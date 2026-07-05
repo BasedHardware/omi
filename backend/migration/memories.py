@@ -68,7 +68,7 @@ def migration_incorrect_start_finish_time():
 
                     memory_ref = db.collection('users').document(user.id).collection('memories').document(memory.id)
 
-                    batch.update(memory_ref, memory.dict())
+                    batch.update(memory_ref, memory.model_dump())
 
                 batch.commit()
                 offset += len(docs)

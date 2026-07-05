@@ -1,12 +1,17 @@
-import 'package:json_annotation/json_annotation.dart';
-
-part 'subscription.g.dart';
+import 'package:omi/backend/schema/gen/subscription_usage_wire.g.dart' as wire;
 
 enum PlanType { basic, unlimited, architect, operator }
 
 enum SubscriptionStatus { active, inactive }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
+PlanType _planTypeFromWire(String? value) {
+  return PlanType.values.asNameMap()[value] ?? PlanType.basic;
+}
+
+SubscriptionStatus _subscriptionStatusFromWire(String? value) {
+  return SubscriptionStatus.values.asNameMap()[value] ?? SubscriptionStatus.inactive;
+}
+
 class PlanLimits {
   final int? transcriptionSeconds;
   final int? wordsTranscribed;
@@ -22,24 +27,41 @@ class PlanLimits {
     this.chatCostUsdPerMonth,
   });
 
-  factory PlanLimits.fromJson(Map<String, dynamic> json) => _$PlanLimitsFromJson(json);
-  Map<String, dynamic> toJson() => _$PlanLimitsToJson(this);
+  factory PlanLimits.fromJson(Map<String, dynamic> json) {
+    return PlanLimits.fromGenerated(wire.GeneratedPlanLimits.fromJson(json));
+  }
+
+  factory PlanLimits.fromGenerated(wire.GeneratedPlanLimits generated) {
+    return PlanLimits(
+      transcriptionSeconds: generated.transcriptionSeconds,
+      wordsTranscribed: generated.wordsTranscribed,
+      insightsGained: generated.insightsGained,
+      chatQuestionsPerMonth: generated.chatQuestionsPerMonth,
+      chatCostUsdPerMonth: generated.chatCostUsdPerMonth,
+    );
+  }
+
+  wire.GeneratedPlanLimits toGenerated() {
+    return wire.GeneratedPlanLimits(
+      transcriptionSeconds: transcriptionSeconds,
+      wordsTranscribed: wordsTranscribed,
+      insightsGained: insightsGained,
+      chatQuestionsPerMonth: chatQuestionsPerMonth,
+      chatCostUsdPerMonth: chatCostUsdPerMonth,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
 class Subscription {
-  @JsonKey(unknownEnumValue: PlanType.basic)
   final PlanType plan;
-  @JsonKey(unknownEnumValue: SubscriptionStatus.inactive)
   final SubscriptionStatus status;
   final int? currentPeriodEnd;
   final String? stripeSubscriptionId;
   final String? currentPriceId;
-  @JsonKey(defaultValue: [])
   final List<String> features;
-  @JsonKey(defaultValue: false)
   final bool cancelAtPeriodEnd;
-  @JsonKey(defaultValue: false)
   final bool deprecated;
   final String? deprecationMessage;
   final PlanLimits limits;
@@ -57,11 +79,43 @@ class Subscription {
     PlanLimits? limits,
   }) : limits = limits ?? PlanLimits();
 
-  factory Subscription.fromJson(Map<String, dynamic> json) => _$SubscriptionFromJson(json);
-  Map<String, dynamic> toJson() => _$SubscriptionToJson(this);
+  factory Subscription.fromJson(Map<String, dynamic> json) {
+    return Subscription.fromGenerated(wire.GeneratedSubscription.fromJson(json));
+  }
+
+  factory Subscription.fromGenerated(wire.GeneratedSubscription generated) {
+    return Subscription(
+      plan: _planTypeFromWire(generated.plan),
+      status: _subscriptionStatusFromWire(generated.status),
+      currentPeriodEnd: generated.currentPeriodEnd,
+      stripeSubscriptionId: generated.stripeSubscriptionId,
+      currentPriceId: generated.currentPriceId,
+      features: generated.features,
+      cancelAtPeriodEnd: generated.cancelAtPeriodEnd ?? false,
+      deprecated: generated.deprecated ?? false,
+      deprecationMessage: generated.deprecationMessage,
+      limits: PlanLimits.fromGenerated(generated.limits),
+    );
+  }
+
+  wire.GeneratedSubscription toGenerated() {
+    return wire.GeneratedSubscription(
+      plan: plan.name,
+      status: status.name,
+      currentPeriodEnd: currentPeriodEnd,
+      stripeSubscriptionId: stripeSubscriptionId,
+      currentPriceId: currentPriceId,
+      features: features,
+      cancelAtPeriodEnd: cancelAtPeriodEnd,
+      deprecated: deprecated,
+      deprecationMessage: deprecationMessage,
+      limits: limits.toGenerated(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
 class PricingOption {
   final String id;
   final String title;
@@ -70,35 +124,66 @@ class PricingOption {
 
   PricingOption({required this.id, required this.title, this.description, required this.priceString});
 
-  factory PricingOption.fromJson(Map<String, dynamic> json) => _$PricingOptionFromJson(json);
-  Map<String, dynamic> toJson() => _$PricingOptionToJson(this);
+  factory PricingOption.fromJson(Map<String, dynamic> json) {
+    return PricingOption.fromGenerated(wire.GeneratedPricingOption.fromJson(json));
+  }
+
+  factory PricingOption.fromGenerated(wire.GeneratedPricingOption generated) {
+    return PricingOption(
+      id: generated.id,
+      title: generated.title,
+      description: generated.description,
+      priceString: generated.priceString,
+    );
+  }
+
+  wire.GeneratedPricingOption toGenerated() {
+    return wire.GeneratedPricingOption(id: id, title: title, description: description, priceString: priceString);
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
 class SubscriptionPlan {
   final String id;
   final String title;
-  @JsonKey(defaultValue: [])
   final List<String> features;
-  @JsonKey(defaultValue: [])
   final List<PricingOption> prices;
 
   SubscriptionPlan({required this.id, required this.title, this.features = const [], this.prices = const []});
 
-  factory SubscriptionPlan.fromJson(Map<String, dynamic> json) => _$SubscriptionPlanFromJson(json);
-  Map<String, dynamic> toJson() => _$SubscriptionPlanToJson(this);
+  factory SubscriptionPlan.fromJson(Map<String, dynamic> json) {
+    return SubscriptionPlan.fromGenerated(wire.GeneratedSubscriptionPlan.fromJson(json));
+  }
+
+  factory SubscriptionPlan.fromGenerated(wire.GeneratedSubscriptionPlan generated) {
+    return SubscriptionPlan(
+      id: generated.id,
+      title: generated.title,
+      features: generated.features,
+      prices: generated.prices.map(PricingOption.fromGenerated).toList(),
+    );
+  }
+
+  wire.GeneratedSubscriptionPlan toGenerated() {
+    return wire.GeneratedSubscriptionPlan(
+      id: id,
+      title: title,
+      features: features,
+      prices: prices.map((price) => price.toGenerated()).toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
 class PhoneCallQuota {
   final bool hasAccess;
   final bool isPaid;
   final int? monthlyLimit;
-  @JsonKey(defaultValue: 0)
   final int monthlyUsed;
   final int? remaining;
   final int? maxDurationSeconds;
-  @JsonKey(defaultValue: [])
   final List<String> allowedCountries;
   final int? resetAt;
 
@@ -113,11 +198,39 @@ class PhoneCallQuota {
     this.resetAt,
   });
 
-  factory PhoneCallQuota.fromJson(Map<String, dynamic> json) => _$PhoneCallQuotaFromJson(json);
-  Map<String, dynamic> toJson() => _$PhoneCallQuotaToJson(this);
+  factory PhoneCallQuota.fromJson(Map<String, dynamic> json) {
+    return PhoneCallQuota.fromGenerated(wire.GeneratedPhoneCallQuota.fromJson(json));
+  }
+
+  factory PhoneCallQuota.fromGenerated(wire.GeneratedPhoneCallQuota generated) {
+    return PhoneCallQuota(
+      hasAccess: generated.hasAccess,
+      isPaid: generated.isPaid,
+      monthlyLimit: generated.monthlyLimit,
+      monthlyUsed: generated.monthlyUsed,
+      remaining: generated.remaining,
+      maxDurationSeconds: generated.maxDurationSeconds,
+      allowedCountries: generated.allowedCountries,
+      resetAt: generated.resetAt,
+    );
+  }
+
+  wire.GeneratedPhoneCallQuota toGenerated() {
+    return wire.GeneratedPhoneCallQuota(
+      hasAccess: hasAccess,
+      isPaid: isPaid,
+      monthlyLimit: monthlyLimit,
+      monthlyUsed: monthlyUsed,
+      remaining: remaining,
+      maxDurationSeconds: maxDurationSeconds,
+      allowedCountries: allowedCountries,
+      resetAt: resetAt,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
 class UserSubscriptionResponse {
   final Subscription subscription;
   final int transcriptionSecondsUsed;
@@ -126,17 +239,12 @@ class UserSubscriptionResponse {
   final int wordsTranscribedLimit;
   final int insightsGainedUsed;
   final int insightsGainedLimit;
-  @JsonKey(defaultValue: [])
   final List<SubscriptionPlan> availablePlans;
-  @JsonKey(defaultValue: true)
   final bool showSubscriptionUi;
   // Chat quota fields — populated from subscription endpoint
-  @JsonKey(defaultValue: 0.0)
   final double chatQuotaUsed;
   final String? chatQuotaUnit;
-  @JsonKey(defaultValue: 0.0)
   final double chatQuotaPercent;
-  @JsonKey(defaultValue: true)
   final bool chatQuotaAllowed;
   final int? chatQuotaResetAt;
   final PhoneCallQuota? phoneCallQuota;
@@ -159,6 +267,49 @@ class UserSubscriptionResponse {
     this.phoneCallQuota,
   });
 
-  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) => _$UserSubscriptionResponseFromJson(json);
-  Map<String, dynamic> toJson() => _$UserSubscriptionResponseToJson(this);
+  factory UserSubscriptionResponse.fromJson(Map<String, dynamic> json) {
+    return UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse.fromJson(json));
+  }
+
+  factory UserSubscriptionResponse.fromGenerated(wire.GeneratedUserSubscriptionResponse generated) {
+    return UserSubscriptionResponse(
+      subscription: Subscription.fromGenerated(generated.subscription),
+      transcriptionSecondsUsed: generated.transcriptionSecondsUsed,
+      transcriptionSecondsLimit: generated.transcriptionSecondsLimit,
+      wordsTranscribedUsed: generated.wordsTranscribedUsed,
+      wordsTranscribedLimit: generated.wordsTranscribedLimit,
+      insightsGainedUsed: generated.insightsGainedUsed,
+      insightsGainedLimit: generated.insightsGainedLimit,
+      availablePlans: generated.availablePlans.map(SubscriptionPlan.fromGenerated).toList(),
+      showSubscriptionUi: generated.showSubscriptionUi,
+      chatQuotaUsed: generated.chatQuotaUsed,
+      chatQuotaUnit: generated.chatQuotaUnit,
+      chatQuotaPercent: generated.chatQuotaPercent,
+      chatQuotaAllowed: generated.chatQuotaAllowed,
+      chatQuotaResetAt: generated.chatQuotaResetAt,
+      phoneCallQuota: generated.phoneCallQuota == null ? null : PhoneCallQuota.fromGenerated(generated.phoneCallQuota!),
+    );
+  }
+
+  wire.GeneratedUserSubscriptionResponse toGenerated() {
+    return wire.GeneratedUserSubscriptionResponse(
+      subscription: subscription.toGenerated(),
+      transcriptionSecondsUsed: transcriptionSecondsUsed,
+      transcriptionSecondsLimit: transcriptionSecondsLimit,
+      wordsTranscribedUsed: wordsTranscribedUsed,
+      wordsTranscribedLimit: wordsTranscribedLimit,
+      insightsGainedUsed: insightsGainedUsed,
+      insightsGainedLimit: insightsGainedLimit,
+      availablePlans: availablePlans.map((plan) => plan.toGenerated()).toList(),
+      showSubscriptionUi: showSubscriptionUi,
+      chatQuotaUsed: chatQuotaUsed,
+      chatQuotaUnit: chatQuotaUnit,
+      chatQuotaPercent: chatQuotaPercent,
+      chatQuotaAllowed: chatQuotaAllowed,
+      chatQuotaResetAt: chatQuotaResetAt,
+      phoneCallQuota: phoneCallQuota?.toGenerated(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }

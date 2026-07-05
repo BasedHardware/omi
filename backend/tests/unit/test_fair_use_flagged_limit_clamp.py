@@ -27,7 +27,6 @@ os.environ.setdefault(
 _STUB = (
     'database',
     'utils',
-    'models',
     'firebase_admin',
     'google',
     'pinecone',

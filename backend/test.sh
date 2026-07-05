@@ -8,7 +8,7 @@ export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c
 export OPENAI_API_KEY="test-openai-key-not-real"
 
 pytest() {
-  python3 -m pytest "$@"
+  "${PYTHON:-python3}" -m pytest "$@"
 }
 
 if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then

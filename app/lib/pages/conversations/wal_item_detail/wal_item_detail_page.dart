@@ -417,7 +417,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildControlButton(
-                    icon: Icons.replay_10,
+                    icon: FontAwesomeIcons.backward,
                     onPressed: playbackState.canPlayOrShare && isPlaying
                         ? () => _handleSkipBackward(context.read<SyncProvider>())
                         : null,
@@ -425,8 +425,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   ),
                   _buildControlButton(
                     icon: playbackState.isProcessing
-                        ? Icons.hourglass_empty
-                        : (isPlaying ? Icons.pause : Icons.play_arrow),
+                        ? FontAwesomeIcons.hourglass
+                        : (isPlaying ? FontAwesomeIcons.pause : FontAwesomeIcons.play),
                     size: 80,
                     backgroundColor: Theme.of(context).colorScheme.secondary,
                     iconColor: Colors.white,
@@ -435,7 +435,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         : null,
                   ),
                   _buildControlButton(
-                    icon: Icons.forward_10,
+                    icon: FontAwesomeIcons.forward,
                     onPressed: playbackState.canPlayOrShare && isPlaying
                         ? () => _handleSkipForward(context.read<SyncProvider>())
                         : null,
@@ -460,7 +460,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Widget _buildControlButton({
-    required IconData icon,
+    required FaIconData icon,
     VoidCallback? onPressed,
     double size = 48,
     Color? backgroundColor,
@@ -475,7 +475,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: Icon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
+        icon: FaIcon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
       ),
     );
   }
@@ -557,7 +557,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
             ] else ...[
               ListTile(
-                leading: const FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
+                leading: FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
                 title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(sheetContext);

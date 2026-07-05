@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/privacy_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -11,8 +12,16 @@ class MigrationRequest {
 
   MigrationRequest({required this.id, required this.type, required this.targetLevel});
 
+  factory MigrationRequest.fromGenerated(wire.GeneratedMigrationRequest generated) {
+    return MigrationRequest(id: generated.id, type: generated.type, targetLevel: generated.targetLevel);
+  }
+
+  wire.GeneratedMigrationRequest toGenerated() {
+    return wire.GeneratedMigrationRequest(id: id, type: type, targetLevel: targetLevel);
+  }
+
   Map<String, dynamic> toJson() {
-    return {'id': id, 'type': type, 'target_level': targetLevel};
+    return toGenerated().toJson();
   }
 }
 
@@ -27,7 +36,9 @@ class PrivacyApi {
       );
 
       if (response != null && response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final decoded = jsonDecode(response.body) as Map<String, dynamic>;
+        wire.GeneratedUserProfileResponse.fromJson(decoded);
+        return decoded;
       } else {
         if (response?.statusCode == 410) {
           Logger.error('User profile not found: ${response?.statusCode} ${response?.body}');
@@ -48,10 +59,14 @@ class PrivacyApi {
         url: '${Env.apiBaseUrl}v1/users/migration/requests',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'target_level': targetLevel}),
+        body: jsonEncode(wire.GeneratedMigrationTargetRequest(targetLevel: targetLevel).toJson()),
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Failed to start migration: ${response?.statusCode} ${response?.body}');
+        throw Exception('Failed to start migration');
+      }
+      final data = wire.GeneratedMigrationStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      if (data.status != 'ok') {
         throw Exception('Failed to start migration');
       }
     } catch (e, stackTrace) {
@@ -69,10 +84,19 @@ class PrivacyApi {
         body: '',
       );
       if (response != null && response.statusCode == 200) {
-        final body = jsonDecode(response.body);
-        final List<dynamic> objects = body['needs_migration'];
+        final body = wire.GeneratedMigrationRequestsResponse.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>,
+        );
+        final objects = body.needsMigration ?? const <Map<String, dynamic>>[];
         return objects
-            .map((obj) => MigrationRequest(id: obj['id'], type: obj['type'], targetLevel: targetLevel))
+            .map(
+              (obj) => MigrationRequest.fromGenerated(
+                wire.GeneratedMigrationRequest.fromJson({
+                  ...Map<String, dynamic>.from(obj),
+                  'target_level': targetLevel,
+                }),
+              ),
+            )
             .toList();
       } else {
         Logger.error('Failed to check migration status: ${response?.statusCode} ${response?.body}');
@@ -96,6 +120,10 @@ class PrivacyApi {
         Logger.error('Failed to migrate object ${request.id}: ${response?.statusCode} ${response?.body}');
         throw Exception('Failed to migrate object');
       }
+      final data = wire.GeneratedMigrationStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      if (data.status != 'ok') {
+        throw Exception('Failed to migrate object');
+      }
     } catch (e, stackTrace) {
       Logger.error('Error migrating object ${request.id}: $e\n$stackTrace');
       rethrow;
@@ -108,10 +136,18 @@ class PrivacyApi {
         url: '${Env.apiBaseUrl}v1/users/migration/batch-requests',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'requests': requests.map((r) => r.toJson()).toList()}),
+        body: jsonEncode(
+          wire.GeneratedBatchMigrationRequest(
+            requests: requests.map((request) => request.toGenerated()).toList(),
+          ).toJson(),
+        ),
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Failed to migrate batch: ${response?.statusCode} ${response?.body}');
+        throw Exception('Failed to migrate batch');
+      }
+      final data = wire.GeneratedMigrationStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      if (data.status != 'ok') {
         throw Exception('Failed to migrate batch');
       }
     } catch (e, stackTrace) {
@@ -126,10 +162,14 @@ class PrivacyApi {
         url: '${Env.apiBaseUrl}v1/users/migration/requests/data-protection-level/finalize',
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'target_level': targetLevel}),
+        body: jsonEncode(wire.GeneratedMigrationTargetRequest(targetLevel: targetLevel).toJson()),
       );
       if (response == null || response.statusCode != 200) {
         Logger.error('Failed to finalize migration: ${response?.statusCode} ${response?.body}');
+        throw Exception('Failed to finalize migration');
+      }
+      final data = wire.GeneratedMigrationStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      if (data.status != 'ok') {
         throw Exception('Failed to finalize migration');
       }
     } catch (e, stackTrace) {

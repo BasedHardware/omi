@@ -263,6 +263,7 @@ def test_checkout_valid_promo_passes_id_to_session():
             )
 
     assert response.status_code == 200
+    assert response.json() == {"url": "https://checkout.stripe.com/test", "session_id": "cs_test_123"}
     call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args
     assert call_kwargs[1].get("promotion_code_id") == "promo_abc123" or (
         len(call_kwargs[0]) > 4 and call_kwargs[0][4] == "promo_abc123"
@@ -284,8 +285,26 @@ def test_checkout_no_promo_omits_promo_id():
         response = client.post("/v1/payments/checkout-session", json={"price_id": "price_123"})
 
     assert response.status_code == 200
+    assert response.json() == {"url": "https://checkout.stripe.com/test", "session_id": "cs_test_456"}
     call_kwargs = router.stripe_utils.create_subscription_checkout_session.call_args
     assert call_kwargs[1].get("promotion_code_id") is None
+
+
+def test_checkout_response_model_rejects_malformed_success_payloads():
+    """Checkout success must be either a full session or a full reactivation response."""
+    client, router = _setup_payment_module()
+
+    router.PaymentCheckoutSessionResponse.model_validate(
+        {"url": "https://checkout.stripe.com/test", "session_id": "cs"}
+    )
+    router.PaymentCheckoutSessionResponse.model_validate(
+        {"status": "reactivated", "message": "Reactivated", "next_billing_date": 123}
+    )
+
+    with pytest.raises(ValueError):
+        router.PaymentCheckoutSessionResponse.model_validate({"url": "https://checkout.stripe.com/test"})
+    with pytest.raises(ValueError):
+        router.PaymentCheckoutSessionResponse.model_validate({"status": "reactivated", "message": "missing date"})
 
 
 # --- _release_attached_schedules helper ---

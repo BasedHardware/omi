@@ -25,7 +25,8 @@ from utils.executors import (
 )
 
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
 from pydub import AudioSegment
 
@@ -49,6 +50,7 @@ from database.sync_jobs import (
 )
 from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -112,6 +114,38 @@ _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files
 router = APIRouter()
 
 
+class SyncLocalFilesResultResponse(BaseModel):
+    new_memories: list[str] = Field(default_factory=list)
+    updated_memories: list[str] = Field(default_factory=list)
+    failed_segments: int = 0
+    total_segments: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class SyncJobStartResponse(BaseModel):
+    job_id: str
+    status: str
+    total_files: int
+    total_segments: int
+    poll_after_ms: int
+
+
+class SyncJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    total_segments: int = 0
+    processed_segments: int = 0
+    successful_segments: int = 0
+    failed_segments: int = 0
+    result: SyncLocalFilesResultResponse | None = None
+    error: str | None = None
+
+
+class AudioDownloadPendingResponse(BaseModel):
+    status: str
+    poll_after_ms: int
+
+
 def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     headers = dict(base_headers or {})
     if retry_after is not None:
@@ -119,7 +153,7 @@ def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Di
     return headers
 
 
-@router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
+@router.post("/v1/sync/audio/{conversation_id}/precache", response_model=AudioPrecacheResponse, tags=['v1'])
 def precache_conversation_audio_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -137,7 +171,7 @@ def precache_conversation_audio_endpoint(
     return sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', []))
 
 
-@router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
+@router.get("/v1/sync/audio/{conversation_id}/urls", response_model=AudioUrlsResponse, tags=['v1'])
 def get_audio_signed_urls_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
@@ -164,7 +198,33 @@ def get_audio_signed_urls_endpoint(
 # **********************************************
 
 
-@router.get("/v1/sync/audio/{conversation_id}/{audio_file_id}", tags=['v1'])
+@router.get(
+    "/v1/sync/audio/{conversation_id}/{audio_file_id}",
+    tags=['v1'],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+        202: {
+            "description": "Audio artifact is being prepared.",
+            "model": AudioDownloadPendingResponse,
+        },
+        206: {
+            "description": "Partial audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+    },
+)
 def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
@@ -647,7 +707,7 @@ def process_segment(
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
 
-            transcript_segments = [s.dict() for s in transcript_segments]
+            transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
             for segment in transcript_segments:
@@ -792,7 +852,7 @@ def _finalize_sync_audio_files(uid: str, response: dict):
             audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
             if not audio_files:
                 continue
-            files_payload = [af.dict() for af in audio_files]
+            files_payload = [af.model_dump() for af in audio_files]
             conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
             precache_conversation_audio(uid, conversation_id, files_payload)
         except Exception as e:
@@ -809,6 +869,8 @@ def _cleanup_files(file_paths):
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
+# response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
+# the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True)
 async def sync_local_files(
     request: Request,
@@ -1445,7 +1507,7 @@ def _download_staged_files(blob_paths: list) -> bool:
     return True
 
 
-@router.post("/v2/sync-local-files")
+@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -1562,7 +1624,7 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-@router.get("/v2/sync-local-files/{job_id}")
+@router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
@@ -1590,6 +1652,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return resp
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: runs one sync job inside the request.
@@ -1676,6 +1740,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.

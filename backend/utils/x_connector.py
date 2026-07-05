@@ -377,7 +377,7 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
         ):
             memory_service = MemoryService(db_client=db)
             for mdb in memory_dbs:
-                memory_service.write(uid, mdb.dict())
+                memory_service.write(uid, mdb.model_dump())
         else:
             memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
             upsert_memory_vectors_batch(

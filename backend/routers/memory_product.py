@@ -11,6 +11,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from database._client import db
 from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
 from models.product_memory import MemoryAccessPolicy
+from models.memory_product import (
+    ArchiveProductMemorySearchResponse,
+    ProductMemorySearchResponse,
+    VectorMemorySearchResponse,
+)
 from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
@@ -83,7 +88,7 @@ def _require_product_authorization(context: ProductAuthorizationContext):
     return decision
 
 
-@router.get('/memory/search', tags=['memories', 'memory'])
+@router.get('/memory/search', tags=['memories', 'memory'], response_model=ProductMemorySearchResponse)
 def search_product_memory(
     query: str = Query(''),
     limit: int = Query(100),
@@ -125,7 +130,7 @@ def search_product_memory(
     return response
 
 
-@router.get('/memory/vector/search', tags=['memories', 'memory'])
+@router.get('/memory/vector/search', tags=['memories', 'memory'], response_model=VectorMemorySearchResponse)
 def search_vector_memory(
     query: str = Query(...),
     limit: int = Query(10),
@@ -180,7 +185,7 @@ def search_vector_memory(
     return response
 
 
-@router.get('/memory/archive/search', tags=['memories', 'memory'])
+@router.get('/memory/archive/search', tags=['memories', 'memory'], response_model=ArchiveProductMemorySearchResponse)
 def search_archive_memory(
     query: str = Query(''),
     limit: int = Query(100),

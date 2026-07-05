@@ -287,7 +287,7 @@ def get_conversations_tool(
         # Store conversations in config for citation tracking (as lightweight dicts)
         conversations_collected = config['configurable'].get('conversations_collected', [])
         for conv in conversations:
-            conv_dict = conv.dict()
+            conv_dict = conv.model_dump()
             # Remove heavy fields to reduce memory usage
             conv_dict.pop('transcript_segments', None)
             conv_dict.pop('photos', None)
@@ -523,7 +523,7 @@ def search_conversations_tool(
         # Store conversations in config for citation tracking (as lightweight dicts)
         conversations_collected = config['configurable'].get('conversations_collected', [])
         for conv in conversations:
-            conv_dict = conv.dict()
+            conv_dict = conv.model_dump()
             # Remove heavy fields to reduce memory usage
             conv_dict.pop('transcript_segments', None)
             conv_dict.pop('photos', None)

@@ -195,6 +195,18 @@ class IntegrationResponse(BaseModel):
     app_key: str = Field(description="Integration app key")
 
 
+class IntegrationMutationResponse(BaseModel):
+    status: str
+    app_key: str
+
+
+class AppleHealthSyncResponse(BaseModel):
+    status: str
+    app_key: str
+    synced_at: str
+    data_types_synced: list[str] = Field(default_factory=list)
+
+
 # *****************************
 # ********** ROUTES ***********
 # *****************************
@@ -211,7 +223,7 @@ def get_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid))
         return IntegrationResponse(connected=False, app_key=app_key)
 
 
-@router.put("/v1/integrations/{app_key}", tags=['integrations'])
+@router.put("/v1/integrations/{app_key}", tags=['integrations'], response_model=IntegrationMutationResponse)
 def save_integration(app_key: str, data: IntegrationData, uid: str = Depends(auth.get_current_user_uid)):
     """Save or update an integration connection."""
     # Convert Pydantic model to dict, excluding None values
@@ -233,7 +245,7 @@ def delete_integration(app_key: str, uid: str = Depends(auth.get_current_user_ui
     return None
 
 
-@router.put("/v1/integrations/apple-health/sync", tags=['integrations'])
+@router.put("/v1/integrations/apple-health/sync", response_model=AppleHealthSyncResponse, tags=['integrations'])
 def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.get_current_user_uid)):
     """
     Sync Apple Health data from the iOS device.

@@ -9,6 +9,19 @@ class SaveFcmTokenRequest(BaseModel):
     time_zone: str
 
 
+class SendNotificationRequest(BaseModel):
+    uid: str
+    title: str
+    body: str
+    data: dict = Field(default_factory=dict)
+
+
+class SendAppNotificationRequest(BaseModel):
+    aid: str
+    message: str
+    uid: str
+
+
 class UploadProfile(BaseModel):
     bytes: List[List[int]]
     duration: int

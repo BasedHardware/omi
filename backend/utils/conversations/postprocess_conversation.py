@@ -104,7 +104,7 @@ def postprocess_conversation(
             conversation.transcript_segments = fal_segments
 
         conversations_db.upsert_conversation(
-            uid, conversation.dict()
+            uid, conversation.model_dump()
         )  # Store transcript segments at least if smth fails later
         if fal_failed:
             # TODO: FAL fails too much and is fucking expensive. Remove it.
@@ -162,7 +162,7 @@ async def _process_user_emotion(uid: str, language_code: str, conversation: Conv
 
 def _handle_segment_embedding_matching(uid: str, file_path: str, segments: List[TranscriptSegment], aseg: AudioSegment):
     if aseg.frame_rate == 16000:
-        matches = get_speech_profile_matching_predictions(uid, file_path, [s.dict() for s in segments])
+        matches = get_speech_profile_matching_predictions(uid, file_path, [s.model_dump() for s in segments])
         for i, segment in enumerate(segments):
             segment.is_user = matches[i]['is_user']
             segment.person_id = matches[i].get('person_id')

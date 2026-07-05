@@ -15,7 +15,7 @@ Future<Memory?> createMemoryServer(String content, String visibility, String cat
   if (response == null) return null;
   Logger.debug('createMemory response: ${response.body}');
   if (response.statusCode == 200) {
-    return Memory.fromJson(json.decode(response.body));
+    return Memory.fromGeneratedWireJson(json.decode(response.body) as Map<String, dynamic>);
   }
   return null;
 }
@@ -40,6 +40,12 @@ class GetMemoriesResult {
   const GetMemoriesResult(this.memories, this.deviceScopeSupported);
 }
 
+List<Memory> _decodeMemoriesResponse(String body) {
+  return (json.decode(body) as List<dynamic>)
+      .map((memory) => Memory.fromGeneratedWireJson(Map<String, dynamic>.from(memory as Map)))
+      .toList();
+}
+
 Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bool thisDeviceOnly = false}) async {
   var url = '${Env.apiBaseUrl}v3/memories?limit=$limit&offset=$offset';
   if (thisDeviceOnly) {
@@ -50,9 +56,11 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
     return GetMemoriesResult([], !thisDeviceOnly);
   }
   if (response.statusCode == 200) {
-    var decoded = json.decode(response.body);
-    if (decoded is List) {
-      return GetMemoriesResult(decoded.map((e) => Memory.fromJson(e)).toList(), true);
+    try {
+      return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
+    } catch (e) {
+      Logger.error('Failed to decode memories 200 response: $e');
+      return const GetMemoriesResult([], true);
     }
   }
   // Legacy memory users cannot use server-side device_scope; fetch all and

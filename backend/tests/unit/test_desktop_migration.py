@@ -138,14 +138,12 @@ helpers_stub.prepare_for_write = lambda **kw: (lambda f: f)
 helpers_stub.prepare_for_read = lambda **kw: (lambda f: f)
 
 # Stub models and utils needed by database.users and database.chat
-_stub_package("models")
+_ensure_package_path("models", BACKEND_DIR / "models")
 models_users_stub = _stub_module("models.users")
 models_users_stub.Subscription = MagicMock()
 models_users_stub.PlanLimits = MagicMock()
 models_users_stub.PlanType = MagicMock()
 models_users_stub.SubscriptionStatus = MagicMock()
-models_chat_stub = _stub_module("models.chat")
-models_chat_stub.Message = MagicMock()
 
 _stub_package("utils")
 _stub_package("utils.other")

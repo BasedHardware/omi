@@ -258,7 +258,7 @@ def perform_merge_async(
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.dict())
+        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
 
         # Store photos in subcollection if any
         if merged_photos:

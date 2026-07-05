@@ -7,11 +7,24 @@ Guides new users through Google Calendar connection during onboarding.
 from typing import Optional
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 
 import database.users as users_db
 from utils.other import endpoints as auth
 
 router = APIRouter()
+
+
+class CalendarOnboardingStatusResponse(BaseModel):
+    connected: bool
+    onboarding_completed: bool
+    needs_reconnect: bool
+    reauth_reason: Optional[str] = None
+    state: str
+
+
+class CalendarOnboardingSkipResponse(BaseModel):
+    skipped: bool
 
 
 def _calendar_onboarding_state(integration: Optional[dict]) -> dict:
@@ -46,21 +59,35 @@ def _calendar_onboarding_state(integration: Optional[dict]) -> dict:
     }
 
 
-@router.get('/v1/calendar/onboarding/status', tags=['calendar_onboarding'])
+@router.get(
+    '/v1/calendar/onboarding/status',
+    tags=['calendar_onboarding'],
+    response_model=CalendarOnboardingStatusResponse,
+)
 def get_calendar_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
     """Return the calendar onboarding state, including whether a previously-connected calendar now
     needs reconnecting (its OAuth token expired)."""
     return _calendar_onboarding_state(users_db.get_integration(uid, 'google_calendar'))
 
 
-@router.post('/v1/calendar/onboarding/skip', tags=['calendar_onboarding'])
+@router.post(
+    '/v1/calendar/onboarding/skip',
+    tags=['calendar_onboarding'],
+    response_model=CalendarOnboardingSkipResponse,
+)
 def skip_calendar_onboarding(uid: str = Depends(auth.get_current_user_uid)):
     """Mark calendar onboarding as skipped so the prompt is not shown again."""
     users_db.set_integration(uid, 'google_calendar', {'onboarding_skipped': True})
     return {'skipped': True}
 
 
-@router.post('/v1/calendar/onboarding/reset', tags=['calendar_onboarding'])
+class CalendarOnboardingResetResponse(BaseModel):
+    reset: bool
+
+
+@router.post(
+    '/v1/calendar/onboarding/reset', response_model=CalendarOnboardingResetResponse, tags=['calendar_onboarding']
+)
 def reset_calendar_onboarding(uid: str = Depends(auth.get_current_user_uid)):
     """Clear the skipped / reauth flags so the connect-calendar prompt is shown again."""
     users_db.set_integration(

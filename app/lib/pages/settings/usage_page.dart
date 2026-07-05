@@ -302,7 +302,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         centerTitle: true,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
-        actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
+        actions: [IconButton(icon: FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,
@@ -710,6 +710,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -728,6 +729,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -745,6 +747,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -767,6 +770,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -1101,7 +1105,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Widget _buildUsageCard(
     BuildContext context, {
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required String value,
     required String subtitle,

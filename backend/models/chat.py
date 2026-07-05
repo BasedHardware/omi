@@ -38,9 +38,9 @@ class FileChat(BaseModel):
     def is_image(self):
         return self.mime_type.startswith("image")
 
-    def dict(self, **kwargs):
+    def model_dump(self, **kwargs):
         exclude_fields = {'thumb_name'}
-        return super().dict(exclude=exclude_fields, **kwargs)
+        return super().model_dump(exclude=exclude_fields, **kwargs)
 
 
 class ChartDataPoint(BaseModel):
@@ -213,6 +213,14 @@ class SendMessageRequest(BaseModel):
     text: str
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
+
+
+class RateMessageRequest(BaseModel):
+    rating: Optional[int] = None
+
+
+class ShareChatMessagesRequest(BaseModel):
+    message_ids: list[str] = []
 
 
 class ChatSession(BaseModel):

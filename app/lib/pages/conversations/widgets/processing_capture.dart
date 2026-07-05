@@ -599,14 +599,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             Row(
               children: [
                 _buildOfflineControl(
-                  icon: muted ? Icons.mic_none_rounded : Icons.mic_off_outlined,
+                  icon: muted ? FontAwesomeIcons.microphone : FontAwesomeIcons.microphoneSlash,
                   label: muted ? context.l10n.unmute : context.l10n.mute,
                   primary: false,
                   onTap: () => provider.toggleOfflineMute(),
                 ),
                 const SizedBox(width: 10),
                 _buildOfflineControl(
-                  icon: Icons.fiber_new_rounded,
+                  icon: FontAwesomeIcons.circlePlus,
                   label: context.l10n.newRecording,
                   primary: true,
                   onTap: () => provider.startNewOfflineRecording(),
@@ -620,7 +620,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   }
 
   Widget _buildOfflineControl({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required bool primary,
     required VoidCallback onTap,
@@ -639,7 +639,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 16, color: color),
+              FaIcon(icon, size: 16, color: color),
               const SizedBox(width: 6),
               Text(
                 label,

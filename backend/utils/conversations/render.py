@@ -238,4 +238,4 @@ def serialize_datetimes(obj: Any) -> Any:
 
 def conversation_to_dict(conversation: Conversation) -> Dict:
     """Convert a Conversation to a JSON-safe dict with ISO datetime strings."""
-    return serialize_datetimes(conversation.dict())
+    return serialize_datetimes(conversation.model_dump())

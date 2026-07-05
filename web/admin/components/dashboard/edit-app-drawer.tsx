@@ -75,7 +75,7 @@ export function EditAppDrawer({ open, onClose, app, onSaved }: EditAppDrawerProp
     try {
       const form = new FormData();
       form.append('app_id', app.id);
-      form.append('uid', app.uid);
+      form.append('uid', app.uid ?? '');
       if (name) form.append('name', name);
       if (description) form.append('description', description);
       if (hasMemories && memoryPrompt) form.append('memory_prompt', memoryPrompt);

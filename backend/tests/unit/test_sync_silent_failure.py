@@ -14,6 +14,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 
 def _read_text(path):
@@ -595,6 +596,7 @@ _STUB_MODULES = [
     'models',
     'models.conversation',
     'models.conversation_enums',
+    'models.sync_audio',
     'models.transcript_segment',
     'database._client',
     'database.redis_db',
@@ -735,6 +737,15 @@ class TestProcessSegmentReal:
         sys.modules['models.conversation'].CreateConversation = _CreateConversation
         sys.modules['models.conversation'].Conversation = _Conversation
         sys.modules['models.transcript_segment'].TranscriptSegment = _TranscriptSegment
+
+        class _AudioPrecacheResponse(BaseModel):
+            pass
+
+        class _AudioUrlsResponse(BaseModel):
+            pass
+
+        sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+        sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
         # Import under stubs
         from routers.sync import process_segment
@@ -931,7 +942,7 @@ class TestProcessSegmentReal:
 
         mock_segment = MagicMock()
         mock_segment.end = 5.0
-        mock_segment.dict.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
+        mock_segment.model_dump.return_value = {'start': 0.0, 'end': 5.0, 'text': 'hello', 'speaker': 'SPEAKER_00'}
 
         # Simulate existing conversation with the SAME segments (retry scenario)
         existing_conv = {

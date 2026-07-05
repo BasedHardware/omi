@@ -169,7 +169,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   }
 
   Widget _buildProfileStyleItem({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     String? subtitle,
     String? chipValue,
@@ -777,7 +777,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 24,
                       height: 24,
                       child: FaIcon(FontAwesomeIcons.linkSlash, color: Colors.redAccent, size: 20),
@@ -834,7 +834,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 24,
                       height: 24,
                       child: FaIcon(FontAwesomeIcons.ban, color: Colors.orange, size: 20),
@@ -894,7 +894,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             title: Text(

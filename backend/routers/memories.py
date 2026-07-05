@@ -50,6 +50,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+class MemoryMutationResponse(BaseModel):
+    status: str
+
+
+class ReviewResolutionResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    status: str
+
+
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
@@ -466,7 +477,7 @@ async def create_memories_batch(
                 )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            payload = memory_db.dict()
+            payload = memory_db.model_dump()
             if memory_db.manually_added:
                 payload = required_promotion_payload(payload, source_surface="v3_manual")
             committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
@@ -658,7 +669,7 @@ def get_memories(
     return memory_list_response(memory_response.body or [], exposure, headers=headers)
 
 
-@router.get('/v3/memories/review-queue', tags=['memories'])
+@router.get('/v3/memories/review-queue', tags=['memories'], response_model=List[Dict[str, Any]])
 def list_memory_review_queue(
     status: str = Query('pending'),
     limit: int = Query(100, ge=1, le=500),
@@ -667,7 +678,14 @@ def list_memory_review_queue(
     return review_queue.list_review_conflicts(uid, status=status, limit=limit)
 
 
-@router.get('/v3/memories/review-queue/{review_id}', tags=['memories'])
+class MemoryReviewItemResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    review_id: str
+    status: str = 'pending'
+
+
+@router.get('/v3/memories/review-queue/{review_id}', response_model=MemoryReviewItemResponse, tags=['memories'])
 def get_memory_review_item(
     review_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
@@ -684,7 +702,11 @@ def get_memory_review_item(
     return conflict
 
 
-@router.post('/v3/memories/review-queue/{review_id}/resolve', tags=['memories'])
+@router.post(
+    '/v3/memories/review-queue/{review_id}/resolve',
+    tags=['memories'],
+    response_model=ReviewResolutionResponse,
+)
 def resolve_memory_review_item(
     review_id: str,
     request: ReviewResolutionRequest,
@@ -705,7 +727,7 @@ def resolve_memory_review_item(
     return result
 
 
-@router.delete('/v3/memories/{memory_id}', tags=['memories'])
+@router.delete('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memory(
     memory_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
@@ -727,7 +749,7 @@ def delete_memory(
     return {'status': 'ok'}
 
 
-@router.delete('/v3/memories', tags=['memories'])
+@router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
@@ -758,7 +780,7 @@ def delete_memories(
     return {'status': 'ok'}
 
 
-@router.post('/v3/memories/{memory_id}/review', tags=['memories'])
+@router.post('/v3/memories/{memory_id}/review', tags=['memories'], response_model=MemoryMutationResponse)
 def review_memory(
     memory_id: str,
     value: bool,
@@ -774,7 +796,7 @@ def review_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'])
+@router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def edit_memory(
     memory_id: str,
     value: str,
@@ -800,7 +822,7 @@ def edit_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'])
+@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'], response_model=MemoryMutationResponse)
 def update_memory_visibility(
     memory_id: str,
     value: str,

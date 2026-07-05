@@ -908,9 +908,9 @@ async def _stream_handler(
             call_id=call_id if is_multi_channel else None,
         )
         if client_conversation_id and new_conversation_id == client_conversation_id:
-            conversations_db.create_conversation_if_absent(uid, stub_conversation.dict())
+            conversations_db.create_conversation_if_absent(uid, stub_conversation.model_dump())
         else:
-            conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.dict())
+            conversations_db.upsert_conversation(uid, conversation_data=stub_conversation.model_dump())
         redis_db.set_in_progress_conversation_id(uid, new_conversation_id)
 
         detected_meeting_id = None
@@ -1044,7 +1044,7 @@ async def _stream_handler(
                     segment_person_assignment_map,
                     speaker_to_person_map,
                 )
-            segments_dicts = [segment.dict() for segment in conversation.transcript_segments]
+            segments_dicts = [segment.model_dump() for segment in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
                 uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
             )
@@ -1224,9 +1224,9 @@ async def _stream_handler(
                                 (j for j, t in enumerate(translations) if t.get('lang') == translation_language), None
                             )
                             if existing_idx is not None:
-                                translations[existing_idx] = trans.dict()
+                                translations[existing_idx] = trans.model_dump()
                             else:
-                                translations.append(trans.dict())
+                                translations.append(trans.model_dump())
                             conversation['transcript_segments'][i]['translations'] = translations
                             conversations_db.update_conversation_segments(
                                 uid,
@@ -1650,7 +1650,7 @@ async def _stream_handler(
                 segment_person_assignment_map,
                 speaker_to_person_map,
             )
-            segments_dicts = [seg.dict() for seg in conversation.transcript_segments]
+            segments_dicts = [seg.model_dump() for seg in conversation.transcript_segments]
             conversations_db.update_conversation_segments(
                 uid, conversation.id, segments_dicts, data_protection_level=_cached_protection_level
             )
@@ -1746,16 +1746,16 @@ async def _stream_handler(
                 _send_message_event(SegmentsDeletedEvent(segment_ids=removed_ids))
 
             if transcript_segments:
-                await websocket.send_json([segment.dict() for segment in updated_segments])
+                await websocket.send_json([segment.model_dump() for segment in updated_segments])
 
                 if transcript_send is not None and user_has_credits:
-                    transcript_send([segment.dict() for segment in transcript_segments])
+                    transcript_send([segment.model_dump() for segment in transcript_segments])
                 elif not PUSHER_ENABLED and user_has_credits:
                     # Fallback: trigger realtime integrations directly when pusher is disabled
                     try:
                         await trigger_realtime_integrations(
                             uid,
-                            [s.dict() for s in transcript_segments],
+                            [s.model_dump() for s in transcript_segments],
                             session.current_conversation_id,
                             source=source,
                         )
@@ -1764,7 +1764,7 @@ async def _stream_handler(
 
                 # Onboarding: pass segments to handler for answer detection
                 if onboarding_handler and not onboarding_handler.completed:
-                    onboarding_handler.on_segments_received([s.dict() for s in transcript_segments])
+                    onboarding_handler.on_segments_received([s.model_dump() for s in transcript_segments])
 
                 if translation_enabled:
                     await translate(updated_segments, conversation.id, removed_ids=removed_ids)

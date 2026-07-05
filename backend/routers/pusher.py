@@ -269,7 +269,7 @@ async def _websocket_util_trigger(
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
-                            {'audio_files': [af.dict() for af in audio_files]},
+                            {'audio_files': [af.model_dump() for af in audio_files]},
                         )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
