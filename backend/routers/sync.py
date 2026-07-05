@@ -10,7 +10,7 @@ import uuid as _uuid
 import wave
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, TypedDict, cast
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import httpx
@@ -24,8 +24,9 @@ from utils.executors import (
     start_background_task,
 )
 
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, Query, Header, Request, Response
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
 from pydub import AudioSegment
 
@@ -47,8 +48,9 @@ from database.sync_jobs import (
     get_processed_segments,
     try_mark_once,
 )
-from models.conversation import CreateConversation
+from models.conversation import Conversation, CreateConversation
 from models.conversation_enums import ConversationSource
+from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from utils.conversations.factory import deserialize_conversation
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation
@@ -67,14 +69,15 @@ from utils.other.storage import (
     precache_conversation_audio,
 )
 
-from utils.byok import set_byok_keys, has_byok_keys
+from utils import encryption
+from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys
 from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
     is_cloud_tasks_dispatch_enabled,
     verify_cloud_tasks_oidc,
 )
-from utils.http_client import _get_semaphore  # type: ignore[reportPrivateUsage]  # intentional: loop-scoped semaphore helper
+from utils.http_client import _get_semaphore
 from utils.log_sanitizer import sanitize
 from utils.sync import playback as sync_playback
 from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
@@ -111,6 +114,38 @@ _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files
 router = APIRouter()
 
 
+class SyncLocalFilesResultResponse(BaseModel):
+    new_memories: list[str] = Field(default_factory=list)
+    updated_memories: list[str] = Field(default_factory=list)
+    failed_segments: int = 0
+    total_segments: int = 0
+    errors: list[str] = Field(default_factory=list)
+
+
+class SyncJobStartResponse(BaseModel):
+    job_id: str
+    status: str
+    total_files: int
+    total_segments: int
+    poll_after_ms: int
+
+
+class SyncJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    total_segments: int = 0
+    processed_segments: int = 0
+    successful_segments: int = 0
+    failed_segments: int = 0
+    result: SyncLocalFilesResultResponse | None = None
+    error: str | None = None
+
+
+class AudioDownloadPendingResponse(BaseModel):
+    status: str
+    poll_after_ms: int
+
+
 def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Dict[str, str]] = None) -> Dict[str, str]:
     headers = dict(base_headers or {})
     if retry_after is not None:
@@ -118,11 +153,11 @@ def _hard_restriction_headers(retry_after: int | None, base_headers: Optional[Di
     return headers
 
 
-@router.post("/v1/sync/audio/{conversation_id}/precache", tags=['v1'])
+@router.post("/v1/sync/audio/{conversation_id}/precache", response_model=AudioPrecacheResponse, tags=['v1'])
 def precache_conversation_audio_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
-) -> Dict[str, Any]:
+):
     """
     Warm the audio cache for a conversation.
     Returns immediately - caching happens in background.
@@ -133,14 +168,14 @@ def precache_conversation_audio_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    return cast(Dict[str, Any], sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', [])))  # type: ignore[reportUnknownMemberType]  # upstream dict[Unknown, Unknown]
+    return sync_playback.precache_audio_files(uid, conversation_id, conversation.get('audio_files', []))
 
 
-@router.get("/v1/sync/audio/{conversation_id}/urls", tags=['v1'])
+@router.get("/v1/sync/audio/{conversation_id}/urls", response_model=AudioUrlsResponse, tags=['v1'])
 def get_audio_signed_urls_endpoint(
     conversation_id: str,
     uid: str = Depends(auth.get_current_user_uid),
-) -> Dict[str, Any]:
+):
     """
     Get signed URLs for all audio files in a conversation.
     Synchronously caches the first uncached file for immediate playback.
@@ -155,7 +190,7 @@ def get_audio_signed_urls_endpoint(
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
-    return cast(Dict[str, Any], sync_playback.get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files', [])))  # type: ignore[reportUnknownMemberType]  # upstream dict[Unknown, Unknown]
+    return sync_playback.get_audio_signed_urls(uid, conversation_id, conversation.get('audio_files', []))
 
 
 # **********************************************
@@ -163,7 +198,33 @@ def get_audio_signed_urls_endpoint(
 # **********************************************
 
 
-@router.get("/v1/sync/audio/{conversation_id}/{audio_file_id}", tags=['v1'])
+@router.get(
+    "/v1/sync/audio/{conversation_id}/{audio_file_id}",
+    tags=['v1'],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+        202: {
+            "description": "Audio artifact is being prepared.",
+            "model": AudioDownloadPendingResponse,
+        },
+        206: {
+            "description": "Partial audio stream.",
+            "content": {
+                "audio/wav": {"schema": {"type": "string", "format": "binary"}},
+                "audio/mpeg": {"schema": {"type": "string", "format": "binary"}},
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}},
+            },
+        },
+    },
+)
 def download_audio_file_endpoint(
     conversation_id: str,
     audio_file_id: str,
@@ -217,18 +278,8 @@ def download_audio_file_endpoint(
 MAX_VAD_SEGMENT_SECONDS = int(os.getenv('SYNC_MAX_VAD_SEGMENT_SECONDS', '300'))
 
 
-class _VadSegment(TypedDict):
-    start: float
-    end: float
-
-
-class _PersonEmbedding(TypedDict):
-    embedding: Any
-    name: str
-
-
-def _merge_and_cap_vad_segments(voice_segments: List[_VadSegment]) -> List[_VadSegment]:
-    merged: List[_VadSegment] = []
+def _merge_and_cap_vad_segments(voice_segments: list) -> list:
+    merged = []
     for segment in voice_segments:
         if (
             merged
@@ -237,9 +288,9 @@ def _merge_and_cap_vad_segments(voice_segments: List[_VadSegment]) -> List[_VadS
         ):
             merged[-1]['end'] = segment['end']
         else:
-            merged.append(cast(_VadSegment, dict(segment)))
+            merged.append(dict(segment))
 
-    segments: List[_VadSegment] = []
+    segments = []
     for segment in merged:
         if segment['end'] - segment['start'] <= MAX_VAD_SEGMENT_SECONDS:
             segments.append(segment)
@@ -252,10 +303,10 @@ def _merge_and_cap_vad_segments(voice_segments: List[_VadSegment]) -> List[_VadS
     return segments
 
 
-def retrieve_vad_segments(path: str, segmented_paths: Set[str], errors: Optional[List[str]] = None) -> None:
+def retrieve_vad_segments(path: str, segmented_paths: set, errors: list = None):
     try:
         start_timestamp = get_timestamp_from_path(path)
-        voice_segments_raw = vad_is_empty(path, return_segments=True, cache=True)
+        voice_segments = vad_is_empty(path, return_segments=True, cache=True)
     except Exception as e:
         error_msg = f"VAD failed for {path}: {str(e)}"
         logger.info(error_msg)
@@ -263,21 +314,20 @@ def retrieve_vad_segments(path: str, segmented_paths: Set[str], errors: Optional
             errors.append(error_msg)
         raise  # Re-raise to ensure thread failure is visible
 
-    voice_segments: List[_VadSegment] = cast(List[_VadSegment], voice_segments_raw)
     segments = _merge_and_cap_vad_segments(voice_segments)
     logger.info(f"{path} {len(segments)}")
 
-    aseg = AudioSegment.from_wav(path)  # type: ignore[reportUnknownMemberType]  # pydub untyped
+    aseg = AudioSegment.from_wav(path)
     path_dir = '/'.join(path.split('/')[:-1])
 
     try:
-        for segment in segments:
+        for i, segment in enumerate(segments):
             if (segment['end'] - segment['start']) < 1:
                 continue
             segment_timestamp = start_timestamp + segment['start']
             segment_path = f'{path_dir}/{segment_timestamp}.wav'
-            segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]  # type: ignore[reportUnknownMemberType]  # pydub untyped
-            segment_aseg.export(segment_path, format='wav')  # type: ignore[reportUnknownMemberType]  # pydub untyped
+            segment_aseg = aseg[segment['start'] * 1000 : segment['end'] * 1000]
+            segment_aseg.export(segment_path, format='wav')
             segmented_paths.add(segment_path)
             # Explicitly delete segment to free memory immediately
             del segment_aseg
@@ -316,13 +366,13 @@ USER_SELF_PERSON_ID = 'user'
 SPEAKER_ID_MIN_AUDIO = 1.0  # Minimum seconds of audio per speaker for embedding extraction
 
 
-def build_person_embeddings_cache(uid: str) -> Dict[str, _PersonEmbedding]:
+def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     """Build a cache of person embeddings for speaker identification.
 
     Loads the user's own speaker embedding and all people with stored embeddings.
     Returns dict mapping person_id -> {embedding: np.ndarray, name: str}.
     """
-    cache: Dict[str, _PersonEmbedding] = {}
+    cache: Dict[str, dict] = {}
 
     # Load user's own speaker embedding
     embedding_list = users_db.get_user_speaker_embedding(uid)
@@ -405,7 +455,7 @@ def _extract_speaker_clip_wav(audio_bytes: bytes, start_sec: float, end_sec: flo
 def identify_speakers_for_segments(
     transcript_segments: List['TranscriptSegment'],
     audio_bytes: Optional[bytes],
-    person_embeddings_cache: Dict[str, _PersonEmbedding],
+    person_embeddings_cache: Dict[str, dict],
     uid: str,
 ) -> None:
     """Identify speakers in transcript segments using voice embeddings and text detection.
@@ -431,7 +481,7 @@ def identify_speakers_for_segments(
     # Voice embedding matching (only when audio and cached embeddings are available)
     # Track matched person_ids so each person is only assigned to one speaker
     # (diarization tells us speakers are distinct — no person can be two speakers).
-    matched_person_ids: Set[str] = set()
+    matched_person_ids: set = set()
 
     if audio_bytes and person_embeddings_cache:
         # Sort speakers by best single segment duration (longest first) — this is the clip
@@ -462,7 +512,7 @@ def identify_speakers_for_segments(
                 continue
 
             # Compare only against unmatched candidates (each person can be one speaker)
-            best_match: Optional[Tuple[str, str]] = None
+            best_match = None
             best_distance = float('inf')
             for person_id, data in person_embeddings_cache.items():
                 if person_id in matched_person_ids:
@@ -475,7 +525,7 @@ def identify_speakers_for_segments(
             if best_match and best_distance < SPEAKER_MATCH_THRESHOLD:
                 person_id, person_name = best_match
                 speaker_to_person_map[speaker_id] = (person_id, person_name)
-                segment_person_assignment_map[best_seg.id] = person_id  # type: ignore[reportArgumentType]  # best_seg.id Optional[str], populated by TranscriptSegment __init__
+                segment_person_assignment_map[best_seg.id] = person_id
                 matched_person_ids.add(person_id)
                 logger.info(
                     f'Speaker ID (sync): speaker {speaker_id} -> {person_id} '
@@ -495,7 +545,7 @@ def identify_speakers_for_segments(
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person:
                     # Per-segment assignment always applies
-                    segment_person_assignment_map[seg.id] = person['id']  # type: ignore[reportArgumentType]  # seg.id Optional[str], populated by TranscriptSegment __init__
+                    segment_person_assignment_map[seg.id] = person['id']
                     # Update speaker map only when diarization is active
                     if speaker_id > 0:
                         speaker_to_person_map[speaker_id] = (person['id'], person['name'])
@@ -529,7 +579,7 @@ class _OrderedTurnstile:
 
     def __init__(self, ordered_keys: List[str]):
         self._pending = deque(ordered_keys)
-        self._done: Set[str] = set()
+        self._done = set()
         self._cond = threading.Condition()
 
     def _advance(self):
@@ -553,18 +603,18 @@ class _OrderedTurnstile:
 def process_segment(
     path: str,
     uid: str,
-    response: Dict[str, Any],
+    response: dict,
     lock: threading.Lock,
-    errors: List[str],
+    errors: list,
     source: ConversationSource = ConversationSource.omi,
     is_locked: bool = False,
-    transcription_prefs: Optional[Dict[str, Any]] = None,
-    person_embeddings_cache: Optional[Dict[str, _PersonEmbedding]] = None,
-    target_conversation_id: Optional[str] = None,
+    transcription_prefs: dict = None,
+    person_embeddings_cache: dict = None,
+    target_conversation_id: str = None,
     turnstile: Optional[_OrderedTurnstile] = None,
     private_cloud_sync_enabled: bool = False,
-    data_protection_level: Optional[str] = None,
-) -> bool:
+    data_protection_level: str = None,
+):
     try:
         url = get_syncing_file_temporal_signed_url(path)
         schedule_syncing_temporal_file_deletion(path)
@@ -580,6 +630,7 @@ def process_segment(
 
         # When single-language mode is active, trust the user's language choice
         # rather than Deepgram's detection (avoids overriding explicit selection).
+        use_return_language = not (single_language_mode and user_language)
         words, detected_language = prerecorded(
             url,
             speakers_count=3,
@@ -588,14 +639,13 @@ def process_segment(
             language=req_language,
             keywords=vocabulary if vocabulary else None,
         )
-        detected_language_str = detected_language if isinstance(detected_language, str) else ''
-        language = user_language if (single_language_mode and user_language) else detected_language_str
+        language = user_language if (single_language_mode and user_language) else detected_language
         if not words:
             # DG processed audio successfully but found no speech (silence/noise).
             # Real DG failures now raise RuntimeError and are caught by the except block.
             logger.info(f'No transcript words for segment {path} (silence or noise-only audio)')
             return True
-        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)  # type: ignore[reportArgumentType]  # upstream words Union, narrowed at runtime by return_language=True
+        transcript_segments: List[TranscriptSegment] = postprocess_words(words, 0)
         if not transcript_segments:
             logger.warning(f'Postprocessing returned empty for segment {path} (words present but no segments)')
             return True
@@ -626,8 +676,6 @@ def process_segment(
 
         timestamp = get_timestamp_from_path(path)
         segment_end_timestamp = timestamp + transcript_segments[-1].end
-        timestamp_int = int(timestamp)
-        segment_end_int = int(segment_end_timestamp)
 
         # When a target conversation is specified (auto-sync from live capture),
         # attach segments to it directly instead of searching by timestamp.
@@ -637,9 +685,9 @@ def process_segment(
                 logger.warning(
                     f'Target conversation {target_conversation_id} not found, falling back to timestamp lookup'
                 )
-                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp_int, segment_end_int)
+                closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
         else:
-            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp_int, segment_end_int)
+            closest_memory = get_closest_conversation_to_timestamps(uid, timestamp, segment_end_timestamp)
 
         if not closest_memory:
             started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -659,10 +707,10 @@ def process_segment(
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
 
-            transcript_segment_dicts: List[Dict[str, Any]] = [s.dict() for s in transcript_segments]
+            transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
-            for segment in transcript_segment_dicts:
+            for segment in transcript_segments:
                 segment['timestamp'] = timestamp + segment['start']
             for segment in closest_memory['transcript_segments']:
                 segment['timestamp'] = closest_memory['started_at'].timestamp() + segment['start']
@@ -673,8 +721,8 @@ def process_segment(
                 (round(s['timestamp'], 2), round(s['timestamp'] + (s['end'] - s['start']), 2))
                 for s in closest_memory['transcript_segments']
             }
-            deduped_segments: List[Dict[str, Any]] = []
-            for seg in transcript_segment_dicts:
+            deduped_segments = []
+            for seg in transcript_segments:
                 seg_key = (round(seg['timestamp'], 2), round(seg['timestamp'] + (seg['end'] - seg['start']), 2))
                 if seg_key not in existing_timestamps:
                     deduped_segments.append(seg)
@@ -688,11 +736,11 @@ def process_segment(
                 return True
 
             # merge and sort segments by start timestamp
-            segments: List[Dict[str, Any]] = list(closest_memory['transcript_segments']) + deduped_segments
+            segments = closest_memory['transcript_segments'] + deduped_segments
             segments.sort(key=lambda x: x['timestamp'])
 
             # fix segment.start .end to be relative to the memory
-            for segment in segments:
+            for i, segment in enumerate(segments):
                 duration = segment['end'] - segment['start']
                 segment['start'] = segment['timestamp'] - closest_memory['started_at'].timestamp()
                 segment['end'] = segment['start'] + duration
@@ -709,7 +757,7 @@ def process_segment(
 
             # remove timestamp field
             for segment in segments:
-                segment.pop('timestamp', None)
+                segment.pop('timestamp')
 
             # save with updated finished_at
             with lock:
@@ -735,8 +783,7 @@ def process_segment(
                 # Record it so the caller reprocesses once per conversation at batch end,
                 # instead of once per merged segment.
                 with lock:
-                    merged_map = cast(Dict[str, str], response.setdefault('_merged', {}))
-                    merged_map[closest_memory['id']] = language
+                    response.setdefault('_merged', {})[closest_memory['id']] = language
         return True
     except Exception as e:
         error_msg = f'Failed to process segment {path}: {e}'
@@ -749,14 +796,13 @@ def process_segment(
             turnstile.complete(path)
 
 
-def _reprocess_merged_conversations(uid: str, response: Dict[str, Any]) -> None:
+def _reprocess_merged_conversations(uid: str, response: dict):
     """Regenerate summary/structured data for conversations that gained segments this batch.
 
     The merge path in process_segment only appends transcript segments; without this the
     conversation keeps the summary generated from its first chunk only.
     """
-    merged_raw: Any = response.pop('_merged', {})
-    merged = cast(Dict[str, str], merged_raw) if isinstance(merged_raw, dict) else {}
+    merged = response.pop('_merged', {})
     for conversation_id, language in merged.items():
         try:
             _reprocess_conversation_after_update(uid, conversation_id, language)
@@ -769,9 +815,9 @@ def _wav_bytes_to_pcm16_16k(audio_bytes: Optional[bytes]) -> Optional[bytes]:
     expects (it opus-encodes internally) and the audio merge is hardcoded to."""
     if not audio_bytes:
         return None
-    seg = AudioSegment.from_wav(io.BytesIO(audio_bytes))  # type: ignore[reportUnknownMemberType]  # pydub untyped
-    seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)  # type: ignore[reportUnknownMemberType]  # pydub untyped
-    return seg.raw_data  # type: ignore[reportUnknownMemberType]  # pydub untyped
+    seg = AudioSegment.from_wav(io.BytesIO(audio_bytes))
+    seg = seg.set_frame_rate(16000).set_channels(1).set_sample_width(2)
+    return seg.raw_data
 
 
 def _store_sync_audio_chunk(
@@ -795,29 +841,25 @@ def _store_sync_audio_chunk(
         logger.warning(f'sync: failed to store audio chunk for {conversation_id}@{timestamp}: {e}')
 
 
-def _finalize_sync_audio_files(uid: str, response: Dict[str, Any]) -> None:
+def _finalize_sync_audio_files(uid: str, response: dict):
     """After all segments are assigned, build audio_files from the uploaded chunks and
     persist them on each conversation — exactly as the realtime flush does — then warm the
     playback artifact. Rebuild+replace is idempotent across retries (create_audio_files_from_chunks
     always rebuilds from the full chunk listing)."""
-    new_mem: Any = response.get('new_memories', set())
-    upd_mem: Any = response.get('updated_memories', set())
-    new_set: Set[str] = cast(Set[str], new_mem) if isinstance(new_mem, set) else set()
-    upd_set: Set[str] = cast(Set[str], upd_mem) if isinstance(upd_mem, set) else set()
-    conversation_ids: Set[str] = new_set | upd_set
+    conversation_ids = set(response.get('new_memories', set())) | set(response.get('updated_memories', set()))
     for conversation_id in conversation_ids:
         try:
             audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation_id)
             if not audio_files:
                 continue
-            files_payload = [af.dict() for af in audio_files]
+            files_payload = [af.model_dump() for af in audio_files]
             conversations_db.update_conversation(uid, conversation_id, {'audio_files': files_payload})
             precache_conversation_audio(uid, conversation_id, files_payload)
         except Exception as e:
             logger.error(f'sync: failed to finalize audio_files for {conversation_id}: {e}')
 
 
-def _cleanup_files(file_paths: Iterable[str]) -> None:
+def _cleanup_files(file_paths):
     """Helper to clean up temporary files."""
     for path in file_paths:
         try:
@@ -827,16 +869,18 @@ def _cleanup_files(file_paths: Iterable[str]) -> None:
             logger.error(f"Failed to cleanup file {path}: {e}")
 
 
+# response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
+# the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True)
 async def sync_local_files(
     request: Request,
     response: Response,
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
-    conversation_id: Optional[str] = Query(
+    conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
-) -> Any:
+):
     logger.warning(
         f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
         f'user_agent={request.headers.get("user-agent", "")}'
@@ -862,9 +906,9 @@ async def sync_local_files(
             source = ConversationSource.limitless
             break
 
-    paths: List[str] = []
-    wav_paths: List[str] = []
-    segmented_paths: Set[str] = set()
+    paths = []
+    wav_paths = []
+    segmented_paths = set()
 
     try:
         try:
@@ -873,12 +917,12 @@ async def sync_local_files(
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
-        vad_errors: List[str] = []
+        vad_errors = []
 
-        def _run_vad(path: str) -> None:
+        def _run_vad(path):
             retrieve_vad_segments(path, segmented_paths, vad_errors)
 
-        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, p) for p in wav_paths])
+        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
         _cleanup_files(wav_paths)
@@ -902,15 +946,15 @@ async def sync_local_files(
         if FAIR_USE_ENABLED and total_speech_ms > 0:
             record_speech_ms(uid, total_speech_ms, source='sync')
             speech_totals = get_rolling_speech_ms(uid)
-            triggered_caps = cast(List[Any], check_soft_caps(uid, speech_totals=speech_totals))
+            triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
             if triggered_caps:
                 logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
                 asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))
 
         is_locked = should_lock
 
-        pipe_response: Dict[str, Any] = {'updated_memories': set(), 'new_memories': set()}
-        segment_errors: List[str] = []
+        response = {'updated_memories': set(), 'new_memories': set()}
+        segment_errors = []
         segment_lock = threading.Lock()
         total_segments = len(segmented_paths)
 
@@ -972,9 +1016,9 @@ async def sync_local_files(
                 run_blocking(
                     sync_executor,
                     process_segment,
-                    p,
+                    path,
                     uid,
-                    pipe_response,
+                    response,
                     segment_lock,
                     segment_errors,
                     source,
@@ -986,13 +1030,13 @@ async def sync_local_files(
                     private_cloud_sync_enabled=private_cloud_sync_enabled,
                     data_protection_level=data_protection_level,
                 )
-                for p in ordered_paths
+                for path in ordered_paths
             ]
         )
 
-        await run_blocking(sync_executor, _reprocess_merged_conversations, uid, pipe_response)
+        await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
         if private_cloud_sync_enabled:
-            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, pipe_response)
+            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
 
         # Record DG usage after successful processing (not before, to avoid charging on retries)
         if fair_use_restrict_dg:
@@ -1004,9 +1048,9 @@ async def sync_local_files(
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
         # Build JSON-serializable response
-        result: Dict[str, Any] = {
-            'new_memories': sorted(pipe_response['new_memories']),
-            'updated_memories': sorted(pipe_response['updated_memories']),
+        result = {
+            'new_memories': sorted(response['new_memories']),
+            'updated_memories': sorted(response['updated_memories']),
         }
 
         failed_segments = len(segment_errors)
@@ -1064,11 +1108,11 @@ async def sync_local_files(
 # ---------------------------------------------------------------------------
 
 
-def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str) -> List[str]:
+def _retrieve_file_paths_v2(files: List[UploadFile], uid: str, job_id: str):
     """Like retrieve_file_paths but uses a job-specific directory to avoid concurrency conflicts."""
     directory = f'syncing/{uid}/{job_id}/'
     os.makedirs(directory, exist_ok=True)
-    paths: List[str] = []
+    paths = []
     for file in files:
         filename = file.filename
         if not filename:
@@ -1106,13 +1150,13 @@ def _get_sync_pipeline_semaphore() -> asyncio.Semaphore:
 async def _run_full_pipeline_background_async(
     job_id: str,
     uid: str,
-    raw_paths: List[str],
-    source: ConversationSource,
+    raw_paths: list,
+    source,
     should_lock: bool,
     job_dir: str,
-    target_conversation_id: Optional[str] = None,
+    target_conversation_id: str = None,
     task_mode: bool = False,
-) -> None:
+):
     """Async coordinator for the full sync pipeline (decode → VAD → fair-use → STT → LLM).
 
     Inline dispatch (task_mode=False): runs as a fire-and-forget asyncio task,
@@ -1131,9 +1175,9 @@ async def _run_full_pipeline_background_async(
     """
     concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore()
     async with concurrency_gate:
-        segmented_paths: Set[str] = set()
-        wav_paths: List[str] = []
-        stage_timings: Dict[str, int] = {}
+        segmented_paths = set()
+        wav_paths = []
+        stage_timings = {}
         pipeline_start = time.monotonic()
         try:
             await run_blocking(db_executor, mark_job_processing, job_id)
@@ -1171,15 +1215,17 @@ async def _run_full_pipeline_background_async(
             # --- Phase 2: VAD ---
             await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'vad'})
             t0 = time.monotonic()
-            vad_errors: List[str] = []
+            vad_errors = []
 
-            def _run_vad_bg(path: str) -> None:
+            def _run_vad_bg(path):
                 try:
                     retrieve_vad_segments(path, segmented_paths, vad_errors)
                 except Exception as e:
                     vad_errors.append(f'{path}: {e}')
 
-            vad_tasks = [asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg, p), timeout=300) for p in wav_paths]
+            vad_tasks = [
+                asyncio.wait_for(run_blocking(sync_executor, _run_vad_bg, path), timeout=300) for path in wav_paths
+            ]
             vad_results = await asyncio.gather(*vad_tasks, return_exceptions=True)
             for r in vad_results:
                 if isinstance(r, asyncio.TimeoutError):
@@ -1230,19 +1276,8 @@ async def _run_full_pipeline_background_async(
                 # Once-guard: a Cloud Tasks retry must not count the same audio twice
                 if await run_blocking(db_executor, try_mark_once, job_id, 'speech_ms'):
                     await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source='sync')
-                speech_totals = cast(
-                    Dict[str, Any],
-                    await run_blocking(db_executor, get_rolling_speech_ms, uid),  # type: ignore[reportUnknownArgumentType]  # upstream returns dict[Unknown, Unknown]
-                )
-                triggered_caps = cast(
-                    List[Any],
-                    await run_blocking(
-                        db_executor,
-                        check_soft_caps,
-                        uid,
-                        speech_totals=speech_totals,
-                    ),
-                )
+                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
+                triggered_caps = await run_blocking(db_executor, check_soft_caps, uid, speech_totals=speech_totals)
                 if triggered_caps:
                     logger.info(f'sync_v2 bg: soft caps triggered for {uid}: {triggered_caps}')
                     try:
@@ -1291,12 +1326,12 @@ async def _run_full_pipeline_background_async(
             # --- Phase 5: Process segments (STT + LLM) ---
             await run_blocking(db_executor, update_sync_job, job_id, {'stage': 'stt_llm'})
             t0 = time.monotonic()
-            response: Dict[str, Any] = {'updated_memories': set(), 'new_memories': set()}
-            segment_errors: List[str] = []
+            response = {'updated_memories': set(), 'new_memories': set()}
+            segment_errors = []
             segment_lock = threading.Lock()
 
             # Segments that fully landed in a prior Cloud Tasks attempt are skipped
-            already_processed: Set[str] = set()
+            already_processed = set()
             if task_mode:
                 already_processed = await run_blocking(db_executor, get_processed_segments, job_id)
                 if already_processed:
@@ -1308,10 +1343,10 @@ async def _run_full_pipeline_background_async(
             # Chronological order + turnstile: STT runs in parallel (per chunk), but
             # conversation assignment is serialized oldest-first so adjacent chunks merge
             # instead of racing into separate conversations (#6551, #5747).
-            segment_list: List[str] = sorted(segmented_paths, key=get_timestamp_from_path)
+            segment_list = sorted(segmented_paths, key=get_timestamp_from_path)
             assignment_turnstile = _OrderedTurnstile(segment_list)
 
-            def _process_one_segment(path: str) -> None:
+            def _process_one_segment(path):
                 if path in already_processed:
                     # Release the assignment slot — later segments wait on it
                     assignment_turnstile.complete(path)
@@ -1340,8 +1375,8 @@ async def _run_full_pipeline_background_async(
                 # Later segments in a chunk also wait their assignment turn, so widen
                 # their timeout by position to avoid spurious timeouts.
                 seg_tasks = [
-                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, p), timeout=300 + 60 * j)
-                    for j, p in enumerate(chunk)
+                    asyncio.wait_for(run_blocking(sync_executor, _process_one_segment, path), timeout=300 + 60 * j)
+                    for j, path in enumerate(chunk)
                 ]
                 seg_results = await asyncio.gather(*seg_tasks, return_exceptions=True)
                 for r in seg_results:
@@ -1382,7 +1417,7 @@ async def _run_full_pipeline_background_async(
             # Build result
             failed_segments = len(segment_errors)
             successful_segments = total_segments - failed_segments
-            result: Dict[str, Any] = {
+            result = {
                 'new_memories': sorted(response['new_memories']),
                 'updated_memories': sorted(response['updated_memories']),
             }
@@ -1446,13 +1481,13 @@ async def _run_full_pipeline_background_async(
                 logger.error(f'sync_v2 bg: failed to cleanup job dir {job_dir}: {e}')
 
 
-def _stage_files_to_gcs(paths: List[str]) -> None:
+def _stage_files_to_gcs(paths: list):
     """Upload raw .bin files to the syncing bucket (blob name = local path)."""
     for p in paths:
         upload_syncing_temporal_file(p)
 
 
-def _delete_staged_blobs(blob_paths: List[str]) -> None:
+def _delete_staged_blobs(blob_paths: list):
     for p in blob_paths:
         try:
             delete_syncing_temporal_file(p)
@@ -1460,11 +1495,11 @@ def _delete_staged_blobs(blob_paths: List[str]) -> None:
             logger.warning(f'Failed to delete staged blob {p}: {e}')
 
 
-async def _delete_staged_blobs_async(blob_paths: List[str]) -> None:
+async def _delete_staged_blobs_async(blob_paths: list):
     await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
 
 
-def _download_staged_files(blob_paths: List[str]) -> bool:
+def _download_staged_files(blob_paths: list) -> bool:
     """Download staged blobs back to their local paths. False if any is gone."""
     for p in blob_paths:
         if not download_syncing_temporal_file(p):
@@ -1472,14 +1507,14 @@ def _download_staged_files(blob_paths: List[str]) -> bool:
     return True
 
 
-@router.post("/v2/sync-local-files")
+@router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
-    conversation_id: Optional[str] = Query(
+    conversation_id: str = Query(
         None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
     ),
-) -> JSONResponse:
+):
     """
     Async version of sync-local-files. Saves raw files and returns 202
     immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
@@ -1508,7 +1543,7 @@ async def sync_local_files_v2(
     job_id = str(_uuid.uuid4())
     job_dir = f'syncing/{uid}/{job_id}'
 
-    paths: List[str] = []
+    paths = []
 
     try:
         # --- Fast path: save raw files only (< 2s typical) ---
@@ -1520,7 +1555,7 @@ async def sync_local_files_v2(
         await run_blocking(db_executor, create_sync_job, uid, total_files=len(files), total_segments=0, job_id=job_id)
 
         # Transfer ownership of raw paths to the background task
-        owned_paths: List[str] = list(paths)
+        owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg task
 
         dispatched = False
@@ -1589,7 +1624,7 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
-@router.get("/v2/sync-local-files/{job_id}")
+@router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
     job = get_sync_job(job_id)
@@ -1617,6 +1652,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return resp
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: runs one sync job inside the request.
@@ -1703,6 +1740,8 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
         await run_blocking(db_executor, release_job_run_lock, job_id, lock_token)
 
 
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse status
+# codes (200/409/500) drive the queue protocol, not a typed client-facing body.
 @router.post("/v2/audio-merge-jobs/run", include_in_schema=False)
 async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Cloud Tasks handler: build one playback MP3 artifact inside the request.

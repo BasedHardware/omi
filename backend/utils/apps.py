@@ -630,7 +630,7 @@ def upsert_app_payment_link(
         app.payment_link = payment_link.url
 
     # updates
-    update_app_in_db(app.dict())
+    update_app_in_db(app.model_dump())
     return app
 
 
@@ -1061,7 +1061,7 @@ def build_pagination_metadata(total: int, offset: int, limit: int, category: Opt
 
     metadata: Dict[str, Any] = {
         'total': total,
-        'count': min(limit, total - offset),
+        'count': max(0, min(limit, total - offset)),
         'offset': offset,
         'limit': limit,
         'hasNext': has_next,

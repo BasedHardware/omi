@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, TypedDict, cast
+from typing import Optional
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter, transactional  # type: ignore[reportUnknownMemberType]  # firestore transactional is untyped
+from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
-from models.users import Subscription, PlanType, SubscriptionStatus
+from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
 
@@ -18,78 +18,6 @@ logger = logging.getLogger(__name__)
 _USER_LANGUAGE_CACHE = CachePolicy(namespace='user_language', version=1, ttl_seconds=300)
 _USER_TRANSCRIPTION_PREFS_CACHE = CachePolicy(namespace='user_transcription_prefs', version=1, ttl_seconds=120)
 _USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl_seconds=300)
-
-
-class UserDoc(TypedDict, total=False):
-    """Typed contract for the users/{uid} Firestore document.
-
-    All keys are optional (``total=False``) because the document is patched
-    incrementally across many features. Scalar datetimes are typed as ``Any``
-    because the firestore SDK returns ``DatetimeWithNanoseconds`` which is not
-    statically exported.
-    """
-
-    # Identity / lifecycle
-    uid: str
-    id: str
-    created_at: Any  # datetime from firestore
-    deleted_at: Any  # datetime from firestore
-
-    # Telemetry (record_user_platform)
-    signup_platform: str
-    signup_os: str
-    signup_platform_at: Any  # datetime
-    last_active_platform: str
-    last_active_os: str
-    last_active_at: Any  # datetime
-    platforms_used: List[str]
-
-    # Privacy / permissions
-    store_recording_permission: bool
-    private_cloud_sync_enabled: bool
-    training_data_opt_in: Dict[str, Any]
-    data_protection_level: str
-    migration_status: Dict[str, Any]
-
-    # BYOK
-    byok: Dict[str, Any]
-
-    # Audio / speaker
-    speaker_embedding: List[Any]
-    speaker_embedding_updated_at: Any  # datetime
-
-    # Payments
-    stripe_account_id: Optional[str]
-    stripe_customer_id: Optional[str]
-    paypal_details: Optional[Dict[str, Any]]
-    default_payment_method: Optional[str]
-    subscription: Dict[str, Any]
-    cancellation_feedback: Dict[str, Any]
-
-    # Onboarding / preferences
-    onboarding: Dict[str, Any]
-    language: str
-    transcription_preferences: Dict[str, Any]
-    default_task_integration: Optional[str]
-    agentVm: Optional[Dict[str, Any]]
-
-    # Desktop settings
-    notifications_enabled: bool
-    notification_frequency: int
-    assistant_settings: Dict[str, Any]
-    update_channel: Optional[str]
-    ai_user_profile: Dict[str, Any]
-
-
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    """Typed adapter for Firestore ``DocumentSnapshot.to_dict()``.
-
-    Coerces the untyped SDK return into ``Dict[str, Any]`` so call sites can
-    read fields without each one re-narrowing. Returns ``{}`` for missing or
-    malformed payloads.
-    """
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
 # Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
@@ -121,7 +49,7 @@ def _normalize_platform(raw: Optional[str]) -> tuple[Optional[str], Optional[str
     `coarse_platform` is one of 'desktop' / 'mobile' (None if unrecognized).
     `os_value` is the normalized OS string preserved for drill-down.
     """
-    if not raw:
+    if not raw or not isinstance(raw, str):
         return None, None
     os_value = raw.strip().lower()
     if not os_value:
@@ -152,7 +80,7 @@ def record_client_device(
         now = datetime.now(timezone.utc)
         coarse, _os_value = _normalize_platform(platform)
         doc_ref = db.collection('users').document(uid).collection('client_devices').document(client_device_id)
-        updates: Dict[str, Any] = {
+        updates = {
             'platform': platform,
             'device_class': coarse,
             'last_seen_at': now,
@@ -196,7 +124,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         now = datetime.now(timezone.utc)
         user_ref = db.collection('users').document(uid)
 
-        updates: Dict[str, Any] = {
+        updates = {
             'last_active_platform': coarse,
             'last_active_os': os_value,
             'last_active_at': now,
@@ -209,7 +137,7 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         # than a transaction for a field that almost never changes.
         snapshot = user_ref.get()
         if snapshot.exists:
-            data: Dict[str, Any] = _typed_doc(snapshot)
+            data = snapshot.to_dict() or {}
             if not data.get('signup_platform'):
                 updates['signup_platform'] = coarse
                 updates['signup_os'] = os_value
@@ -225,30 +153,29 @@ def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
         logger.warning("record_user_platform failed for uid=%s: %s", uid, e)
 
 
-def is_exists_user(uid: str) -> bool:
+def is_exists_user(uid: str):
     user_ref = db.collection('users').document(uid)
     if not user_ref.get().exists:
         return False
     return True
 
 
-def get_user_profile(uid: str) -> Dict[str, Any]:
+def get_user_profile(uid: str) -> dict:
     """Gets the full user profile document."""
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
     if user_doc.exists:
-        return _typed_doc(user_doc)
+        return user_doc.to_dict()
     return {}
 
 
-def get_user_store_recording_permission(uid: str) -> bool:
+def get_user_store_recording_permission(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data: Dict[str, Any] = _typed_doc(user_ref.get())
-    value: object = user_data.get('store_recording_permission', False)
-    return cast(bool, value)
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('store_recording_permission', False)
 
 
-def set_user_store_recording_permission(uid: str, value: bool) -> None:
+def set_user_store_recording_permission(uid: str, value: bool):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'store_recording_permission': value})
 
@@ -256,18 +183,17 @@ def set_user_store_recording_permission(uid: str, value: bool) -> None:
 def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     """Check if user has private cloud sync enabled."""
     user_ref = db.collection('users').document(uid)
-    user_data: Dict[str, Any] = _typed_doc(user_ref.get())
-    value: object = user_data.get('private_cloud_sync_enabled', True)
-    return cast(bool, value)
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('private_cloud_sync_enabled', True)
 
 
-def set_user_private_cloud_sync_enabled(uid: str, value: bool) -> None:
+def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     """Enable or disable private cloud sync for a user."""
     user_ref = db.collection('users').document(uid)
     user_ref.update({'private_cloud_sync_enabled': value})
 
 
-def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None) -> None:
+def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
     user_ref = db.collection('users').document(uid)
     user_ref.set(
         {
@@ -288,11 +214,10 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
 BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
-def get_byok_state(uid: str) -> Dict[str, Any]:
+def get_byok_state(uid: str) -> dict:
     user_ref = db.collection('users').document(uid)
-    data: Dict[str, Any] = _typed_doc(user_ref.get())
-    byok: object = data.get('byok', {})
-    return cast(Dict[str, Any], byok) if isinstance(byok, dict) else {}
+    data = user_ref.get().to_dict() or {}
+    return data.get('byok', {})
 
 
 def is_byok_active(uid: str) -> bool:
@@ -300,7 +225,7 @@ def is_byok_active(uid: str) -> bool:
     state = get_byok_state(uid)
     if not state.get('active'):
         return False
-    last_seen: object = state.get('last_seen_at')
+    last_seen = state.get('last_seen_at')
     if not last_seen:
         return False
     if isinstance(last_seen, datetime):
@@ -310,7 +235,7 @@ def is_byok_active(uid: str) -> bool:
     return age <= BYOK_HEARTBEAT_TTL_SECONDS
 
 
-def set_byok_active(uid: str, fingerprints: Dict[str, Any]) -> None:
+def set_byok_active(uid: str, fingerprints: dict):
     user_ref = db.collection('users').document(uid)
     user_ref.set(
         {
@@ -324,7 +249,7 @@ def set_byok_active(uid: str, fingerprints: Dict[str, Any]) -> None:
     )
 
 
-def clear_byok_active(uid: str) -> None:
+def clear_byok_active(uid: str):
     user_ref = db.collection('users').document(uid)
     user_ref.set(
         {
@@ -338,7 +263,7 @@ def clear_byok_active(uid: str) -> None:
     )
 
 
-def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None) -> None:
+def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
     # Use merge=True so a retried delete request does not erase a durable wipe marker
     # (pending/failed/retrying/deleting_auth) already written to the same document.
@@ -353,7 +278,7 @@ def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: 
     )
 
 
-def mark_user_deletion_wipe_started(uid: str) -> None:
+def mark_user_deletion_wipe_started(uid: str):
     """Mark that the background data wipe has been queued but not yet completed.
 
     Persisted in the top-level ``account_deletions`` collection so it survives a
@@ -372,7 +297,7 @@ def mark_user_deletion_wipe_started(uid: str) -> None:
     )
 
 
-def mark_user_deletion_wipe_running(uid: str) -> None:
+def mark_user_deletion_wipe_running(uid: str):
     """Transition a queued wipe marker to ``running`` once the worker starts.
 
     Called by ``background_wipe_user_data`` at the top of the executor future.
@@ -391,7 +316,7 @@ def mark_user_deletion_wipe_running(uid: str) -> None:
     )
 
 
-def mark_user_deletion_wipe_intent(uid: str) -> None:
+def mark_user_deletion_wipe_intent(uid: str):
     """Persist a non-actionable deletion intent *before* auth deletion.
 
     Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
@@ -409,7 +334,7 @@ def mark_user_deletion_wipe_intent(uid: str) -> None:
     )
 
 
-def mark_user_deletion_wipe_completed(uid: str) -> None:
+def mark_user_deletion_wipe_completed(uid: str):
     """Mark the background data wipe as finished."""
     db.collection('account_deletions').document(uid).set(
         {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
@@ -417,7 +342,7 @@ def mark_user_deletion_wipe_completed(uid: str) -> None:
     )
 
 
-def mark_user_deletion_wipe_failed(uid: str) -> None:
+def mark_user_deletion_wipe_failed(uid: str):
     """Mark the background data wipe as failed so a reconciliation worker can retry."""
     db.collection('account_deletions').document(uid).set(
         {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
@@ -425,7 +350,7 @@ def mark_user_deletion_wipe_failed(uid: str) -> None:
     )
 
 
-def cancel_user_deletion_wipe(uid: str) -> None:
+def cancel_user_deletion_wipe(uid: str):
     """Cancel a pending deletion-wipe marker.
 
     Called when the Firebase auth deletion fails after the marker was already
@@ -442,7 +367,7 @@ def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
     running_stale_after: timedelta = timedelta(minutes=30),
-) -> List[Dict[str, Any]]:
+) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
     Queries ``failed`` records (always actionable), stale ``pending`` records
@@ -465,12 +390,9 @@ def get_pending_deletion_wipes(
     stale_cutoff = datetime.now(timezone.utc) - stale_after
     running_cutoff = datetime.now(timezone.utc) - running_stale_after
     budget = limit
-    result: List[Dict[str, Any]] = []
 
     failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
-    for doc in failed_docs:
-        data: Dict[str, Any] = _typed_doc(doc)
-        result.append(data | {'uid': doc.id})
+    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
 
     if len(result) < limit:
         # Over-fetch *all* pending docs and age-filter in Python. A tight
@@ -482,7 +404,7 @@ def get_pending_deletion_wipes(
         for doc in pending_docs:
             if len(result) >= limit:
                 break
-            data = _typed_doc(doc)
+            data = doc.to_dict()
             queued_at = data.get('wipe_queued_at')
             if queued_at and queued_at < stale_cutoff:
                 result.append(data | {'uid': doc.id})
@@ -498,7 +420,7 @@ def get_pending_deletion_wipes(
         for doc in running_docs:
             if len(result) >= limit:
                 break
-            data = _typed_doc(doc)
+            data = doc.to_dict()
             running_at = data.get('wipe_running_at')
             if running_at and running_at < running_cutoff:
                 result.append(data | {'uid': doc.id})
@@ -513,7 +435,7 @@ def get_pending_deletion_wipes(
         for doc in deleting_auth_docs:
             if len(result) >= limit:
                 break
-            data = _typed_doc(doc)
+            data = doc.to_dict()
             intent_at = data.get('wipe_intent_at')
             if intent_at and intent_at < stale_cutoff:
                 result.append(data | {'uid': doc.id})
@@ -523,7 +445,7 @@ def get_pending_deletion_wipes(
         for doc in retrying_docs:
             if len(result) >= limit:
                 break
-            data = _typed_doc(doc)
+            data = doc.to_dict()
             claimed_at = data.get('wipe_claimed_at')
             # Use the longer ``running_stale_after`` window so a queued-but-
             # not-yet-running retrying claim is not returned as a candidate
@@ -536,7 +458,7 @@ def get_pending_deletion_wipes(
 
 @transactional
 def _claim_deletion_wipe_txn(
-    transaction: Any, doc_ref: Any, stale_after: timedelta, running_stale_after: timedelta
+    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
 ) -> str | None:
     """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
 
@@ -552,7 +474,7 @@ def _claim_deletion_wipe_txn(
     snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
-    data: Dict[str, Any] = _typed_doc(snapshot)
+    data = snapshot.to_dict()
     status = data.get('wipe_status')
     now = datetime.now(timezone.utc)
     if status == 'deleting_auth':
@@ -618,44 +540,44 @@ def claim_deletion_wipe(
     return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
 
 
-def create_person(uid: str, data: Dict[str, Any]) -> Dict[str, Any]:
+def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set(data)
     return data
 
 
-def get_person(uid: str, person_id: str) -> Optional[Dict[str, Any]]:
+def get_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_doc = person_ref.get()
     if not person_doc.exists:
         return None
-    person_data: Dict[str, Any] = _typed_doc(person_doc)
+    person_data = person_doc.to_dict()
     person_data.setdefault('id', person_doc.id)
     return person_data
 
 
-def get_people(uid: str) -> List[Dict[str, Any]]:
+def get_people(uid: str):
     people_ref = db.collection('users').document(uid).collection('people')
-    result: List[Dict[str, Any]] = []
+    result = []
     for person in people_ref.stream():
-        data: Dict[str, Any] = _typed_doc(person)
+        data = person.to_dict()
         data.setdefault('id', person.id)
         result.append(data)
     return result
 
 
-def get_person_by_name(uid: str, name: str) -> Optional[Dict[str, Any]]:
+def get_person_by_name(uid: str, name: str):
     people_ref = db.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name)).limit(1)
     docs = list(query.stream())
     if docs:
-        data: Dict[str, Any] = _typed_doc(docs[0])
+        data = docs[0].to_dict()
         data.setdefault('id', docs[0].id)
         return data
     return None
 
 
-def get_people_by_ids(uid: str, person_ids: List[str]) -> List[Dict[str, Any]]:
+def get_people_by_ids(uid: str, person_ids: list[str]):
     """Fetch people docs by ID using db.get_all().
 
     Note: db.get_all() returns results in arbitrary order (Firestore behavior).
@@ -667,52 +589,46 @@ def get_people_by_ids(uid: str, person_ids: List[str]) -> List[Dict[str, Any]]:
     # Use document ID fetches instead of where("id", "in", ...) to handle
     # legacy docs that may not have a stored 'id' field.
     doc_refs = [people_ref.document(pid) for pid in person_ids]
-    all_people: List[Dict[str, Any]] = []
+    all_people = []
     for doc in db.get_all(doc_refs):
         if doc.exists:
-            data: Dict[str, Any] = _typed_doc(doc)
+            data = doc.to_dict()
             data.setdefault('id', doc.id)
             all_people.append(data)
     return all_people
 
 
-def update_person(uid: str, person_id: str, name: str) -> None:
+def update_person(uid: str, person_id: str, name: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.update({'name': name})
 
 
-def delete_person(uid: str, person_id: str) -> None:
+def delete_person(uid: str, person_id: str):
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     person_ref.delete()
 
 
 @transactional
-def _add_sample_transaction(
-    transaction: Any,
-    person_ref: Any,
-    sample_path: str,
-    transcript: Optional[str],
-    max_samples: int,
-) -> bool:
+def _add_sample_transaction(transaction, person_ref, sample_path, transcript, max_samples):
     """Transaction to atomically add sample and transcript."""
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return False
 
-    person_data: Dict[str, Any] = _typed_doc(snapshot)
-    samples: List[Any] = cast(List[Any], person_data.get('speech_samples', []))
+    person_data = snapshot.to_dict()
+    samples = person_data.get('speech_samples', [])
 
     if len(samples) >= max_samples:
         return False
 
     samples.append(sample_path)
-    update_data: Dict[str, Any] = {
+    update_data = {
         'speech_samples': samples,
         'updated_at': datetime.now(timezone.utc),
     }
 
     if transcript is not None:
-        transcripts: List[Any] = cast(List[Any], person_data.get('speech_sample_transcripts', []))
+        transcripts = person_data.get('speech_sample_transcripts', [])
         # Ensure transcript array alignment with samples:
         # If we're adding a transcript but existing samples don't have transcripts,
         # pad with empty strings for the existing samples first (Dart expects non-null)
@@ -761,21 +677,20 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
     if not person_doc.exists:
         return 0
 
-    person_data: Dict[str, Any] = _typed_doc(person_doc)
-    samples: Any = person_data.get('speech_samples', [])
-    return len(samples)
+    person_data = person_doc.to_dict()
+    return len(person_data.get('speech_samples', []))
 
 
 @transactional
-def _remove_sample_transaction(transaction: Any, person_ref: Any, sample_path: str) -> bool:
+def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> bool:
     """Atomically remove a sample and its aligned transcript."""
     snapshot = person_ref.get(transaction=transaction)
     if not snapshot.exists:
         return False
 
-    person_data: Dict[str, Any] = _typed_doc(snapshot)
-    samples: List[Any] = list(cast(List[Any], person_data.get('speech_samples', [])))
-    transcripts: List[Any] = list(cast(List[Any], person_data.get('speech_sample_transcripts', [])))
+    person_data = snapshot.to_dict()
+    samples = list(person_data.get('speech_samples', []))
+    transcripts = list(person_data.get('speech_sample_transcripts', []))
 
     try:
         idx = samples.index(sample_path)
@@ -815,7 +730,7 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
     return _remove_sample_transaction(transaction, person_ref, sample_path)
 
 
-def set_user_speaker_embedding(uid: str, embedding: List[Any]) -> bool:
+def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
     """Store speaker embedding for the user's own voice on their user document."""
     user_ref = db.collection('users').document(uid)
     user_ref.update(
@@ -827,18 +742,16 @@ def set_user_speaker_embedding(uid: str, embedding: List[Any]) -> bool:
     return True
 
 
-def get_user_speaker_embedding(uid: str) -> Optional[List[Any]]:
+def get_user_speaker_embedding(uid: str) -> Optional[list]:
     """Get the user's own speaker embedding from their user document."""
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
     if not user_doc.exists:
         return None
-    data: Dict[str, Any] = _typed_doc(user_doc)
-    value: object = data.get('speaker_embedding')
-    return cast(List[Any], value) if isinstance(value, list) else None
+    return user_doc.to_dict().get('speaker_embedding')
 
 
-def set_person_speaker_embedding(uid: str, person_id: str, embedding: List[Any]) -> bool:
+def set_person_speaker_embedding(uid: str, person_id: str, embedding: list) -> bool:
     """
     Store speaker embedding for a person.
 
@@ -865,7 +778,7 @@ def set_person_speaker_embedding(uid: str, person_id: str, embedding: List[Any])
     return True
 
 
-def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[List[Any]]:
+def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[list]:
     """
     Get speaker embedding for a person.
 
@@ -882,9 +795,8 @@ def get_person_speaker_embedding(uid: str, person_id: str) -> Optional[List[Any]
     if not person_doc.exists:
         return None
 
-    person_data: Dict[str, Any] = _typed_doc(person_doc)
-    value: object = person_data.get('speaker_embedding')
-    return cast(List[Any], value) if isinstance(value, list) else None
+    person_data = person_doc.to_dict()
+    return person_data.get('speaker_embedding')
 
 
 def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: int, transcript: str) -> bool:
@@ -906,7 +818,7 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
     if not person_doc.exists:
         return False
 
-    person_data: Dict[str, Any] = _typed_doc(person_doc)
+    person_data = person_doc.to_dict()
     samples = person_data.get('speech_samples', [])
     transcripts = person_data.get('speech_sample_transcripts', [])
 
@@ -932,10 +844,10 @@ def set_person_speech_sample_transcript(uid: str, person_id: str, sample_index: 
 def update_person_speech_samples_after_migration(
     uid: str,
     person_id: str,
-    samples: List[Any],
-    transcripts: List[Any],
+    samples: list,
+    transcripts: list,
     version: int,
-    speaker_embedding: Optional[List[Any]] = None,
+    speaker_embedding: Optional[list] = None,
 ) -> bool:
     """
     Replace all samples/transcripts/embedding and set version atomically.
@@ -958,7 +870,7 @@ def update_person_speech_samples_after_migration(
     if not person_doc.exists:
         return False
 
-    update_data: Dict[str, Any] = {
+    update_data = {
         'speech_samples': samples,
         'speech_sample_transcripts': transcripts,
         'speech_samples_version': version,
@@ -1029,7 +941,7 @@ def update_person_speech_samples_version(uid: str, person_id: str, version: int)
     return True
 
 
-def _delete_collection_recursive(collection_ref: Any, batch_size: int = 450) -> None:
+def _delete_collection_recursive(collection_ref, batch_size: int = 450):
     """Delete every document under a collection, descending into nested subcollections first."""
     while True:
         docs = list(collection_ref.limit(batch_size).stream())
@@ -1049,7 +961,7 @@ def _delete_collection_recursive(collection_ref: Any, batch_size: int = 450) -> 
             return
 
 
-def delete_user_data(uid: str) -> Dict[str, str]:
+def delete_user_data(uid: str):
     user_ref = db.collection('users').document(uid)
     if not user_ref.get().exists:
         return {'status': 'error', 'message': 'User not found'}
@@ -1073,7 +985,7 @@ def delete_user_data(uid: str) -> Dict[str, str]:
 # **************************************
 
 
-def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int) -> None:
+def set_conversation_summary_rating_score(uid: str, conversation_id: str, value: int):
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
     db.collection('analytics').document(doc_id).set(
         {
@@ -1087,28 +999,23 @@ def set_conversation_summary_rating_score(uid: str, conversation_id: str, value:
     )
 
 
-def get_conversation_summary_rating_score(conversation_id: str) -> Optional[Dict[str, Any]]:
+def get_conversation_summary_rating_score(conversation_id: str):
     doc_id = document_id_from_seed('memory_summary' + conversation_id)
     doc_ref = db.collection('analytics').document(doc_id)
     doc = doc_ref.get()
     if doc.exists:
-        return _typed_doc(doc)
+        return doc.to_dict()
     return None
 
 
-def get_all_ratings(rating_type: str = 'memory_summary') -> List[Dict[str, Any]]:
+def get_all_ratings(rating_type: str = 'memory_summary'):
     ratings = db.collection('analytics').where('type', '==', rating_type).stream()
-    return [_typed_doc(rating) for rating in ratings]
+    return [rating.to_dict() for rating in ratings]
 
 
 def set_chat_message_rating_score(
-    uid: str,
-    message_id: str,
-    value: int,
-    reason: Optional[str] = None,
-    platform: Optional[str] = None,
-    app_version: Optional[str] = None,
-) -> None:
+    uid: str, message_id: str, value: int, reason: str = None, platform: str = None, app_version: str = None
+):
     """
     Store chat message rating/feedback.
 
@@ -1122,7 +1029,7 @@ def set_chat_message_rating_score(
         app_version: App version string (e.g. '0.11.276') — maps to a specific prompt version
     """
     doc_id = document_id_from_seed('chat_message' + message_id)
-    data: Dict[str, Any] = {
+    data = {
         'id': doc_id,
         'message_id': message_id,
         'uid': uid,
@@ -1144,40 +1051,37 @@ def set_chat_message_rating_score(
 # **************************************
 
 
-def get_stripe_connect_account_id(uid: str) -> Optional[str]:
+def get_stripe_connect_account_id(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data: Dict[str, Any] = _typed_doc(user_ref.get())
-    value: object = user_data.get('stripe_account_id', None)
-    return value if isinstance(value, str) else None
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('stripe_account_id', None)
 
 
-def set_stripe_connect_account_id(uid: str, account_id: str) -> None:
+def set_stripe_connect_account_id(uid: str, account_id: str):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'stripe_account_id': account_id})
 
 
-def set_paypal_payment_details(uid: str, data: Dict[str, Any]) -> None:
+def set_paypal_payment_details(uid: str, data: dict):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'paypal_details': data})
 
 
-def get_paypal_payment_details(uid: str) -> Optional[Dict[str, Any]]:
+def get_paypal_payment_details(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data: Dict[str, Any] = _typed_doc(user_ref.get())
-    value: object = user_data.get('paypal_details', None)
-    return cast(Dict[str, Any], value) if isinstance(value, dict) else None
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('paypal_details', None)
 
 
-def set_default_payment_method(uid: str, payment_method_id: str) -> None:
+def set_default_payment_method(uid: str, payment_method_id: str):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'default_payment_method': payment_method_id})
 
 
-def get_default_payment_method(uid: str) -> Optional[str]:
+def get_default_payment_method(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data: Dict[str, Any] = _typed_doc(user_ref.get())
-    value: object = user_data.get('default_payment_method', None)
-    return value if isinstance(value, str) else None
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('default_payment_method', None)
 
 
 def get_stripe_customer_id(uid: str) -> Optional[str]:
@@ -1185,31 +1089,30 @@ def get_stripe_customer_id(uid: str) -> Optional[str]:
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
-        value: object = user_data.get('stripe_customer_id')
-        return value if isinstance(value, str) else None
+        user_data = user_doc.to_dict()
+        return user_data.get('stripe_customer_id')
     return None
 
 
-def set_stripe_customer_id(uid: str, customer_id: str) -> None:
+def set_stripe_customer_id(uid: str, customer_id: str):
     user_ref = db.collection('users').document(uid)
     user_ref.update({'stripe_customer_id': customer_id})
 
 
-def get_user_by_stripe_customer_id(customer_id: str) -> Optional[Dict[str, Any]]:
+def get_user_by_stripe_customer_id(customer_id: str):
     users_ref = db.collection('users')
     query = users_ref.where(filter=FieldFilter('stripe_customer_id', '==', customer_id)).limit(1)
     docs = list(query.stream())
     if docs:
-        user_dict: Dict[str, Any] = _typed_doc(docs[0])
+        user_dict = docs[0].to_dict()
         user_dict['uid'] = docs[0].id
         return user_dict
     return None
 
 
-def update_user_subscription(uid: str, subscription_data: Dict[str, Any]) -> None:
+def update_user_subscription(uid: str, subscription_data: dict):
     """Updates the user's subscription information, removing dynamic fields before storing."""
-    subscription_data_to_store: Dict[str, Any] = subscription_data.copy()
+    subscription_data_to_store = subscription_data.copy()
     subscription_data_to_store.pop('features', None)
     subscription_data_to_store.pop('limits', None)
 
@@ -1236,9 +1139,8 @@ def get_data_protection_level(uid: str) -> str:
     user_doc = user_ref.get()
 
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
-        value: object = user_data.get('data_protection_level', 'enhanced')
-        return value if isinstance(value, str) else 'enhanced'
+        user_data = user_doc.to_dict()
+        return user_data.get('data_protection_level', 'enhanced')
 
     return 'enhanced'
 
@@ -1257,18 +1159,14 @@ def set_data_protection_level(uid: str, level: str) -> None:
     user_ref.set({'data_protection_level': level}, merge=True)
 
 
-def set_migration_status(uid: str, target_level: str) -> None:
+def set_migration_status(uid: str, target_level: str):
     """Sets the migration status on the user's profile."""
     user_ref = db.collection('users').document(uid)
-    migration_status: Dict[str, Any] = {
-        'target_level': target_level,
-        'status': 'in_progress',
-        'started_at': datetime.now(timezone.utc),
-    }
+    migration_status = {'target_level': target_level, 'status': 'in_progress', 'started_at': datetime.now(timezone.utc)}
     user_ref.set({'migration_status': migration_status}, merge=True)
 
 
-def finalize_migration(uid: str, target_level: str) -> None:
+def finalize_migration(uid: str, target_level: str):
     """Atomically sets the new protection level and removes the migration status field."""
     user_ref = db.collection('users').document(uid)
     user_ref.update({'data_protection_level': target_level, 'migration_status': firestore.DELETE_FIELD})
@@ -1290,14 +1188,13 @@ def get_user_language_preference(uid: str) -> str:
         Language code (e.g., 'en', 'vi') or empty string if not set
     """
 
-    def fetch_language() -> str:
+    def fetch_language():
         user_ref = db.collection('users').document(uid)
         user_doc = user_ref.get(['language'])
 
         if user_doc.exists:
-            user_data: Dict[str, Any] = _typed_doc(user_doc)
-            value: object = user_data.get('language', '')
-            return value if isinstance(value, str) else ''
+            user_data = user_doc.to_dict()
+            return user_data.get('language', '')
 
         return ''  # Return empty string if not set
 
@@ -1311,7 +1208,7 @@ def get_user_language_preference(uid: str) -> str:
     #
     # Safety: cache is disabled by default, Redis failures fall back to Firestore,
     # and set_user_language_preference() invalidates this namespace.
-    return cast(str, get_or_fetch(_USER_LANGUAGE_CACHE, uid, fetch_language))
+    return get_or_fetch(_USER_LANGUAGE_CACHE, uid, fetch_language)
 
 
 def set_user_language_preference(uid: str, language: str) -> None:
@@ -1328,18 +1225,17 @@ def set_user_language_preference(uid: str, language: str) -> None:
     invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
-def get_user_onboarding_state(uid: str) -> Dict[str, Any]:
+def get_user_onboarding_state(uid: str) -> dict:
     """Get the user's onboarding state from Firestore."""
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get()
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
-        value: object = user_data.get('onboarding', {})
-        return cast(Dict[str, Any], value) if isinstance(value, dict) else {}
+        user_data = user_doc.to_dict()
+        return user_data.get('onboarding', {})
     return {}
 
 
-def set_user_onboarding_state(uid: str, onboarding_data: Dict[str, Any]) -> None:
+def set_user_onboarding_state(uid: str, onboarding_data: dict) -> None:
     """Update the user's onboarding state in Firestore (merge with existing)."""
     user_ref = db.collection('users').document(uid)
     user_ref.set({'onboarding': onboarding_data}, merge=True)
@@ -1350,10 +1246,9 @@ def get_user_subscription(uid: str) -> Subscription:
     user_ref = db.collection('users').document(uid)
     user_doc = user_ref.get(['subscription'])
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
+        user_data = user_doc.to_dict()
         if 'subscription' in user_data:
-            sub_data_raw: object = user_data['subscription']
-            sub_data: Dict[str, Any] = cast(Dict[str, Any], sub_data_raw) if isinstance(sub_data_raw, dict) else {}
+            sub_data = user_data['subscription']
             # Handle migration for old 'free' plan identifier
             if sub_data.get('plan') == 'free':
                 sub_data['plan'] = PlanType.basic.value
@@ -1363,7 +1258,7 @@ def get_user_subscription(uid: str) -> Subscription:
     # If subscription doesn't exist for the user, create and return a default free plan.
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
-    sub_to_store: Dict[str, Any] = default_subscription.dict()
+    sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
@@ -1377,26 +1272,24 @@ def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
     if not user_doc.exists:
         return None
 
-    user_data: Dict[str, Any] = _typed_doc(user_doc)
+    user_data = user_doc.to_dict()
     if 'subscription' not in user_data:
         return None
 
-    sub_data_raw: object = user_data['subscription']
-    sub_data: Dict[str, Any] = cast(Dict[str, Any], sub_data_raw) if isinstance(sub_data_raw, dict) else {}
+    sub_data = user_data['subscription']
     if sub_data.get('plan') == 'free':
         sub_data['plan'] = PlanType.basic.value
     return Subscription(**sub_data)
 
 
-def get_user_training_data_opt_in(uid: str) -> Optional[Dict[str, Any]]:
+def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     """Get user's training data opt-in status."""
     user_ref = db.collection('users').document(uid)
-    user_data: Dict[str, Any] = _typed_doc(user_ref.get())
-    value: object = user_data.get('training_data_opt_in', None)
-    return cast(Dict[str, Any], value) if isinstance(value, dict) else None
+    user_data = user_ref.get().to_dict() or {}
+    return user_data.get('training_data_opt_in', None)
 
 
-def set_user_training_data_opt_in(uid: str, status: str) -> None:
+def set_user_training_data_opt_in(uid: str, status: str):
     """Set user's training data opt-in status. Status can be: pending_review, approved, rejected"""
     user_ref = db.collection('users').document(uid)
     user_ref.update(
@@ -1442,7 +1335,7 @@ def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
 # **************************************
 
 
-def get_task_integrations(uid: str) -> Dict[str, Dict[str, Any]]:
+def get_task_integrations(uid: str) -> dict:
     """
     Get all task integration connections for a user.
 
@@ -1455,14 +1348,14 @@ def get_task_integrations(uid: str) -> Dict[str, Dict[str, Any]]:
     user_ref = db.collection('users').document(uid)
     integrations_ref = user_ref.collection('task_integrations')
 
-    integrations: Dict[str, Dict[str, Any]] = {}
+    integrations = {}
     for doc in integrations_ref.stream():
-        integrations[doc.id] = _typed_doc(doc)
+        integrations[doc.id] = doc.to_dict()
 
     return integrations
 
 
-def get_task_integration(uid: str, app_key: str) -> Optional[Dict[str, Any]]:
+def get_task_integration(uid: str, app_key: str) -> Optional[dict]:
     """
     Get a specific task integration connection.
 
@@ -1478,11 +1371,11 @@ def get_task_integration(uid: str, app_key: str) -> Optional[Dict[str, Any]]:
     doc = integration_ref.get()
 
     if doc.exists:
-        return _typed_doc(doc)
+        return doc.to_dict()
     return None
 
 
-def set_task_integration(uid: str, app_key: str, data: Dict[str, Any]) -> None:
+def set_task_integration(uid: str, app_key: str, data: dict) -> None:
     """
     Save or update a task integration connection.
 
@@ -1524,7 +1417,7 @@ def delete_task_integration(uid: str, app_key: str) -> bool:
     user_doc = user_ref.get()
     is_default = False
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
+        user_data = user_doc.to_dict()
         is_default = user_data.get('default_task_integration') == app_key
 
     # Delete integration
@@ -1551,9 +1444,8 @@ def get_default_task_integration(uid: str) -> Optional[str]:
     user_doc = user_ref.get()
 
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
-        value: object = user_data.get('default_task_integration')
-        return value if isinstance(value, str) else None
+        user_data = user_doc.to_dict()
+        return user_data.get('default_task_integration')
 
     return None
 
@@ -1575,7 +1467,7 @@ def set_default_task_integration(uid: str, app_key: str) -> None:
 # **************************************
 
 
-def get_integration(uid: str, app_key: str) -> Optional[Dict[str, Any]]:
+def get_integration(uid: str, app_key: str) -> Optional[dict]:
     """
     Get a specific integration connection.
 
@@ -1591,11 +1483,11 @@ def get_integration(uid: str, app_key: str) -> Optional[Dict[str, Any]]:
     doc = integration_ref.get()
 
     if doc.exists:
-        return _typed_doc(doc)
+        return doc.to_dict()
     return None
 
 
-def set_integration(uid: str, app_key: str, data: Dict[str, Any]) -> None:
+def set_integration(uid: str, app_key: str, data: dict) -> None:
     """
     Save or update an integration connection.
 
@@ -1641,7 +1533,7 @@ def delete_integration(uid: str, app_key: str) -> bool:
 # **************************************
 
 
-def get_user_transcription_preferences(uid: str) -> Dict[str, Any]:
+def get_user_transcription_preferences(uid: str) -> dict:
     """
     Get the user's transcription preferences.
 
@@ -1649,14 +1541,13 @@ def get_user_transcription_preferences(uid: str) -> Dict[str, Any]:
         dict with 'single_language_mode' (bool), 'vocabulary' (List[str]), and 'language' (str)
     """
 
-    def fetch_preferences() -> Dict[str, Any]:
+    def fetch_preferences():
         user_ref = db.collection('users').document(uid)
         user_doc = user_ref.get(['transcription_preferences', 'language'])
 
         if user_doc.exists:
-            user_data: Dict[str, Any] = _typed_doc(user_doc)
-            prefs_raw: object = user_data.get('transcription_preferences', {})
-            prefs: Dict[str, Any] = cast(Dict[str, Any], prefs_raw) if isinstance(prefs_raw, dict) else {}
+            user_data = user_doc.to_dict()
+            prefs = user_data.get('transcription_preferences', {})
             return {
                 'single_language_mode': prefs.get('single_language_mode', False),
                 'vocabulary': prefs.get('vocabulary', []),
@@ -1676,10 +1567,10 @@ def get_user_transcription_preferences(uid: str) -> Dict[str, Any]:
     # DESIGN DECISION: cache this typed user projection, not the full users/{uid} doc.
     # It includes only transcription startup preferences and language. It does not
     # include entitlement, BYOK, data-protection, or privacy-consent fields.
-    return cast(Dict[str, Any], get_or_fetch(_USER_TRANSCRIPTION_PREFS_CACHE, uid, fetch_preferences))
+    return get_or_fetch(_USER_TRANSCRIPTION_PREFS_CACHE, uid, fetch_preferences)
 
 
-def get_agent_vm(uid: str) -> Optional[Dict[str, Any]]:
+def get_agent_vm(uid: str) -> Optional[dict]:
     """Get the user's agent VM info from Firestore.
 
     Returns:
@@ -1689,18 +1580,13 @@ def get_agent_vm(uid: str) -> Optional[Dict[str, Any]]:
     user_doc = user_ref.get()
 
     if user_doc.exists:
-        user_data: Dict[str, Any] = _typed_doc(user_doc)
-        value: object = user_data.get('agentVm')
-        return cast(Dict[str, Any], value) if isinstance(value, dict) else None
+        user_data = user_doc.to_dict()
+        return user_data.get('agentVm')
 
     return None
 
 
-def set_user_transcription_preferences(
-    uid: str,
-    single_language_mode: Optional[bool] = None,
-    vocabulary: Optional[List[str]] = None,
-) -> None:
+def set_user_transcription_preferences(uid: str, single_language_mode: bool = None, vocabulary: list = None) -> None:
     """
     Set the user's transcription preferences.
 
@@ -1710,7 +1596,7 @@ def set_user_transcription_preferences(
         vocabulary: List of custom keywords/terms for better transcription accuracy
     """
     user_ref = db.collection('users').document(uid)
-    update_data: Dict[str, Any] = {}
+    update_data = {}
 
     if single_language_mode is not None:
         update_data['transcription_preferences.single_language_mode'] = single_language_mode
@@ -1739,7 +1625,7 @@ def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
     `_since` timestamp is not overwritten on every session and writes stay rare.
     """
     user_ref = db.collection('users').document(uid)
-    update_data: Dict[str, Any] = {'transcription_preferences.uses_custom_stt': uses_custom_stt}
+    update_data = {'transcription_preferences.uses_custom_stt': uses_custom_stt}
     update_data['transcription_preferences.custom_stt_since'] = datetime.now(timezone.utc) if uses_custom_stt else None
     user_ref.update(update_data)
     invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
@@ -1750,7 +1636,7 @@ def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
 # ============================================================================
 
 
-def get_notification_settings(uid: str) -> Dict[str, Any]:
+def get_notification_settings(uid: str) -> dict:
     """Return notification settings with Swift-compatible field names.
 
     Firestore stores ``notifications_enabled`` / ``notification_frequency`` on
@@ -1763,20 +1649,16 @@ def get_notification_settings(uid: str) -> Dict[str, Any]:
     doc = user_ref.get()
     if not doc.exists:
         return {'enabled': True, 'frequency': 0}
-    data: Dict[str, Any] = _typed_doc(doc)
+    data = doc.to_dict()
     return {
         'enabled': data.get('notifications_enabled', True),
         'frequency': data.get('notification_frequency', 0),
     }
 
 
-def update_notification_settings(
-    uid: str,
-    enabled: Optional[bool] = None,
-    frequency: Optional[int] = None,
-) -> Dict[str, Any]:
+def update_notification_settings(uid: str, enabled: bool = None, frequency: int = None) -> dict:
     user_ref = db.collection('users').document(uid)
-    updates: Dict[str, Any] = {}
+    updates = {}
     if enabled is not None:
         updates['notifications_enabled'] = enabled
     if frequency is not None:
@@ -1786,18 +1668,16 @@ def update_notification_settings(
     return get_notification_settings(uid)
 
 
-def _get_raw_assistant_settings(uid: str) -> Dict[str, Any]:
+def _get_raw_assistant_settings(uid: str) -> dict:
     """Read only the assistant_settings sub-map (without update_channel injection)."""
     user_ref = db.collection('users').document(uid)
     doc = user_ref.get()
     if not doc.exists:
         return {}
-    data: Dict[str, Any] = _typed_doc(doc)
-    value: object = data.get('assistant_settings')
-    return cast(Dict[str, Any], value) if isinstance(value, dict) else {}
+    return doc.to_dict().get('assistant_settings') or {}
 
 
-def get_assistant_settings(uid: str) -> Dict[str, Any]:
+def get_assistant_settings(uid: str) -> dict:
     """Read assistant settings for the API response.
 
     Injects top-level ``update_channel`` into the response dict (it lives
@@ -1807,19 +1687,14 @@ def get_assistant_settings(uid: str) -> Dict[str, Any]:
     doc = user_ref.get()
     if not doc.exists:
         return {}
-    data: Dict[str, Any] = _typed_doc(doc)
-    result: Dict[str, Any] = (
-        cast(Dict[str, Any], data.get('assistant_settings') or {}).copy()
-        if isinstance(data.get('assistant_settings'), dict)
-        else {}
-    )
-    raw_channel: object = data.get('update_channel')
-    if raw_channel is not None:
-        result['update_channel'] = raw_channel
+    data = doc.to_dict()
+    result = (data.get('assistant_settings') or {}).copy()
+    if data.get('update_channel') is not None:
+        result['update_channel'] = data['update_channel']
     return result
 
 
-def update_assistant_settings(uid: str, settings: Dict[str, Any]) -> Dict[str, Any]:
+def update_assistant_settings(uid: str, settings: dict) -> dict:
     """Deep-merge partial settings into existing assistant_settings.
 
     The Swift client sends tiny partial updates (e.g. {"focus": {"enabled": true}})
@@ -1829,20 +1704,19 @@ def update_assistant_settings(uid: str, settings: Dict[str, Any]) -> Dict[str, A
     user doc (not inside assistant_settings), matching Rust backend behavior.
     """
     # Read raw sub-map (without injected update_channel) to avoid leaking it back
-    existing: Dict[str, Any] = _get_raw_assistant_settings(uid)
+    existing = _get_raw_assistant_settings(uid)
 
     # Extract update_channel — it goes to a top-level user doc field
     update_channel = settings.pop('update_channel', None)
 
     for section, values in settings.items():
-        existing_section: object = existing.get(section)
-        if isinstance(values, dict) and isinstance(existing_section, dict):
-            cast(Dict[str, Any], existing_section).update(cast(Dict[str, Any], values))
+        if isinstance(values, dict) and isinstance(existing.get(section), dict):
+            existing[section].update(values)
         else:
             existing[section] = values
 
     user_ref = db.collection('users').document(uid)
-    updates: Dict[str, Any] = {'assistant_settings': existing}
+    updates = {'assistant_settings': existing}
     if update_channel is not None:
         updates['update_channel'] = update_channel
     user_ref.update(updates)
@@ -1853,38 +1727,29 @@ def update_assistant_settings(uid: str, settings: Dict[str, Any]) -> Dict[str, A
     return existing
 
 
-def _get_ai_user_profile_from_firestore(uid: str) -> Optional[Dict[str, Any]]:
+def _get_ai_user_profile_from_firestore(uid: str) -> Optional[dict]:
     user_ref = db.collection('users').document(uid)
     doc = user_ref.get(['ai_user_profile'])
     if not doc.exists:
         return None
-    data: Dict[str, Any] = _typed_doc(doc)
-    value: object = data.get('ai_user_profile')
-    return cast(Dict[str, Any], value) if isinstance(value, dict) else None
+    return doc.to_dict().get('ai_user_profile')
 
 
-def get_ai_user_profile(uid: str) -> Optional[Dict[str, Any]]:
+def get_ai_user_profile(uid: str) -> Optional[dict]:
     # DESIGN DECISION: cache only the low-risk ai_user_profile projection.
     # Avoid full user-doc caching because high-risk entitlement/BYOK/privacy
     # fields live on the same Firestore document.
-    return cast(
-        Optional[Dict[str, Any]],
-        get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid)),
-    )
+    return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
 
 
 def update_ai_user_profile(
-    uid: str,
-    profile_text: Optional[str] = None,
-    generated_at: Any = None,
-    data_sources_used: Optional[int] = None,
-) -> Dict[str, Any]:
+    uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
+) -> dict:
     """Update AI user profile.  Only writes non-None fields (partial update)."""
     # Read existing profile directly from Firestore — never from cache — because
     # this is a read-modify-write path. Using a stale cached projection here
     # could overwrite newer profile fields.
-    existing_raw: Optional[Dict[str, Any]] = _get_ai_user_profile_from_firestore(uid)
-    existing: Dict[str, Any] = existing_raw if existing_raw is not None else {}
+    existing = _get_ai_user_profile_from_firestore(uid) or {}
     if profile_text is not None:
         existing['profile_text'] = profile_text
     if generated_at is not None:

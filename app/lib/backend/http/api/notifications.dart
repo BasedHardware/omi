@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -14,7 +15,8 @@ Future<void> saveFcmTokenServer({required String token, required String timeZone
 
   Logger.debug('saveToken: ${response?.body}');
   if (response?.statusCode == 200) {
-    Logger.debug("Token saved successfully");
+    final data = wire.GeneratedFcmTokenResponse.fromJson(jsonDecode(response!.body) as Map<String, dynamic>);
+    Logger.debug(data.status == 'Ok' ? "Token saved successfully" : "Token save returned ${data.status}");
   } else {
     Logger.debug("Failed to save token");
   }

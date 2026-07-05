@@ -8,7 +8,7 @@ export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c
 export OPENAI_API_KEY="test-openai-key-not-real"
 
 pytest() {
-  python3 -m pytest "$@"
+  "${PYTHON:-python3}" -m pytest "$@"
 }
 
 if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
@@ -170,6 +170,7 @@ pytest tests/unit/test_v3_control_state_adapter.py -v
 pytest tests/unit/test_v3_account_generation_source.py -v
 pytest tests/unit/test_v3_compatibility_projection.py -v
 pytest tests/unit/test_v3_production_runtime_wiring.py -v
+pytest tests/unit/test_first_user_memory_tools.py -v
 pytest tests/unit/test_v3_limited_rollout_config.py -v
 pytest tests/unit/test_v3_f5_real_service_evidence_readiness.py -v
 pytest tests/unit/test_v3_gcp_evidence_config.py -v

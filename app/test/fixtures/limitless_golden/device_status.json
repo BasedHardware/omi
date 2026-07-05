@@ -1,0 +1,14 @@
+{
+  "name": "device_status",
+  "packets": [
+    "080f10001801221708552a1308552a0f086410c413180320c0a9072890b00a"
+  ],
+  "expectedPages": [],
+  "expectedStorageState": {
+    "oldest_flash_page": 100,
+    "newest_flash_page": 2500,
+    "current_storage_session": 3,
+    "free_capture_pages": 120000,
+    "total_capture_pages": 170000
+  }
+}

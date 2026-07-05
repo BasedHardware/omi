@@ -127,7 +127,7 @@ def process_external_integration_memory(
         ):
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
-                memory_service.write(uid, memory_db.dict())
+                memory_service.write(uid, memory_db.model_dump())
         else:
             memories_db.save_memories(
                 uid,
@@ -174,7 +174,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
         ):
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
-                memory_service.write(uid, memory_db.dict())
+                memory_service.write(uid, memory_db.model_dump())
         else:
             memories_db.save_memories(
                 uid,

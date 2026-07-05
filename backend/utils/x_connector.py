@@ -22,7 +22,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlencode
 
 import httpx
@@ -153,8 +153,8 @@ def _basic_auth_header() -> Dict[str, str]:
     return {'Authorization': f'Basic {token}'}
 
 
-async def exchange_code(code: str, verifier: str) -> Dict[str, Any]:
-    logger.info(f'exchange_code: using redirect_uri={X_REDIRECT_URI!r} client_id={(X_CLIENT_ID or "")[:8]!r}…')
+async def exchange_code(code: str, verifier: str) -> Dict:
+    logger.info(f'exchange_code: using redirect_uri={X_REDIRECT_URI!r} client_id={X_CLIENT_ID[:8]!r}…')
     data = {
         'grant_type': 'authorization_code',
         'code': code,
@@ -170,7 +170,7 @@ async def exchange_code(code: str, verifier: str) -> Dict[str, Any]:
         return resp.json()
 
 
-async def _refresh(refresh_token: str) -> Dict[str, Any]:
+async def _refresh(refresh_token: str) -> Dict:
     data = {
         'grant_type': 'refresh_token',
         'refresh_token': refresh_token,
@@ -182,11 +182,9 @@ async def _refresh(refresh_token: str) -> Dict[str, Any]:
         return resp.json()
 
 
-def _store_tokens(
-    uid: str, token_resp: Dict[str, Any], handle: Optional[str] = None, x_user_id: Optional[str] = None
-) -> None:
+def _store_tokens(uid: str, token_resp: Dict, handle: Optional[str] = None, x_user_id: Optional[str] = None):
     expires_in = int(token_resp.get('expires_in', 7200))
-    data: Dict[str, Any] = {
+    data = {
         'connected': True,
         'access_token': token_resp['access_token'],
         'expires_at': (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).isoformat(),
@@ -262,19 +260,19 @@ async def get_valid_access_token(uid: str) -> Optional[str]:
 # ----------------------------------------------------------------------------
 
 
-async def _api_get(token: str, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
+async def _api_get(token: str, path: str, params: Dict) -> Dict:
     async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=3.0)) as client:
         resp = await client.get(f'{API_BASE}{path}', params=params, headers={'Authorization': f'Bearer {token}'})
         resp.raise_for_status()
         return resp.json()
 
 
-async def fetch_me(token: str) -> Dict[str, Any]:
+async def fetch_me(token: str) -> Dict:
     data = await _api_get(token, '/users/me', {})
     return data.get('data', {})
 
 
-def _tweet_to_post(t: Dict[str, Any], kind: str) -> Dict[str, Any]:
+def _tweet_to_post(t: Dict, kind: str) -> Dict:
     return {
         'id': str(t.get('id')),
         'text': t.get('text', ''),
@@ -285,40 +283,34 @@ def _tweet_to_post(t: Dict[str, Any], kind: str) -> Dict[str, Any]:
     }
 
 
-async def _fetch_paged(token: str, path: str, kind: str, max_pages: int, extra: Dict[str, Any]) -> List[Dict[str, Any]]:
-    posts: List[Dict[str, Any]] = []
-    params: Dict[str, Any] = {
+async def _fetch_paged(token: str, path: str, kind: str, max_pages: int, extra: Dict) -> List[Dict]:
+    posts: List[Dict] = []
+    params = {
         'max_results': 100,
         'tweet.fields': 'created_at,lang,public_metrics',
     }
     params.update(extra)
-    pagination_token: Optional[str] = None
+    pagination_token = None
     for _ in range(max_pages):
         if pagination_token:
             params['pagination_token'] = pagination_token
         data = await _api_get(token, path, params)
-        raw_tweets: object = data.get('data', [])
-        tweets_list: List[Dict[str, Any]] = (
-            cast(List[Dict[str, Any]], raw_tweets) if isinstance(raw_tweets, list) else []
-        )
-        for t in tweets_list:
+        for t in data.get('data', []) or []:
             posts.append(_tweet_to_post(t, kind))
-        raw_meta: object = data.get('meta', {})
-        meta: Dict[str, Any] = cast(Dict[str, Any], raw_meta) if isinstance(raw_meta, dict) else {}
-        pagination_token = meta.get('next_token')
+        pagination_token = data.get('meta', {}).get('next_token')
         if not pagination_token:
             break
     return posts
 
 
-async def fetch_tweets(token: str, x_user_id: str, since_id: Optional[str]) -> List[Dict[str, Any]]:
-    extra: Dict[str, Any] = {'exclude': 'retweets'}
+async def fetch_tweets(token: str, x_user_id: str, since_id: Optional[str]) -> List[Dict]:
+    extra = {'exclude': 'retweets'}
     if since_id:
         extra['since_id'] = since_id
     return await _fetch_paged(token, f'/users/{x_user_id}/tweets', x_posts_db.KIND_TWEET, MAX_TWEET_PAGES, extra)
 
 
-async def fetch_bookmarks(token: str, x_user_id: str) -> List[Dict[str, Any]]:
+async def fetch_bookmarks(token: str, x_user_id: str) -> List[Dict]:
     try:
         return await _fetch_paged(
             token, f'/users/{x_user_id}/bookmarks', x_posts_db.KIND_BOOKMARK, MAX_BOOKMARK_PAGES, {}
@@ -333,7 +325,7 @@ async def fetch_bookmarks(token: str, x_user_id: str) -> List[Dict[str, Any]]:
 # ----------------------------------------------------------------------------
 
 
-def _extract_and_index(uid: str, posts: List[Dict[str, Any]]) -> int:
+def _extract_and_index(uid: str, posts: List[Dict]) -> int:
     """Run memory extraction over the given posts (grouped into chunks) and
     vector-index the resulting memories. Returns memories created."""
     if not posts:
@@ -385,7 +377,7 @@ def _extract_and_index(uid: str, posts: List[Dict[str, Any]]) -> int:
         ):
             memory_service = MemoryService(db_client=db)
             for mdb in memory_dbs:
-                memory_service.write(uid, mdb.dict())  # type: ignore[reportDeprecated]  # pydantic v2 BaseModel.dict(); preserved as-is
+                memory_service.write(uid, mdb.model_dump())
         else:
             memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
             upsert_memory_vectors_batch(
@@ -409,7 +401,7 @@ def _extract_and_index(uid: str, posts: List[Dict[str, Any]]) -> int:
 # ----------------------------------------------------------------------------
 
 
-async def sync_x_for_user(uid: str) -> Dict[str, Any]:
+async def sync_x_for_user(uid: str) -> Dict:
     """Pull new X posts, store raw, extract memories. Returns a summary dict."""
     sync_context = IntegrationTelemetryContext(integration_name=X, operation='sync_posts', uid=uid)
     emit_sync_attempted(sync_context)
@@ -419,7 +411,7 @@ async def sync_x_for_user(uid: str) -> Dict[str, Any]:
     await run_blocking(db_executor, users_db.set_integration, uid, INTEGRATION_KEY, {'syncing': True})
     since_id = await run_blocking(db_executor, x_posts_db.get_newest_tweet_id, uid)
 
-    new_posts: List[Dict[str, Any]] = []
+    new_posts: List[Dict] = []
     source = None
     token = await get_valid_access_token(uid)
 
@@ -498,7 +490,7 @@ async def sync_x_for_user(uid: str) -> Dict[str, Any]:
         # Vector-index the raw posts so agents can semantically search the actual
         # tweets (not just the extracted memories) via the MCP search_x_posts tool.
         # Chunk to stay within Pinecone's per-upsert vector limit (~100).
-        items_to_index: List[Dict[str, Any]] = [
+        items_to_index = [
             {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
         ]
         for i in range(0, len(items_to_index), 100):
@@ -546,7 +538,7 @@ async def sync_x_for_user(uid: str) -> Dict[str, Any]:
     }
 
 
-def connection_status(uid: str) -> Dict[str, Any]:
+def connection_status(uid: str) -> Dict:
     integ = users_db.get_integration(uid, INTEGRATION_KEY)
     if not integ or not integ.get('connected'):
         return {'success': True, 'connected': False}
@@ -577,7 +569,7 @@ def should_run_x_sync_job() -> bool:
     return datetime.now(timezone.utc).hour % SYNC_JOB_INTERVAL_HOURS == 0
 
 
-async def run_x_sync_job() -> Dict[str, Any]:
+async def run_x_sync_job() -> Dict:
     """Incrementally sync every connected X user. Errors are isolated per user;
     a slow/failed account never blocks the others."""
     try:

@@ -704,7 +704,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                     Navigator.pop(context);
                   }
                 },
-                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
+                icon: FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
               ),
             ),
             title: Align(
@@ -861,7 +861,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
+                                : FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16.0, color: Colors.white),
                           ),
                         ),
                         // Search button (second) - only show on transcript and summary tabs
@@ -894,7 +894,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                 });
                                 HapticFeedback.mediumImpact();
                               },
-                              icon: const FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
+                              icon: FaIcon(FontAwesomeIcons.magnifyingGlass, size: 16.0, color: Colors.white),
                             ),
                           ),
                         // Developer Tools button (third) - iOS style pull-down menu
@@ -922,7 +922,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                               if (provider.conversation.hasAudio())
                                 PullDownMenuItem(
                                   title: context.l10n.shareAudio,
-                                  iconWidget: const FaIcon(FontAwesomeIcons.share, size: 16),
+                                  iconWidget: FaIcon(FontAwesomeIcons.share, size: 16),
                                   onTap: _isDownloadingAudio
                                       ? null
                                       : () => _handleMenuSelection(context, 'download_audio', provider),
@@ -978,7 +978,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                   color: Colors.grey.withValues(alpha: 0.3),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Center(
+                                child: Center(
                                   child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
                                 ),
                               ),

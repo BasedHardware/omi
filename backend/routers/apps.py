@@ -1,167 +1,405 @@
-# async-blockers: no-import-scope
-# async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
-import asyncio
-import base64
 import json
 import logging
 import os
+import asyncio
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+
+import httpx
+from typing import List, Optional
 from urllib.parse import urlparse
-
-from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
-from fastapi.responses import HTMLResponse
-from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import ValidationError
-from pydantic import BaseModel as PydanticBaseModel
+from pydantic import BaseModel as PydanticBaseModel, ConfigDict, Field, ValidationError
 from ulid import ULID
+from fastapi import APIRouter, Depends, Form, UploadFile, File, HTTPException, Header, Query
+from fastapi.responses import HTMLResponse
 
+from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
-from utils.executors import db_executor, llm_executor, run_blocking, storage_executor
+from utils.executors import db_executor, llm_executor, storage_executor, run_blocking
 from utils.http_client import get_webhook_client
-from utils.llm.app_generator import (
-    generate_app_from_prompt,
-    generate_app_icon,
-    generate_description,
-    generate_description_and_emoji,
-)
-from utils.llm.clients import get_llm
-from utils.llm.persona import generate_persona_intro_message
-from utils.llm.usage_tracker import Features, track_usage
 from utils.mcp_client import (
-    build_authorization_url,
-    discover_mcp_tools,
     discover_oauth_metadata,
+    register_oauth_client,
+    build_authorization_url,
     exchange_oauth_code,
+    refresh_oauth_token,
+    discover_mcp_tools,
     fetch_brandfetch_logo,
-    generate_pkce_pair,
     generate_state_token,
     parse_state_token,
-    refresh_oauth_token,
-    register_oauth_client,
+    generate_pkce_pair,
 )
-from utils.notifications import (
-    send_app_review_reply_notification,
-    send_new_app_review_notification,
-    send_notification,
+
+from database.apps import (
+    change_app_approval_status,
+    get_unapproved_public_apps_db,
+    get_app_by_id_db,
+    add_app_to_db,
+    update_app_in_db,
+    delete_app_from_db,
+    update_app_visibility_in_db,
+    get_personas_by_username_db,
+    get_persona_by_id_db,
+    delete_persona_db,
+    get_persona_by_twitter_handle_db,
+    get_persona_by_username_db,
+    migrate_app_owner_id_db,
+    get_user_persona_by_uid,
+    get_omi_persona_apps_by_uid_db,
+    create_api_key_db,
+    list_api_keys_db,
+    delete_api_key_db,
+    set_app_popular_db,
+    search_apps_db,
 )
+from database.webhook_health import clear_app_webhook_health
+from database.auth import get_user_from_uid
+from database.redis_db import (
+    delete_generic_cache,
+    get_generic_cache,
+    set_generic_cache,
+    get_specific_user_review,
+    increase_app_installs_count,
+    decrease_app_installs_count,
+    enable_app,
+    disable_app,
+    is_app_enabled,
+    delete_app_cache_by_id,
+    is_username_taken,
+    save_username,
+    get_enabled_apps,
+    get_conversation_summary_app_ids,
+    add_conversation_summary_app_id,
+    remove_conversation_summary_app_id,
+    get_apps_installs_count,
+    get_apps_reviews,
+)
+from utils.apps import (
+    get_available_apps,
+    get_available_app_by_id,
+    get_approved_available_apps,
+    invalidate_approved_apps_cache,
+    invalidate_popular_apps_cache,
+    get_available_app_by_id_with_reviews,
+    set_app_review,
+    get_app_reviews,
+    add_tester,
+    is_tester,
+    add_app_access_for_tester,
+    remove_app_access_for_tester,
+    upsert_app_payment_link,
+    get_is_user_paid_app,
+    is_permit_payment_plan_get,
+    generate_persona_prompt,
+    generate_persona_desc,
+    get_persona_by_uid,
+    increment_username,
+    generate_api_key,
+    get_popular_apps,
+    paginate_apps,
+    build_pagination_metadata,
+    get_capabilities_list,
+    normalize_app_numeric_fields,
+    filter_apps_by_capability,
+    sort_apps_by_installs,
+    group_apps_by_capability,
+    build_capability_groups_response,
+    group_capability_apps_by_category,
+    build_capability_category_groups_response,
+    validate_app_endpoints_for_reenable,
+)
+
+from database.memories import migrate_memories
+
+from utils.llm.persona import generate_persona_intro_message
+from utils.llm.app_generator import generate_description
+from utils.llm.app_generation_prompts import app_generation_prompts_from_llm_payload, app_generation_prompts_response
+from utils.llm.usage_tracker import track_usage, Features
+from utils.notifications import send_notification, send_app_review_reply_notification, send_new_app_review_notification
 from utils.other import endpoints as auth
-from utils.other.storage import delete_app_logo, get_app_thumbnail_url, upload_app_logo, upload_app_thumbnail
 from utils.request_validation import (
     backfill_app_home_url_from_auth_steps,
     normalize_required_webhook_url,
     parse_form_json,
 )
+from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel, AppReview
+from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
-    add_twitter_to_persona,
     get_twitter_profile,
-    upsert_persona_from_twitter_profile,
     verify_latest_tweet,
+    upsert_persona_from_twitter_profile,
+    add_twitter_to_persona,
 )
-
-from database.apps import (
-    add_app_to_db,
-    change_app_approval_status,
-    create_api_key_db,
-    delete_api_key_db,
-    delete_app_from_db,
-    delete_persona_db,
-    get_app_by_id_db,
-    get_omi_persona_apps_by_uid_db,
-    get_persona_by_id_db,
-    get_persona_by_twitter_handle_db,
-    get_persona_by_username_db,
-    get_personas_by_username_db,
-    get_unapproved_public_apps_db,
-    get_user_persona_by_uid,
-    list_api_keys_db,
-    migrate_app_owner_id_db,
-    search_apps_db,
-    set_app_popular_db,
-    update_app_in_db,
-    update_app_visibility_in_db,
-)
-from database.auth import get_user_from_uid
-from database.memories import migrate_memories
-from database.redis_db import (
-    add_conversation_summary_app_id,
-    decrease_app_installs_count,
-    delete_app_cache_by_id,
-    disable_app,
-    enable_app,
-    get_apps_installs_count,
-    get_apps_reviews,
-    get_conversation_summary_app_ids,
-    get_enabled_apps,
-    get_generic_cache,
-    get_specific_user_review,
-    increase_app_installs_count,
-    is_app_enabled,
-    remove_conversation_summary_app_id,
-    save_username,
-    set_generic_cache,
-)
-from database.webhook_health import clear_app_webhook_health
-from utils.apps import (
-    add_app_access_for_tester,
-    add_tester,
-    build_capability_category_groups_response,
-    build_capability_groups_response,
-    build_pagination_metadata,
-    filter_apps_by_capability,
-    generate_api_key,
-    generate_persona_desc,
-    generate_persona_prompt,
-    get_app_reviews,
-    get_approved_available_apps,
-    get_available_app_by_id,
-    get_available_app_by_id_with_reviews,
-    get_available_apps,
-    get_capabilities_list,
-    get_is_user_paid_app,
-    get_persona_by_uid,
-    get_popular_apps,
-    increment_username,
-    invalidate_approved_apps_cache,
-    invalidate_popular_apps_cache,
-    is_permit_payment_plan_get,
-    is_tester,
-    normalize_app_numeric_fields,
-    paginate_apps,
-    remove_app_access_for_tester,
-    set_app_review,
-    sort_apps_by_installs,
-    group_apps_by_capability,
-    group_capability_apps_by_category,
-    upsert_app_payment_link,
-    validate_app_endpoints_for_reenable,
-)
-
-from models.app import ActionType, App, AppBaseModel, AppCreate, AppUpdate, ChatTool
+import logging
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def _write_file(path: str, data: bytes) -> None:
+class AppSelectOption(PydanticBaseModel):
+    title: str
+    id: str
+
+
+class AppCapabilityAction(AppSelectOption):
+    doc_url: Optional[str] = None
+    description: Optional[str] = None
+
+
+class AppCapabilityResponse(AppSelectOption):
+    triggers: List[AppSelectOption] = Field(default_factory=list)
+    actions: List[AppCapabilityAction] = Field(default_factory=list)
+    scopes: List[AppSelectOption] = Field(default_factory=list)
+
+
+class AppThumbnailUploadResponse(PydanticBaseModel):
+    thumbnail_url: str
+    thumbnail_id: str
+
+
+class AppMutationResponse(PydanticBaseModel):
+    status: str
+
+
+class AppStatusMessageResponse(AppMutationResponse):
+    message: str
+
+
+class AppManifestRefreshResponse(AppMutationResponse):
+    tools_count: int = 0
+
+
+class AppCreateResponse(AppMutationResponse):
+    app_id: str
+
+
+class AppMigrationResponse(AppMutationResponse):
+    message: str
+
+
+class McpAddServerResponse(PydanticBaseModel):
+    app_id: str
+    requires_oauth: bool
+    auth_url: Optional[str] = None
+    tools_count: Optional[int] = None
+    tool_names: List[str] = Field(default_factory=list)
+
+
+class McpRefreshToolsResponse(PydanticBaseModel):
+    tools_count: int
+    tool_names: List[str] = Field(default_factory=list)
+
+
+class AppTesterCheckResponse(PydanticBaseModel):
+    is_tester: bool
+
+
+class UnapprovedPublicAppResponse(PydanticBaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: Optional[str] = None
+    name: Optional[str] = None
+    uid: Optional[str] = None
+    private: Optional[bool] = None
+    approved: Optional[bool] = None
+    status: Optional[str] = None
+    category: Optional[str] = None
+    author: Optional[str] = None
+    description: Optional[str] = None
+    image: Optional[str] = None
+    capabilities: List[str] = Field(default_factory=list)
+
+
+class AppDescriptionGenerationResponse(PydanticBaseModel):
+    description: str
+
+
+class AppDescriptionEmojiGenerationResponse(PydanticBaseModel):
+    description: str
+    emoji: str
+
+
+class AppPromptsGenerationResponse(PydanticBaseModel):
+    prompts: List[str]
+
+
+class AppDraftGenerationResponse(PydanticBaseModel):
+    name: str
+    description: str
+    category: str
+    capabilities: List[str]
+    chat_prompt: Optional[str] = None
+    memory_prompt: Optional[str] = None
+
+
+class AppGenerationResponse(PydanticBaseModel):
+    status: str
+    app: AppDraftGenerationResponse
+
+
+class AppIconGenerationResponse(PydanticBaseModel):
+    status: str
+    icon_base64: str
+    mime_type: str
+
+
+class AppPaginationLinks(PydanticBaseModel):
+    next: Optional[str] = None
+    previous: Optional[str] = None
+
+
+class AppPagination(PydanticBaseModel):
+    total: int
+    count: int
+    offset: int
+    limit: int
+    hasNext: bool
+    hasPrevious: bool
+    links: Optional[AppPaginationLinks] = None
+
+
+class AppCatalogGroup(PydanticBaseModel):
+    capability: Optional[AppSelectOption] = None
+    category: Optional[AppSelectOption] = None
+    data: List[AppBaseModel] = Field(default_factory=list)
+    pagination: Optional[AppPagination] = None
+    count: Optional[int] = None
+
+
+class AppCatalogMeta(PydanticBaseModel):
+    capabilities: List[AppSelectOption] = Field(default_factory=list)
+    groupCount: int = 0
+    limit: Optional[int] = None
+    offset: Optional[int] = None
+    totalApps: Optional[int] = None
+
+
+class AppCatalogResponse(PydanticBaseModel):
+    data: List[AppBaseModel] = Field(default_factory=list)
+    pagination: Optional[AppPagination] = None
+    capability: Optional[AppSelectOption] = None
+    category: Optional[AppSelectOption] = None
+    groups: List[AppCatalogGroup] = Field(default_factory=list)
+    meta: Optional[AppCatalogMeta] = None
+
+
+class AppSearchFilters(PydanticBaseModel):
+    query: Optional[str] = None
+    category: Optional[str] = None
+    rating: Optional[float] = None
+    capability: Optional[str] = None
+    sort: str
+    my_apps: Optional[bool] = None
+    installed_apps: Optional[bool] = None
+
+
+class AppSearchResponse(PydanticBaseModel):
+    data: List[AppBaseModel] = Field(default_factory=list)
+    pagination: AppPagination
+    filters: AppSearchFilters
+
+
+class AppApiKeyResponse(PydanticBaseModel):
+    id: str
+    label: str
+    created_at: Optional[datetime] = None
+    secret: Optional[str] = None
+
+
+class PersonaMutationResponse(AppMutationResponse):
+    app_id: str
+    username: str
+
+
+class TwitterProfileResponse(PydanticBaseModel):
+    name: str
+    profile: str
+    rest_id: str
+    avatar: str
+    desc: str
+    friends: int
+    sub_count: int
+    id: str
+    status: str
+    persona_id: Optional[str] = None
+    persona_username: Optional[str] = None
+
+
+class TwitterOwnershipVerificationResponse(PydanticBaseModel):
+    tweet: str
+    verified: bool
+    persona_id: Optional[str] = None
+
+
+class TwitterInitialMessageResponse(PydanticBaseModel):
+    message: str
+
+
+class ConversationSummaryAppIdsResponse(PydanticBaseModel):
+    app_ids: List[str] = Field(default_factory=list)
+
+
+class PersonaRecordResponse(App):
+    doc_id: Optional[str] = None
+
+
+# ******************************************************
+# ******************* REQUEST MODELS *******************
+# ******************************************************
+
+
+class ReviewAppRequest(PydanticBaseModel):
+    score: float
+    review: Optional[str] = None
+    username: Optional[str] = None
+    response: Optional[str] = None
+
+
+class ReplyToReviewRequest(PydanticBaseModel):
+    reviewer_uid: str
+    response: str
+
+
+class GenerateDescriptionRequest(PydanticBaseModel):
+    name: str
+    description: str
+
+
+class GenerateDescriptionEmojiRequest(PydanticBaseModel):
+    name: str
+    prompt: str
+
+
+class GenerateAppRequest(PydanticBaseModel):
+    prompt: str = ''
+
+
+class GenerateAppIconRequest(PydanticBaseModel):
+    name: str = ''
+    description: str = ''
+    category: str = 'other'
+
+
+class AddTesterRequest(PydanticBaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    uid: str
+    apps: List[str]
+
+
+class TesterAccessRequest(PydanticBaseModel):
+    uid: str
+    app_id: str
+
+
+def _write_file(path: str, data: bytes):
     """Write bytes to file — offloaded to storage_executor."""
     with open(path, 'wb') as f:
         f.write(data)
 
 
-def _get_app_by_id(app_id: str, uid: Optional[str]) -> Optional[Dict[str, Any]]:
-    """Typed wrapper for get_available_app_by_id."""
-    return get_available_app_by_id(app_id, uid)
-
-
-def _get_app_by_id_with_reviews(app_id: str, uid: Optional[str]) -> Optional[Dict[str, Any]]:
-    """Typed wrapper for get_available_app_by_id_with_reviews."""
-    return get_available_app_by_id_with_reviews(app_id, uid)
-
-
-def _process_chat_tools_manifest(external_integration: Dict[str, Any], app_dict: Dict[str, Any]) -> Dict[str, Any]:
+def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> dict:
     """Fetch and process chat tools manifest, updating and returning app_dict.
 
     Fetches the manifest from chat_tools_manifest_url, resolves relative endpoints
@@ -182,18 +420,13 @@ def _process_chat_tools_manifest(external_integration: Dict[str, Any], app_dict:
     if not manifest_result:
         return app_dict
 
-    fetched_tools_raw = manifest_result.get('tools')
-    fetched_tools: List[Dict[str, Any]] = (
-        [cast(Dict[str, Any], t) for t in cast(List[Any], fetched_tools_raw) if isinstance(t, dict)]
-        if isinstance(fetched_tools_raw, list)
-        else []
-    )
+    fetched_tools = manifest_result.get('tools')
     if fetched_tools:
         # Resolve relative endpoints to absolute URLs
-        base_url = str(external_integration.get('app_home_url', '') or '').rstrip('/')
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
-                endpoint = str(tool.get('endpoint', '') or '')
+                endpoint = tool.get('endpoint', '')
                 if endpoint.startswith('/') and not endpoint.startswith('//'):
                     tool['endpoint'] = f"{base_url}{endpoint}"
         app_dict['chat_tools'] = fetched_tools
@@ -215,30 +448,53 @@ def _process_chat_tools_manifest(external_integration: Dict[str, Any], app_dict:
     return app_dict
 
 
+def _get_categories():
+    return [
+        {'title': 'Popular', 'id': 'popular'},
+        {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
+        {'title': 'Personality Clone', 'id': 'personality-emulation'},
+        {'title': 'Health', 'id': 'health-and-wellness'},
+        {'title': 'Education', 'id': 'education-and-learning'},
+        {'title': 'Communication', 'id': 'communication-improvement'},
+        {'title': 'Emotional Support', 'id': 'emotional-and-mental-support'},
+        {'title': 'Productivity', 'id': 'productivity-and-organization'},
+        {'title': 'Entertainment', 'id': 'entertainment-and-fun'},
+        {'title': 'Financial', 'id': 'financial'},
+        {'title': 'Travel', 'id': 'travel-and-exploration'},
+        {'title': 'Safety', 'id': 'safety-and-security'},
+        {'title': 'Shopping', 'id': 'shopping-and-commerce'},
+        {'title': 'Social', 'id': 'social-and-relationships'},
+        {'title': 'News', 'id': 'news-and-information'},
+        {'title': 'Utilities', 'id': 'utilities-and-tools'},
+        {'title': 'Other', 'id': 'other'},
+    ]
+
+
 # ******************************************************
 # ********************* APPS CRUD **********************
 # ******************************************************
 
 
 @router.get('/v1/apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True) -> List[Dict[str, Any]]:
+def get_apps(uid: str = Depends(auth.get_current_user_uid), include_reviews: bool = True):
     apps = get_available_apps(uid, include_reviews=include_reviews)
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in apps]
 
 
-@router.get('/v1/apps/enabled', tags=['v1'])
-def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)) -> List[str]:
+@router.get('/v1/apps/enabled', tags=['v1'], response_model=List[str])
+def get_user_enabled_apps(uid: str = Depends(auth.get_current_user_uid)):
     """Returns the list of app IDs the user has enabled/installed."""
     return get_enabled_apps(uid)
 
 
-@router.get('/v2/apps', tags=['v2'])
+@router.get('/v2/apps', tags=['v2'], response_model=AppCatalogResponse)
 def get_apps_v2(
     capability: str | None = Query(default=None, description='Filter by capability id'),
+    category: str | None = Query(default=None, description='Filter by category id'),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     include_reviews: bool = Query(default=False),
-) -> Any:
+):
     """Public omi apps, paginated by capability groups.
 
     Notes:
@@ -252,6 +508,8 @@ def get_apps_v2(
 
     if capability:
         cache_key = f"apps:capability:v2:{capability}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
+    elif category:
+        cache_key = f"apps:category:v2:{category}:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
     else:
         cache_key = f"apps:capability_groups:v2:offset={offset}:limit={limit}:reviews={int(include_reviews)}"
 
@@ -261,7 +519,7 @@ def get_apps_v2(
 
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
-    approved_apps = [a for a in apps if a.approved and (cast(Optional[bool], a.private) is None or not a.private)]
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
 
@@ -271,13 +529,32 @@ def get_apps_v2(
         sorted_apps = sort_apps_by_installs(filtered_apps)
         page = paginate_apps(sorted_apps, offset, limit)
 
-        res: Dict[str, Any] = {
+        res = {
             'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
             'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, capability),
             'capability': {
                 'id': capability,
                 'title': next(
                     (c['title'] for c in capabilities if c['id'] == capability), capability.title().replace('_', ' ')
+                ),
+            },
+        }
+        set_generic_cache(cache_key, res, ttl=60 * 10)
+        return res
+
+    if category:
+        filtered_apps = [app for app in approved_apps if app.category == category]
+        sorted_apps = sort_apps_by_installs(filtered_apps)
+        page = paginate_apps(sorted_apps, offset, limit)
+        categories = _get_categories()
+
+        res = {
+            'data': [normalize_app_numeric_fields(app.to_reduced_dict()) for app in page],
+            'pagination': build_pagination_metadata(len(sorted_apps), offset, limit, category),
+            'category': {
+                'id': category,
+                'title': next(
+                    (c['title'] for c in categories if c['id'] == category), category.title().replace('-', ' ')
                 ),
             },
         }
@@ -301,11 +578,11 @@ def get_apps_v2(
     return res
 
 
-@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'])
+@router.get('/v2/apps/capability/{capability_id}/grouped', tags=['v2'], response_model=AppCatalogResponse)
 def get_capability_apps_grouped_by_category(
     capability_id: str,
     include_reviews: bool = Query(default=True),
-) -> Any:
+):
     """Get all apps for a specific capability, grouped by master category.
 
     Returns apps grouped into master categories like:
@@ -323,7 +600,7 @@ def get_capability_apps_grouped_by_category(
 
     # Fetch and filter approved public apps
     apps = get_approved_available_apps(include_reviews=include_reviews)
-    approved_apps = [a for a in apps if a.approved and (cast(Optional[bool], a.private) is None or not a.private)]
+    approved_apps = [a for a in apps if a.approved and (a.private is None or not a.private)]
     # Always exclude persona type apps
     approved_apps = [a for a in approved_apps if not a.is_a_persona()]
 
@@ -334,7 +611,7 @@ def get_capability_apps_grouped_by_category(
     grouped_apps = group_capability_apps_by_category(filtered_apps, capability_id)
     groups = build_capability_category_groups_response(grouped_apps, capability_id)
 
-    res: Dict[str, Any] = {
+    res = {
         'groups': groups,
         'capability': {
             'id': capability_id,
@@ -352,7 +629,7 @@ def get_capability_apps_grouped_by_category(
     return res
 
 
-@router.get('/v2/apps/search', tags=['v2'])
+@router.get('/v2/apps/search', tags=['v2'], response_model=AppSearchResponse)
 def search_apps(
     q: str | None = Query(default=None, description='Search query for app name or description'),
     category: str | None = Query(default=None, description='Filter by category id'),
@@ -366,13 +643,13 @@ def search_apps(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     uid: str = Depends(auth.get_current_user_uid),
-) -> Dict[str, Any]:
+):
     """Search and filter apps with pagination.
 
     Returns a flat list of apps matching the search and filter criteria.
     """
 
-    enabled_app_ids: Optional[List[str]] = None
+    enabled_app_ids = None
     if installed_apps:
         enabled_app_ids = list(get_enabled_apps(uid))
 
@@ -400,7 +677,7 @@ def search_apps(
     apps_installs = get_apps_installs_count(app_ids)
     apps_reviews = get_apps_reviews(app_ids)
 
-    apps: List[App] = []
+    apps = []
 
     for app_dict in apps_data:
         app_dict['enabled'] = app_dict['id'] in user_enabled
@@ -425,7 +702,7 @@ def search_apps(
             )
 
     # Always exclude persona type apps from results
-    filtered_apps: List[App] = [app for app in apps if not app.is_a_persona()]
+    filtered_apps = [app for app in apps if not app.is_a_persona()]
 
     # Apply text search filter
     if q and q.strip():
@@ -474,7 +751,7 @@ def search_apps(
 
 
 @router.get('/v1/approved-apps', tags=['v1'], response_model=List[AppBaseModel])
-def get_approved_apps(include_reviews: bool = False) -> List[Dict[str, Any]]:
+def get_approved_apps(include_reviews: bool = False):
     apps = get_approved_available_apps(include_reviews=include_reviews)
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
@@ -482,18 +759,16 @@ def get_approved_apps(include_reviews: bool = False) -> List[Dict[str, Any]]:
 
 
 @router.get('/v1/apps/popular', tags=['v1'], response_model=List[AppBaseModel])
-def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)) -> List[Dict[str, Any]]:
+def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     apps = get_popular_apps()
     # Always exclude persona type apps
     filtered_apps = [app for app in apps if not app.is_a_persona()]
     return [normalize_app_numeric_fields(app.to_reduced_dict()) for app in filtered_apps]
 
 
-@router.post('/v1/apps', tags=['v1'])
-def create_app(
-    app_data: str = Form(...), file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, str]:
-    data: Dict[str, Any] = parse_form_json(dict, app_data, 'app_data')
+@router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
+def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
+    data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
     data['status'] = 'under-review'
     data['name'] = (data.get('name') or '').strip()
@@ -511,32 +786,32 @@ def create_app(
         if data['is_paid'] is True:
             if data.get('price') is None:
                 raise HTTPException(status_code=422, detail='App price is required')
-            if cast(float, data.get('price')) < 0.0:
+            if data.get('price') < 0.0:
                 raise HTTPException(status_code=422, detail='Price cannot be a negative value')
             if data.get('payment_plan') is None:
                 raise HTTPException(status_code=422, detail='Payment plan is required')
 
     if external_integration := data.get('external_integration'):
-        ext_int = cast(Dict[str, Any], external_integration) if isinstance(external_integration, dict) else {}
-        if ext_int.get('triggers_on') is None and len(ext_int.get('actions', [])) == 0:
+        if external_integration.get('triggers_on') is None and len(external_integration.get('actions', [])) == 0:
             raise HTTPException(status_code=422, detail='Triggers on or actions is required')
         # Trigger on
-        if ext_int.get('triggers_on'):
-            normalize_required_webhook_url(ext_int)
-            if ext_int.get('setup_instructions_file_path'):
-                ext_int['setup_instructions_file_path'] = cast(str, ext_int['setup_instructions_file_path']).strip()
-                if ext_int['setup_instructions_file_path'].startswith('http'):
-                    ext_int['is_instructions_url'] = True
+        if external_integration.get('triggers_on'):
+            normalize_required_webhook_url(external_integration)
+            if external_integration.get('setup_instructions_file_path'):
+                external_integration['setup_instructions_file_path'] = external_integration[
+                    'setup_instructions_file_path'
+                ].strip()
+                if external_integration['setup_instructions_file_path'].startswith('http'):
+                    external_integration['is_instructions_url'] = True
                 else:
-                    ext_int['is_instructions_url'] = False
+                    external_integration['is_instructions_url'] = False
 
         # Actions
-        if actions := ext_int.get('actions'):
+        if actions := external_integration.get('actions'):
             for action in actions:
-                action_dict = cast(Dict[str, Any], action) if isinstance(action, dict) else {}
-                if not action_dict.get('action'):
+                if not action.get('action'):
                     raise HTTPException(status_code=422, detail='Action field is required for each action')
-                if action_dict.get('action') not in [action_type.value for action_type in ActionType]:
+                if action.get('action') not in [action_type.value for action_type in ActionType]:
                     raise HTTPException(
                         status_code=422,
                         detail=f'Unsupported action type. Supported types: {", ".join([action_type.value for action_type in ActionType])}',
@@ -562,30 +837,21 @@ def create_app(
 
     # Fetch chat tools from manifest URL (only way to add chat tools)
     if external_integration := data.get('external_integration'):
-        app_dict = _process_chat_tools_manifest(
-            cast(Dict[str, Any], external_integration) if isinstance(external_integration, dict) else {},
-            app_dict,
-        )
+        app_dict = _process_chat_tools_manifest(external_integration, app_dict)
 
     add_app_to_db(app_dict)
 
     # payment link
-    upsert_app_payment_link(
-        app.id,
-        cast(bool, app.is_paid),
-        cast(float, app.price),
-        cast(str, app.payment_plan),
-        cast(str, app.uid),
-    )
+    upsert_app_payment_link(app.id, app.is_paid, app.price, app.payment_plan, app.uid)
 
     return {'status': 'ok', 'app_id': app.id}
 
 
-@router.post('/v1/personas', tags=['v1'])
+@router.post('/v1/personas', tags=['v1'], response_model=PersonaMutationResponse)
 async def create_persona(
-    persona_data: str = Form(...), file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, str]:
-    data: Dict[str, Any] = parse_form_json(dict, persona_data, 'persona_data')
+    persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
+):
+    data = parse_form_json(dict, persona_data, 'persona_data')
     data['approved'] = False
     data['status'] = 'under-review'
     data['category'] = 'personality-emulation'
@@ -593,8 +859,7 @@ async def create_persona(
     data['id'] = str(ULID())
     data['uid'] = uid
     data['capabilities'] = ['persona']
-    user_raw = await run_blocking(db_executor, get_user_from_uid, uid)
-    user: Dict[str, Any] = user_raw if isinstance(user_raw, dict) else {}
+    user = await run_blocking(db_executor, get_user_from_uid, uid) or {}
     data['author'] = user.get('display_name', '')
     data['email'] = user.get('email')
 
@@ -625,16 +890,15 @@ async def create_persona(
     return {'status': 'ok', 'app_id': data['id'], 'username': data['username']}
 
 
-@router.patch('/v1/personas/{persona_id}', tags=['v1'])
+@router.patch('/v1/personas/{persona_id}', tags=['v1'], response_model=PersonaMutationResponse)
 async def update_persona(
     persona_id: str,
     persona_data: str = Form(...),
     file: UploadFile = File(None),
-    uid: str = Depends(auth.get_current_user_uid),
-) -> Dict[str, str]:
-    data: Dict[str, Any] = parse_form_json(dict, persona_data, 'persona_data')
-    persona_raw = await run_blocking(db_executor, _get_app_by_id, persona_id, uid)
-    persona: Optional[Dict[str, Any]] = persona_raw if isinstance(persona_raw, dict) else None
+    uid=Depends(auth.get_current_user_uid),
+):
+    data = parse_form_json(dict, persona_data, 'persona_data')
+    persona = await run_blocking(db_executor, get_available_app_by_id, persona_id, uid)
     if not persona:
         raise HTTPException(status_code=404, detail='Persona not found')
     if persona['uid'] != uid:
@@ -670,31 +934,30 @@ async def update_persona(
 
     await run_blocking(db_executor, update_app_in_db, update_app.model_dump(exclude_unset=True))
 
-    if persona['approved'] and (
-        cast(Optional[bool], persona['private']) is None or cast(Optional[bool], persona['private']) is False
-    ):
+    if persona['approved'] and (persona['private'] is None or persona['private'] is False):
         await run_blocking(db_executor, invalidate_approved_apps_cache)
     await run_blocking(db_executor, delete_app_cache_by_id, persona_id)
     return {'status': 'ok', 'app_id': persona_id, 'username': data['username']}
 
 
-@router.get('/v1/personas', tags=['v1'])
-def get_persona_details(uid: str = Depends(auth.get_current_user_uid)) -> App:
-    app_raw = get_persona_by_uid(uid)
-    app = App(**app_raw) if app_raw else None
+@router.get('/v1/personas', tags=['v1'], response_model=App)
+def get_persona_details(uid: str = Depends(auth.get_current_user_uid)):
+    app = get_persona_by_uid(uid)
+    # print(app)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='Persona not found')
     if app.uid != uid:
         raise HTTPException(status_code=404, detail='Persona not found')
-    if cast(Optional[bool], app.private) is not None:
+    if app.private is not None:
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to view this Persona')
 
     return app
 
 
-@router.post('/v1/user/persona', tags=['v1'])
-async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)) -> Any:
+@router.post('/v1/user/persona', tags=['v1'], response_model=App)
+async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_uid)):
     """Get or create a user persona.
 
     If the user already has a persona, return it.
@@ -707,14 +970,13 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
         return persona
 
     # Create a new persona for the user
-    user_raw = await run_blocking(db_executor, get_user_from_uid, uid)
-    user: Dict[str, Any] = user_raw if isinstance(user_raw, dict) else {}
+    user = await run_blocking(db_executor, get_user_from_uid, uid)
 
     # Generate a unique ID for the persona
     persona_id = str(ULID())
 
     # Create persona data
-    persona_data: Dict[str, Any] = {
+    persona_data = {
         'id': persona_id,
         'name': user.get('display_name', 'My Persona'),
         'username': await run_blocking(
@@ -751,16 +1013,12 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
     return persona_data
 
 
-@router.patch('/v1/apps/{app_id}', tags=['v1'])
+@router.patch('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
 def update_app(
-    app_id: str,
-    app_data: str = Form(...),
-    file: UploadFile = File(None),
-    uid: str = Depends(auth.get_current_user_uid),
-) -> Dict[str, str]:
-    data: Dict[str, Any] = parse_form_json(dict, app_data, 'app_data')
-    app_raw = _get_app_by_id(app_id, uid)
-    app: Optional[Dict[str, Any]] = app_raw if isinstance(app_raw, dict) else None
+    app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
+):
+    data = parse_form_json(dict, app_data, 'app_data')
+    app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
@@ -778,10 +1036,7 @@ def update_app(
 
     # Backward compatibility: Set app_home_url from first auth step if not provided
     if 'external_integration' in data:
-        ext_int_data = data['external_integration']
-        backfill_app_home_url_from_auth_steps(
-            cast(Dict[str, Any], ext_int_data) if isinstance(ext_int_data, dict) else {}
-        )
+        backfill_app_home_url_from_auth_steps(data['external_integration'])
 
     try:
         update_app = AppUpdate.model_validate(data)
@@ -789,14 +1044,11 @@ def update_app(
         raise HTTPException(status_code=422, detail=str(e))
 
     # Build update dict
-    update_dict: Dict[str, Any] = update_app.model_dump(exclude_unset=True)
+    update_dict = update_app.model_dump(exclude_unset=True)
 
     # Fetch chat tools from manifest URL (only way to add/update chat tools)
     if external_integration := data.get('external_integration'):
-        update_dict = _process_chat_tools_manifest(
-            cast(Dict[str, Any], external_integration) if isinstance(external_integration, dict) else {},
-            update_dict,
-        )
+        update_dict = _process_chat_tools_manifest(external_integration, update_dict)
 
     if update_dict.get('disabled') is False and app.get('disabled'):
         validate_app_endpoints_for_reenable(app, update_dict, app_id)
@@ -810,78 +1062,60 @@ def update_app(
 
     # payment link
     upsert_app_payment_link(
-        cast(str, data.get('id')),
-        cast(bool, data.get('is_paid', False)),
-        cast(float, data.get('price')),
-        cast(str, data.get('payment_plan')),
-        cast(str, data.get('uid')),
-        previous_price=cast(float, app.get("price", 0)),
+        data.get('id'),
+        data.get('is_paid', False),
+        data.get('price'),
+        data.get('payment_plan'),
+        data.get('uid'),
+        previous_price=app.get("price", 0),
     )
 
-    if app['approved'] and (
-        cast(Optional[bool], app['private']) is None or cast(Optional[bool], app['private']) is False
-    ):
+    if app['approved'] and (app['private'] is None or app['private'] is False):
         invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'])
-def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+@router.post('/v1/apps/{app_id}/refresh-manifest', tags=['v1'], response_model=AppManifestRefreshResponse)
+def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Refresh chat tools manifest for an app.
 
     Forces a fresh fetch of the manifest from the external URL, bypassing cache.
     Only the app owner can refresh their app's manifest.
     """
-    app_raw = _get_app_by_id(app_id, uid)
-    app: Optional[Dict[str, Any]] = app_raw if isinstance(app_raw, dict) else None
+    app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
 
-    external_integration_raw = app.get('external_integration')
-    external_integration: Dict[str, Any] = (
-        cast(Dict[str, Any], external_integration_raw) if isinstance(external_integration_raw, dict) else {}
-    )
-    if not external_integration_raw:
+    external_integration = app.get('external_integration')
+    if not external_integration:
         raise HTTPException(status_code=400, detail='App does not have external integration')
 
-    manifest_url_raw: object = external_integration.get('chat_tools_manifest_url')
-    manifest_url = manifest_url_raw if isinstance(manifest_url_raw, str) else None
+    manifest_url = external_integration.get('chat_tools_manifest_url')
     if not manifest_url:
         raise HTTPException(status_code=400, detail='App does not have a chat tools manifest URL')
 
-    manifest_result_raw: object = fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
-    manifest_result: Dict[str, Any] = manifest_result_raw if isinstance(manifest_result_raw, dict) else {}
+    manifest_result = fetch_app_chat_tools_from_manifest(manifest_url, force_refresh=True)
     if not manifest_result:
         raise HTTPException(status_code=502, detail='Failed to fetch manifest from external URL')
 
-    update_dict: Dict[str, Any] = {'id': app_id, 'updated_at': datetime.now(timezone.utc)}
+    update_dict = {'id': app_id, 'updated_at': datetime.now(timezone.utc)}
 
-    fetched_tools_raw: object = manifest_result.get('tools')
-    fetched_tools: List[Dict[str, Any]] = (
-        [cast(Dict[str, Any], t) for t in cast(List[Any], fetched_tools_raw) if isinstance(t, dict)]
-        if isinstance(fetched_tools_raw, list)
-        else []
-    )
+    fetched_tools = manifest_result.get('tools')
     if fetched_tools:
-        base_url_raw: object = external_integration.get('app_home_url', '')
-        base_url = base_url_raw.rstrip('/') if isinstance(base_url_raw, str) else ''
+        base_url = external_integration.get('app_home_url', '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
-                endpoint_raw: object = tool.get('endpoint', '')
-                endpoint = endpoint_raw if isinstance(endpoint_raw, str) else ''
+                endpoint = tool.get('endpoint', '')
                 if endpoint.startswith('/') and not endpoint.startswith('//'):
                     tool['endpoint'] = f"{base_url}{endpoint}"
         update_dict['chat_tools'] = fetched_tools
 
-    chat_messages_raw: object = manifest_result.get('chat_messages')
-    chat_messages: Dict[str, Any] = (
-        cast(Dict[str, Any], chat_messages_raw) if isinstance(chat_messages_raw, dict) else {}
-    )
-    ext_int_update: Dict[str, Any] = {}
+    chat_messages = manifest_result.get('chat_messages')
+    ext_int_update = {}
     if chat_messages:
         ext_int_update['chat_messages_enabled'] = chat_messages.get('enabled', False)
         ext_int_update['chat_messages_target'] = chat_messages.get('target', 'app')
@@ -894,9 +1128,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
 
     update_app_in_db(update_dict)
 
-    if app['approved'] and (
-        cast(Optional[bool], app['private']) is None or cast(Optional[bool], app['private']) is False
-    ):
+    if app['approved'] and (app['private'] is None or app['private'] is False):
         invalidate_approved_apps_cache()
     delete_app_cache_by_id(app_id)
 
@@ -904,9 +1136,9 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
     return {'status': 'ok', 'tools_count': tools_count}
 
 
-@router.delete('/v1/apps/{app_id}', tags=['v1'])
-def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
-    app: Optional[Dict[str, Any]] = _get_app_by_id(app_id, uid)
+@router.delete('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
+def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app['uid'] != uid:
@@ -918,15 +1150,15 @@ def delete_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Di
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}', tags=['v1'])
-def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> App:
-    app_raw = _get_app_by_id_with_reviews(app_id, uid)
-    app = App(**app_raw) if app_raw else None
+@router.get('/v1/apps/{app_id}', tags=['v1'], response_model=App)
+def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id_with_reviews(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if not app.approved and app.uid != uid:
         raise HTTPException(status_code=404, detail='App not found')
-    if cast(Optional[bool], app.private) is not None:
+    if app.private is not None:
         if app.private and app.uid != uid:
             raise HTTPException(status_code=403, detail='You are not authorized to view this app')
 
@@ -944,8 +1176,8 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)) 
     return app
 
 
-@router.get('/v1/app-categories', tags=['v1'])
-def get_app_categories() -> List[Dict[str, str]]:
+@router.get('/v1/app-categories', tags=['v1'], response_model=List[AppSelectOption])
+def get_app_categories():
     return [
         {'title': 'Conversation Analysis', 'id': 'conversation-analysis'},
         {'title': 'Personality Clone', 'id': 'personality-emulation'},
@@ -966,13 +1198,10 @@ def get_app_categories() -> List[Dict[str, str]]:
     ]
 
 
-@router.post('/v1/apps/review', tags=['v1'])
-def review_app(app_id: str, data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
-    if 'score' not in data:
-        raise HTTPException(status_code=422, detail='Score is required')
-
-    app_raw = _get_app_by_id(app_id, uid)
-    app = App(**app_raw) if app_raw else None
+@router.post('/v1/apps/review', tags=['v1'], response_model=AppMutationResponse)
+def review_app(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -982,20 +1211,20 @@ def review_app(app_id: str, data: Dict[str, Any], uid: str = Depends(auth.get_cu
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to review this app')
 
-    review_data: Dict[str, Any] = {
-        'score': data['score'],
-        'review': data.get('review', ''),
-        'username': data.get('username', ''),
-        'response': data.get('response', ''),
+    review_data = {
+        'score': data.score,
+        'review': data.review or '',
+        'username': data.username or '',
+        'response': data.response or '',
         'rated_at': datetime.now(timezone.utc).isoformat(),
         'uid': uid,
     }
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
-    if review_body := data.get('review', ''):
+    if review_body := data.review or '':
         send_new_app_review_notification(
-            app_owner_uid=cast(str, app.uid),
+            app_owner_uid=app.uid,
             reviewer_uid=uid,
             app_id=app_id,
             app_name=app.name,
@@ -1005,15 +1234,10 @@ def review_app(app_id: str, data: Dict[str, Any], uid: str = Depends(auth.get_cu
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review', tags=['v1'])
-def update_app_review(
-    app_id: str, data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, str]:
-    if 'score' not in data:
-        raise HTTPException(status_code=422, detail='Score is required')
-
-    app_raw = _get_app_by_id(app_id, uid)
-    app = App(**app_raw) if app_raw else None
+@router.patch('/v1/apps/{app_id}/review', tags=['v1'], response_model=AppMutationResponse)
+def update_app_review(app_id: str, data: ReviewAppRequest, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1025,21 +1249,21 @@ def update_app_review(
     old_review = get_specific_user_review(app_id, uid)
     if not old_review:
         raise HTTPException(status_code=404, detail='Review not found')
-    review_data: Dict[str, Any] = {
-        'score': data['score'],
-        'review': data.get('review', ''),
+    review_data = {
+        'score': data.score,
+        'review': data.review or '',
         'updated_at': datetime.now(timezone.utc).isoformat(),
         'rated_at': old_review['rated_at'],
-        'username': data.get('username', old_review.get('username', '')),
+        'username': data.username if data.username is not None else old_review.get('username', ''),
         'response': old_review.get('response', ''),
         'uid': uid,
     }
     set_app_review(app_id, uid, review_data)
 
     # Send notification to app owner
-    if review_body := data.get('review', ''):
+    if review_body := data.review or '':
         send_new_app_review_notification(
-            app_owner_uid=cast(str, app.uid),
+            app_owner_uid=app.uid,
             reviewer_uid=uid,
             app_id=app_id,
             app_name=app.name,
@@ -1049,10 +1273,10 @@ def update_app_review(
     return {'status': 'ok'}
 
 
-@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'])
-def reply_to_review(app_id: str, data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
-    app_raw = _get_app_by_id(app_id, uid)
-    app = App(**app_raw) if app_raw else None
+@router.patch('/v1/apps/{app_id}/review/reply', tags=['v1'], response_model=AppMutationResponse)
+def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -1062,27 +1286,25 @@ def reply_to_review(app_id: str, data: Dict[str, Any], uid: str = Depends(auth.g
     if app.private and app.uid != uid:
         raise HTTPException(status_code=403, detail='You are not authorized to reply to this app review')
 
-    reviewer_uid = data.get('reviewer_uid')
-    if not reviewer_uid:
+    if not data.reviewer_uid:
         raise HTTPException(status_code=422, detail='Reviewer UID is required')
 
-    response = data.get('response')
-    if not isinstance(response, str) or not response.strip():
+    if not data.response.strip():
         raise HTTPException(status_code=422, detail='Response is required')
 
-    review = get_specific_user_review(app_id, cast(str, reviewer_uid))
+    review = get_specific_user_review(app_id, data.reviewer_uid)
     if not review:
         raise HTTPException(status_code=404, detail='Review not found')
 
-    review['response'] = response
+    review['response'] = data.response
     review['responded_at'] = datetime.now(timezone.utc).isoformat()
-    set_app_review(app_id, cast(str, reviewer_uid), review)
+    set_app_review(app_id, data.reviewer_uid, review)
 
     # Send notification to reviewer
     send_app_review_reply_notification(
-        cast(str, reviewer_uid),
-        cast(str, app.uid),
-        response,
+        data.reviewer_uid,
+        app.uid,
+        data.response,
         app_id,
         app.name,
     )
@@ -1090,17 +1312,17 @@ def reply_to_review(app_id: str, data: Dict[str, Any], uid: str = Depends(auth.g
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/{app_id}/reviews', tags=['v1'])
-def app_reviews(app_id: str) -> List[Dict[str, Any]]:
+@router.get('/v1/apps/{app_id}/reviews', tags=['v1'], response_model=List[AppReview])
+def app_reviews(app_id: str):
     reviews = get_app_reviews(app_id)
-    reviews = [details for details in reviews.values() if details['review']]
+    reviews = [details for details in reviews.values() if details.get('review')]
     return reviews
 
 
-@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'])
-def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
-    app_raw = _get_app_by_id(app_id, uid)
-    app = App(**app_raw) if app_raw else None
+@router.patch('/v1/apps/{app_id}/change-visibility', tags=['v1'], response_model=AppMutationResponse)
+def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.get_current_user_uid)):
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.uid != uid:
@@ -1116,8 +1338,8 @@ def change_app_visibility(app_id: str, private: bool, uid: str = Depends(auth.ge
     return {'status': 'ok'}
 
 
-@router.get('/v1/app/proactive-notification-scopes', tags=['v1'])
-def get_notification_scopes() -> List[Dict[str, str]]:
+@router.get('/v1/app/proactive-notification-scopes', tags=['v1'], response_model=List[AppSelectOption])
+def get_notification_scopes():
     return [
         {'title': 'User Name', 'id': 'user_name'},
         {'title': 'User Memories', 'id': 'user_facts'},
@@ -1126,8 +1348,8 @@ def get_notification_scopes() -> List[Dict[str, str]]:
     ]
 
 
-@router.get('/v1/app-capabilities', tags=['v1'])
-def get_app_capabilities() -> List[Dict[str, Any]]:
+@router.get('/v1/app-capabilities', tags=['v1'], response_model=List[AppCapabilityResponse])
+def get_app_capabilities():
     return [
         {'title': 'Chat', 'id': 'chat'},
         {'title': 'Conversations', 'id': 'memories'},
@@ -1186,15 +1408,15 @@ def get_app_capabilities() -> List[Dict[str, Any]]:
 
 
 # @deprecated
-@router.get('/v1/app/payment-plans', tags=['v1'])
-def get_payment_plans_v1() -> List[Dict[str, str]]:
+@router.get('/v1/app/payment-plans', tags=['v1'], response_model=List[AppSelectOption])
+def get_payment_plans_v1():
     return [
         {'title': 'Monthly Recurring', 'id': 'monthly_recurring'},
     ]
 
 
-@router.get('/v1/app/plans', tags=['v1'])
-def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)) -> List[Dict[str, str]]:
+@router.get('/v1/app/plans', tags=['v1'], response_model=List[AppSelectOption])
+def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)):
     if not uid or len(uid) == 0 or not is_permit_payment_plan_get(uid):
         return []
     return [
@@ -1202,38 +1424,36 @@ def get_payment_plans(uid: str = Depends(auth.get_current_user_uid)) -> List[Dic
     ]
 
 
-@router.post('/v1/app/generate-description', tags=['v1'])
-def generate_description_endpoint(
-    data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, str]:
-    if data['name'] == '':
+@router.post('/v1/app/generate-description', tags=['v1'], response_model=AppDescriptionGenerationResponse)
+def generate_description_endpoint(data: GenerateDescriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
+    if data.name == '':
         raise HTTPException(status_code=422, detail='App Name is required')
-    if data['description'] == '':
+    if data.description == '':
         raise HTTPException(status_code=422, detail='App Description is required')
     with track_usage(uid, Features.APP_GENERATOR):
-        desc = generate_description(data['name'], data['description'])
+        desc = generate_description(data.name, data.description)
     return {
         'description': desc,
     }
 
 
-@router.post('/v1/app/generate-description-emoji', tags=['v1'])
+@router.post('/v1/app/generate-description-emoji', tags=['v1'], response_model=AppDescriptionEmojiGenerationResponse)
 def generate_description_and_emoji_endpoint(
-    data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, Any]:
+    data: GenerateDescriptionEmojiRequest, uid: str = Depends(auth.get_current_user_uid)
+):
     """
     Generate an app description and representative emoji.
     Used by the quick template creator feature.
     """
-    if not data.get('name'):
+    from utils.llm.app_generator import generate_description_and_emoji
+
+    if not data.name:
         raise HTTPException(status_code=422, detail='App Name is required')
-    if not data.get('prompt'):
+    if not data.prompt:
         raise HTTPException(status_code=422, detail='App Prompt is required')
 
     with track_usage(uid, Features.APP_GENERATOR):
-        result: Dict[str, Any] = cast(
-            Dict[str, Any], generate_description_and_emoji(str(data['name']), str(data['prompt']))
-        )
+        result = generate_description_and_emoji(data.name, data.prompt)
     return result
 
 
@@ -1242,14 +1462,17 @@ def generate_description_and_emoji_endpoint(
 # ******************************************************
 
 
-@router.get('/v1/app/generate-prompts', tags=['v1'])
+@router.get('/v1/app/generate-prompts', tags=['v1'], response_model=AppPromptsGenerationResponse)
 async def generate_sample_prompts_endpoint(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "apps:generate_prompts")),
-) -> Dict[str, Any]:
+):
     """
     Generate sample app prompts for the AI app generator.
     Uses a fast model to generate creative suggestions.
     """
+    from utils.llm.clients import get_llm
+    import json
+
     system_prompt = """Generate 5 creative and diverse ideas for apps that are either:
 1. Conversation summary based apps - analyze user's recorded conversations and extract/organize information
 2. Chat assistant based apps - AI personas or assistants users can chat with
@@ -1275,51 +1498,30 @@ Be creative, fun, and varied. No generic ideas."""
                 ]
             )
 
-        content_raw: Any = response.content  # type: ignore[reportUnknownMemberType]  # langchain BaseMessage.content partially typed
-        content = content_raw if isinstance(content_raw, str) else ''
-        content = content.strip()
+        content = response.content.strip()
 
         # Parse JSON from response
         if content.startswith("```"):
             lines = content.split("\n")
             content = "\n".join(lines[1:-1] if lines[-1] == "```" else lines[1:])
 
-        loaded: object = json.loads(content)
+        prompts = json.loads(content)
 
-        if isinstance(loaded, list) and len(cast(List[Any], loaded)) >= 5:
-            prompts = cast(List[Any], loaded)
-            return {"prompts": prompts[:5]}
-        else:
-            # Fallback
-            return {
-                "prompts": [
-                    "Mind map generator from conversations",
-                    "Jokes and funny moments extractor",
-                    "Key decisions and commitments tracker",
-                    "Elon Musk startup advisor clone",
-                    "Strict accountability coach",
-                ]
-            }
+        return app_generation_prompts_from_llm_payload(prompts)
     except Exception as e:
         logger.error(f"Error generating prompts: {e}")
-        return {
-            "prompts": [
-                "Mind map generator from conversations",
-                "Jokes and funny moments extractor",
-                "Key decisions and commitments tracker",
-                "Elon Musk startup advisor clone",
-                "Strict accountability coach",
-            ]
-        }
+        return app_generation_prompts_response()
 
 
-@router.post('/v1/app/generate', tags=['v1'])
-async def generate_app_endpoint(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+@router.post('/v1/app/generate', tags=['v1'], response_model=AppGenerationResponse)
+async def generate_app_endpoint(data: GenerateAppRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app configuration from a natural language prompt.
     This is an experimental feature that uses AI to create app configurations.
     """
-    prompt = str(data.get('prompt', '') or '').strip()
+    from utils.llm.app_generator import generate_app_from_prompt, generate_app_icon
+
+    prompt = data.prompt.strip()
     if not prompt:
         raise HTTPException(status_code=422, detail='Prompt is required')
 
@@ -1350,17 +1552,18 @@ async def generate_app_endpoint(data: Dict[str, Any], uid: str = Depends(auth.ge
         raise HTTPException(status_code=500, detail=f'Failed to generate app: {str(e)}')
 
 
-@router.post('/v1/app/generate-icon', tags=['v1'])
-async def generate_app_icon_endpoint(
-    data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, str]:
+@router.post('/v1/app/generate-icon', tags=['v1'], response_model=AppIconGenerationResponse)
+async def generate_app_icon_endpoint(data: GenerateAppIconRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate an app icon using AI (DALL-E).
     Returns the icon as a base64 encoded PNG image.
     """
-    app_name = str(data.get('name', '') or '').strip()
-    app_description = str(data.get('description', '') or '').strip()
-    category = str(data.get('category', 'other') or '').strip()
+    from utils.llm.app_generator import generate_app_icon
+    import base64
+
+    app_name = data.name.strip()
+    app_description = data.description.strip()
+    category = data.category.strip()
 
     if not app_name:
         raise HTTPException(status_code=422, detail='App name is required')
@@ -1387,14 +1590,14 @@ async def generate_app_icon_endpoint(
 # ******************************************************
 
 
-@router.get('/v1/personas/twitter/profile', tags=['v1'])
-async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+@router.get('/v1/personas/twitter/profile', tags=['v1'], response_model=TwitterProfileResponse)
+async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_current_user_uid)):
     if handle.startswith('@'):
         handle = handle[1:]
     profile = await get_twitter_profile(handle)
 
     # Convert TwitterProfile to dict for response
-    res: Dict[str, Any] = {
+    res = {
         "name": profile.name,
         "profile": profile.profile,
         "rest_id": profile.rest_id,
@@ -1420,13 +1623,10 @@ async def get_twitter_profile_data(handle: str, uid: str = Depends(auth.get_curr
     return res
 
 
-@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'])
+@router.get('/v1/personas/twitter/verify-ownership', tags=['v1'], response_model=TwitterOwnershipVerificationResponse)
 async def verify_twitter_ownership_tweet(
-    username: str,
-    handle: str,
-    uid: str = Depends(auth.get_current_user_uid),
-    persona_id: Optional[str] = None,
-) -> Dict[str, Any]:
+    username: str, handle: str, uid: str = Depends(auth.get_current_user_uid), persona_id: str | None = None
+):
     # Get user info to check auth provider
     user = await run_blocking(db_executor, get_user_from_uid, uid)
     if not user:
@@ -1456,8 +1656,8 @@ async def verify_twitter_ownership_tweet(
     return res
 
 
-@router.get('/v1/personas/twitter/initial-message', tags=['v1'])
-def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
+@router.get('/v1/personas/twitter/initial-message', tags=['v1'], response_model=TwitterInitialMessageResponse)
+def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_current_user_uid)):
     persona = get_persona_by_username_db(username)
     if persona:
         with track_usage(uid, Features.PERSONA):
@@ -1466,8 +1666,8 @@ def get_twitter_initial_message(username: str, uid: str = Depends(auth.get_curre
     return {'message': ''}
 
 
-@router.post('/v1/apps/migrate-owner', tags=['v1'])
-async def migrate_app_owner(old_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
+@router.post('/v1/apps/migrate-owner', tags=['v1'], response_model=AppMigrationResponse)
+async def migrate_app_owner(old_id, uid: str = Depends(auth.get_current_user_uid)):
     await run_blocking(db_executor, migrate_app_owner_id_db, uid, old_id)
 
     # Start async tasks to migrate memories and update persona connected accounts
@@ -1477,16 +1677,16 @@ async def migrate_app_owner(old_id: str, uid: str = Depends(auth.get_current_use
     return {"status": "ok", "message": "Migration started"}
 
 
-async def update_omi_persona_connected_accounts(uid: str) -> None:
+async def update_omi_persona_connected_accounts(uid: str):
     try:
         personas = await run_blocking(db_executor, get_omi_persona_apps_by_uid_db, uid)
 
         for persona in personas:
-            connected_accounts = list(persona.get('connected_accounts', []) or [])
+            connected_accounts = persona.get('connected_accounts', [])
             if 'omi' not in connected_accounts:
                 connected_accounts.append('omi')
 
-                update_data: Dict[str, Any] = persona
+                update_data = persona
                 update_data['connected_accounts'] = connected_accounts
                 update_data['updated_at'] = datetime.now(timezone.utc)
                 update_data['persona_prompt'] = await generate_persona_prompt(uid, update_data)
@@ -1511,23 +1711,23 @@ class McpServerRequest(PydanticBaseModel):
     description: Optional[str] = None
 
 
-def _serialize_chat_tools_for_firestore(tools: List[ChatTool]) -> List[Dict[str, Any]]:
+def _serialize_chat_tools_for_firestore(tools) -> list:
     """Serialize ChatTool objects for Firestore, converting parameters dict to JSON string.
 
     Firestore has nesting depth limits that MCP tool schemas can exceed,
     so we store the parameters field as a JSON string.
     """
-    result: List[Dict[str, Any]] = []
+    result = []
     for t in tools:
-        d = t.dict()
+        d = t.model_dump()
         if d.get('parameters') is not None:
             d['parameters'] = json.dumps(d['parameters'])
         result.append(d)
     return result
 
 
-@router.post('/v1/apps/mcp', tags=['v1'])
-async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+@router.post('/v1/apps/mcp', tags=['v1'], response_model=McpAddServerResponse)
+async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Add a remote MCP server as a private app with chat tools.
 
     1. Extracts domain from URL and fetches logo via Brandfetch / logo.dev
@@ -1550,8 +1750,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
     logo_url = await fetch_brandfetch_logo(domain) or ''
 
     app_id = str(ULID())
-    user_raw = await run_blocking(db_executor, get_user_from_uid, uid)
-    user: Dict[str, Any] = user_raw if isinstance(user_raw, dict) else {}
+    user = await run_blocking(db_executor, get_user_from_uid, uid)
 
     # Check for OAuth metadata
     oauth_meta = await discover_oauth_metadata(server_url)
@@ -1564,7 +1763,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
 
         redirect_uri = f"{base_url}/v1/apps/mcp/callback"
 
-        client_info: Dict[str, Any] = {}
+        client_info = {}
         if oauth_meta.get('registration_endpoint'):
             try:
                 client_info = await register_oauth_client(
@@ -1595,7 +1794,7 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         logger.info(f"[MCP OAuth] auth_url={auth_url}")
 
         # Create app in pending state (no tools yet)
-        app_dict: Dict[str, Any] = {
+        app_dict = {
             'id': app_id,
             'name': app_name,
             'description': app_description,
@@ -1671,8 +1870,10 @@ async def add_mcp_server(data: McpServerRequest, uid: str = Depends(auth.get_cur
         }
 
 
-@router.get('/v1/apps/mcp/callback', tags=['v1'])
-async def mcp_oauth_callback(code: str, state: str) -> HTMLResponse:
+@router.get(
+    '/v1/apps/mcp/callback', tags=['v1'], response_class=HTMLResponse
+)  # response_model omitted: OAuth callback returns HTML
+async def mcp_oauth_callback(code: str, state: str):
     """OAuth callback for MCP server authorization.
 
     Exchanges the authorization code for tokens, discovers tools, updates the app.
@@ -1687,10 +1888,8 @@ async def mcp_oauth_callback(code: str, state: str) -> HTMLResponse:
     if not app_data:
         return HTMLResponse('<html><body><h1>App not found</h1></body></html>', status_code=404)
 
-    ext_raw = app_data.get('external_integration', {})
-    ext: Dict[str, Any] = cast(Dict[str, Any], ext_raw) if isinstance(ext_raw, dict) else {}
-    oauth_tokens_raw = ext.get('mcp_oauth_tokens', {})
-    oauth_tokens: Dict[str, Any] = cast(Dict[str, Any], oauth_tokens_raw) if isinstance(oauth_tokens_raw, dict) else {}
+    ext = app_data.get('external_integration', {})
+    oauth_tokens = ext.get('mcp_oauth_tokens', {})
     server_url = ext.get('mcp_server_url', '')
 
     if not oauth_tokens or not oauth_tokens.get('token_endpoint'):
@@ -1725,7 +1924,7 @@ async def mcp_oauth_callback(code: str, state: str) -> HTMLResponse:
     resolved_url = tools[0].endpoint if tools else server_url
 
     # Update app with tokens and tools
-    update_dict: Dict[str, Any] = {
+    update_dict = {
         'id': app_id,
         'status': 'approved',
         'external_integration': {
@@ -1763,8 +1962,8 @@ async def mcp_oauth_callback(code: str, state: str) -> HTMLResponse:
     """)
 
 
-@router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'])
-async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+@router.post('/v1/apps/{app_id}/mcp/refresh', tags=['v1'], response_model=McpRefreshToolsResponse)
+async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Re-discover tools from an MCP server and update the app."""
     app_data = await run_blocking(db_executor, get_app_by_id_db, app_id)
     if not app_data:
@@ -1772,16 +1971,12 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
     if app_data.get('uid') != uid:
         raise HTTPException(status_code=403, detail='Not authorized')
 
-    ext_raw = app_data.get('external_integration', {})
-    ext: Dict[str, Any] = cast(Dict[str, Any], ext_raw) if isinstance(ext_raw, dict) else {}
+    ext = app_data.get('external_integration', {})
     server_url = ext.get('mcp_server_url')
     if not server_url:
         raise HTTPException(status_code=422, detail='App is not an MCP server app')
 
-    oauth_tokens_raw = ext.get('mcp_oauth_tokens')
-    oauth_tokens: Optional[Dict[str, Any]] = (
-        cast(Dict[str, Any], oauth_tokens_raw) if isinstance(oauth_tokens_raw, dict) else None
-    )
+    oauth_tokens = ext.get('mcp_oauth_tokens')
     access_token = oauth_tokens.get('access_token') if oauth_tokens else None
 
     try:
@@ -1801,7 +1996,7 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 
             tools = await discover_mcp_tools(server_url, new_tokens['access_token'])
 
-            update_dict: Dict[str, Any] = {
+            update_dict = {
                 'id': app_id,
                 'external_integration': {
                     'mcp_server_url': server_url,
@@ -1832,10 +2027,10 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
 # ******************************************************
 
 
-@router.post('/v1/apps/enable')
-async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
-    app_raw = await run_blocking(db_executor, _get_app_by_id, app_id, uid)
-    app = App(**app_raw) if app_raw else None
+@router.post('/v1/apps/enable', response_model=AppMutationResponse)
+async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    app = await run_blocking(db_executor, get_available_app_by_id, app_id, uid)
+    app = App(**app) if app else None
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
     if app.disabled:
@@ -1843,10 +2038,10 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
             status_code=400,
             detail='This app is currently unavailable due to connectivity issues. The developer has been notified.',
         )
-    if cast(Optional[bool], app.private) is not None:
+    if app.private is not None:
         if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
             raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if app.works_externally() and app.external_integration and app.external_integration.setup_completed_url:
+    if app.works_externally() and app.external_integration.setup_completed_url:
         client = get_webhook_client()
         res = await client.get(app.external_integration.setup_completed_url + f'?uid={uid}')
         logger.info(f'enable_app_endpoint {res.status_code} {res.content}')
@@ -1859,7 +2054,7 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
 
     await run_blocking(db_executor, enable_app, uid, app_id)
     if (
-        (cast(Optional[bool], app.private) is None or not app.private)
+        (app.private is None or not app.private)
         and (app.uid is None or app.uid != uid)
         and not await run_blocking(db_executor, is_tester, uid)
     ):
@@ -1867,20 +2062,16 @@ async def enable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_u
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/disable')
-def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, str]:
+@router.post('/v1/apps/disable', response_model=AppMutationResponse)
+def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     # Allow users to always disable apps they have installed, even if the app
     # was made private after installation (see issue #4886).
     if is_app_enabled(uid, app_id):
         disable_app(uid, app_id)
-        app_raw = _get_app_by_id(app_id, uid)
-        if app_raw:
-            app = App(**app_raw)
-            if (
-                (cast(Optional[bool], app.private) is None or not app.private)
-                and (app.uid is None or app.uid != uid)
-                and not is_tester(uid)
-            ):
+        app = get_available_app_by_id(app_id, uid)
+        if app:
+            app = App(**app)
+            if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
                 decrease_app_installs_count(app_id)
         return {'status': 'ok'}
 
@@ -1892,51 +2083,52 @@ def disable_app_endpoint(app_id: str, uid: str = Depends(auth.get_current_user_u
 # ******************************************************
 
 
-@router.post('/v1/apps/tester', tags=['v1'])
-def add_new_tester(data: Dict[str, Any], secret_key: str = Header(...)):
+@router.post('/v1/apps/tester', tags=['v1'], response_model=AppMutationResponse)
+def add_new_tester(data: AddTesterRequest, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
+    if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
-    if not data.get('apps'):
+    if not data.apps:
         raise HTTPException(status_code=422, detail='apps is required')
-    data['added_at'] = datetime.now(timezone.utc).isoformat()
-    add_tester(data)
+    payload = data.model_dump()
+    payload['added_at'] = datetime.now(timezone.utc).isoformat()
+    add_tester(payload)
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/tester/access', tags=['v1'])
-def add_app_access_tester(data: Dict[str, Any], secret_key: str = Header(...)):
+@router.post('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
+def add_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
+    if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
-    if not data.get('app_id'):
+    if not data.app_id:
         raise HTTPException(status_code=422, detail='app_id is required')
-    add_app_access_for_tester(data['app_id'], data['uid'])
+    add_app_access_for_tester(data.app_id, data.uid)
     return {'status': 'ok'}
 
 
-@router.delete('/v1/apps/tester/access', tags=['v1'])
-def remove_app_access_tester(data: Dict[str, Any], secret_key: str = Header(...)):
+@router.delete('/v1/apps/tester/access', tags=['v1'], response_model=AppMutationResponse)
+def remove_app_access_tester(data: TesterAccessRequest, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
+    if not data.uid:
         raise HTTPException(status_code=422, detail='uid is required')
-    if not data.get('app_id'):
+    if not data.app_id:
         raise HTTPException(status_code=422, detail='app_id is required')
-    remove_app_access_for_tester(data['app_id'], data['uid'])
+    remove_app_access_for_tester(data.app_id, data.uid)
     return {'status': 'ok'}
 
 
-@router.get('/v1/apps/tester/check', tags=['v1'])
+@router.get('/v1/apps/tester/check', tags=['v1'], response_model=AppTesterCheckResponse)
 def check_is_tester(uid: str = Depends(auth.get_current_user_uid)):
     if is_tester(uid):
         return {'is_tester': True}
     return {'is_tester': False}
 
 
-@router.get('/v1/apps/public/unapproved', tags=['v1'])
+@router.get('/v1/apps/public/unapproved', tags=['v1'], response_model=List[UnapprovedPublicAppResponse])
 def get_unapproved_public_apps(secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -1944,7 +2136,7 @@ def get_unapproved_public_apps(secret_key: str = Header(...)):
     return apps
 
 
-@router.patch('/v1/apps/{app_id}/popular', tags=['v1'])
+@router.patch('/v1/apps/{app_id}/popular', tags=['v1'], response_model=AppMutationResponse)
 def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -1954,15 +2146,14 @@ def set_app_popular(app_id: str, value: bool = Query(...), secret_key: str = Hea
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/approve', tags=['v1'])
+@router.post('/v1/apps/{app_id}/approve', tags=['v1'], response_model=AppMutationResponse)
 def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, True)
     invalidate_approved_apps_cache()  # App is now public, invalidate cache
     delete_app_cache_by_id(app_id)
-    app_raw = _get_app_by_id(app_id, uid)
-    app: Dict[str, Any] = cast(Dict[str, Any], app_raw)
+    app = get_available_app_by_id(app_id, uid)
     send_notification(
         uid,
         'App Approved 🎉',
@@ -1971,14 +2162,14 @@ def approve_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.post('/v1/apps/{app_id}/reject', tags=['v1'])
+@router.post('/v1/apps/{app_id}/reject', tags=['v1'], response_model=AppMutationResponse)
 def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
     change_app_approval_status(app_id, False)
     invalidate_approved_apps_cache()  # App removed from public list, invalidate cache
-    app_raw = _get_app_by_id(app_id, uid)
-    app: Dict[str, Any] = cast(Dict[str, Any], app_raw)
+    delete_app_cache_by_id(app_id)
+    app = get_available_app_by_id(app_id, uid)
     # TODO: Add reason for rejection in payload and also redirect to the app page
     send_notification(
         uid,
@@ -1988,8 +2179,8 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.delete('/v1/personas/{persona_id}', tags=['v1'])
-@router.post('/v1/app/thumbnails', tags=['v1'])
+@router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppThumbnailUploadResponse)
+@router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
     """Upload a thumbnail image for an app.
 
@@ -2031,7 +2222,7 @@ def delete_persona(persona_id: str, secret_key: str = Header(...)):
     return {'status': 'ok'}
 
 
-@router.get('/v1/personas/{persona_id}', tags=['v1'])
+@router.get('/v1/personas/{persona_id}', tags=['v1'], response_model=List[PersonaRecordResponse])
 def get_personas(persona_id: str, secret_key: str = Header(...)):
     if secret_key != os.getenv('ADMIN_KEY'):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
@@ -2042,9 +2233,9 @@ def get_personas(persona_id: str, secret_key: str = Header(...)):
     return persona
 
 
-@router.post('/v1/apps/{app_id}/keys', tags=['v1'])
+@router.post('/v1/apps/{app_id}/keys', tags=['v1'], response_model=AppApiKeyResponse)
 def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = _get_app_by_id(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -2060,9 +2251,9 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
     return {'id': data['id'], 'secret': key, 'label': label, 'created_at': data['created_at']}  # with sk_
 
 
-@router.get('/v1/apps/{app_id}/keys', tags=['v1'])
+@router.get('/v1/apps/{app_id}/keys', tags=['v1'], response_model=List[AppApiKeyResponse])
 def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = _get_app_by_id(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -2073,9 +2264,9 @@ def list_api_keys(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return keys
 
 
-@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'])
+@router.delete('/v1/apps/{app_id}/keys/{key_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    app = _get_app_by_id(app_id, uid)
+    app = get_available_app_by_id(app_id, uid)
     if not app:
         raise HTTPException(status_code=404, detail='App not found')
 
@@ -2092,7 +2283,7 @@ def delete_api_key(app_id: str, key_id: str, uid: str = Depends(auth.get_current
 # ******************************************************
 
 
-@router.get('/v1/summary-app-ids', tags=['v1'])
+@router.get('/v1/summary-app-ids', tags=['v1'], response_model=ConversationSummaryAppIdsResponse)
 def get_summary_app_ids(secret_key: str = Header(...)):
     """Get all conversation summary app IDs from Redis"""
     if secret_key != os.getenv('ADMIN_KEY'):
@@ -2103,7 +2294,7 @@ def get_summary_app_ids(secret_key: str = Header(...)):
     return {'app_ids': app_ids or []}
 
 
-@router.post('/v1/summary-app-ids/{app_id}', tags=['v1'])
+@router.post('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Add an app ID to the conversation summary apps list"""
     if secret_key != os.getenv('ADMIN_KEY'):
@@ -2116,7 +2307,7 @@ def add_summary_app_id(app_id: str, secret_key: str = Header(...)):
         return {'status': 'ok', 'message': f'App {app_id} already exists in conversation summary apps'}
 
 
-@router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'])
+@router.delete('/v1/summary-app-ids/{app_id}', tags=['v1'], response_model=AppStatusMessageResponse)
 def delete_summary_app_id(app_id: str, secret_key: str = Header(...)):
     """Remove an app ID from the conversation summary apps list"""
     if secret_key != os.getenv('ADMIN_KEY'):

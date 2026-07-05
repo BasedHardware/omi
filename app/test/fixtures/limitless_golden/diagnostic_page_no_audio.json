@@ -1,0 +1,15 @@
+{
+  "name": "diagnostic_page_no_audio",
+  "packets": [
+    "080c1000180122191217100720032866320f0880d183a1f7321a06620408011000"
+  ],
+  "expectedPages": [
+    {
+      "index": 102,
+      "session": 7,
+      "timestampMs": 1750000003200,
+      "frames": []
+    }
+  ],
+  "expectedStorageState": null
+}

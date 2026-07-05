@@ -9,7 +9,7 @@ import os
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from database import (
     conversations as conversations_db,
@@ -53,6 +53,7 @@ from models.conversation import Conversation
 from models.geolocation import Geolocation
 from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
+from models.shared import StatusResponse
 from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
 from datetime import datetime, time, timedelta
@@ -127,7 +128,150 @@ class BatchMigrationRequest(BaseModel):
     requests: List[MigrationRequest]
 
 
-@router.get('/v1/users/profile', tags=['v1'])
+class MigrationStatusResponse(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+
+class MigrationRequestsResponse(BaseModel):
+    needs_migration: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class UserStatusResponse(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+
+class UserProfileResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    data_protection_level: Optional[str] = None
+    migration_status: Optional[Dict[str, Any]] = None
+
+
+class UserWebhooksStatusResponse(BaseModel):
+    audio_bytes: bool
+    memory_created: bool
+    realtime_transcript: bool
+    day_summary: bool
+
+
+class UserWebhookUrlResponse(BaseModel):
+    url: Optional[str] = None
+
+
+class UserDataExportResponse(BaseModel):
+    profile: Dict[str, Any] = Field(default_factory=dict)
+    conversations: List[Dict[str, Any]] = Field(default_factory=list)
+    memories: List[Dict[str, Any]] = Field(default_factory=list)
+    people: List[Dict[str, Any]] = Field(default_factory=list)
+    action_items: List[Dict[str, Any]] = Field(default_factory=list)
+    chat_messages: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class StoreRecordingPermissionResponse(BaseModel):
+    store_recording_permission: bool
+
+
+class PrivateCloudSyncResponse(BaseModel):
+    private_cloud_sync_enabled: bool
+
+
+class OnboardingStateResponse(BaseModel):
+    completed: bool = False
+    acquisition_source: str = ''
+    device_onboarding_completed: bool = False
+
+
+class UserLanguageResponse(BaseModel):
+    language: Optional[str] = None
+
+
+class UserLanguageUpdateResponse(UserStatusResponse):
+    single_language_mode: bool
+
+
+class MemorySummaryRatingResponse(BaseModel):
+    has_rating: bool
+    rating: Optional[int] = None
+
+
+class TrainingDataOptInResponse(BaseModel):
+    opted_in: bool
+    status: Optional[str] = None
+
+
+class DailySummaryTestResponse(UserStatusResponse):
+    summary_id: str
+    conversations_count: int
+
+
+class DailySummaryActionItem(BaseModel):
+    description: Optional[str] = None
+    priority: Optional[str] = None
+    source_conversation_id: Optional[str] = None
+    completed: Optional[bool] = None
+
+
+class DailySummaryTopicHighlight(BaseModel):
+    topic: Optional[str] = None
+    emoji: Optional[str] = None
+    summary: Optional[str] = None
+    conversation_ids: Optional[List[str]] = None
+
+
+class DailySummaryUnresolvedQuestion(BaseModel):
+    question: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class DailySummaryDecisionMade(BaseModel):
+    decision: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class DailySummaryKnowledgeNugget(BaseModel):
+    insight: Optional[str] = None
+    conversation_id: Optional[str] = None
+
+
+class DailySummaryDayStats(BaseModel):
+    total_conversations: Optional[int] = None
+    total_duration_minutes: Optional[int] = None
+    action_items_count: Optional[int] = None
+
+
+class DailySummaryLocationPin(BaseModel):
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    address: Optional[str] = None
+    conversation_id: Optional[str] = None
+    time: Optional[str] = None
+
+
+class DailySummaryResponse(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
+    id: Optional[str] = None
+    date: Optional[str] = None
+    created_at: Optional[datetime] = None
+    headline: Optional[str] = None
+    overview: Optional[str] = None
+    day_emoji: Optional[str] = None
+    stats: Optional[DailySummaryDayStats] = None
+    highlights: Optional[List[DailySummaryTopicHighlight]] = None
+    action_items: Optional[List[DailySummaryActionItem]] = None
+    unresolved_questions: Optional[List[DailySummaryUnresolvedQuestion]] = None
+    decisions_made: Optional[List[DailySummaryDecisionMade]] = None
+    knowledge_nuggets: Optional[List[DailySummaryKnowledgeNugget]] = None
+    locations: Optional[List[DailySummaryLocationPin]] = None
+
+
+class DailySummariesResponse(BaseModel):
+    summaries: List[DailySummaryResponse] = Field(default_factory=list)
+
+
+@router.get('/v1/users/profile', tags=['v1'], response_model=UserProfileResponse)
 def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Gets the full user profile, including data protection and migration status."""
     profile = get_user_profile(uid)
@@ -141,7 +285,7 @@ class DeleteAccountRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/users/delete-account', tags=['v1'])
+@router.delete('/v1/users/delete-account', tags=['v1'], response_model=UserStatusResponse)
 def delete_account(
     request: DeleteAccountRequest = DeleteAccountRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -153,7 +297,7 @@ def delete_account(
         raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
 
 
-@router.patch('/v1/users/geolocation', tags=['v1'])
+@router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)
 def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_current_user_uid)):
     last_location_data = get_cached_user_geolocation(uid)
     if last_location_data:
@@ -169,13 +313,13 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
             if last_lat == new_lat and last_lon == new_lon:
                 return {'status': 'ok', 'message': 'Location not changed significantly.'}
 
-            cache_user_geolocation(uid, geolocation.dict())
+            cache_user_geolocation(uid, geolocation.model_dump())
         except Exception as e:
             logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
-            cache_user_geolocation(uid, geolocation.dict())
+            cache_user_geolocation(uid, geolocation.model_dump())
     else:
         # No previous location, so cache the new one
-        cache_user_geolocation(uid, geolocation.dict())
+        cache_user_geolocation(uid, geolocation.model_dump())
 
     return {'status': 'ok'}
 
@@ -185,36 +329,40 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 # ***********************************************
 
 
-@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
-def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
-    url = data.get('url')
-    if url is None:
-        raise HTTPException(status_code=400, detail='url is required')
+class SetUserWebhookUrlRequest(BaseModel):
+    url: str
+
+
+@router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'], response_model=UserStatusResponse)
+def set_user_webhook_endpoint(
+    wtype: WebhookType, data: SetUserWebhookUrlRequest, uid: str = Depends(auth.get_current_user_uid)
+):
+    url = data.url
     if url == '' or url == ',':
         disable_user_webhook_db(uid, wtype)
     set_user_webhook_db(uid, wtype, url)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'])
+@router.get('/v1/users/developer/webhook/{wtype}', tags=['v1'], response_model=UserWebhookUrlResponse)
 def get_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_user_webhook_db(uid, wtype)}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'])
+@router.post('/v1/users/developer/webhook/{wtype}/disable', tags=['v1'], response_model=UserStatusResponse)
 def disable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     disable_user_webhook_db(uid, wtype)
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'])
+@router.post('/v1/users/developer/webhook/{wtype}/enable', tags=['v1'], response_model=UserStatusResponse)
 def enable_user_webhook_endpoint(wtype: WebhookType, uid: str = Depends(auth.get_current_user_uid)):
     enable_user_webhook_db(uid, wtype)
     record_dev_webhook_success(uid, wtype.value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/developer/webhooks/status', tags=['v1'])
+@router.get('/v1/users/developer/webhooks/status', tags=['v1'], response_model=UserWebhooksStatusResponse)
 def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
     # This only happens the first time because the user_webhook_status_db function will return None for existing users
     audio_bytes = user_webhook_status_db(uid, WebhookType.audio_bytes)
@@ -242,18 +390,18 @@ def get_user_webhooks_status(uid: str = Depends(auth.get_current_user_uid)):
 # *************************************************
 
 
-@router.post('/v1/users/store-recording-permission', tags=['v1'])
+@router.post('/v1/users/store-recording-permission', tags=['v1'], response_model=UserStatusResponse)
 def store_recording_permission(value: bool, uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/store-recording-permission', tags=['v1'])
+@router.get('/v1/users/store-recording-permission', tags=['v1'], response_model=StoreRecordingPermissionResponse)
 def get_store_recording_permission(uid: str = Depends(auth.get_current_user_uid)):
     return {'store_recording_permission': get_user_store_recording_permission(uid)}
 
 
-@router.delete('/v1/users/store-recording-permission', tags=['v1'])
+@router.delete('/v1/users/store-recording-permission', tags=['v1'], response_model=UserStatusResponse)
 def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_uid)):
     set_user_store_recording_permission(uid, False)
     delete_all_conversation_recordings(uid)
@@ -265,7 +413,7 @@ def delete_permission_and_recordings(uid: str = Depends(auth.get_current_user_ui
 # *************************************************
 
 
-@router.get('/v1/users/onboarding', tags=['v1'])
+@router.get('/v1/users/onboarding', tags=['v1'], response_model=OnboardingStateResponse)
 def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's onboarding state (completed status, acquisition source, etc.)."""
     state = get_user_onboarding_state(uid)
@@ -276,16 +424,22 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
     }
 
 
-@router.patch('/v1/users/onboarding', tags=['v1'])
-def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+class OnboardingStateUpdate(BaseModel):
+    completed: Optional[bool] = None
+    acquisition_source: Optional[str] = None
+    device_onboarding_completed: Optional[bool] = None
+
+
+@router.patch('/v1/users/onboarding', tags=['v1'], response_model=UserStatusResponse)
+def update_onboarding_state(data: OnboardingStateUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
     current_state = get_user_onboarding_state(uid)
-    if 'completed' in data:
-        current_state['completed'] = data['completed']
-    if 'acquisition_source' in data:
-        current_state['acquisition_source'] = data['acquisition_source']
-    if 'device_onboarding_completed' in data:
-        current_state['device_onboarding_completed'] = data['device_onboarding_completed']
+    if data.completed is not None:
+        current_state['completed'] = data.completed
+    if data.acquisition_source is not None:
+        current_state['acquisition_source'] = data.acquisition_source
+    if data.device_onboarding_completed is not None:
+        current_state['device_onboarding_completed'] = data.device_onboarding_completed
     set_user_onboarding_state(uid, current_state)
     return {'status': 'ok'}
 
@@ -295,13 +449,13 @@ def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user
 # *************************************************
 
 
-@router.post('/v1/users/private-cloud-sync', tags=['v1'])
+@router.post('/v1/users/private-cloud-sync', tags=['v1'], response_model=UserStatusResponse)
 def set_private_cloud_sync(value: bool, uid: str = Depends(auth.get_current_user_uid)):
     set_user_private_cloud_sync_enabled(uid, value)
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/private-cloud-sync', tags=['v1'])
+@router.get('/v1/users/private-cloud-sync', tags=['v1'], response_model=PrivateCloudSyncResponse)
 def get_private_cloud_sync(uid: str = Depends(auth.get_current_user_uid)):
     return {'private_cloud_sync_enabled': get_user_private_cloud_sync_enabled(uid)}
 
@@ -361,7 +515,7 @@ def get_all_people(include_speech_samples: bool = True, uid: str = Depends(auth.
     return people
 
 
-@router.patch('/v1/users/people/{person_id}/name', tags=['v1'])
+@router.patch('/v1/users/people/{person_id}/name', tags=['v1'], response_model=UserStatusResponse)
 def update_person_name(
     person_id: str,
     value: str,  # = Field(min_length=2, max_length=40),
@@ -375,10 +529,13 @@ def update_person_name(
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
-    return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}/speech-samples/{sample_index}', tags=['v1'])
+@router.delete(
+    '/v1/users/people/{person_id}/speech-samples/{sample_index}',
+    tags=['v1'],
+    response_model=UserStatusResponse,
+)
 def delete_person_speech_sample_endpoint(
     person_id: str,
     sample_index: int,
@@ -414,7 +571,13 @@ def delete_person_speech_sample_endpoint(
 # **********************************************************
 
 
-@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
+class FollowupQuestionResponse(BaseModel):
+    """Response for the Joan follow-up question endpoint (a generated prompt)."""
+
+    result: str = Field(description='Generated follow-up question prompt text.')
+
+
+@router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], response_model=FollowupQuestionResponse)
 def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
@@ -435,7 +598,7 @@ def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_u
 # **************************************
 
 
-@router.post('/v1/users/analytics/memory_summary', tags=['v1'])
+@router.post('/v1/users/analytics/memory_summary', tags=['v1'], response_model=UserStatusResponse)
 def set_memory_summary_rating(
     memory_id: str,
     value: int,  # 0, 1, -1 (shown)
@@ -445,7 +608,7 @@ def set_memory_summary_rating(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/analytics/memory_summary', tags=['v1'])
+@router.get('/v1/users/analytics/memory_summary', tags=['v1'], response_model=MemorySummaryRatingResponse)
 def get_memory_summary_rating(
     memory_id: str,
     _: str = Depends(auth.get_current_user_uid),
@@ -457,7 +620,7 @@ def get_memory_summary_rating(
     return {'has_rating': rating.get('value', -1) != -1, 'rating': rating.get('value', -1)}
 
 
-@router.post('/v1/users/analytics/chat_message', tags=['v1'])
+@router.post('/v1/users/analytics/chat_message', tags=['v1'], response_model=UserStatusResponse)
 def set_chat_message_analytics(
     message_id: str,
     value: int,
@@ -522,7 +685,7 @@ def set_chat_message_analytics(
 # ***************************************
 
 
-@router.get('/v1/users/language', tags=['v1'])
+@router.get('/v1/users/language', tags=['v1'], response_model=UserLanguageResponse)
 def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's preferred language."""
     language = get_user_language_preference(uid)
@@ -531,10 +694,14 @@ def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
     return {'language': language}
 
 
-@router.patch('/v1/users/language', tags=['v1'])
-def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+class SetUserLanguageRequest(BaseModel):
+    language: str
+
+
+@router.patch('/v1/users/language', tags=['v1'], response_model=UserLanguageUpdateResponse)
+def set_user_language(data: SetUserLanguageRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language = data.get('language')
+    language = data.language
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
@@ -550,7 +717,7 @@ def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid))
 
 class TranscriptionPreferencesResponse(BaseModel):
     single_language_mode: bool = False
-    vocabulary: List[str] = []
+    vocabulary: List[str] = Field(default_factory=list)
     language: str = ''
     uses_custom_stt: bool = False
     custom_stt_since: Optional[datetime] = None
@@ -568,7 +735,7 @@ def get_transcription_preferences_endpoint(uid: str = Depends(auth.get_current_u
     return prefs
 
 
-@router.patch('/v1/users/transcription-preferences', tags=['v1'])
+@router.patch('/v1/users/transcription-preferences', tags=['v1'], response_model=UserStatusResponse)
 def update_transcription_preferences_endpoint(
     data: TranscriptionPreferencesUpdate, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -587,7 +754,7 @@ def update_transcription_preferences_endpoint(
 # **************************************
 
 
-@router.post('/v1/users/migration/requests', tags=['v1'])
+@router.post('/v1/users/migration/requests', tags=['v1'], response_model=MigrationStatusResponse)
 def handle_migration_requests(
     request: Union[MigrationRequest, MigrationTargetRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -629,7 +796,7 @@ def handle_migration_requests(
         return {'status': 'ok', 'message': 'Migration status set.'}
 
 
-@router.get('/v1/users/migration/requests', tags=['v1'])
+@router.get('/v1/users/migration/requests', tags=['v1'], response_model=MigrationRequestsResponse)
 def get_migration_requests(target_level: str, uid: str = Depends(auth.get_current_user_uid)):
     """Checks which documents need to be migrated to the target level."""
     if target_level != 'enhanced':
@@ -642,7 +809,7 @@ def get_migration_requests(target_level: str, uid: str = Depends(auth.get_curren
     return {"needs_migration": needs_migration}
 
 
-@router.post('/v1/users/migration/batch-requests', tags=['v1'])
+@router.post('/v1/users/migration/batch-requests', tags=['v1'], response_model=MigrationStatusResponse)
 def handle_batch_migration_requests(
     batch_request: BatchMigrationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -678,7 +845,11 @@ def handle_batch_migration_requests(
     return {'status': 'ok'}
 
 
-@router.post('/v1/users/migration/requests/data-protection-level/finalize', tags=['v1'])
+@router.post(
+    '/v1/users/migration/requests/data-protection-level/finalize',
+    tags=['v1'],
+    response_model=MigrationStatusResponse,
+)
 def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Finalizes the migration by setting the user's global protection level."""
     if request.target_level != 'enhanced':
@@ -689,7 +860,7 @@ def finalize_migration_request(request: MigrationTargetRequest, uid: str = Depen
     return {'status': 'ok'}
 
 
-@router.put('/v1/users/preferences/app', tags=['v1'])
+@router.put('/v1/users/preferences/app', tags=['v1'], response_model=UserStatusResponse)
 def set_preferred_app_for_user(
     app_id: str = Query(..., description="The ID of the app to set as preferred"),
     uid: str = Depends(auth.get_current_user_uid),
@@ -716,7 +887,7 @@ def set_preferred_app_for_user(
 # **************************************
 
 
-@router.get('/v1/users/training-data-opt-in', tags=['v1'])
+@router.get('/v1/users/training-data-opt-in', tags=['v1'], response_model=TrainingDataOptInResponse)
 def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the user's training data opt-in status."""
     opt_in_data = get_user_training_data_opt_in(uid)
@@ -725,7 +896,7 @@ def get_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid
     return {'opted_in': True, 'status': opt_in_data.get('status')}
 
 
-@router.post('/v1/users/training-data-opt-in', tags=['v1'])
+@router.post('/v1/users/training-data-opt-in', tags=['v1'], response_model=UserStatusResponse)
 def set_training_data_opt_in_status(uid: str = Depends(auth.get_current_user_uid)):
     """Opt-in for training data program. User's request will be reviewed."""
     set_user_training_data_opt_in(uid, 'pending_review')
@@ -763,7 +934,11 @@ class BYOKActivateRequest(BaseModel):
     fingerprints: Dict[str, str]
 
 
-@router.post('/v1/users/me/byok-active', tags=['v1'])
+class BYOKActiveResponse(BaseModel):
+    active: bool
+
+
+@router.post('/v1/users/me/byok-active', tags=['v1'], response_model=BYOKActiveResponse)
 def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
     """Flip the user onto the BYOK free plan.
 
@@ -790,7 +965,7 @@ def activate_byok_endpoint(data: BYOKActivateRequest, uid: str = Depends(auth.ge
     return {"active": True}
 
 
-@router.delete('/v1/users/me/byok-active', tags=['v1'])
+@router.delete('/v1/users/me/byok-active', tags=['v1'], response_model=BYOKActiveResponse)
 def deactivate_byok_endpoint(uid: str = Depends(auth.get_current_user_uid_no_byok_validation)):
     """Drop the user off the BYOK free plan (keys were cleared client-side)."""
     users_db.clear_byok_active(uid)
@@ -1139,7 +1314,7 @@ def get_daily_summary_settings(uid: str = Depends(auth.get_current_user_uid)):
     return DailySummarySettingsResponse(enabled=enabled, hour=local_hour)
 
 
-@router.patch('/v1/users/daily-summary-settings', tags=['v1'])
+@router.patch('/v1/users/daily-summary-settings', tags=['v1'], response_model=UserStatusResponse)
 def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = Depends(auth.get_current_user_uid)):
     """
     Update user's daily summary notification settings.
@@ -1171,7 +1346,7 @@ class TestDailySummaryRequest(BaseModel):
     date: Optional[str] = None  # YYYY-MM-DD format, defaults to today
 
 
-@router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
+@router.post('/v1/users/daily-summary-settings/test', tags=['v1'], response_model=DailySummaryTestResponse)
 def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
     """
     Test endpoint to manually trigger daily summary for the authenticated user.
@@ -1281,7 +1456,7 @@ def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depen
 # Daily Summaries API
 
 
-@router.get('/v1/users/daily-summaries', tags=['v1'])
+@router.get('/v1/users/daily-summaries', tags=['v1'], response_model=DailySummariesResponse)
 def get_daily_summaries(
     limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0), uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1293,7 +1468,7 @@ def get_daily_summaries(
     return {'summaries': summaries}
 
 
-@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+@router.get('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=DailySummaryResponse)
 def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Get a single daily summary by ID.
@@ -1304,7 +1479,7 @@ def get_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_
     return summary
 
 
-@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'])
+@router.patch('/v1/users/daily-summaries/{summary_id}/visibility', tags=['v1'], response_model=UserStatusResponse)
 def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Set the visibility of a daily summary. Use value='shared' to make it shareable.
@@ -1322,7 +1497,7 @@ def set_daily_summary_visibility(summary_id: str, value: str, uid: str = Depends
     return {'status': 'Ok'}
 
 
-@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'])
+@router.delete('/v1/users/daily-summaries/{summary_id}', tags=['v1'], response_model=UserStatusResponse)
 def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Delete a daily summary by ID.
@@ -1340,7 +1515,7 @@ def delete_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_us
 _REGENERATE_COOLDOWN_SECONDS = 30
 
 
-@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'])
+@router.post('/v1/users/daily-summaries/{summary_id}/regenerate', tags=['v1'], response_model=DailySummaryResponse)
 def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Re-run summary generation for the date of an existing daily summary and
@@ -1414,7 +1589,7 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
     return refreshed or {**summary_data, 'id': summary_id}
 
 
-@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'])
+@router.get('/v1/daily-summaries/{summary_id}/shared', tags=['v1'], response_model=DailySummaryResponse)
 def get_shared_daily_summary(summary_id: str):
     """
     Public endpoint to retrieve a daily summary for sharing. No auth required.
@@ -1471,7 +1646,7 @@ def get_mentor_notification_settings(uid: str = Depends(auth.get_current_user_ui
     return MentorNotificationSettingsResponse(frequency=frequency)
 
 
-@router.patch('/v1/users/mentor-notification-settings', tags=['v1'])
+@router.patch('/v1/users/mentor-notification-settings', tags=['v1'], response_model=UserStatusResponse)
 def update_mentor_notification_settings(
     data: MentorNotificationSettingsUpdate, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1496,7 +1671,29 @@ def update_mentor_notification_settings(
 # LLM Usage Tracking Endpoints
 
 
-@router.get('/v1/users/me/llm-usage', tags=['users'])
+class LlmUsageFeatureResponse(BaseModel):
+    feature: str
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    call_count: int = 0
+
+
+class LlmUsageResponse(BaseModel):
+    summary: Dict[str, Any] = Field(default_factory=dict)
+    top_features: List[LlmUsageFeatureResponse] = Field(default_factory=list)
+    period_days: int
+
+
+class LlmUsageRecordResponse(BaseModel):
+    status: str
+
+
+class LlmTotalCostResponse(BaseModel):
+    total_cost_usd: float
+
+
+@router.get('/v1/users/me/llm-usage', tags=['users'], response_model=LlmUsageResponse)
 def get_llm_usage(
     days: int = Query(default=30, ge=1, le=365),
     uid: str = Depends(auth.get_current_user_uid),
@@ -1516,7 +1713,7 @@ def get_llm_usage(
     }
 
 
-@router.get('/v1/users/me/llm-usage/top-features', tags=['users'])
+@router.get('/v1/users/me/llm-usage/top-features', tags=['users'], response_model=List[LlmUsageFeatureResponse])
 def get_llm_top_features(
     days: int = Query(default=30, ge=1, le=365),
     limit: int = Query(default=3, ge=1, le=10),
@@ -1530,7 +1727,9 @@ def get_llm_top_features(
     return llm_usage_db.get_top_features(uid, days=days, limit=limit)
 
 
-@router.get('/v1/users/export', tags=['v1'])
+# response_model omitted: this streams a chunked JSON document via StreamingResponse (not a single JSON object);
+# the responses= override documents the streamed shape in OpenAPI without enforcing response_model validation.
+@router.get('/v1/users/export', tags=['v1'], responses={200: {'model': UserDataExportResponse}})
 def export_all_user_data(uid: str = Depends(auth.get_current_user_uid)):
     """Export all user data for GDPR/CCPA compliance. Streams response to avoid timeouts."""
     return StreamingResponse(
@@ -1550,12 +1749,17 @@ class UpdateNotificationSettingsRequest(BaseModel):
     frequency: int | None = Field(None, ge=0, le=5)
 
 
-@router.get('/v1/users/notification-settings', tags=['users'])
+class NotificationSettingsResponse(BaseModel):
+    enabled: bool
+    frequency: int
+
+
+@router.get('/v1/users/notification-settings', tags=['users'], response_model=NotificationSettingsResponse)
 def get_notification_settings(uid: str = Depends(auth.get_current_user_uid)):
     return users_db.get_notification_settings(uid)
 
 
-@router.patch('/v1/users/notification-settings', tags=['users'])
+@router.patch('/v1/users/notification-settings', tags=['users'], response_model=NotificationSettingsResponse)
 def update_notification_settings(
     request: UpdateNotificationSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1626,12 +1830,16 @@ class UpdateAssistantSettingsRequest(BaseModel):
     update_channel: str | None = Field(None, max_length=50)
 
 
-@router.get('/v1/users/assistant-settings', tags=['users'])
+class AssistantSettingsResponse(UpdateAssistantSettingsRequest):
+    model_config = ConfigDict(extra='allow')
+
+
+@router.get('/v1/users/assistant-settings', tags=['users'], response_model=AssistantSettingsResponse)
 def get_assistant_settings(uid: str = Depends(auth.get_current_user_uid)):
     return users_db.get_assistant_settings(uid)
 
 
-@router.patch('/v1/users/assistant-settings', tags=['users'])
+@router.patch('/v1/users/assistant-settings', tags=['users'], response_model=AssistantSettingsResponse)
 def update_assistant_settings(
     request: UpdateAssistantSettingsRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1651,12 +1859,18 @@ class UpdateAIUserProfileRequest(BaseModel):
     data_sources_used: int | None = Field(None, ge=0)
 
 
-@router.get('/v1/users/ai-profile', tags=['users'])
+class AIUserProfileResponse(BaseModel):
+    profile_text: str | None = None
+    generated_at: Optional[str] = None
+    data_sources_used: int | None = None
+
+
+@router.get('/v1/users/ai-profile', tags=['users'], response_model=AIUserProfileResponse | None)
 def get_ai_profile(uid: str = Depends(auth.get_current_user_uid)):
     return users_db.get_ai_user_profile(uid)
 
 
-@router.patch('/v1/users/ai-profile', tags=['users'])
+@router.patch('/v1/users/ai-profile', tags=['users'], response_model=AIUserProfileResponse)
 def update_ai_profile(
     request: UpdateAIUserProfileRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1684,7 +1898,7 @@ class RecordLlmUsageBucketRequest(BaseModel):
     account: str = Field('omi', max_length=100)
 
 
-@router.post('/v1/users/me/llm-usage', tags=['users'])
+@router.post('/v1/users/me/llm-usage', tags=['users'], response_model=LlmUsageRecordResponse)
 def record_llm_usage_bucket(
     request: RecordLlmUsageBucketRequest,
     uid: str = Depends(auth.get_current_user_uid),
@@ -1702,7 +1916,7 @@ def record_llm_usage_bucket(
     return {'status': 'ok'}
 
 
-@router.get('/v1/users/me/llm-usage/total', tags=['users'])
+@router.get('/v1/users/me/llm-usage/total', tags=['users'], response_model=LlmTotalCostResponse)
 def get_total_llm_cost(uid: str = Depends(auth.get_current_user_uid)):
     total = llm_usage_db.get_total_llm_cost(uid)
     return {'total_cost_usd': total}

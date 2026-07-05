@@ -19,6 +19,7 @@ from database.redis_db import get_enabled_apps, r as redis_client
 import database.action_items as action_items_db
 import models.integrations as integration_models
 import models.conversation as conversation_models
+from models.shared import EmptyResponse
 from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import (
@@ -77,7 +78,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 
 @router.post(
     '/v2/integrations/{app_id}/user/conversations',
-    response_model=integration_models.EmptyResponse,
+    response_model=EmptyResponse,
     tags=['integration', 'conversations'],
 )
 async def create_conversation_via_integration(
@@ -159,7 +160,7 @@ async def create_conversation_via_integration(
 
 @router.post(
     '/v2/integrations/{app_id}/user/memories',
-    response_model=integration_models.EmptyResponse,
+    response_model=EmptyResponse,
     tags=['integration', 'memories'],
 )
 def create_memories_via_integration(
@@ -532,7 +533,7 @@ def search_conversations_via_integration(
 
 @router.post(
     '/v2/integrations/{app_id}/notification',
-    response_model=integration_models.EmptyResponse,
+    response_model=integration_models.IntegrationNotificationResponse,
     tags=['integration', 'notifications'],
 )
 def send_notification_via_integration(

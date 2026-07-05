@@ -5,17 +5,20 @@ remains an importable alias. Registers ``/memory/*`` product paths.
 """
 
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from database._client import db
-from database import memory_vector_repair_outbox as vector_repair_outbox_db
+from database.memory_vector_repair_outbox import write_vector_repair_purge_outbox_records
 from models.product_memory import MemoryAccessPolicy
-from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH, GlobalReadGateDecision
+from models.memory_product import (
+    ArchiveProductMemorySearchResponse,
+    ProductMemorySearchResponse,
+    VectorMemorySearchResponse,
+)
+from utils.memory.default_read_rollout import GLOBAL_READ_GATE_PATH
 from utils.memory.product_authorization import (
     ProductAuthorizationContext,
-    ProductAuthorizationDecision,
     authorize_memory_product_memory_route,
 )
 from utils.memory.product_memory_read_service import (
@@ -30,15 +33,6 @@ from utils.memory.vector_search_service import (
 from utils.other import endpoints as auth
 
 router = APIRouter()
-MEMORY_GLOBAL_READ_GATE_PATH = GLOBAL_READ_GATE_PATH
-RoutePayload = Dict[str, Any]
-RoutePayloadList = List[RoutePayload]
-VectorQuery = Callable[..., Any]
-VectorRepairOutboxWriter = Callable[[RoutePayloadList], RoutePayloadList]
-_write_vector_repair_records = cast(
-    Callable[..., RoutePayloadList],
-    cast(Any, vector_repair_outbox_db).write_vector_repair_purge_outbox_records,
-)
 
 
 def _current_time() -> datetime:
@@ -65,7 +59,7 @@ def _validate_vector_limit(limit: int) -> None:
         raise HTTPException(status_code=400, detail=f'limit must be between 1 and {MAX_MEMORY_VECTOR_SEARCH_LIMIT}')
 
 
-def _policy_payload(policy: MemoryAccessPolicy) -> RoutePayload:
+def _policy_payload(policy: MemoryAccessPolicy) -> dict:
     return {
         'consumer': policy.consumer.value,
         'app_has_default_memory_grant': policy.app_has_default_memory_grant,
@@ -74,18 +68,11 @@ def _policy_payload(policy: MemoryAccessPolicy) -> RoutePayload:
     }
 
 
-def _write_vector_repair_purge_outbox_records(records: RoutePayloadList) -> RoutePayloadList:
-    return _write_vector_repair_records(db_client=db, records=records)
+def _write_vector_repair_purge_outbox_records(records: list[dict]) -> list[dict]:
+    return write_vector_repair_purge_outbox_records(db_client=db, records=records)
 
 
-def _global_read_gate_observability(gate: Optional[GlobalReadGateDecision]) -> RoutePayload:
-    if gate is None:
-        return {
-            'source_path': MEMORY_GLOBAL_READ_GATE_PATH,
-            'read_decision': 'DENY_MEMORY',
-            'fallback_reason': 'missing_global_read_gate',
-            'reason': 'missing_global_read_gate',
-        }
+def _global_read_gate_observability(gate) -> dict:
     return {
         'source_path': gate.source_path,
         'read_decision': gate.read_decision.value,
@@ -94,14 +81,14 @@ def _global_read_gate_observability(gate: Optional[GlobalReadGateDecision]) -> R
     }
 
 
-def _require_product_authorization(context: ProductAuthorizationContext) -> ProductAuthorizationDecision:
+def _require_product_authorization(context: ProductAuthorizationContext):
     decision = authorize_memory_product_memory_route(context, db_client=db)
     if not decision.allowed:
         raise HTTPException(status_code=decision.status_code, detail=decision.observability)
     return decision
 
 
-@router.get('/memory/search', tags=['memories', 'memory'])
+@router.get('/memory/search', tags=['memories', 'memory'], response_model=ProductMemorySearchResponse)
 def search_product_memory(
     query: str = Query(''),
     limit: int = Query(100),
@@ -143,12 +130,12 @@ def search_product_memory(
     return response
 
 
-@router.get('/memory/vector/search', tags=['memories', 'memory'])
+@router.get('/memory/vector/search', tags=['memories', 'memory'], response_model=VectorMemorySearchResponse)
 def search_vector_memory(
     query: str = Query(...),
     limit: int = Query(10),
     uid: str = Depends(auth.get_current_user_uid),
-    vector_query: Optional[VectorQuery] = None,
+    vector_query=None,
 ):
     """Search default-visible memory memory through hydrated vector candidates.
 
@@ -182,9 +169,7 @@ def search_vector_memory(
             policy=policy,
             vector_query=vector_query if callable(vector_query) else None,
             repair_purge_outbox_writer=(
-                cast(VectorRepairOutboxWriter, _write_vector_repair_purge_outbox_records)
-                if rollout.vector_repair_outbox_enabled
-                else None
+                _write_vector_repair_purge_outbox_records if rollout.vector_repair_outbox_enabled else None
             ),
             limit=limit,
             required_projection_commit_id=rollout.vector_projection_commit_id,
@@ -200,7 +185,7 @@ def search_vector_memory(
     return response
 
 
-@router.get('/memory/archive/search', tags=['memories', 'memory'])
+@router.get('/memory/archive/search', tags=['memories', 'memory'], response_model=ArchiveProductMemorySearchResponse)
 def search_archive_memory(
     query: str = Query(''),
     limit: int = Query(100),

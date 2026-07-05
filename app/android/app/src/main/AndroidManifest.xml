@@ -187,7 +187,7 @@
 
         <!-- Native BLE Companion Service — receives OS-level device presence events -->
         <service
-            android:name="com.friend.ios.BleCompanionService"
+            android:name="com.friend.ios.ble.BleCompanionService"
             android:exported="true"
             android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
             <intent-filter>
@@ -197,7 +197,7 @@
 
         <!-- Native BLE Foreground Service — persistent BLE connection -->
         <service
-            android:name="com.friend.ios.OmiBleForegroundService"
+            android:name="com.friend.ios.ble.OmiBleForegroundService"
             android:foregroundServiceType="connectedDevice"
             android:stopWithTask="false"
             android:exported="false" />

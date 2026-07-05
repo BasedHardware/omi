@@ -1,23 +1,11 @@
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
-class Translation {
-  String lang;
-  String text;
-
-  Translation({required this.lang, required this.text});
-
-  factory Translation.fromJson(Map<String, dynamic> json) {
-    return Translation(lang: json['lang'] as String, text: json['text'] as String);
-  }
-
-  Map<String, dynamic> toJson() {
-    return {'lang': lang, 'text': text};
-  }
-
-  static List<Translation> fromJsonList(List<dynamic> jsonList) {
-    return jsonList.map((e) => Translation.fromJson(e)).toList();
-  }
-}
+// Phase 4.1 — pure 1:1 thin wrapper: both fields (String lang, String text) match
+// GeneratedTranslation exactly with no behavior, so it is a typedef.
+// GeneratedTranslation provides fromJson/toJson; the deleted hand-written
+// fromJsonList/toGenerated had no callers.
+typedef Translation = wire.GeneratedTranslation;
 
 class TranscriptSegment {
   String id;
@@ -63,42 +51,44 @@ class TranscriptSegment {
 
   // Factory constructor to create a new Message instance from a map
   factory TranscriptSegment.fromJson(Map<String, dynamic> json) {
+    final generated = wire.GeneratedTranscriptSegment.fromJson(json);
+    return TranscriptSegment.fromGenerated(generated);
+  }
+
+  factory TranscriptSegment.fromGenerated(wire.GeneratedTranscriptSegment generated) {
     return TranscriptSegment(
-      id: (json['id'] ?? '') as String,
-      text: json['text'] as String,
-      speaker: (json['speaker'] ?? 'SPEAKER_00') as String,
-      isUser: (json['is_user'] ?? false) as bool,
-      personId: json['person_id'],
-      start: double.tryParse(json['start'].toString()) ?? 0.0,
-      end: double.tryParse(json['end'].toString()) ?? 0.0,
-      translations: json['translations'] != null ? Translation.fromJsonList(json['translations'] as List<dynamic>) : [],
-      speechProfileProcessed: (json['speech_profile_processed'] ?? true) as bool,
-      sttProvider: json['stt_provider'] as String?,
+      id: generated.id ?? '',
+      text: generated.text,
+      speaker: generated.speaker ?? 'SPEAKER_00',
+      isUser: generated.isUser,
+      personId: generated.personId,
+      start: generated.start,
+      end: generated.end,
+      translations: generated.translations ?? const [],
+      speechProfileProcessed: generated.speechProfileProcessed,
+      sttProvider: generated.sttProvider,
+    );
+  }
+
+  wire.GeneratedTranscriptSegment toGenerated() {
+    return wire.GeneratedTranscriptSegment(
+      id: id,
+      text: text,
+      speaker: speaker,
+      speakerId: speakerId,
+      isUser: isUser,
+      personId: personId,
+      start: start,
+      end: end,
+      translations: translations,
+      speechProfileProcessed: speechProfileProcessed,
+      sttProvider: sttProvider,
     );
   }
 
   // Method to convert a Message instance into a map
   Map<String, dynamic> toJson() {
-    return {
-      'text': text,
-      'speaker': speaker,
-      'speaker_id': speakerId,
-      'is_user': isUser,
-      'start': start,
-      'end': end,
-      'translations': translations.map((t) => t.toJson()).toList(),
-      if (sttProvider != null) 'stt_provider': sttProvider,
-    };
-  }
-
-  static List<TranscriptSegment> fromJsonList(List<dynamic> jsonList) {
-    final List<TranscriptSegment> segments = [];
-    for (int i = 0; i < jsonList.length; i++) {
-      final segment = TranscriptSegment.fromJson(jsonList[i]);
-      segment.idx = i;
-      segments.add(segment);
-    }
-    return segments;
+    return toGenerated().toJson();
   }
 
   static List<TranscriptSegment> updateSegments(

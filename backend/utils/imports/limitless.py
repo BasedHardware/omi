@@ -327,7 +327,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     )
 
                     # Save directly to database (skip all AI processing)
-                    conversations_db.upsert_conversation(uid, conversation.dict())
+                    conversations_db.upsert_conversation(uid, conversation.model_dump())
                     conversations_created += 1
 
                 except Exception as e:
@@ -358,6 +358,13 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                 else:
                     # Partial success
                     error_msg = f"{len(errors)} files failed to process"
+
+            # A user cancel during processing must stick: don't overwrite a cancelled job with the
+            # final completed/failed status.
+            current = import_jobs_db.get_import_job(job_id)
+            if current and current.get('status') == ImportJobStatus.cancelled.value:
+                logger.info(f"Import job {job_id} was cancelled; skipping final status write")
+                return
 
             import_jobs_db.update_import_job(
                 job_id,
@@ -425,5 +432,5 @@ def create_import_job(uid: str, source_type: ImportSourceType = ImportSourceType
         status=ImportJobStatus.pending,
         source_type=source_type,
     )
-    import_jobs_db.create_import_job(job.dict())
+    import_jobs_db.create_import_job(job.model_dump())
     return job

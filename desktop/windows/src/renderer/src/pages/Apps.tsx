@@ -3,19 +3,7 @@ import { LayoutGrid, RefreshCw, Star, Check, Plus, Loader2, Search, SlidersHoriz
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
-
-type AppEntry = {
-  id: string
-  name?: string
-  description?: string
-  image?: string | null
-  author?: string | null
-  category?: string | null
-  rating_avg?: number | null
-  installs?: number | null
-  is_paid?: boolean
-  price?: number | null
-}
+import type { App as AppEntry } from '../lib/omiApi.generated'
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
 function formatCategory(raw: string): string {
@@ -119,6 +107,7 @@ export function Apps(): React.JSX.Element {
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     void load()
   }, [])
 

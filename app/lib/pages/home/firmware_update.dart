@@ -110,7 +110,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
   }
 
   Widget _buildVersionItem({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required String version,
     Color? iconColor,
@@ -211,7 +211,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
+                FaIcon(FontAwesomeIcons.triangleExclamation, color: Color(0xFFFFB800), size: 18),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Text(
@@ -241,7 +241,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   width: 80,
                   height: 80,
                   decoration: BoxDecoration(color: const Color(0xFF1A3D2E), borderRadius: BorderRadius.circular(40)),
-                  child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Color(0xFF4ADE80), size: 32)),
+                  child: Center(child: FaIcon(FontAwesomeIcons.check, color: Color(0xFF4ADE80), size: 32)),
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -300,7 +300,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
                   style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
                 ),
                 const SizedBox(width: 8),
-                const FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
+                FaIcon(FontAwesomeIcons.circleCheck, color: Color(0xFF4ADE80), size: 14),
               ],
             ),
           ),
@@ -419,7 +419,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const FaIcon(FontAwesomeIcons.download, color: Colors.black, size: 16),
+                  FaIcon(FontAwesomeIcons.download, color: Colors.black, size: 16),
                   const SizedBox(width: 10),
                   Text(
                     widget.isRollback
@@ -513,7 +513,7 @@ class _FirmwareUpdateState extends State<FirmwareUpdate> with FirmwareMixin {
           leading: (isDownloading || isInstalling)
               ? const SizedBox()
               : IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                  icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
           title: Text(

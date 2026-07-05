@@ -127,6 +127,7 @@ export function IntegrationsTab(): React.JSX.Element {
 
   useEffect(() => {
     if (!GOOGLE_ENABLED || !googleStatus.connected) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
     void runSync()
     const id = setInterval(() => void runSync(), 15 * 60 * 1000)
     return () => clearInterval(id)

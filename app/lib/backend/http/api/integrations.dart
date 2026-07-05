@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/imports_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -12,10 +13,15 @@ class IntegrationResponse {
   IntegrationResponse({required this.connected, required this.appKey});
 
   factory IntegrationResponse.fromJson(Map<String, dynamic> json) {
-    return IntegrationResponse(
-      connected: json['connected'] as bool? ?? false,
-      appKey: json['app_key'] as String? ?? '',
-    );
+    return IntegrationResponse.fromGenerated(wire.GeneratedIntegrationResponse.fromJson(json));
+  }
+
+  factory IntegrationResponse.fromGenerated(wire.GeneratedIntegrationResponse generated) {
+    return IntegrationResponse(connected: generated.connected, appKey: generated.appKey);
+  }
+
+  wire.GeneratedIntegrationResponse toGenerated() {
+    return wire.GeneratedIntegrationResponse(connected: connected, appKey: appKey);
   }
 }
 
@@ -32,7 +38,9 @@ Future<IntegrationResponse?> getIntegration(String appKey) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return IntegrationResponse.fromJson(jsonDecode(body));
+    return IntegrationResponse.fromGenerated(
+      wire.GeneratedIntegrationResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
   } else {
     Logger.debug('getIntegration error ${response.statusCode}');
     return null;
@@ -90,8 +98,8 @@ Future<String?> getIntegrationOAuthUrl(String appKey) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return data['auth_url'] as String?;
+    final data = wire.GeneratedOAuthUrlResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return data.authUrl;
   } else {
     Logger.debug('getIntegrationOAuthUrl error ${response.statusCode}');
     return null;
@@ -111,8 +119,9 @@ Future<bool> syncAppleHealthData(Map<String, dynamic> healthData) async {
   if (response == null) return false;
 
   if (response.statusCode == 200) {
+    final data = wire.GeneratedAppleHealthSyncResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     Logger.debug('Apple Health data synced successfully');
-    return true;
+    return data.status == 'ok';
   } else {
     Logger.debug('syncAppleHealthData error ${response.statusCode}');
     return false;

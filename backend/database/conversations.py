@@ -3,13 +3,14 @@ import json
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, Iterator, List, Optional, cast
+from typing import List, Optional, Dict, Any
 
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
+from database import users as users_db
 from models.audio_file import AudioFile
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -23,17 +24,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 conversations_collection = 'conversations'
-
-
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    """Typed adapter for a Firestore snapshot's ``to_dict()`` (SDK stub gap)."""
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-
-
-def _typed_docs(query: Any) -> List[Dict[str, Any]]:
-    """Stream a Firestore query into a list of typed dicts (missing docs become ``{}`)."""
-    return [_typed_doc(doc) for doc in query.stream()]
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -155,23 +145,12 @@ def _prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> O
     return data
 
 
-# prepare_for_read's decryptor contract is ``(Dict, str) -> Dict``. The underlying helpers
-# accept/return ``Optional[Dict]`` for direct-call safety, but the decorator only ever invokes
-# them with non-None dicts. These cast adapters bridge the signature gap with zero runtime change.
-_decrypt_conversation: Callable[[Dict[str, Any], str], Dict[str, Any]] = cast(
-    Callable[[Dict[str, Any], str], Dict[str, Any]], _prepare_conversation_for_read
-)
-_decrypt_photo: Callable[[Dict[str, Any], str], Dict[str, Any]] = cast(
-    Callable[[Dict[str, Any], str], Dict[str, Any]], _prepare_photo_for_read
-)
-
-
-@prepare_for_read(decrypt_func=_decrypt_photo)
-def get_conversation_photos(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
+@prepare_for_read(decrypt_func=_prepare_photo_for_read)
+def get_conversation_photos(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
-    photos: List[Dict[str, Any]] = _typed_docs(photos_ref)
+    photos = [doc.to_dict() for doc in photos_ref.stream()]
     return photos
 
 
@@ -182,7 +161,7 @@ def get_conversation_photos(uid: str, conversation_id: str) -> List[Dict[str, An
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def upsert_conversation(uid: str, conversation_data: Dict[str, Any]) -> None:
+def upsert_conversation(uid: str, conversation_data: dict):
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
     if 'photos' in conversation_data:
@@ -195,7 +174,7 @@ def upsert_conversation(uid: str, conversation_data: Dict[str, Any]) -> None:
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def create_conversation_if_absent(uid: str, conversation_data: Dict[str, Any]) -> bool:
+def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     if 'audio_base64_url' in conversation_data:
         del conversation_data['audio_base64_url']
@@ -211,17 +190,16 @@ def create_conversation_if_absent(uid: str, conversation_data: Dict[str, Any]) -
         return False
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversation(uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
+def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    raw: object = conversation_ref.get().to_dict()
-    conversation_data: Optional[Dict[str, Any]] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
+    conversation_data = conversation_ref.get().to_dict()
     return conversation_data
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversations(
     uid: str,
@@ -235,7 +213,7 @@ def get_conversations(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     date_field: str = 'created_at',
-) -> List[Dict[str, Any]]:
+):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
@@ -264,7 +242,7 @@ def get_conversations(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations: List[Dict[str, Any]] = _typed_docs(conversations_ref)
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     return conversations
 
 
@@ -278,7 +256,7 @@ def get_conversations_count(
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
     sources: Optional[List[str]] = None,
-) -> int:
+):
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
@@ -300,7 +278,7 @@ def get_conversations_count(
     return int(result[0][0].value)
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,
     limit: int = 100,
@@ -312,7 +290,7 @@ def get_conversations_without_photos(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
-) -> List[Dict[str, Any]]:
+):
     """
     Same as get_conversations but without loading photos.
     Much faster for list endpoints and bulk operations where full photo base64 isn't needed.
@@ -344,13 +322,11 @@ def get_conversations_without_photos(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations: List[Dict[str, Any]] = _typed_docs(conversations_ref)
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     return conversations
 
 
-def iter_all_conversations(
-    uid: str, batch_size: int = 400, include_discarded: bool = True
-) -> Iterator[Optional[Dict[str, Any]]]:
+def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: bool = True):
     """Yield all conversations for a user, decrypted, in batches. Used for streaming data export."""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     if not include_discarded:
@@ -359,12 +335,10 @@ def iter_all_conversations(
     offset = 0
     while True:
         batch_ref = conversations_ref.limit(batch_size).offset(offset)
-        batch: List[Optional[Dict[str, Any]]] = []
+        batch = []
         for doc in batch_ref.stream():
-            raw: object = doc.to_dict()
-            raw_dict: Optional[Dict[str, Any]] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
-            prepared = _prepare_conversation_for_read(raw_dict, uid)
-            conv: Optional[Dict[str, Any]] = prepared or raw_dict
+            conv = doc.to_dict()
+            conv = _prepare_conversation_for_read(conv, uid) or conv
             batch.append(conv)
         yield from batch
         if len(batch) < batch_size:
@@ -372,13 +346,13 @@ def iter_all_conversations(
         offset += batch_size
 
 
-def update_conversation(uid: str, conversation_id: str, update_data: Dict[str, Any]) -> None:
+def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
         return
 
-    doc_level = _typed_doc(doc_snapshot).get('data_protection_level', 'standard')
+    doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
 
@@ -399,16 +373,16 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks: List[Dict[str, Any]] = list_audio_chunks(uid, conversation_id)
+    chunks = list_audio_chunks(uid, conversation_id)
     if not chunks:
         return []
 
     # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
-    audio_files: List[AudioFile] = []
-    current_group: List[Dict[str, Any]] = []
+    audio_files = []
+    current_group = []
     gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
 
-    for _, chunk in enumerate(chunks):
+    for i, chunk in enumerate(chunks):
         if not current_group:
             current_group.append(chunk)
         else:
@@ -434,7 +408,7 @@ def create_audio_files_from_chunks(
 
 
 def _finalize_audio_file_group(
-    uid: str, conversation_id: str, chunk_group: List[Dict[str, Any]], existing_files: List[AudioFile]
+    uid: str, conversation_id: str, chunk_group: List[dict], existing_files: List[AudioFile]
 ) -> Optional[AudioFile]:
     """
     Create an AudioFile record that references chunks (no merging).
@@ -455,7 +429,7 @@ def _finalize_audio_file_group(
     file_id = str(uuid.uuid4())
 
     # Extract timestamps
-    timestamps: List[Any] = [chunk['timestamp'] for chunk in chunk_group]
+    timestamps = [chunk['timestamp'] for chunk in chunk_group]
 
     # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
@@ -469,14 +443,14 @@ def _finalize_audio_file_group(
         id=file_id,
         uid=uid,
         conversation_id=conversation_id,
-        chunk_timestamps=cast(List[float], timestamps),
+        chunk_timestamps=timestamps,
         provider='gcp',
         started_at=started_at,
         duration=duration,
     )
 
 
-def update_conversation_title(uid: str, conversation_id: str, title: str) -> None:
+def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
@@ -509,15 +483,12 @@ def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional
         conversation_ref.update({'structured.overview': content})
         return 'ok'
 
-    raw: Dict[str, Any] = _typed_doc(doc_snapshot)
-    apps_results: List[Any] = list(raw.get('apps_results') or [])
+    raw = doc_snapshot.to_dict() or {}
+    apps_results = list(raw.get('apps_results') or [])
     found = False
     for entry in apps_results:
-        if not isinstance(entry, dict):
-            continue
-        entry_dict: Dict[str, Any] = cast(Dict[str, Any], entry)
-        if entry_dict.get('app_id') == app_id:
-            entry_dict['content'] = content
+        if isinstance(entry, dict) and entry.get('app_id') == app_id:
+            entry['content'] = content
             found = True
             break
     if not found:
@@ -540,7 +511,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
     if not doc_snapshot.exists:
         return 'not_found'
 
-    raw_data: Dict[str, Any] = _typed_doc(doc_snapshot)
+    raw_data = doc_snapshot.to_dict()
     if raw_data.get('is_locked', False):
         return 'locked'
 
@@ -551,11 +522,8 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
     segments = conversation_data.get('transcript_segments', [])
     found = False
     for segment in segments:
-        if not isinstance(segment, dict):
-            continue
-        segment_dict: Dict[str, Any] = cast(Dict[str, Any], segment)
-        if segment_dict.get('id') == segment_id:
-            segment_dict['text'] = text
+        if isinstance(segment, dict) and segment.get('id') == segment_id:
+            segment['text'] = text
             found = True
             break
 
@@ -611,7 +579,7 @@ def delete_conversation_photos(uid: str, conversation_id: str) -> int:
     return deleted_count
 
 
-def delete_conversation(uid: str, conversation_id: str) -> None:
+def delete_conversation(uid, conversation_id):
     """
     Delete a conversation and its photos subcollection.
 
@@ -627,19 +595,19 @@ def delete_conversation(uid: str, conversation_id: str) -> None:
     conversation_ref.delete()
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid: str, conversation_ids: List[str]) -> List[Dict[str, Any]]:
+def get_conversations_by_id(uid, conversation_ids):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
 
-    conversations: List[Dict[str, Any]] = []
+    conversations = []
     for doc in docs:
         if doc.exists:
-            data: Dict[str, Any] = _typed_doc(doc)
+            data = doc.to_dict()
             if data.get('discarded'):
                 continue
             conversations.append(data)
@@ -652,7 +620,7 @@ def get_conversations_by_id(uid: str, conversation_ids: List[str]) -> List[Dict[
 # **************************************
 
 
-def get_conversations_to_migrate(uid: str, target_level: str) -> List[Dict[str, Any]]:
+def get_conversations_to_migrate(uid: str, target_level: str) -> List[dict]:
     """
     Finds all conversations that are not at the target protection level by fetching all documents
     and filtering them in memory. This simplifies the code but may be less performant for
@@ -661,9 +629,9 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[Dict[str, 
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
     all_conversations = conversations_ref.select(['data_protection_level', 'visibility']).stream()
 
-    to_migrate: List[Dict[str, Any]] = []
+    to_migrate = []
     for doc in all_conversations:
-        doc_data: Dict[str, Any] = _typed_doc(doc)
+        doc_data = doc.to_dict()
         if doc_data.get('visibility') in ['public', 'shared']:
             continue
 
@@ -674,7 +642,7 @@ def get_conversations_to_migrate(uid: str, target_level: str) -> List[Dict[str, 
     return to_migrate
 
 
-def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str) -> None:
+def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], target_level: str):
     """
     Migrates a batch of conversations to the target protection level, committing in batches of 450.
     """
@@ -691,21 +659,21 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
             continue
 
-        conversation_data: Dict[str, Any] = _typed_doc(doc_snapshot)
+        conversation_data = doc_snapshot.to_dict()
         current_level = conversation_data.get('data_protection_level', 'standard')
 
         if current_level == target_level:
             continue
 
         # Decrypt/decompress the data to get a clean slate.
-        plain_data: Dict[str, Any] = cast(Dict[str, Any], _prepare_conversation_for_read(conversation_data, uid))
+        plain_data = _prepare_conversation_for_read(conversation_data, uid)
 
         # Re-prepare the segments for writing with the new level.
-        update_payload: Dict[str, Any] = {'transcript_segments': plain_data.get('transcript_segments')}
+        update_payload = {'transcript_segments': plain_data.get('transcript_segments')}
         prepared_payload = _prepare_conversation_for_write(update_payload, uid, target_level)
 
         # Update the document with the migrated data and the new protection level.
-        update_data: Dict[str, Any] = {
+        update_data = {
             'data_protection_level': target_level,
         }
         if 'transcript_segments' in prepared_payload:
@@ -728,16 +696,16 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         photos_ref = doc_snapshot.reference.collection('photos')
         photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
         for photo_doc in photos_stream:
-            photo_data: Dict[str, Any] = _typed_doc(photo_doc)
+            photo_data = photo_doc.to_dict()
             current_photo_level = photo_data.get('data_protection_level', 'standard')
             if current_photo_level == target_level:
                 continue
 
             # Decrypt first to get a clean state
-            plain_photo_data: Dict[str, Any] = cast(Dict[str, Any], _prepare_photo_for_read(photo_data, uid))
+            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
 
             # Prepare the specific fields for update
-            photo_update_payload: Dict[str, Any] = {'data_protection_level': target_level}
+            photo_update_payload = {'data_protection_level': target_level}
             if target_level == 'enhanced':
                 photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
             else:  # Moving from enhanced to standard
@@ -760,9 +728,9 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 # **************************************
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_in_progress_conversation(uid: str) -> Optional[Dict[str, Any]]:
+def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = (
         user_ref.collection(conversations_collection)
@@ -770,19 +738,19 @@ def get_in_progress_conversation(uid: str) -> Optional[Dict[str, Any]]:
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
-    docs: List[Dict[str, Any]] = _typed_docs(conversations_ref)
+    docs = [doc.to_dict() for doc in conversations_ref.stream()]
     conversation = docs[0] if docs else None
     return conversation
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_processing_conversations(uid: str) -> List[Dict[str, Any]]:
+def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection).where(
         filter=FieldFilter('status', '==', 'processing')
     )
-    conversations: List[Dict[str, Any]] = _typed_docs(conversations_ref)
+    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
     # Exclude lazy-deferred conversations: they intentionally sit in `processing` (no LLM summary
     # yet) until the user opens them, where they're enriched on demand. They must NOT be swept
     # back to pusher for background processing — that would defeat the freemium cost saving.
@@ -790,7 +758,7 @@ def get_processing_conversations(uid: str) -> List[Dict[str, Any]]:
     return conversations
 
 
-def update_conversation_status(uid: str, conversation_id: str, status: str) -> None:
+def update_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
@@ -808,12 +776,12 @@ def claim_conversation_status(
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     transaction = db.transaction()
 
-    @firestore.transactional  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
-    def _claim(transaction: Any) -> bool:
+    @firestore.transactional
+    def _claim(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
-        current: Dict[str, Any] = _typed_doc(snapshot)
+        current = snapshot.to_dict() or {}
         if current.get('status') != expected_status.value:
             return False
         updates = {'status': claimed_status.value}
@@ -825,7 +793,7 @@ def claim_conversation_status(
     return _claim(transaction)
 
 
-def set_conversation_as_discarded(uid: str, conversation_id: str) -> None:
+def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
@@ -836,7 +804,7 @@ def set_conversation_as_discarded(uid: str, conversation_id: str) -> None:
 # *********************************
 
 
-def update_conversation_events(uid: str, conversation_id: str, events: List[Dict[str, Any]]) -> None:
+def update_conversation_events(uid: str, conversation_id: str, events: List[dict]):
     update_conversation(uid, conversation_id, {'structured.events': events})
 
 
@@ -845,7 +813,7 @@ def update_conversation_events(uid: str, conversation_id: str, events: List[Dict
 # *********************************
 
 
-def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[Dict[str, Any]]) -> None:
+def update_conversation_action_items(uid: str, conversation_id: str, action_items: List[dict]):
     update_conversation(uid, conversation_id, {'structured.action_items': action_items})
 
 
@@ -856,7 +824,7 @@ def get_action_items(
     include_completed: bool = True,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-) -> List[Dict[str, Any]]:
+):
     """Fetch action items directly from conversations collection"""
     conversations_ref = db.collection('users').document(uid).collection(conversations_collection)
 
@@ -873,9 +841,9 @@ def get_action_items(
     conversations_ref = conversations_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
 
     # Get all conversations with action items
-    conversations: List[Dict[str, Any]] = []
+    conversations = []
     for doc in conversations_ref.stream():
-        conversation_data: Dict[str, Any] = _typed_doc(doc)
+        conversation_data = doc.to_dict()
 
         # Check if conversation has action items
         structured = conversation_data.get('structured', {})
@@ -883,30 +851,27 @@ def get_action_items(
 
         if raw_action_items:
             # Decrypt conversation data for proper reading
-            decrypted_data = cast(Dict[str, Any], _prepare_conversation_for_read(conversation_data, uid))
+            decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
             conversations.append(decrypted_data)
 
     # Extract and flatten action items with metadata
-    action_items: List[Dict[str, Any]] = []
+    action_items = []
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
         conversation_created_at = _ensure_timezone_aware(conversation['created_at'])
 
-        raw_items = cast(List[Any], conversation.get('structured', {}).get('action_items', []))
+        raw_items = conversation.get('structured', {}).get('action_items', [])
 
         for idx, item in enumerate(raw_items):
-            # `item` may be a dict or a legacy scalar; narrow once into a typed view.
-            item_dict: Optional[Dict[str, Any]] = cast(Dict[str, Any], item) if isinstance(item, dict) else None
-
             # Skip deleted items
-            if item_dict is not None and item_dict.get('deleted', False):
+            if isinstance(item, dict) and item.get('deleted', False):
                 continue
 
             # Skip completed items if not requested
             is_completed = False
-            if item_dict is not None:
-                is_completed = item_dict.get('completed', False)
+            if isinstance(item, dict):
+                is_completed = item.get('completed', False)
 
             if not include_completed and is_completed:
                 continue
@@ -915,9 +880,9 @@ def get_action_items(
             created_at = None
             completed_at = None
 
-            if item_dict is not None:
-                created_at = item_dict.get('created_at')
-                completed_at = item_dict.get('completed_at')
+            if isinstance(item, dict):
+                created_at = item.get('created_at')
+                completed_at = item.get('completed_at')
 
             # Ensure timezone awareness for action item dates
             if created_at is not None:
@@ -933,15 +898,15 @@ def get_action_items(
             if is_completed and completed_at is None:
                 completed_at = conversation_created_at
 
-            action_item_data: Dict[str, Any] = {
+            action_item_data = {
                 'id': f"{conversation_id}_{idx}",
                 'conversation_id': conversation_id,
                 'conversation_title': conversation_title,
                 'conversation_created_at': conversation_created_at,
                 'index': idx,
-                'description': item_dict.get('description', item) if item_dict is not None else item,
+                'description': item.get('description', item) if isinstance(item, dict) else item,
                 'completed': is_completed,
-                'deleted': item_dict.get('deleted', False) if item_dict is not None else False,
+                'deleted': item.get('deleted', False) if isinstance(item, dict) else False,
                 'created_at': created_at,
                 'completed_at': completed_at,
             }
@@ -962,7 +927,7 @@ def get_action_items(
 # ******************************
 
 
-def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime) -> None:
+def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'finished_at': finished_at})
@@ -971,10 +936,10 @@ def update_conversation_finished_at(uid: str, conversation_id: str, finished_at:
 def update_conversation_segments(
     uid: str,
     conversation_id: str,
-    segments: List[Dict[str, Any]],
-    finished_at: Optional[datetime] = None,
-    data_protection_level: Optional[str] = None,
-) -> None:
+    segments: List[dict],
+    finished_at: datetime = None,
+    data_protection_level: str = None,
+):
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     if data_protection_level is not None:
         doc_level = data_protection_level
@@ -982,8 +947,8 @@ def update_conversation_segments(
         doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
         if not doc_snapshot.exists:
             return
-        doc_level = _typed_doc(doc_snapshot).get('data_protection_level', 'standard')
-    update_payload: Dict[str, Any] = {'transcript_segments': segments}
+        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
+    update_payload = {'transcript_segments': segments}
     if finished_at:
         update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
@@ -999,19 +964,19 @@ def update_conversation_segments(
 # ***********************************
 
 
-def set_conversation_visibility(uid: str, conversation_id: str, visibility: str) -> None:
+def set_conversation_visibility(uid: str, conversation_id: str, visibility: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'visibility': visibility})
 
 
-def set_conversation_starred(uid: str, conversation_id: str, starred: bool) -> None:
+def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'starred': starred})
 
 
-def unlock_all_conversations(uid: str) -> None:
+def unlock_all_conversations(uid: str):
     """
     Finds all conversations for a user with is_locked: True and updates them to is_locked = False.
     """
@@ -1042,9 +1007,9 @@ def set_postprocessing_status(
     uid: str,
     conversation_id: str,
     status: PostProcessingStatus,
-    fail_reason: Optional[str] = None,
+    fail_reason: str = None,
     model: PostProcessingModel = PostProcessingModel.fal_whisperx,
-) -> None:
+):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update(
@@ -1052,12 +1017,7 @@ def set_postprocessing_status(
     )
 
 
-def store_model_segments_result(
-    uid: str,
-    conversation_id: str,
-    model_name: str,
-    segments: List[TranscriptSegment],
-) -> None:
+def store_model_segments_result(uid: str, conversation_id: str, model_name: str, segments: List[TranscriptSegment]):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     segments_ref = conversation_ref.collection(model_name)
@@ -1065,7 +1025,7 @@ def store_model_segments_result(
     for i, segment in enumerate(segments):
         segment_id = str(uuid.uuid4())
         segment_ref = segments_ref.document(segment_id)
-        batch.set(segment_ref, segment.dict())
+        batch.set(segment_ref, segment.model_dump())
         if i >= 400:
             batch.commit()
             batch = db.batch()
@@ -1073,11 +1033,8 @@ def store_model_segments_result(
 
 
 def store_model_emotion_predictions_result(
-    uid: str,
-    conversation_id: str,
-    model_name: str,
-    predictions: List[hume.HumeJobModelPredictionResponseModel],
-) -> None:
+    uid: str, conversation_id: str, model_name: str, predictions: List[hume.HumeJobModelPredictionResponseModel]
+):
     now = datetime.now()
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -1104,7 +1061,7 @@ def store_model_emotion_predictions_result(
     batch.commit()
 
 
-def get_conversation_transcripts_by_model(uid: str, conversation_id: str) -> Dict[str, List[Dict[str, Any]]]:
+def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     deepgram_ref = conversation_ref.collection('deepgram_streaming')
@@ -1113,10 +1070,10 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str) -> Dic
     whisperx_ref = conversation_ref.collection('fal_whisperx')
 
     return {
-        'deepgram': list(sorted(_typed_docs(deepgram_ref), key=lambda x: x['start'])),
-        'soniox': list(sorted(_typed_docs(soniox_ref), key=lambda x: x['start'])),
-        'speechmatics': list(sorted(_typed_docs(speechmatics_ref), key=lambda x: x['start'])),
-        'whisperx': list(sorted(_typed_docs(whisperx_ref), key=lambda x: x['start'])),
+        'deepgram': list(sorted([doc.to_dict() for doc in deepgram_ref.stream()], key=lambda x: x['start'])),
+        'soniox': list(sorted([doc.to_dict() for doc in soniox_ref.stream()], key=lambda x: x['start'])),
+        'speechmatics': list(sorted([doc.to_dict() for doc in speechmatics_ref.stream()], key=lambda x: x['start'])),
+        'whisperx': list(sorted([doc.to_dict() for doc in whisperx_ref.stream()], key=lambda x: x['start'])),
     }
 
 
@@ -1125,21 +1082,21 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str) -> Dic
 # ***********************************
 
 
-def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]) -> None:
+def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
     conversation_snapshot = conversation_ref.get(field_paths=['data_protection_level'])
     level = 'standard'
     if conversation_snapshot.exists:
-        level = _typed_doc(conversation_snapshot).get('data_protection_level', 'standard')
+        level = conversation_snapshot.to_dict().get('data_protection_level', 'standard')
 
     photos_ref = conversation_ref.collection('photos')
     batch = db.batch()
     for photo in photos:
         photo_id = photo.id or str(uuid.uuid4())
         photo_ref = photos_ref.document(photo_id)
-        data: Dict[str, Any] = photo.dict()
+        data = photo.model_dump()
         data['id'] = photo_id
         prepared_data = _prepare_photo_for_write(data, uid, level)
         batch.set(photo_ref, prepared_data)
@@ -1151,11 +1108,9 @@ def store_conversation_photos(uid: str, conversation_id: str, photos: List[Conve
 # ********************************
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_closest_conversation_to_timestamps(
-    uid: str, start_timestamp: int, end_timestamp: int
-) -> Optional[Dict[str, Any]]:
+def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
     start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
     end_threshold = datetime.fromtimestamp(end_timestamp, tz=timezone.utc) + timedelta(minutes=2)
 
@@ -1168,7 +1123,7 @@ def get_closest_conversation_to_timestamps(
         .order_by('created_at', direction=firestore.Query.DESCENDING)
     )
 
-    conversations: List[Dict[str, Any]] = _typed_docs(query)
+    conversations = [doc.to_dict() for doc in query.stream()]
     logger.info(f'get_closest_conversation_to_timestamps len(conversations) {len(conversations)}')
     if not conversations:
         return None
@@ -1178,7 +1133,7 @@ def get_closest_conversation_to_timestamps(
         logger.info(f"- {conversation['id']} {conversation['started_at']} {conversation['finished_at']}")
 
     # get the conversation that has the closest start timestamp or end timestamp
-    closest_conversation: Optional[Dict[str, Any]] = None
+    closest_conversation = None
     min_diff = float('inf')
     for conversation in conversations:
         conversation_start_timestamp = conversation['started_at'].timestamp()
@@ -1189,14 +1144,13 @@ def get_closest_conversation_to_timestamps(
             min_diff = min(diff1, diff2)
             closest_conversation = conversation
 
-    if closest_conversation is not None:
-        logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
+    logger.info(f"get_closest_conversation_to_timestamps closest_conversation: {closest_conversation['id']}")
     return closest_conversation
 
 
-@prepare_for_read(decrypt_func=_decrypt_conversation)
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_last_completed_conversation(uid: str) -> Optional[Dict[str, Any]]:
+def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (
         db.collection('users')
         .document(uid)
@@ -1205,6 +1159,6 @@ def get_last_completed_conversation(uid: str) -> Optional[Dict[str, Any]]:
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(1)
     )
-    conversations: List[Dict[str, Any]] = _typed_docs(query)
+    conversations = [doc.to_dict() for doc in query.stream()]
     conversation = conversations[0] if conversations else None
     return conversation

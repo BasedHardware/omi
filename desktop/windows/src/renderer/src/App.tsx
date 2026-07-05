@@ -6,7 +6,8 @@ import { Sidebar } from './components/layout/Sidebar'
 import { MainViews } from './components/layout/MainViews'
 import { Spinner } from './components/ui/Spinner'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
-import { AppStateProvider, useAppState } from './state/AppStateProvider'
+import { AppStateProvider } from './state/AppStateProvider'
+import { useAppState } from './state/appState'
 import { SourcePicker } from './components/SourcePicker'
 // Imported DIRECTLY (NOT lazy/Suspense). Code-splitting the Onboarding page
 // (commit c226cac, for the three.js bundle win) repeatedly blanked the onboarding
@@ -77,6 +78,7 @@ function AppShellInner(): React.JSX.Element {
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
+        // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
         onPick={recorder.pickScreen}
       />
       {/* Background screen capture for Rewind (runs while the app is open). */}

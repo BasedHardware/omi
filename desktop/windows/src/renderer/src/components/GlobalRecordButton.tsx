@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Mic, ChevronDown, Monitor } from 'lucide-react'
-import { useAppState, type CaptureChoice } from '../state/AppStateProvider'
+import { useAppState, type CaptureChoice } from '../state/appState'
 import { Shortcut } from './ui/Shortcut'
 
 const OPTIONS: { choice: CaptureChoice; label: string; Icon: typeof Mic; keys?: string[] }[] = [

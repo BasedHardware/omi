@@ -6,7 +6,7 @@ Collection: users/{uid}/staged_tasks
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import List, Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 BATCH_LIMIT = 500  # Firestore hard limit
 
 
-def _user_col(uid: str, collection: str) -> Any:
+def _user_col(uid: str, collection: str):
     """Shorthand for users/{uid}/{collection}."""
     return db.collection('users').document(uid).collection(collection)
 
 
-def _commit_batch(batch: Any, count: int) -> Tuple[Any, int]:
+def _commit_batch(batch, count):
     """Commit batch if count reaches BATCH_LIMIT; return fresh batch and 0."""
     if count >= BATCH_LIMIT:
         batch.commit()
@@ -32,7 +32,7 @@ def _commit_batch(batch: Any, count: int) -> Tuple[Any, int]:
     return batch, count
 
 
-def create_staged_task(uid: str, description: str, **kwargs: Any) -> Dict[str, Any]:
+def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     """Create a staged task.  Deduplicates by normalized description.
 
     Uses the same normalization (``_normalize_description``) as the
@@ -44,16 +44,16 @@ def create_staged_task(uid: str, description: str, **kwargs: Any) -> Dict[str, A
     col = _user_col(uid, 'staged_tasks')
 
     # Deduplicate
-    desc_norm = _normalize_desc(description)
-    for candidate in col.stream():
-        data = cast(Dict[str, Any], candidate.to_dict())
-        if _normalize_desc(data.get('description', '')) == desc_norm:
-            data['id'] = candidate.id
-            return data
+    desc_norm = action_items_db._normalize_description(description)
+    for doc in col.stream():
+        if action_items_db._normalize_description(doc.to_dict().get('description', '')) == desc_norm:
+            existing = doc.to_dict()
+            existing['id'] = doc.id
+            return existing
 
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    doc: Dict[str, Any] = {
+    doc = {
         'id': task_id,
         'description': description,
         'completed': False,
@@ -68,7 +68,7 @@ def create_staged_task(uid: str, description: str, **kwargs: Any) -> Dict[str, A
     return doc
 
 
-def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[dict]:
     """Fetch uncompleted staged tasks ordered by relevance (ascending)."""
     col = _user_col(uid, 'staged_tasks')
     query = col.where(filter=FieldFilter('completed', '==', False))
@@ -77,9 +77,9 @@ def get_staged_tasks(uid: str, limit: int = 100, offset: int = 0) -> List[Dict[s
         query = query.offset(offset)
     query = query.limit(limit)
 
-    items: List[Dict[str, Any]] = []
+    items = []
     for doc in query.stream():
-        data = cast(Dict[str, Any], doc.to_dict())
+        data = doc.to_dict()
         data['id'] = doc.id
         items.append(data)
     return items
@@ -93,7 +93,7 @@ def delete_staged_task(uid: str, task_id: str) -> bool:
     return True
 
 
-def batch_update_staged_scores(uid: str, scores: List[Dict[str, Any]]) -> None:
+def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
     """Update relevance_score for staged tasks in batches of 500.
 
     Pre-filters to active (uncompleted) document IDs so stale/deleted/promoted
@@ -119,12 +119,14 @@ def batch_update_staged_scores(uid: str, scores: List[Dict[str, Any]]) -> None:
         batch.commit()
 
 
-def promote_staged_task(uid: str) -> Optional[Dict[str, Any]]:
-    """Promote the top-scored staged task to an action_item.
+def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dict]:
+    """Promote a staged task to an action_item.
 
-    Returns the new (or pre-existing) action_item dict, or None if no staged
-    tasks exist. Uses ``database.action_items.create_action_item()`` for
-    consistent field handling.
+    When ``task_id`` is given, promote that specific candidate; otherwise promote the
+    top-scored active staged task (the original behavior). Returns the new (or pre-existing)
+    action_item dict, or None if there is nothing to promote — no staged tasks exist, or the
+    given id does not exist or is already promoted/completed. Uses
+    ``database.action_items.create_action_item()`` for consistent field handling.
 
     Deduplicates against the live ``action_items`` collection: if a user
     already has an active (uncompleted, undeleted) action_item with the same
@@ -139,35 +141,44 @@ def promote_staged_task(uid: str) -> Optional[Dict[str, Any]]:
     a few hours of activity.
     """
     col = _user_col(uid, 'staged_tasks')
-    query = (
-        col.where(filter=FieldFilter('completed', '==', False))
-        .order_by('relevance_score', direction=firestore.Query.ASCENDING)
-        .limit(1)
-    )
-    docs = list(query.stream())
-    if not docs:
-        return None
-
-    staged = cast(Dict[str, Any], docs[0].to_dict())
-    staged['id'] = docs[0].id
+    if task_id is not None:
+        snap = col.document(task_id).get()
+        if not snap.exists:
+            return None
+        staged = snap.to_dict() or {}
+        if staged.get('completed'):
+            # Already promoted/closed — nothing to do.
+            return None
+        staged['id'] = snap.id
+    else:
+        query = (
+            col.where(filter=FieldFilter('completed', '==', False))
+            .order_by('relevance_score', direction=firestore.Query.ASCENDING)
+            .limit(1)
+        )
+        docs = list(query.stream())
+        if not docs:
+            return None
+        staged = docs[0].to_dict()
+        staged['id'] = docs[0].id
 
     # Dedup: skip promotion if an active action_item with the same description
     # already exists. Close the staged task pointing at the existing item.
-    existing = _get_active_by_desc(uid, staged['description'])
+    existing = action_items_db.get_active_action_item_by_description(uid, staged['description'])
     if existing is not None:
         # Merge enrichment fields the existing item is missing. The staged
         # task may carry richer context from a later conversation
         # (e.g. a due_at the user mentioned later) that the original
         # action_item lacks; without this merge that scheduling info is
         # silently dropped.
-        merge_fields: Dict[str, Any] = {}
+        merge_fields = {}
         for field in ('due_at', 'priority', 'category'):
             staged_value = staged.get(field)
             if staged_value is not None and not existing.get(field):
                 merge_fields[field] = staged_value
         if merge_fields:
             try:
-                _update_item(uid, existing['id'], merge_fields)
+                action_items_db.update_action_item(uid, existing['id'], merge_fields)
                 existing.update(merge_fields)
             except Exception as e:
                 # Merge is best-effort — the dedup itself is the primary
@@ -197,7 +208,7 @@ def promote_staged_task(uid: str) -> Optional[Dict[str, Any]]:
         return existing
 
     # Build action_item data from staged task fields
-    action_data: Dict[str, Any] = {
+    action_data = {
         'description': staged['description'],
         'completed': False,
         'from_staged': True,
@@ -206,16 +217,37 @@ def promote_staged_task(uid: str) -> Optional[Dict[str, Any]]:
         if staged.get(field) is not None:
             action_data[field] = staged[field]
 
-    action_id = _create_item(uid, action_data)
+    action_id = action_items_db.create_action_item(uid, action_data)
 
     # Mark staged task as completed
     col.document(staged['id']).update({'completed': True, 'promoted_at': datetime.now(timezone.utc)})
 
-    action_item = _get_item(uid, action_id)
+    action_item = action_items_db.get_action_item(uid, action_id)
     return action_item
 
 
-def migrate_ai_tasks(uid: str) -> Dict[str, Any]:
+def clear_staged_tasks(uid: str) -> int:
+    """Delete all active (uncompleted) staged tasks for a user in one call.
+
+    Returns the number deleted. Scoped to completed==False so promotion history
+    (completed/promoted staged tasks) is preserved.
+    """
+    col = _user_col(uid, 'staged_tasks')
+    active_query = col.where(filter=FieldFilter('completed', '==', False)).select([])
+    batch = db.batch()
+    count = 0
+    total = 0
+    for doc in active_query.stream():
+        batch.delete(col.document(doc.id))
+        count += 1
+        total += 1
+        batch, count = _commit_batch(batch, count)
+    if count > 0:
+        batch.commit()
+    return total
+
+
+def migrate_ai_tasks(uid: str) -> dict:
     """One-time migration: move excess AI tasks from action_items to staged_tasks.
 
     Keeps top 3 AI tasks in action_items, moves the rest to staged_tasks.
@@ -224,9 +256,9 @@ def migrate_ai_tasks(uid: str) -> Dict[str, Any]:
     col = _user_col(uid, 'action_items')
     query = col.where(filter=FieldFilter('completed', '==', False))
 
-    all_items: List[Dict[str, Any]] = []
+    all_items = []
     for doc in query.stream():
-        data = cast(Dict[str, Any], doc.to_dict())
+        data = doc.to_dict()
         data['id'] = doc.id
         if data.get('deleted'):
             continue
@@ -256,7 +288,7 @@ def migrate_ai_tasks(uid: str) -> Dict[str, Any]:
     return {'moved': len(to_move), 'kept': len(keep)}
 
 
-def migrate_conversation_items_to_staged(uid: str) -> Dict[str, Any]:
+def migrate_conversation_items_to_staged(uid: str) -> dict:
     """Move conversation-sourced action items (without 'source') to staged_tasks."""
     col = _user_col(uid, 'action_items')
     staged_col = _user_col(uid, 'staged_tasks')
@@ -265,7 +297,7 @@ def migrate_conversation_items_to_staged(uid: str) -> Dict[str, Any]:
     moved = 0
     batch_count = 0
     for doc in col.stream():
-        data = cast(Dict[str, Any], doc.to_dict())
+        data = doc.to_dict()
         if data.get('deleted') or data.get('completed'):
             continue
         if data.get('conversation_id') and not data.get('source'):
@@ -280,44 +312,3 @@ def migrate_conversation_items_to_staged(uid: str) -> Dict[str, Any]:
         batch.commit()
 
     return {'moved': moved}
-
-
-# ---------------------------------------------------------------------------
-# Typed adapters for ``database.action_items`` (not yet strict-enrolled).
-#
-# These thin wrappers pin fully-typed callable shapes at this module's boundary.
-# Attribute access happens at CALL time (inside the wrapper bodies), matching
-# the original inline calls — so tests that stub ``database.action_items`` as
-# an empty module before importing this file keep working. Drop these once
-# action_items.py is strict-enrolled.
-# ---------------------------------------------------------------------------
-def _normalize_desc(desc: Optional[str]) -> str:
-    return cast(str, action_items_db._normalize_description(desc))  # type: ignore[reportPrivateUsage]  # cross-module dedup helper, intentionally shared
-
-
-def _get_active_by_desc(uid: str, description: str) -> Optional[Dict[str, Any]]:
-    return cast(
-        Optional[Dict[str, Any]],
-        action_items_db.get_active_action_item_by_description(uid, description),  # type: ignore[reportUnknownMemberType]  # action_items not yet strict-enrolled
-    )
-
-
-def _update_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
-    return cast(
-        bool,
-        action_items_db.update_action_item(uid, action_item_id, update_data),  # type: ignore[reportUnknownMemberType]  # action_items not yet strict-enrolled
-    )
-
-
-def _create_item(uid: str, action_item_data: Dict[str, Any]) -> str:
-    return cast(
-        str,
-        action_items_db.create_action_item(uid, action_item_data),  # type: ignore[reportUnknownMemberType]  # action_items not yet strict-enrolled
-    )
-
-
-def _get_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
-    return cast(
-        Optional[Dict[str, Any]],
-        action_items_db.get_action_item(uid, action_item_id),  # type: ignore[reportUnknownMemberType]  # action_items not yet strict-enrolled
-    )

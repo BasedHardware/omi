@@ -9395,7 +9395,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Per ora funziona con i dispositivi Omi. L\'audio resta sul telefono finché non scegli di caricarlo.';
+      'Per ora funziona con i dispositivi Omi e Limitless. L\'audio resta sul telefono finché non scegli di caricarlo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9545,4 +9545,23 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Installa il firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Registrazione sul ciondolo';
+
+  @override
+  String get pendantRecordingNote =>
+      'Il tuo ciondolo registra autonomamente. Le registrazioni si sincronizzano con il telefono mentre l\'app è aperta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sincronizzazione delle registrazioni dal ciondolo…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min memorizzati';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'La memoria del ciondolo è quasi piena — tieni l\'app aperta per sincronizzare.';
 }

@@ -190,6 +190,14 @@ struct FloatingControlBarView: View {
                 }
             }
 
+            if state.usesNotchIsland && !state.pttHintText.isEmpty && !state.showingAIConversation {
+                notchPttHintRow
+                    .frame(height: FloatingControlBarWindow.pttHintRowHeight)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity)
+            }
+
             if state.showingAIConversation {
                 conversationView
                     .padding(.horizontal, 12)
@@ -245,6 +253,7 @@ struct FloatingControlBarView: View {
                 let hasExpandedSurface = state.showingAIConversation
                     || state.currentNotification != nil
                     || shouldShowNotchHoverMenu
+                    || !state.pttHintText.isEmpty
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                 let surfaceWidth = hasExpandedSurface
                     ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
@@ -447,6 +456,22 @@ struct FloatingControlBarView: View {
         .accessibilityIdentifier("notch_floating_bar_settings")
         .accessibilityLabel("Floating Bar Settings")
         .accessibilityHint("Open settings")
+    }
+
+    /// Transient too-short PTT hint shown below the notch chrome (notch layout has
+    /// no inline text spot, unlike the pill's `voiceListeningView`). White/neutral,
+    /// no toast; cleared on the same ~2s lifecycle as `pttHintText`.
+    private var notchPttHintRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 11, weight: .semibold)
+                .foregroundColor(.white.opacity(0.9))
+            Text(state.pttHintText)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var notchOmiChatRow: some View {
@@ -968,7 +993,15 @@ struct FloatingControlBarView: View {
     private var controlBarView: some View {
         let allowsHoverExpansion = isHovering && !state.isVoiceResponseGlowActive
         return Group {
-            if state.isVoiceListening && !state.isVoiceFollowUp {
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT hint takes precedence over every other bar state
+                // (incl. follow-up turns) for its brief window.
+                voiceListeningView
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(height: 42)
+                    .transition(.opacity)
+            } else if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -1177,20 +1210,30 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 7) {
-            // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: state.isVoiceListening)
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT tap: inline hint instead of the live waveform.
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
+                Text(state.pttHintText)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+            } else {
+                // Playful realtime mic waveform (replaces the old pulsing red dot)
+                VoiceWaveformBars(isActive: state.isVoiceListening)
 
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 12, weight: .semibold)
-                .foregroundColor(.white)
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
 
-            if state.isVoiceLocked {
-                Image(systemName: "lock.fill")
-                    .scaledFont(size: 10, weight: .bold)
-                    .foregroundColor(.orange)
-                    .frame(width: 18, height: 18)
-                    .background(Color.orange.opacity(0.2))
-                    .cornerRadius(4)
+                if state.isVoiceLocked {
+                    Image(systemName: "lock.fill")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(.orange)
+                        .frame(width: 18, height: 18)
+                        .background(Color.orange.opacity(0.2))
+                        .cornerRadius(4)
+                }
             }
         }
     }

@@ -891,12 +891,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// action can re-issue the user's last prompt. Cleared after a
     /// successful re-send or on dismiss to avoid stale retries.
     private var lastFailedPrompt: String?
+    private var pendingErrorRecoveryPrompt: String?
 
     /// Monotonically-incremented id for each sendMessage / stopAgent cycle.
     /// Watchdog tasks capture their gen and only reset state if it still
     /// matches — so a watchdog fired by a stuck send #N won't cancel a
     /// later, healthy send #N+1. See sendMessage() and stopAgent().
     private var sendGeneration: Int = 0
+    private var activeBridgeSendGeneration: Int?
 
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
@@ -3166,16 +3168,25 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return false
         }
         isStopping = true
+        let stoppedGen = sendGeneration
+        sendGeneration += 1
         let myGen = sendGeneration
         Task {
-            await agentBridge.interrupt()
-            // Normal path: interrupt → bridge emits final result or .stopped →
-            // sendMessage's do/catch resets isSending via its finally (line 2631).
-            // Fallback: if the bridge drops the turn_end as "stray" (known
-            // sleep/wake flake — see PR where this watchdog was added), the
-            // for-await in sendMessage hangs forever and isSending stays true.
-            // After a short grace, force-release so the user's next query isn't
-            // silently swallowed by the guard at sendMessage:start.
+            let shouldInterruptBridge = await MainActor.run { () -> Bool in
+                guard self.isSending,
+                      self.sendGeneration == myGen,
+                      self.activeBridgeSendGeneration == stoppedGen else {
+                    return false
+                }
+                self.activeBridgeSendGeneration = nil
+                return true
+            }
+            if shouldInterruptBridge {
+                await agentBridge.interrupt()
+            }
+            // Normal path: interrupt → bridge emits final result or .stopped.
+            // Fallback: if the bridge drops the turn_end as "stray", force-release
+            // after a short grace so the user's next query is not silently swallowed.
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await MainActor.run {
                 if self.isSending && self.sendGeneration == myGen {
@@ -3674,6 +3685,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let tracer = QueryTracerContext.current
 
         isSending = true
+        isStopping = false
         activeTurnOwner = turnOwner
         errorMessage = nil
         currentError = nil
@@ -3704,6 +3716,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return nil
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
+        guard sendGeneration == sendGen else {
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            clearSendLockState()
+            return nil
+        }
 
         // Show upgrade prompt if over threshold but don't block the message.
         // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
@@ -3729,6 +3746,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             sessionId = sid
         }
+        guard sendGeneration == sendGen else {
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            clearSendLockState()
+            return nil
+        }
 
         // Safety-net watchdog: if this specific send is still "in flight"
         // 3 minutes from now, something in the bridge / stream pipeline has
@@ -3738,11 +3760,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // by the "already sending" guard. The generation check means the
         // watchdog only fires if no later send has replaced this one.
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 180_000_000_000)
-            await MainActor.run {
-                guard let self = self, self.isSending, self.sendGeneration == sendGen else { return }
+            do {
+                try await Task.sleep(nanoseconds: 180_000_000_000)
+            } catch {
+                return
+            }
+            guard let self else { return }
+            let stillStuck = await MainActor.run { () -> Bool in
+                guard self.isSending, self.sendGeneration == sendGen else { return false }
                 log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
-                self.releaseSendLock(sendGeneration: sendGen)
+                return true
+            }
+            guard stillStuck else { return }
+            await self.agentBridge.interrupt()
+            await MainActor.run {
+                guard self.isSending, self.sendGeneration == sendGen else { return }
+                _ = self.releaseSendLock(sendGeneration: sendGen)
                 self.errorMessage = "Response took too long. Try again."
             }
         }
@@ -3754,6 +3787,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var attachmentsForMessage: [ChatAttachment] = []
         if !pendingAttachments.isEmpty {
             let ok = await awaitPendingUploads()
+            guard sendGeneration == sendGen else {
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                clearSendLockState()
+                return nil
+            }
             if !ok {
                 releaseSendLock(sendGeneration: sendGen)
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
@@ -3892,6 +3930,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             startedAtMs: turnStartMs
         )
 
+        var stoppedByUser = false
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
             // at session/new; for the normal reused-session path it is ignored.
@@ -4171,6 +4210,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 ? basePromptForBridge
                 : "\(bridgePromptContexts.joined(separator: "\n\n"))\n\n\(basePromptForBridge)"
 
+            activeBridgeSendGeneration = sendGen
             let queryResult = try await agentBridge.query(
                 prompt: promptForBridge,
                 systemPrompt: systemPrompt,
@@ -4204,6 +4244,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             )
+            activeBridgeSendGeneration = nil
             if let coordinatorCompletionDeltaContext {
                 // Acknowledge against the exact surface the delta was peeked from,
                 // so main chat and notch stay independent consumers.
@@ -4420,6 +4461,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             completedResponseText = messageText
         } catch {
+            activeBridgeSendGeneration = nil
             // QueryTracer: error path — close spans and write the (partial) trace
             // so failed/timed-out queries still show up in benchmarks.
             tracer?.end("ttft")
@@ -4511,6 +4553,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Both surfaces coexist — only one is active at a time per
             // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+                stoppedByUser = true
                 // User stopped — no error to show, but the card system
                 // still surfaces .interrupted so users can resume.
                 if let card = ChatErrorState.from(bridgeError) {
@@ -4529,7 +4572,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
 
-        let releasedCurrentGeneration = releaseSendLock(sendGeneration: sendGen)
+        let releasedCurrentGeneration: Bool
+        if stoppedByUser, isStopping, sendGeneration != sendGen {
+            clearSendLockState()
+            releasedCurrentGeneration = false
+        } else {
+            releasedCurrentGeneration = releaseSendLock(sendGeneration: sendGen)
+        }
 
         // If follow-ups were queued while we were running, chain the oldest as a new full query.
         // Each chained query drains one item; this preserves user barge-in order without
@@ -4557,11 +4606,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @discardableResult
     private func releaseSendLock(sendGeneration generation: Int) -> Bool {
         guard sendGeneration == generation else { return false }
+        clearSendLockState()
+        return true
+    }
+
+    private func clearSendLockState() {
         isSending = false
         isStopping = false
+        activeBridgeSendGeneration = nil
         activeTurnOwner = nil
         activeFollowUpContext = nil
-        return true
+        if let prompt = pendingErrorRecoveryPrompt {
+            pendingErrorRecoveryPrompt = nil
+            Task { [weak self] in
+                await self?.sendMessage(prompt)
+            }
+        }
     }
 
     /// Generate a title for the session using LLM
@@ -5058,6 +5118,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         switch action {
         case .retry:
             if let prompt = promptToRetry, !prompt.isEmpty {
+                if isSending {
+                    if isStopping {
+                        pendingErrorRecoveryPrompt = prompt
+                        return
+                    }
+                    currentError = error
+                    lastFailedPrompt = prompt
+                    return
+                }
                 await sendMessage(prompt)
             }
         case .dismiss:

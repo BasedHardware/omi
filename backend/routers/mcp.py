@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union
 
-from utils.executors import postprocess_executor
+from utils.executors import db_executor, postprocess_executor
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -20,15 +20,17 @@ from firebase_admin import auth as firebase_auth
 
 # from database.redis_db import get_filter_category_items
 # from database.vector_db import query_vectors_by_metadata
+from database.vector_db import upsert_memory_vector, delete_memory_vector
 import database.vector_db as vector_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.conversation_enums import CategoryEnum
 from utils.conversations.render import populate_speaker_names, redact_conversations_for_list
 from utils.apps import update_personas_async
 from utils.llm.memories import identify_category_for_memory
+from utils.memory.canonical_memory_adapter import _read_canonical_memory_item, memory_item_to_memorydb
 from utils.memory.memory_service import MemoryService, fetch_memory_dict
 from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import pin_memory_system
+from utils.memory.surface_routing import memorydb_list_with_locked_preview, pin_memory_system
 from dependencies import (
     get_uid_from_mcp_api_key,
     get_current_user_id,
@@ -39,6 +41,7 @@ from utils.other.endpoints import with_rate_limit, with_rate_limit_context
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.default_read_rollout import (
     MemoryReadDecision,
+    guard_legacy_memory_write,
     read_default_read_rollout,
 )
 from utils.memory.product_authorization import (
@@ -67,6 +70,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class McpStatusResponse(BaseModel):
+    status: str
+
+
+class McpOauthGrantsResponse(BaseModel):
+    grants: List[Dict[str, Any]] = []
+
+
+class McpScreenActivityRow(BaseModel):
+    id: Optional[str] = None
+    timestamp: Optional[datetime] = None
+    app_name: Optional[str] = None
+    window_title: Optional[str] = None
+    ocr_text: Optional[str] = None
+
+
+class McpScreenActivityAppSummary(BaseModel):
+    count: int = 0
+    first_seen: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
+    window_titles: List[str] = []
+
+
+class McpScreenActivitySummaryResponse(BaseModel):
+    apps: Dict[str, McpScreenActivityAppSummary] = {}
+    total_screenshots: int = 0
+
+
 @router.get("/v1/mcp/keys", response_model=List[McpApiKey], tags=["mcp"])
 def get_keys(uid: str = Depends(get_current_user_id)):
     return mcp_api_key_db.get_mcp_keys_for_user(uid)
@@ -78,7 +109,7 @@ def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
     raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
-    return McpApiKeyCreated(**api_key_data.dict(), key=raw_key)
+    return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
 
 @router.delete("/v1/mcp/keys/{key_id}", status_code=204, tags=["mcp"])
@@ -87,7 +118,7 @@ def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
     return
 
 
-@router.get("/v1/mcp/oauth/grants", tags=["mcp"])
+@router.get("/v1/mcp/oauth/grants", tags=["mcp"], response_model=McpOauthGrantsResponse)
 def get_oauth_grants(uid: str = Depends(get_current_user_id)):
     return {"grants": mcp_oauth_db.list_user_grants(uid)}
 
@@ -131,11 +162,11 @@ def create_memory(
     return memory_db
 
 
-def _validate_mcp_memory(uid: str, memory_id: str) -> Dict[str, Any]:
+def _validate_mcp_memory(uid: str, memory_id: str) -> dict:
     return fetch_memory_dict(uid, memory_id, db_client=db)
 
 
-@router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"])
+@router.delete("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
 def delete_memory(
     memory_id: str,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_write_context),
@@ -162,7 +193,7 @@ def delete_memory(
     return {"status": "ok"}
 
 
-@router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"])
+@router.patch("/v1/mcp/memories/{memory_id}", tags=["mcp"], response_model=McpStatusResponse)
 def edit_memory(
     memory_id: str,
     value: str,
@@ -199,21 +230,15 @@ class UserProfile(BaseModel):
     data_sources_used: Optional[int] = None
 
 
-def _get_firebase_user(uid: str) -> Any:
-    return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-
-
-def _get_user_contact(uid: str) -> Dict[str, Any]:
+def _get_user_contact(uid: str) -> dict:
     """Best-effort name/email/phone for the profile. Never raises — a contact
     lookup failure must not break the profile response."""
-    name: Optional[str] = None
-    email: Optional[str] = None
-    phone_number: Optional[str] = None
+    name = email = phone_number = None
     try:
-        user = _get_firebase_user(uid)
-        name = cast(Optional[str], user.display_name) or None
-        email = cast(Optional[str], user.email) or None
-        phone_number = cast(Optional[str], user.phone_number) or None
+        user = firebase_auth.get_user(uid)
+        name = user.display_name or None
+        email = user.email or None
+        phone_number = user.phone_number or None
     except Exception as e:
         # Expected for uids with no Firebase Auth record; warn (no traceback).
         logger.warning("get_user_profile: firebase contact lookup failed uid=%s: %s", uid, e)
@@ -223,7 +248,7 @@ def _get_user_contact(uid: str) -> Dict[str, Any]:
             numbers = phone_calls_db.get_phone_numbers(uid) or []
             primary = next((n for n in numbers if n.get("is_primary")), None) or (numbers[0] if numbers else None)
             if primary:
-                phone_number = cast(Optional[str], primary.get("phone_number"))
+                phone_number = primary.get("phone_number")
         except Exception as e:
             logger.warning("get_user_profile: phone_numbers lookup failed uid=%s: %s", uid, e)
     return {"name": name, "email": email, "phone_number": phone_number}
@@ -256,7 +281,7 @@ class CleanerMemory(BaseModel):
     manually_added_source: Optional[str] = None
     memory_default_memory: Optional[bool] = None
     archive_default_visible: Optional[bool] = None
-    policy: Optional[Dict[str, Any]] = None
+    policy: Optional[dict] = None
 
 
 class SearchedMemory(CleanerMemory):
@@ -268,7 +293,7 @@ def search_memories(
     query: str,
     limit: int = 10,
     auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
-) -> List[Dict[str, Any]]:
+):
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
         raise HTTPException(
@@ -294,7 +319,7 @@ def search_memories(
         rollout_decision=memory_rollout,
     )
     if vector_search_results.read_decision == MemoryReadDecision.USE_MEMORY:
-        return cast(List[Dict[str, Any]], vector_search_results.memories)  # type: ignore[reportUnknownMemberType]  # McpMemorySearchResult.memories is bare list[dict]
+        return vector_search_results.memories
     if vector_search_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
         return []
 
@@ -314,7 +339,7 @@ def get_memories(
     updated_after: Optional[str] = None,
     include_activity: bool = False,
     include_sensitive: bool = True,
-) -> List[Dict[str, Any]]:
+):
     try:
         limit = parse_mcp_int(limit, "limit", default=25, minimum=1, maximum=500)
         offset = parse_mcp_int(offset, "offset", default=0, minimum=0, maximum=100000)
@@ -371,7 +396,7 @@ def get_memories(
             sort=sort,
             categories=[c.value for c in category_list] if category_list else None,
         )
-        memories = cast(List[Dict[str, Any]], filtered['memories'])
+        memories = filtered['memories']
         for memory in memories:
             if memory.get('is_locked', False):
                 content = memory.get('content', '')
@@ -390,7 +415,7 @@ def get_memories(
         manually_added=manually_added,
     )
     if memory_list_results.read_decision == MemoryReadDecision.USE_MEMORY:
-        return cast(List[Dict[str, Any]], memory_list_results.memories)  # type: ignore[reportUnknownMemberType]  # McpMemoryListResult.memories is bare list[dict]
+        return memory_list_results.memories
     if memory_list_results.read_decision != MemoryReadDecision.USE_LEGACY_SAFE:
         return []
 
@@ -407,7 +432,7 @@ def get_memories(
         updated_after=parsed_updated_after,
         sort=sort,
     )
-    memories = cast(List[Dict[str, Any]], result["memories"])
+    memories = result["memories"]
     for memory in memories:
         if memory.get('is_locked', False):
             content = memory.get('content', '')
@@ -460,7 +485,7 @@ def get_conversations(
     limit: int = 100,
     offset: int = 0,
     uid: str = Depends(get_uid_from_mcp_api_key),
-) -> List[SimpleConversation]:
+):
     logger.info(f"get_conversations {uid} {limit} {offset} {start_date} {end_date} {categories}")
     try:
         category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
@@ -481,7 +506,7 @@ def get_conversations(
     redact_conversations_for_list(conversations)
     # Validate each record individually so one malformed conversation (e.g. a category
     # no longer in CategoryEnum) cannot 500 the whole page via response_model coercion.
-    valid_conversations: List[SimpleConversation] = []
+    valid_conversations = []
     for conv in conversations:
         try:
             valid_conversations.append(SimpleConversation.model_validate(conv))
@@ -497,7 +522,7 @@ def search_conversations(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     uid: str = Depends(get_uid_from_mcp_api_key),
-) -> List[SimpleConversation]:
+):
     logger.info(f"search_conversations {uid} query={sanitize_pii(query)} limit={limit}")
 
     starts_at = None
@@ -521,7 +546,7 @@ def search_conversations(
 
     conversations = conversations_db.get_conversations_by_id(uid, conversation_ids)
     redact_conversations_for_list(conversations)
-    valid: List[SimpleConversation] = []
+    valid = []
     for conv in conversations:
         try:
             valid.append(SimpleConversation.model_validate(conv))
@@ -575,7 +600,7 @@ def get_action_items(
     limit: int = 100,
     offset: int = 0,
     uid: str = Depends(get_uid_from_mcp_api_key),
-) -> List[Dict[str, Any]]:
+):
     logger.info(f"get_action_items {uid} completed={completed} limit={limit} offset={offset}")
     limit = max(1, min(limit, 500))
     offset = max(0, offset)
@@ -615,10 +640,10 @@ def search_action_items(
     query: str,
     limit: int = 10,
     uid: str = Depends(get_uid_from_mcp_api_key),
-) -> List[Dict[str, Any]]:
+):
     logger.info(f"search_action_items {uid} limit={limit}")
     try:
-        return cast(List[Dict[str, Any]], mcp_action_items.search_action_items(uid, query, limit=limit))  # type: ignore[reportUnknownMemberType]  # mcp_action_items returns bare list[dict]
+        return mcp_action_items.search_action_items(uid, query, limit=limit)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -627,10 +652,10 @@ def search_action_items(
 def create_action_item(
     body: McpCreateActionItem,
     uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
-) -> Dict[str, Any]:
+):
     logger.info(f"create_action_item {uid} completed={body.completed} has_due={body.due_at is not None}")
     try:
-        return cast(Dict[str, Any], mcp_action_items.create_action_item(uid, body.description, due_at=body.due_at, completed=body.completed))  # type: ignore[reportUnknownMemberType]  # mcp_action_items returns bare dict
+        return mcp_action_items.create_action_item(uid, body.description, due_at=body.due_at, completed=body.completed)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except mcp_action_items.ActionItemError as e:
@@ -642,10 +667,10 @@ def complete_action_item(
     action_item_id: str,
     completed: bool = True,
     uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
-) -> Dict[str, Any]:
+):
     logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
     try:
-        return cast(Dict[str, Any], mcp_action_items.set_completed(uid, action_item_id, completed=completed))  # type: ignore[reportUnknownMemberType]  # mcp_action_items returns bare dict
+        return mcp_action_items.set_completed(uid, action_item_id, completed=completed)
     except mcp_action_items.ActionItemError as e:
         raise _action_item_write_error(e)
 
@@ -655,14 +680,11 @@ def update_action_item(
     action_item_id: str,
     body: McpUpdateActionItem,
     uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
-) -> Dict[str, Any]:
+):
     logger.info(f"update_action_item {uid} id={action_item_id}")
     try:
-        return cast(
-            Dict[str, Any],
-            mcp_action_items.update_action_item(  # type: ignore[reportUnknownMemberType]  # mcp_action_items returns bare dict
-                uid, action_item_id, description=body.description, due_at=body.due_at
-            ),
+        return mcp_action_items.update_action_item(
+            uid, action_item_id, description=body.description, due_at=body.due_at
         )
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
@@ -670,7 +692,7 @@ def update_action_item(
         raise _action_item_write_error(e)
 
 
-@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"])
+@router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"], response_model=McpStatusResponse)
 def delete_action_item(
     action_item_id: str,
     uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
@@ -688,7 +710,7 @@ def delete_action_item(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/goals", tags=["mcp"])
+@router.get("/v1/mcp/goals", tags=["mcp"], response_model=List[Dict[str, Any]])
 def get_goals(
     include_inactive: bool = False,
     uid: str = Depends(get_uid_from_mcp_api_key),
@@ -715,7 +737,7 @@ def get_chat_messages(
     limit: int = 50,
     offset: int = 0,
     uid: str = Depends(get_uid_from_mcp_api_key),
-) -> List[Dict[str, Any]]:
+):
     logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
@@ -736,7 +758,7 @@ class SimplePerson(BaseModel):
 
 
 @router.get("/v1/mcp/people", response_model=List[SimplePerson], tags=["mcp"])
-def get_people(uid: str = Depends(get_uid_from_mcp_api_key)) -> List[Dict[str, Any]]:
+def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
 
@@ -746,7 +768,11 @@ def get_people(uid: str = Depends(get_uid_from_mcp_api_key)) -> List[Dict[str, A
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/screen-activity", tags=["mcp"])
+@router.get(
+    "/v1/mcp/screen-activity",
+    tags=["mcp"],
+    response_model=Union[List[McpScreenActivityRow], McpScreenActivitySummaryResponse],
+)
 def get_screen_activity(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
@@ -754,7 +780,7 @@ def get_screen_activity(
     summary: bool = False,
     limit: int = 200,
     uid: str = Depends(get_uid_from_mcp_api_key),
-) -> Union[Dict[str, Any], List[Dict[str, Any]]]:
+):
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     if summary:
         return screen_activity_db.get_screen_activity_summary(uid, start_date=start_date, end_date=end_date)
@@ -770,7 +796,7 @@ def get_screen_activity(
 # ---------------------------------------------------------------------------
 
 
-@router.get("/v1/mcp/daily-summaries", tags=["mcp"])
+@router.get("/v1/mcp/daily-summaries", tags=["mcp"], response_model=List[Dict[str, Any]])
 def get_daily_summaries(
     limit: int = 30,
     offset: int = 0,

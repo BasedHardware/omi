@@ -280,7 +280,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                           )
                                         else
-                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording
@@ -398,7 +398,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _RecordOption(
-            icon: Icons.phone_in_talk_rounded,
+            icon: FontAwesomeIcons.phone,
             title: context.l10n.phoneCall,
             subtitle: context.l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,
@@ -410,7 +410,7 @@ class _RecordOptionsSheet extends StatelessWidget {
 }
 
 class _RecordOption extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -447,7 +447,7 @@ class _RecordOption extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 18),
+              child: FaIcon(icon, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

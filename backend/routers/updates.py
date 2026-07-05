@@ -1,73 +1,47 @@
 import os
 import re
-from typing import Any, Dict, List, Optional, TypedDict, cast
+from typing import Optional, List, Dict
 from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
-from fastapi.responses import Response, HTMLResponse
+from fastapi.responses import RedirectResponse, Response, HTMLResponse
+from pydantic import BaseModel, Field
 
 from database.desktop_update_policy import get_desktop_update_policy
 from database.redis_db import delete_generic_cache
-from utils.github_releases import (
-    get_omi_github_releases,
-    extract_key_value_pairs,
-)
+from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 
 router = APIRouter()
+
+
+class DesktopUpdatePolicyResponse(BaseModel):
+    """Server-controlled desktop update banner policy."""
+
+    id: str = Field(description='Policy document identifier.')
+    active: bool = Field(description='Whether the update banner is active.')
+    severity: str = Field(description='Banner severity (none|banner|required).')
+    maximum_build_number: Optional[int] = Field(default=None, description='Max build unaffected by this policy.')
+    latest_build_number: Optional[int] = Field(default=None, description='Latest available build number.')
+    title: Optional[str] = Field(default=None, description='Banner title.')
+    message: Optional[str] = Field(default=None, description='Banner message body.')
+    cta_text: str = Field(default='Download latest', description='Call-to-action button text.')
+    download_url: str = Field(description='Download URL for the latest release.')
+    can_dismiss: bool = Field(default=True, description='Whether the user can dismiss the banner.')
+    platforms: Optional[List[str]] = Field(
+        default=None, description='Platforms this policy applies to (empty/None = all).'
+    )
+
+
+class ClearCacheResponse(BaseModel):
+    """Ack for clearing the desktop releases cache."""
+
+    success: bool = Field(description='Whether the cache was cleared.')
+    message: str = Field(description='Human-readable confirmation.')
+
 
 VALID_CHANNELS = {"beta", "stable"}
 
 _XML_ATTR_ENTITIES = {'"': '&quot;', "'": '&apos;'}
-
-
-class ReleaseAsset(TypedDict, total=False):
-    """GitHub release asset entry (subset of fields used here)."""
-
-    name: str
-    browser_download_url: Optional[str]
-
-
-class GitHubRelease(TypedDict, total=False):
-    """GitHub release payload (subset of fields used here)."""
-
-    draft: bool
-    published_at: Optional[str]
-    tag_name: str
-    body: str
-    assets: List[ReleaseAsset]
-
-
-class KVMetadata(TypedDict, total=False):
-    """Parsed KEY_VALUE_START block from a release body."""
-
-    isLive: str
-    channel: str
-    changelog: List[str]
-    mandatory: str
-    edSignature: str
-
-
-class DesktopReleaseEntry(TypedDict):
-    """Filtered desktop release with parsed metadata."""
-
-    release: GitHubRelease
-    version_info: Dict[str, str]
-    metadata: KVMetadata
-    channel: str
-
-
-class AppcastItem(TypedDict):
-    """Single Sparkle appcast <item> payload."""
-
-    version: str
-    shortVersion: str
-    changes: List[Dict[str, str]]
-    date: Optional[str]
-    mandatory: bool
-    url: str
-    platform: str
-    edSignature: str
-    channel: str
 
 
 def _xml_attr(value: str) -> str:
@@ -91,9 +65,6 @@ def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
         return None
 
     major, minor, patch, build = match.groups()
-    # Regex guarantees major/minor/build are non-None; patch is optional.
-    if major is None or minor is None or build is None:
-        return None
     patch = patch if patch is not None else '0'
 
     return {
@@ -117,7 +88,7 @@ def _parse_changelog_to_changes(changelog: List[str], release_body: str) -> List
     Returns:
         List of change objects with type and message
     """
-    changes: List[Dict[str, str]] = []
+    changes = []
 
     # First try to use the structured changelog from KEY_VALUE section
     if changelog:
@@ -176,7 +147,7 @@ def _parse_changelog_to_changes(changelog: List[str], release_body: str) -> List
     return changes
 
 
-def _get_sparkle_zip_download_url(release: GitHubRelease) -> Optional[str]:
+def _get_sparkle_zip_download_url(release: Dict) -> Optional[str]:
     """Get the Sparkle ZIP download URL from GitHub release assets."""
     for asset in release.get("assets", []):
         if asset.get("name", "") == "Omi.zip":
@@ -184,16 +155,15 @@ def _get_sparkle_zip_download_url(release: GitHubRelease) -> Optional[str]:
     return None
 
 
-def _get_dmg_download_url(release: GitHubRelease) -> Optional[str]:
+def _get_dmg_download_url(release: Dict) -> Optional[str]:
     """Get the DMG installer download URL from GitHub release assets."""
     for asset in release.get("assets", []):
-        asset_name = asset.get("name", "")
-        if asset_name.endswith(".dmg"):
+        if asset.get("name", "").endswith(".dmg"):
             return asset.get("browser_download_url")
     return None
 
 
-async def _get_live_desktop_releases(platform: str) -> List[DesktopReleaseEntry]:
+async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     """
     Fetch and filter live desktop releases for a given platform.
     Returns list of releases sorted by published date (newest first).
@@ -201,12 +171,12 @@ async def _get_live_desktop_releases(platform: str) -> List[DesktopReleaseEntry]
     and channel (beta or stable).
     """
     cache_key = "github_releases_desktop"
-    releases = cast(Optional[List[GitHubRelease]], await get_omi_github_releases(cache_key))
+    releases = await get_omi_github_releases(cache_key)
 
     if not releases:
         return []
 
-    desktop_releases: List[DesktopReleaseEntry] = []
+    desktop_releases = []
     for release in releases:
         if release.get("draft") or not release.get("published_at"):
             continue
@@ -225,8 +195,7 @@ async def _get_live_desktop_releases(platform: str) -> List[DesktopReleaseEntry]
         if not version_info:
             continue
 
-        body = release.get("body", "")
-        kv = cast(KVMetadata, extract_key_value_pairs(body))
+        kv = extract_key_value_pairs(release.get("body", ""))
         is_live = kv.get("isLive", "false").lower() == "true"
         if not is_live:
             continue
@@ -244,7 +213,7 @@ async def _get_live_desktop_releases(platform: str) -> List[DesktopReleaseEntry]
             }
         )
 
-    desktop_releases.sort(key=lambda x: x["release"].get("published_at") or "", reverse=True)
+    desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
     return desktop_releases
 
 
@@ -344,7 +313,7 @@ def _format_changelog_html(changes: List[Dict[str, str]]) -> str:
     return html
 
 
-def _generate_appcast_xml(items: List[AppcastItem], platform: str) -> str:
+def _generate_appcast_xml(items: List[Dict], platform: str) -> str:
     """
     Generate Sparkle 2.0 appcast XML with channel support.
     Stable items get no <sparkle:channel> tag (Sparkle default).
@@ -363,7 +332,7 @@ def _generate_appcast_xml(items: List[AppcastItem], platform: str) -> str:
         version = release_item['version']
         short_version = release_item['shortVersion']
         changes_html = _format_changelog_html(release_item.get('changes', []))
-        pub_date = release_item.get('date') or ''
+        pub_date = release_item.get('date', '')
         url = release_item.get('url', '')
         ed_signature = release_item.get('edSignature', '').strip()
         channel = release_item.get('channel', 'beta')
@@ -402,9 +371,7 @@ def _generate_appcast_xml(items: List[AppcastItem], platform: str) -> str:
 
 
 @router.get("/v2/desktop/appcast.xml")
-async def get_desktop_appcast_xml(
-    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
-) -> Response:
+async def get_desktop_appcast_xml(platform: str = Query(default="macos", pattern="^(macos|windows|linux)$")):
     """
     Sparkle appcast XML endpoint for desktop auto-updates.
     Returns a single feed with both beta and stable channel items.
@@ -417,8 +384,8 @@ async def get_desktop_appcast_xml(
             raise HTTPException(status_code=404, detail=f"No desktop releases found for platform: {platform}")
 
         # Deduplicate: latest release per channel
-        seen_channels: set[str] = set()
-        items: List[AppcastItem] = []
+        seen_channels = set()
+        items = []
 
         for entry in desktop_releases:
             channel = entry["channel"]
@@ -472,7 +439,7 @@ async def get_desktop_appcast_xml(
 async def download_latest_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     channel: str = Query(default="stable", pattern="^(beta|stable)$"),
-) -> HTMLResponse:
+):
     """
     Redirect to the latest desktop release DMG installer.
     Stable resolves from the latest stable-tagged release.
@@ -516,7 +483,7 @@ async def download_latest_desktop_release(
 @router.get("/v2/desktop/download/beta")
 async def download_beta_desktop_release(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
-) -> HTMLResponse:
+):
     """
     Redirect to the latest beta desktop release DMG installer.
     Convenience endpoint for macos.omi.me/beta (URL map can't add query params).
@@ -524,11 +491,11 @@ async def download_beta_desktop_release(
     return await download_latest_desktop_release(platform=platform, channel="beta")
 
 
-@router.get("/v2/desktop/update-policy")
+@router.get("/v2/desktop/update-policy", response_model=DesktopUpdatePolicyResponse)
 def get_desktop_update_policy_endpoint(
     platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
     current_build: Optional[int] = Query(default=None, ge=0),
-) -> Dict[str, Any]:
+):
     """
     Server-controlled desktop update banner policy.
 
@@ -539,8 +506,8 @@ def get_desktop_update_policy_endpoint(
     return get_desktop_update_policy(current_build=current_build, platform=platform)
 
 
-@router.post("/v2/desktop/clear-cache")
-def clear_desktop_cache(secret_key: str = Header(...)) -> Dict[str, Any]:
+@router.post("/v2/desktop/clear-cache", response_model=ClearCacheResponse)
+def clear_desktop_cache(secret_key: str = Header(...)):
     """
     Clear the GitHub releases cache for desktop updates.
     This forces the next appcast.xml request to fetch fresh data from GitHub.

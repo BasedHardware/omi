@@ -3090,7 +3090,7 @@
     "syncCustomSttWarningMessage": "Você usa seu próprio provedor de transcrição. Sincronizar estas gravações as transcreve nos servidores da Omi e elas contam para o limite de transcrição do seu plano.",
     "transcribeLaterTitle": "Transcrever depois",
     "transcribeLaterDescription": "Grave o áudio agora e transcreva quando quiser, em vez de ao vivo. As gravações ficam salvas no seu telefone e você as envia para criar conversas.",
-    "transcribeLaterNote": "Por enquanto, funciona com dispositivos Omi. O áudio permanece no seu telefone até você decidir enviá-lo.",
+    "transcribeLaterNote": "Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.",
     "transcribeLaterStorageFull": "Seu telefone está com pouco espaço de armazenamento, por isso a gravação foi pausada. Libere espaço ou envie suas gravações e ela será retomada automaticamente.",
     "unmute": "Reativar áudio",
     "newRecording": "Nova gravação",
@@ -3140,5 +3140,17 @@
     "deviceOnboardingIntroDuration": "Cerca de 1 minuto",
     "jumpToLatestMessage": "Ir para a mensagem mais recente",
     "latest": "Mais recente",
-    "flashFirmware": "Gravar firmware"
+    "flashFirmware": "Gravar firmware",
+    "pendantRecordingTitle": "Gravando no pingente",
+    "pendantRecordingNote": "Seu pingente grava sozinho. As gravações são sincronizadas com o telefone enquanto o app está aberto.",
+    "pendantSyncingRecordings": "Sincronizando gravações do seu pingente…",
+    "pendantMinutesStored": "~{minutes} min armazenados",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar."
 }

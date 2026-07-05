@@ -14,12 +14,13 @@ themselves without the backend needing to know which is calling.
 """
 
 import logging
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
+import database.x_posts as x_posts_db
 from utils import x_connector
 from utils.executors import start_background_task
 from utils.other import endpoints as auth
@@ -28,12 +29,48 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DEFAULT_DEEP_LINK = 'omi://x/callback'
+X_POST_KINDS = (x_posts_db.KIND_TWEET, x_posts_db.KIND_BOOKMARK, x_posts_db.KIND_LIKE)
 
 
 class OAuthUrlResponse(BaseModel):
     success: bool
     auth_url: Optional[str] = None
     error: Optional[str] = None
+
+
+class XConnectionStatusResponse(BaseModel):
+    """X integration connection status for the current user."""
+
+    success: bool = Field(description='Whether the request succeeded.')
+    connected: bool = Field(description='Whether the user has connected their X account.')
+    handle: Optional[str] = Field(default=None, description='X handle, when connected.')
+    post_count: int = Field(default=0, description='Number of synced posts.')
+    memory_count: int = Field(default=0, description='Number of extracted memories.')
+    syncing: bool = Field(default=False, description='Whether a sync is currently in progress.')
+    last_synced_at: Optional[str] = Field(default=None, description='ISO timestamp of the last successful sync.')
+    last_sync_source: Optional[str] = Field(default=None, description='Source of the last sync (oauth|rapidapi).')
+
+
+class XSyncResponse(BaseModel):
+    """Outcome of an X posts sync."""
+
+    success: bool = Field(description='Whether the sync completed without error.')
+    source: Optional[str] = Field(default=None, description='Sync source used (oauth|rapidapi).')
+    new_posts: int = Field(default=0, description='Number of new posts stored.')
+    memories_created: int = Field(default=0, description='Number of memories extracted from new posts.')
+    error: Optional[str] = Field(default=None, description='Error code on failure (not_connected|fetch_failed).')
+
+
+class XDisconnectResponse(BaseModel):
+    """Ack for disconnecting the X integration."""
+
+    success: bool = Field(description='Whether the disconnect succeeded.')
+
+
+class XPostsResponse(BaseModel):
+    """List of the user's synced X posts."""
+
+    posts: List[Dict[str, Any]] = Field(description='Synced X posts, newest first.')
 
 
 @router.get('/v1/x/oauth-url', response_model=OAuthUrlResponse, tags=['x'])
@@ -84,17 +121,17 @@ async def x_oauth_callback(
     uid = st['uid']
     deep_link = st.get('success_redirect_url') or DEFAULT_DEEP_LINK
     try:
-        token_resp = cast(Dict[str, Any], await x_connector.exchange_code(code, st['verifier']))  # type: ignore[reportUnknownMemberType]  # x_connector.exchange_code returns bare Dict
+        token_resp = await x_connector.exchange_code(code, st['verifier'])
         # Resolve the account so we can store the handle for status + RapidAPI fallback.
-        handle: Optional[str] = None
-        x_user_id: Optional[str] = None
+        handle = None
+        x_user_id = None
         try:
-            me = cast(Dict[str, Any], await x_connector.fetch_me(token_resp['access_token']))  # type: ignore[reportUnknownMemberType]  # x_connector.fetch_me returns bare Dict
+            me = await x_connector.fetch_me(token_resp['access_token'])
             handle = me.get('username')
             x_user_id = str(me.get('id')) if me.get('id') else None
         except Exception as e:
             logger.info(f'x callback: fetch_me failed (non-fatal): {e}')
-        x_connector._store_tokens(uid, token_resp, handle=handle, x_user_id=x_user_id)  # type: ignore[reportPrivateUsage,reportUnknownMemberType]  # x_connector._store_tokens is a private SDK boundary taking a bare Dict
+        x_connector._store_tokens(uid, token_resp, handle=handle, x_user_id=x_user_id)
         # First ingest in the background so the browser redirect is instant.
         start_background_task(x_connector.sync_x_for_user(uid), name=f'x_initial_sync_{uid}')
         return _redirect_html(f'{deep_link}?status=success', True, 'X connected')
@@ -103,17 +140,34 @@ async def x_oauth_callback(
         return _redirect_html(f'{deep_link}?error=exchange_failed', False, 'Connection failed')
 
 
-@router.get('/v1/x/connection-status', tags=['x'])
-def x_connection_status(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
-    return cast(Dict[str, Any], x_connector.connection_status(uid))  # type: ignore[reportUnknownMemberType]  # x_connector.connection_status returns bare Dict
+@router.get('/v1/x/connection-status', tags=['x'], response_model=XConnectionStatusResponse)
+def x_connection_status(uid: str = Depends(auth.get_current_user_uid)):
+    return x_connector.connection_status(uid)
 
 
-@router.post('/v1/x/sync', tags=['x'])
-async def x_sync(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
-    return cast(Dict[str, Any], await x_connector.sync_x_for_user(uid))  # type: ignore[reportUnknownMemberType]  # x_connector.sync_x_for_user returns bare Dict
+@router.get('/v1/x/posts', tags=['x'], response_model=XPostsResponse)
+def list_x_posts(
+    kind: Optional[str] = Query(None, description="Filter by kind: 'tweet', 'bookmark', or 'like'"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of posts to return"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """List the user's synced X posts, newest first.
+
+    The connector stores every synced post under the user's account and mines memories
+    from them, but there was no endpoint to read the raw posts back. Supports an optional
+    kind filter ('tweet', 'bookmark', 'like') and a bounded limit.
+    """
+    if kind is not None and kind not in X_POST_KINDS:
+        raise HTTPException(status_code=400, detail="kind must be one of: tweet, bookmark, like")
+    return {'posts': x_posts_db.get_x_posts(uid, limit=limit, kind=kind)}
 
 
-@router.post('/v1/x/disconnect', tags=['x'])
+@router.post('/v1/x/sync', tags=['x'], response_model=XSyncResponse)
+async def x_sync(uid: str = Depends(auth.get_current_user_uid)):
+    return await x_connector.sync_x_for_user(uid)
+
+
+@router.post('/v1/x/disconnect', tags=['x'], response_model=XDisconnectResponse)
 def x_disconnect(uid: str = Depends(auth.get_current_user_uid)):
     x_connector.disconnect(uid)
     return {'success': True}

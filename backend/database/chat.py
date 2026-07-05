@@ -92,7 +92,7 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[conversation_id] if conversation_id else [],
     )
-    add_message(uid, ai_message.dict())
+    add_message(uid, ai_message.model_dump())
     return ai_message
 
 
@@ -112,7 +112,7 @@ def add_integration_chat_message(text: str, app_id: Optional[str], uid: str) -> 
         type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         chat_session_id=chat_session_id,
     )
-    add_message(uid, ai_message.dict())
+    add_message(uid, ai_message.model_dump())
     if chat_session_id:
         add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
@@ -129,7 +129,7 @@ def add_summary_message(text: str, uid: str) -> Message:
         type='day_summary',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[],
     )
-    add_message(uid, ai_message.dict())
+    add_message(uid, ai_message.model_dump())
     return ai_message
 
 

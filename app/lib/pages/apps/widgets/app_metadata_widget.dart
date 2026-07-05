@@ -147,7 +147,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        const FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                        FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
                                         const SizedBox(height: 6),
                                         Text(
                                           '${context.l10n.appIconLabel}*',
@@ -166,7 +166,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(6.0),
                                   decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                                  child: const FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
+                                  child: FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
                                 ),
                               ),
                             ),

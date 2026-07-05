@@ -83,7 +83,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     );
   }
 
-  Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+  Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
     return Padding(
       padding: const EdgeInsets.only(left: 2, top: 1),
       child: FaIcon(icon, size: size, color: color),

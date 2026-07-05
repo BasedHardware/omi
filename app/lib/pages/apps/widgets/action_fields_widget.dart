@@ -109,7 +109,7 @@ class ActionFieldsWidget extends StatelessWidget {
     );
   }
 
-  IconData _getIconForAction(String actionId) {
+  FaIconData _getIconForAction(String actionId) {
     switch (actionId) {
       case 'create_conversation':
         return FontAwesomeIcons.solidComment;

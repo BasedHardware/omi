@@ -490,7 +490,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
     );
   }
 
-  Widget _buildStatItem(IconData icon, String value) {
+  Widget _buildStatItem(FaIconData icon, String value) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
@@ -604,7 +604,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         point: LatLng(loc.latitude, loc.longitude),
         width: 32,
         height: 32,
-        child: const FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
+        child: FaIcon(FontAwesomeIcons.locationDot, color: Colors.deepPurple, size: 28),
       );
     }).toList();
 
