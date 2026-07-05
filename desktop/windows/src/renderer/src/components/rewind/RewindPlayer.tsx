@@ -28,6 +28,7 @@ export function RewindPlayer({
   useEffect(() => {
     let alive = true
     if (!frame) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
       setSrc(null)
       return
     }
@@ -76,6 +77,7 @@ export function RewindPlayer({
 
 /** Time + app/window context for the frame under the cursor. */
 function FrameMeta({ frame }: { frame: RewindFrame }): React.JSX.Element {
+  // eslint-disable-next-line react-hooks/purity -- display-only timestamp, intentionally recomputed each render so relative labels stay current
   const now = Date.now()
   const when = isSameDay(frame.ts, now)
     ? new Date(frame.ts).toLocaleTimeString()

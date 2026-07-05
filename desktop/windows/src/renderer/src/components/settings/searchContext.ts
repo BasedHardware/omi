@@ -1,14 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useId, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useId } from 'react'
 
 // Global Settings search. Rows register their searchable text (+ which tab they
 // belong to). With a query present, each row self-hides when it doesn't match,
 // and a whole tab panel hides when none of its rows match — giving cross-tab
 // search without a separate hand-maintained manifest. All tab panels stay
 // mounted (just visually hidden) so the registry is always complete.
+//
+// Contexts + hooks live here (a non-component module) so the provider file can
+// export only its component and keep React Fast Refresh working.
 
-type Entry = { text: string; tab: string }
+export type Entry = { text: string; tab: string }
 
-type SearchCtx = {
+export type SearchCtx = {
   query: string
   setQuery: (q: string) => void
   isSearching: boolean
@@ -17,45 +20,10 @@ type SearchCtx = {
   tabHasMatch: (tab: string) => boolean
 }
 
-const Ctx = createContext<SearchCtx | null>(null)
+export const Ctx = createContext<SearchCtx | null>(null)
 
 // The tab a row currently lives under, supplied by SettingsTabPanel.
 export const TabIdContext = createContext<string>('')
-
-export function SettingsSearchProvider(props: { children: React.ReactNode }): React.JSX.Element {
-  const [query, setQuery] = useState('')
-  const entries = useRef(new Map<string, Entry>())
-  // Bump to recompute tabHasMatch when the registry changes.
-  const [, force] = useState(0)
-
-  const register = useCallback((id: string, text: string, tab: string): void => {
-    entries.current.set(id, { text: text.toLowerCase(), tab })
-    force((n) => n + 1)
-  }, [])
-  const unregister = useCallback((id: string): void => {
-    entries.current.delete(id)
-    force((n) => n + 1)
-  }, [])
-
-  const q = query.trim().toLowerCase()
-  const isSearching = q.length > 0
-  const tabHasMatch = useCallback(
-    (tab: string): boolean => {
-      if (!q) return true
-      for (const e of entries.current.values()) {
-        if (e.tab === tab && e.text.includes(q)) return true
-      }
-      return false
-    },
-    [q]
-  )
-
-  return (
-    <Ctx.Provider value={{ query, setQuery, isSearching, register, unregister, tabHasMatch }}>
-      {props.children}
-    </Ctx.Provider>
-  )
-}
 
 export function useSettingsSearch(): SearchCtx {
   const v = useContext(Ctx)

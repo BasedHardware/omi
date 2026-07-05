@@ -33,6 +33,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // reply is still streaming (which `useChat.send` would no-op). Each send is
   // chained after the prior one resolves and dispatched through the latest `send`.
   const sendRef = useRef(send)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   sendRef.current = send
   const sendChainRef = useRef<Promise<void>>(Promise.resolve())
   const enqueueSend = useCallback((text: string): void => {
@@ -47,6 +48,7 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // auto-sends it (queued behind any in-flight reply).
   // Latest draft, read by the window-level (textarea-unfocused) push-to-talk path.
   const draftRef = useRef(draft)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   draftRef.current = draft
 
   const ptt = usePushToTalk({

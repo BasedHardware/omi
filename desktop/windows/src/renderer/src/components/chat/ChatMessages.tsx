@@ -16,6 +16,7 @@ function RevealMarkdown({
 }): React.JSX.Element {
   const [shown, setShown] = useState(startRevealed ? text.length : 0)
   const targetRef = useRef(text)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   targetRef.current = text
   useEffect(() => {
     const id = setInterval(() => {
