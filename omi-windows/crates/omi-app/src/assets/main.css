@@ -1076,6 +1076,33 @@ body {
 .fbar-pill-dismiss { background: transparent; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0 2px; flex-shrink: 0; }
 .fbar-pill-dismiss:hover { color: var(--text-primary); }
 
+.fbar-pill-detail {
+  background: rgba(20, 20, 20, 0.95);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  padding: 10px 14px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: pill-detail-in 0.15s ease-out;
+}
+.fbar-pill-detail-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  margin: 0;
+}
+.fbar-pill-detail-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+@keyframes pill-detail-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* -- Floating bar: compact/expand ----------------------------------- */
 .fbar-compact {
   min-width: auto;
