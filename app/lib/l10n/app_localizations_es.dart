@@ -9361,7 +9361,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'De momento funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.';
+      'De momento funciona con dispositivos Omi y Limitless. El audio permanece en tu teléfono hasta que decidas subirlo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9511,4 +9511,23 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flashear firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Grabando en el colgante';
+
+  @override
+  String get pendantRecordingNote =>
+      'Tu colgante graba por sí solo. Las grabaciones se sincronizan con tu teléfono mientras la app está abierta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sincronizando grabaciones desde tu colgante…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min almacenados';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'El almacenamiento del colgante está casi lleno: mantén la app abierta para sincronizar.';
 }

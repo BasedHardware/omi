@@ -287,6 +287,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             await Future.wait([
               convoProvider.getInitialConversations(),
               Provider.of<FolderProvider>(context, listen: false).loadFolders(),
+              recordingsProvider.refresh(),
             ]);
           },
           color: Colors.deepPurpleAccent,

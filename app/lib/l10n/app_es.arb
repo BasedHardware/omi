@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Usas tu propio proveedor de transcripción. Sincronizar estas grabaciones las transcribe en los servidores de Omi y cuentan para el límite de transcripción de tu plan.",
     "transcribeLaterTitle": "Transcribir después",
     "transcribeLaterDescription": "Graba el audio ahora y transcríbelo cuando quieras, en lugar de en directo. Las grabaciones se guardan en tu teléfono y luego las subes para crear conversaciones.",
-    "transcribeLaterNote": "De momento funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.",
+    "transcribeLaterNote": "De momento funciona con dispositivos Omi y Limitless. El audio permanece en tu teléfono hasta que decidas subirlo.",
     "transcribeLaterStorageFull": "Tu teléfono tiene poco espacio, así que la grabación está en pausa. Libera espacio o sube tus grabaciones y se reanudará automáticamente.",
     "unmute": "Reactivar audio",
     "newRecording": "Nueva grabación",
@@ -3105,5 +3105,17 @@
     "deviceOnboardingIntroDuration": "Aproximadamente 1 minuto",
     "jumpToLatestMessage": "Ir al mensaje más reciente",
     "latest": "Más reciente",
-    "flashFirmware": "Flashear firmware"
+    "flashFirmware": "Flashear firmware",
+    "pendantRecordingTitle": "Grabando en el colgante",
+    "pendantRecordingNote": "Tu colgante graba por sí solo. Las grabaciones se sincronizan con tu teléfono mientras la app está abierta.",
+    "pendantSyncingRecordings": "Sincronizando grabaciones desde tu colgante…",
+    "pendantMinutesStored": "~{minutes} min almacenados",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "El almacenamiento del colgante está casi lleno: mantén la app abierta para sincronizar."
 }

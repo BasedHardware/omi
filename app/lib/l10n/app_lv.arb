@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā.",
     "transcribeLaterTitle": "Transkribēt vēlāk",
     "transcribeLaterDescription": "Ierakstiet audio tagad un transkribējiet to pēc pieprasījuma, nevis reāllaikā. Ieraksti tiek saglabāti jūsu tālrunī, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.",
-    "transcribeLaterNote": "Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.",
+    "transcribeLaterNote": "Pagaidām darbojas ar Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.",
     "transcribeLaterStorageFull": "Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.",
     "unmute": "Ieslēgt skaņu",
     "newRecording": "Jauns ieraksts",
@@ -3104,5 +3104,17 @@
     "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
     "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
     "latest": "Jaunākais",
-    "flashFirmware": "Instalēt aparātprogrammatūru"
+    "flashFirmware": "Instalēt aparātprogrammatūru",
+    "pendantRecordingTitle": "Ierakstīšana kulonā",
+    "pendantRecordingNote": "Jūsu kulons ieraksta patstāvīgi. Ieraksti tiek sinhronizēti ar jūsu tālruni, kamēr lietotne ir atvērta.",
+    "pendantSyncingRecordings": "Notiek ierakstu sinhronizēšana no jūsu kulona…",
+    "pendantMinutesStored": "~{minutes} min saglabāts",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu."
 }

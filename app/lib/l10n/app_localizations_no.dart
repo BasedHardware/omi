@@ -9337,7 +9337,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerer foreløpig med Omi-enheter. Lyden blir værende på telefonen til du velger å laste den opp.';
+      'Fungerer foreløpig med Omi- og Limitless-enheter. Lyden blir værende på telefonen til du velger å laste den opp.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9487,4 +9487,23 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flash fastvare';
+
+  @override
+  String get pendantRecordingTitle => 'Tar opp på anhenget';
+
+  @override
+  String get pendantRecordingNote =>
+      'Anhenget ditt tar opp på egen hånd. Opptak synkroniseres til telefonen mens appen er åpen.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkroniserer opptak fra anhenget ditt…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min lagret';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Lagringsplassen på anhenget er nesten full — hold appen åpen for å synkronisere.';
 }
