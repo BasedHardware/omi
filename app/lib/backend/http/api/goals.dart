@@ -83,6 +83,8 @@ class Goal {
       'max_value': maxValue,
       'unit': unit,
       'is_active': isActive,
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'updated_at': updatedAt.toUtc().toIso8601String(),
     };
   }
 
