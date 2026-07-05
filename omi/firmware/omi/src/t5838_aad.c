@@ -138,8 +138,9 @@ void t5838_aad_power(bool on)
 
 void t5838_aad_release_clk(void)
 {
-    /* Hand PDMCLK back to the PDM peripheral: leave as input so pinctrl/PSEL
-     * can reclaim it cleanly on the next dmic START. */
+    /* Undo the AAD-sleep line parking: THSEL back low, and hand PDMCLK back to
+     * the PDM peripheral (input so pinctrl/PSEL reclaims it on the next START). */
+    gpio_pin_set_dt(&thsel, 0);
     gpio_pin_configure(clk_port, PDMCLK_PIN, GPIO_INPUT);
 }
 
@@ -161,9 +162,12 @@ int t5838_aad_enter(void)
     /* Clock >2 ms so the mic latches config and enters AAD sleep. */
     clock_bitbang(ENTER_SLEEP_CLOCKING_US / ENTER_SLEEP_CLK_PERIOD_US, ENTER_SLEEP_CLK_PERIOD_US);
 
-    /* Park lines: CLK idle low, THSEL low. */
-    clk_set(0);
-    gpio_pin_set_dt(&thsel, 0);
-    LOG_INF("t5838 AAD: entered sleep (mode A, 75dB)");
+    /* Park lines HIGH (not low) during AAD sleep. Held low, CLK+THSEL fight the
+     * TXS0104's internal 10k pull-ups on both rails (~0.5 mA each). High matches
+     * the pull-ups -> no shifter leak. Clock is static (no edges) so the mic
+     * stays latched in AAD mode. */
+    clk_set(1);
+    gpio_pin_set_dt(&thsel, 1);
+    LOG_INF("t5838 AAD: entered sleep (mode A, 75dB, CLK/THSEL parked high)");
     return 0;
 }
