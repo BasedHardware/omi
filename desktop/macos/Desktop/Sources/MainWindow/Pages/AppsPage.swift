@@ -1165,6 +1165,57 @@ struct ConnectionModalActionButton: View {
     }
 }
 
+func connectorUserMessage(for error: Error, connectorTitle: String) -> String {
+    let fallback = "Couldn't sync \(connectorTitle). Try again."
+    let connectivityFailure = "Couldn't reach \(connectorTitle). Check your connection and try again."
+
+    if let gmailError = error as? GmailReaderError {
+        if case .networkError = gmailError {
+            return connectivityFailure
+        }
+        return gmailError.errorDescription ?? fallback
+    }
+    if let calendarError = error as? CalendarReaderError {
+        if case .networkError = calendarError {
+            return connectivityFailure
+        }
+        return calendarError.errorDescription ?? fallback
+    }
+    if let notesError = error as? AppleNotesReaderError {
+        return notesError.errorDescription ?? fallback
+    }
+    if let urlError = error as? URLError, urlError.isConnectivityFailure {
+        return "You appear to be offline. Check your connection and try again."
+    }
+
+    let nsError = error as NSError
+    if nsError.domain == NSURLErrorDomain,
+        URLError.Code(rawValue: nsError.code).isConnectivityFailure
+    {
+        return "You appear to be offline. Check your connection and try again."
+    }
+
+    log("ImportConnectorSheetModel: \(connectorTitle) import failed: \(error.localizedDescription)")
+    return fallback
+}
+
+private extension URLError {
+    var isConnectivityFailure: Bool {
+        code.isConnectivityFailure
+    }
+}
+
+private extension URLError.Code {
+    var isConnectivityFailure: Bool {
+        switch self {
+        case .notConnectedToInternet, .networkConnectionLost, .timedOut:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 @MainActor
 private final class ImportConnectorSheetModel: ObservableObject {
     struct SyncResult {
@@ -1252,7 +1303,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
             return SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = connectorUserMessage(for: error, connectorTitle: "Gmail")
             return nil
         }
     }
@@ -1329,7 +1380,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
             }
             return SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = connectorUserMessage(for: error, connectorTitle: "X")
             return nil
         }
     }
@@ -1369,7 +1420,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
             return SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count)
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = connectorUserMessage(for: error, connectorTitle: "Calendar")
             return nil
         }
     }
@@ -1385,13 +1436,13 @@ private final class ImportConnectorSheetModel: ObservableObject {
             return try await runAppleNotesImport()
         } catch let error as AppleNotesReaderError {
             guard error.shouldPromptForFolderSelection else {
-                errorMessage = error.localizedDescription
+                errorMessage = connectorUserMessage(for: error, connectorTitle: "Apple Notes")
                 return nil
             }
             let granted = await selectAppleNotesFolder()
             guard granted else {
                 if errorMessage == nil {
-                    errorMessage = error.localizedDescription
+                    errorMessage = connectorUserMessage(for: error, connectorTitle: "Apple Notes")
                 }
                 return nil
             }
@@ -1399,11 +1450,11 @@ private final class ImportConnectorSheetModel: ObservableObject {
             do {
                 return try await runAppleNotesImport()
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = connectorUserMessage(for: error, connectorTitle: "Apple Notes")
                 return nil
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = connectorUserMessage(for: error, connectorTitle: "Apple Notes")
             return nil
         }
     }
@@ -1478,10 +1529,10 @@ private final class ImportConnectorSheetModel: ObservableObject {
             errorMessage = nil
             return true
         } catch let error as AppleNotesReaderError {
-            errorMessage = error.localizedDescription
+            errorMessage = connectorUserMessage(for: error, connectorTitle: "Apple Notes")
             return false
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = connectorUserMessage(for: error, connectorTitle: "Apple Notes")
             return false
         }
     }
@@ -1562,60 +1613,7 @@ struct ImportConnectorSheet: View {
             }
 
             Button {
-                Task {
-                    switch connector.id {
-                    case "calendar":
-                        if let result = await model.importCalendar() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems
-                            )
-                        }
-                    case "email":
-                        if let result = await model.importGmail() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems
-                            )
-                        }
-                    case "x":
-                        if let result = await model.connectX() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems,
-                                availabilityText: "Posts & bookmarks"
-                            )
-                        }
-                    case "apple-notes":
-                        if let result = await model.importAppleNotes() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems,
-                                availabilityText: "Private notes accessible"
-                            )
-                        }
-                    case "local-files":
-                        if let result = await model.rescanLocalFiles(appState: appState) {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems,
-                                availabilityText: "On-device index"
-                            )
-                        }
-                    default:
-                        break
-                    }
-                }
+                runPrimaryAction()
             } label: {
                 ConnectionModalActionButton(
                     title: primaryActionTitle,
@@ -1671,17 +1669,7 @@ struct ImportConnectorSheet: View {
             }
 
             Button {
-                Task {
-                    if let result = await model.importMemoryLog(source: memorySource) {
-                        statusStore.markSynced(
-                            connectorID: connector.id,
-                            sourceCount: result.sourceCount,
-                            memoryCount: result.memoryCount,
-                            lastDeltaCount: result.newItems,
-                            availabilityText: "Imported manually"
-                        )
-                    }
-                }
+                runPrimaryAction()
             } label: {
                 ConnectionModalActionButton(
                     title: model.isRunning ? "Importing…" : "Import \(connector.title)"
@@ -1746,9 +1734,28 @@ struct ImportConnectorSheet: View {
                 .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.success)
         } else if let errorMessage = model.errorMessage {
-            Text(errorMessage)
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.warning)
+            statusCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(errorMessage)
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundColor(OmiColors.warning)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Button("Try again") {
+                        runPrimaryAction()
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(model.isRunning)
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(OmiColors.textPrimary)
+                    .padding(.horizontal, 12)
+                    .frame(height: 28)
+                    .background(
+                        Capsule(style: .continuous)
+                            .fill(Color.white.opacity(0.12))
+                    )
+                }
+            }
         } else if snapshot.isConnected || snapshot.secondaryText != nil {
             statusCard {
                 VStack(alignment: .leading, spacing: 6) {
@@ -1782,6 +1789,73 @@ struct ImportConnectorSheet: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(OmiColors.backgroundSecondary)
             .cornerRadius(16)
+    }
+
+    private func runPrimaryAction() {
+        Task {
+            switch connector.id {
+            case "calendar":
+                if let result = await model.importCalendar() {
+                    statusStore.markSynced(
+                        connectorID: connector.id,
+                        sourceCount: result.sourceCount,
+                        memoryCount: result.memoryCount,
+                        lastDeltaCount: result.newItems
+                    )
+                }
+            case "email":
+                if let result = await model.importGmail() {
+                    statusStore.markSynced(
+                        connectorID: connector.id,
+                        sourceCount: result.sourceCount,
+                        memoryCount: result.memoryCount,
+                        lastDeltaCount: result.newItems
+                    )
+                }
+            case "x":
+                if let result = await model.connectX() {
+                    statusStore.markSynced(
+                        connectorID: connector.id,
+                        sourceCount: result.sourceCount,
+                        memoryCount: result.memoryCount,
+                        lastDeltaCount: result.newItems,
+                        availabilityText: "Posts & bookmarks"
+                    )
+                }
+            case "apple-notes":
+                if let result = await model.importAppleNotes() {
+                    statusStore.markSynced(
+                        connectorID: connector.id,
+                        sourceCount: result.sourceCount,
+                        memoryCount: result.memoryCount,
+                        lastDeltaCount: result.newItems,
+                        availabilityText: "Private notes accessible"
+                    )
+                }
+            case "local-files":
+                if let result = await model.rescanLocalFiles(appState: appState) {
+                    statusStore.markSynced(
+                        connectorID: connector.id,
+                        sourceCount: result.sourceCount,
+                        memoryCount: result.memoryCount,
+                        lastDeltaCount: result.newItems,
+                        availabilityText: "On-device index"
+                    )
+                }
+            case "chatgpt", "claude":
+                if let result = await model.importMemoryLog(source: memorySource) {
+                    statusStore.markSynced(
+                        connectorID: connector.id,
+                        sourceCount: result.sourceCount,
+                        memoryCount: result.memoryCount,
+                        lastDeltaCount: result.newItems,
+                        availabilityText: "Imported manually"
+                    )
+                }
+            default:
+                break
+            }
+        }
     }
 }
 
