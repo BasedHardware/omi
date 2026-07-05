@@ -59,7 +59,11 @@ def test_quiz_returns_due_cards():
 
 def _first_card_id() -> str:
     result = client.post("/tools/quiz_me", json={"uid": UID}).json()["result"]
-    line = next(l for l in result.split("\n") if "card_id=" in l)
+    line = next((l for l in result.split("\n") if "card_id=" in l), None)
+    assert line is not None, (
+        f"No due cards found for {UID}. "
+        "Ensure test_webhook_creates_cards has been called before using _first_card_id()."
+    )
     return line.split("card_id=")[1].split(":")[0].split(" ")[0]
 
 
