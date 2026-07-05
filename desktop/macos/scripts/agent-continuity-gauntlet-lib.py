@@ -707,8 +707,7 @@ class GauntletRunner:
             "Reply briefly acknowledging it."
         )
         trace_start = trace_line_count()
-        ptt = bridge_action(
-            self.port,
+        ptt = self.bridge_act(
             "ptt_test_turn",
             {
                 "pcm": str(self.pcm_path),
@@ -927,8 +926,7 @@ class GauntletRunner:
 
         # PTT blind recall — seed-first; must not call get_conversations.
         trace_start = trace_line_count()
-        ptt = bridge_action(
-            self.port,
+        ptt = self.bridge_act(
             "ptt_test_turn",
             {
                 "pcm": str(self.pcm_path),
