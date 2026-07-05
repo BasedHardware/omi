@@ -50,6 +50,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatProviderSource.contains("resources: resources"))
   }
 
+  func testArtifactDeliveryClearsFloatingTypingState() throws {
+    let windowSource = try floatingControlBarWindowSource()
+    let responseSource = try aiResponseViewSource()
+
+    XCTAssertTrue(windowSource.contains("chatCancellable?.cancel()"))
+    XCTAssertTrue(windowSource.contains("completedMessage.isStreaming = false"))
+    XCTAssertTrue(windowSource.contains("window.state.currentAIMessage = completedMessage"))
+    XCTAssertFalse(windowSource.contains("window.state.currentAIMessage = nil\n        window.state.displayedQuery = \"\""))
+    XCTAssertTrue(responseSource.contains("} else if isLoading {"))
+    XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
+  }
+
   func testVoiceAgentKickoffUsesCachedPhrasePack() throws {
     let agentPillSource = try agentPillSource()
     let voiceServiceSource = try floatingBarVoicePlaybackServiceSource()

@@ -3436,13 +3436,24 @@ class FloatingControlBarManager {
 
     private func deliverAgentArtifactCompletionToFloatingSurface(_ message: ChatMessage) {
         guard let window else { return }
-        let exchange = FloatingChatExchange(
-            question: nil,
-            questionMessageId: nil,
-            aiMessage: message
-        )
-        window.state.chatHistory.append(exchange)
-        window.state.currentAIMessage = nil
+        chatCancellable?.cancel()
+        chatCancellable = nil
+
+        var completedMessage = message
+        completedMessage.isStreaming = false
+
+        if let current = window.state.currentAIMessage {
+            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            window.state.chatHistory.append(
+                FloatingChatExchange(
+                    question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
+                    aiMessage: current
+                )
+            )
+        }
+
+        window.state.currentAIMessage = completedMessage
         window.state.displayedQuery = ""
         window.state.currentQuestionMessageId = nil
         window.state.isAILoading = false

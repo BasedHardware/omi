@@ -366,7 +366,7 @@ struct AIResponseView: View {
                         NSPasteboard.general.setString(combined, forType: .string)
                     }
                 }
-            } else {
+            } else if isLoading {
                 TypingIndicator()
                     .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                     .padding(.horizontal, 4)
