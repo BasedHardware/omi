@@ -68,9 +68,10 @@ actor CommitmentExtractionService {
 
     let prompt = Self.buildPrompt(transcript: transcript, contact: contact)
     let system =
-      "You analyze a person's real text-message history with one contact and extract only "
-      + "explicit, unfulfilled commitments THEY made. You are conservative and never invent "
-      + "commitments. Output only valid JSON."
+      "You analyze a person's real text-message history with one contact and extract the "
+      + "still-open obligations the user owes that contact — both promises the user made and "
+      + "unfulfilled requests/reminders the contact sent for something the user owes. You are "
+      + "conservative and never invent obligations. Output only valid JSON."
 
     let responseText = try await runLLM(prompt: prompt, system: system, label: "scan")
     let parsed = Self.parseCommitments(from: responseText, contact: contact)
@@ -312,39 +313,53 @@ actor CommitmentExtractionService {
     TRANSCRIPT:
     \(transcript)
 
-    Find every case where "Me" (the user) EXPLICITLY committed to doing something for, sending \
-    something to, or following up with \(contact.displayName) — and that commitment does NOT \
-    appear fulfilled anywhere later in the visible conversation.
+    Find every OPEN OBLIGATION the user ("Me") owes \(contact.displayName) — a specific thing \
+    the user needs to do, send, or deliver that does NOT appear done anywhere later in the \
+    visible conversation. There are TWO kinds, and you must catch BOTH:
 
-    What counts as a commitment (extract these):
+    A) A promise the USER made:
     - "I'll send you the deck tomorrow"
     - "let me get back to you on the dates"
     - "I'll call the landlord this week"
     - "yeah let's do Thursday" when the user is the one agreeing to / proposing the plan
     - "I'll look into it and let you know"
 
+    B) The OTHER person asking for, chasing, or reminding about something the user owes them — \
+    even if the user's original promise isn't visible in this window. This is the MOST common \
+    real case, do not skip it:
+    - "can you get me the notes you promised" → the user owes them notes
+    - "did you send it?" / "still waiting on the deck" → the user owes a deliverable
+    - "can you send me the order script" / "can you get me X" → a direct request the user \
+      hasn't fulfilled
+    - "you said you'd send the pics" → the user owes the pics
+    In case B the obligation is the USER's action to deliver the thing. Only extract it if the \
+    request names a CONCRETE deliverable/action and the transcript does not show the user \
+    already delivering it.
+
     What does NOT count (never extract these):
     - Vague conversational filler ("we should hang out sometime", "lol yeah", "maybe")
-    - Things the OTHER person committed to (only the user's own promises count)
-    - A commitment that is clearly resolved later in the thread (they sent it, it happened, \
-      it was cancelled, or the user says it's done)
-    - Questions, opinions, reactions, or plans with no concrete action owned by the user
+    - Something the OTHER person promised to do FOR the user (their obligation, not the user's)
+    - An obligation clearly resolved later in the thread (the user sent it, it happened, it was \
+      cancelled, or the user says it's done)
+    - Reactions, opinions, or plans with no concrete deliverable the user owes
 
-    Be conservative. When unsure whether something is a real, still-open commitment, leave it out.
+    Be conservative on vagueness, but a clear request/reminder for a named deliverable IS an \
+    obligation — do not drop it just because the user never typed an explicit promise.
 
-    For each real, unfulfilled commitment, output:
+    For each real, still-open obligation, output:
     - commitment_text: a short verb-first task the user should do, naming \
-    "\(contact.displayName)" (e.g. "Send \(contact.displayName) the signed lease"). 5–14 words.
-    - said_on: the date the user made the commitment, as yyyy-MM-dd (from the transcript \
-    timestamps). Empty string if you cannot tell.
-    - context: the user's ACTUAL message text where they made the promise, copied verbatim \
-    from the transcript (never paraphrased or invented).
-    - confidence: 0.0–1.0 that this is a genuine, still-open commitment.
+    "\(contact.displayName)" (e.g. "Send \(contact.displayName) the notes you promised"). 5–14 words.
+    - said_on: the date the obligation is anchored to, as yyyy-MM-dd (the user's promise date, \
+    or the date of the other person's request/reminder). Empty string if you cannot tell.
+    - context: the ACTUAL message text that evidences the obligation, copied verbatim from the \
+    transcript — the user's promise line, OR the other person's request/reminder line. Never \
+    paraphrased or invented.
+    - confidence: 0.0–1.0 that this is a genuine, still-open obligation the user owes.
 
     Respond ONLY with valid JSON (no markdown, no code fences):
-    {"commitments": [{"commitment_text": "...", "said_on": "2026-06-14", "context": "exact user line", "confidence": 0.9}]}
+    {"commitments": [{"commitment_text": "...", "said_on": "2026-06-14", "context": "exact line from transcript", "confidence": 0.9}]}
 
-    If there are no clear unfulfilled commitments, respond with {"commitments": []}.
+    If there are no clear open obligations, respond with {"commitments": []}.
     """
   }
 
