@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Confirmation gate for manually syncing offline recordings.

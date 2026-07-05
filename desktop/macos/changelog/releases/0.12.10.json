@@ -1,0 +1,7 @@
+{
+  "version": "0.12.10",
+  "date": "2026-07-04",
+  "changes": [
+    "Fixed onboarding file scan flooding your memories with one entry per local file — it now saves only a few aggregate facts about your projects and technologies"
+  ]
+}

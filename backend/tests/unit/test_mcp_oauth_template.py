@@ -85,6 +85,13 @@ def test_mcp_oauth_template_still_renders_permissions_and_social_sign_in():
     assert "firebaseui-auth-container" in html
 
 
+def test_mcp_oauth_template_places_email_sign_in_below_social_options():
+    html = _render_mcp_template()
+
+    assert "or sign in with email" in html
+    assert html.index('id="firebaseui-auth-container"') < html.index('id="email-sign-in-form"')
+
+
 def test_mcp_oauth_template_uses_client_display_name():
     html = _render_mcp_template_for_client("Claude")
 

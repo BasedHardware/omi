@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -26,6 +28,8 @@ from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRe
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
 from utils.log_sanitizer import sanitize
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class ExecutorResult:
@@ -47,10 +51,23 @@ class ProviderRegistry:
         return self._providers.get(provider.strip().lower())
 
     async def aclose(self) -> None:
-        for provider in self._providers.values():
-            close = getattr(provider, 'aclose', None)
-            if close is not None:
-                await close()
+        cleanup_tasks = [
+            _close_provider(provider_name, provider)
+            for provider_name, provider in self._providers.items()
+            if getattr(provider, 'aclose', None) is not None
+        ]
+        if cleanup_tasks:
+            await asyncio.gather(*cleanup_tasks)
+
+
+async def _close_provider(provider_name: str, provider: ChatCompletionProvider) -> None:
+    close = getattr(provider, 'aclose', None)
+    if close is None:
+        return
+    try:
+        await close()
+    except Exception:
+        logger.exception('LLM gateway provider cleanup failed: %s', provider_name)
 
 
 async def execute_chat_completion(
@@ -125,6 +142,14 @@ def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
 
 def selected_serving_route_artifact_id(resolved_route: ResolvedRoute) -> str:
     return _select_serving_route(resolved_route).route_artifact_id
+
+
+def selected_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
+    return _select_serving_route(resolved_route)
+
+
+def provider_request_for(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
+    return _provider_request(resolved_route, provider_ref)
 
 
 def _is_route_eligible_to_serve(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
@@ -239,7 +264,7 @@ async def _attempt_provider(
     for _attempt in range(max_attempts):
         try:
             response = await provider.create_chat_completion(
-                _provider_request(resolved_route, provider_ref),
+                _provider_request(resolved_route, provider_ref, route=route),
                 provider_ref=provider_ref,
                 credentials=credential_context,
                 timeout_ms=route.timeouts.request_ms,
@@ -252,15 +277,59 @@ async def _attempt_provider(
     return None, error
 
 
-def _provider_request(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
+def _provider_request(
+    resolved_route: ResolvedRoute,
+    provider_ref: ProviderRef,
+    *,
+    route: RouteArtifact | None = None,
+) -> dict[str, Any]:
+    route = route or selected_serving_route(resolved_route)
     provider_request = {
         'model': provider_ref.model,
         'messages': list(resolved_route.validated_request.messages),
-        'response_format': dict(resolved_route.validated_request.response_format),
         'stream': False,
     }
+    _apply_provider_options(provider_request, route.provider_options)
+    if resolved_route.validated_request.response_format is not None:
+        provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
     return provider_request
+
+
+def _apply_provider_options(provider_request: dict[str, Any], provider_options: Mapping[str, Any]) -> None:
+    extra_body = provider_options.get('extra_body')
+    if isinstance(extra_body, Mapping):
+        provider_request.update(dict(extra_body))
+    for key, value in provider_options.items():
+        if key == 'extra_body':
+            continue
+        if key == 'thinking_budget':
+            _apply_gemini_thinking_budget(provider_request, value)
+            continue
+        provider_request[key] = value
+
+
+def _apply_gemini_thinking_budget(provider_request: dict[str, Any], thinking_budget: Any) -> None:
+    if thinking_budget == 0:
+        provider_request['reasoning_effort'] = 'none'
+        return
+
+    extra_body = provider_request.get('extra_body')
+    if not isinstance(extra_body, dict):
+        extra_body = {}
+        provider_request['extra_body'] = extra_body
+
+    google_options = extra_body.get('google')
+    if not isinstance(google_options, dict):
+        google_options = {}
+        extra_body['google'] = google_options
+
+    thinking_config = google_options.get('thinking_config')
+    if not isinstance(thinking_config, dict):
+        thinking_config = {}
+        google_options['thinking_config'] = thinking_config
+
+    thinking_config['thinking_budget'] = thinking_budget
 
 
 def _executor_result(

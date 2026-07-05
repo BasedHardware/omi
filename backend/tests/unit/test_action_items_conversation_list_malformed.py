@@ -1,8 +1,10 @@
-"""GET /v1/conversations/{id}/action-items must skip a malformed action item instead of 500ing the page.
+"""The action-items list endpoints must skip a malformed item instead of 500ing the whole list.
 
-The endpoint built ActionItemResponse(**item) per item, so one malformed/legacy item (missing a required
-field like 'completed') raised ValidationError and failed the whole page. routers/action_items.py has a
-heavy import graph, so we import it under a stub finder, then call the endpoint directly.
+Each built ActionItemResponse(**item) per item, so one malformed/legacy item (missing a required field
+like 'completed') raised ValidationError and failed the whole response. A shared _safe_action_item_responses
+helper now skips bad records. This covers the conversation list, the main list (GET /v1/action-items), and
+search. routers/action_items.py has a heavy import graph, so we import it under a stub finder, then call the
+endpoints directly.
 """
 
 import importlib.abc
@@ -120,4 +122,33 @@ def test_conversation_list_skips_malformed_not_500():
         ai_mod.conversations_db, 'get_conversation', return_value={'id': 'c1', 'is_locked': False}
     ), patch.object(ai_mod.action_items_db, 'get_action_items_by_conversation', return_value=page):
         resp = ai_mod.get_conversation_action_items(conversation_id='c1', uid='uid1')
+    assert [i.id for i in resp['action_items']] == ['a1']
+
+
+def test_main_list_skips_malformed_not_500():
+    bad = {'id': 'a2', 'description': 'missing completed'}  # missing required 'completed' -> ValidationError
+    page = [_valid('a1'), bad]
+    with patch.object(ai_mod.action_items_db, 'get_action_items', return_value=page):
+        # Pass params explicitly: calling the handler directly leaves Query() defaults unresolved.
+        resp = ai_mod.get_action_items(
+            limit=50,
+            offset=0,
+            completed=None,
+            conversation_id=None,
+            start_date=None,
+            end_date=None,
+            due_start_date=None,
+            due_end_date=None,
+            uid='uid1',
+        )
+    assert [i.id for i in resp['action_items']] == ['a1']
+
+
+def test_search_skips_malformed_not_500():
+    bad = {'id': 'a2', 'description': 'missing completed'}
+    page = [_valid('a1'), bad]
+    with patch.object(ai_mod, 'search_action_items_by_vector', return_value=['a1', 'a2']), patch.object(
+        ai_mod.action_items_db, 'get_action_items_by_ids', return_value=page
+    ):
+        resp = ai_mod.search_action_items(query='meeting', limit=10, uid='uid1')
     assert [i.id for i in resp['action_items']] == ['a1']

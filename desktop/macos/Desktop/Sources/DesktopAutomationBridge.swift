@@ -382,6 +382,22 @@ final class DesktopAutomationActionRegistry {
       return await harness.run(timeoutSeconds: timeout)
     }
 
+    // Run the post-scan local-file memory import exactly as onboarding does
+    // (indexed-files snapshot → aggregate drafts → import evidence service
+    // with legacy batch fallback). Lets agents verify the import pipeline
+    // without driving the onboarding UI or the cursor.
+    register(
+      name: "onboarding_local_file_import",
+      summary: "Run the post-scan local-file memory import from the indexed snapshot; returns saved count"
+    ) { _ in
+      let coordinator = OnboardingPagedIntroCoordinator()
+      await coordinator.refreshSnapshotIfAvailable()
+      return [
+        "saved": String(coordinator.localFileMemoriesSaved),
+        "file_count": String(coordinator.scanSnapshot?.fileCount ?? 0),
+      ]
+    }
+
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
@@ -416,6 +432,41 @@ final class DesktopAutomationActionRegistry {
         FloatingControlBarManager.shared.show()
       }
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
+      return ["sent": query]
+    }
+
+    // Force the floating-bar active state so the pill↔notch-island morph and the
+    // "thinking" animation can be exercised without a mic. Same flags a real PTT
+    // turn sets; non-prod bridge only. state = idle|listening|thinking|answering.
+    register(
+      name: "debug_bar_state",
+      summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
+      params: ["state"]
+    ) { params in
+      let s = (params["state"] ?? "thinking").lowercased()
+      let mgr = FloatingControlBarManager.shared
+      guard let bar = mgr.barState else { return ["error": "no bar state"] }
+      if s != "idle", !mgr.isVisible { mgr.show() }
+      bar.isVoiceResponseActive = (s == "answering")
+      bar.isVoiceListening = (s == "listening")
+      bar.isThinking = (s == "thinking")
+      return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
+    }
+
+    // Send a message through the real main-window chat pipeline (ChatPage),
+    // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
+    // or keyboard input, so it never touches the user's actual cursor.
+    register(
+      name: "ask_main_chat",
+      summary: "Send a query to the main-window chat (typed path); exercises the full chat pipeline",
+      params: ["query"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      _ = await provider.sendMessage(query)
       return ["sent": query]
     }
 
@@ -760,6 +811,76 @@ final class DesktopAutomationActionRegistry {
       summary: "Read-only diagnostic of the live Claude Add detection (no overlay, no clicks)"
     ) { _ in
       await MainActor.run { CloudConnectorFormAutomation.claudeAddGuidanceDiagnostics() }
+    }
+
+    register(
+      name: "coordinator_awareness_snapshot",
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
+    ) { _ in
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "coordinator_action_queue",
+      summary: "Read the derived Swift coordinator attention queue",
+      params: ["limit"]
+    ) { params in
+      let limit = intParam(params["limit"], default: 20)
+      let queue = try await DesktopCoordinatorService.shared.actionQueueJSON(limit: max(1, limit))
+      return ["items": queue]
+    }
+
+    register(
+      name: "coordinator_open_loops",
+      summary: "Read unresolved agent/coordinator loops from the Swift projection"
+    ) { _ in
+      let loops = try await DesktopCoordinatorService.shared.openLoopsJSON()
+      return ["openLoops": loops]
+    }
+
+    register(
+      name: "coordinator_route_intent",
+      summary: "Route an intent through deterministic coordinator projection rules",
+      params: ["intent", "surfaceKind", "taskId"]
+    ) { params in
+      let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
+        intent: params["intent"] ?? "",
+        surfaceKind: params["surfaceKind"],
+        taskId: params["taskId"]
+      )
+      return ["decision": decision]
+    }
+
+    register(
+      name: "coordinator_create_dispatch",
+      summary: "Create a coordinator dispatch through the runtime control path for Agents & Attention testing",
+      params: ["kind", "title", "decisionPrompt", "recommendedDefault", "sourceSessionId", "sourceRunId"]
+    ) { params in
+      let dispatch = try await DesktopCoordinatorService.shared.createDispatchJSON(
+        kind: params["kind"] ?? "routing_choice",
+        title: params["title"] ?? "Coordinator attention",
+        decisionPrompt: params["decisionPrompt"] ?? "Review this coordinator attention item.",
+        recommendedDefault: params["recommendedDefault"],
+        sourceSessionId: params["sourceSessionId"],
+        sourceRunId: params["sourceRunId"]
+      )
+      return ["dispatch": dispatch]
+    }
+
+    register(
+      name: "coordinator_resolve_dispatch",
+      summary: "Resolve a coordinator dispatch through the runtime control path",
+      params: ["dispatchId", "resolution"]
+    ) { params in
+      guard let dispatchId = params["dispatchId"], !dispatchId.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("missing dispatchId")
+      }
+      let dispatch = try await DesktopCoordinatorService.shared.resolveDispatchJSON(
+        dispatchId: dispatchId,
+        resolution: params["resolution"] ?? "resolved"
+      )
+      return ["dispatch": dispatch]
     }
 
     register(

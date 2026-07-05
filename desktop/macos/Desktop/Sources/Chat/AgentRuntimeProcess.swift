@@ -134,7 +134,9 @@ actor AgentRuntimeProcess {
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
+  private var advertisedAgentControlTools: Set<String> = []
   private var isRestarting = false
+  private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
 
   var isAlive: Bool { isRunning }
 
@@ -154,6 +156,7 @@ actor AgentRuntimeProcess {
     clients[clientId] = registration
 
     if isRunning {
+      try await waitForInit(timeout: 30.0)
       return
     }
 
@@ -269,6 +272,9 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Agent control requires a signed-in owner")
     }
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard advertisedAgentControlTools.contains(name) else {
+      throw BridgeError.agentError("Agent runtime does not advertise direct control tool \(name)")
+    }
 
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -308,7 +314,14 @@ actor AgentRuntimeProcess {
     if let ownerId = currentOwnerId() {
       dict["ownerId"] = ownerId
     }
-    sendJson(dict)
+    guard sendJson(dict) else {
+      activeRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+      return
+    }
+    activeRequests.removeValue(forKey: requestKey)
+    expectedCancelledRequests.insert(requestKey)
+    request.continuation.resume(throwing: BridgeError.stopped)
   }
 
   func query(
@@ -430,6 +443,7 @@ actor AgentRuntimeProcess {
     closePipes()
     lastExitWasOOM = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -456,6 +470,7 @@ actor AgentRuntimeProcess {
     env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
+    env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
@@ -665,6 +680,7 @@ actor AgentRuntimeProcess {
     closePipes()
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
@@ -731,6 +747,7 @@ actor AgentRuntimeProcess {
     oomDiagnosticLatch.reset(generation: processGeneration)
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -792,6 +809,8 @@ actor AgentRuntimeProcess {
     switch message.kind {
     case .initMessage:
       log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let tools = message.payload["agentControlTools"] as? [String] ?? []
+      advertisedAgentControlTools = Set(tools)
       receivedInit = true
       resolveInitContinuations()
 
@@ -909,11 +928,18 @@ actor AgentRuntimeProcess {
   }
 
   private func completeRequest(_ message: RuntimeMessage) {
-    guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
+    let terminalStatus = message.payload["terminalStatus"] as? String
+    guard let requestKey = message.requestKey else {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
-    let terminalStatus = message.payload["terminalStatus"] as? String
+    guard let request = activeRequests.removeValue(forKey: requestKey) else {
+      if terminalStatus == "cancelled", expectedCancelledRequests.remove(requestKey) != nil {
+        return
+      }
+      log("AgentRuntimeProcess: dropping unroutable result")
+      return
+    }
     if terminalStatus == "cancelled" {
       request.continuation.resume(throwing: BridgeError.stopped)
       return
@@ -974,7 +1000,10 @@ actor AgentRuntimeProcess {
       inputTokens: payload["inputTokens"] as? Int ?? 0,
       outputTokens: payload["outputTokens"] as? Int ?? 0,
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0
+      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
+      artifacts: AgentArtifactProjection.parseList(
+        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
+      )
     )
   }
 
@@ -1029,6 +1058,7 @@ actor AgentRuntimeProcess {
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
@@ -1093,6 +1123,21 @@ actor AgentRuntimeProcess {
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
       .appendingPathComponent("AgentRuntime")
+      .appendingPathComponent(bundleComponent)
+      .path
+  }
+
+  static func defaultArtifactsDirectory(
+    bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) -> String {
+    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+      ?? "com.omi.desktop-dev"
+    return homeDirectory
+      .appendingPathComponent("Library")
+      .appendingPathComponent("Application Support")
+      .appendingPathComponent("Omi")
+      .appendingPathComponent("Artifacts")
       .appendingPathComponent(bundleComponent)
       .path
   }

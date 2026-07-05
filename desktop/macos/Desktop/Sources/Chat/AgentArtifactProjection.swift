@@ -1,7 +1,7 @@
 import Combine
 import Foundation
 
-struct AgentArtifactProjection: Equatable, Identifiable {
+struct AgentArtifactProjection: Codable, Equatable, Identifiable {
   var id: String { artifactId }
 
   let artifactId: String
@@ -27,6 +27,18 @@ struct AgentArtifactProjection: Equatable, Identifiable {
     return uri
   }
 
+  /// True for artifacts worth surfacing to the user as a result card (a produced
+  /// file/output), excluding inputs, intermediate context, and dismissed items.
+  var isUserFacingResult: Bool {
+    if lifecycleState == "dismissed" { return false }
+    switch role {
+    case "input", "context", "reference":
+      return false
+    default:
+      return true
+    }
+  }
+
   static func parseList(fromToolResult result: String) throws -> [AgentArtifactProjection] {
     guard let data = result.data(using: .utf8),
       let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -41,7 +53,11 @@ struct AgentArtifactProjection: Equatable, Identifiable {
     guard let artifacts = root["artifacts"] as? [[String: Any]] else {
       throw AgentArtifactProjectionError.invalidResponse
     }
-    return artifacts.compactMap(parseArtifact(_:))
+    return parseList(fromJSONArray: artifacts)
+  }
+
+  static func parseList(fromJSONArray artifacts: [[String: Any]]) -> [AgentArtifactProjection] {
+    artifacts.compactMap(parseArtifact(_:))
   }
 
   private static func parseArtifact(_ dict: [String: Any]) -> AgentArtifactProjection? {

@@ -11,6 +11,7 @@ Usage: scripts/prepare-desktop-bundle-native-deps.sh /path/to/Omi.app
 Normalizes bundled native Node dependencies before signing:
   - rewrites host-machine LC_ID_DYLIB values in .node dylibs
   - vendors Homebrew pcre2 next to bundled ripgrep binaries that need it
+  - strips local symbols from the main app executable before codesign
 USAGE
 }
 
@@ -27,9 +28,113 @@ fi
 
 APP_BUNDLE="$(cd "$APP_BUNDLE" && pwd)"
 CONTENTS_DIR="$APP_BUNDLE/Contents"
+MACOS_DIR="$CONTENTS_DIR/MacOS"
+
+human_bytes() {
+  local bytes="$1"
+  awk -v bytes="$bytes" 'BEGIN {
+    split("B KiB MiB GiB", units, " ")
+    value = bytes + 0
+    unit = 1
+    while (value >= 1024 && unit < 4) {
+      value = value / 1024
+      unit++
+    }
+    if (unit == 1) {
+      printf "%d %s", value, units[unit]
+    } else {
+      printf "%.1f %s", value, units[unit]
+    }
+  }'
+}
+
+file_size_bytes() {
+  if stat -f%z "$1" >/dev/null 2>&1; then
+    stat -f%z "$1"
+  else
+    stat -c%s "$1"
+  fi
+}
+
+main_executable_name() {
+  local executable
+  local candidate
+
+  executable="$(/usr/libexec/PlistBuddy -c "Print :CFBundleExecutable" "$CONTENTS_DIR/Info.plist" 2>/dev/null || true)"
+  if [[ -n "$executable" && -f "$MACOS_DIR/$executable" ]]; then
+    printf '%s\n' "$executable"
+    return 0
+  fi
+
+  while IFS= read -r -d '' candidate; do
+    if [[ -f "$candidate" && -x "$candidate" ]]; then
+      basename "$candidate"
+      return 0
+    fi
+  done < <(find "$MACOS_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+}
 
 is_macho() {
   file "$1" 2>/dev/null | grep -q "Mach-O"
+}
+
+macho_arches() {
+  file "$1" 2>/dev/null | grep -oE 'arm64|x86_64' | sort -u | tr '\n' ' '
+}
+
+strip_main_executable() {
+  if [[ "${OMI_SKIP_MAIN_BINARY_STRIP:-0}" == "1" ]]; then
+    echo "Skipping main app executable strip (OMI_SKIP_MAIN_BINARY_STRIP=1)"
+    return 0
+  fi
+
+  if ! command -v strip >/dev/null 2>&1; then
+    echo "WARNING: strip not found; leaving main app executable unstripped" >&2
+    return 0
+  fi
+
+  local executable_name
+  local executable_path
+  local before_bytes
+  local after_bytes
+  local before_arches
+  local after_arches
+  local saved_bytes
+
+  executable_name="$(main_executable_name || true)"
+  if [[ -z "$executable_name" ]]; then
+    echo "WARNING: could not determine main app executable; skipping strip" >&2
+    return 0
+  fi
+
+  executable_path="$MACOS_DIR/$executable_name"
+  if [[ ! -f "$executable_path" ]]; then
+    echo "WARNING: main app executable missing at $executable_path; skipping strip" >&2
+    return 0
+  fi
+  if ! is_macho "$executable_path"; then
+    echo "WARNING: main app executable is not Mach-O: $executable_path; skipping strip" >&2
+    return 0
+  fi
+
+  before_bytes="$(file_size_bytes "$executable_path")"
+  before_arches="$(macho_arches "$executable_path")"
+  chmod u+w "$executable_path" 2>/dev/null || true
+  strip -x "$executable_path"
+  after_bytes="$(file_size_bytes "$executable_path")"
+  after_arches="$(macho_arches "$executable_path")"
+
+  if [[ "$before_arches" != "$after_arches" ]]; then
+    echo "ERROR: strip changed main executable architectures: before='$before_arches' after='$after_arches'" >&2
+    exit 1
+  fi
+  if [[ "$after_bytes" -gt "$before_bytes" ]]; then
+    echo "ERROR: strip increased main executable size: $(human_bytes "$before_bytes") -> $(human_bytes "$after_bytes")" >&2
+    exit 1
+  fi
+
+  saved_bytes=$((before_bytes - after_bytes))
+  echo "Stripped main app executable: $(human_bytes "$before_bytes") -> $(human_bytes "$after_bytes") (saved $(human_bytes "$saved_bytes"))"
 }
 
 host_local_id_names() {
@@ -123,5 +228,7 @@ while IFS= read -r -d '' rg; do
   chmod u+w "$rg" 2>/dev/null || true
   vendor_pcre2_for_ripgrep "$rg"
 done < <(find "$CONTENTS_DIR/Resources" -path '*/vendor/ripgrep/*-darwin/rg' -type f -print0 2>/dev/null)
+
+strip_main_executable
 
 echo "Prepared desktop bundle native dependencies"

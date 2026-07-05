@@ -99,6 +99,20 @@ class Message(BaseModel):
                 data['app_id'] = plugin_id_val
         return data
 
+    @classmethod
+    def deserialize_many_safe(cls, records, on_error=None) -> List['Message']:
+        """Build Message objects from raw stored records, skipping any that fail
+        validation so one malformed or legacy chat message cannot 500 a whole history
+        load. on_error(record, exception), when provided, is called for each skip."""
+        parsed: List['Message'] = []
+        for record in records:
+            try:
+                parsed.append(cls(**record))
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break the history
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
+
     @staticmethod
     def get_messages_as_string(
         messages: List['Message'],

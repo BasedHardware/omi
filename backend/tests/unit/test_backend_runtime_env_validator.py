@@ -26,11 +26,18 @@ def write_yaml(path: Path, payload: dict) -> None:
 
 def with_memory_env(payload: str) -> str:
     memory_env = '''\
+        {"name": "OMI_ENV_STAGE", "value": "dev"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED", "value": "true"},
         {"name": "OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE", "value": "1.0"},
-        {"name": "MEMORY_MODE", "value": "write"},
+        {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "true"},
+        {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
+        {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
+        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
+        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
+        {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
+        {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
         {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
         {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "false"},'''
     return payload.replace(
@@ -258,7 +265,10 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                             'backend': {
                                 'env': {
                                     'GOOGLE_CLOUD_PROJECT': {'value': 'based-hardware'},
+                                    'OMI_ENV_STAGE': {'value': 'dev'},
                                     'OMI_LLM_GATEWAY_URL': {'value': 'http://custom-manifest-gateway'},
+                                    'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'true'},
+                                    'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
                                 'secrets': {},
@@ -490,6 +500,49 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
     )
 
     assert errors == []
+
+
+def test_provisional_cloud_run_env_missing_is_allowed():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={
+            'OMI_LLM_GATEWAY_URL': {
+                'env_var': 'OMI_LLM_GATEWAY_URL',
+                'provisional': True,
+            },
+            'MEMORY_MODE': {'value': 'canonical'},
+        },
+        actual={'MEMORY_MODE': {'name': 'MEMORY_MODE', 'value': 'canonical'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
+def test_empty_literal_env_matches_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={'MEMORY_ENABLED_USERS': {'value': ''}},
+        actual={'MEMORY_ENABLED_USERS': {'name': 'MEMORY_ENABLED_USERS'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
+def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={'MEMORY_MODE': {'value': 'off'}},
+        actual={'MEMORY_MODE': {'name': 'MEMORY_MODE'}},
+        strict_provisional=False,
+    )
+
+    assert len(errors) == 1
+    assert errors[0].message == "env MEMORY_MODE value mismatch: expected 'off'"
 
 
 def test_backend_listen_chart_only_workflow_preserves_runtime_project():

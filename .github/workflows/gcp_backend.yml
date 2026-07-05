@@ -139,34 +139,19 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
       - name: Deploy backend-secrets to GKE using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
         run: |
-          if [[ -n "${BACKEND_SECRETS_GSA}" ]]; then
-            gsa_name="${BACKEND_SECRETS_GSA}"
-          else
-            gsa_name="${{ vars.ENV }}-omi-backend-eso-gsa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com"
-          fi
           python3 -m pip install -q pyyaml
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets ./backend/charts/backend-secrets \
-            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml \
-            --set gke.projectID=${{ vars.GCP_PROJECT_ID }} \
-            --set gke.clusterLocation=${{ env.REGION }} \
-            --set gke.clusterName=${{ vars.GKE_CLUSTER }} \
-            --set gsa.name="${gsa_name}"
-          force_sync_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
-            ${{ vars.ENV }}-omi-backend-external-secret \
-            force-sync="${force_sync_at}" --overwrite
-          python3 backend/scripts/wait_external_secret_refresh.py \
-            --namespace ${{ vars.ENV }}-omi-backend \
-            --name ${{ vars.ENV }}-omi-backend-external-secret \
-            --min-refresh-time "${force_sync_at}" \
-            --timeout-seconds 120
-          kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o json \
-            | python3 backend/scripts/verify_k8s_secret_keys.py \
-                ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
+          backend/scripts/deploy-backend-secrets.sh
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
         run: |

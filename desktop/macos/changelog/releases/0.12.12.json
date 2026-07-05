@@ -1,0 +1,10 @@
+{
+  "version": "0.12.12",
+  "date": "2026-07-04",
+  "changes": [
+    "Fixed Codex connection cards to show setup complete and restart guidance after MCP setup finishes",
+    "Fixed rapid push-to-talk follow-ups so they keep context and wait for realtime recovery instead of dropping the turn",
+    "Fixed subagent chats sometimes missing the typing indicator while working",
+    "Improved desktop voice status so push-to-talk shows a waiting glow after release and the Listening pill shows and toggles meetings-only mode"
+  ]
+}

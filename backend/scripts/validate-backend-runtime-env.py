@@ -301,6 +301,13 @@ def _manifest_env_value(expected_services: dict[str, Any], name: str) -> str:
     return ''
 
 
+def _literal_env_value(entry: dict[str, Any]) -> str:
+    value = entry.get('value')
+    if value is None:
+        return ''
+    return str(value)
+
+
 def _validate_env_entries(
     *,
     scope: str,
@@ -312,6 +319,8 @@ def _validate_env_entries(
     for name, expected_entry in expected.items():
         actual_entry = actual.get(name)
         if actual_entry is None:
+            if _is_provisional(expected_entry) and not strict_provisional:
+                continue
             errors.append(ValidationError(scope, f'missing env {name}'))
             continue
         if 'value' in expected_entry:
@@ -319,7 +328,7 @@ def _validate_env_entries(
                 if not _has_literal_value(actual_entry):
                     errors.append(ValidationError(scope, f'env {name} must have a literal value'))
                 continue
-            actual_value = actual_entry.get('value')
+            actual_value = _literal_env_value(actual_entry)
             expected_value = str(expected_entry['value'])
             if actual_value != expected_value:
                 errors.append(ValidationError(scope, f'env {name} value mismatch: expected {expected_value!r}'))

@@ -21,8 +21,19 @@ struct AgentSurfaceReference: Hashable, Sendable {
     AgentSurfaceReference(surfaceKind: "task_chat", externalRefKind: "task", externalRefId: taskId)
   }
 
+  /// Notch / floating "Omi Chat" text conversation. Used as an independent
+  /// completed-agent-delta consumer so a finished sub-agent's artifacts can be
+  /// delivered to the floating bar separately from the main chat.
+  static func floatingChat(chatId: String? = nil) -> AgentSurfaceReference {
+    AgentSurfaceReference(
+      surfaceKind: "floating_chat",
+      externalRefKind: "chat",
+      externalRefId: chatId?.isEmpty == false ? chatId! : "default"
+    )
+  }
+
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
-    AgentSurfaceReference(surfaceKind: "floating_pill", externalRefKind: "pill", externalRefId: pillId.uuidString)
+    AgentSurfaceReference(surfaceKind: "background_agent", externalRefKind: "pill", externalRefId: pillId.uuidString)
   }
 }
 
@@ -129,6 +140,23 @@ final class AgentRuntimeStatusStore: ObservableObject {
     sessionIdBySurface[surface.key]
   }
 
+  func clear(surface: AgentSurfaceReference) {
+    if let existing = projectionsBySurface.removeValue(forKey: surface.key) {
+      if let runId = existing.runId {
+        projectionByRunId.removeValue(forKey: runId)
+      }
+      if let sessionId = existing.sessionId {
+        projectionBySessionId.removeValue(forKey: sessionId)
+      }
+    }
+    if let runId = runIdBySurface.removeValue(forKey: surface.key) {
+      projectionByRunId.removeValue(forKey: runId)
+    }
+    if let sessionId = sessionIdBySurface.removeValue(forKey: surface.key) {
+      projectionBySessionId.removeValue(forKey: sessionId)
+    }
+  }
+
   func beginRequest(surface: AgentSurfaceReference, statusText: String? = "Starting...") {
     clearTerminalProjectionForNewRun(surface: surface)
     update(surface: surface, status: .starting, statusText: statusText, terminal: false)
@@ -158,8 +186,15 @@ final class AgentRuntimeStatusStore: ObservableObject {
     update(surface: surface, status: .cancelled, statusText: nil, errorMessage: message, terminal: true)
   }
 
-  func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil) {
-    update(surface: surface, status: .succeeded, statusText: statusText, terminal: true)
+  func recordAcceptedRun(surface: AgentSurfaceReference, sessionId: String, runId: String, attemptId: String?, statusText: String?) {
+    var payload: [String: Any] = [
+      "sessionId": sessionId,
+      "runId": runId,
+    ]
+    if let attemptId, !attemptId.isEmpty {
+      payload["attemptId"] = attemptId
+    }
+    update(surface: surface, status: .running, statusText: statusText, terminal: false, payload: payload)
   }
 
   func ingest(message: AgentRuntimeProcess.RuntimeMessage, surface: AgentSurfaceReference) {
