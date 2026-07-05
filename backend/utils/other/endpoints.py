@@ -201,9 +201,9 @@ def _get_ws_auth_close(error: Exception) -> 'tuple[int, str]':
 
 
 async def get_current_user_uid_ws_listen(
-    websocket: Optional[WebSocket] = None,
+    websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare WebSocket type for WS injection
     authorization: str = Header(None),
-) -> str:
+):
     """WebSocket auth for /v4/listen — NO rate limiting.
 
     Mobile apps reconnect legitimately on network switch / backgrounding,
@@ -224,7 +224,7 @@ async def get_current_user_uid_ws_listen(
     uid = await run_blocking(critical_executor, _verify_ws_auth, authorization)
 
     # Extract BYOK headers from the WS upgrade request and validate.
-    if websocket is not None:
+    if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
         byok_keys = extract_byok_from_websocket(websocket)
         if byok_keys:
             set_byok_keys(byok_keys)
@@ -235,7 +235,7 @@ async def get_current_user_uid_ws_listen(
     return uid
 
 
-def get_current_user_uid_ws(authorization: str = Header(None)) -> str:
+def get_current_user_uid_ws(authorization: str = Header(None)):
     """WebSocket auth WITH per-UID rate limiting (7s window).
 
     Use for WebSocket endpoints that need retry-storm protection.
