@@ -137,13 +137,6 @@ void set_led_state()
         return;
     }
 
-    // While the mic is in hardware AAD sleep (idle, waiting for sound), keep the
-    // status LED off to save power. It resumes normal indication on wake.
-    if (!is_connected && mic_in_aad_sleep()) {
-        led_off();
-        return;
-    }
-
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // If RTC not synced, blink red to warn user to connect phone app
     if (!rtc_is_valid()) {
