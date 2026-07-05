@@ -561,9 +561,14 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            info_requested = 0;
-            if (conn) {
+            /* Only answer once the client's CCC subscription is committed; a
+             * notify sent before that returns -EAGAIN and would be lost. Keep the
+             * request pending and retry next poll instead of dropping it. */
+            if (conn && storage_notify_ready(conn)) {
                 (void) send_ring_info_response(conn);
+                info_requested = 0;
+            } else if (!conn) {
+                info_requested = 0;
             }
         }
 
@@ -590,12 +595,14 @@ static void storage_write(void)
         }
 
         if (read_request_pending) {
-            read_request_pending = 0;
-            if (conn) {
+            if (conn && storage_notify_ready(conn)) {
                 int ret = start_pending_read(conn);
                 if (ret < 0) {
                     (void) send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
                 }
+                read_request_pending = 0;
+            } else if (!conn) {
+                read_request_pending = 0;
             }
         }
 
