@@ -18,6 +18,14 @@ final class TranscriptionConnectionStateTests: XCTestCase {
       source.contains("didOpenWithProtocol"),
       "TranscriptionService should mark connected from URLSessionWebSocketDelegate.didOpenWithProtocol"
     )
+    XCTAssertTrue(
+      source.contains("Task { [weak self, weak task] in"),
+      "TranscriptionService should scope the connect timeout to the WebSocket attempt"
+    )
+    XCTAssertTrue(
+      source.contains("guard let self, let task, self.webSocketTask === task, !self.isConnected, self.shouldReconnect else { return }"),
+      "TranscriptionService should ignore stale connect timeouts from prior WebSocket attempts"
+    )
   }
 
   func testWebSocketConnectionDelegateForwardsOpenAndClose() {

@@ -430,9 +430,9 @@ class TranscriptionService {
         receiveMessage()
 
         // Connect timeout: if still not connected after 10s, force reconnect
-        Task { [weak self] in
+        Task { [weak self, weak task] in
             try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard let self = self, !self.isConnected, self.shouldReconnect else { return }
+            guard let self, let task, self.webSocketTask === task, !self.isConnected, self.shouldReconnect else { return }
             log("TranscriptionService: Connect timeout (10s) — forcing reconnect")
             self.cleanupAndReconnect()
         }
