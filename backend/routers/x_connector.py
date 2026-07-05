@@ -14,7 +14,7 @@ themselves without the backend needing to know which is calling.
 """
 
 import logging
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
@@ -65,6 +65,12 @@ class XDisconnectResponse(BaseModel):
     """Ack for disconnecting the X integration."""
 
     success: bool = Field(description='Whether the disconnect succeeded.')
+
+
+class XPostsResponse(BaseModel):
+    """List of the user's synced X posts."""
+
+    posts: List[Dict[str, Any]] = Field(description='Synced X posts, newest first.')
 
 
 @router.get('/v1/x/oauth-url', response_model=OAuthUrlResponse, tags=['x'])
@@ -139,7 +145,7 @@ def x_connection_status(uid: str = Depends(auth.get_current_user_uid)):
     return x_connector.connection_status(uid)
 
 
-@router.get('/v1/x/posts', tags=['x'])
+@router.get('/v1/x/posts', tags=['x'], response_model=XPostsResponse)
 def list_x_posts(
     kind: Optional[str] = Query(None, description="Filter by kind: 'tweet', 'bookmark', or 'like'"),
     limit: int = Query(100, ge=1, le=500, description="Maximum number of posts to return"),
