@@ -809,10 +809,13 @@ void transport_conn_set_lowpower(bool low)
      * radio a few times/sec instead of ~100x/sec. Fast params are restored on
      * wake for low-latency streaming. */
     const struct bt_le_conn_param slow = {
-        .interval_min = 120, /* 150 ms */
-        .interval_max = 160, /* 200 ms */
-        .latency = 4,
-        .timeout = 600, /* 6 s */
+        /* Small base interval so audio throughput is high the instant the mic
+         * wakes (avoids dropping the first ~1 s of speech during the slow->fast
+         * renegotiation); slave latency still skips idle events to save power. */
+        .interval_min = 32, /* 40 ms */
+        .interval_max = 40, /* 50 ms */
+        .latency = 2,
+        .timeout = 400, /* 4 s */
     };
     const struct bt_le_conn_param fast = {
         .interval_min = 6,  /* 7.5 ms */
