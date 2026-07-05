@@ -45,6 +45,9 @@ Returns `{"status": "healthy", "ready": true, "streaming": true/false}` (200) wh
 ### `GET /batch/metrics` — Batch engine stats
 Returns `{"total_requests", "total_batches", "total_files", "rejected_requests", "pending_requests"}`.
 
+### `GET /metrics` — Prometheus metrics
+Standard Prometheus text format. Includes `parakeet_vram_used_mb`, `parakeet_vram_free_mb`, `parakeet_vram_total_mb`, `parakeet_vram_baseline_mb` gauges (live GPU VRAM via `mem_get_info`).
+
 ## Environment Variables
 
 ### Batch Model & GPU Worker
