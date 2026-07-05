@@ -299,7 +299,11 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
-    batchAudioOverflowSignaled = false  // fresh turn — allow the too-long warning again
+    // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
+    // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
+    batchAudioLock.lock()
+    batchAudioOverflowSignaled = false
+    batchAudioLock.unlock()
     barState?.pttHintText = ""  // clear any lingering too-short/too-long hint from a prior tap
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
@@ -933,22 +937,43 @@ class PushToTalkManager: ObservableObject {
   /// (~4.5 min) audio still transcribes normally when the turn is released.
   private func appendBatchAudioBounded(_ audioData: Data) {
     batchAudioLock.lock()
-    let atCap = batchAudioBuffer.count >= Self.maxBatchAudioBytes
-    if !atCap { batchAudioBuffer.append(audioData) }
+    // Append while under the cap (the chunk that reaches it is kept, so the warning
+    // fires exactly at the crossing). Set the once-flag atomically under the lock so
+    // the warning is enqueued exactly once, not on every subsequent chunk.
+    var justHitCap = false
+    if batchAudioBuffer.count < Self.maxBatchAudioBytes {
+      batchAudioBuffer.append(audioData)
+      if batchAudioBuffer.count >= Self.maxBatchAudioBytes && !batchAudioOverflowSignaled {
+        batchAudioOverflowSignaled = true
+        justHitCap = true
+      }
+    }
     batchAudioLock.unlock()
-    if atCap { signalBatchAudioOverflowOnce() }
+    if justHitCap { showBatchAudioOverflowWarning(turn: micCaptureGeneration) }
   }
 
-  /// Surface a one-time "recording too long" warning when the turn buffer is
+  /// Surface the one-time "recording too long" warning when the turn buffer is
   /// capped. Hops to main (called from the audio thread) and reuses the rendered
   /// `pttHintText` surface (the legacy `voiceTranscript` error field is unrendered).
-  private func signalBatchAudioOverflowOnce() {
+  /// `turn` guards against a stale warning painting a *newer* turn if this turn
+  /// ended before the block ran. Self-clears after a beat (like the too-short hint)
+  /// so it doesn't linger on the bar after the capped turn is submitted.
+  private func showBatchAudioOverflowWarning(turn: UInt64) {
     DispatchQueue.main.async { [weak self] in
-      guard let self, !self.batchAudioOverflowSignaled else { return }
-      self.batchAudioOverflowSignaled = true
+      guard let self, self.micCaptureGeneration == turn else { return }
       log("PushToTalkManager: turn audio hit \(Self.maxBatchAudioBytes)-byte cap — bounding buffer, warning user")
       self.barState?.pttHintText = "Recording too long — keep it under 5 min"
       self.updateBarState()
+      self.pttHintGeneration &+= 1
+      let generation = self.pttHintGeneration
+      Task { @MainActor [weak self] in
+        try? await Task.sleep(nanoseconds: 4_000_000_000)
+        guard let self, self.pttHintGeneration == generation else { return }
+        if self.barState?.pttHintText == "Recording too long — keep it under 5 min" {
+          self.barState?.pttHintText = ""
+          self.updateBarState()
+        }
+      }
     }
   }
 

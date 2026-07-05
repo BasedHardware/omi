@@ -74,6 +74,14 @@ final class TranscriptionTransportTests: XCTestCase {
       "audio-thread appends must go through the bounded helper")
     // A user-visible warning surfaces via the rendered pttHintText channel.
     XCTAssertTrue(src.contains("Recording too long"))
+    // Review fixes: the overflow warning is turn-guarded (no stale warning painting a
+    // newer turn) and self-clears (doesn't linger after the capped turn is submitted).
+    guard let range = src.range(of: "func showBatchAudioOverflowWarning") else {
+      return XCTFail("showBatchAudioOverflowWarning not found")
+    }
+    let body = String(src[range.lowerBound...].prefix(700))
+    XCTAssertTrue(body.contains("micCaptureGeneration == turn"), "warning must be turn-guarded")
+    XCTAssertTrue(body.contains("pttHintGeneration"), "overflow hint must self-clear like the too-short hint")
   }
 
   // MARK: BL-014 — deinit must not deadlock
