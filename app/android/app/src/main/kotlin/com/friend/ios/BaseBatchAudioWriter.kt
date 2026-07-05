@@ -181,10 +181,12 @@ abstract class BaseBatchAudioWriter(
                 if (currentBytes > 0 && synced) {
                     // Atomically promote .bin.part -> .bin so it becomes ingestable.
                     val finalFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
-                    val renamed = partFile.renameTo(finalFile)
-                    if (!renamed) Log.w(tag, "failed to finalize ${partFile.name}")
-                    Log.i(tag, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
-                    if (renamed) notifyFinalized(finalFile.name)
+                    if (partFile.renameTo(finalFile)) {
+                        Log.i(tag, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
+                        notifyFinalized(finalFile.name)
+                    } else {
+                        Log.w(tag, "failed to finalize ${partFile.name}")
+                    }
                 } else if (currentBytes > 0) {
                     // Durability unconfirmed — hold the ACK barrier and leave the
                     // .part for stale-part recovery instead of publishing it.

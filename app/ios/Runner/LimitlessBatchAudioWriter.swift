@@ -62,10 +62,17 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
 
     private func appendLocked(_ frames: [Data], pageTimestampMs: Int64) -> Bool {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        // Pendant clock sanity: pages recorded before the first msg6 time-sync (e.g.
-        // right after a battery-dead reboot) carry a bogus epoch — fall back to drain
-        // wall-clock, mirroring the Dart connector's validity gate.
-        let ts = pageTimestampMs > minValidTsMs ? pageTimestampMs : nowMs
+        // Pendant clock sanity: pages recorded before the first msg6 time-sync carry
+        // a bogus epoch. Inside an open session inherit the last valid timestamp so a
+        // bogus page can't fake a session gap; otherwise fall back to drain wall-clock.
+        let ts: Int64
+        if pageTimestampMs > minValidTsMs {
+            ts = pageTimestampMs
+        } else if lastPageTimestampMs > 0 {
+            ts = lastPageTimestampMs
+        } else {
+            ts = nowMs
+        }
 
         if isOpen, lastPageTimestampMs > 0, abs(ts - lastPageTimestampMs) > sessionGapMs {
             closeCurrentLocked("session_gap")
@@ -78,7 +85,13 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
             guard let dir = UserDefaults.standard.string(forKey: "flutter.batchAudioDir"), !dir.isEmpty else {
                 return false
             }
-            let startSec = ts / 1000
+            var startSec = ts / 1000
+            // A finalize replaces an existing same-name .bin — never reuse a taken name.
+            while FileManager.default.fileExists(
+                atPath: "\(dir)/audio_\(Self.deviceMarker)_opus_fs320_16000_1_fs320_\(startSec).bin"
+            ) {
+                startSec += 1
+            }
             let name = "audio_\(Self.deviceMarker)_opus_fs320_16000_1_fs320_\(startSec).bin.\(partSuffix)"
             guard openLocked(dirPath: dir, fileName: name, startSec: startSec, nowMs: nowMs) else {
                 return false // storage full or open failed

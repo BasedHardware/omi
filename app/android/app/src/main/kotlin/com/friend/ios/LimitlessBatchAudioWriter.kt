@@ -1,6 +1,7 @@
 package com.friend.ios
 
 import android.content.Context
+import java.io.File
 import kotlin.math.abs
 
 /**
@@ -44,12 +45,16 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
     fun append(frames: List<ByteArray>, pageTimestampMs: Long): Boolean {
         if (frames.isEmpty()) return true
         val now = System.currentTimeMillis()
-        // Pendant clock sanity: pages recorded before the first msg6 time-sync (e.g.
-        // right after a battery-dead reboot) carry a bogus epoch — fall back to drain
-        // wall-clock, mirroring the Dart connector's validity gate.
-        val ts = if (pageTimestampMs > MIN_VALID_TS_MS) pageTimestampMs else now
 
         synchronized(lock) {
+            // Pendant clock sanity: pages recorded before the first msg6 time-sync carry
+            // a bogus epoch. Inside an open session inherit the last valid timestamp so a
+            // bogus page can't fake a session gap; otherwise fall back to drain wall-clock.
+            val ts = when {
+                pageTimestampMs > MIN_VALID_TS_MS -> pageTimestampMs
+                lastPageTimestampMs > 0 -> lastPageTimestampMs
+                else -> now
+            }
             if (isOpenLocked && lastPageTimestampMs > 0 && abs(ts - lastPageTimestampMs) > SESSION_GAP_MS) {
                 closeCurrentLocked("session_gap")
             }
@@ -60,7 +65,11 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
             if (!isOpenLocked) {
                 val dir = stringPref("batchAudioDir")
                 if (dir.isEmpty()) return false
-                val startSec = ts / 1000
+                var startSec = ts / 1000
+                // A finalize replaces an existing same-name .bin — never reuse a taken name.
+                while (File(dir, "audio_${DEVICE_MARKER}_opus_fs320_16000_1_fs320_${startSec}.bin").exists()) {
+                    startSec++
+                }
                 val name = "audio_${DEVICE_MARKER}_opus_fs320_16000_1_fs320_${startSec}.bin$PART_SUFFIX"
                 if (!openLocked(dir, name, startSec, now)) return false // storage full or open failed
             }

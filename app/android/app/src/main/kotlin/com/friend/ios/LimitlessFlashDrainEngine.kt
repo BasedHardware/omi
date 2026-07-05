@@ -206,24 +206,32 @@ class LimitlessFlashDrainEngine(
         pagesSinceAck++
 
         if (pagesSinceAck >= ACK_EVERY_PAGES) {
-            ackWritten()
+            if (!ackWritten()) {
+                finishDrain("fsync_failed")
+                return
+            }
         }
         if (maxSeenPageIndex >= endPage) {
             finishDrain("caught_up")
         }
     }
 
-    /** fsync barrier, then ACK everything appended so far. Never ACKs unwritten pages. */
-    private fun ackWritten() {
-        val address = deviceAddress ?: return
-        if (lastAppendedPageIndex <= lastAckedPageIndex) return
+    /** fsync barrier, then ACK everything appended so far. Never ACKs unwritten pages.
+     *  On a failed barrier the watermark rolls back to the last ACK — a later ACK is
+     *  up-to-index and would otherwise cover the unconfirmed pages — and the caller
+     *  must end the drain so those pages redeliver next cycle. */
+    private fun ackWritten(): Boolean {
+        val address = deviceAddress ?: return true
+        if (lastAppendedPageIndex <= lastAckedPageIndex) return true
         if (!writer.sync()) {
-            Log.w(TAG, "fsync failed — skipping ACK (pages stay on pendant)")
-            return
+            Log.w(TAG, "fsync failed — dropping ACK watermark, pages redrain next cycle")
+            lastAppendedPageIndex = lastAckedPageIndex
+            return false
         }
         write(address, LimitlessProtocol.encodeAcknowledgeProcessedData(messageIndex++, ++requestId, lastAppendedPageIndex))
         lastAckedPageIndex = lastAppendedPageIndex
         pagesSinceAck = 0
+        return true
     }
 
     private fun finishDrain(reason: String) {
