@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -121,6 +121,35 @@ def list_calendar_meetings(
     # record cannot hide every other meeting the user has. Log a safe identifier plus
     # the exception class only: a ValidationError's str() renders the field input_value,
     # which for a meeting can be sensitive (title, participant emails, link, notes).
+    return CalendarMeetingContext.from_records(
+        meetings,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed calendar meeting for uid=%s event_id=%s: %s',
+            uid,
+            record.get('calendar_event_id'),
+            type(exc).__name__,
+        ),
+    )
+
+
+@router.get('/v1/calendar/current-meetings', response_model=List[CalendarMeetingContext], tags=['calendar'])
+def get_current_meetings(
+    uid: str = Depends(auth.get_current_user_uid),
+    at: Optional[datetime] = None,
+):
+    """List calendar meetings in progress at a given instant (default: now).
+
+    Returns the meeting(s) whose [start_time, end_time] window contains `at`, i.e. the
+    meeting the user is currently in. Reuses the same overlap query the desktop
+    transcription pipeline uses to auto-attach a conversation to a meeting; there was
+    no HTTP surface for it before.
+    """
+    moment = at or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        # Treat a naive instant as UTC, consistent with how meeting times are stored.
+        moment = moment.replace(tzinfo=timezone.utc)
+
+    meetings = calendar_db.get_meetings_in_time_range(uid, moment, moment)
     return CalendarMeetingContext.from_records(
         meetings,
         on_error=lambda record, exc: logger.warning(
