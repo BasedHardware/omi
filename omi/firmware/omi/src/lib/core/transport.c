@@ -612,6 +612,12 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     uint16_t mtu = bt_gatt_get_mtu(conn);
     current_mtu = mtu;
 
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+    /* Kick the SD remount immediately (it may be off from offline AAD sleep) so
+     * it is mounted well before the app fires its one-shot sync command. */
+    sd_request_power(true);
+#endif
+
     LOG_INF("Transport connected");
 
     // Log initial connection parameters
@@ -648,9 +654,7 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
-    /* A phone may sync recordings at any time, so make sure the SD is powered on
-     * (it may have been cut during offline AAD sleep). */
-    sd_request_power(true);
+    /* SD power-on was already requested at the top of this handler. */
 #endif
 }
 

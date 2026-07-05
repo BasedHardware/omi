@@ -24,6 +24,8 @@ int app_sd_init(void);
 int app_sd_off(void);
 void sd_write_pause(bool pause);
 bool is_sd_on(void);
+/** @brief True when the SD is powered AND mounted (ring reads/writes will work). */
+bool sd_is_ready(void);
 
 /**
  * @brief Request the SD worker to power the SD NAND on (remount) or off.

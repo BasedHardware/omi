@@ -1157,6 +1157,13 @@ bool is_sd_on(void)
     return sd_enabled;
 }
 
+bool sd_is_ready(void)
+{
+    /* Powered AND actually mounted -> ring reads will succeed. During a
+     * power-on the card is enabled but not yet mounted (~remount latency). */
+    return sd_enabled && is_mounted;
+}
+
 void sd_write_pause(bool pause)
 {
     sd_write_paused = pause;

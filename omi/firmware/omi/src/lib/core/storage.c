@@ -561,10 +561,12 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            /* Only answer once the client's CCC subscription is committed; a
-             * notify sent before that returns -EAGAIN and would be lost. Keep the
-             * request pending and retry next poll instead of dropping it. */
-            if (conn && storage_notify_ready(conn)) {
+            /* The app triggers sync only once per connect, so never answer before
+             * we can answer correctly: wait until the CCC subscription is
+             * committed AND the SD is mounted. Keep the request pending and retry
+             * each poll instead of replying "not ready" (which makes the app give
+             * up) or dropping the notify (-EAGAIN). */
+            if (conn && storage_notify_ready(conn) && sd_is_ready()) {
                 (void) send_ring_info_response(conn);
                 info_requested = 0;
             } else if (!conn) {
@@ -595,7 +597,7 @@ static void storage_write(void)
         }
 
         if (read_request_pending) {
-            if (conn && storage_notify_ready(conn)) {
+            if (conn && storage_notify_ready(conn) && sd_is_ready()) {
                 int ret = start_pending_read(conn);
                 if (ret < 0) {
                     (void) send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
