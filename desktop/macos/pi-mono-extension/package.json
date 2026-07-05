@@ -7,7 +7,7 @@
     "extensions": ["./index.ts"]
   },
   "scripts": {
-    "test": "node --experimental-strip-types --test index.test.ts"
+    "test": "npx --yes tsx --test index.test.ts"
   },
   "dependencies": {
     "@mariozechner/pi-ai": "^0.67.2",

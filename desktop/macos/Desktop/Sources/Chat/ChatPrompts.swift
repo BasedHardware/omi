@@ -9,55 +9,11 @@ import Foundation
 // - {current_datetime_iso} - ISO format datetime
 // - {memories_str} - User's memories/facts
 // - {memories_section} - Formatted memories section
-// - {conversation_history} - Previous messages
 // - {plugin_section} - App/plugin specific instructions
 // - {goal_section} - User's current goal
 // - {context_section} - Current page context
 
 struct ChatPrompts {
-
-    // MARK: - Initial Chat Message Prompt
-
-    /// Prompt for generating the initial greeting message
-    /// Variables: {user_name}, {memories_str}, {prev_messages_str}
-    static let initialChatMessage = """
-    You are 'Omi', a friendly and helpful assistant who aims to make {user_name}'s life better 10x.
-    You know the following about {user_name}: {memories_str}.
-
-    {prev_messages_str}
-
-    Compose an initial message to {user_name} that fully embodies your friendly and helpful personality. Use warm and cheerful language, and include light humor if appropriate. The message should be short, engaging, and make {user_name} feel welcome. Do not mention that you are an assistant or that this is an initial message; just start the conversation naturally, showcasing your personality.
-    """
-
-    /// Prompt for generating the initial greeting message with a custom app/plugin
-    /// Variables: {plugin_name}, {plugin_chat_prompt}, {user_name}, {memories_str}, {prev_messages_str}
-    static let initialChatMessageWithPlugin = """
-    You are '{plugin_name}', {plugin_chat_prompt}.
-    You know the following about {user_name}: {memories_str}.
-
-    {prev_messages_str}
-
-    As {plugin_name}, fully embrace your personality and characteristics in your initial message to {user_name}. Use language, tone, and style that reflect your unique personality traits. Start the conversation naturally with a short, engaging message that showcases your personality and humor, and connects with {user_name}. Do not mention that you are an AI or that this is an initial message.
-    """
-
-    // MARK: - Omi Question Prompt
-
-    /// Prompt for answering questions about the Omi app itself
-    /// Variables: {context}, {conversation_history}
-    static let omiQuestion = """
-    You are an assistant for answering questions about the app Omi, also known as Friend.
-    Continue the conversation, answering the question based on the context provided.
-
-    Context:
-    ```
-    {context}
-    ```
-
-    Conversation History:
-    {conversation_history}
-
-    Answer:
-    """
 
     /// Citation instruction to append when citations are enabled
     static let citedInstruction = """
@@ -1207,7 +1163,6 @@ struct ChatPromptBuilder {
         pluginSection: String = "",
         pluginInstructionHint: String = "",
         pluginPersonalityHint: String = "",
-        conversationHistory: String = "",
         question: String = "",
         context: String = "",
         pluginInfo: String = "",
@@ -1240,12 +1195,10 @@ struct ChatPromptBuilder {
         prompt = prompt.replacingOccurrences(of: "{plugin_section}", with: pluginSection)
         prompt = prompt.replacingOccurrences(of: "{plugin_instruction_hint}", with: pluginInstructionHint)
         prompt = prompt.replacingOccurrences(of: "{plugin_personality_hint}", with: pluginPersonalityHint)
-        prompt = prompt.replacingOccurrences(of: "{conversation_history}", with: conversationHistory)
         prompt = prompt.replacingOccurrences(of: "{question}", with: question)
         prompt = prompt.replacingOccurrences(of: "{context}", with: context)
         prompt = prompt.replacingOccurrences(of: "{plugin_info}", with: pluginInfo)
         prompt = prompt.replacingOccurrences(of: "{cited_instruction}", with: citedInstruction)
-        prompt = prompt.replacingOccurrences(of: "{prev_messages_str}", with: conversationHistory)
 
         return prompt
     }

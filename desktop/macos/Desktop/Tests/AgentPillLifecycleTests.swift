@@ -88,12 +88,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try chatProviderSource()
 
     XCTAssertTrue(source.contains("isFloatingPillSurface(resolvedSurface)"))
-    XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
-    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
-    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
-    XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
-    XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains("buildFloatingBarSystemPrompt("))
     XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "run_agent_and_wait"]"#))
+    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }

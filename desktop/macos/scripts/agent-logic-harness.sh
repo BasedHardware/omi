@@ -205,7 +205,7 @@ run_pi_mono_extension_exact() {
   ensure_pi_mono_extension_deps
   (
     cd "$DESKTOP_DIR/pi-mono-extension"
-    node --experimental-strip-types --test index.test.ts
+    npx --yes tsx --test index.test.ts
   )
 }
 
