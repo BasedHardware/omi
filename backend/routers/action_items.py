@@ -370,6 +370,17 @@ def search_action_items(
     return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
 
 
+@router.get("/v1/action-items/ids", tags=['action-items'])
+def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
+    """Return all of the user's action-item IDs (IDs only, no field reads).
+
+    A lightweight way for a client to reconcile which tasks it has without paging the full
+    list. Declared before /v1/action-items/{action_item_id} so the static path is not
+    captured as an action item id.
+    """
+    return {"ids": action_items_db.get_action_item_ids(uid)}
+
+
 @router.get("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get a specific action item by ID."""
