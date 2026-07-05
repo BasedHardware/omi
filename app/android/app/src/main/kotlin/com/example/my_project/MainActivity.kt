@@ -2,6 +2,7 @@ package com.friend.ios
 
 import android.content.Intent
 import com.friend.ios.ble.BleHostApiImpl
+import com.friend.ios.phonecalls.PhoneCallsPlugin
 import com.friend.ios.ble.OmiBleForegroundService
 import com.friend.ios.ble.OmiBleManager
 import com.friend.ios.ble.OmiCompanionManager
