@@ -3517,23 +3517,27 @@ struct Goal: Codable, Identifiable {
     // source) the backend REST schema does not expose, read via the same
     // container with tolerant fallbacks.
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    let wire = try OmiAPI.GoalResponse(from: decoder)
+    // Wire DTO required fields (created_at, title, etc.) are stricter than the
+    // legacy decoder; use try? and fall back to the container for tolerance.
+    let wire = try? OmiAPI.GoalResponse(from: decoder)
 
-    id = wire.id
-    title = wire.title
+    id = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    title = try wire?.title ?? container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description)
-    goalType = GoalType(rawValue: wire.goalType) ?? .boolean
-    targetValue = wire.targetValue
-    currentValue = wire.currentValue
-    minValue = wire.minValue
-    maxValue = wire.maxValue
-    unit = wire.unit
-    isActive = wire.isActive
+    goalType = GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "") ?? .boolean
+    targetValue = try wire?.targetValue ?? container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 0
+    currentValue = try wire?.currentValue ?? container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0
+    minValue = try wire?.minValue ?? container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0
+    maxValue = try wire?.maxValue ?? container.decodeIfPresent(Double.self, forKey: .maxValue) ?? 0
+    unit = try wire?.unit ?? container.decodeIfPresent(String.self, forKey: .unit)
+    isActive = try wire?.isActive ?? container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     let std = ISO8601DateFormatter()
-    createdAt = f.date(from: wire.createdAt) ?? std.date(from: wire.createdAt) ?? Date()
-    updatedAt = f.date(from: wire.updatedAt) ?? std.date(from: wire.updatedAt) ?? createdAt
+    let createdAtString = wire?.createdAt
+    createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? Date()
+    let updatedAtString = wire?.updatedAt
+    updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
     source = try container.decodeIfPresent(String.self, forKey: .source)
   }
