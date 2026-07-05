@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from datetime import datetime
+from typing import List, Optional, Tuple
 
 from google.cloud import firestore
 
@@ -15,11 +15,6 @@ from utils.dev_api_keys import generate_dev_api_key, hash_dev_api_key
 from utils.scopes import READ_ONLY_SCOPES, Scopes
 
 
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-
-
 def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) -> Tuple[str, DevApiKey]:
     """
     Creates a new Developer API key for a user.
@@ -29,12 +24,12 @@ def create_dev_key(user_id: str, name: str, scopes: Optional[List[str]] = None) 
     raw_key, hashed_key, key_prefix = generate_dev_api_key()
 
     key_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.utcnow()
 
     if scopes is None:
         scopes = READ_ONLY_SCOPES
 
-    api_key_doc: Dict[str, Any] = {
+    api_key_doc = {
         "id": key_id,
         "user_id": user_id,
         "name": name,
@@ -81,9 +76,9 @@ def get_dev_keys_for_user(user_id: str) -> List[DevApiKey]:
         .order_by("created_at", direction=firestore.Query.DESCENDING)
     )
     docs = keys_ref.stream()
-    keys: List[DevApiKey] = []
+    keys = []
     for doc in docs:
-        key_dict = _typed_doc(doc)
+        key_dict = doc.to_dict()
         # Ensure scopes field is present (None for backward compat)
         if "scopes" not in key_dict:
             key_dict["scopes"] = None
@@ -91,18 +86,18 @@ def get_dev_keys_for_user(user_id: str) -> List[DevApiKey]:
     return keys
 
 
-def delete_dev_key(user_id: str, key_id: str) -> None:
+def delete_dev_key(user_id: str, key_id: str):
     """
     Deletes a Developer API key.
     """
     key_ref = db.collection("dev_api_keys").document(key_id)
     key_doc = key_ref.get()
-    if getattr(key_doc, "exists", False):
-        key_data = _typed_doc(key_doc)
+    if key_doc.exists:
+        key_data = key_doc.to_dict()
         if key_data.get("user_id") == user_id:
             hashed_key = key_data.get("hashed_key")
             if hashed_key:
-                redis_db.delete_cached_dev_api_key(str(hashed_key))
+                redis_db.delete_cached_dev_api_key(hashed_key)
             key_ref.delete()
             # Remove the persisted app/key memory grant for this key so a
             # deleted key can no longer pass the memory grant gate.
@@ -119,7 +114,7 @@ def get_user_id_by_api_key(api_key: str) -> Optional[str]:
     return user_data.get("user_id") if user_data else None
 
 
-def get_user_and_scopes_by_api_key(api_key: str) -> Optional[Dict[str, Any]]:
+def get_user_and_scopes_by_api_key(api_key: str) -> Optional[dict]:
     """
     Verifies a Developer API key and returns the associated user ID and scopes.
     Uses a cache to avoid frequent database lookups.
@@ -133,15 +128,14 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[Dict[str, Any]]:
     hashed_key = hash_dev_api_key(secret_part)
 
     # Check cache first
-    cached_data_raw = redis_db.get_cached_dev_api_key_data(hashed_key)
-    if cached_data_raw:
-        cached_dict: Dict[str, Any] = cached_data_raw
+    cached_data = redis_db.get_cached_dev_api_key_data(hashed_key)
+    if cached_data:
         # Legacy Redis entries predate app/key identity and only contain
         # user_id/scopes. Do not return those for memory authorization paths:
         # fall through to Firestore so otherwise-valid keys recover their real
         # key_id/app_id immediately instead of 403ing until cache TTL expiry.
-        if cached_dict.get("key_id") and cached_dict.get("app_id"):
-            return cached_dict
+        if cached_data.get("key_id") and cached_data.get("app_id"):
+            return cached_data
 
     # If not in cache, query database
     keys_ref = db.collection("dev_api_keys").where("hashed_key", "==", hashed_key).limit(1)
@@ -151,7 +145,7 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[Dict[str, Any]]:
         return None
 
     key_doc = docs[0]
-    key_data = _typed_doc(key_doc)
+    key_data = key_doc.to_dict()
     user_id = key_data.get("user_id")
     key_id = key_data.get("id") or getattr(key_doc, "id", None)
     app_id = key_data.get("app_id") or "developer_api"
@@ -160,14 +154,8 @@ def get_user_and_scopes_by_api_key(api_key: str) -> Optional[Dict[str, Any]]:
 
     if user_id:
         # Cache the key with scopes/app/key context (None scopes remain read-only compatible) and update last_used_at
-        redis_db.cache_dev_api_key(
-            hashed_key,
-            str(user_id),
-            scopes=cast(Optional[List[str]], scopes),
-            key_id=str(key_id) if key_id is not None else None,
-            app_id=str(app_id) if app_id is not None else None,
-        )
+        redis_db.cache_dev_api_key(hashed_key, user_id, scopes, key_id=key_id, app_id=app_id)
         key_ref = key_doc.reference
-        key_ref.update({"last_used_at": datetime.now(timezone.utc)})
+        key_ref.update({"last_used_at": datetime.utcnow()})
 
     return {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
