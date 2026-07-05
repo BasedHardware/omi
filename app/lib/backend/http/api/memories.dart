@@ -56,7 +56,12 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
     return GetMemoriesResult([], !thisDeviceOnly);
   }
   if (response.statusCode == 200) {
-    return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
+    try {
+      return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
+    } catch (e) {
+      Logger.debug('Failed to decode memories response: $e');
+      return const GetMemoriesResult([], true);
+    }
   }
   // Legacy memory users cannot use server-side device_scope; fetch all and
   // signal that local device filtering should be skipped to avoid hiding
