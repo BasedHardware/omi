@@ -30,6 +30,24 @@ enum TaskCategory: String, CaseIterable {
     }
 }
 
+struct TaskSortOrderSyncFailure: Equatable {
+    let storageErrorDescription: String?
+    let backendErrorDescription: String?
+
+    var message: String {
+        switch (storageErrorDescription != nil, backendErrorDescription != nil) {
+        case (true, true):
+            return "Could not save task order to this Mac or Omi Cloud. Retry when your connection is available."
+        case (true, false):
+            return "Could not save task order to this Mac. Retry to keep the order after restart."
+        case (false, true):
+            return "Task order was saved on this Mac, but not synced to Omi Cloud. Retry when your connection is available."
+        case (false, false):
+            return "Could not confirm task order sync. Retry when your connection is available."
+        }
+    }
+}
+
 // MARK: - Task Filter Tag
 
 enum TaskFilterGroup: String, CaseIterable {
@@ -690,6 +708,9 @@ class TasksViewModel: ObservableObject {
 
     /// Debounced task for syncing sort orders to SQLite + backend
     private var sortOrderSyncTask: Task<Void, Never>?
+    @Published private(set) var sortOrderSyncFailure: TaskSortOrderSyncFailure?
+    private var pendingSortOrderUpdates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
+    var hasPendingSortOrderRetry: Bool { !pendingSortOrderUpdates.isEmpty }
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -1133,6 +1154,11 @@ class TasksViewModel: ObservableObject {
             // and pick up any membership changes that happened during the debounce window.
             recomputeAllCaches()
         }
+        let updates = collectSortOrderUpdates()
+        await syncSortOrderUpdates(updates)
+    }
+
+    private func collectSortOrderUpdates() -> [(id: String, sortOrder: Int, indentLevel: Int)] {
         var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
 
         for category in TaskCategory.allCases {
@@ -1148,13 +1174,21 @@ class TasksViewModel: ObservableObject {
             }
         }
 
+        return updates
+    }
+
+    private func syncSortOrderUpdates(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)]) async {
         guard !updates.isEmpty else { return }
+
+        var storageErrorDescription: String?
+        var backendErrorDescription: String?
 
         // Write to SQLite
         let storageUpdates = updates.map { (backendId: $0.id, sortOrder: $0.sortOrder, indentLevel: $0.indentLevel) }
         do {
             try await ActionItemStorage.shared.updateSortOrders(storageUpdates)
         } catch {
+            storageErrorDescription = String(describing: error)
             log("TasksVM: Failed to write sort orders to SQLite: \(error)")
         }
 
@@ -1163,7 +1197,57 @@ class TasksViewModel: ObservableObject {
             try await APIClient.shared.batchUpdateSortOrders(updates)
             log("TasksVM: Synced \(updates.count) sort orders to backend")
         } catch {
+            backendErrorDescription = String(describing: error)
             log("TasksVM: Failed to sync sort orders to backend: \(error)")
+        }
+
+        if storageErrorDescription == nil, backendErrorDescription == nil {
+            await MainActor.run {
+                self.clearSortOrderSyncFailure()
+            }
+        } else {
+            await MainActor.run {
+                self.recordSortOrderSyncFailure(
+                    storageErrorDescription: storageErrorDescription,
+                    backendErrorDescription: backendErrorDescription,
+                    updates: updates
+                )
+            }
+        }
+    }
+
+    func recordSortOrderSyncFailure(
+        storageErrorDescription: String?,
+        backendErrorDescription: String?,
+        updates: [(id: String, sortOrder: Int, indentLevel: Int)]
+    ) {
+        pendingSortOrderUpdates = updates
+        sortOrderSyncFailure = TaskSortOrderSyncFailure(
+            storageErrorDescription: storageErrorDescription,
+            backendErrorDescription: backendErrorDescription
+        )
+    }
+
+    private func clearSortOrderSyncFailure() {
+        pendingSortOrderUpdates = []
+        sortOrderSyncFailure = nil
+    }
+
+    func retrySortOrderSync() {
+        sortOrderSyncTask?.cancel()
+        let updates = pendingSortOrderUpdates
+        sortOrderSyncTask = Task { [weak self] in
+            guard let self else { return }
+            if updates.isEmpty {
+                await self.syncSortOrders()
+                return
+            }
+            self.suppressDatabaseRequery = true
+            defer {
+                self.suppressDatabaseRequery = false
+                self.recomputeAllCaches()
+            }
+            await self.syncSortOrderUpdates(updates)
         }
     }
 
@@ -2405,6 +2489,10 @@ struct TasksPage: View {
             // Header with filter toggle and sort
             headerView
 
+            if let failure = viewModel.sortOrderSyncFailure {
+                sortOrderSyncFailureBanner(failure)
+            }
+
             // Content
             if viewModel.isLoading && viewModel.tasks.isEmpty {
                 loadingView
@@ -3077,6 +3165,42 @@ struct TasksPage: View {
     }
 
     // MARK: - Error View
+
+    private func sortOrderSyncFailureBanner(_ failure: TaskSortOrderSyncFailure) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .scaledFont(size: 14)
+                .foregroundColor(OmiColors.textSecondary)
+                .accessibilityHidden(true)
+
+            Text(failure.message)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textPrimary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            Button("Retry") {
+                viewModel.retrySortOrderSync()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(OmiColors.textSecondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(OmiColors.backgroundSecondary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(OmiColors.border, lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
 
     private func errorView(_ error: String) -> some View {
         VStack(spacing: 16) {
