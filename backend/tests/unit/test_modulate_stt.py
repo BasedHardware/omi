@@ -1208,14 +1208,46 @@ class TestParakeetV4Protocol(unittest.TestCase):
             'ENCRYPTION_SECRET': 'secret',
         },
     )
-    def test_endswith_dedup_exercises_suffix_check(self):
+    def test_endswith_dedup_suffix_skips_emission(self):
         from utils.stt.streaming import ParakeetWebSocketSocket
 
-        sock = ParakeetWebSocketSocket.__new__(ParakeetWebSocketSocket)
-        sock._committed_text = "hello world"
-        self.assertTrue(sock._committed_text.endswith("world"))
-        self.assertTrue(sock._committed_text.endswith("hello world"))
-        self.assertFalse(sock._committed_text.endswith("goodbye"))
+        loop = asyncio.new_event_loop()
+        try:
+            segments = []
+
+            async def run():
+                mock_ws_mod = MagicMock()
+                mock_ws_mod.__version__ = '12.0'
+                ws = _FakeV4WebSocket(
+                    chunk_responses=[],
+                    close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'},
+                )
+                mock_ws_mod.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+
+                with patch('utils.stt.streaming.websockets', mock_ws_mod), patch(
+                    'utils.stt.streaming.asyncio.sleep', AsyncMock()
+                ):
+                    sock = ParakeetWebSocketSocket(segments.extend, 'ws://parakeet.local/v4/stream', 16000)
+                    await sock.start()
+                    sock._committed_text = "hello world"
+                    sock._last_partial = ""
+                    await ws._messages.put(
+                        json.dumps(
+                            {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'world', 'is_final': True}
+                        )
+                    )
+                    await ws._messages.put(json.dumps({'stream_id': 's1', 'final_text': '', 'status': 'closed'}))
+                    await ws._messages.put(None)
+                    await asyncio.sleep(0)
+                    await asyncio.sleep(0)
+                    await asyncio.sleep(0)
+                return segments
+
+            result = loop.run_until_complete(run())
+            world_segs = [s for s in result if s.get('text') == 'world']
+            self.assertEqual(len(world_segs), 0, f"'world' should be deduped by endswith guard, got: {result}")
+        finally:
+            loop.close()
 
 
 class TestParakeetVersionRouting(unittest.TestCase):
