@@ -66,7 +66,7 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: Based Hardware
+  maintainer: Based Hardware <team@basedhardware.com>
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
