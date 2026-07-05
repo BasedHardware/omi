@@ -103,6 +103,77 @@ final class GmailOutcomeParserTests: XCTestCase {
     XCTAssertEqual(GmailOutcomeParser.diagnosticsLine(attempts), "Arc[auth:no Google auth cookies]")
   }
 
+  func testBatchSuccessParsesResponsesInOrder() {
+    let json: [String: Any] = [
+      "ok": true,
+      "browser": "Chrome",
+      "source": "batch",
+      "responses": [
+        [
+          "id": "query",
+          "browser": "Chrome",
+          "source": "atom",
+          "emails": [["id": "q1", "subject": "Query result"]],
+        ],
+        [
+          "id": "label:atom/inbox",
+          "browser": "Chrome",
+          "source": "atom",
+          "emails": [["id": "l1", "subject": "Inbox result"]],
+        ],
+      ],
+    ]
+
+    guard case let .success(responses) = GmailAtomBatchParser.parse(json) else {
+      return XCTFail("expected batch success")
+    }
+
+    XCTAssertEqual(responses.map(\.requestID), ["query", "label:atom/inbox"])
+    XCTAssertEqual(responses[0].browser, "Chrome")
+    XCTAssertEqual(responses[0].source, "atom")
+    XCTAssertEqual(responses[0].emails.count, 1)
+  }
+
+  func testBatchSuccessWithEmptyResponsesIsSuccessNotFailure() {
+    let json: [String: Any] = ["ok": true, "browser": "none", "source": "batch", "responses": []]
+
+    guard case let .success(responses) = GmailAtomBatchParser.parse(json) else {
+      return XCTFail("expected batch success for empty responses")
+    }
+    XCTAssertTrue(responses.isEmpty)
+  }
+
+  func testBatchOkWithoutResponsesIsTreatedAsContractFailure() {
+    // The helper always emits `responses` on success; its absence is a
+    // contract violation, not a single-response payload to synthesize.
+    let json: [String: Any] = ["ok": true, "browser": "Chrome", "emails": [["id": "x"]]]
+
+    guard case let .failure(cls, summary, _) = GmailAtomBatchParser.parse(json) else {
+      return XCTFail("expected contract failure when responses is missing")
+    }
+    XCTAssertEqual(cls, .unknown)
+    XCTAssertEqual(summary, "Gmail batch response missing responses")
+  }
+
+  func testBatchFailureUsesExistingFailureClassification() {
+    let json: [String: Any] = [
+      "ok": false,
+      "error_class": "network",
+      "summary": "Could not reach Gmail (HTTP 500).",
+      "attempts": [
+        ["browser": "Chrome", "stage": "fetch", "reason": "HTTP 500", "had_auth": true, "http": 500]
+      ],
+    ]
+
+    guard case let .failure(cls, summary, attempts) = GmailAtomBatchParser.parse(json) else {
+      return XCTFail("expected batch failure")
+    }
+
+    XCTAssertEqual(cls, .network)
+    XCTAssertEqual(summary, "Could not reach Gmail (HTTP 500).")
+    XCTAssertEqual(attempts.count, 1)
+  }
+
   func testConnectionStatusIsConnectedHelper() {
     XCTAssertTrue(GmailConnectionStatus.connected(verifiedAt: Date()).isConnected)
     XCTAssertFalse(GmailConnectionStatus.needsSignIn(message: "x").isConnected)
