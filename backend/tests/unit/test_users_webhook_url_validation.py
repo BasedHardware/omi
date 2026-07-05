@@ -110,17 +110,22 @@ finally:
         sys.modules.pop('python_multipart', None)
 
 from fastapi import HTTPException  # noqa: E402
+import pydantic  # noqa: E402
+
+from routers.users import SetUserWebhookUrlRequest  # noqa: E402
 
 
-def test_missing_url_returns_400():
-    with pytest.raises(HTTPException) as e:
-        users_mod.set_user_webhook_endpoint(wtype='audio_bytes', data={}, uid='u1')
-    assert e.value.status_code == 400
+def test_missing_url_returns_422():
+    # Pydantic rejects missing required field; FastAPI surfaces as 422 at API layer.
+    with pytest.raises(pydantic.ValidationError):
+        SetUserWebhookUrlRequest()
 
 
 def test_valid_url_sets():
     with patch.object(users_mod, 'set_user_webhook_db') as setdb, patch.object(users_mod, 'disable_user_webhook_db'):
-        result = users_mod.set_user_webhook_endpoint(wtype='audio_bytes', data={'url': 'http://x'}, uid='u1')
+        result = users_mod.set_user_webhook_endpoint(
+            wtype='audio_bytes', data=SetUserWebhookUrlRequest(url='http://x'), uid='u1'
+        )
     assert result['status'] == 'ok'
     setdb.assert_called_once()
 
