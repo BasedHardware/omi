@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed cached short-term memories appearing in the desktop Memories UI before the account is enabled for the new memory lifecycle."
+  ]
+}
