@@ -7,7 +7,7 @@ CalendarEvent = dict[str, object]
 
 @dataclass
 class CalendarMutationResult:
-    succeeded: list[CalendarEvent] = field(default_factory=list[CalendarEvent])
+    succeeded: list[CalendarEvent] = field(default_factory=list)
     failed: list[tuple[str, str]] = field(default_factory=list[tuple[str, str]])
 
 

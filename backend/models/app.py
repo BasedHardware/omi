@@ -71,9 +71,9 @@ class ExternalIntegration(BaseModel):
     setup_completed_url: Optional[str] = None
     setup_instructions_file_path: Optional[str] = None
     is_instructions_url: bool = True
-    auth_steps: Optional[List[AuthStep]] = Field(default_factory=list[AuthStep])
+    auth_steps: Optional[List[AuthStep]] = Field(default_factory=list)
     app_home_url: Optional[str] = None
-    actions: Optional[List[Action]] = Field(default_factory=list[Action])
+    actions: Optional[List[Action]] = Field(default_factory=list)
     # URL to fetch chat tools manifest from (e.g., https://my-app.com/.well-known/omi-tools.json)
     chat_tools_manifest_url: Optional[str] = None
     # Chat messages configuration from manifest (enabled, target, notify)
@@ -140,7 +140,7 @@ class AppBaseModel(BaseModel):
     image: str
     capabilities: Set[str]
     username: Optional[str] = None
-    connected_accounts: List[str] = Field(default_factory=list[str])
+    connected_accounts: List[str] = Field(default_factory=list)
     external_integration: Optional[ExternalIntegration] = None
     rating_avg: Optional[float] = 0
     rating_count: int = 0
@@ -155,12 +155,12 @@ class AppBaseModel(BaseModel):
     payment_plan: Optional[str] = None
     payment_link: Optional[str] = None
     is_user_paid: Optional[bool] = False
-    thumbnails: Optional[List[str]] = Field(default_factory=list[str])
-    thumbnail_urls: Optional[List[str]] = Field(default_factory=list[str])
+    thumbnails: Optional[List[str]] = Field(default_factory=list)
+    thumbnail_urls: Optional[List[str]] = Field(default_factory=list)
     is_influencer: Optional[bool] = False
     is_popular: Optional[bool] = False
     official: Optional[bool] = False
-    chat_tools: Optional[List[ChatTool]] = Field(default_factory=list[ChatTool])
+    chat_tools: Optional[List[ChatTool]] = Field(default_factory=list)
     source_code_url: Optional[str] = None
     disabled: Optional[bool] = False
     disabled_reason: Optional[str] = None
@@ -175,7 +175,7 @@ class App(AppBaseModel):
     chat_prompt: Optional[str] = None
     persona_prompt: Optional[str] = None
     twitter: Optional[dict[str, Any]] = None
-    reviews: List[AppReview] = Field(default_factory=list[AppReview])
+    reviews: List[AppReview] = Field(default_factory=list)
     user_review: Optional[AppReview] = None
     money_made: Optional[float] = None
     usage_count: Optional[int] = None
@@ -268,7 +268,7 @@ class AppCreate(BaseModel):
     chat_prompt: Optional[str] = None
     persona_prompt: Optional[str] = None
     username: Optional[str] = None
-    connected_accounts: List[str] = Field(default_factory=list[str])
+    connected_accounts: List[str] = Field(default_factory=list)
     twitter: Optional[dict[str, Any]] = None
     external_integration: Optional[ExternalIntegration] = None
     proactive_notification: Optional[ProactiveNotification] = None
@@ -276,8 +276,8 @@ class AppCreate(BaseModel):
     is_paid: Optional[bool] = False
     price: Optional[float] = 0.0  # cents/100
     payment_plan: Optional[str] = None
-    thumbnails: Optional[List[str]] = Field(default_factory=list[str])  # List of thumbnail IDs
-    chat_tools: Optional[List[ChatTool]] = Field(default_factory=list[ChatTool])
+    thumbnails: Optional[List[str]] = Field(default_factory=list)  # List of thumbnail IDs
+    chat_tools: Optional[List[ChatTool]] = Field(default_factory=list)
     source_code_url: Optional[str] = None
 
 

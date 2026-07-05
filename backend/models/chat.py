@@ -72,12 +72,12 @@ class Message(BaseModel):
     plugin_id: Optional[str] = None
     from_external_integration: bool = False
     type: MessageType
-    memories_id: List[str] = Field(default_factory=list[str])  # used in db
-    memories: List[MessageConversation] = Field(default_factory=list[MessageConversation])  # used front facing
+    memories_id: List[str] = Field(default_factory=list)  # used in db
+    memories: List[MessageConversation] = Field(default_factory=list)  # used front facing
     reported: bool = False
     report_reason: Optional[str] = None
-    files_id: List[str] = Field(default_factory=list[str])
-    files: List[FileChat] = Field(default_factory=list[FileChat])
+    files_id: List[str] = Field(default_factory=list)
+    files: List[FileChat] = Field(default_factory=list)
     chat_session_id: Optional[str] = None
     data_protection_level: Optional[str] = None
     langsmith_run_id: Optional[str] = None  # LangSmith run ID for feedback tracking
@@ -217,14 +217,14 @@ class PageContext(BaseModel):
 
 class SendMessageRequest(BaseModel):
     text: str
-    file_ids: Optional[List[str]] = Field(default_factory=list[str])
+    file_ids: Optional[List[str]] = Field(default_factory=list)
     context: Optional[PageContext] = None
 
 
 class ChatSession(BaseModel):
     id: str
-    message_ids: Optional[List[str]] = Field(default_factory=list[str])
-    file_ids: Optional[List[str]] = Field(default_factory=list[str])
+    message_ids: Optional[List[str]] = Field(default_factory=list)
+    file_ids: Optional[List[str]] = Field(default_factory=list)
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime

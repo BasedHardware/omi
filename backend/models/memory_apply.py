@@ -186,8 +186,8 @@ class ApplyResult(BaseModel):
     status: ApplyStatus
     control_state: MemoryControlState
     operation: MemoryOperation
-    memory_items: List[MemoryItem] = Field(default_factory=list[MemoryItem])
-    outbox_events: List[MemoryOutboxEvent] = Field(default_factory=list[MemoryOutboxEvent])
+    memory_items: List[MemoryItem] = Field(default_factory=list)
+    outbox_events: List[MemoryOutboxEvent] = Field(default_factory=list)
     reason: Optional[str] = None
 
 

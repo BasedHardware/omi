@@ -107,8 +107,8 @@ class ConversationItemStructured(BaseModel):
     overview: str
     emoji: str = "🧠"
     category: str = "other"
-    action_items: List[ActionItem] = Field(default_factory=list[ActionItem])
-    events: List[Event] = Field(default_factory=list[Event])
+    action_items: List[ActionItem] = Field(default_factory=list)
+    events: List[Event] = Field(default_factory=list)
 
 
 class ConversationItemGeolocation(BaseModel):

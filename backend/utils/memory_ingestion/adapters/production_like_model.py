@@ -91,12 +91,12 @@ class ProductionLikeMemory(BaseModel):
 
 
 class ProductionLikeMemories(BaseModel):
-    facts: list[ProductionLikeMemory] = Field(default_factory=list[ProductionLikeMemory], max_length=2)
+    facts: list[ProductionLikeMemory] = Field(default_factory=list, max_length=2)
 
 
 class HighRecallProductionLikeMemories(BaseModel):
     facts: list[ProductionLikeMemory] = Field(
-        default_factory=list[ProductionLikeMemory],
+        default_factory=list,
         description="List of all memory-worthy facts from the conversation.",
     )
 
@@ -142,7 +142,7 @@ class TypedProductionLikeMemory(ProductionLikeMemory):
 
 class TypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
-        default_factory=list[TypedProductionLikeMemory],
+        default_factory=list,
         description="All memory-worthy facts from the conversation, as typed propositions.",
         max_length=6,
     )
@@ -150,7 +150,7 @@ class TypedProductionLikeMemories(BaseModel):
 
 class VoiceRecallTypedProductionLikeMemories(BaseModel):
     facts: list[TypedProductionLikeMemory] = Field(
-        default_factory=list[TypedProductionLikeMemory],
+        default_factory=list,
         description=(
             "All memory-worthy voice facts from the selected claim-dense spans. "
             "Preserve user, speaker, project, organization, and tool subjects explicitly."

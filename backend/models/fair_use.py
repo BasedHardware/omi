@@ -56,7 +56,7 @@ class ClassifierResult(BaseModel):
     misuse_score: float = 0.0
     usage_type: UsageType = UsageType.NONE
     confidence: float = 0.0
-    evidence: List[ClassifierEvidence] = Field(default_factory=list[ClassifierEvidence])
+    evidence: List[ClassifierEvidence] = Field(default_factory=list)
 
 
 class FairUseState(BaseModel):

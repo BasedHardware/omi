@@ -48,7 +48,7 @@ class V3MemoryReadServiceInput:
     default_memory_grant: bool | None
     request: V3MemoryReadRequest
     projection_readiness_context: V3ProjectionReadinessContext | dict[str, Any] | None = None
-    page_body: list[Any] = field(default_factory=list[Any])
+    page_body: list[Any] = field(default_factory=list)
     cursor_context: V3CursorContext | None = None
     cursor_secret: bytes | None = None
     next_keyset: V3Keyset | None = None

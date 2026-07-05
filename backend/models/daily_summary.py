@@ -19,7 +19,7 @@ class TopicHighlight(BaseModel):
     topic: str
     emoji: str
     summary: str  # Keep it snappy - 1-2 sentences max
-    conversation_ids: List[str] = Field(default_factory=list[str])
+    conversation_ids: List[str] = Field(default_factory=list)
 
 
 class UnresolvedQuestion(BaseModel):
@@ -65,14 +65,14 @@ class DailySummary(BaseModel):
     stats: DayStats = Field(default_factory=DayStats)
 
     # Core content (all optional - skip if not enough quality data)
-    highlights: List[TopicHighlight] = Field(default_factory=list[TopicHighlight])
-    action_items: List[ActionItemSummary] = Field(default_factory=list[ActionItemSummary])
-    unresolved_questions: List[UnresolvedQuestion] = Field(default_factory=list[UnresolvedQuestion])  # Max 3
-    decisions_made: List[DecisionMade] = Field(default_factory=list[DecisionMade])  # Max 3
-    knowledge_nuggets: List[KnowledgeNugget] = Field(default_factory=list[KnowledgeNugget])  # Max 3
+    highlights: List[TopicHighlight] = Field(default_factory=list)
+    action_items: List[ActionItemSummary] = Field(default_factory=list)
+    unresolved_questions: List[UnresolvedQuestion] = Field(default_factory=list)  # Max 3
+    decisions_made: List[DecisionMade] = Field(default_factory=list)  # Max 3
+    knowledge_nuggets: List[KnowledgeNugget] = Field(default_factory=list)  # Max 3
 
     # Locations
-    locations: List[LocationPin] = Field(default_factory=list[LocationPin])
+    locations: List[LocationPin] = Field(default_factory=list)
 
     def dict(self, **kwargs: Any) -> dict[str, Any]:
         data = self.model_dump(**kwargs)

@@ -91,18 +91,18 @@ class Conversation(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
-    transcript_segments: List[TranscriptSegment] = Field(default_factory=list[TranscriptSegment])
+    transcript_segments: List[TranscriptSegment] = Field(default_factory=list)
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
-    photos: List[ConversationPhoto] = Field(default_factory=list[ConversationPhoto])
-    audio_files: List[AudioFile] = Field(default_factory=list[AudioFile])
+    photos: List[ConversationPhoto] = Field(default_factory=list)
+    audio_files: List[AudioFile] = Field(default_factory=list)
     private_cloud_sync_enabled: bool = False
 
-    apps_results: List[AppResult] = Field(default_factory=list[AppResult])
-    suggested_summarization_apps: List[str] = Field(default_factory=list[str])
+    apps_results: List[AppResult] = Field(default_factory=list)
+    suggested_summarization_apps: List[str] = Field(default_factory=list)
 
     # TODO: plugins_results for backward compatibility with the old memories routes and app
-    plugins_results: List[PluginResult] = Field(default_factory=list[PluginResult])
+    plugins_results: List[PluginResult] = Field(default_factory=list)
 
     external_data: Optional[Dict[str, Any]] = None
     app_id: Optional[str] = None
@@ -181,7 +181,7 @@ class CreateConversation(BaseModel):
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation] = None
 
-    photos: List[ConversationPhoto] = Field(default_factory=list[ConversationPhoto])
+    photos: List[ConversationPhoto] = Field(default_factory=list)
 
     source: ConversationSource = ConversationSource.omi
     language: Optional[str] = None
@@ -232,13 +232,13 @@ class ExternalIntegrationCreateConversation(BaseModel):
 
 class CreateConversationResponse(BaseModel):
     conversation: Conversation
-    messages: List[Message] = Field(default_factory=list[Message])
+    messages: List[Message] = Field(default_factory=list)
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app
 class CreateMemoryResponse(BaseModel):
     memory: Conversation
-    messages: List[Message] = Field(default_factory=list[Message])
+    messages: List[Message] = Field(default_factory=list)
 
 
 class SetConversationEventsStateRequest(BaseModel):

@@ -32,7 +32,7 @@ class TranscriptSegment(BaseModel):
     person_id: Optional[str] = None
     start: float
     end: float
-    translations: Optional[List[Translation]] = Field(default_factory=list[Translation])
+    translations: Optional[List[Translation]] = Field(default_factory=list)
     speech_profile_processed: bool = True
     stt_provider: Optional[str] = None
 

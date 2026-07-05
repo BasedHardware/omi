@@ -91,7 +91,7 @@ class Memory(BaseModel):
     content: str = Field(description="The content of the memory")
     category: MemoryCategory = Field(description="The category of the memory", default=MemoryCategory.interesting)
     visibility: Optional[str] = Field(description="The visibility of the memory", default='private')
-    tags: List[str] = Field(description="The tags of the memory and learning", default_factory=list[str])
+    tags: List[str] = Field(description="The tags of the memory and learning", default_factory=list)
     headline: Optional[str] = Field(description="Short headline for notification preview (max 5 words)", default=None)
     predicate: Optional[str] = Field(
         description="Canonical relation for the fact, e.g. resides_in, works_at, prefers", default=None
@@ -106,7 +106,7 @@ class Memory(BaseModel):
         description="How the memory subject was attributed", default=SubjectAttribution.unknown
     )
     object_entity_ids: List[str] = Field(
-        description="Stable entity ids referenced by the fact arguments", default_factory=list[str]
+        description="Stable entity ids referenced by the fact arguments", default_factory=list
     )
     qualifiers: Dict[str, Any] = Field(
         description="Optional proposition qualifiers such as scope, valid_time, or epistemic_status",
@@ -117,7 +117,7 @@ class Memory(BaseModel):
     )
     veracity: Optional[float] = Field(description="Current belief that the fact is true", default=None)
     uncertainty_reasons: List[str] = Field(
-        description="Reasons this fact needs caution or review", default_factory=list[str]
+        description="Reasons this fact needs caution or review", default_factory=list
     )
     durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
 
@@ -569,7 +569,7 @@ class MemoryDB(Memory):
     data_protection_level: Optional[str] = None
     is_locked: bool = False
     kg_extracted: bool = False
-    evidence: List[Evidence] = Field(default_factory=list[Evidence])
+    evidence: List[Evidence] = Field(default_factory=list)
 
     # Canonical memory tiering. Legacy API/service boundaries set this to None
     # so non-cohort users cannot receive Short-term/Long-term rollout state.
@@ -595,7 +595,7 @@ class MemoryDB(Memory):
     superseded_by: Optional[str] = None
 
     primary_capture_device: Optional[str] = None
-    capture_device_ids: List[str] = Field(default_factory=list[str])
+    capture_device_ids: List[str] = Field(default_factory=list)
 
     def __init__(self, **data: Any) -> None:
         super().__init__(**data)
@@ -702,7 +702,7 @@ class ShortTermMemory(Memory):
     uid: str
     created_at: datetime
     updated_at: datetime
-    evidence: List[Evidence] = Field(default_factory=list[Evidence])
+    evidence: List[Evidence] = Field(default_factory=list)
     status: str = "pending_consolidation"
     allowed_uses: List[str] = Field(default_factory=lambda: ["retrieval", "consolidation"])
     scope: str = "global"

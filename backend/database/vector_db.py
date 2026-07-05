@@ -288,7 +288,7 @@ def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = 
 
 @dataclass(frozen=True)
 class VectorCandidateQueryResult:
-    hits: List[SearchVectorHit] = field(default_factory=list[SearchVectorHit])
+    hits: List[SearchVectorHit] = field(default_factory=list)
     rejected_count: int = 0
 
 

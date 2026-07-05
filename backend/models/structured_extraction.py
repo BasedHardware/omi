@@ -18,7 +18,7 @@ class ExtractedActionItem(BaseModel):
 class ActionItemsExtraction(BaseModel):
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
-        default_factory=list[ExtractedActionItem],
+        default_factory=list,
     )
 
     def to_action_items(self) -> List[ActionItem]:
@@ -78,11 +78,11 @@ class StructuredExtraction(BaseModel):
     category: CategoryEnum = Field(description="A category for this conversation", default=CategoryEnum.other)
     action_items: List[ExtractedActionItem] = Field(
         description="A list of action items from the conversation",
-        default_factory=list[ExtractedActionItem],
+        default_factory=list,
     )
     events: List[ExtractedEvent] = Field(
         description="A list of events extracted from the conversation, that the user must have on his calendar.",
-        default_factory=list[ExtractedEvent],
+        default_factory=list,
     )
 
     @field_validator('category', mode='before')

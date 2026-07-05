@@ -26,7 +26,7 @@ class StoreMeetingRequest(BaseModel):
     platform: Optional[str] = Field(default=None, description="Platform: 'Zoom', 'Teams', 'Google Meet', etc.")
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
     participants: List[MeetingParticipant] = Field(
-        default_factory=list[MeetingParticipant], description="Meeting participants"
+        default_factory=list, description="Meeting participants"
     )
     notes: Optional[str] = Field(default=None, description="Meeting notes/description")
 

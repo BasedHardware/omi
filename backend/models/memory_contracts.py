@@ -358,7 +358,7 @@ class L2SearchPlan(BaseModel):
     schema_version: str = "l2_custom_search_plan.v1"
     packet_id: str
     search_budget: int = 3
-    searches: List[L2SearchRequest] = Field(default_factory=list[L2SearchRequest])
+    searches: List[L2SearchRequest] = Field(default_factory=list)
     same_user_only: bool = True
     read_only: bool = True
 
@@ -443,7 +443,7 @@ class DurableMemoryPatch(BaseModel):
     decision: DurablePatchDecision
     result_status: LifecycleState
     evidence_ids: List[str] = Field(default_factory=list)
-    evidence_refs: List[EvidenceRef] = Field(default_factory=list[EvidenceRef])
+    evidence_refs: List[EvidenceRef] = Field(default_factory=list)
     target_memory_id: Optional[str] = None
     new_memory_id: Optional[str] = None
     memory_text: Optional[str] = None

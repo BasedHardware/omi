@@ -59,7 +59,7 @@ class HydratedSearchResult(BaseModel):
 
 
 class SearchGatewayResult(BaseModel):
-    results: List[HydratedSearchResult] = Field(default_factory=list[HydratedSearchResult])
+    results: List[HydratedSearchResult] = Field(default_factory=list)
     decisions: Dict[str, SearchDecision] = Field(default_factory=dict)
     repair_purge_candidates: List[Dict[str, Any]] = Field(default_factory=list[Dict[str, Any]])
 

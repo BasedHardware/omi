@@ -87,11 +87,11 @@ if _USE_LOCAL_MODELS:
         emoji: str = Field(description='An emoji to represent the conversation', default='🧠')
         category: CategoryEnum = Field(description='A category for this conversation', default=CategoryEnum.other)
         action_items: List[ActionItem] = Field(
-            description='A list of action items from the conversation', default_factory=list[ActionItem]
+            description='A list of action items from the conversation', default_factory=list
         )
         events: List[Event] = Field(
             description='A list of events extracted from the conversation, that the user must have on his calendar.',
-            default_factory=list[Event],
+            default_factory=list,
         )
 
         @field_validator('category', mode='before')
