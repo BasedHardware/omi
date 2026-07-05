@@ -561,14 +561,16 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            /* The app triggers sync only once per connect, so never answer before
-             * we can answer correctly: wait until the CCC subscription is
-             * committed AND the SD is mounted. Keep the request pending and retry
-             * each poll instead of replying "not ready" (which makes the app give
-             * up) or dropping the notify (-EAGAIN). */
+            /* The app triggers sync only once per connect, so we must actually
+             * deliver this one response. Wait until the CCC subscription is
+             * committed AND the SD is mounted, then only clear the request once
+             * the notify was accepted by the stack (>=0). If it fails transiently
+             * (e.g. -ENOMEM when the TX buffers are busy during the conn-param /
+             * MTU update, or -EAGAIN), keep it pending and retry next poll. */
             if (conn && storage_notify_ready(conn) && sd_is_ready()) {
-                (void) send_ring_info_response(conn);
-                info_requested = 0;
+                if (send_ring_info_response(conn) >= 0) {
+                    info_requested = 0;
+                }
             } else if (!conn) {
                 info_requested = 0;
             }
