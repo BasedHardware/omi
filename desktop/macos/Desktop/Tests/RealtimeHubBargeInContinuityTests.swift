@@ -76,6 +76,38 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertFalse(source.contains("preserveInterruptedTurnForContinuity()"))
   }
 
+  func testBeginTurnWaitsForActiveSessionBeforeActivityStart() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("inputTurnInProgress = true"))
+    XCTAssertTrue(source.contains("await self.waitUntilActive(timeout: 15)"))
+    XCTAssertTrue(source.contains("inputTurnActivityStartPending = true"))
+  }
+
+  func testHubDidConnectRetriesActivityStartDuringOpenTurn() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("if inputTurnInProgress"))
+    XCTAssertTrue(
+      source.contains("inputTurnActivityStartPending || sessionProvider == .gemini"))
+    XCTAssertTrue(source.contains("session?.beginInputTurn(interrupting: pendingInputTurnInterrupting)"))
+  }
+
+  func testPTTArmsVoiceSeedPrefetchBeforeMicCapture() throws {
+    let pttSource = try pushToTalkManagerSource()
+    let prefetchRange = try XCTUnwrap(pttSource.range(of: "prefetchVoiceSeedContextIfNeeded()"))
+    let captureRange = try XCTUnwrap(pttSource.range(of: "captureContextAndStartAudio(preOverlayImage: preOverlayImage)"))
+    XCTAssertLessThan(prefetchRange.lowerBound, captureRange.lowerBound)
+  }
+
+  private func pushToTalkManagerSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/PushToTalkManager.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
   private func realtimeHubControllerSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

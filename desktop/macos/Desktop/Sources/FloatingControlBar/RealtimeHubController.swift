@@ -197,6 +197,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var turnAudio16k = Data()
   /// Monotonic turn counter guarding async language-ID results against cross-turn races.
   private var turnEpoch = 0
+  /// True from PTT-down (`beginTurn`) until commit/cancel — gates activityStart retry on reconnect.
+  private var inputTurnInProgress = false
+  /// `beginInputTurn` was deferred because the warm session was still opening after seed-stale reconnect.
+  private var inputTurnActivityStartPending = false
+  private var pendingInputTurnInterrupting = false
   /// Early (mid-hold) language verdict — kicked off ~1.5 s into the hold so it's already
   /// computed by PTT-up and the provider hint adds zero perceived latency.
   private var earlyLIDTask: Task<PTTLanguageIdentifier.Verdict, Never>?
@@ -608,7 +613,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return sections.joined(separator: "\n\n")
   }
 
-  private func prefetchVoiceSeedContextIfNeeded() {
+  /// Prefetch kernel voice seed on PTT key-down so seed-stale reconnect can finish before `beginTurn`.
+  func prefetchVoiceSeedContextIfNeeded() {
     voiceSeedPrefetchTask?.cancel()
     voiceSeedPrefetchTask = Task { [weak self] in
       async let seed = FloatingControlBarManager.shared.kernelVoiceSeedContext()
@@ -921,6 +927,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     lastTurnAt = Date()
+    inputTurnInProgress = true
+    inputTurnActivityStartPending = false
+    pendingInputTurnInterrupting = providerResponseInFlight
     if bargeIn {
       pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
     }
@@ -956,7 +965,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         self.reconnectWarmSessionIfSeedStale()
         self.ensureWarm()
         if ownsInputTurn {
-          self.session?.beginInputTurn(interrupting: interrupting)
+          if await self.waitUntilActive(timeout: 15) {
+            self.session?.beginInputTurn(interrupting: interrupting)
+          } else {
+            self.inputTurnActivityStartPending = true
+            self.pendingInputTurnInterrupting = interrupting
+            log(
+              "RealtimeHub: session not ready for activityStart — will retry on connect")
+          }
         }
       }
     } else {
@@ -1046,6 +1062,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   /// PTT-up: end the turn; the model now responds (and may call tools).
   func commitTurn() -> RealtimeHubCommitResult {
+    inputTurnInProgress = false
+    inputTurnActivityStartPending = false
     responding = true
     // (The screen frame is sent at turn START — see beginTurn — so it has time to
     // upload/decode before the model answers. Nothing to attach here.)
@@ -1107,6 +1125,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
   /// turn behind, or the model answers the non-speech later.
   func cancelTurn() {
+    inputTurnInProgress = false
+    inputTurnActivityStartPending = false
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
@@ -1157,6 +1177,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
+    if inputTurnInProgress,
+      inputTurnActivityStartPending || sessionProvider == .gemini
+    {
+      session?.beginInputTurn(interrupting: pendingInputTurnInterrupting)
+      inputTurnActivityStartPending = false
+    }
   }
 
   func hubDidReceiveInputTranscript(_ text: String, isFinal: Bool, source: RealtimeHubSession) {

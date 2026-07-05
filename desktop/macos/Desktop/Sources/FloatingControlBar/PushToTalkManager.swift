@@ -289,6 +289,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
+    RealtimeHubController.shared.prefetchVoiceSeedContextIfNeeded()
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -324,6 +325,7 @@ class PushToTalkManager: ObservableObject {
 
   private func enterLockedListening() {
     if isBlockedByUsageLimit() { return }
+    RealtimeHubController.shared.prefetchVoiceSeedContextIfNeeded()
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
