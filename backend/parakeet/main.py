@@ -175,7 +175,7 @@ def _remove_file(path: str) -> None:
         pass
 
 
-@app.post("/v1/transcribe")
+@app.post("/v1/transcribe", response_model=None)
 async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
@@ -228,7 +228,7 @@ async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, A
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
-@app.post("/v2/transcribe")
+@app.post("/v2/transcribe", response_model=None)
 async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
@@ -342,7 +342,7 @@ async def stream_transcribe(
         session.cleanup()
 
 
-@app.get("/health")
+@app.get("/health", response_model=None)
 async def health_check() -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None:
         ready = gpu_worker.is_ready
