@@ -51,7 +51,7 @@ async function fetchAll(): Promise<{ items: ActionItem[]; convs: Record<string, 
   if (convRes.status === 'fulfilled' && Array.isArray(convRes.value.data)) {
     for (const c of convRes.value.data) {
       map[c.id] = {
-        title: c.structured?.title || c.title || 'Untitled',
+        title: c.structured?.title || 'Untitled',
         emoji: c.structured?.emoji ?? undefined
       }
     }

@@ -98,10 +98,10 @@ export function Conversations(): React.JSX.Element {
         const created = c.created_at ? new Date(c.created_at).getTime() : 0
         out.push({
           id: c.id,
-          title: c.structured?.title || c.title || 'Untitled conversation',
+          title: c.structured?.title || 'Untitled conversation',
           emoji: c.structured?.emoji || undefined,
           subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
-          preview: c.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
+          preview: c.structured?.overview || summarize(c.transcript_segments).slice(0, 200) || '(no transcript)',
           source: 'cloud',
           sortAt: created
         })

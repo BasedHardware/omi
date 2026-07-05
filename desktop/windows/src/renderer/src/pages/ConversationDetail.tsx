@@ -14,7 +14,7 @@ type Display = {
   emoji?: string
   subtitle?: string
   overview?: string
-  segments?: { text: string; speaker?: string; start?: number; end?: number }[]
+  segments?: { text: string; speaker?: string | null; start?: number; end?: number }[]
   transcript?: string
   actionItems?: { id?: string; description: string; completed?: boolean }[]
   chatMessages?: ChatMessage[]
@@ -24,8 +24,8 @@ type Display = {
 }
 
 function mapServer(c: ServerConversation): Display {
-  const title = c.structured?.title || c.title || 'Conversation'
-  const overview = c.structured?.overview || c.overview || ''
+  const title = c.structured?.title || 'Conversation'
+  const overview = c.structured?.overview || ''
   const status = c.status ?? ''
   return {
     title,
