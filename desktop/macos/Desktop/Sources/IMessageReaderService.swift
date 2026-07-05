@@ -129,7 +129,7 @@ actor IMessageReaderService {
   func topContacts(limit: Int) async throws -> [IMessageContact] {
     let queue = try makeReadOnlyQueue()
     do {
-      return try await queue.read { db in
+      let contacts: [IMessageContact] = try await queue.read { db in
         let rows = try Row.fetchAll(
           db,
           sql: """
@@ -163,6 +163,15 @@ actor IMessageReaderService {
 
           return IMessageContact(id: handle, displayName: handle, messageCount: count)
         }
+      }
+
+      // Resolve handles → real Contacts names (via the AddressBook, using the same Full Disk
+      // Access this feature already needs). Unmatched handles keep the raw handle.
+      let names = await ContactNameResolver.shared.resolveAll(contacts.map { $0.id })
+      return contacts.map { contact in
+        guard let name = names[contact.id], !name.isEmpty else { return contact }
+        return IMessageContact(
+          id: contact.id, displayName: name, messageCount: contact.messageCount)
       }
     } catch let error as IMessageReaderError {
       throw error

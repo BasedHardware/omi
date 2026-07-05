@@ -154,6 +154,63 @@ enum AICloneHarness {
         "commitments": readable,
       ]
     }
+
+    registry.register(
+      name: "ai_clone_commitments_reset",
+      summary: "Delete commitment tasks (staged + action items). only_numbered=true keeps named ones.",
+      params: ["only_numbered"]
+    ) { params in
+      // only_numbered=true deletes just the old phone-number-titled commitment tasks, leaving
+      // the newer name-titled ones intact.
+      let onlyNumbered = (params["only_numbered"] ?? "false") == "true"
+
+      func isCommitment(source: String?, category: String?) -> Bool {
+        source == "commitment" || category == "commitment_tracking"
+      }
+      // A run of 10+ consecutive digits, or a "+1"-style handle, means a raw phone number
+      // leaked into the title (the pre-name-resolver tasks).
+      func hasRawNumber(_ text: String) -> Bool {
+        var run = 0
+        for ch in text {
+          if ch.isNumber { run += 1; if run >= 10 { return true } } else { run = 0 }
+        }
+        return false
+      }
+
+      var deletedActions = 0
+      var deletedStaged = 0
+      var matched: [String] = []
+
+      if let response = try? await APIClient.shared.getActionItems(limit: 500) {
+        for item in response.items {
+          let commit = isCommitment(source: item.source, category: item.category)
+            || hasRawNumber(item.description)
+          guard commit else { continue }
+          if onlyNumbered && !hasRawNumber(item.description) { continue }
+          if (try? await APIClient.shared.deleteActionItem(id: item.id)) != nil {
+            deletedActions += 1
+            matched.append(item.description)
+          }
+        }
+      }
+      if let staged = try? await APIClient.shared.getStagedTasks(limit: 500) {
+        for item in staged.items {
+          let commit = isCommitment(source: item.source, category: item.category)
+            || hasRawNumber(item.description)
+          guard commit else { continue }
+          if onlyNumbered && !hasRawNumber(item.description) { continue }
+          if (try? await APIClient.shared.deleteStagedTask(id: item.id)) != nil {
+            deletedStaged += 1
+            matched.append(item.description)
+          }
+        }
+      }
+      return [
+        "deletedActionItems": String(deletedActions),
+        "deletedStaged": String(deletedStaged),
+        "deleted": matched.joined(separator: "\n"),
+      ]
+    }
   }
 
   // MARK: - Run execution
