@@ -1,0 +1,3 @@
+{
+  "change": "Show a retryable error when task reordering cannot sync locally or to Omi Cloud"
+}
