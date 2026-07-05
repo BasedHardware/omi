@@ -2,11 +2,16 @@
 # Agent continuity gauntlet — standing INV-6 smoke test for the desktop agent refactor.
 #
 # Drives a named omi-* bundle through:
+#   0. (non-prod) clear kernel main_chat turns to avoid stale model-visible history
 #   1. typed main-chat turn
 #   2. PTT hub turn (ptt_test_turn + forced transcript)
 #   3. typed follow-up that must see the PTT turn
 #   4. background agent spawn (spawn_agent)
 #   5. status query about that spawned agent
+#   7. floating pill spawn → cross-surface blind recall (PTT + typed)
+#
+# Repeated runs on one bundle pollute model-visible history even though R8 per-run
+# nonces protect harness assertions. Step 0 clears kernel turns via the real bridge.
 #
 # Evidence bundle (timestamped under desktop/macos/.harness/agent-continuity-gauntlet/):
 #   per-step user/assistant text, QueryTracer excerpts, runtime sqlite path+hash,

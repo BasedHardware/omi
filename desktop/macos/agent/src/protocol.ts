@@ -149,6 +149,28 @@ export interface GetVoiceSeedContextMessage extends ProtocolEnvelope {
   externalRefId?: string;
 }
 
+export interface ClearOwnerSurfaceStateMessage extends ProtocolEnvelope {
+  type: "clear_owner_surface_state";
+  chatId?: string;
+}
+
+export interface GetKernelTurnTailMessage extends ProtocolEnvelope {
+  type: "get_kernel_turn_tail";
+  limit?: number;
+  chatId?: string;
+}
+
+export interface ProjectCrossSurfaceTurnMessage extends ProtocolEnvelope {
+  type: "project_cross_surface_turn";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  userText: string;
+  assistantText: string;
+  origin: string;
+  idempotencyKey?: string;
+}
+
 export type InboundMessage =
   | QueryMessage
   | ToolResultMessage
@@ -163,6 +185,9 @@ export type InboundMessage =
   | MergeFloatingChatIntoMainChatMessage
   | RecordSurfaceTurnMessage
   | GetVoiceSeedContextMessage
+  | ClearOwnerSurfaceStateMessage
+  | GetKernelTurnTailMessage
+  | ProjectCrossSurfaceTurnMessage
   | AuthenticateMessage
   | WarmupMessage
   | RefreshTokenMessage;
@@ -320,6 +345,19 @@ export interface VoiceSeedContextMessage extends OutboundEnvelope {
   context: string;
 }
 
+export interface KernelTurnTailMessage extends OutboundEnvelope {
+  type: "kernel_turn_tail";
+  conversationId: string;
+  turns: Array<{
+    role: string;
+    content: string;
+    surfaceKind: string;
+    createdAtMs: number;
+    metadataJson: string;
+    origin?: string;
+  }>;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -334,7 +372,8 @@ export type OutboundMessage =
   | CancelAckMessage
   | ControlToolResultMessage
   | TurnRecordedMessage
-  | VoiceSeedContextMessage;
+  | VoiceSeedContextMessage
+  | KernelTurnTailMessage;
 
 type OutboundWithEnvelope = Exclude<OutboundMessage, InitMessage | AuthRequiredMessage | AuthSuccessMessage>;
 
@@ -355,7 +394,8 @@ export type OutboundMessageDraft =
   | DraftEnvelope<CancelAckMessage>
   | DraftEnvelope<ControlToolResultMessage>
   | DraftEnvelope<TurnRecordedMessage>
-  | DraftEnvelope<VoiceSeedContextMessage>;
+  | DraftEnvelope<VoiceSeedContextMessage>
+  | DraftEnvelope<KernelTurnTailMessage>;
 
 export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
   if (message.type === "init" || message.type === "auth_required" || message.type === "auth_success") {

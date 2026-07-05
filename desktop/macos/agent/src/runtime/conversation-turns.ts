@@ -254,3 +254,76 @@ function conversationTurnFromRow(row: Record<string, unknown>): ConversationTurn
     metadataJson: String(row.metadata_json ?? "{}"),
   };
 }
+
+const DEFAULT_MAIN_CHAT_SURFACE: SurfaceRef = {
+  surfaceKind: "main_chat",
+  externalRefKind: "chat",
+  externalRefId: "default",
+};
+
+function mainChatConversationId(
+  store: AgentStore,
+  ownerId: string,
+  chatId = "default",
+): string | null {
+  const row = store.getOptionalRow(
+    `SELECT conversation_id FROM surface_conversations
+     WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+    [ownerId, "main_chat", "chat", chatId],
+  );
+  return row ? String(row.conversation_id) : null;
+}
+
+export function clearOwnerMainChatTurns(
+  store: AgentStore,
+  ownerId: string,
+  chatId = "default",
+): { conversationId: string | null; deletedTurns: number } {
+  const conversationId = mainChatConversationId(store, ownerId, chatId);
+  if (!conversationId) {
+    return { conversationId: null, deletedTurns: 0 };
+  }
+  const deletedTurns = store.execute(`DELETE FROM conversation_turns WHERE conversation_id = ?`, [
+    conversationId,
+  ]);
+  return { conversationId, deletedTurns };
+}
+
+export function getMainChatTurnTail(
+  store: AgentStore,
+  ownerId: string,
+  limit = 8,
+  chatId = "default",
+): { conversationId: string | null; turns: ConversationTurn[] } {
+  const conversationId = mainChatConversationId(store, ownerId, chatId);
+  if (!conversationId) {
+    return { conversationId: null, turns: [] };
+  }
+  return {
+    conversationId,
+    turns: listRecentConversationTurns(store, conversationId, limit),
+  };
+}
+
+export function projectCrossSurfaceTurn(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    targetSurfaceRef?: SurfaceRef;
+    userText: string;
+    assistantText: string;
+    origin: string;
+    idempotencyKey?: string;
+    nowMs?: number;
+  },
+): RecordSurfaceTurnResult {
+  return recordSurfaceTurn(store, {
+    ownerId: input.ownerId,
+    surfaceRef: input.targetSurfaceRef ?? DEFAULT_MAIN_CHAT_SURFACE,
+    userText: input.userText,
+    assistantText: input.assistantText,
+    origin: input.origin,
+    idempotencyKey: input.idempotencyKey,
+    nowMs: input.nowMs,
+  });
+}

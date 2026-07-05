@@ -488,6 +488,33 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "clear_owner_surface_state",
+      summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
+      params: ["chatId"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "clear_owner_surface_state is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let chatId = params["chatId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      return await provider.automationClearOwnerSurfaceState(chatId: chatId?.isEmpty == false ? chatId! : "default")
+    }
+
+    register(
+      name: "kernel_turn_tail",
+      summary: "Return the last N kernel main_chat turns for continuity harness evidence",
+      params: ["limit", "chatId"]
+    ) { params in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let limit = max(1, intParam(params["limit"], default: 8))
+      return await provider.automationKernelTurnTail(limit: limit)
+    }
+
+    register(
       name: "wait_main_chat_idle",
       summary: "Block until main chat is not sending or streaming (continuity harness)",
       params: ["timeoutMs", "pollMs"]

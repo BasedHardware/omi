@@ -29,6 +29,8 @@ final class AgentContinuityGauntletTests: XCTestCase {
       "ask_main_chat",
       "coordinator_awareness_snapshot",
       "swap_test_owner",
+      "clear_owner_surface_state",
+      "kernel_turn_tail",
     ]
     for name in required {
       XCTAssertTrue(
@@ -49,5 +51,7 @@ final class AgentContinuityGauntletTests: XCTestCase {
     )
     XCTAssertTrue(providerSource.contains("automationMainChatSnapshot"))
     XCTAssertTrue(providerSource.contains("automationSwapTestOwner"))
+    XCTAssertTrue(providerSource.contains("automationKernelTurnTail"))
+    XCTAssertTrue(providerSource.contains("automationClearOwnerSurfaceState"))
   }
 }

@@ -45,6 +45,7 @@ actor AgentRuntimeProcess {
       case controlToolResult
       case turnRecorded
       case voiceSeedContext
+      case kernelTurnTail
       case unknown(String)
     }
 
@@ -91,6 +92,7 @@ actor AgentRuntimeProcess {
       case "control_tool_result": return .controlToolResult
       case "turn_recorded": return .turnRecorded
       case "voice_seed_context": return .voiceSeedContext
+      case "kernel_turn_tail": return .kernelTurnTail
       default: return .unknown(type)
       }
     }
@@ -130,6 +132,26 @@ actor AgentRuntimeProcess {
     let continuation: CheckedContinuation<(conversationId: String, context: String), Error>
   }
 
+  struct KernelTurnTailTurn: Sendable {
+    let role: String
+    let content: String
+    let surfaceKind: String
+    let createdAtMs: Int
+    let metadataJson: String
+    let origin: String
+  }
+
+  struct KernelTurnTailResult: Sendable {
+    let conversationId: String
+    let turns: [KernelTurnTailTurn]
+  }
+
+  private struct ActiveKernelTurnTailRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<KernelTurnTailResult, Error>
+  }
+
   struct KernelTurnRecorded: Sendable {
     let conversationId: String
     let surfaceKind: String
@@ -158,6 +180,7 @@ actor AgentRuntimeProcess {
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
+  private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
   private var turnRecordedHandlers: [TurnRecordedHandler] = []
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
@@ -293,6 +316,20 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
+  func clearOwnerSurfaceState(clientId: String, chatId: String = "default") {
+    var dict: [String: Any] = [
+      "type": "clear_owner_surface_state",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "chatId": chatId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
   // TODO(desktop-agent-platonic-gap-closure G6): delete importer two desktop releases after platonic ships.
   func importLegacyMainChatSessions(clientId: String, entries: [[String: String]]) {
     var dict: [String: Any] = [
@@ -409,6 +446,68 @@ actor AgentRuntimeProcess {
         request.continuation.resume(throwing: BridgeError.agentError("Failed to send voice seed request"))
       }
     }
+  }
+
+  func getKernelTurnTail(
+    clientId: String,
+    harnessMode: String,
+    limit: Int = 8,
+    chatId: String = "default"
+  ) async throws -> KernelTurnTailResult {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeKernelTurnTailRequests[requestKey] = ActiveKernelTurnTailRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "get_kernel_turn_tail",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "limit": limit,
+        "chatId": chatId,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send kernel turn tail request"))
+      }
+    }
+  }
+
+  func projectCrossSurfaceTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    idempotencyKey: String? = nil
+  ) {
+    var dict: [String: Any] = [
+      "type": "project_cross_surface_turn",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "userText": userText,
+      "assistantText": assistantText,
+      "origin": origin,
+    ]
+    if let idempotencyKey, !idempotencyKey.isEmpty {
+      dict["idempotencyKey"] = idempotencyKey
+    }
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
   }
 
   func refreshAuthToken(_ token: String) {
@@ -981,6 +1080,9 @@ actor AgentRuntimeProcess {
     case .voiceSeedContext:
       completeVoiceSeedRequest(message)
 
+    case .kernelTurnTail:
+      completeKernelTurnTailRequest(message)
+
     case .turnRecorded:
       if let recorded = kernelTurnRecorded(from: message) {
         for handler in turnRecordedHandlers {
@@ -1086,6 +1188,28 @@ actor AgentRuntimeProcess {
     let conversationId = message.payload["conversationId"] as? String ?? ""
     let context = message.payload["context"] as? String ?? ""
     request.continuation.resume(returning: (conversationId: conversationId, context: context))
+  }
+
+  private func completeKernelTurnTailRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable kernel turn tail")
+      return
+    }
+    let conversationId = message.payload["conversationId"] as? String ?? ""
+    let rawTurns = message.payload["turns"] as? [[String: Any]] ?? []
+    let turns = rawTurns.map { row in
+      KernelTurnTailTurn(
+        role: row["role"] as? String ?? "",
+        content: row["content"] as? String ?? "",
+        surfaceKind: row["surfaceKind"] as? String ?? "",
+        createdAtMs: row["createdAtMs"] as? Int ?? 0,
+        metadataJson: row["metadataJson"] as? String ?? "{}",
+        origin: row["origin"] as? String ?? ""
+      )
+    }
+    request.continuation.resume(returning: KernelTurnTailResult(conversationId: conversationId, turns: turns))
   }
 
   private func kernelTurnRecorded(from message: RuntimeMessage) -> KernelTurnRecorded? {

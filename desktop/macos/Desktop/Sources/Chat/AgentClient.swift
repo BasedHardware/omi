@@ -82,6 +82,10 @@ enum AgentClient {
       await bridge.clearOwnerState()
     }
 
+    func clearOwnerSurfaceState(chatId: String = "default") async {
+      await bridge.clearOwnerSurfaceState(chatId: chatId)
+    }
+
     func invalidateSurface(_ surface: AgentSurfaceReference) async {
       await bridge.invalidateSurface(surface)
     }
@@ -128,6 +132,26 @@ enum AgentClient {
 
     func getVoiceSeedContext(surface: AgentSurfaceReference) async throws -> (conversationId: String, context: String) {
       try await bridge.getVoiceSeedContext(surface: surface)
+    }
+
+    func getKernelTurnTail(limit: Int = 8, chatId: String = "default") async throws -> AgentRuntimeProcess.KernelTurnTailResult {
+      try await bridge.getKernelTurnTail(limit: limit, chatId: chatId)
+    }
+
+    func projectCrossSurfaceTurn(
+      surface: AgentSurfaceReference,
+      userText: String,
+      assistantText: String,
+      origin: String,
+      idempotencyKey: String? = nil
+    ) async {
+      await bridge.projectCrossSurfaceTurn(
+        surface: surface,
+        userText: userText,
+        assistantText: assistantText,
+        origin: origin,
+        idempotencyKey: idempotencyKey
+      )
     }
 
     func testPlaywrightConnection() async throws -> Bool {

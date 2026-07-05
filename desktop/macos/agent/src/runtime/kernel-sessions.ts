@@ -20,8 +20,11 @@ import {
 } from "./surface-session.js";
 import {
   appendConversationTurn,
+  clearOwnerMainChatTurns,
   conversationIdForSession,
+  getMainChatTurnTail,
   importConversationTurnsForSurface,
+  projectCrossSurfaceTurn,
   recordSurfaceTurn as persistSurfaceTurn,
   type ConversationTurnImportEntry,
   type RecordSurfaceTurnResult,
@@ -40,6 +43,7 @@ import type {
   AgentSession,
   AgentStore,
   AgentGrant,
+  ConversationTurn,
   NewAgentArtifact,
   NewAgentGrant,
   RunAttempt,
@@ -238,6 +242,36 @@ export class KernelSessions extends KernelArtifacts {
 
   clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {
     return clearOwnerSurfaceState(this.store, ownerId, () => Date.now());
+  }
+
+  clearOwnerMainChatTurns(ownerId: string, chatId = "default"): {
+    conversationId: string | null;
+    deletedTurns: number;
+  } {
+    return clearOwnerMainChatTurns(this.store, ownerId, chatId);
+  }
+
+  getMainChatTurnTail(ownerId: string, limit = 8, chatId = "default"): {
+    conversationId: string | null;
+    turns: ConversationTurn[];
+  } {
+    return getMainChatTurnTail(this.store, ownerId, limit, chatId);
+  }
+
+  projectCrossSurfaceTurn(input: {
+    ownerId: string;
+    targetSurfaceRef?: SurfaceRef;
+    userText: string;
+    assistantText: string;
+    origin: string;
+    idempotencyKey?: string;
+  }): RecordSurfaceTurnResult {
+    return this.withTransaction(() =>
+      projectCrossSurfaceTurn(this.store, {
+        ...input,
+        nowMs: Date.now(),
+      }),
+    );
   }
 
   invalidateBindings(input: InvalidateBindingsInput): InvalidateBindingsResult {

@@ -409,6 +409,7 @@ class GauntletRunner:
             "typed": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-TYPED",
             "ptt": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-PTT",
             "spawn": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-SPAWN",
+            "floating_spawn": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-FLOAT",
         }
         self.suites = expand_suites(getattr(args, "suite", "core"))
         self.baseline_identity: dict[str, str] | None = None
@@ -499,6 +500,62 @@ class GauntletRunner:
         if extra:
             record["extra"] = extra
         self.steps.append(record)
+
+    def clear_kernel_hygiene_if_available(self) -> None:
+        """Clear kernel main_chat turns on non-prod bundles before continuity assertions."""
+        cleared = self.bridge_act("clear_owner_surface_state")
+        detail = cleared.get("result", {}).get("detail", {})
+        if cleared.get("ok") is False or detail.get("error"):
+            message = detail.get("error", cleared.get("error", cleared))
+            if "disabled on production" in str(message).lower():
+                self.warn(
+                    "kernel hygiene skipped on production bundle — repeated runs may pollute "
+                    "model-visible history even though R8 nonces protect harness assertions"
+                )
+                return
+            self.fail(f"clear_owner_surface_state failed: {message}")
+            return
+        write_json(
+            self.run_dir / "kernel-hygiene.json",
+            {"cleared": True, "detail": detail},
+        )
+
+    def ask_floating_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
+        trace_start = trace_line_count()
+        send = self.bridge_act("ask", {"query": query})
+        if send.get("ok") is False:
+            raise SystemExit(f"ask (floating) failed: {send.get('error', send)}")
+        detail = send.get("result", {}).get("detail", {})
+        if detail.get("error"):
+            raise SystemExit(f"ask (floating) error: {detail['error']}")
+
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        snapshot_detail: dict[str, str] = {}
+        while time.monotonic() < deadline:
+            wait = bridge_action(
+                self.port,
+                "wait_main_chat_idle",
+                {"timeoutMs": "2000", "pollMs": "250"},
+            )
+            snapshot_detail = wait.get("result", {}).get("detail", {})
+            if wait.get("ok") and snapshot_detail.get("idle") == "true":
+                break
+            time.sleep(0.25)
+        else:
+            self.fail(f"timed out waiting for floating query idle: {query[:120]}")
+
+        snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+        traces = read_new_traces(trace_start)
+        return send, snapshot_detail, traces
+
+    def kernel_turn_tail_blob(self, *, limit: int = 12) -> str:
+        tail = self.bridge_act("kernel_turn_tail", {"limit": str(limit)})
+        detail = tail.get("result", {}).get("detail", {})
+        if tail.get("ok") is False or detail.get("error"):
+            self.fail(f"kernel_turn_tail failed: {detail.get('error', tail.get('error', tail))}")
+            return ""
+        return detail.get("turns_json", "[]")
 
     def send_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
         trace_start = trace_line_count()
@@ -621,6 +678,7 @@ class GauntletRunner:
 
         self.ensure_bridge()
         self.navigate_chat()
+        self.clear_kernel_hygiene_if_available()
 
         if "continuity" in self.suites:
             self.run_continuity_suite()
@@ -817,6 +875,125 @@ class GauntletRunner:
                 "status step passed without list_agent_sessions tool verification "
                 "(answer derived from injected context)"
             )
+
+        self.run_floating_spawn_recall_step()
+
+    def run_floating_spawn_recall_step(self) -> None:
+        """Floating pill spawn handoff must reach kernel main_chat and PTT seed."""
+        spawn_title = f"GAUNTLET Recall Page {self.markers['floating_spawn'][-8:]}"
+        casual_query = "yo what's up"
+        spawn_query = (
+            f"Spawn a background agent titled \"{spawn_title}\" to track marker "
+            f"{self.markers['floating_spawn']}. Start it now and do not ask follow-up questions."
+        )
+
+        casual_send, casual_snapshot, casual_traces = self.ask_floating_and_wait(
+            casual_query, self.args.turn_timeout_ms
+        )
+        self.record_step(
+            "07a-floating-casual",
+            "floating pill casual message",
+            user_text=casual_query,
+            action_response=casual_send,
+            snapshot_detail=casual_snapshot,
+            traces=casual_traces,
+        )
+
+        spawn_send, spawn_snapshot, spawn_traces = self.ask_floating_and_wait(
+            spawn_query, self.args.turn_timeout_ms
+        )
+        kernel_tail = self.kernel_turn_tail_blob(limit=12)
+        self.record_step(
+            "07b-floating-spawn",
+            "floating pill spawn handoff",
+            user_text=spawn_query,
+            action_response=spawn_send,
+            snapshot_detail=spawn_snapshot,
+            traces=spawn_traces,
+            extra={
+                "spawn_title": spawn_title,
+                "kernel_turn_tail": kernel_tail,
+            },
+        )
+        if self.markers["floating_spawn"] not in kernel_tail and spawn_title not in kernel_tail:
+            self.fail(
+                "floating spawn handoff missing from kernel main_chat tail "
+                f"(marker={self.markers['floating_spawn']!r}, title={spawn_title!r})"
+            )
+
+        recency_probe = "What was the last thing I asked you for?"
+        if self.markers["floating_spawn"] in recency_probe or spawn_title in recency_probe:
+            self.fail("spawn-recall probe must not contain the spawn marker or title (R8)")
+
+        # PTT blind recall — seed-first; must not call get_conversations.
+        trace_start = trace_line_count()
+        ptt = bridge_action(
+            self.port,
+            "ptt_test_turn",
+            {
+                "pcm": str(self.pcm_path),
+                "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
+                "force_transcript": recency_probe,
+            },
+        )
+        ptt_detail = ptt.get("result", {}).get("detail", {})
+        if ptt.get("ok") is False or ptt_detail.get("error"):
+            self.fail(f"spawn-recall PTT probe failed: {ptt_detail.get('error', ptt.get('error', ptt))}")
+        ptt_traces = read_new_traces(trace_start)
+        ptt_assistant = str(ptt_detail.get("assistant_reply") or "")
+        ptt_evidence = strip_probe_text(
+            ptt_assistant + "\n" + "\n".join(flatten_trace_text(trace) for trace in ptt_traces),
+            [recency_probe],
+        )
+        ptt_get_convos = trace_tool_executions(ptt_traces, {"get_conversations"})
+        if ptt_get_convos:
+            self.fail("spawn-recall PTT probe called get_conversations while seed should be fresh")
+        if (
+            self.markers["floating_spawn"] not in ptt_evidence
+            and spawn_title not in ptt_evidence
+            and spawn_title.lower() not in ptt_evidence.lower()
+        ):
+            self.fail(
+                "spawn-recall PTT probe did not reference floating spawn handoff "
+                f"(reply={ptt_assistant[:160]!r})"
+            )
+        self.record_step(
+            "07c-spawn-recall-ptt",
+            "PTT blind recall after floating spawn",
+            user_text=recency_probe,
+            action_response=ptt,
+            snapshot_detail={},
+            traces=ptt_traces,
+            extra={
+                "get_conversations_calls": len(ptt_get_convos),
+                "assistant_reply": ptt_assistant,
+            },
+        )
+
+        # Typed main-chat blind recall — same marker-free probe.
+        send, snapshot, traces = self.send_and_wait(recency_probe, self.args.turn_timeout_ms)
+        assistant = latest_assistant_text(snapshot)
+        typed_evidence = strip_probe_text(
+            assistant + "\n" + "\n".join(flatten_trace_text(trace) for trace in traces),
+            [recency_probe],
+        )
+        if (
+            self.markers["floating_spawn"] not in typed_evidence
+            and spawn_title not in typed_evidence
+            and spawn_title.lower() not in typed_evidence.lower()
+        ):
+            self.fail(
+                "spawn-recall typed probe did not reference floating spawn handoff "
+                f"(reply={assistant[:160]!r})"
+            )
+        self.record_step(
+            "07d-spawn-recall-typed",
+            "typed blind recall after floating spawn",
+            user_text=recency_probe,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+        )
 
     def run_owner_suite(self) -> None:
         # Step 6 — owner-switch isolation (in-process via swap_test_owner)
@@ -1080,6 +1257,8 @@ def self_check() -> int:
         "agent_runtime_evidence",
         "coordinator_awareness_snapshot",
         "swap_test_owner",
+        "clear_owner_surface_state",
+        "kernel_turn_tail",
     }
     hub_actions = {"ptt_test_turn"}
     bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")

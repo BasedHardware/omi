@@ -176,6 +176,10 @@ actor AgentBridge {
     await runtime.clearOwnerState(clientId: clientId)
   }
 
+  func clearOwnerSurfaceState(chatId: String = "default") async {
+    await runtime.clearOwnerSurfaceState(clientId: clientId, chatId: chatId)
+  }
+
   func importLegacyMainChatSessions(_ entries: [(chatId: String, agentSessionId: String)]) async {
     await runtime.importLegacyMainChatSessions(
       clientId: clientId,
@@ -229,6 +233,33 @@ actor AgentBridge {
       clientId: clientId,
       harnessMode: harnessMode,
       surface: surface
+    )
+  }
+
+  func getKernelTurnTail(limit: Int = 8, chatId: String = "default") async throws -> AgentRuntimeProcess.KernelTurnTailResult {
+    try await start()
+    return try await runtime.getKernelTurnTail(
+      clientId: clientId,
+      harnessMode: harnessMode,
+      limit: limit,
+      chatId: chatId
+    )
+  }
+
+  func projectCrossSurfaceTurn(
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    idempotencyKey: String? = nil
+  ) async {
+    await runtime.projectCrossSurfaceTurn(
+      clientId: clientId,
+      surface: surface,
+      userText: userText,
+      assistantText: assistantText,
+      origin: origin,
+      idempotencyKey: idempotencyKey
     )
   }
 

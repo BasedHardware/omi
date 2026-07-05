@@ -78,4 +78,39 @@ final class KernelTurnProjection {
       return ""
     }
   }
+
+  func fetchKernelTurnTail(limit: Int = 8) async -> AgentRuntimeProcess.KernelTurnTailResult? {
+    guard let host, await host.ensureBridgeStartedForKernel() else { return nil }
+    guard let client else { return nil }
+    do {
+      return try await client.getKernelTurnTail(limit: limit)
+    } catch {
+      log("KernelTurnProjection: kernel turn tail fetch failed: \(error.localizedDescription)")
+      return nil
+    }
+  }
+
+  func clearOwnerSurfaceState(chatId: String = "default") async {
+    guard let host, await host.ensureBridgeStartedForKernel() else { return }
+    guard let client else { return }
+    await client.clearOwnerSurfaceState(chatId: chatId)
+  }
+
+  func projectCrossSurfaceTurn(
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    idempotencyKey: String? = nil
+  ) async {
+    guard let host, await host.ensureBridgeStartedForKernel() else { return }
+    guard let client else { return }
+    await client.projectCrossSurfaceTurn(
+      surface: surface,
+      userText: userText,
+      assistantText: assistantText,
+      origin: origin,
+      idempotencyKey: idempotencyKey
+    )
+  }
 }

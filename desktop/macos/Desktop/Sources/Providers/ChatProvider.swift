@@ -743,6 +743,7 @@ enum ChatTurnOwner: Equatable {
 extension ChatMessage {
     /// Convert a backend message to a local ChatMessage
     init(from db: ChatMessageDB) {
+        let resources = ChatResource.decodeResourcesFromMessageMetadata(db.metadata)
         self.init(
             id: db.id,
             text: db.text,
@@ -751,7 +752,8 @@ extension ChatMessage {
             isStreaming: false,
             rating: db.rating,
             isSynced: true,
-            attachments: ChatMessage.decodeAttachments(from: db.metadata)
+            attachments: ChatMessage.decodeAttachments(from: db.metadata),
+            resources: resources
         )
     }
 
@@ -1725,6 +1727,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             )
             messages = persistedMessages.map(ChatMessage.init(from:))
                 .sorted(by: { $0.createdAt < $1.createdAt })
+            await rehydrateMissingArtifactResourcesFromKernel()
             messagesPaginationOffset = persistedMessages.count
             // If we got a full page, there might be more messages
             hasMoreMessages = persistedMessages.count == messagesPageSize
@@ -2664,6 +2667,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 )
                 messages = persistedMessages.map(ChatMessage.init(from:))
                     .sorted(by: { $0.createdAt < $1.createdAt })
+                await rehydrateMissingArtifactResourcesFromKernel()
                 messagesPaginationOffset = persistedMessages.count
                 hasMoreMessages = persistedMessages.count == messagesPageSize
                 sessionsLoadError = nil
@@ -2805,6 +2809,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     // Merge: adopt the server ID so future polls find it by ID.
                     messages[localIndex].id = dbMsg.id
                     messages[localIndex].isSynced = true
+                    if messages[localIndex].resources.isEmpty {
+                        let resources = ChatResource.decodeResourcesFromMessageMetadata(dbMsg.metadata)
+                        if !resources.isEmpty {
+                            messages[localIndex].resources = resources
+                        }
+                    }
                     log("ChatProvider poll: merged backend ID \(dbMsg.id) into local message (was unsynced)")
                     continue
                 }
@@ -2991,6 +3001,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // saveMessage site 2 of 5: AI message synthesized from a
         // proactive notification (no bridge query, no streaming).
         // Fire-and-forget Task.
+        let capturedResources = resources
+        let capturedMetadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: capturedResources)
         pendingSaves.begin()
         Task { [weak self] in
             do {
@@ -2999,6 +3011,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     sender: "ai",
                     appId: capturedAppId,
                     sessionId: capturedSessionId,
+                    metadata: capturedMetadata,
                     clientMessageId: localId
                 )
                 await MainActor.run {
@@ -3087,11 +3100,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         messageSource: String
     ) async {
         do {
+            let metadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: message.resources)
             let response = try await APIClient.shared.saveMessage(
                 text: text,
                 sender: sender,
                 appId: appId,
                 sessionId: sessionId,
+                metadata: metadata,
                 clientMessageId: message.id,
                 messageSource: messageSource
             )
@@ -3882,7 +3897,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 pendingSaves.begin()
                 defer { pendingSaves.end() }
                 do {
-                    let toolMetadata = serializeToolCallMetadata(messageId: aiMessageId)
+                    let toolMetadata = serializeMessagePersistenceMetadata(messageId: aiMessageId)
                     let response = try await APIClient.shared.saveMessage(
                         text: textToSave,
                         sender: "ai",
@@ -4011,7 +4026,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     // response after a bridge error. Fire-and-forget
                     // Task; same counter pattern as the other sites.
                     let partialText = messages[index].text
-                    let partialToolMetadata = self.serializeToolCallMetadata(messageId: aiMessageId)
+                    let partialToolMetadata = self.serializeMessagePersistenceMetadata(messageId: aiMessageId)
                     pendingSaves.begin()
                     Task { [weak self] in
                         do {
@@ -4515,10 +4530,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
-    /// Serialize tool calls from a message's contentBlocks into a JSON metadata string.
-    /// Returns nil if there are no tool calls.
-    private func serializeToolCallMetadata(messageId: String) -> String? {
+    /// Serialize tool calls and resource cards from a message into a JSON metadata string.
+    /// Returns nil if there are no tool calls and no resources.
+    private func serializeMessagePersistenceMetadata(messageId: String) -> String? {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
+
+        var root: [String: Any] = [:]
 
         var toolCalls: [[String: Any]] = []
         for block in messages[index].contentBlocks {
@@ -4536,13 +4553,72 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 toolCalls.append(call)
             }
         }
+        if !toolCalls.isEmpty {
+            root["tool_calls"] = toolCalls
+        }
 
-        guard !toolCalls.isEmpty else { return nil }
+        if let resourcesMetadata = ChatResource.mergeResourcesIntoMessageMetadata(
+            nil,
+            resources: messages[index].resources
+        ),
+           let data = resourcesMetadata.data(using: .utf8),
+           let resourcesRoot = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let resources = resourcesRoot[ChatResource.messageMetadataResourcesKey] {
+            root[ChatResource.messageMetadataResourcesKey] = resources
+        }
 
-        let metadata: [String: Any] = ["tool_calls": toolCalls]
-        guard let data = try? JSONSerialization.data(withJSONObject: metadata),
+        guard !root.isEmpty else { return nil }
+
+        guard let data = try? JSONSerialization.data(withJSONObject: root),
               let json = String(data: data, encoding: .utf8) else { return nil }
         return json
+    }
+
+    /// Re-resolve artifact cards whose persisted file paths are missing by asking the kernel.
+    private func rehydrateMissingArtifactResourcesFromKernel() async {
+        var runIds = Set<String>()
+        for message in messages {
+            for resource in message.resources where resource.artifactId != nil {
+                guard let fileURL = resource.fileURL else {
+                    if let runId = resource.runId { runIds.insert(runId) }
+                    continue
+                }
+                if !FileManager.default.fileExists(atPath: fileURL.path),
+                   let runId = resource.runId {
+                    runIds.insert(runId)
+                }
+            }
+        }
+        guard !runIds.isEmpty else { return }
+
+        var artifactsByRunId: [String: [String: AgentArtifactProjection]] = [:]
+        for runId in runIds {
+            guard let artifacts = try? await DesktopCoordinatorService.shared.inspectArtifactsForRun(runId: runId)
+            else { continue }
+            artifactsByRunId[runId] = Dictionary(uniqueKeysWithValues: artifacts.map { ($0.artifactId, $0) })
+        }
+        guard !artifactsByRunId.isEmpty else { return }
+
+        for messageIndex in messages.indices {
+            var updatedResources = messages[messageIndex].resources
+            var changed = false
+            for resourceIndex in updatedResources.indices {
+                let resource = updatedResources[resourceIndex]
+                guard let artifactId = resource.artifactId,
+                      let runId = resource.runId,
+                      let artifact = artifactsByRunId[runId]?[artifactId]
+                else { continue }
+
+                let refreshed = resource.refreshedFromKernelArtifact(artifact)
+                if refreshed != resource {
+                    updatedResources[resourceIndex] = refreshed
+                    changed = true
+                }
+            }
+            if changed {
+                messages[messageIndex].resources = updatedResources
+            }
+        }
     }
 
     // MARK: - Message Rating
@@ -4818,5 +4894,46 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             detail["owner_id"] = ownerId
         }
         return detail
+    }
+
+    /// Clear kernel `main_chat` turns for the active owner (continuity harness hygiene).
+    func automationClearOwnerSurfaceState(chatId: String = "default") async -> [String: String] {
+        guard AppBuild.isNonProduction else {
+            return ["error": "clear_owner_surface_state is disabled on production bundles"]
+        }
+        _ = await ensureBridgeStartedForKernel()
+        await kernelTurnProjection.clearOwnerSurfaceState(chatId: chatId)
+        return ["cleared": "true", "chat_id": chatId]
+    }
+
+    /// Read-only kernel `main_chat` turn tail for continuity harness evidence.
+    func automationKernelTurnTail(limit: Int = 8) async -> [String: String] {
+        let boundedLimit = max(1, limit)
+        guard await ensureBridgeStartedForKernel(),
+              let tail = await kernelTurnProjection.fetchKernelTurnTail(limit: boundedLimit)
+        else {
+            return ["error": "kernel turn tail unavailable"]
+        }
+        let rows: [[String: String]] = tail.turns.map { turn in
+            [
+                "role": turn.role,
+                "content": turn.content,
+                "surface_kind": turn.surfaceKind,
+                "created_at_ms": "\(turn.createdAtMs)",
+                "origin": turn.origin,
+            ]
+        }
+        let turnsJSON: String
+        if let data = try? JSONSerialization.data(withJSONObject: rows),
+           let encoded = String(data: data, encoding: .utf8) {
+            turnsJSON = encoded
+        } else {
+            turnsJSON = "[]"
+        }
+        return [
+            "conversation_id": tail.conversationId,
+            "turn_count": "\(tail.turns.count)",
+            "turns_json": turnsJSON,
+        ]
     }
 }

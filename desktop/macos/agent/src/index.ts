@@ -46,6 +46,9 @@ import type {
   RefreshTokenMessage,
   RecordSurfaceTurnMessage,
   GetVoiceSeedContextMessage,
+  GetKernelTurnTailMessage,
+  ClearOwnerSurfaceStateMessage,
+  ProjectCrossSurfaceTurnMessage,
   MergeFloatingChatIntoMainChatMessage,
   AuthMethod,
 } from "./protocol.js";
@@ -1462,6 +1465,92 @@ async function main(): Promise<void> {
           conversationId,
           context,
         });
+        break;
+      }
+
+      case "clear_owner_surface_state": {
+        const clear = msg as ClearOwnerSurfaceStateMessage;
+        const ownerId = clear.ownerId?.trim() || currentOwnerId;
+        const chatId = typeof clear.chatId === "string" ? clear.chatId : "default";
+        const result = kernel.clearOwnerMainChatTurns(ownerId, chatId);
+        logErr(
+          `Cleared main_chat kernel turns for ${ownerId}/${chatId}: `
+            + `conversation=${result.conversationId ?? "none"}, deleted=${result.deletedTurns}`,
+        );
+        break;
+      }
+
+      case "get_kernel_turn_tail": {
+        const tail = msg as GetKernelTurnTailMessage;
+        const ownerId = tail.ownerId?.trim() || currentOwnerId;
+        const requestId = tail.requestId.trim();
+        const limit = typeof tail.limit === "number" ? tail.limit : 8;
+        const chatId = typeof tail.chatId === "string" ? tail.chatId : "default";
+        const resolved = kernel.getMainChatTurnTail(ownerId, limit, chatId);
+        const turns = resolved.turns.map((turn) => {
+          let origin = "";
+          try {
+            const metadata = JSON.parse(turn.metadataJson || "{}") as { origin?: unknown };
+            origin = typeof metadata.origin === "string" ? metadata.origin : "";
+          } catch {
+            origin = "";
+          }
+          return {
+            role: turn.role,
+            content: turn.content,
+            surfaceKind: turn.surfaceKind,
+            createdAtMs: turn.createdAtMs,
+            metadataJson: turn.metadataJson,
+            origin,
+          };
+        });
+        send({
+          type: "kernel_turn_tail",
+          protocolVersion: tail.protocolVersion,
+          requestId,
+          clientId: tail.clientId,
+          conversationId: resolved.conversationId ?? "",
+          turns,
+        });
+        break;
+      }
+
+      case "project_cross_surface_turn": {
+        const project = msg as ProjectCrossSurfaceTurnMessage;
+        const ownerId = project.ownerId?.trim() || currentOwnerId;
+        const surfaceKind = typeof project.surfaceKind === "string" ? project.surfaceKind : "main_chat";
+        const externalRefKind = typeof project.externalRefKind === "string" ? project.externalRefKind : "chat";
+        const externalRefId = typeof project.externalRefId === "string" ? project.externalRefId : "default";
+        const userText = typeof project.userText === "string" ? project.userText : "";
+        const assistantText = typeof project.assistantText === "string" ? project.assistantText : "";
+        const origin = typeof project.origin === "string" ? project.origin : "surface";
+        const result = kernel.projectCrossSurfaceTurn({
+          ownerId,
+          targetSurfaceRef: { surfaceKind, externalRefKind, externalRefId },
+          userText,
+          assistantText,
+          origin,
+          idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
+        });
+        if (result.recorded) {
+          send({
+            type: "turn_recorded",
+            protocolVersion: project.protocolVersion,
+            requestId: project.requestId,
+            clientId: project.clientId,
+            conversationId: result.conversationId,
+            surfaceKind,
+            externalRefKind,
+            externalRefId,
+            userText: userText.trim(),
+            assistantText: assistantText.trim(),
+            origin,
+            interrupted: false,
+            idempotencyKey: typeof project.idempotencyKey === "string" ? project.idempotencyKey : undefined,
+            userTurnId: result.userTurn?.turnId,
+            assistantTurnId: result.assistantTurn?.turnId,
+          });
+        }
         break;
       }
 
