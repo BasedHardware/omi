@@ -114,6 +114,11 @@ struct OnboardingView: View {
       log("OnboardingView: resetOnboardingRequested — returning to the first onboarding step")
       currentStep = 0
     }
+    .onReceive(NotificationCenter.default.publisher(for: .onboardingBackRequested)) { _ in
+      guard !isExportPreview, currentStep > 0 else { return }
+      log("OnboardingView: onboardingBackRequested — returning to the previous step")
+      currentStep -= 1
+    }
   }
 
   private var onboardingContent: some View {

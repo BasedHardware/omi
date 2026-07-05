@@ -188,7 +188,36 @@ struct OnboardingStepScaffold<Content: View>: View {
 struct OnboardingLogoMark: View {
   let onForceComplete: (() -> Void)?
 
+  // Mirrors OnboardingView's step index so the Back control appears consistently in
+  // every step header without threading a closure through each step view.
+  @AppStorage("onboardingStep") private var currentStep = 0
+
   var body: some View {
+    HStack(spacing: 12) {
+      if currentStep > 0 {
+        Button {
+          NotificationCenter.default.post(name: .onboardingBackRequested, object: nil)
+        } label: {
+          Image(systemName: "chevron.left")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 28, height: 28)
+            .background(
+              Circle().fill(OmiColors.backgroundTertiary)
+            )
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("[", modifiers: .command)
+        .help("Go back to the previous step")
+        .accessibilityLabel("Back")
+      }
+
+      logo
+    }
+  }
+
+  private var logo: some View {
     Group {
       if let logoImage = onboardingTextLogoImage() {
         Image(nsImage: logoImage)

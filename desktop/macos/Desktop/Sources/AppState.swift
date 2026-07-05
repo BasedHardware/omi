@@ -652,6 +652,8 @@ class AppState: ObservableObject {
 
 extension Notification.Name {
   static let resetOnboardingRequested = Notification.Name("resetOnboardingRequested")
+  /// Posted when the user taps the onboarding Back control to return to the previous step
+  static let onboardingBackRequested = Notification.Name("onboardingBackRequested")
   /// Posted when the system wakes from sleep
   static let systemDidWake = Notification.Name("systemDidWake")
   /// Posted when the screen is locked
