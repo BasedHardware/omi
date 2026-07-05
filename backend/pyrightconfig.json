@@ -129,7 +129,10 @@
         "utils/webhooks.py",
         "routers/payment.py",
         "models/conversation.py",
-        "utils/conversations/merge_conversations.py"
+        "utils/conversations/merge_conversations.py",
+        "utils/retrieval/agentic.py",
+        "routers/agent_tools.py",
+        "routers/tools.py"
     ],
     "extraPaths": [
         "."

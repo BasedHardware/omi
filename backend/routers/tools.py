@@ -18,38 +18,27 @@ Endpoints:
 
 import logging
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field, field_validator
 
 import database.vector_db as vector_db
-
-# `utils.other.endpoints.with_rate_limit` and
-# `utils.conversations.transcript_chunks.hydrate_chunk_texts` are untyped; reach
-# them through getattr + cast so the untyped symbol never lands in a typed binding.
-from utils.conversations import transcript_chunks as _chunk_utils
-from utils.other import endpoints as _endpoints
-from utils.other.endpoints import get_current_user_uid
-from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
-from utils.retrieval.tool_services.action_items import (
-    create_action_item_text,
-    get_action_items_text,
-    update_action_item_text,
-)
+from utils.other.endpoints import get_current_user_uid, with_rate_limit
+from utils.conversations.transcript_chunks import hydrate_chunk_texts
 from utils.retrieval.tool_services.conversations import get_conversations_text, search_conversations_text
 from utils.retrieval.tool_services.memories import get_memories_text, search_memories_text
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
+from utils.retrieval.tool_services.action_items import (
+    get_action_items_text,
+    create_action_item_text,
+    update_action_item_text,
+)
 from utils.retrieval.tools.calendar_tools import create_calendar_event_tool
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# Typed aliases for untyped utils (getattr yields Any; cast pins the signature).
-RateLimitFactory = Callable[[Callable[..., Any], str], Callable[..., Any]]
-with_rate_limit: RateLimitFactory = cast(RateLimitFactory, getattr(_endpoints, "with_rate_limit"))
-HydrateChunks = Callable[[str, List[Dict[str, Any]]], List[Dict[str, Any]]]
-hydrate_chunk_texts: HydrateChunks = cast(HydrateChunks, getattr(_chunk_utils, "hydrate_chunk_texts"))
 
 
 # --------------- response envelope ---------------
@@ -61,7 +50,7 @@ class ToolResponse(BaseModel):
     is_error: bool = False
 
 
-def _ok(tool_name: str, text: str) -> Dict[str, Any]:
+def _ok(tool_name: str, text: str) -> dict:
     return {"tool_name": tool_name, "result_text": text, "is_error": text.startswith("Error")}
 
 
@@ -109,15 +98,6 @@ class CreateCalendarEventRequest(BaseModel):
         return value
 
 
-async def _invoke_calendar_event_tool(tool_input: Dict[str, Any], user_id: str) -> str:
-    """Typed adapter for the untyped LangChain `create_calendar_event_tool.ainvoke`."""
-    result = await create_calendar_event_tool.ainvoke(  # type: ignore[reportUnknownMemberType]  # langchain Tool.ainvoke is untyped
-        tool_input,
-        config={"configurable": {"user_id": user_id}},
-    )
-    return cast(str, result)
-
-
 # --------------- conversation endpoints ---------------
 
 
@@ -129,7 +109,7 @@ def get_conversations(
     offset: int = Query(default=0, ge=0),
     include_transcript: bool = Query(default=True),
     uid: str = Depends(get_current_user_uid),
-) -> Dict[str, Any]:
+):
     result = get_conversations_text(
         uid=uid,
         start_date=start_date,
@@ -145,7 +125,7 @@ def get_conversations(
 def search_conversations(
     body: SearchConversationsRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
-) -> Dict[str, Any]:
+):
     result = search_conversations_text(
         uid=uid,
         query=body.query,
@@ -166,7 +146,7 @@ class SearchChunksRequest(BaseModel):
 def search_conversation_chunks(
     body: SearchChunksRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
-) -> Dict[str, Any]:
+):
     """Semantic search over RAW transcript chunks (verbatim evidence with dates).
 
     Complements /conversations/search, which matches against conversation summaries:
@@ -177,7 +157,7 @@ def search_conversation_chunks(
     rows = hydrate_chunk_texts(uid, rows)
     if not rows:
         return _ok("search_conversation_chunks", f"No transcript excerpts found matching '{body.query}'.")
-    parts: List[str] = []
+    parts = []
     for i, r in enumerate(rows, 1):
         parts.append(f"Excerpt {i} (relevance: {r['score']:.2f}):\n{r['text']}")
     return _ok("search_conversation_chunks", "\n\n".join(parts))
@@ -193,7 +173,7 @@ def get_memories(
     start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     uid: str = Depends(get_current_user_uid),
-) -> Dict[str, Any]:
+):
     result = get_memories_text(
         uid=uid,
         limit=limit,
@@ -209,7 +189,7 @@ def get_memories(
 def search_memories(
     body: SearchMemoriesRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:search")),
-) -> Dict[str, Any]:
+):
     result = search_memories_text(
         uid=uid,
         query=body.query,
@@ -233,7 +213,7 @@ def get_action_items(
     due_start_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     due_end_date: Optional[str] = Query(default=None, description="ISO date with timezone"),
     uid: str = Depends(get_current_user_uid),
-) -> Dict[str, Any]:
+):
     result = get_action_items_text(
         uid=uid,
         limit=limit,
@@ -252,7 +232,7 @@ def get_action_items(
 def create_action_item(
     body: CreateActionItemRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
-) -> Dict[str, Any]:
+):
     result = create_action_item_text(
         uid=uid,
         description=body.description,
@@ -267,7 +247,7 @@ def update_action_item(
     action_item_id: str,
     body: UpdateActionItemRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
-) -> Dict[str, Any]:
+):
     result = update_action_item_text(
         uid=uid,
         action_item_id=action_item_id,
@@ -285,8 +265,8 @@ def update_action_item(
 async def create_calendar_event(
     body: CreateCalendarEventRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "tools:mutate")),
-) -> Dict[str, Any]:
-    result = await _invoke_calendar_event_tool(
+):
+    result = await create_calendar_event_tool.ainvoke(
         {
             "title": body.title,
             "start_time": body.start_time.isoformat(),
@@ -295,7 +275,7 @@ async def create_calendar_event(
             "location": body.location,
             "attendees": body.attendees,
         },
-        user_id=uid,
+        config={"configurable": {"user_id": uid}},
     )
     return {
         "tool_name": "create_calendar_event",

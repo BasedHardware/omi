@@ -10,15 +10,12 @@ import uuid
 import asyncio
 import contextvars
 import traceback
-from typing import List, Optional, AsyncGenerator, Any, Dict, Callable, TypeVar, Tuple, cast
+from typing import List, Optional, AsyncGenerator, Any, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import BaseTool
 
 # Context variable to store config for tools
-agent_config_context: contextvars.ContextVar[Optional[Dict[str, Any]]] = contextvars.ContextVar(
-    'agent_config', default=None
-)
+agent_config_context: contextvars.ContextVar[dict] = contextvars.ContextVar('agent_config', default=None)
 
 from models.app import App
 from models.chat import Message, ChatSession, PageContext
@@ -55,27 +52,21 @@ from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_res
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
-from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone  # type: ignore[reportPrivateUsage]  # shared agentic prompt builder, intentionally cross-module
+from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
+from utils.other.endpoints import timeit
+from utils.observability.langsmith import is_langsmith_enabled
 import logging
 
-# Typed wrapper around langsmith.traceable with a no-op fallback when langsmith is absent.
-# Keeps the decorated function's signature intact for the type-checker.
-F = TypeVar("F", bound=Callable[..., Any])
-
+# Import langsmith traceable if available
 try:
-    from langsmith import traceable as _langsmith_traceable  # type: ignore[reportUnknownVariableType]  # langsmith traceable overloads
+    from langsmith import traceable as _traceable
 except ImportError:
-    _langsmith_traceable = None
 
-
-def _traceable(**kwargs: Any) -> Callable[[F], F]:
-    if _langsmith_traceable is None:
-
-        def decorator(func: F) -> F:
+    def _traceable(**kwargs):
+        def decorator(func):
             return func
 
         return decorator
-    return cast("Callable[[F], F]", _langsmith_traceable(**kwargs))
 
 
 logger = logging.getLogger(__name__)
@@ -172,31 +163,31 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
 class AsyncStreamingCallback:
     """Callback for streaming LLM responses with data and thought prefixes."""
 
-    def __init__(self) -> None:
-        self.queue: asyncio.Queue[Optional[str]] = asyncio.Queue()
+    def __init__(self):
+        self.queue = asyncio.Queue()
 
-    async def put_data(self, text: str) -> None:
+    async def put_data(self, text):
         await self.queue.put(f"data: {text}")
 
-    async def put_thought(self, text: str, app_id: Optional[str] = None) -> None:
+    async def put_thought(self, text, app_id: Optional[str] = None):
         if app_id:
             await self.queue.put(f"think: {text}|app_id:{app_id}")
         else:
             await self.queue.put(f"think: {text}")
 
-    def put_thought_nowait(self, text: str, app_id: Optional[str] = None) -> None:
+    def put_thought_nowait(self, text, app_id: Optional[str] = None):
         if app_id:
             self.queue.put_nowait(f"think: {text}|app_id:{app_id}")
         else:
             self.queue.put_nowait(f"think: {text}")
 
-    def put_data_nowait(self, text: str) -> None:
+    def put_data_nowait(self, text):
         self.queue.put_nowait(f"data: {text}")
 
-    async def end(self) -> None:
+    async def end(self):
         await self.queue.put(None)
 
-    def end_nowait(self) -> None:
+    def end_nowait(self):
         self.queue.put_nowait(None)
 
 
@@ -205,22 +196,19 @@ class AsyncStreamingCallback:
 # ---------------------------------------------------------------------------
 
 
-def _langchain_tool_to_anthropic(lc_tool: BaseTool, defer_loading: bool = False) -> Dict[str, Any]:
+def _langchain_tool_to_anthropic(lc_tool, defer_loading: bool = False) -> dict:
     """Convert a LangChain @tool to Anthropic tool schema format."""
-    _args_schema: Any = lc_tool.args_schema
-    schema: Dict[str, Any] = cast(Dict[str, Any], _args_schema.schema())
-    properties: Dict[str, Any] = {
-        k: v for k, v in cast(Dict[str, Any], schema.get('properties', {})).items() if k != 'config'
-    }
-    required: List[str] = [r for r in cast(List[str], schema.get('required', [])) if r != 'config']
+    schema = lc_tool.args_schema.schema()
+    properties = {k: v for k, v in schema.get('properties', {}).items() if k != 'config'}
+    required = [r for r in schema.get('required', []) if r != 'config']
 
     # Clean up schema: remove 'title' keys that Pydantic adds (not needed by Anthropic)
-    cleaned_properties: Dict[str, Any] = {}
+    cleaned_properties = {}
     for k, v in properties.items():
-        cleaned = {pk: pv for pk, pv in cast(Dict[str, Any], v).items() if pk != 'title'}
+        cleaned = {pk: pv for pk, pv in v.items() if pk != 'title'}
         cleaned_properties[k] = cleaned
 
-    tool_def: Dict[str, Any] = {
+    tool_def = {
         "name": lc_tool.name,
         "description": lc_tool.description,
         "input_schema": {
@@ -235,22 +223,20 @@ def _langchain_tool_to_anthropic(lc_tool: BaseTool, defer_loading: bool = False)
 
 
 # Tool search tool definition — Anthropic's built-in tool discovery
-TOOL_SEARCH_TOOL: Dict[str, str] = {
+TOOL_SEARCH_TOOL = {
     "type": "tool_search_tool_regex_20251119",
     "name": "tool_search_tool_regex",
 }
 
 # Web search tool — Anthropic's built-in server-side web search (replaces Perplexity)
-WEB_SEARCH_TOOL: Dict[str, Any] = {
+WEB_SEARCH_TOOL = {
     "type": "web_search_20260209",
     "name": "web_search",
     "max_uses": 5,
 }
 
 
-def _convert_tools(
-    core_tools: List[BaseTool], app_tools: Optional[List[BaseTool]] = None
-) -> Tuple[List[Dict[str, Any]], Dict[str, BaseTool]]:
+def _convert_tools(core_tools: list, app_tools: list = None) -> tuple:
     """Convert all tools and build name->object registry.
 
     Core tools are always visible to Claude. App tools are marked with
@@ -261,7 +247,7 @@ def _convert_tools(
         (tool_schemas, tool_registry) where tool_schemas is a list of Anthropic
         tool definitions and tool_registry maps tool name -> LangChain tool object.
     """
-    schemas: List[Dict[str, Any]] = []
+    schemas = []
 
     # Add built-in server tools
     schemas.append(WEB_SEARCH_TOOL)
@@ -279,20 +265,18 @@ def _convert_tools(
         schemas.append(_langchain_tool_to_anthropic(t, defer_loading=True))
 
     # Registry includes ALL tools (core + app) for execution
-    all_tools: List[BaseTool] = list(core_tools) + list(app_tools or [])
-    registry: Dict[str, BaseTool] = {t.name: t for t in all_tools}
+    all_tools = list(core_tools) + list(app_tools or [])
+    registry = {t.name: t for t in all_tools}
     return schemas, registry
 
 
 @_traceable(name="chat.tool_execution", run_type="tool")
-async def _execute_tool(
-    tool_name: str, tool_input: Dict[str, Any], registry: Dict[str, BaseTool], configurable: Dict[str, Any]
-) -> str:
+async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
-    tool_obj: BaseTool = registry[tool_name]
+    tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
-    raw_result: Any = await tool_obj.ainvoke(tool_input, config=config)  # type: ignore[reportUnknownMemberType]  # BaseTool.ainvoke generic output
-    result: str = preserve_chat_memory_tool_result_boundary(tool_name, str(raw_result))
+    result = await tool_obj.ainvoke(tool_input, config=config)
+    result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
     return result
 
 
@@ -315,7 +299,7 @@ def _extract_app_id(tool_name: str) -> Optional[str]:
 # ---------------------------------------------------------------------------
 
 
-async def _emit_calendar_status(callback: AsyncStreamingCallback, tool_name: str, output: str) -> None:
+async def _emit_calendar_status(callback: AsyncStreamingCallback, tool_name: str, output: str):
     """Emit calendar-specific completion status messages."""
     if 'calendar' not in tool_name.lower():
         return
@@ -353,16 +337,16 @@ async def _emit_calendar_status(callback: AsyncStreamingCallback, tool_name: str
 # ---------------------------------------------------------------------------
 
 
-def _messages_to_anthropic(messages: List[Message]) -> List[Dict[str, Any]]:
+def _messages_to_anthropic(messages: List[Message]) -> list:
     """Convert chat messages to Anthropic API format."""
-    anthropic_messages: List[Dict[str, Any]] = []
+    anthropic_messages = []
     for msg in messages:
         role = "assistant" if msg.sender == "ai" else "user"
         anthropic_messages.append({"role": role, "content": msg.text})
     return anthropic_messages
 
 
-def _inject_current_datetime(anthropic_messages: List[Dict[str, Any]], datetime_block: str) -> List[Dict[str, Any]]:
+def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> list:
     """Prepend the current-datetime block to the latest user turn.
 
     The datetime changes every request, so it is kept out of the cache_control system
@@ -395,14 +379,14 @@ def _inject_current_datetime(anthropic_messages: List[Dict[str, Any]], datetime_
 
 async def _run_anthropic_agent_stream(
     system_prompt: str,
-    messages: List[Dict[str, Any]],
-    tool_schemas: List[Dict[str, Any]],
-    tool_registry: Dict[str, BaseTool],
+    messages: list,
+    tool_schemas: list,
+    tool_registry: dict,
     callback: AsyncStreamingCallback,
-    full_response: List[str],
+    full_response: list,
     safety_guard: AgentSafetyGuard,
-    configurable: Dict[str, Any],
-) -> None:
+    configurable: dict,
+):
     """Run the Anthropic tool-use loop with streaming.
 
     This replaces LangGraph's create_react_agent + astream_events with a simple
@@ -484,7 +468,8 @@ async def _run_anthropic_agent_stream(
 
         # Execute tool calls
         tool_use_blocks = [b for b in response.content if b.type == "tool_use"]
-        tool_results: List[Dict[str, Any]] = []
+        tool_results = []
+        should_stop = False
 
         for block in tool_use_blocks:
             # Safety guard: validate before execution
@@ -530,7 +515,7 @@ async def _run_anthropic_agent_stream(
 
         # Append assistant message + tool results for next iteration
         # Serialize content blocks for the messages array
-        assistant_content: List[Dict[str, Any]] = []
+        assistant_content = []
         for block in response.content:
             if block.type == "text":
                 assistant_content.append({"type": "text", "text": block.text})
@@ -564,10 +549,10 @@ async def execute_agentic_chat_stream(
     uid: str,
     messages: List[Message],
     app: Optional[App] = None,
-    callback_data: Optional[Dict[str, Any]] = None,
+    callback_data: dict = None,
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
-) -> AsyncGenerator[Optional[str], None]:
+) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
     Yields formatted chunks with "data: " or "think: " prefixes.
@@ -580,20 +565,19 @@ async def execute_agentic_chat_stream(
     system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context, tz=tz)
 
     # Get prompt metadata for tracing/versioning
-    prompt_name: Optional[str] = None
-    prompt_commit: Optional[str] = None
+    prompt_name, prompt_commit, prompt_source = None, None, None
     try:
         from utils.observability.langsmith_prompts import get_prompt_metadata
 
-        prompt_name, prompt_commit, _ = get_prompt_metadata()
+        prompt_name, prompt_commit, prompt_source = get_prompt_metadata()
     except Exception as e:
         logger.error(f"Could not get prompt metadata: {e}")
 
     # Core tools (fixed order) — always visible to Claude
-    core_tools: List[BaseTool] = list(CORE_TOOLS)
+    core_tools = list(CORE_TOOLS)
 
     # Dynamic app tools — deferred, discovered on-demand via tool search
-    app_tools: List[BaseTool] = []
+    app_tools = []
     try:
         app_tools = load_app_tools(uid)
         if app_tools:
@@ -603,7 +587,11 @@ async def execute_agentic_chat_stream(
 
     # Append app tool awareness to system prompt so Claude knows to search for them
     if app_tools:
-        app_tool_names = ", ".join(sorted({t.name for t in app_tools}))
+        app_names = set()
+        for t in app_tools:
+            # Tool names are prefixed with app_id; extract the human-readable app name from description
+            app_names.add(t.name)
+        app_tool_names = ", ".join(sorted(app_names))
         system_prompt += f"""
 
 <available_app_tools>
@@ -635,7 +623,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     callback = AsyncStreamingCallback()
 
     # Conversations collected by tools for citation
-    conversations_collected: List[Dict[str, Any]] = []
+    conversations_collected = []
 
     # Safety guard
     safety_guard = AgentSafetyGuard(max_tool_calls=25, max_context_tokens=500000)
@@ -644,7 +632,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     langsmith_run_id = str(uuid.uuid4())
 
     # Config for tools to access via RunnableConfig
-    configurable: Dict[str, Any] = {
+    configurable = {
         "user_id": uid,
         "thread_id": str(uuid.uuid4()),
         "conversations_collected": conversations_collected,
@@ -662,7 +650,7 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
         callback_data['prompt_name'] = prompt_name
         callback_data['prompt_commit'] = prompt_commit
 
-    full_response: List[str] = []
+    full_response = []
     tool_usage_count = 0
 
     # Start agent task
