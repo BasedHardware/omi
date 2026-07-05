@@ -498,7 +498,8 @@ class TestV4StreamEndpoint:
         client = TestClient(app, raise_server_exceptions=False)
         with client.websocket_connect("/v4/stream?sample_rate=8000") as ws:
             data = ws.receive()
-            assert data.get("type") == "websocket.close" or data == {"type": "websocket.close"}
+            assert data.get("type") == "websocket.close"
+            assert data.get("code", 1003) == 1003, f"Expected close code 1003, got {data}"
 
     def test_streaming_unavailable_closes_with_1013(self):
         app, mod, _, _ = _make_app_with_mocks(streaming=False)
@@ -506,6 +507,7 @@ class TestV4StreamEndpoint:
         with client.websocket_connect("/v4/stream") as ws:
             data = ws.receive()
             assert data.get("type") == "websocket.close"
+            assert data.get("code", 1013) == 1013, f"Expected close code 1013, got {data}"
 
     def test_model_loading_closes_with_1013(self):
         app, mod, mock_gpu, _ = _make_app_with_mocks(gpu_ready=False, streaming=True)
@@ -513,6 +515,7 @@ class TestV4StreamEndpoint:
         with client.websocket_connect("/v4/stream") as ws:
             data = ws.receive()
             assert data.get("type") == "websocket.close"
+            assert data.get("code", 1013) == 1013, f"Expected close code 1013, got {data}"
 
     def test_too_many_streams_closes_with_1013(self):
         app, mod, _, _ = _make_app_with_mocks(streaming=True)
@@ -521,6 +524,7 @@ class TestV4StreamEndpoint:
         with client.websocket_connect("/v4/stream") as ws:
             data = ws.receive()
             assert data.get("type") == "websocket.close"
+            assert data.get("code", 1013) == 1013, f"Expected close code 1013, got {data}"
 
     def test_finalize_closes_stream(self):
         app, mod, _, _ = _make_app_with_mocks(streaming=True)
@@ -563,6 +567,10 @@ class TestV4StreamEndpoint:
         pcm = np.zeros(160, dtype=np.int16).tobytes()
         with client.websocket_connect("/v4/stream") as ws:
             ws.send_bytes(pcm)
+            ws.send_text("finalize")
+            data = ws.receive_json()
+            assert data["status"] == "closed", f"Expected clean close after error, got: {data}"
+            mod.stream_engine.close_stream.assert_called_once()
 
 
 class TestStreamMetricsEndpoint:

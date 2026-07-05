@@ -405,3 +405,14 @@ class TestIdleReaping:
             assert len(to_reap) == 0
         finally:
             await eng.stop()
+
+    @pytest.mark.asyncio
+    async def test_reaper_task_is_running(self, gpu_worker):
+        eng = StreamEngine(gpu_worker=gpu_worker, max_concurrent_streams=4, idle_timeout=10)
+        await eng.start()
+        try:
+            assert eng._reaper_task is not None
+            assert not eng._reaper_task.done()
+        finally:
+            await eng.stop()
+            assert eng._reaper_task.done()

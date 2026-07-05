@@ -168,6 +168,11 @@ class TestStreamTranscription:
                     break
 
             assert len(responses) > 0, "No responses received"
+            has_transcript = any(
+                r.get("partial_transcript") or r.get("final_transcript") or r.get("final_text") for r in responses
+            )
+            has_close = any(r.get("status") == "closed" for r in responses)
+            assert has_transcript or has_close, f"No transcript or close in responses: {responses[:3]}"
 
     @pytest.mark.asyncio
     async def test_first_response_latency(self):
