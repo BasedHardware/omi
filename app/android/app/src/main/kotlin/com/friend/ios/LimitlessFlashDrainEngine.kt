@@ -129,7 +129,9 @@ class LimitlessFlashDrainEngine(
     }
 
     private fun processPacket(data: ByteArray) {
-        LimitlessProtocol.parseDeviceStatus(data)?.let { onStorageState(it) }
+        if (phase == Phase.AWAITING_STATUS) {
+            LimitlessProtocol.parseDeviceStatus(data)?.let { onStorageState(it) }
+        }
 
         val packet = LimitlessProtocol.parseBlePacket(data) ?: return
         fragmentBuffer.getOrPut(packet.index) { mutableMapOf() }[packet.seq] = packet.payload

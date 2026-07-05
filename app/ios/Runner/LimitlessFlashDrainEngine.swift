@@ -148,7 +148,7 @@ final class LimitlessFlashDrainEngine {
     }
 
     private func processPacket(_ data: Data) {
-        if let state = LimitlessProtocol.parseDeviceStatus(data) {
+        if phase == .awaitingStatus, let state = LimitlessProtocol.parseDeviceStatus(data) {
             onStorageState(state)
         }
 
