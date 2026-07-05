@@ -376,6 +376,24 @@ class AuthService {
         return ""
     }
 
+    /// Resolve the Firebase Web API key or fail loudly (BL-019).
+    ///
+    /// The key is provisioned asynchronously (APIKeyService fetches it from the
+    /// backend and `setenv`s it), so it can legitimately be absent right after a
+    /// cold launch — failing at launch would false-positive. Instead, fail at the
+    /// point of use: every identitytoolkit/securetoken request must resolve the key
+    /// through this helper so a missing/empty key surfaces as a clear, user-visible
+    /// `AuthError` instead of being interpolated into `?key=` and returning an
+    /// opaque HTTP 400 ("API key not valid") that looks like a generic auth failure.
+    private func requireFirebaseApiKey() throws -> String {
+        let key = firebaseApiKey
+        guard !key.isEmpty else {
+            log("AuthService: refusing to build an auth request without FIREBASE_API_KEY")
+            throw AuthError.missingFirebaseApiKey
+        }
+        return key
+    }
+
     // MARK: - User Name Properties
 
     /// Get the user's given name (first name)
@@ -470,10 +488,7 @@ class AuthService {
         guard let hostPort = DesktopLocalProfile.authEmulatorHost else {
             throw AuthError.invalidURL
         }
-        let apiKey = firebaseApiKey
-        guard !apiKey.isEmpty else {
-            throw AuthError.missingToken
-        }
+        let apiKey = try requireFirebaseApiKey()
         guard let url = URL(
             string: "http://\(hostPort)/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=\(apiKey)"
         ) else {
@@ -1196,6 +1211,7 @@ class AuthService {
         case .invalidCredential: return "invalid_credential"
         case .invalidNonce: return "invalid_nonce"
         case .missingToken: return "missing_token"
+        case .missingFirebaseApiKey: return "missing_firebase_api_key"
         case .notSignedIn: return "not_signed_in"
         case .invalidURL: return "invalid_url"
         case .stateMismatch: return "state_mismatch"
@@ -1645,7 +1661,8 @@ class AuthService {
 
     /// Exchange custom token for ID token using Firebase REST API
     private func exchangeCustomTokenForIdToken(customToken: String) async throws -> FirebaseTokenResult {
-        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)") else {
+        let apiKey = try requireFirebaseApiKey()
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(apiKey)") else {
             throw AuthError.invalidURL
         }
 
@@ -1711,7 +1728,8 @@ class AuthService {
             throw AuthError.notSignedIn
         }
 
-        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)") else {
+        let apiKey = try requireFirebaseApiKey()
+        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
             throw AuthError.invalidURL
         }
 
@@ -2058,7 +2076,8 @@ class AuthService {
     /// Sign in with Firebase using an Apple identity token via REST API
     /// This bypasses the backend entirely - Firebase verifies the Apple JWT directly
     private func signInWithAppleIdentityToken(identityToken: String, nonce: String) async throws -> FirebaseTokenResult {
-        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(firebaseApiKey)") else {
+        let apiKey = try requireFirebaseApiKey()
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(apiKey)") else {
             throw AuthError.invalidURL
         }
 
@@ -2179,6 +2198,7 @@ enum AuthError: LocalizedError {
     case invalidCredential
     case invalidNonce
     case missingToken
+    case missingFirebaseApiKey
     case notSignedIn
     case invalidURL
     case stateMismatch
@@ -2199,6 +2219,8 @@ enum AuthError: LocalizedError {
             return "Invalid nonce - please try again"
         case .missingToken:
             return "Missing identity token from Apple"
+        case .missingFirebaseApiKey:
+            return "Sign-in is not ready yet (Firebase API key unavailable). Please check your connection and try again in a moment."
         case .notSignedIn:
             return "User is not signed in"
         case .invalidURL:
