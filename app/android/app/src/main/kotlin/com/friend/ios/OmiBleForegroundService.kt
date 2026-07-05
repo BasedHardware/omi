@@ -663,7 +663,17 @@ class OmiBleForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
+        // On Android 12+ startForeground() throws ForegroundServiceStartNotAllowedException when the
+        // service is (re)started while the app is in the background — e.g. START_STICKY redelivery after
+        // a process kill with the screen locked, or a CompanionDeviceService callback. An uncaught throw
+        // silently kills the whole process ("app just disappears"). Stop cleanly instead of crashing.
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed; stopping service instead of crashing", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val backgroundMode = isBackgroundModeEnabled(this)
         val persistentMode = isPersistentModeEnabled(this)
