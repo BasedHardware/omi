@@ -245,25 +245,48 @@ enum RealtimeHubTools {
       // tools use lowercase JSON-schema types, which Gemini silently accepts but degrades
       // (the model gets less confident about when/how to call) — so convert them.
       if let params = tool["parameters"] as? [String: Any] {
-        decl["parameters"] = upcasedSchemaTypes(params)
+        decl["parameters"] = geminiParametersSchema(params)
       }
       return decl
     }
   }
 
-  /// Recursively uppercase every `type` value in a JSON-schema dict so it matches Gemini's
-  /// Schema enum (object → OBJECT, string → STRING, …).
-  private static func upcasedSchemaTypes(_ schema: [String: Any]) -> [String: Any] {
-    var out = schema
-    if let t = schema["type"] as? String { out["type"] = t.uppercased() }
-    if let props = schema["properties"] as? [String: Any] {
-      var converted: [String: Any] = [:]
-      for (key, value) in props {
-        converted[key] = (value as? [String: Any]).map(upcasedSchemaTypes) ?? value
+  private static let geminiUnsupportedSchemaKeys: Set<String> = [
+    "additionalProperties", "$schema", "default", "title", "pattern", "const",
+  ]
+
+  /// Gemini Live `parameters` is OpenAPI 3.0 Schema: uppercase `type` and drop JSON Schema
+  /// keys Gemini rejects (e.g. `additionalProperties`).
+  private static func geminiParametersSchema(_ schema: [String: Any]) -> [String: Any] {
+    var out: [String: Any] = [:]
+    for (key, value) in schema {
+      if geminiUnsupportedSchemaKeys.contains(key) { continue }
+      switch key {
+      case "type":
+        out[key] = (value as? String)?.uppercased() ?? value
+      case "properties":
+        guard let props = value as? [String: Any] else {
+          out[key] = value
+          break
+        }
+        var converted: [String: Any] = [:]
+        for (propKey, propValue) in props {
+          converted[propKey] =
+            (propValue as? [String: Any]).map(geminiParametersSchema) ?? propValue
+        }
+        out[key] = converted
+      case "items":
+        out[key] = (value as? [String: Any]).map(geminiParametersSchema) ?? value
+      default:
+        if let nested = value as? [String: Any] {
+          out[key] = geminiParametersSchema(nested)
+        } else if let nestedArray = value as? [[String: Any]] {
+          out[key] = nestedArray.map(geminiParametersSchema)
+        } else {
+          out[key] = value
+        }
       }
-      out["properties"] = converted
     }
-    if let items = schema["items"] as? [String: Any] { out["items"] = upcasedSchemaTypes(items) }
     return out
   }
 

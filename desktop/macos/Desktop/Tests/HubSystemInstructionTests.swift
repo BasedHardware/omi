@@ -80,6 +80,41 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual(parameters?["required"] as? [String], ["title", "start_time", "end_time"])
     }
 
+    func testGeminiRealtimeToolSchemasOmitUnsupportedJsonSchemaKeys() {
+        let declarations = RealtimeHubTools.geminiFunctionDeclarations
+        XCTAssertFalse(declarations.isEmpty)
+
+        func assertGeminiSchemaClean(_ schema: [String: Any], path: String) {
+            for key in schema.keys {
+                XCTAssertFalse(
+                    ["additionalProperties", "$schema", "const"].contains(key),
+                    "unsupported key \(key) at \(path)")
+            }
+            if let type = schema["type"] as? String {
+                XCTAssertEqual(type, type.uppercased(), "type must be uppercase at \(path)")
+            }
+            if let props = schema["properties"] as? [String: Any] {
+                for (name, value) in props {
+                    if let nested = value as? [String: Any] {
+                        assertGeminiSchemaClean(nested, path: "\(path).properties.\(name)")
+                    }
+                }
+            }
+            if let items = schema["items"] as? [String: Any] {
+                assertGeminiSchemaClean(items, path: "\(path).items")
+            }
+        }
+
+        for decl in declarations {
+            let name = decl["name"] as? String ?? "<unknown>"
+            guard let parameters = decl["parameters"] as? [String: Any] else {
+                XCTFail("missing parameters for \(name)")
+                continue
+            }
+            assertGeminiSchemaClean(parameters, path: name)
+        }
+    }
+
     func testRealtimeCanonicalAgentControlToolsAreExposed() {
         let tools = RealtimeHubTools.openAITools
         let toolNames = Set(tools.compactMap { $0["name"] as? String })

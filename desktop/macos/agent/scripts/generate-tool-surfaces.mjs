@@ -215,6 +215,52 @@ function descriptionForRealtime(tool) {
   return tool.voice?.realtimeDescription ?? tool.description;
 }
 
+// Gemini Live functionDeclaration.parameters uses OpenAPI 3.0 Schema, not full JSON Schema.
+// Strip keys that make setup fail (e.g. additionalProperties) before embedding in realtime tools.
+const GEMINI_UNSUPPORTED_REALTIME_SCHEMA_KEYS = new Set([
+  "additionalProperties",
+  "$schema",
+  "default",
+  "title",
+  "pattern",
+  "const",
+]);
+
+function sanitizeRealtimeVoiceSchema(schema) {
+  if (schema === null || typeof schema !== "object" || Array.isArray(schema)) {
+    return schema;
+  }
+
+  const out = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (GEMINI_UNSUPPORTED_REALTIME_SCHEMA_KEYS.has(key)) continue;
+    if (key === "properties" && value && typeof value === "object" && !Array.isArray(value)) {
+      const props = {};
+      for (const [propKey, propValue] of Object.entries(value)) {
+        props[propKey] = sanitizeRealtimeVoiceSchema(propValue);
+      }
+      out[key] = props;
+      continue;
+    }
+    if (key === "items" && value && typeof value === "object") {
+      out[key] = sanitizeRealtimeVoiceSchema(value);
+      continue;
+    }
+    if (Array.isArray(value)) {
+      out[key] = value.map((item) =>
+        item && typeof item === "object" ? sanitizeRealtimeVoiceSchema(item) : item,
+      );
+      continue;
+    }
+    if (value && typeof value === "object") {
+      out[key] = sanitizeRealtimeVoiceSchema(value);
+      continue;
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
 function openAIToolDefinition({ exposedName, tool }, { includeSpawnProvider = false, directedProviders = [] } = {}) {
   const schema = schemaForRealtime(tool);
   const description = descriptionForRealtime(tool);
@@ -251,10 +297,7 @@ function openAIToolDefinition({ exposedName, tool }, { includeSpawnProvider = fa
     };
   }
 
-  const parameters = { ...schema };
-  if (parameters.additionalProperties === undefined) {
-    parameters.additionalProperties = false;
-  }
+  const parameters = sanitizeRealtimeVoiceSchema({ ...schema });
 
   return {
     type: "function",

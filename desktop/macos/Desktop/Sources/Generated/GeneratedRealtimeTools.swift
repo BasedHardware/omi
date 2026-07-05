@@ -51,8 +51,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "query"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -67,8 +66,7 @@ enum GeneratedRealtimeTools {
           "description": "0=today, 1=yesterday, 7=past week"
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -105,8 +103,7 @@ enum GeneratedRealtimeTools {
           "description": "Maximum sessions to return. Default 50."
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -133,8 +130,7 @@ enum GeneratedRealtimeTools {
           "description": "Maximum events to return. Default 100."
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -153,8 +149,7 @@ enum GeneratedRealtimeTools {
           "description": "Canonical Omi run id to cancel."
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -205,8 +200,7 @@ enum GeneratedRealtimeTools {
           "description": "Maximum artifacts to return. Default 50."
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -252,8 +246,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "state"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -290,8 +283,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "objective"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -355,15 +347,13 @@ enum GeneratedRealtimeTools {
         },
         "metadata": {
           "type": "object",
-          "description": "Small structured metadata for the child run.",
-          "additionalProperties": true
+          "description": "Small structured metadata for the child run."
         }
       },
       "required": [
         "objective",
         "parentRunId"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -401,8 +391,7 @@ enum GeneratedRealtimeTools {
       "required": [
         "subjectKind",
         "subjectId"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -432,8 +421,7 @@ enum GeneratedRealtimeTools {
           "description": "Load speaker data"
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -463,8 +451,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "query"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -488,8 +475,7 @@ enum GeneratedRealtimeTools {
           "type": "string"
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -510,8 +496,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "query"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -544,8 +529,7 @@ enum GeneratedRealtimeTools {
           "type": "string"
         }
       },
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -569,8 +553,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "description"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -599,8 +582,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "id"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -610,8 +592,7 @@ enum GeneratedRealtimeTools {
     "parameters": {
       "type": "object",
       "properties": {},
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -650,8 +631,7 @@ enum GeneratedRealtimeTools {
         "title",
         "start_time",
         "end_time"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -672,8 +652,7 @@ enum GeneratedRealtimeTools {
       },
       "required": [
         "query"
-      ],
-      "additionalProperties": false
+      ]
     }
   },
   {
@@ -683,8 +662,7 @@ enum GeneratedRealtimeTools {
     "parameters": {
       "type": "object",
       "properties": {},
-      "required": [],
-      "additionalProperties": false
+      "required": []
     }
   },
   {
@@ -706,8 +684,7 @@ enum GeneratedRealtimeTools {
       "required": [
         "x",
         "y"
-      ],
-      "additionalProperties": false
+      ]
     }
   }
 ]
