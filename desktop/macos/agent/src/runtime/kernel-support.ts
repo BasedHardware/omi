@@ -468,7 +468,7 @@ export function buildDelegatedPrompt(objective: string, context: string | undefi
 
 export function requiredChildSessionId(sessionId: string | undefined): string {
   if (!sessionId) {
-    throw new Error("delegate_agent continue mode requires childSessionId");
+    throw new Error("send_agent_message continue mode requires childSessionId");
   }
   return sessionId;
 }

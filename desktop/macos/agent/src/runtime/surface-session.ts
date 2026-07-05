@@ -197,6 +197,7 @@ function resolveLegacyAgentSessionId(
   }
 }
 
+// TODO(desktop-agent-platonic-gap-closure G6): delete importLegacyMainChatSessions two desktop releases after the release that ships the platonic branch.
 export function importLegacyMainChatSessions(
   store: AgentStore,
   input: { ownerId: string; entries: LegacyMainChatSessionEntry[] },

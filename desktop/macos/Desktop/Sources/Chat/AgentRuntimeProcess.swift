@@ -293,6 +293,7 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
+  // TODO(desktop-agent-platonic-gap-closure G6): delete importer two desktop releases after platonic ships.
   func importLegacyMainChatSessions(clientId: String, entries: [[String: String]]) {
     var dict: [String: Any] = [
       "type": "import_legacy_main_chat_sessions",
@@ -1125,7 +1126,7 @@ actor AgentRuntimeProcess {
 
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
     let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? message.payload["omiSessionId"] as? String ?? ""
+    let omiSessionId = payload["sessionId"] as? String ?? ""
     let adapterSessionId = payload["adapterSessionId"] as? String
     return AgentBridge.QueryResult(
       text: payload["text"] as? String ?? "",

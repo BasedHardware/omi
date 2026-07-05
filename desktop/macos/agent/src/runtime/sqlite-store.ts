@@ -82,6 +82,7 @@ CREATE TABLE sessions (
   surface_kind TEXT NOT NULL,
   external_ref_kind TEXT,
   external_ref_id TEXT,
+  -- TODO(desktop-agent-platonic-gap-closure G6): drop legacy_client_scope + legacy_session_key two desktop releases after platonic ships.
   legacy_client_scope TEXT,
   legacy_session_key TEXT,
   default_adapter_id TEXT NOT NULL,

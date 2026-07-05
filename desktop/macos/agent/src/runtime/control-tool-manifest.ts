@@ -132,7 +132,6 @@ Returns canonical session/run summaries plus task_agents and floating_agent_pill
     promptGuidelines: [
       "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
       "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
-      "Replaces get_task_agent_status and manage_agent_pills list/status queries.",
     ],
     capabilityDoc: controlDoc(
       "List Agent Sessions",
@@ -140,7 +139,6 @@ Returns canonical session/run summaries plus task_agents and floating_agent_pill
       [
         "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
         "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
-        "Replaces get_task_agent_status and manage_agent_pills list/status queries.",
       ],
     ),
     latency: "fast local",

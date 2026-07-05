@@ -37,3 +37,12 @@ The coordinator uses the existing TypeScript desktop runtime kernel as the execu
 - `DesktopAutomationBridge` and `scripts/omi-ctl` are verification and development substrates, documented in [desktop e2e](../e2e/SKILL.md) and [harness](../e2e/harness.md). They are not production coordinator actuators unless a separate approval path is added.
 - Local Agent API expansion is deferred until scoped local credentials, Host/Origin checks, token rotation, and context-access logging are in place.
 - Tool-manifest risk/privacy/bundle metadata is a classification contract for the coordinator. Grant enforcement lands with the local policy module; until then, do not treat metadata alone as an approval membrane.
+
+## Maintenance — migration shim burn-down
+
+Temporary shims from the platonic refactor are scheduled for deletion **two desktop releases after** the release that ships the platonic branch. Track in `.cursor/plans/desktop-agent-platonic-gap-closure.plan.md` (G6):
+
+| Shim | Site | Delete in |
+|------|------|-----------|
+| `import_legacy_main_chat_sessions` | `agent/src/runtime/surface-session.ts`, `agent/src/index.ts`, `AgentRuntimeProcess.swift` | ship+2 releases |
+| sqlite `legacy_client_scope` / `legacy_session_key` columns | `agent/src/runtime/sqlite-store.ts` | ship+2 releases |

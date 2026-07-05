@@ -1345,6 +1345,7 @@ async function main(): Promise<void> {
       }
 
       case "import_legacy_main_chat_sessions": {
+        // TODO(desktop-agent-platonic-gap-closure G6): delete handler two desktop releases after platonic ships.
         const ownerId = msg.ownerId?.trim() || currentOwnerId;
         const entries = Array.isArray(msg.entries) ? msg.entries : [];
         const imported = kernel.importLegacyMainChatSessions({ ownerId, entries });
