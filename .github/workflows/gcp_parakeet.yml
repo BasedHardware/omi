@@ -44,6 +44,10 @@ jobs:
         with:
           ref: ${{ github.event.inputs.branch }}
 
+      - name: Resolve image tag from checked-out HEAD
+        id: resolve_tag
+        run: echo "sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Google Auth
         id: auth
         uses: 'google-github-actions/auth@v2'
@@ -57,8 +61,8 @@ jobs:
 
       - name: Build and Push Docker image
         run: |
-          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/${{ env.SERVICE }}/Dockerfile .
-          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
+          docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.resolve_tag.outputs.sha }} -f backend/${{ env.SERVICE }}/Dockerfile .
+          docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.resolve_tag.outputs.sha }}
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
@@ -69,7 +73,7 @@ jobs:
 
       - name: Deploy Parakeet to GKE cluster using Helm
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-${{ env.SERVICE }} ./backend/charts/${{ env.SERVICE }} -f ./backend/charts/${{ env.SERVICE }}/${{ vars.ENV }}_omi_${{ env.SERVICE }}_values.yaml --set "image.tag=${{ steps.resolve_tag.outputs.sha }}"
 
       - name: Verify rollout
         run: |
