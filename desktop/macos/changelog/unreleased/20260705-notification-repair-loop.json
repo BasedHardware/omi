@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a startup notification-permission repair that could re-run on every launch, repeatedly restarting macOS Notification Center"
+}
