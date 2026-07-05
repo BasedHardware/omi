@@ -28,6 +28,7 @@ MODEL_REST_DTO_FILES = (
 LOCAL_NON_REST_SCHEMA_FILES = frozenset(
     {
         APP_SCHEMA_DIR / 'bt_device' / 'bt_device.dart',
+        APP_SCHEMA_DIR / 'message_event.dart',  # local SSE/WS event schema, not a REST DTO
     }
 )
 
@@ -47,6 +48,38 @@ RAW_DECODE_RE = re.compile(
     r'\bjsonDecode\s*\(|\bjson\.decode\s*\(|\bas\s+(?:Map|List)<[^>]+>|\b[A-Za-z_][A-Za-z0-9_]*\.fromJson\s*\(|\[[\'"][A-Za-z_][A-Za-z0-9_]*[\'"]\]'
 )
 WIRE_DECODE_RE = re.compile(r'wire\.Generated[A-Za-z0-9_]+\.fromJson|\.fromGenerated\s*\(|fromGeneratedWireJson')
+
+
+def _collect_wire_backed_type_names() -> list[str]:
+    """Collect Dart type names whose fromJson delegates to wire.Generated* parsers.
+
+    Covers two patterns:
+    - typedefs: ``typedef DevApiKey = wire.GeneratedDevApiKey;``
+    - adapter classes with ``factory X.fromGenerated(...)`` or ``static X fromGeneratedWireJson(...)``
+
+    Decode sites that call ``TypeName.fromJson`` for these names are generated-backed
+    even though the call-site text doesn't contain ``wire.Generated``.
+    """
+    names: set[str] = set()
+    typedef_re = re.compile(r'^\s*typedef\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*wire\.Generated', re.MULTILINE)
+    adapter_re = re.compile(
+        r'(?:factory|static)\s+([A-Za-z_][A-Za-z0-9_]*)\.(?:fromGenerated|fromGeneratedWireJson)\s*\('
+    )
+    for path in sorted(APP_SCHEMA_DIR.rglob('*.dart')):
+        if path.name.endswith('.g.dart') or path.name.endswith('.gen.dart'):
+            continue
+        text = path.read_text()
+        names.update(typedef_re.findall(text))
+        names.update(adapter_re.findall(text))
+    return sorted(names, key=len, reverse=True)  # longest first for alternation
+
+
+_WIRE_BACKED_NAMES = _collect_wire_backed_type_names()
+_WIRE_BACKED_DECODE_RE = (
+    re.compile(r'\b(?:' + '|'.join(re.escape(n) for n in _WIRE_BACKED_NAMES) + r')\.(?:fromJson|fromResponseJson)\s*\(')
+    if _WIRE_BACKED_NAMES
+    else re.compile(r'(?!)')  # never matches
+)
 
 
 @dataclass(frozen=True)
@@ -199,7 +232,9 @@ def scan_dart_schema_file(path: Path) -> DartSchemaFile:
         from_json_count=len(FROM_JSON_RE.findall(text)),
         to_json_count=len(TO_JSON_RE.findall(text)),
         generated=any(marker in text[:500] for marker in GENERATED_MARKERS) or path.name.endswith('.g.dart'),
-        generated_backed=bool(GENERATED_WIRE_RE.search(text) or WIRE_DECODE_RE.search(text)),
+        generated_backed=bool(
+            GENERATED_WIRE_RE.search(text) or WIRE_DECODE_RE.search(text) or _WIRE_BACKED_DECODE_RE.search(text)
+        ),
     )
 
 
@@ -267,7 +302,7 @@ def scan_dart_decode_sites() -> list[DartDecodeSite]:
                     line=index,
                     kind=decode_site_kind(line),
                     snippet=stripped[:220],
-                    generated_backed=bool(WIRE_DECODE_RE.search(window)),
+                    generated_backed=bool(WIRE_DECODE_RE.search(window) or _WIRE_BACKED_DECODE_RE.search(window)),
                     context=decode_site_context(line),
                 )
             )

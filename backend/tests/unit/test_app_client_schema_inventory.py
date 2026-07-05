@@ -24,7 +24,8 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     }
 
     assert 'app/lib/backend/schema/conversation.dart' in generated_backed_paths
-    assert 'app/lib/backend/schema/action_item.dart' in generated_backed_paths
+    # action_item.dart was fully migrated to typedefs (no fromJson/toJson), so it's
+    # correctly absent from manual_files entirely — neither generated_backed nor remaining.
     assert 'app/lib/backend/schema/folder.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/apps.dart' in generated_backed_paths
     assert 'app/lib/backend/http/api/users.dart' in generated_backed_paths
