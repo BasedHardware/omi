@@ -196,16 +196,16 @@ class DailySummary {
     try {
       return DailySummary.fromGenerated(wire.GeneratedDailySummaryResponse.fromJson(json));
     } catch (_) {
+      // Degraded fallback: generated parser failed on malformed data.
+      // Return a minimal summary with defaults rather than hand-parsing partial JSON.
       return DailySummary(
-        id: json['id'] as String? ?? '',
-        date: json['date'] as String? ?? '',
-        createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ?? DateTime.now(),
-        headline: json['headline'] as String? ?? 'Your Day in Review',
-        overview: json['overview'] as String? ?? '',
-        dayEmoji: json['day_emoji'] as String? ?? '📅',
-        stats: json['stats'] is Map<String, dynamic>
-            ? DayStats.fromJson(json['stats'] as Map<String, dynamic>)
-            : DayStats(),
+        id: '',
+        date: '',
+        createdAt: DateTime.now(),
+        headline: 'Your Day in Review',
+        overview: '',
+        dayEmoji: '📅',
+        stats: DayStats(),
       );
     }
   }
