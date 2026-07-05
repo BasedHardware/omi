@@ -28,8 +28,9 @@ cd "$SCRIPT_DIR"
 # state leaks across suites and hard-crashes a co-scheduled memory/storage suite.
 # The crash is a scheduling-dependent moving target, so no fixed --skip set makes
 # the combined run deterministic. Every suite passes in isolation, so we isolate
-# each — mirroring the backend's per-file pytest isolation. Tracking: BL-034;
-# durable fix is singleton dependency injection (BL-004).
+# each — mirroring the backend's per-file pytest isolation.
+# Tracking: https://github.com/BasedHardware/omi/issues/9029
+# (durable fix is singleton dependency injection; see the same issue).
 #
 # Method-level skips are the only remaining known-red tests; each needs a
 # product/policy decision, not a test change:
@@ -38,17 +39,19 @@ cd "$SCRIPT_DIR"
 #     testDesktopPromptDistinguishesDelegationFromFloatingPills}
 #       — Swift DesktopCapabilityRegistry vs agent control-tool-manifest.ts vs the
 #         desktop chat prompt have drifted; reconciling the canonical tool set is a
-#         product change (BL-035).
+#         product change. https://github.com/BasedHardware/omi/issues/9030
 #   APIClientRoutingTests/testDeleteConversationRoutesToPython
 #       — client omits ?cascade=true; cascade is backend-gated behind owner sign-off
 #         (backend/routers/conversations.py), so flipping it is a data-deletion
-#         behavior change, not a test fix (BL-036).
+#         behavior change, not a test fix. https://github.com/BasedHardware/omi/issues/9031
 #   ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable
 #       — macOS 26 system SQLite rejects `DELETE FROM sqlite_master` even with
-#         writable_schema=ON, blocking the test's corruption setup (BL-037).
+#         writable_schema=ON, blocking the test's corruption setup.
+#         https://github.com/BasedHardware/omi/issues/9032
 #   PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing
 #       — the detector does not fully honor the injected environment/home, so the
-#         result depends on whether OpenClaw is installed on the runner (BL-038).
+#         result depends on whether OpenClaw is installed on the runner.
+#         https://github.com/BasedHardware/omi/issues/9033
 skip_for_suite() {
   case "$1" in
     ChatDiscoverabilityTests)
