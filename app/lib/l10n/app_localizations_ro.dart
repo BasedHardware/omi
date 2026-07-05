@@ -9548,7 +9548,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String pendantMinutesStored(int minutes) {
-    return '~$minutes min stocate';
+    return '~$minutes min stocat(e)';
   }
 
   @override

@@ -3108,7 +3108,7 @@
     "pendantRecordingTitle": "Înregistrare pe pandantiv",
     "pendantRecordingNote": "Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.",
     "pendantSyncingRecordings": "Se sincronizează înregistrările de pe pandantivul tău…",
-    "pendantMinutesStored": "~{minutes} min stocate",
+    "pendantMinutesStored": "~{minutes} min stocat(e)",
     "@pendantMinutesStored": {
         "placeholders": {
             "minutes": {
