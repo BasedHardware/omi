@@ -1,6 +1,6 @@
 """Focus sessions — focus/distraction tracking and statistics."""
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
@@ -89,5 +89,8 @@ def screen_activity_summary(
     start = end = None
     if date:
         start = datetime.strptime(date, '%Y-%m-%d')
-        end = start + timedelta(days=1)
+        # Inclusive same-day upper bound. get_screen_activity applies end_date as
+        # timestamp <= 'YYYY-MM-DD HH:MM:SS.999', so a next-day midnight end would leak the
+        # following day's first second into this privacy-sensitive single-day summary.
+        end = start.replace(hour=23, minute=59, second=59)
     return screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end)
