@@ -110,7 +110,14 @@ struct UpdateFailureDiagnostics: Equatable {
   }
 
   var analyticsProperties: [String: Any] {
+    let telemetryMessage = message.isEmpty ? "\(domain) \(code)" : message
     var properties: [String: Any] = [
+      // Emit the human-readable message under "error" so the daily report's
+      // error_or_message column is populated (previously blank on Update Check Failed).
+      "error": telemetryMessage,
+      "phase": reason.rawValue,
+      "update_failure_message": telemetryMessage,
+      "update_failure_phase": reason.rawValue,
       "update_failure_reason": reason.rawValue,
       "update_failure_domain": domain,
       "update_failure_code": code,
