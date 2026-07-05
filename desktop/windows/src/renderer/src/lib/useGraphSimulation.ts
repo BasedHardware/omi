@@ -253,11 +253,13 @@ export class GraphSimulation {
 
   // Advance one tick per render frame, but only while the layout is still warm.
   // Once alpha decays the layout is settled and ticking stops (no idle CPU).
-  settleFrame(): void {
+  settleFrame(): boolean {
     if (this.sim.alpha() > 0.01) {
       this.sim.tick(1)
       this.clampPositions()
+      return this.sim.alpha() > 0.01
     }
+    return false
   }
 
   // Live simulation node (positions mutate in place each tick). The renderer

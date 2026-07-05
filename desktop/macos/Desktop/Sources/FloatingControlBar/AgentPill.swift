@@ -166,7 +166,7 @@ final class AgentPillsManager: ObservableObject {
 
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
-    private var pendingFollowUpsByPill: [UUID: [String]] = [:]
+    private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
 
     /// Shared agent-noun pattern used by negation guard, intent detection, and
     /// task extraction. Kept word-boundary-free so callers can embed it inside
@@ -193,6 +193,11 @@ final class AgentPillsManager: ObservableObject {
     struct FloatingAgentHandoff: Equatable {
         let originalRequest: String
         let agentTask: String
+    }
+
+    private struct PendingAgentFollowUp {
+        let text: String
+        let attachments: [ChatAttachment]
     }
 
     /// Combined router result. Title/ack are pre-computed alongside the route
@@ -909,6 +914,7 @@ final class AgentPillsManager: ObservableObject {
                 // the handoff stays visible after the retry's accept rebuilds
                 // the transcript (empty on a first attempt).
                 pill.conversationMessages = pill.providerFallbackNotices + [ChatMessage(text: pill.query, sender: .user)]
+                Self.ensureStreamingAssistantMessage(for: pill)
                 pill.markContentChanged()
                 AgentRuntimeStatusStore.shared.recordAcceptedRun(
                     surface: surfaceRef,
@@ -919,7 +925,11 @@ final class AgentPillsManager: ObservableObject {
                 )
                 let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                 if !queuedFollowUps.isEmpty {
-                    self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                    self.continueAgent(
+                        from: pill,
+                        text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                        attachments: queuedFollowUps.flatMap(\.attachments)
+                    )
                     return
                 }
                 await self.pollCanonicalRun(for: pill)
@@ -1015,9 +1025,19 @@ final class AgentPillsManager: ObservableObject {
     }
 
     /// Send a follow-up to the same canonical background-agent session.
-    func continueAgent(from pill: AgentPill, text: String) {
+    func continueAgent(from pill: AgentPill, text: String, attachments: [ChatAttachment] = []) {
+        // The floating agent runs locally with disk access, so attachments are
+        // handed off by local_path in the prompt (see attachmentContextPrompt) —
+        // no upload round-trip needed. The visible bubble still renders the files
+        // through the shared ChatResource card UI.
+        let prompt: String
+        if let context = ChatProvider.attachmentContextPrompt(for: attachments) {
+            prompt = text.isEmpty ? context : "\(text)\n\n\(context)"
+        } else {
+            prompt = text
+        }
         guard let sessionId = pill.canonicalSessionId else {
-            pendingFollowUpsByPill[pill.id, default: []].append(text)
+            pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
             pill.latestActivity = "Queued follow-up until the agent starts…"
             pill.markContentChanged()
             return
@@ -1026,7 +1046,10 @@ final class AgentPillsManager: ObservableObject {
         pill.completedAt = nil
         pill.suggestedFollowUps = []
         pill.latestActivity = "Interrupting current run…"
-        pill.conversationMessages.append(ChatMessage(text: text, sender: .user))
+        pill.conversationMessages.append(
+            ChatMessage(text: text, sender: .user, resources: attachments.map(ChatResource.attachment))
+        )
+        Self.ensureStreamingAssistantMessage(for: pill)
         pill.markContentChanged()
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
         let activeRunId = pill.canonicalRunId
@@ -1042,14 +1065,18 @@ final class AgentPillsManager: ObservableObject {
                     case .cancelled:
                         return
                     case .failed:
-                        pendingFollowUpsByPill[pill.id, default: []].append(text)
+                        pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
                         await self.pollCanonicalRun(for: pill)
                         guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                         let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                         if !queuedFollowUps.isEmpty {
-                            self.continueAgent(from: pill, text: queuedFollowUps.joined(separator: "\n\n"))
+                            self.continueAgent(
+                                from: pill,
+                                text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                                attachments: queuedFollowUps.flatMap(\.attachments)
+                            )
                         }
                         return
                     }
@@ -1057,10 +1084,11 @@ final class AgentPillsManager: ObservableObject {
                     guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                 }
                 pill.latestActivity = "Working on your follow-up…"
+                Self.ensureStreamingAssistantMessage(for: pill)
                 pill.markContentChanged()
                 let result = try await DesktopCoordinatorService.shared.continueAgent(
                     sessionId: sessionId,
-                    prompt: text,
+                    prompt: prompt,
                     model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
                     cwd: workingDirectory
                 )
@@ -1132,6 +1160,7 @@ final class AgentPillsManager: ObservableObject {
         pill.status = .stopped
         pill.latestActivity = "Stopped by user"
         pill.completedAt = Date()
+        Self.clearStreamingAssistantMessage(for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
         if pill.viewedAt != nil {
@@ -1250,7 +1279,7 @@ final class AgentPillsManager: ObservableObject {
             } else {
                 pill.status = .running
                 pill.latestActivity = "Working…"
-                pill.aiMessage = nil
+                Self.ensureStreamingAssistantMessage(for: pill)
                 pill.completedAt = nil
             }
             pill.markContentChanged()
@@ -1389,15 +1418,22 @@ final class AgentPillsManager: ObservableObject {
         case "queued", "starting":
             pill.status = .starting
             pill.latestActivity = "Starting…"
+            Self.ensureStreamingAssistantMessage(for: pill)
         case "running", "waiting_input", "waiting_approval", "cancelling":
             pill.status = .running
             pill.latestActivity = inspection.status == "cancelling" ? "Stopping…" : "Working…"
+            Self.ensureStreamingAssistantMessage(for: pill)
         case "succeeded", "completed":
-            finish(pill: pill, finalText: inspection.finalText)
+            finish(
+                pill: pill,
+                finalText: inspection.finalText,
+                resources: inspection.artifacts.map(ChatResource.artifact)
+            )
         case "cancelled":
             pill.status = .stopped
             pill.latestActivity = "Stopped by user"
             pill.completedAt = Date()
+            Self.clearStreamingAssistantMessage(for: pill)
             pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         case "failed", "timed_out", "orphaned":
             // Startup fallback runs before any terminal state is committed so
@@ -1426,26 +1462,40 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func finish(pill: AgentPill, finalText: String?) {
+    private func finish(pill: AgentPill, finalText: String?, resources: [ChatResource] = []) {
         let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        if !trimmed.isEmpty {
+        if !trimmed.isEmpty || !resources.isEmpty {
             // Real task output arrived — from here on, provider startup
             // fallback is permanently off for this pill (a later follow-up
             // turn that fails at startup must fail visibly, not silently
             // re-run the brief on another provider).
             pill.markTaskOutputProduced()
-            let finalMessage = ChatMessage(text: trimmed, sender: .ai)
+            let messageText = trimmed.isEmpty ? "Done." : trimmed
+            var finalMessage = pill.aiMessage ?? ChatMessage(text: messageText, sender: .ai)
+            finalMessage.text = messageText
+            finalMessage.resources = resources
+            finalMessage.isStreaming = false
             pill.aiMessage = finalMessage
             if pill.conversationMessages.isEmpty {
                 pill.conversationMessages = [
                     ChatMessage(text: pill.query, sender: .user),
                     finalMessage,
                 ]
+            } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
+                pill.conversationMessages[index] = finalMessage
             } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
                 pill.conversationMessages.append(finalMessage)
             }
-            pill.latestActivity = String(trimmed.prefix(140))
+            pill.latestActivity = String(messageText.prefix(140))
+            FloatingControlBarManager.shared.recordAgentArtifactCompletion(
+                pillID: pill.id,
+                runId: pill.canonicalRunId,
+                title: pill.title,
+                finalText: trimmed,
+                resources: resources
+            )
         } else {
+            Self.clearStreamingAssistantMessage(for: pill)
             pill.latestActivity = "Done"
         }
         pill.status = .done
@@ -1458,9 +1508,52 @@ final class AgentPillsManager: ObservableObject {
         pill.status = .failed(errorText)
         pill.latestActivity = errorText
         pill.completedAt = Date()
+        Self.clearStreamingAssistantMessage(for: pill)
         Self.ensureFailureMessage(errorText, for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
+    }
+
+    private static func ensureStreamingAssistantMessage(for pill: AgentPill) {
+        if let aiMessage = pill.aiMessage, aiMessage.isStreaming {
+            if !pill.conversationMessages.contains(where: { $0.id == aiMessage.id }) {
+                pill.conversationMessages.append(aiMessage)
+            }
+            return
+        }
+
+        if let index = pill.conversationMessages.lastIndex(where: { $0.sender == .ai && $0.isStreaming }) {
+            pill.aiMessage = pill.conversationMessages[index]
+            return
+        }
+
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [ChatMessage(text: pill.query, sender: .user)]
+        }
+
+        var streamingMessage = ChatMessage(text: "", sender: .ai)
+        streamingMessage.isStreaming = true
+        pill.aiMessage = streamingMessage
+        pill.conversationMessages.append(streamingMessage)
+    }
+
+    private static func clearStreamingAssistantMessage(for pill: AgentPill) {
+        guard let aiMessage = pill.aiMessage, aiMessage.isStreaming else { return }
+        let hasVisibleContent =
+            !aiMessage.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !aiMessage.contentBlocks.isEmpty
+
+        if hasVisibleContent {
+            var completedMessage = aiMessage
+            completedMessage.isStreaming = false
+            pill.aiMessage = completedMessage
+            if let index = pill.conversationMessages.firstIndex(where: { $0.id == completedMessage.id }) {
+                pill.conversationMessages[index] = completedMessage
+            }
+        } else {
+            pill.aiMessage = nil
+            pill.conversationMessages.removeAll { $0.id == aiMessage.id }
+        }
     }
 
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
@@ -1480,7 +1573,11 @@ final class AgentPillsManager: ObservableObject {
         }
         let displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
+            return message.sender == .user
+                || !trimmed.isEmpty
+                || message.isStreaming
+                || !message.contentBlocks.isEmpty
+                || !message.displayResources.isEmpty
         }
         if !displayMessages.isEmpty {
             pill.conversationMessages = pill.providerFallbackNotices + displayMessages
@@ -1632,12 +1729,15 @@ final class AgentPillsManager: ObservableObject {
         switch projection.status {
         case .queued:
             pill.status = .queued
+            ensureStreamingAssistantMessage(for: pill)
         case .starting, .running, .waitingInput, .waitingApproval, .cancelling:
             pill.status = .running
             pill.completedAt = nil
+            ensureStreamingAssistantMessage(for: pill)
         case .succeeded:
             pill.status = .done
             pill.completedAt = projection.completedAt ?? Date()
+            clearStreamingAssistantMessage(for: pill)
             if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
                !statusText.isEmpty {
                 pill.latestActivity = String(statusText.prefix(140))
@@ -1654,12 +1754,14 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()
+            clearStreamingAssistantMessage(for: pill)
             ensureFailureMessage(message, for: pill)
             pill.markContentChanged()
         case .cancelled:
             pill.status = .stopped
             pill.latestActivity = "Stopped by user"
             pill.completedAt = projection.completedAt ?? Date()
+            clearStreamingAssistantMessage(for: pill)
             pill.markContentChanged()
         case .idle:
             break

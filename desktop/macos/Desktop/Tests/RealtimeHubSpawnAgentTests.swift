@@ -79,6 +79,31 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("return expectedTurnEpoch == realtimeToolTurnEpoch && pendingRealtimeToolCallIds.contains(key)"))
   }
 
+  func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("case deferredForReplacement"))
+    XCTAssertTrue(source.contains("if var pending = pendingBargeInReplacement"))
+    XCTAssertTrue(source.contains("pending.pendingCommit = true"))
+    XCTAssertTrue(source.contains("pendingBargeInReplacement = pending"))
+    XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
+    XCTAssertTrue(source.contains("return .deferredForReplacement"))
+    XCTAssertFalse(
+      source.contains("barge-in replacement not ready at commit — falling back to buffered transcription"))
+  }
+
+  func testCompletedVoiceTurnContinuityIsRecordedBeforeAsyncCorrection() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("let provisionalHeard = heard"))
+    XCTAssertTrue(source.contains("let provisionalReply = reply"))
+    XCTAssertTrue(source.contains("userText: provisionalHeard"))
+    XCTAssertTrue(source.contains("assistantText: provisionalReply"))
+    XCTAssertTrue(source.contains("if usedLocal {"))
+    XCTAssertTrue(source.contains("replaceVoiceContinuityTurn("))
+    XCTAssertTrue(source.contains("recordedAt: voiceContinuityTurns[index].recordedAt"))
+  }
+
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
     let source = try realtimeHubControllerSource()
 

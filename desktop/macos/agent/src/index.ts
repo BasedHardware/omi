@@ -76,6 +76,7 @@ import {
 } from "./runtime/control-tools.js";
 import { AdapterRuntimeError } from "./runtime/failures.js";
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
+import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -150,6 +151,10 @@ function logErr(msg: string): void {
 
 function agentStateDir(): string {
   return process.env.OMI_AGENT_STATE_DIR ?? join(homedir(), "Library", "Application Support", "Omi", "agent");
+}
+
+function agentArtifactsDir(): string {
+  return defaultArtifactRoot(process.env);
 }
 
 // --- OMI tools relay via Unix socket ---
@@ -841,7 +846,9 @@ async function main(): Promise<void> {
   const store = new SqliteAgentStore({ stateDir: agentStateDir() });
   const registry = new AdapterRegistry();
   registry.register("acp", () => acpAdapter, 1);
-  const kernel = new AgentRuntimeKernel({ store, registry });
+  const artifactStorage = new OmiArtifactStorage({ rootDir: agentArtifactsDir() });
+  logErr(`Omi artifact root: ${artifactStorage.rootDir}`);
+  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage });
   kernel.subscribe((event) => {
     if (!event.runId) return;
     if (event.type === "run.queued") {

@@ -548,7 +548,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   private func setFloatingPillResponseGlow(_ active: Bool) {
-    FloatingControlBarManager.shared.barState?.isVoiceResponseActive = active
+    if active {
+      FloatingControlBarManager.shared.barState?.isVoiceResponseActive = true
+    } else {
+      FloatingControlBarManager.shared.barState?.clearVoiceResponseState()
+    }
   }
 
   private func clearFloatingPillResponseGlowIfIdle() {

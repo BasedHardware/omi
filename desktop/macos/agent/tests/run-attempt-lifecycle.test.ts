@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -315,6 +316,37 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     ]);
     expect(JSON.parse(artifacts[0].metadataJson)).toEqual({ adapterArtifactId: "native-report" });
     expect(store.allRows("SELECT type FROM events WHERE type = 'artifact.created'")).toHaveLength(1);
+    store.close();
+  });
+
+  it("uses a managed run directory and discovers files written there as artifacts", async () => {
+    const artifactRoot = mkdtempTracked("omi-agent-artifacts-");
+    const artifactStorage = new OmiArtifactStorage({ rootDir: artifactRoot });
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 4, artifactStorage);
+    adapter.writeFileOnExecute = { name: "omi-artifact-smoke.txt", contents: "hello from smoke test" };
+
+    const result = await kernel.executeRun({ ...baseRunInput, cwd: artifactRoot });
+    const artifacts = kernel.inspectArtifacts({ runId: result.run.runId });
+
+    expect(adapter.opened[0].cwd).toContain(result.run.runId);
+    expect(adapter.executed[0].binding.cwd).toBe(adapter.opened[0].cwd);
+    expect(artifacts).toEqual([
+      expect.objectContaining({
+        sessionId: result.session.sessionId,
+        runId: result.run.runId,
+        attemptId: result.attempt.attemptId,
+        uri: expect.stringContaining("omi-artifact-smoke.txt"),
+        displayName: "omi-artifact-smoke.txt",
+        role: "result",
+        mimeType: "text/plain",
+        sizeBytes: 21,
+      }),
+    ]);
+    expect(readFileSync(new URL(artifacts[0].uri), "utf8")).toBe("hello from smoke test");
+    expect(JSON.parse(artifacts[0].metadataJson)).toMatchObject({
+      omiManaged: true,
+      discoveredFromRunDirectory: true,
+    });
     store.close();
   });
 

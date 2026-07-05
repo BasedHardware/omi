@@ -30,12 +30,39 @@ describe("macOS release CI", () => {
       );
     }
     expect(codemagic).toContain(
-      'cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
+      'cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"'
+    );
+    expect(codemagic).toContain(
+      'cp -Rf .harness/agent-runtime/pi-mono-extension-node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"'
     );
     expect(runScript).toContain('(cd "$PI_MONO_EXT_DIR" && npm ci --no-fund --no-audit)');
     expect(runScript).toContain(
-      'cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"'
+      'macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"'
     );
+    expect(runScript).toContain(
+      'macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"'
+    );
+  });
+
+  it("prepares production-only Node dependencies for app packaging", () => {
+    const prepareRuntimeScript = readFileSync(
+      new URL("../../scripts/prepare-agent-runtime.sh", import.meta.url),
+      "utf8"
+    );
+
+    expect(prepareRuntimeScript).toContain("npm run build --silent");
+    expect(prepareRuntimeScript).toContain('stage_production_node_modules "$AGENT_DIR" "$AGENT_PACKAGED_NODE_MODULES"');
+    expect(prepareRuntimeScript).toContain(
+      'stage_production_node_modules "$PI_MONO_DIR" "$PI_MONO_PACKAGED_NODE_MODULES"'
+    );
+    expect(prepareRuntimeScript).toContain("dedupe_pi_mono_packaged_node_modules");
+    expect(prepareRuntimeScript).toContain("prune_packaged_node_modules");
+    expect(prepareRuntimeScript).toContain('["darwin_arm64", "darwin_x64"]');
+    expect(prepareRuntimeScript).toContain('["arm64-darwin", "x64-darwin"]');
+    expect(prepareRuntimeScript).toContain('return `../../agent/node_modules/${packageName}`');
+    expect(prepareRuntimeScript).toContain('return `../../../agent/node_modules/${packageName}`');
+    expect(prepareRuntimeScript).toContain("npm ci --omit=dev --no-fund --no-audit");
+    expect(prepareRuntimeScript).toContain('prune_non_macos_node_packages "$temp_dir"');
   });
 
   it("signs bundled pi-mono-extension native dependencies before app signing", () => {

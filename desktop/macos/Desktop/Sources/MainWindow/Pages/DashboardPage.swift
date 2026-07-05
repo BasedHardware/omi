@@ -220,6 +220,14 @@ struct DashboardPage: View {
     @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
+    @State private var selectedCatalogApp: OmiApp?
+    @State private var selectedImportConnector: ImportConnector?
+    @State private var selectedExportDestination: MemoryExportDestination?
+    @State private var isShowingAppsPopup = false
+    @State private var appsPopupAcceptsInput = false
+    @State private var homeConnectSheetAcceptsInput = false
+    @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
+    @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
     @State private var screenshotCount: Int?
     // True totals for the "What omi knows" tiles. Without these the tiles showed
@@ -232,12 +240,15 @@ struct DashboardPage: View {
     @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
         forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
     @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
+    @State private var lastHomeStatusRefreshAt = Date.distantPast
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
     @AppStorage("dashboardWidgetsCollapsed") private var widgetsCollapsed = false
     @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
     @AppStorage("transcriptionEnabled") private var transcriptionEnabled = true
+    @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
+        AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
     @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
 
     private var selectedApp: OmiApp? {
@@ -261,7 +272,68 @@ struct DashboardPage: View {
         isCaptureMonitoring || ProactiveAssistantsPlugin.shared.isMonitoring
     }
 
+    private var listeningCaptureMode: AssistantSettings.SystemAudioCaptureMode {
+        AssistantSettings.SystemAudioCaptureMode(rawValue: systemAudioCaptureModeRaw) ?? .onlyDuringMeetings
+    }
+
+    private var listeningModeTitle: String {
+        switch listeningCaptureMode {
+        case .always:
+            return "Always"
+        case .onlyDuringMeetings:
+            return appState.isAwaitingMeeting ? "Meetings only" : "In meeting"
+        case .never:
+            return "Mic only"
+        }
+    }
+
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+    private static let homeStageMaxWidth: CGFloat = 1120
+    private static let homeStageHorizontalPadding: CGFloat = 34
+    private static let appsPopupMaxWidth: CGFloat = 1040
+    private static let appsPopupMaxHeight: CGFloat = 600
+    private static let appsPopupMinWidth: CGFloat = 360
+    private static let appsPopupMinHeight: CGFloat = 360
+    private static let appsPopupHorizontalMargin: CGFloat = 48
+    private static let appsPopupVerticalMargin: CGFloat = 32
+    private static let appsPopupCornerRadius: CGFloat = 22
+    private static let homeConnectSheetHorizontalMargin: CGFloat = 56
+    private static let homeConnectSheetVerticalMargin: CGFloat = 44
+    private static let homeConnectSheetMinWidth: CGFloat = 360
+    private static let homeConnectSheetMinHeight: CGFloat = 360
+    private static let homeConnectSheetCornerRadius: CGFloat = 24
+    private static let appDetailSheetPreferredSize = CGSize(width: 500, height: 600)
+    private static let importConnectorSheetPreferredSize = CGSize(width: 520, height: 500)
+    private static let exportDestinationSheetPreferredSize = CGSize(width: 520, height: 560)
+
+    private var homeConnectSheetIsPresented: Bool {
+        selectedCatalogApp != nil || selectedImportConnector != nil || selectedExportDestination != nil
+    }
+
+    private var isHomeModalPresented: Bool {
+        isShowingAppsPopup || homeConnectSheetIsPresented
+    }
+
+    private var legacySelectedCatalogApp: Binding<OmiApp?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedCatalogApp : nil },
+            set: { selectedCatalogApp = $0 }
+        )
+    }
+
+    private var legacySelectedImportConnector: Binding<ImportConnector?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedImportConnector : nil },
+            set: { selectedImportConnector = $0 }
+        )
+    }
+
+    private var legacySelectedExportDestination: Binding<MemoryExportDestination?> {
+        Binding(
+            get: { useLegacyHomeDesign ? selectedExportDestination : nil },
+            set: { selectedExportDestination = $0 }
+        )
+    }
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
@@ -304,6 +376,34 @@ struct DashboardPage: View {
             )
             .frame(minWidth: 500, minHeight: 500)
         }
+        .dismissableSheet(item: legacySelectedCatalogApp) { app in
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { selectedCatalogApp = nil })
+                .frame(width: 500, height: 650)
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        }
+        .dismissableSheet(item: legacySelectedImportConnector) { connector in
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: importConnectorStatusStore,
+                onDismiss: {
+                    selectedImportConnector = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
+        .dismissableSheet(item: legacySelectedExportDestination) { destination in
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $memoryExportStatuses,
+                onDismiss: {
+                    selectedExportDestination = nil
+                }
+            )
+            .frame(width: 520, height: 620)
+        }
         .overlay {
             if isLoadingCitation {
                 ZStack {
@@ -325,19 +425,13 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
-            Task { await importConnectorStatusStore.refresh() }
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses() }
+            Task { await refreshHomeStatusData(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await importConnectorStatusStore.refresh() }
-            Task { await loadScreenshotCount() }
-            Task { await loadKnowledgeCounts() }
-            Task { await loadMemoryExportStatuses() }
+            Task { await refreshHomeStatusData(force: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -401,7 +495,7 @@ struct DashboardPage: View {
                     Task { await chatProvider.sendFollowUp(text) }
                 },
                 onStop: {
-                    chatProvider.stopAgent()
+                    chatProvider.stopAgent(owner: .mainChat)
                 },
                 isSending: chatProvider.isSending,
                 isStopping: chatProvider.isStopping,
@@ -431,22 +525,222 @@ struct DashboardPage: View {
         GeometryReader { proxy in
             let panelHeight = min(max(proxy.size.height - 132, CGFloat(440)), CGFloat(640))
             let panelTop = max(CGFloat(82), (proxy.size.height - panelHeight) / 2)
+            let panelWidth = min(
+                Self.homeStageMaxWidth,
+                max(CGFloat(0), proxy.size.width - (Self.homeStageHorizontalPadding * 2))
+            )
 
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
                 homeRoutingStage
-                    .frame(maxWidth: 1120)
-                    .padding(.horizontal, 34)
+                    .frame(maxWidth: Self.homeStageMaxWidth)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .frame(width: proxy.size.width)
                     .frame(height: panelHeight)
                     .position(x: proxy.size.width / 2, y: panelTop + panelHeight / 2)
+                    // The popup/sheet overlays are modal: while one is up, the
+                    // stage underneath must not be reachable by VoiceOver /
+                    // Full Keyboard Access.
+                    .accessibilityHidden(isHomeModalPresented)
 
                 homeHeader
-                    .padding(.horizontal, 34)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
                     .padding(.top, 26)
+                    .accessibilityHidden(isHomeModalPresented)
+
+                appsPopupOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
+
+                homeConnectSheetOverlay(
+                    contentWidth: proxy.size.width,
+                    panelWidth: panelWidth,
+                    panelHeight: panelHeight,
+                    panelTop: panelTop
+                )
+            }
+            .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
+            .animation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
+        }
+    }
+
+    @ViewBuilder
+    private func appsPopupOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        ZStack {
+            if isShowingAppsPopup {
+                Color.black.opacity(0.16)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissAppsPopup()
+                    }
+                    .transition(.opacity)
+                    .zIndex(2)
+
+                let popupSize = appsPopupSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                AppsPage(
+                    appProvider: appProvider,
+                    appState: appState,
+                    initialSection: appsPopupInitialSection,
+                    onDismiss: {
+                        dismissAppsPopup()
+                    },
+                    onSelectApp: { app in
+                        openAppFromAppsPopup(app)
+                    },
+                    onSelectConnector: { connector in
+                        openImportConnectorFromAppsPopup(connector)
+                    },
+                    onSelectDestination: { destination in
+                        openExportDestinationFromAppsPopup(destination)
+                    }
+                )
+                .id(appsPopupPresentationID)
+                .frame(width: popupSize.width, height: popupSize.height)
+                .background(OmiColors.backgroundPrimary)
+                .clipShape(RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: Self.appsPopupCornerRadius, style: .continuous)
+                        .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.38), radius: 26, y: 14)
+                .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
+                .accessibilityAddTraits(.isModal)
+                .zIndex(3)
+
+                // Only the topmost modal owns Esc; the connect sheet takes over
+                // while it is presented (including the brief crossfade overlap).
+                if appsPopupAcceptsInput && !homeConnectSheetIsPresented {
+                    OverlayModalEscapeCatcher {
+                        dismissAppsPopup()
+                    }
+                    .zIndex(3)
+                }
             }
         }
+        .allowsHitTesting(appsPopupAcceptsInput && !homeConnectSheetIsPresented)
+        .zIndex(2)
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetOverlay(
+        contentWidth: CGFloat,
+        panelWidth: CGFloat,
+        panelHeight: CGFloat,
+        panelTop: CGFloat
+    ) -> some View {
+        ZStack {
+            if homeConnectSheetIsPresented {
+                Color.black.opacity(0.22)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        dismissHomeConnectSheet()
+                    }
+                    .transition(.opacity)
+                    .zIndex(4)
+
+                let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)
+
+                homeConnectSheetContent()
+                    .frame(width: sheetSize.width, height: sheetSize.height)
+                    .background(OmiColors.backgroundPrimary)
+                    .clipShape(RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Self.homeConnectSheetCornerRadius, style: .continuous)
+                            .stroke(HomePalette.hairline.opacity(0.92), lineWidth: 1)
+                    )
+                    .shadow(color: .black.opacity(0.42), radius: 30, y: 16)
+                    .position(x: contentWidth / 2, y: panelTop + panelHeight / 2)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                    .accessibilityAddTraits(.isModal)
+                    .zIndex(5)
+
+                if homeConnectSheetAcceptsInput {
+                    OverlayModalEscapeCatcher {
+                        dismissHomeConnectSheet()
+                    }
+                    .zIndex(5)
+                }
+            }
+        }
+        .allowsHitTesting(homeConnectSheetAcceptsInput)
+        .zIndex(4)
+    }
+
+    private func homeConnectSheetSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        let preferred = homeConnectSheetPreferredSize
+        return CGSize(
+            width: min(
+                preferred.width,
+                max(Self.homeConnectSheetMinWidth, panelWidth - (Self.homeConnectSheetHorizontalMargin * 2))
+            ),
+            height: min(
+                preferred.height,
+                max(Self.homeConnectSheetMinHeight, panelHeight - (Self.homeConnectSheetVerticalMargin * 2))
+            )
+        )
+    }
+
+    private var homeConnectSheetPreferredSize: CGSize {
+        if selectedCatalogApp != nil {
+            return Self.appDetailSheetPreferredSize
+        }
+        if selectedImportConnector != nil {
+            return Self.importConnectorSheetPreferredSize
+        }
+        return Self.exportDestinationSheetPreferredSize
+    }
+
+    @ViewBuilder
+    private func homeConnectSheetContent() -> some View {
+        if let app = selectedCatalogApp {
+            AppDetailSheet(app: app, appProvider: appProvider, onDismiss: { dismissHomeConnectSheet() })
+                .onAppear {
+                    AnalyticsManager.shared.appDetailViewed(appId: app.id, appName: app.name)
+                }
+        } else if let connector = selectedImportConnector {
+            ImportConnectorSheet(
+                connector: connector,
+                appState: appState,
+                statusStore: importConnectorStatusStore,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        } else if let destination = selectedExportDestination {
+            ConnectDestinationSheet(
+                destination: destination,
+                statuses: $memoryExportStatuses,
+                onDismiss: {
+                    dismissHomeConnectSheet()
+                }
+            )
+        }
+    }
+
+    private func appsPopupSize(panelWidth: CGFloat, panelHeight: CGFloat) -> CGSize {
+        CGSize(
+            width: min(
+                Self.appsPopupMaxWidth,
+                max(Self.appsPopupMinWidth, panelWidth - (Self.appsPopupHorizontalMargin * 2))
+            ),
+            height: min(
+                Self.appsPopupMaxHeight,
+                max(Self.appsPopupMinHeight, panelHeight - (Self.appsPopupVerticalMargin * 2))
+            )
+        )
     }
 
     private var homeHeader: some View {
@@ -461,12 +755,15 @@ struct DashboardPage: View {
                     action: toggleCapture
                 )
 
-                HomeStatusButton(
+                HomeListeningStatusButton(
                     title: "Listening",
                     systemImage: appState.isTranscribing ? "waveform.circle.fill" : "mic.circle",
                     status: appState.isTranscribing ? .active : .inactive,
+                    modeTitle: listeningModeTitle,
+                    isMeetingsOnly: listeningCaptureMode == .onlyDuringMeetings,
                     isToggling: isTogglingListening,
-                    action: toggleListening
+                    action: toggleListening,
+                    modeAction: toggleListeningMode
                 )
 
                 HomeSettingsMenuButton(
@@ -570,7 +867,7 @@ struct DashboardPage: View {
                 openOmiDeviceWebsite()
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup(initialSection: .imports)
             }
         }
     }
@@ -605,7 +902,7 @@ struct DashboardPage: View {
                 openExportDestination(.hermes)
             }
             HomeAIChoiceButton(title: "More", systemImage: "plus") {
-                openAppsPage()
+                openAppsPopup(initialSection: .exports)
             }
         }
     }
@@ -676,30 +973,73 @@ struct DashboardPage: View {
         AnalyticsManager.shared.tabChanged(tabName: item.title)
     }
 
-    private func openAppsPage() {
-        navigate(to: .apps)
+    private func openAppsPopup(initialSection: AppsCatalogInitialSection) {
+        // Filters left behind by earlier catalog visits (a category, a search,
+        // "Installed") would otherwise replace the Imports/Exports sections
+        // this popup exists to show.
+        appProvider.clearFilters()
+        appsPopupInitialSection = initialSection
+        appsPopupPresentationID = UUID()
+        appsPopupAcceptsInput = true
+        isShowingAppsPopup = true
+    }
+
+    private func dismissAppsPopup() {
+        appsPopupAcceptsInput = false
+        isShowingAppsPopup = false
+    }
+
+    private func openAppFromAppsPopup(_ app: OmiApp) {
+        dismissAppsPopup()
+        presentCatalogApp(app)
+    }
+
+    private func openImportConnectorFromAppsPopup(_ connector: ImportConnector) {
+        dismissAppsPopup()
+        presentImportConnector(connector)
+    }
+
+    private func openExportDestinationFromAppsPopup(_ destination: MemoryExportDestination) {
+        dismissAppsPopup()
+        presentExportDestination(destination)
     }
 
     private func openImportConnector(_ connectorID: String) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenImportRequested,
-                object: nil,
-                userInfo: ["connector": connectorID]
-            )
+        if let connector = ImportConnector.all.first(where: { $0.id == connectorID }) {
+            presentImportConnector(connector)
         }
     }
 
     private func openExportDestination(_ destination: MemoryExportDestination) {
-        navigate(to: .apps)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            NotificationCenter.default.post(
-                name: .desktopAutomationOpenExportRequested,
-                object: nil,
-                userInfo: ["destination": destination.rawValue]
-            )
-        }
+        presentExportDestination(destination)
+    }
+
+    private func presentCatalogApp(_ app: OmiApp) {
+        homeConnectSheetAcceptsInput = true
+        selectedImportConnector = nil
+        selectedExportDestination = nil
+        selectedCatalogApp = app
+    }
+
+    private func presentImportConnector(_ connector: ImportConnector) {
+        homeConnectSheetAcceptsInput = true
+        selectedCatalogApp = nil
+        selectedExportDestination = nil
+        selectedImportConnector = connector
+    }
+
+    private func presentExportDestination(_ destination: MemoryExportDestination) {
+        homeConnectSheetAcceptsInput = true
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = destination
+    }
+
+    private func dismissHomeConnectSheet() {
+        homeConnectSheetAcceptsInput = false
+        selectedCatalogApp = nil
+        selectedImportConnector = nil
+        selectedExportDestination = nil
     }
 
     private func openReferFriend() {
@@ -740,6 +1080,17 @@ struct DashboardPage: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             isTogglingListening = false
         }
+    }
+
+    private func toggleListeningMode() {
+        let nextMode: AssistantSettings.SystemAudioCaptureMode =
+            listeningCaptureMode == .onlyDuringMeetings ? .always : .onlyDuringMeetings
+        systemAudioCaptureModeRaw = nextMode.rawValue
+        AssistantSettings.shared.systemAudioCaptureMode = nextMode
+        AnalyticsManager.shared.settingToggled(
+            setting: "meetings_only_listening",
+            enabled: nextMode == .onlyDuringMeetings
+        )
     }
 
     private func toggleCapture() {
@@ -799,6 +1150,32 @@ struct DashboardPage: View {
         }
     }
 
+    /// Refreshes Home-only status tiles and connector rows. Forced loads run
+    /// when the Home view is recreated; activation-triggered loads share the
+    /// app-wide cooldown so Cmd-Tab bursts do not rescan configs or hit count
+    /// endpoints repeatedly while Home is still mounted.
+    private func refreshHomeStatusData(force: Bool) async {
+        let shouldRefresh = await MainActor.run {
+            let now = Date()
+            if !force,
+               !PollingConfig.shouldAllowActivationRefresh(
+                   now: now,
+                   lastRefresh: lastHomeStatusRefreshAt
+               ) {
+                return false
+            }
+            lastHomeStatusRefreshAt = now
+            return true
+        }
+        guard shouldRefresh else { return }
+
+        async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()
+        async let screenshots: Void = loadScreenshotCount()
+        async let knowledgeCounts: Void = loadKnowledgeCounts()
+        async let exportStatuses: Void = loadMemoryExportStatuses()
+        _ = await (importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
+    }
+
     private func loadMemoryExportStatuses() async {
         let statuses = await MemoryExportService.shared.allStatuses()
         await MainActor.run {
@@ -815,7 +1192,8 @@ struct DashboardPage: View {
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
         // the old value just under-counted, capping each bucket at a 7-day window).
         async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        async let deviceHistory = try? APIClient.shared.hasOmiDeviceConversations()
+        let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }
+        async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil
         let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
         await MainActor.run {
             if let c { conversationCount = c }
@@ -828,6 +1206,10 @@ struct DashboardPage: View {
                 UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
             }
         }
+    }
+
+    private func loadOmiDeviceHistory() async -> Bool? {
+        try? await APIClient.shared.hasOmiDeviceConversations()
     }
 
     private func formattedCount(_ count: Int) -> String {
@@ -2727,14 +3109,11 @@ private struct HomeStatusButton: View {
                 Text(title)
                     .scaledFont(size: 12, weight: .semibold)
                     .lineLimit(1)
-
-                Circle()
-                    .fill(status.indicator)
-                    .frame(width: 6, height: 6)
             }
             .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .frame(height: 34)
             .background(
                 Capsule(style: .continuous)
                     .fill(statusFill)
@@ -2750,6 +3129,123 @@ private struct HomeStatusButton: View {
         .onHover { isHovering = $0 }
         .help("\(title): \(status.text)")
         .accessibilityLabel("\(title) \(status.text)")
+    }
+
+    private var statusFill: Color {
+        if status.isActive {
+            return HomePalette.green.opacity(isHovering ? 0.20 : 0.12)
+        }
+        if status.isBlocked {
+            return status.indicator.opacity(isHovering ? 0.16 : 0.10)
+        }
+        return isHovering ? HomePalette.tileHover : HomePalette.panel
+    }
+
+    private var statusStroke: Color {
+        if status.isActive {
+            return HomePalette.green.opacity(0.38)
+        }
+        if status.isBlocked {
+            return status.indicator.opacity(isHovering ? 0.54 : 0.38)
+        }
+        return HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58)
+    }
+}
+
+private struct HomeListeningStatusButton: View {
+    let title: String
+    let systemImage: String
+    let status: HomeStatusState
+    let modeTitle: String
+    let isMeetingsOnly: Bool
+    let isToggling: Bool
+    let action: () -> Void
+    let modeAction: () -> Void
+
+    // Single pill-level hover flag so moving between the title and the mode
+    // toggle never flickers the revealed controls.
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: action) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        if isToggling {
+                            ProgressView()
+                                .controlSize(.small)
+                                .scaleEffect(0.55)
+                        } else {
+                            Image(systemName: systemImage)
+                                .scaledFont(size: 13, weight: .semibold)
+                        }
+                    }
+                    .frame(width: 18, height: 18)
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(title)
+                            .scaledFont(size: 12, weight: .semibold)
+                            .lineLimit(1)
+
+                        // Mode ("Always" / "In meeting" / …) is revealed only on
+                        // hover to keep the resting pill clean.
+                        if isHovering {
+                            Text(modeTitle)
+                                .scaledFont(size: 8, weight: .medium)
+                                .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
+                                .lineLimit(1)
+                                .transition(.opacity)
+                        }
+                    }
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 8)
+                .frame(height: 34)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(isToggling)
+            .help("Listening: \(status.text), \(modeTitle)")
+            .accessibilityLabel("Listening \(status.text), \(modeTitle)")
+
+            // Divider + mode toggle are revealed only on hover to keep the
+            // resting pill compact.
+            if isHovering {
+                Rectangle()
+                    .fill(HomePalette.hairline.opacity(0.65))
+                    .frame(width: 1, height: 18)
+                    .transition(.opacity)
+
+                Button(action: modeAction) {
+                    Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundStyle(modeIconColor)
+                        .frame(width: 30, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
+                .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
+                .transition(.opacity)
+            }
+        }
+        .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
+        .background(
+            Capsule(style: .continuous)
+                .fill(statusFill)
+        )
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(statusStroke, lineWidth: 1)
+        )
+        .contentShape(Capsule())
+        .frame(height: 34)
+        .onHover { isHovering = $0 }
+        .animation(.easeInOut(duration: 0.14), value: isHovering)
+    }
+
+    private var modeIconColor: Color {
+        status.isActive ? HomePalette.green : HomePalette.muted
     }
 
     private var statusFill: Color {

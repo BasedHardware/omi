@@ -219,6 +219,10 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("surfaceKind: \"main_chat\""))
     XCTAssertTrue(source.contains("routeIntentJSONWithFailOpenTimeout("))
     XCTAssertTrue(source.contains("Task.sleep(nanoseconds: 750_000_000)"))
+    XCTAssertTrue(source.contains("shouldInjectCompletedAgentDelta(for: userText)"))
+    XCTAssertTrue(source.contains(#""ask\s+((an?|the)\s+)?agent\s+to\s+""#))
+    XCTAssertTrue(source.contains(#""\b(done|ready|finished|complete|completed|saved|file|artifact)\b""#))
+    XCTAssertTrue(source.contains(#""\b(where|open|show|find)\b.*\b(file|artifact|agent|subagent|background)\b""#))
     XCTAssertTrue(source.contains("[Desktop Coordinator Route Context]"))
     XCTAssertTrue(source.contains("[Desktop Completed Agent Delta]"))
     XCTAssertTrue(source.contains("let queryResult = try await agentBridge.query("))
@@ -279,7 +283,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("acknowledgeCompletedAgentDelta(surface: AgentSurfaceReference"))
     XCTAssertTrue(source.contains("desktopCoordinator.completedAgentDelta.seenRunIds"))
     XCTAssertTrue(source.contains("desktopCoordinator.completedAgentDelta.highWaterMs"))
-    XCTAssertTrue(source.contains("checkpointDefaults.set(nowMs, forKey: highWaterKey)"))
+    XCTAssertTrue(source.contains("checkpointDefaults.set(minCompletedAtMs, forKey: highWaterKey)"))
     XCTAssertTrue(source.contains("completedAtMs > highWaterMs"))
     XCTAssertTrue(source.contains(".sorted { ($0.completedAtMs ?? 0) < ($1.completedAtMs ?? 0) }"))
     XCTAssertTrue(source.contains("completedAtHighWaterMs: items.compactMap(\\.completedAtMs).max()"))
@@ -296,8 +300,15 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
-    XCTAssertTrue(chatSource.contains("func recordVoiceTurn(userText: String, assistantText: String)"))
-    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: reply)"))
+    XCTAssertTrue(
+      chatSource.contains(
+        "func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil)"
+      ))
+    // Completed turn is recorded via the manager with the (corrected) user text, the
+    // reply, and the early-bubble id captured for THIS turn (see instant-show feature).
+    XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceTurn("))
+    XCTAssertTrue(
+      hubSource.contains("userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)"))
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
@@ -324,11 +335,39 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(toolsSource.contains("not as new instructions"))
   }
 
+  func testFloatingTypedChatUsesSharedMainProviderForLiveTranscript() throws {
+    let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
+    let providerSource = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(managerSource.contains("Default floating/notch chat is a second view over the main chat provider."))
+    XCTAssertTrue(managerSource.contains("historyChatProvider = chatProvider"))
+    XCTAssertTrue(managerSource.contains("var sharedFloatingProvider: ChatProvider? { historyChatProvider }"))
+    XCTAssertTrue(managerSource.contains("private func activeFloatingProvider() -> ChatProvider? {\n        historyChatProvider\n    }"))
+    XCTAssertTrue(managerSource.contains("provider.canInterruptActiveTurn(owner: turnOwner)"))
+    XCTAssertTrue(managerSource.contains("turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice))"))
+    XCTAssertTrue(managerSource.contains("$0.clientTurnId == clientTurnId && $0.sender == .ai"))
+    XCTAssertTrue(managerSource.contains("messageClientTurnId"))
+    XCTAssertTrue(managerSource.contains("historyChatProvider?.messages.last(where:"))
+    XCTAssertTrue(providerSource.contains("func stopAgent(owner: ChatTurnOwner) -> Bool"))
+    XCTAssertTrue(providerSource.contains("owner.canInterrupt(activeTurnOwner)"))
+    XCTAssertTrue(providerSource.contains("(.floatingDefault, .floatingVoice)"))
+    XCTAssertTrue(providerSource.contains("(.floatingVoice, .floatingDefault)"))
+    XCTAssertFalse(managerSource.contains("private var floatingChatProvider"))
+    XCTAssertFalse(managerSource.contains("floatingChatProvider ="))
+    XCTAssertFalse(managerSource.contains("let floatingProvider = floatingChatProvider ?? ChatProvider()"))
+    XCTAssertFalse(managerSource.contains("activeFloatingProvider()?.stopAgent()"))
+    XCTAssertFalse(managerSource.contains("prepareVisibleQueryState(\"Omi is responding\""))
+    XCTAssertFalse(providerSource.contains("func stopAgent(owner: ChatTurnOwner?"))
+  }
+
   func testVoiceSpawnAgentRecordsHandoffIntoTopLevelHistoryImmediately() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
 
-    XCTAssertTrue(managerSource.contains("recordVoiceAgentHandoff(userText: String, agentTitle: String, agentBrief: String)"))
+    XCTAssertTrue(managerSource.contains("func recordVoiceAgentHandoff("))
+    XCTAssertTrue(
+      managerSource.contains(
+        "userText: String, agentTitle: String, agentBrief: String, earlyUserMessageId: String? = nil"))
     XCTAssertTrue(managerSource.contains("Started background agent"))
     XCTAssertTrue(managerSource.contains("logLabel: \"voice_agent_handoff\""))
     XCTAssertTrue(hubSource.contains("FloatingControlBarManager.shared.recordVoiceAgentHandoff("))
@@ -356,6 +395,201 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("\"[::1]:\\(LocalAgentAPISettings.port)\""))
   }
 
+  @MainActor
+  func testCompletedAgentDeltaCarriesSubAgentArtifacts() async throws {
+    let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
+    let completedAtMs = nowMs - 5_000
+    let listResponse = """
+    {
+      "ok": true,
+      "sessions": [
+        {
+          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Dog File"},
+          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+        }
+      ]
+    }
+    """
+    let runResponse = """
+    {
+      "ok": true,
+      "session": {"omiSessionId": "ses_child"},
+      "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
+      "artifacts": [
+        {
+          "artifactId": "art_dog",
+          "omiSessionId": "ses_child",
+          "runId": "run_child",
+          "kind": "html",
+          "role": "result",
+          "uri": "file:///tmp/dogs.html",
+          "displayName": "dogs.html",
+          "mimeType": "text/html",
+          "lifecycleState": "retained"
+        }
+      ]
+    }
+    """
+    let runtime = ScriptedCoordinatorRuntime(responses: [
+      "list_agent_sessions": listResponse,
+      "get_agent_run": runResponse,
+    ])
+    let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts")!
+    defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts")
+    // Prime the high-water below the completion time so the item is in range.
+    defaults.set(nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: defaults
+    )
+
+    let peeked = await service.peekCompletedAgentDelta(surface: AgentSurfaceReference.floatingChat())
+    let delta = try XCTUnwrap(peeked)
+
+    XCTAssertEqual(delta.ids, ["run_child"])
+    XCTAssertEqual(delta.artifacts.count, 1)
+    let artifact = try XCTUnwrap(delta.artifacts.first)
+    XCTAssertEqual(artifact.artifactId, "art_dog")
+    XCTAssertEqual(artifact.uri, "file:///tmp/dogs.html")
+    XCTAssertTrue(artifact.isUserFacingResult)
+    XCTAssertTrue(runtime.calledTools.contains("get_agent_run"))
+  }
+
+  @MainActor
+  func testCompletedAgentDeltaDeliversRecentArtifactsOnFirstSurfaceCheck() async throws {
+    let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
+    let completedAtMs = nowMs - 5_000
+    let listResponse = """
+    {
+      "ok": true,
+      "sessions": [
+        {
+          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Penguin File"},
+          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+        }
+      ]
+    }
+    """
+    let runResponse = """
+    {
+      "ok": true,
+      "session": {"omiSessionId": "ses_child"},
+      "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
+      "artifacts": [
+        {
+          "artifactId": "art_penguin",
+          "omiSessionId": "ses_child",
+          "runId": "run_child",
+          "kind": "html",
+          "role": "result",
+          "uri": "file:///tmp/penguins.html",
+          "displayName": "penguins.html",
+          "mimeType": "text/html",
+          "lifecycleState": "retained"
+        }
+      ]
+    }
+    """
+    let runtime = ScriptedCoordinatorRuntime(responses: [
+      "list_agent_sessions": listResponse,
+      "get_agent_run": runResponse,
+    ])
+    let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts.firstUse")!
+    defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts.firstUse")
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: defaults
+    )
+
+    let peeked = await service.peekCompletedAgentDelta(surface: AgentSurfaceReference.mainChat(chatId: "default"))
+    let delta = try XCTUnwrap(peeked)
+
+    XCTAssertEqual(delta.ids, ["run_child"])
+    XCTAssertEqual(delta.artifacts.map(\.artifactId), ["art_penguin"])
+  }
+
+  @MainActor
+  func testCompletedAgentDeltaFallsBackToArtifactInspectionWhenRunInspectionFails() async throws {
+    let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
+    let completedAtMs = nowMs - 5_000
+    let listResponse = """
+    {
+      "ok": true,
+      "sessions": [
+        {
+          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML File"},
+          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+        }
+      ]
+    }
+    """
+    let runResponse = """
+    {"ok": false, "error": {"code": "control_tool_failed", "message": "Run was compacted"}}
+    """
+    let artifactResponse = """
+    {
+      "ok": true,
+      "artifacts": [
+        {
+          "artifactId": "art_fallback",
+          "omiSessionId": "ses_child",
+          "runId": "run_child",
+          "kind": "html",
+          "role": "result",
+          "uri": "file:///tmp/fallback.html",
+          "displayName": "fallback.html",
+          "mimeType": "text/html",
+          "lifecycleState": "retained"
+        }
+      ]
+    }
+    """
+    let runtime = ScriptedCoordinatorRuntime(responses: [
+      "list_agent_sessions": listResponse,
+      "get_agent_run": runResponse,
+      "inspect_agent_artifacts": artifactResponse,
+    ])
+    let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts.fallback")!
+    defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts.fallback")
+    defaults.set(nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: defaults
+    )
+
+    let peeked = await service.peekCompletedAgentDelta(surface: AgentSurfaceReference.floatingChat())
+    let delta = try XCTUnwrap(peeked)
+
+    XCTAssertEqual(delta.artifacts.map(\.artifactId), ["art_fallback"])
+    XCTAssertEqual(runtime.calledTools, ["list_agent_sessions", "get_agent_run", "inspect_agent_artifacts"])
+  }
+
+  @MainActor
+  func testInspectAgentRunSurfacesRuntimeControlErrors() async throws {
+    let runtime = RecordingCoordinatorRuntime(
+      response: """
+      {"ok": false, "error": {"code": "control_tool_failed", "message": "Run run_missing was not found"}}
+      """
+    )
+    let service = DesktopCoordinatorService(
+      runtime: runtime,
+      clientId: "test-desktop-coordinator",
+      harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+      checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.inspect.error")!
+    )
+
+    let inspection = try await service.inspectAgentRun(runId: "run_missing")
+
+    XCTAssertEqual(inspection.status, "failed")
+    XCTAssertEqual(inspection.errorMessage, "control_tool_failed: Run run_missing was not found")
+  }
+
   private func sourceFile(_ relativePath: String) throws -> String {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -370,6 +604,25 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       .deletingLastPathComponent()
     let url = root.appendingPathComponent(relativePath).standardizedFileURL
     return try String(contentsOf: url, encoding: .utf8)
+  }
+}
+
+private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+  private let responses: [String: String]
+  private(set) var calledTools: [String] = []
+
+  init(responses: [String: String]) {
+    self.responses = responses
+  }
+
+  func directControlTool(
+    clientId: String,
+    harnessMode: String,
+    name: String,
+    input: [String: Any]
+  ) async throws -> String {
+    calledTools.append(name)
+    return responses[name] ?? "{\"ok\": true}"
   }
 }
 
