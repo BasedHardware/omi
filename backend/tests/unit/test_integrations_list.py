@@ -63,6 +63,26 @@ def test_endpoint_tolerates_none_doc():
     assert resp.integrations[0].connected is False
 
 
+def test_endpoint_connected_coerces_strings_strictly():
+    # A stored string 'false' must not be reported as connected (bool('false') is True).
+    raw = {
+        'a': {'connected': 'false'},
+        'b': {'connected': 'true'},
+        'c': {'connected': True},
+        'd': {'connected': False},
+        'e': {'connected': None},
+    }
+    with patch.object(users_db, 'get_integrations', return_value=raw):
+        resp = integrations_router.list_integrations(uid='u1')
+    assert {s.app_key: s.connected for s in resp.integrations} == {
+        'a': False,
+        'b': True,
+        'c': True,
+        'd': False,
+        'e': False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # DB helper: stream into an app_key-keyed dict
 # ---------------------------------------------------------------------------

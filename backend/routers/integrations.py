@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 from pydantic import BaseModel, Field
 import os
 import secrets
@@ -210,7 +210,19 @@ class IntegrationSummary(BaseModel):
 class IntegrationsListResponse(BaseModel):
     """All of the current user's integration connections."""
 
-    integrations: List[IntegrationSummary] = Field(default_factory=list)
+    integrations: list[IntegrationSummary] = Field(default_factory=list)
+
+
+def _coerce_connected(value) -> bool:
+    """Normalize a stored `connected` flag to a strict bool.
+
+    Firestore stores it as a real bool, but a legacy/string value must not be coerced
+    blindly: bool('false') is True, which would report a disconnected integration as
+    connected. Strings are compared explicitly; everything else falls back to truthiness.
+    """
+    if isinstance(value, str):
+        return value.strip().lower() == 'true'
+    return bool(value)
 
 
 @router.get("/v1/integrations", response_model=IntegrationsListResponse, tags=['integrations'])
@@ -226,7 +238,7 @@ def list_integrations(uid: str = Depends(auth.get_current_user_uid)):
         summaries.append(
             IntegrationSummary(
                 app_key=app_key,
-                connected=bool(data.get('connected')),
+                connected=_coerce_connected(data.get('connected')),
                 last_synced=last_synced,
             )
         )
