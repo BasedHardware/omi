@@ -152,6 +152,8 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertEqual(diagnostics.errorChainCodes, [2001, 2001, NSURLErrorTimedOut])
 
     let properties = diagnostics.analyticsProperties
+    XCTAssertEqual(properties["phase"] as? String, "network")
+    XCTAssertEqual(properties["update_failure_phase"] as? String, "network")
     XCTAssertEqual(properties["update_failure_reason"] as? String, "network")
     XCTAssertEqual(properties["nsurl_error_code"] as? Int, NSURLErrorTimedOut)
     XCTAssertEqual(properties["failing_url_host"] as? String, "api.omi.me")
@@ -188,5 +190,33 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertEqual(properties["update_failure_reason"] as? String, "downloads_location")
     XCTAssertEqual(properties["launch_location_bucket"] as? String, "downloads_folder")
     XCTAssertNil(properties["bundle_path"])
+  }
+
+  func testAnalyticsPropertiesFallbackMessageIsNonEmpty() {
+    let diagnostics = UpdateFailureDiagnostics(
+      reason: .unknown,
+      message: "",
+      domain: "SUSparkleErrorDomain",
+      code: 2001,
+      underlyingDomain: nil,
+      underlyingCode: nil,
+      errorChainDomains: ["SUSparkleErrorDomain"],
+      errorChainCodes: [2001],
+      nsurlErrorCode: nil,
+      failingURLHost: nil,
+      failingURLPath: nil,
+      updateChannel: "stable",
+      launchLocationBucket: "applications_system",
+      sourceAppVersion: "0.12.0",
+      sourceAppBuild: "12000",
+      appcastURLHost: "api.omi.me",
+      appcastURLPath: "/v2/desktop/appcast.xml"
+    )
+
+    let properties = diagnostics.analyticsProperties
+    XCTAssertEqual(properties["error"] as? String, "SUSparkleErrorDomain 2001")
+    XCTAssertEqual(properties["phase"] as? String, "unknown")
+    XCTAssertEqual(properties["update_failure_message"] as? String, "SUSparkleErrorDomain 2001")
+    XCTAssertEqual(properties["update_failure_phase"] as? String, "unknown")
   }
 }
