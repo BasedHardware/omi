@@ -1249,19 +1249,15 @@ class ParakeetWebSocketSocket(STTSocket):
                         if self._partial_stable_task and not self._partial_stable_task.done():
                             self._partial_stable_task.cancel()
                             self._partial_stable_task = None
-                        new_final = final
+                        self._last_partial = ""
+                        if self._committed_text and self._committed_text.endswith(final):
+                            continue
+                        new_text = final
                         if self._committed_text:
-                            full = (self._committed_text + " " + final).strip()
-                            if full.startswith(self._committed_text):
-                                candidate = full[len(self._committed_text) :].strip()
-                                if candidate:
-                                    new_final = candidate
-                            self._committed_text = full
+                            self._committed_text = (self._committed_text + " " + final).strip()
                         else:
                             self._committed_text = final
-                        self._last_partial = ""
-                        if new_final:
-                            self._emit_segment(new_final)
+                        self._emit_segment(new_text)
                     elif partial and partial != self._last_partial:
                         self._last_partial = partial
                         if self._partial_stable_task and not self._partial_stable_task.done():

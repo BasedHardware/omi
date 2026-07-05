@@ -1176,6 +1176,30 @@ class TestParakeetV4Protocol(unittest.TestCase):
         texts = [s['text'] for s in segs]
         self.assertEqual(texts.count('hello world'), 1, f"Should not duplicate: {texts}")
 
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_stable_partial_final_close_no_triple_emit(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': 'hello world', 'final_transcript': '', 'is_final': False},
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'hello world', 'is_final': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': 'hello world', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio, audio])
+        texts = [s['text'] for s in segs]
+        hello_count = sum(1 for t in texts if 'hello world' in t)
+        self.assertEqual(hello_count, 1, f"'hello world' should appear exactly once, got: {texts}")
+
 
 class TestParakeetVersionRouting(unittest.TestCase):
 
