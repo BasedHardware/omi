@@ -14,9 +14,7 @@ from google.cloud import firestore
 from ._client import db
 
 
-def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
-    """Typed shim around firestore.transactional (SDK stub gap)."""
-    return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]
+transactional = getattr(firestore, 'transactional', lambda fn: fn)  # pyright: ignore[reportUnknownMemberType]
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -79,7 +77,7 @@ def record_llm_usage(
     usage_ref.set(update_data, merge=True)
 
 
-@_typed_transactional
+@transactional
 def _record_chat_quota_question_transaction(
     transaction: Any,
     usage_ref: Any,
