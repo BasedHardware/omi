@@ -404,20 +404,20 @@ export interface AppThumbnailUploadResponse {
 export interface AppleHealthSyncData {
   average_active_energy_per_day?: number | null;
   average_steps_per_day?: number | null;
-  daily_active_energy?: Array<unknown> | null;
-  daily_sleep?: Array<unknown> | null;
-  daily_steps?: Array<unknown> | null;
+  daily_active_energy?: Array<Record<string, unknown>> | null;
+  daily_sleep?: Array<Record<string, unknown>> | null;
+  daily_steps?: Array<Record<string, unknown>> | null;
   heart_rate_average?: number | null;
   heart_rate_max?: number | null;
   heart_rate_min?: number | null;
   period_days?: number;
-  sleep_sessions?: Array<unknown> | null;
+  sleep_sessions?: Array<Record<string, unknown>> | null;
   sleep_sessions_count?: number | null;
   total_active_energy?: number | null;
   total_in_bed_hours?: number | null;
   total_sleep_hours?: number | null;
   total_steps?: number | null;
-  workouts?: Array<unknown> | null;
+  workouts?: Array<Record<string, unknown>> | null;
 }
 
 export interface AppleHealthSyncResponse {
@@ -1666,7 +1666,7 @@ export interface Memory {
   tags?: Array<string>;
   uncertainty_reasons?: Array<string>;
   veracity?: number | null;
-  visibility?: string;
+  visibility?: string | null;
 }
 
 export interface MemoryAssistantSettings {
@@ -1827,10 +1827,6 @@ export interface MoveConversationRequest {
 export interface NotificationSettingsResponse {
   enabled: boolean;
   frequency: number;
-}
-
-export interface NotificationStatusResponse {
-  status: string;
 }
 
 export interface OAuthUrlResponse {
@@ -2144,12 +2140,6 @@ export interface SearchedMemory {
   relevance_score: number;
   reviewed?: boolean | null;
   reviewed_source?: string | null;
-}
-
-export interface SendAppNotificationRequest {
-  aid: string;
-  message: string;
-  uid: string;
 }
 
 export interface SendMessageRequest {
@@ -3113,7 +3103,6 @@ export interface OmiApiSchemas {
   "MigrationTargetRequest": MigrationTargetRequest;
   "MoveConversationRequest": MoveConversationRequest;
   "NotificationSettingsResponse": NotificationSettingsResponse;
-  "NotificationStatusResponse": NotificationStatusResponse;
   "OAuthUrlResponse": OAuthUrlResponse;
   "OnboardingStateResponse": OnboardingStateResponse;
   "OnboardingStateUpdate": OnboardingStateUpdate;
@@ -3158,7 +3147,6 @@ export interface OmiApiSchemas {
   "SearchConversationsResponse": SearchConversationsResponse;
   "SearchRequest": SearchRequest;
   "SearchedMemory": SearchedMemory;
-  "SendAppNotificationRequest": SendAppNotificationRequest;
   "SendMessageRequest": SendMessageRequest;
   "SetConversationActionItemsStateRequest": SetConversationActionItemsStateRequest;
   "SetConversationEventsStateRequest": SetConversationEventsStateRequest;
@@ -4954,7 +4942,7 @@ export interface OmiApiPaths {
     post: {
       operationId: "send_app_notification_to_user_v1_integrations_notification_post";
       responses: {
-        "200": NotificationStatusResponse;
+        "200": unknown;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -9510,7 +9498,7 @@ export async function sync_apple_health_data_v1_integrations_apple_health_sync_p
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function send_app_notification_to_user_v1_integrations_notification_post(body: SendAppNotificationRequest, init?: OmiApiClientInit): Promise<NotificationStatusResponse> {
+export async function send_app_notification_to_user_v1_integrations_notification_post(body: Record<string, unknown>, init?: OmiApiClientInit): Promise<unknown> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/integrations/notification`;
   const _search = "";

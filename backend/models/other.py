@@ -9,6 +9,10 @@ class SaveFcmTokenRequest(BaseModel):
     time_zone: str
 
 
+class FcmTokenResponse(BaseModel):
+    status: str
+
+
 class SendNotificationRequest(BaseModel):
     uid: str
     title: str

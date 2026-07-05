@@ -273,7 +273,6 @@
       "ConversationItemStructured": {
         "properties": {
           "action_items": {
-            "default": [],
             "items": {
               "$ref": "#/components/schemas/ActionItem"
             },
@@ -291,7 +290,6 @@
             "type": "string"
           },
           "events": {
-            "default": [],
             "items": {
               "$ref": "#/components/schemas/Event"
             },
@@ -1221,7 +1219,6 @@
             "title": "Superseded By"
           },
           "tags": {
-            "default": [],
             "description": "The tags of the memory and learning",
             "items": {
               "type": "string"
@@ -1313,19 +1310,6 @@
         ],
         "title": "MemoryLayer",
         "type": "string"
-      },
-      "NotificationStatusResponse": {
-        "properties": {
-          "status": {
-            "title": "Status",
-            "type": "string"
-          }
-        },
-        "required": [
-          "status"
-        ],
-        "title": "NotificationStatusResponse",
-        "type": "object"
       },
       "SearchConversationsResponse": {
         "properties": {
@@ -1440,29 +1424,6 @@
           }
         },
         "title": "SearchRequest",
-        "type": "object"
-      },
-      "SendAppNotificationRequest": {
-        "properties": {
-          "aid": {
-            "title": "Aid",
-            "type": "string"
-          },
-          "message": {
-            "title": "Message",
-            "type": "string"
-          },
-          "uid": {
-            "title": "Uid",
-            "type": "string"
-          }
-        },
-        "required": [
-          "aid",
-          "message",
-          "uid"
-        ],
-        "title": "SendAppNotificationRequest",
         "type": "object"
       },
       "SubjectAttribution": {
@@ -1658,7 +1619,9 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SendAppNotificationRequest"
+                "additionalProperties": true,
+                "title": "Data",
+                "type": "object"
               }
             }
           },
@@ -1668,9 +1631,7 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/NotificationStatusResponse"
-                }
+                "schema": {}
               }
             },
             "description": "Successful Response"

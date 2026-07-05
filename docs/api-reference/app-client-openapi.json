@@ -7718,6 +7718,19 @@
         "title": "FairUseUsagePctResponse",
         "type": "object"
       },
+      "FcmTokenResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "FcmTokenResponse",
+        "type": "object"
+      },
       "FileChat": {
         "properties": {
           "created_at": {
@@ -38781,11 +38794,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "title": "Response Save Token V1 Users Fcm Token Post",
-                  "type": "object"
+                  "$ref": "#/components/schemas/FcmTokenResponse"
                 }
               }
             },

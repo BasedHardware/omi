@@ -13,7 +13,7 @@ from utils.apps import (
 )
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
-from models.other import SaveFcmTokenRequest
+from models.other import FcmTokenResponse, SaveFcmTokenRequest
 from utils.notifications import (
     send_notification,
 )
@@ -61,13 +61,13 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     return True, remaining, reset_time, 0
 
 
-@router.post('/v1/users/fcm-token')
+@router.post('/v1/users/fcm-token', response_model=FcmTokenResponse)
 def save_token(
     data: SaveFcmTokenRequest,
     uid: str = Depends(auth.get_current_user_uid),
     x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
     x_device_id_hash: Optional[str] = Header(None, alias='X-Device-Id-Hash'),
-) -> Dict[str, str]:
+) -> FcmTokenResponse:
     platform = x_app_platform or 'unknown'
     device_hash = x_device_id_hash or 'default'
 
@@ -78,7 +78,7 @@ def save_token(
     token_data['device_key'] = device_key
 
     notification_db.save_token(uid, token_data)
-    return {'status': 'Ok'}
+    return FcmTokenResponse(status='Ok')
 
 
 # ******************************************************
