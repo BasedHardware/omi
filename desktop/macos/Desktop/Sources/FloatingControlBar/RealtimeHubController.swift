@@ -81,6 +81,11 @@ struct InterruptedTurnPayload: Equatable {
   let userText: String
   let assistantText: String
   let idempotencyKey: String
+
+  /// User-visible chat text for a PTT-barged reply: keep streamed partial text only.
+  static func visibleAssistantText(partialAssistantText: String) -> String {
+    partialAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
 }
 
 enum RealtimeHubBargeInContinuity {
@@ -957,16 +962,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard !turnRecorded else { return nil }
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !heard.isEmpty else { return nil }
-    let partialReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-    let interruptedReply: String
-    if partialReply.isEmpty {
-      interruptedReply = "Interrupted before the assistant finished responding."
-    } else {
-      interruptedReply = "\(partialReply)\n\n[Interrupted by the next push-to-talk turn before completion.]"
-    }
     return InterruptedTurnPayload(
       userText: heard,
-      assistantText: interruptedReply,
+      assistantText: InterruptedTurnPayload.visibleAssistantText(partialAssistantText: assistantText),
       idempotencyKey: turnIdempotencyKey
     )
   }

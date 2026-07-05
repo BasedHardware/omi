@@ -48,6 +48,21 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertEqual(steps, ["seed", "session"])
   }
 
+  func testInterruptedTurnVisibleAssistantTextKeepsPartialReplyOnly() {
+    XCTAssertEqual(
+      InterruptedTurnPayload.visibleAssistantText(partialAssistantText: "  Partial reply  "),
+      "Partial reply"
+    )
+    XCTAssertEqual(
+      InterruptedTurnPayload.visibleAssistantText(partialAssistantText: ""),
+      ""
+    )
+    XCTAssertFalse(
+      InterruptedTurnPayload.visibleAssistantText(partialAssistantText: "Still streaming…")
+        .localizedCaseInsensitiveContains("interrupted")
+    )
+  }
+
   func testFreshSessionBargeInDefersSeedPrefetchUntilContinuityCompletes() throws {
     let source = try realtimeHubControllerSource()
 
