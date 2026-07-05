@@ -721,7 +721,7 @@ class _FakeParakeetWebSocket:
     async def send(self, data):
         self.sent.append(data)
         if data == 'finalize':
-            await self._messages.put(json.dumps({'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}))
+            await self._messages.put(json.dumps({'stream_id': 's1', 'final_text': 'hello', 'status': 'closed'}))
             await self._messages.put(None)
             await self._messages.put(None)
 
@@ -769,12 +769,15 @@ class TestProcessAudioParakeet(unittest.TestCase):
                     await sock.drain_and_close()
 
                 self.assertEqual(ws.sent, [b'pcm', 'finalize'])
-                self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])
+                self.assertEqual(len(segments), 1)
+                self.assertEqual(segments[0]['text'], 'hello')
+                self.assertEqual(segments[0]['speaker'], 'SPEAKER_00')
+                self.assertFalse(segments[0]['is_user'])
                 return mock_ws_module.connect.call_args
 
             call_args = loop.run_until_complete(run())
             uri = call_args[0][0]
-            self.assertEqual(uri, 'ws://parakeet.local/v3/stream?sample_rate=16000')
+            self.assertEqual(uri, 'ws://parakeet.local/v4/stream?sample_rate=16000')
             self.assertNotIn('extra_headers', call_args.kwargs)
         finally:
             loop.close()

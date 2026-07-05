@@ -3,6 +3,7 @@ import io
 import json
 import os
 import random
+import struct
 import threading
 import urllib.parse
 import wave as _wave
@@ -1038,13 +1039,29 @@ class ParakeetStreamingSocket(STTSocket):
         return out
 
 
+def _resample_pcm16(data: bytes, source_rate: int, target_rate: int) -> bytes:
+    if source_rate == target_rate or source_rate <= 0 or target_rate <= 0:
+        return data
+    num_samples = len(data) // 2
+    if num_samples == 0:
+        return data
+    samples = struct.unpack(f'<{num_samples}h', data)
+    ratio = target_rate / source_rate
+    new_length = int(num_samples * ratio)
+    resampled = [samples[min(int(i / ratio), num_samples - 1)] for i in range(new_length)]
+    return struct.pack(f'<{new_length}h', *resampled)
+
+
+PARAKEET_TARGET_SAMPLE_RATE = 16000
+
+
 class ParakeetWebSocketSocket(STTSocket):
-    """True streaming via Parakeet /v3/stream WebSocket with server-side VAD + diarization."""
+    """Streaming via Parakeet /v4/stream WebSocket with NeMo CacheAwareRNNT pipeline."""
 
     def __init__(self, stream_transcript, ws_url: str, sample_rate: int):
         self._stream_transcript = stream_transcript
         self._ws_url = ws_url
-        self._sample_rate = sample_rate
+        self._input_sample_rate = sample_rate
         self._send_queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=1000)
         self._closed = False
         self._dead = False
@@ -1054,6 +1071,9 @@ class ParakeetWebSocketSocket(STTSocket):
         self._receiver_task: Optional[asyncio.Task] = None
         self._connected_event = asyncio.Event()
         self._startup_event = asyncio.Event()
+        self._audio_seconds_sent = 0.0
+        self._last_emit_time = 0.0
+        self._committed_text = ""
 
     async def start(self):
         self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
@@ -1073,6 +1093,9 @@ class ParakeetWebSocketSocket(STTSocket):
     def send(self, data: bytes) -> None:
         if self._closed or not data:
             return
+        self._audio_seconds_sent += len(data) / (self._input_sample_rate * 2)
+        if self._input_sample_rate != PARAKEET_TARGET_SAMPLE_RATE:
+            data = _resample_pcm16(data, self._input_sample_rate, PARAKEET_TARGET_SAMPLE_RATE)
         try:
             self._send_queue.put_nowait(data)
         except asyncio.QueueFull:
@@ -1126,7 +1149,7 @@ class ParakeetWebSocketSocket(STTSocket):
             self._mark_dead('parakeet ws send queue full while finalizing')
 
     async def _run(self):
-        url = f"{self._ws_url}?sample_rate={self._sample_rate}"
+        url = f"{self._ws_url}?sample_rate={PARAKEET_TARGET_SAMPLE_RATE}"
 
         try:
             async with websockets.connect(url, max_size=10 * 1024 * 1024) as ws:
@@ -1169,16 +1192,45 @@ class ParakeetWebSocketSocket(STTSocket):
                 except Exception:
                     pass
 
+    def _emit_segment(self, text: str):
+        start = self._last_emit_time
+        end = self._audio_seconds_sent
+        self._last_emit_time = end
+        self._stream_transcript(
+            [
+                {
+                    'text': text,
+                    'start': round(start, 2),
+                    'end': round(end, 2),
+                    'speaker': 'SPEAKER_00',
+                    'is_user': False,
+                    'person_id': None,
+                }
+            ]
+        )
+
     async def _receive_loop(self, ws):
         try:
             async for msg in ws:
                 if isinstance(msg, str):
                     try:
-                        seg = json.loads(msg)
-                        if isinstance(seg, dict) and seg.get("text"):
-                            self._stream_transcript([seg])
+                        data = json.loads(msg)
                     except json.JSONDecodeError:
-                        pass
+                        continue
+                    if not isinstance(data, dict):
+                        continue
+                    final = (data.get("final_transcript") or "").strip()
+                    if final:
+                        self._committed_text = (self._committed_text + " " + final).strip()
+                        self._emit_segment(final)
+                    elif data.get("status") == "closed":
+                        close_text = (data.get("final_text") or "").strip()
+                        if close_text and close_text != self._committed_text:
+                            suffix = close_text
+                            if self._committed_text and close_text.startswith(self._committed_text):
+                                suffix = close_text[len(self._committed_text) :].strip()
+                            if suffix:
+                                self._emit_segment(suffix)
         except Exception as e:
             if not self._closed:
                 logger.error(f"Parakeet WS recv error: {e}")
@@ -1194,17 +1246,17 @@ async def process_audio_parakeet(
     keywords: List[str] = [],
     is_active: Optional[Callable[[], bool]] = None,
 ):
-    """STT path backed by the self-hosted Parakeet /v3/stream WebSocket.
+    """STT path backed by the self-hosted Parakeet /v4/stream WebSocket.
 
-    Server-side VAD + diarization — the backend just relays PCM chunks
-    and receives speaker-labeled segments.
+    Uses NeMo CacheAwareRNNT pipeline for streaming ASR. Audio is
+    resampled to 16kHz if needed; timing is tracked client-side.
     """
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
         logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
         return None
 
-    ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v3/stream'
+    ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v4/stream'
     logger.info(f'process_audio_parakeet {language} {sample_rate} -> {ws_url}')
     socket = ParakeetWebSocketSocket(stream_transcript, ws_url, sample_rate)
     await socket.start()
