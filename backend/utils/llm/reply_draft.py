@@ -648,6 +648,15 @@ def build_reply_prompt(
         f"'we'll see', 'nothing crazy') when the exact answer is sitting in the context is a FAILURE, just as "
         f"bad as inventing one — it wastes what Omi knows. Prefer the concrete retrieved detail over a vague "
         f"reply every time the detail is actually there. "
+        f"COVER WHAT YOU DID — when {name} asks an open question about what the user did, how something went, or "
+        f"how a day, weekend, trip, or event was ('what did you do', 'how was your 4th', 'what have you been up "
+        f"to'), and the context shows SEVERAL distinct things the user actually did (multiple activities, places, "
+        f"foods, or events), recount the material ones the way the user would in a text — do NOT cherry-pick one "
+        f"detail and drop the rest, and do NOT compress a full day into 'nothing much'. Wrapping a genuinely "
+        f"eventful day in a minimizing frame ('nothing crazy', 'chill day', 'stayed in', 'the usual') when the "
+        f"context lists several real things is the SAME under-sharing failure as hedging on a single fact — it "
+        f"throws away what actually happened. Name the real things (in the user's voice, and as a natural burst "
+        f"of a couple of back-to-back messages if that fits how they text) instead of summarizing them away. "
         f"What you must NOT do is CONFIRM or DENY things with no basis: facts about the user's life; their "
         f"opinions, feelings, preferences and stances; actions they took; and REASONS for their own behavior. "
         f"A made-up \"no\" is as wrong as a made-up \"yes\", and a made-up reason is a fabrication. A "
@@ -749,7 +758,12 @@ def _build_selection_prompt(name: str, style_block: str, thread_text: str, candi
         f"default); when the context shows the user was involved in what's being asked, prefer the candidate "
         f"that affirms it or asks over any that denies it. When the context DOES contain the specific asked "
         f"for (a place, day, time, name, number, dish, plan), PREFER the candidate that states that real "
-        f"retrieved specific over any vaguer/hedging one — using a fact you have beats hedging. Only between "
+        f"retrieved specific over any vaguer/hedging one — using a fact you have beats hedging. When {name} "
+        f"asked an open question about what the user did or how a day/event was AND the context shows SEVERAL "
+        f"distinct real things the user did, PREFER the candidate that COVERS the material ones over a shorter "
+        f"one that names just one and drops the rest or compresses them into 'nothing much' — under-sharing a "
+        f"genuinely eventful answer is a failure, and this coverage preference OVERRIDES the 'shorter is better' "
+        f"preference. Only between "
         f"a vague reply and one that states an UNESTABLISHED specific, pick the vague one. Return the index of the best candidate."
     )
     user_prompt = (
@@ -859,6 +873,95 @@ def _select_best(name: str, style_block: str, thread_text: str, candidates: List
     return candidates[0]
 
 
+# --- recount / "what did you do" distillation --------------------------------------------------
+# An open question like "what did you do for the 4th?" wants the user to RECOUNT the several
+# things they actually did. Retrieval hands back noisy, multi-topic conversation SUMMARIES where
+# the real activities are buried among unrelated tangents and phrased tentatively ("planning
+# pickleball", "burgers came up"). gpt-4.1-mini (the drafting model) can draft a clean recount
+# when handed a clean list, but it collapses to one hedged detail when it has to EXTRACT that list
+# from noisy summaries under the anti-fabrication rules. So for recount questions we distill the
+# noisy context into a short, concrete "things you actually did" recap and put that in front of the
+# drafter. Gated on the question shape so normal drafts pay no extra call.
+_RECOUNT_RE = re.compile(
+    r"("
+    r"what(?:'?d| did| have| ?ve| you)?\s+(?:you\s+)?(?:been\s+|end\s+up\s+|get(?:ting)?\s+)?"
+    r"(?:up\s+to|doing|do\b|been\s+up\s+to)"
+    r"|what\s+did\s+you\s+(?:do|get\s+up\s+to|end\s+up)"
+    r"|what\s+have\s+you\s+been\s+up\s+to"
+    r"|how(?:'?s| was| were| wa)\s+(?:your|the|ur)\s+\w+"
+    r"|how(?:'?d| did)\s+(?:it|that|the|your|ur)\b.*\bgo\b"
+    r"|how\s+did\s+(?:it|that|the|your|ur)\s+\w+\s+go"
+    r"|(?:do|did)\s+(?:you\s+)?(?:do\s+)?anything\s+(?:fun|cool|nice|good)"
+    r"|tell me (?:everything|all about|about your)"
+    r")",
+    re.IGNORECASE,
+)
+
+
+def _is_recount_question(thread: List[dict]) -> bool:
+    """True when the latest inbound is an open 'what did you do / how was your X' question that
+    invites recounting several things — the case where a single hedged detail reads as ducking."""
+    for m in reversed(thread or []):
+        if m.get('is_from_me'):
+            continue
+        return bool(_RECOUNT_RE.search((m.get('text') or '')))
+    return False
+
+
+def distill_recount_recap(omi_context: str, question: str) -> str:
+    """Distill noisy retrieved context into a short, concrete recap of what the user ACTUALLY did,
+    relevant to an open recount question. Returns a labeled recap block to inject, or '' when there
+    is nothing concrete (so the caller falls back to the raw context unchanged). Grounded only in
+    what the context shows — it extracts, it never invents."""
+    ctx = (omi_context or '').strip()
+    if not ctx:
+        return ''
+    sysp = (
+        "You distill noisy, multi-topic conversation summaries into a short list of concrete things "
+        "the USER ACTUALLY DID, so their reply can recount them. The other person asked the user an "
+        "open question about what they did. Extract ONLY concrete activities, places, foods, or events "
+        "the summaries show the USER doing or taking part in that are relevant to the question. "
+        "Include an item only if the summaries show it actually happening or the user doing it; if "
+        "something is merely discussed, considered, or planned with no sign it happened, LEAVE IT OUT. "
+        "Phrase each as a short plain past-tense thing ('grilled burgers', 'played pickleball', "
+        "'watched the fireworks'). Drop other people's businesses/investments, unrelated tangents, and "
+        "meta/app chatter. Return ONLY a short bullet list (one item per line, no commentary). If "
+        "nothing concrete is established, return exactly NONE."
+    )
+    usrp = "QUESTION THEY ASKED: " + (question or '').strip() + "\n\nCAPTURED CONTEXT (noisy):\n" + ctx
+    try:
+        out = (_invoke_memories(sysp, usrp) or '').strip()
+    except Exception as e:
+        logger.warning(f"reply_draft: recount distillation failed: {e}")
+        return ''
+    if not out or out.strip().upper().startswith('NONE'):
+        return ''
+    lines = [ln.strip(" \t-•*").strip() for ln in out.splitlines()]
+    items = [ln for ln in lines if ln]
+    if len(items) < 2:
+        # A single item isn't a recount — the raw context already conveys it; don't override.
+        return ''
+    recap = "\n".join(f"- {i}" for i in items)
+    return "THINGS THE USER ACTUALLY DID (recount these, in their voice):\n" + recap
+
+
+def apply_recount_distillation(omi_context: str, thread: List[dict]) -> str:
+    """If the latest inbound is a recount question, prepend a distilled recap to the retrieved
+    context so the drafter recounts the real activities instead of hedging on one. Shared by the
+    product path and the eval harness so both exercise the same behavior. No-op otherwise."""
+    if not (omi_context or '').strip() or not _is_recount_question(thread):
+        return omi_context
+    question = ''
+    for m in reversed(thread or []):
+        if not m.get('is_from_me') and (m.get('text') or '').strip():
+            question = m['text']
+            break
+    recap = distill_recount_recap(omi_context, question)
+    if not recap:
+        return omi_context
+    return recap + "\n\n" + omi_context
+
+
 def draft_reply(
     uid: str,
     person_ref: str,
@@ -923,6 +1026,9 @@ def draft_reply(
     context_text = "\n".join(context_bits) or "(no extra context)"
 
     omi_context = _relevant_context(uid, thread)
+    # For open "what did you do / how was your X" questions, distill the noisy retrieved context
+    # into a concrete recap so the drafter recounts the real activities instead of hedging on one.
+    omi_context = apply_recount_distillation(omi_context, thread)
 
     system_prompt, user_prompt = build_reply_prompt(
         name=name,
