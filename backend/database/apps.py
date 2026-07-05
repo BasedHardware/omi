@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional, cast
 
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 from google.cloud.firestore import ArrayUnion, ArrayRemove
-from google.cloud.firestore_v1.types import StructuredQuery
 
 from ulid import ULID
 
@@ -13,12 +12,14 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# BaseCompositeFilter expects Operator enum but accepts 'AND' string at runtime.
+# Typed as Any to satisfy pyright without importing StructuredQuery (which fails
+# on some google-cloud-firestore versions).
+_AND_OP: Any = 'AND'
+
+
 # Firestore composite-filter operator. The string 'AND' is accepted at runtime
 # but is untyped to pyright; use the typed enum value instead (byte-identical
-# protobuf output, verified equivalent).
-_AND_OP = StructuredQuery.CompositeFilter.Operator.AND
-
-
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
