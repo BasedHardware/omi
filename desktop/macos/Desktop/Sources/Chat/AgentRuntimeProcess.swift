@@ -764,14 +764,26 @@ actor AgentRuntimeProcess {
     let expectedGeneration = processGeneration
 
     let handle = stdoutPipe.fileHandleForReading
-    handle.readabilityHandler = { [weak self] handle in
+    // Chunks must reach the actor in pipe order. An unstructured Task per
+    // readability callback gives no FIFO guarantee when hopping onto the
+    // actor, so under bursty output (e.g. large adapter message.delta
+    // streams) chunks could be appended to the line buffer out of order,
+    // corrupting the JSONL protocol mid-run (parse failures, pills stuck in
+    // "starting", invalid runtime responses). A single AsyncStream consumer
+    // preserves arrival order end to end.
+    let (stream, continuation) = AsyncStream.makeStream(of: Data.self)
+    handle.readabilityHandler = { handle in
       let data = handle.availableData
       guard !data.isEmpty else {
+        continuation.finish()
         handle.readabilityHandler = nil
         return
       }
-      Task { [weak self] in
-        await self?.processStdoutData(data, generation: expectedGeneration)
+      continuation.yield(data)
+    }
+    Task { [weak self] in
+      for await chunk in stream {
+        await self?.processStdoutData(chunk, generation: expectedGeneration)
       }
     }
   }
