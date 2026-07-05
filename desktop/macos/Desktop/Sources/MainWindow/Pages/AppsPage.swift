@@ -307,7 +307,7 @@ struct AppsPage: View {
                 onDismiss: {
                 selectedConnector = nil
             })
-            .frame(width: 520, height: 620)
+            .frame(width: connector.sheetPreferredSize.width, height: connector.sheetPreferredSize.height)
         }
         .dismissableSheet(item: $selectedExportDestination) { destination in
             ConnectDestinationSheet(
@@ -638,6 +638,15 @@ struct ImportConnector: Identifiable {
     let metricText: String?
     let actionTitle: String
     let isConnected: Bool
+
+    var sheetPreferredSize: CGSize {
+        switch id {
+        case "chatgpt", "claude":
+            return CGSize(width: 520, height: 620)
+        default:
+            return CGSize(width: 520, height: 360)
+        }
+    }
 
     static let all: [ImportConnector] = [
         ImportConnector(
