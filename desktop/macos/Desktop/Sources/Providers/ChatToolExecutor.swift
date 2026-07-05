@@ -64,6 +64,8 @@ class ChatToolExecutor {
 
   struct LocalFileScanOutcome {
     let hasReadableUserFileTarget: Bool
+    let didCompleteSuccessfully: Bool
+    let indexedFileCount: Int
     let summaryText: String
   }
 
@@ -1253,7 +1255,10 @@ class ChatToolExecutor {
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
   private static func executeScanFiles(_: [String: Any]) async -> String {
-    await scanLocalFiles().summaryText
+    let outcome = await scanLocalFiles()
+    fileScanFileCount = outcome.indexedFileCount
+    onScanFilesCompleted?(outcome.indexedFileCount)
+    return outcome.summaryText
   }
 
   static func scanLocalFiles() async -> LocalFileScanOutcome {
@@ -1326,7 +1331,6 @@ class ChatToolExecutor {
 
     // Actually scan accessible folders (blocking)
     let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
-    fileScanFileCount = count
     log(
       "Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied"
     )
@@ -1346,11 +1350,10 @@ class ChatToolExecutor {
         "\nTell the user to click 'Allow' on the macOS dialogs, then call scan_files again to pick up those folders."
     }
 
-    // Notify that scan completed — triggers parallel exploration
-    onScanFilesCompleted?(count)
-
     return LocalFileScanOutcome(
       hasReadableUserFileTarget: readableUserFileTargetCount > 0,
+      didCompleteSuccessfully: !resultsStr.lowercased().hasPrefix("error"),
+      indexedFileCount: count,
       summaryText: out)
   }
 

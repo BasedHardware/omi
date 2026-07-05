@@ -1441,12 +1441,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
         return SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count)
     }
 
-    func rescanLocalFiles(appState: AppState?) async -> SyncResult? {
-        guard let appState else {
-            errorMessage = "App state is unavailable right now."
-            return nil
-        }
-
+    func rescanLocalFiles() async -> SyncResult? {
         beginRun(
             title: "Indexing local files",
             detail: "Scanning your on-device files so Omi can use them in memory search."
@@ -1454,12 +1449,16 @@ private final class ImportConnectorSheetModel: ObservableObject {
         defer { finishRun() }
 
         let previousCount = await currentIndexedFileCount()
-        ChatToolExecutor.onboardingAppState = appState
         AnalyticsManager.shared.onboardingChatToolUsed(
             tool: "scan_files",
             properties: ["surface": "import_connector_sheet"]
         )
         let result = await ChatToolExecutor.scanLocalFiles()
+
+        if !result.didCompleteSuccessfully {
+            errorMessage = result.summaryText
+            return nil
+        }
 
         if !result.hasReadableUserFileTarget {
             errorMessage = result.summaryText
@@ -1624,7 +1623,7 @@ struct ImportConnectorSheet: View {
                             )
                         }
                     case "local-files":
-                        if let result = await model.rescanLocalFiles(appState: appState) {
+                        if let result = await model.rescanLocalFiles() {
                             statusStore.markSynced(
                                 connectorID: connector.id,
                                 sourceCount: result.sourceCount,
