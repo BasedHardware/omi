@@ -1324,6 +1324,7 @@ final class AgentPillsManager: ObservableObject {
             FloatingControlBarManager.shared.recordAgentArtifactCompletion(
                 pillID: pill.id,
                 runId: pill.canonicalRunId,
+                userText: pill.query,
                 title: pill.title,
                 finalText: trimmed,
                 resources: resources
@@ -1336,6 +1337,16 @@ final class AgentPillsManager: ObservableObject {
         pill.completedAt = Date()
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
+        if resources.isEmpty, !trimmed.isEmpty {
+            Task {
+                await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                    pillID: pill.id,
+                    runId: pill.canonicalRunId,
+                    userText: pill.query,
+                    assistantText: trimmed
+                )
+            }
+        }
     }
 
     private func fail(pill: AgentPill, errorText: String) {
@@ -1346,6 +1357,14 @@ final class AgentPillsManager: ObservableObject {
         Self.ensureFailureMessage(errorText, for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
+        Task {
+            await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+                pillID: pill.id,
+                runId: pill.canonicalRunId,
+                userText: pill.query,
+                assistantText: "Background agent failed: \(errorText)"
+            )
+        }
     }
 
     private static func ensureStreamingAssistantMessage(for pill: AgentPill) {

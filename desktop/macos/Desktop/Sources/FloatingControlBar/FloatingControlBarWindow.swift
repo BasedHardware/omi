@@ -2012,6 +2012,7 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var activeQueryGeneration: Int = 0
     private var deliveredAgentArtifactKeys: Set<String> = []
+    private var projectedPillCompletionKeys: Set<String> = []
 
     private var selectedFloatingModel: String {
         let selected = ShortcutSettings.shared.selectedModel
@@ -3323,6 +3324,7 @@ class FloatingControlBarManager {
     func recordAgentArtifactCompletion(
         pillID: UUID,
         runId: String?,
+        userText: String,
         title: String,
         finalText: String?,
         resources: [ChatResource]
@@ -3356,6 +3358,44 @@ class FloatingControlBarManager {
         )
         let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
         deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
+        Task {
+            await recordPillTerminalCompletion(
+                pillID: pillID,
+                runId: runId,
+                userText: userText,
+                assistantText: messageText
+            )
+        }
+    }
+
+    /// Project one terminal pill summary into kernel `main_chat` for cross-surface continuity.
+    func recordPillTerminalCompletion(
+        pillID: UUID,
+        runId: String?,
+        userText: String,
+        assistantText: String
+    ) async {
+        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAssistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedUser.isEmpty, !trimmedAssistant.isEmpty else { return }
+
+        let idempotencyKey: String
+        if let runId, !runId.isEmpty {
+            idempotencyKey = "pill_completion:\(runId)"
+        } else {
+            idempotencyKey = "pill_completion:\(pillID.uuidString)"
+        }
+        guard !projectedPillCompletionKeys.contains(idempotencyKey) else { return }
+        projectedPillCompletionKeys.insert(idempotencyKey)
+
+        guard let provider = historyChatProvider else { return }
+        await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+            surface: provider.mainChatSurfaceReference(),
+            userText: trimmedUser,
+            assistantText: trimmedAssistant,
+            origin: "pill_completion",
+            idempotencyKey: idempotencyKey
+        )
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
