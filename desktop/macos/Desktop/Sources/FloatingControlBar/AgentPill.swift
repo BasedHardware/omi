@@ -176,11 +176,13 @@ final class AgentPillsManager: ObservableObject {
     enum DirectedProvider: String, Equatable {
         case hermes
         case openclaw
+        case codex
 
         var displayName: String {
             switch self {
             case .hermes: return "Hermes"
             case .openclaw: return "OpenClaw"
+            case .codex: return "Codex"
             }
         }
 
@@ -188,6 +190,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return .hermes
             case .openclaw: return .openclaw
+            case .codex: return .codex
             }
         }
 
@@ -195,6 +198,8 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
+            // codex-acp is the ACP stdio bridge that drives the Codex CLI.
+            case .codex: return "codex-acp"
             }
         }
 
@@ -202,6 +207,7 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
             case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+            case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
             }
         }
 
@@ -381,7 +387,7 @@ final class AgentPillsManager: ObservableObject {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let providerPattern = "(open\\s*claw|openclaw|hermes)"
+        let providerPattern = "(open\\s*claw|openclaw|hermes|codex)"
         let patterns = [
             #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
             #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
@@ -399,6 +405,7 @@ final class AgentPillsManager: ObservableObject {
             switch providerToken {
             case "openclaw": provider = .openclaw
             case "hermes": provider = .hermes
+            case "codex": provider = .codex
             default: continue
             }
 

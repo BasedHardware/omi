@@ -32,6 +32,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(ChatProvider.harnessMode(for: .openClaw), "openclaw")
   }
 
+  func testTaskChatModeMappingCodex() {
+    XCTAssertEqual(ChatProvider.harnessMode(for: .codex), "codex")
+  }
+
   func testTaskChatModeMappingAgentSDK() {
     XCTAssertEqual(ChatProvider.harnessMode(for: .omiAI), "piMono")
   }
@@ -41,6 +45,8 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .acp).rawValue, "acp")
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .hermes).rawValue, "hermes")
     XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .openclaw).rawValue, "openclaw")
+    XCTAssertEqual(AgentRuntimeRouting.adapterId(for: .codex).rawValue, "codex")
+    XCTAssertEqual(AgentRuntimeRouting.harnessMode(from: "codex"), .codex)
     XCTAssertNil(AgentRuntimeRouting.harnessMode(from: "unknown"))
   }
 
@@ -236,7 +242,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testAIProviderAllContainsSupportedProviders() {
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw", "codex"])
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {
@@ -244,6 +250,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(AIProvider.from(bridgeMode: "claudeCode")?.id, "claude")
     XCTAssertEqual(AIProvider.from(bridgeMode: "hermes")?.id, "hermes")
     XCTAssertEqual(AIProvider.from(bridgeMode: "openclaw")?.id, "openclaw")
+    XCTAssertEqual(AIProvider.from(bridgeMode: "codex")?.id, "codex")
     XCTAssertNil(AIProvider.from(bridgeMode: "unknown"))
     XCTAssertNil(AIProvider.from(bridgeMode: "agentSDK"))
   }
@@ -264,6 +271,15 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(directive?.provider.harnessMode, .hermes)
     XCTAssertEqual(directive?.rewrittenQuery, "summarize your current status")
     XCTAssertEqual(directive?.title, "Hermes")
+  }
+
+  func testProviderDirectiveRoutesCodexToCodexHarness() {
+    let directive = AgentPillsManager.providerDirective(from: "use codex to refactor the parser")
+
+    XCTAssertEqual(directive?.provider, .codex)
+    XCTAssertEqual(directive?.provider.harnessMode, .codex)
+    XCTAssertEqual(directive?.rewrittenQuery, "to refactor the parser")
+    XCTAssertEqual(directive?.title, "Codex")
   }
 
   func testProviderDirectiveIgnoresNonProviderQuestions() {
