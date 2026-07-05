@@ -1240,16 +1240,28 @@ class ParakeetWebSocketSocket(STTSocket):
                         continue
                     if not isinstance(data, dict):
                         continue
+                    if "text" in data and "start" in data and "end" in data:
+                        self._stream_transcript([data])
+                        continue
                     final = (data.get("final_transcript") or "").strip()
                     partial = (data.get("partial_transcript") or "").strip()
                     if final:
                         if self._partial_stable_task and not self._partial_stable_task.done():
                             self._partial_stable_task.cancel()
                             self._partial_stable_task = None
-                        full = (self._committed_text + " " + final).strip()
-                        self._committed_text = full
+                        new_final = final
+                        if self._committed_text:
+                            full = (self._committed_text + " " + final).strip()
+                            if full.startswith(self._committed_text):
+                                candidate = full[len(self._committed_text) :].strip()
+                                if candidate:
+                                    new_final = candidate
+                            self._committed_text = full
+                        else:
+                            self._committed_text = final
                         self._last_partial = ""
-                        self._emit_segment(final)
+                        if new_final:
+                            self._emit_segment(new_final)
                     elif partial and partial != self._last_partial:
                         self._last_partial = partial
                         if self._partial_stable_task and not self._partial_stable_task.done():

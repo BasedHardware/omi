@@ -1128,6 +1128,54 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertIsInstance(s['end'], float)
         self.assertGreaterEqual(s['end'], s['start'])
 
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_v3_segment_passthrough(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'text': 'hello world', 'start': 0.5, 'end': 1.2, 'speaker': 'SPEAKER_01', 'is_user': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio])
+        v3_segs = [s for s in segs if s.get('text') == 'hello world']
+        self.assertEqual(len(v3_segs), 1)
+        self.assertEqual(v3_segs[0]['speaker'], 'SPEAKER_01')
+        self.assertEqual(v3_segs[0]['start'], 0.5)
+        self.assertEqual(v3_segs[0]['end'], 1.2)
+
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_stable_partial_then_same_final_no_duplicate(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': 'hello world', 'final_transcript': '', 'is_final': False},
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'hello world', 'is_final': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': 'hello world', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio, audio])
+        texts = [s['text'] for s in segs]
+        self.assertEqual(texts.count('hello world'), 1, f"Should not duplicate: {texts}")
+
 
 class TestParakeetVersionRouting(unittest.TestCase):
 

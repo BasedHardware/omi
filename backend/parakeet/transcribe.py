@@ -107,12 +107,15 @@ def _load_nemo_model(model_name: str):
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
+V3_STREAM_MODEL_NAME = os.getenv("PARAKEET_V3_STREAM_MODEL", "")
+
+
 def _init_stream_model():
     global _stream_model
-    if not STREAM_MODEL_NAME:
-        logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
+    if not V3_STREAM_MODEL_NAME:
+        logger.info("No PARAKEET_V3_STREAM_MODEL set, v3 streaming will use batch fallback")
         return
-    _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
+    _stream_model = _load_nemo_model(V3_STREAM_MODEL_NAME)
 
 
 def _init_nim():
