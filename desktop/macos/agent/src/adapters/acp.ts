@@ -66,6 +66,27 @@ const EXTERNAL_ADAPTER_ENV_ALLOWLIST = [
 ] as const;
 
 /**
+ * Additional env vars forwarded to a specific external adapter only. Kept out
+ * of the shared allowlist so provider credentials (e.g. OPENAI_API_KEY) are not
+ * leaked to unrelated third-party adapters spawned with `shell: true`.
+ */
+const ADAPTER_EXTRA_ENV_ALLOWLIST: Partial<Record<string, readonly string[]>> = {
+  // codex-acp authenticates + configures itself entirely through the
+  // environment. Without these the subprocess can't reach OpenAI and falls
+  // back to a browser ChatGPT login (which hangs a headless run).
+  codex: [
+    "CODEX_API_KEY",
+    "OPENAI_API_KEY",
+    "NO_BROWSER",
+    "INITIAL_AGENT_MODE",
+    "CODEX_HOME",
+    "CODEX_PATH",
+    "CODEX_CONFIG",
+    "MODEL_PROVIDER",
+  ],
+};
+
+/**
  * Proxy environment variable names that may carry embedded credentials
  * (e.g. `http://user:pass@proxy:3128`). Their values are sanitized before
  * being forwarded to untrusted external adapter subprocesses.
@@ -135,6 +156,10 @@ export interface AcpRuntimeAdapterOptions {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS = 150_000;
+// Codex runs (build/refactor tasks via codex-acp) routinely go quiet for long
+// stretches while a single tool call executes, so it gets a more generous
+// idle-cancel budget than the other external adapters.
+const DEFAULT_CODEX_NO_PROGRESS_TIMEOUT_MS = 300_000;
 
 function parsePositiveInt(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -176,7 +201,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
-      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
+      ?? (this.adapterId === "codex"
+        ? DEFAULT_CODEX_NO_PROGRESS_TIMEOUT_MS
+        : this.adapterId === "hermes" || this.adapterId === "openclaw"
+          ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS
+          : 0);
   }
 
   async start(): Promise<void> {
@@ -202,7 +231,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const externalEnv: NodeJS.ProcessEnv = {
         OMI_ADAPTER_ID: this.adapterId,
       };
-      for (const key of EXTERNAL_ADAPTER_ENV_ALLOWLIST) {
+      const allowlist = [
+        ...EXTERNAL_ADAPTER_ENV_ALLOWLIST,
+        ...(ADAPTER_EXTRA_ENV_ALLOWLIST[this.adapterId] ?? []),
+      ];
+      for (const key of allowlist) {
         if (process.env[key] !== undefined) {
           // Proxy URLs may carry embedded credentials (user:pass@host).
           // Strip them before forwarding to untrusted subprocesses.

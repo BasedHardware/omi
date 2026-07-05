@@ -254,6 +254,26 @@ export const ADAPTER_CAPABILITY_MATRIX = {
       restartOrphanSemantics: required("Startup reconciliation orphans active attempts while preserving native-resumable OpenClaw bindings."),
     },
   },
+  codex: {
+    adapterId: "codex",
+    productionAdapter: true,
+    expectations: {
+      // codex-acp (@agentclientprotocol/codex-acp) exposes session/resume via
+      // loadSession, but Omi treats Codex sessions as process-local for now and
+      // reopens per attempt; revisit to enable native resume.
+      nativeResume: unsupported("Codex bindings are treated as process-local; native session/resume is not wired yet."),
+      cancellationDispatch: required("codex-acp accepts session/cancel through the shared ACP interrupt path."),
+      cancellationAck: knownLimitation("Codex cancellation is fire-and-forget; no terminal adapter ack is exposed yet.", "TICKET-03-follow-up-cancel-ack"),
+      pinnedWorker: required("Codex keeps session state in the adapter process and must stay worker-pinned while active."),
+      // codex-acp implements unstable_setSessionModel / setSessionConfigOption,
+      // not the standard session/set_model; model is configured via Codex, so
+      // Omi must not send session/set_model.
+      modelSwitching: unsupported("codex-acp does not expose session/set_model; model is selected via Codex config."),
+      artifactEmission: unsupported("Codex ACP adapter does not emit artifact references yet."),
+      toolSupport: unsupported("Codex ACP runs with empty per-session MCP servers; Omi tools are configured through Codex, not per-session MCP."),
+      restartOrphanSemantics: required("Startup reconciliation orphans active attempts and marks process-local Codex bindings stale."),
+    },
+  },
   a2a: {
     adapterId: "a2a",
     productionAdapter: false,
@@ -262,10 +282,10 @@ export const ADAPTER_CAPABILITY_MATRIX = {
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>;
 
 export type KnownAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX;
-export type ProductionAdapterId = "acp" | "pi-mono" | "hermes" | "openclaw";
+export type ProductionAdapterId = "acp" | "pi-mono" | "hermes" | "openclaw" | "codex";
 export type PlaceholderAdapterId = Exclude<KnownAdapterId, ProductionAdapterId>;
 
-export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono", "hermes", "openclaw"] as const satisfies readonly ProductionAdapterId[];
+export const PRODUCTION_ADAPTER_IDS = ["acp", "pi-mono", "hermes", "openclaw", "codex"] as const satisfies readonly ProductionAdapterId[];
 export const PLACEHOLDER_ADAPTER_IDS = ["a2a"] as const satisfies readonly PlaceholderAdapterId[];
 
 export function isKnownAdapterId(adapterId: string): adapterId is KnownAdapterId {
