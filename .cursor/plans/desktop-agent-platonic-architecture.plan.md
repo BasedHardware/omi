@@ -32,7 +32,7 @@
 | Live gauntlet E2E + evidence bundle | Medium | ✅ `20260705T055200Z` @ `83b0ba57b` | gap-closure G3 |
 | ChatProvider → AgentClient (Phase 8) | Medium | ✅ `d7a95a221` |
 | `kernel.ts` split / shrink (Phase 7) | Low–Med | ✅ re-export barrel + modules |
-| `AgentPillsManager` hybrid execution state | Low–Med | document or trim |
+| `AgentPillsManager` hybrid execution state | Low–Med | ✅ closed — `AgentPill.swift` projections only; spawn/continue/stop delegate to kernel |
 | Migration shims (`import_legacy_*`, sqlite legacy cols) | Low | scheduled burn — delete ship+2 after platonic release (gap-closure G6) |
 **Scope:** `desktop/macos/` — Swift app (`Desktop/Sources`), TS agent runtime (`agent/`), realtime/PTT surfaces, floating pills, task chat, onboarding, reader services.
 **Audience:** Any agent or human implementing any phase. Read this whole document before touching code.
