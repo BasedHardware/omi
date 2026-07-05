@@ -83,19 +83,19 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
   FaIconData get icon {
     switch (this) {
       case TaskIntegrationApp.appleReminders:
-        return Icons.checklist_rounded;
+        return FontAwesomeIcons.listCheck;
       case TaskIntegrationApp.googleTasks:
-        return Icons.task_alt;
+        return FontAwesomeIcons.circleCheck;
       case TaskIntegrationApp.clickup:
-        return Icons.rocket_launch;
+        return FontAwesomeIcons.rocket;
       case TaskIntegrationApp.asana:
-        return Icons.analytics_outlined;
+        return FontAwesomeIcons.chartLine;
       case TaskIntegrationApp.trello:
-        return Icons.dashboard_outlined;
+        return FontAwesomeIcons.tableColumns;
       case TaskIntegrationApp.todoist:
-        return Icons.check_circle_outline;
+        return FontAwesomeIcons.circleCheck;
       case TaskIntegrationApp.monday:
-        return Icons.calendar_today;
+        return FontAwesomeIcons.calendarDay;
     }
   }
 
@@ -508,7 +508,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                               isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
+                        child: FaIcon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
                       ),
               ),
             ),

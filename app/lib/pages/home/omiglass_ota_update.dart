@@ -480,7 +480,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
             icon: FontAwesomeIcons.lock,
             obscureText: _obscurePassword,
             suffixIcon: IconButton(
-              icon: Icon(
+              icon: FaIcon(
                 _obscurePassword ? FontAwesomeIcons.eye : FontAwesomeIcons.eyeSlash,
                 color: const Color(0xFF8E8E93),
                 size: 16,

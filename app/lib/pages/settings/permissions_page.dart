@@ -215,7 +215,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   }
 
   Widget _buildPermissionRow({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required bool isGranted,
     required VoidCallback onTap,
@@ -227,7 +227,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
         child: Row(
           children: [
-            SizedBox(width: 24, height: 24, child: Icon(icon, color: const Color(0xFF8E8E93), size: 20)),
+            SizedBox(width: 24, height: 24, child: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20)),
             const SizedBox(width: 16),
             Expanded(
               child: Text(

@@ -424,22 +424,22 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
     switch (job.status) {
       case ImportJobStatus.pending:
-        statusIcon = Icons.hourglass_empty;
+        statusIcon = FontAwesomeIcons.hourglass;
         statusColor = Colors.orange;
         statusText = context.l10n.statusPending;
         break;
       case ImportJobStatus.processing:
-        statusIcon = Icons.sync;
+        statusIcon = FontAwesomeIcons.arrowsRotate;
         statusColor = Colors.blue;
         statusText = context.l10n.statusProcessing;
         break;
       case ImportJobStatus.completed:
-        statusIcon = Icons.done;
+        statusIcon = FontAwesomeIcons.check;
         statusColor = Colors.green;
         statusText = context.l10n.statusCompleted;
         break;
       case ImportJobStatus.failed:
-        statusIcon = Icons.error;
+        statusIcon = FontAwesomeIcons.circleExclamation;
         statusColor = Colors.red;
         statusText = context.l10n.statusFailed;
         break;
@@ -490,7 +490,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
               if (job.isProcessing)
                 _RotatingSyncIcon(color: statusColor, size: 18)
               else if (job.status != ImportJobStatus.completed)
-                Icon(statusIcon, color: statusColor, size: 18),
+                FaIcon(statusIcon, color: statusColor, size: 18),
               if (job.status != ImportJobStatus.completed) const SizedBox(width: 6),
               // Status text and date
               Expanded(

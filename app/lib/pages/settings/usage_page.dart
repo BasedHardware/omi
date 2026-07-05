@@ -710,6 +710,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -728,6 +729,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -745,6 +747,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -767,6 +770,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,

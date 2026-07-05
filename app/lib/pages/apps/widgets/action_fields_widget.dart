@@ -63,7 +63,7 @@ class ActionFieldsWidget extends StatelessWidget {
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Center(
-                                    child: Icon(
+                                    child: FaIcon(
                                       _getIconForAction(actionType.id),
                                       color: Colors.grey.shade400,
                                       size: 16,

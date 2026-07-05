@@ -44,7 +44,7 @@ class BottomNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildTab(BuildContext context, HomeProvider home, int index, IconData icon, String label) {
+  Widget _buildTab(BuildContext context, HomeProvider home, int index, FaIconData icon, String label) {
     return Expanded(
       child: InkWell(
         onTap: () {
@@ -55,7 +55,7 @@ class BottomNavBar extends StatelessWidget {
         },
         child: SizedBox(
           height: 90,
-          child: Center(child: Icon(icon, color: home.selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
+          child: Center(child: FaIcon(icon, color: home.selectedIndex == index ? Colors.white : Colors.grey, size: 26)),
         ),
       ),
     );

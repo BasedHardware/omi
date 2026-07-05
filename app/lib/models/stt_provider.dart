@@ -172,7 +172,7 @@ class SttProviderConfig {
   final SttProvider provider;
   final String displayName;
   final String description;
-  final IconData icon;
+  final FaIconData icon;
   final bool requiresApiKey;
   final String requestType;
   final SttResponseSchema responseSchema;

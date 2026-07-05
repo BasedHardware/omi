@@ -488,7 +488,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircularButtonContent(
+      {required FaIconData icon, required bool isSelected, required VoidCallback onTap}) {
     return Container(
       height: 56,
       width: 56,
@@ -513,7 +514,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             HapticFeedback.mediumImpact();
             onTap();
           },
-          child: Center(child: Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+          child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
         ),
       ),
     );
@@ -795,7 +796,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Widget _buildCircularButton({
     Key? key,
-    required IconData icon,
+    required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -828,7 +829,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               HapticFeedback.mediumImpact();
               onTap();
             },
-            child: Center(child: Icon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
           ),
         ),
       ),

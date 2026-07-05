@@ -143,7 +143,7 @@ class _FolderListItem extends StatelessWidget {
                     color: folder.colorValue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Center(child: Icon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue)),
+                  child: Center(child: FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue)),
                 ),
                 const SizedBox(width: 14),
 

@@ -789,7 +789,7 @@ class _ConversationDetailPageState extends State<ConversationDetailPage> with Ti
                                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
-                                : Icon(
+                                : FaIcon(
                                     provider.conversation.starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star,
                                     size: 16.0,
                                     color: provider.conversation.starred ? Colors.amber : Colors.white,

@@ -803,7 +803,7 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(
+                                FaIcon(
                                   provider.makePublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
                                   color: const Color(0xFF8B5CF6),
                                   size: 12,

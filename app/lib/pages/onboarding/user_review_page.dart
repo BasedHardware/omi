@@ -124,7 +124,7 @@ class _UserReviewPageState extends State<UserReviewPage> {
                         : Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(
+                              FaIcon(
                                 Platform.isIOS ? FontAwesomeIcons.appStoreIos : FontAwesomeIcons.googlePlay,
                                 size: 20,
                               ),

@@ -277,7 +277,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
           border: isSelected ? Border.all(color: _selectedColor, width: 1.5) : null,
         ),
         child: Center(
-          child: Icon(
+          child: FaIcon(
             folderIconToFa(icon),
             size: 16,
             color: isSelected ? _selectedColor : ResponsiveHelper.textSecondary,

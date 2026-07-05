@@ -162,11 +162,11 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
         width: size,
         height: size,
         fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => Icon(_getThinkingIcon(thinkingText), size: size, color: color),
+        errorBuilder: (context, error, stackTrace) => FaIcon(_getThinkingIcon(thinkingText), size: size, color: color),
       ),
     );
   }
-  return Icon(_getThinkingIcon(thinkingText), size: size, color: color);
+  return FaIcon(_getThinkingIcon(thinkingText), size: size, color: color);
 }
 
 class AIMessage extends StatefulWidget {

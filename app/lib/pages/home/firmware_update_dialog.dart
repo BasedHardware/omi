@@ -146,7 +146,7 @@ class _FirmwareUpdateSheetState extends State<FirmwareUpdateSheet> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-              child: Center(child: Icon(step.icon, size: 18, color: Colors.white)),
+              child: Center(child: FaIcon(step.icon, size: 18, color: Colors.white)),
             ),
             const SizedBox(width: 14),
             Expanded(

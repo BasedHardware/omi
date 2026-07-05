@@ -383,14 +383,14 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({required IconData icon, required String title, required Widget trailing}) {
+  Widget _buildSettingRow({required FaIconData icon, required String title, required Widget trailing}) {
     return Row(
       children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: Icon(icon, color: Colors.grey.shade400, size: 16)),
+          child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
         ),
         const SizedBox(width: 14),
         Expanded(

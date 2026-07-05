@@ -398,7 +398,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _RecordOption(
-            icon: Icons.phone_in_talk_rounded,
+            icon: FontAwesomeIcons.phone,
             title: context.l10n.phoneCall,
             subtitle: context.l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,

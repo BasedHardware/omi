@@ -173,7 +173,7 @@ class AppReviewService {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Platform.isIOS ? FontAwesomeIcons.appStoreIos : FontAwesomeIcons.googlePlay, size: 20),
+                          FaIcon(Platform.isIOS ? FontAwesomeIcons.appStoreIos : FontAwesomeIcons.googlePlay, size: 20),
                           const SizedBox(width: 12),
                           Text(
                             'Rate on ${Platform.isIOS ? 'App Store' : 'Google Play'}',

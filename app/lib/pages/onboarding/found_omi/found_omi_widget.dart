@@ -9,7 +9,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 
 class _SourceOption {
   final String label;
-  final IconData icon;
+  final FaIconData icon;
 
   const _SourceOption(this.label, this.icon);
 }
@@ -121,7 +121,7 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
                           ),
                           child: Row(
                             children: [
-                              Icon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
+                              FaIcon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
                               const SizedBox(width: 14),
                               Text(
                                 source.label,

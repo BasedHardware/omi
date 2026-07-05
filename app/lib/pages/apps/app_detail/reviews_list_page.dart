@@ -392,7 +392,7 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
               alignment: Alignment.centerRight,
               child: TextButton.icon(
                 onPressed: () => _showReplyDialog(review),
-                icon: Icon(
+                icon: FaIcon(
                   review.response.isNotEmpty ? FontAwesomeIcons.pencil : FontAwesomeIcons.reply,
                   size: 12,
                   color: Colors.deepPurple,

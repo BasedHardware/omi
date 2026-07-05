@@ -270,7 +270,7 @@ class GetSummaryWidgets extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.only(bottom: 2),
-              child: Icon(
+              child: FaIcon(
                 folderIconToFa(folder?.icon),
                 size: 12,
                 color: folder != null ? folder.colorValue : Colors.grey.shade300,

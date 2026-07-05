@@ -650,19 +650,19 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, Icons.cloud_done_rounded, context.l10n.syncStatusConversationCreated);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusConversationCreated);
       case WalSyncDisplayState.syncing:
-        return (Colors.grey.shade300, Icons.sync_rounded, context.l10n.syncStatusBackingUp);
+        return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, Icons.cloud_sync_rounded, context.l10n.syncStatusUploaded);
+        return (Colors.grey.shade400, FontAwesomeIcons.cloud, context.l10n.syncStatusUploaded);
       case WalSyncDisplayState.waiting:
-        return (Colors.grey.shade500, Icons.cloud_upload_outlined, context.l10n.syncStatusWaiting);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusWaiting);
       case WalSyncDisplayState.retrying:
-        return (Colors.orangeAccent, Icons.autorenew_rounded, context.l10n.syncStatusRetrying);
+        return (Colors.orangeAccent, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusRetrying);
       case WalSyncDisplayState.failed:
-        return (Colors.redAccent, Icons.error_outline_rounded, context.l10n.syncStatusFailed);
+        return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.syncStatusFailed);
       case WalSyncDisplayState.corrupted:
-        return (Colors.redAccent, Icons.warning_amber_rounded, context.l10n.syncStatusFileUnavailable);
+        return (Colors.redAccent, FontAwesomeIcons.triangleExclamation, context.l10n.syncStatusFileUnavailable);
     }
   }
 

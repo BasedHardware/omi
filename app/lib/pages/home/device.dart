@@ -177,7 +177,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 padding: const EdgeInsets.only(left: 2, top: 1),
                 child: charging
                     ? FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
-                    : Icon(
+                    : FaIcon(
                         _getBatteryIcon(provider.batteryLevel),
                         color: _getBatteryColor(provider.batteryLevel),
                         size: 20,
