@@ -13,7 +13,6 @@ from google.cloud import firestore
 
 from ._client import db
 
-
 transactional = getattr(firestore, 'transactional', lambda fn: fn)  # pyright: ignore[reportUnknownMemberType]
 
 
