@@ -39,8 +39,6 @@ struct AIClonePage: View {
   @State private var pendingAutomationChatId: String?
   /// Per-contact backtest UI state (progress while running, result when done).
   @State private var backtestStates: [String: AICloneBacktestUIState] = [:]
-  /// Per-contact commitment-scan UI state (scanning while the LLM runs, then confirmation).
-  @State private var commitmentStates: [String: AICloneCommitmentUIState] = [:]
   /// Non-nil while the backtest-results detail sheet is open.
   @State private var backtestDetail: AICloneBacktestDetail?
 
@@ -431,12 +429,10 @@ struct AIClonePage: View {
               persona: personas[contact.id],
               errorMessage: trainingErrors[contact.id],
               backtest: backtestStates[contact.id],
-              commitment: commitmentStates[contact.id],
               sendMode: sendMode.mode(for: contact.id),
               onSetMode: { newMode in requestModeChange(newMode, for: contact) },
               onToggle: { toggleSelection(contact) },
               onTrain: { train(contact) },
-              onScanCommitments: { scanCommitments(contact) },
               onPreviewChat: {
                 if let persona = personas[contact.id] {
                   chatTarget = AICloneChatTarget(contact: contact, persona: persona)
@@ -740,63 +736,6 @@ struct AIClonePage: View {
     }
   }
 
-  // MARK: - Commitment scan
-
-  /// Scan this contact's imported history for promises the user made and hasn't followed
-  /// through on, creating real Tasks (via the same staged-task pipeline the rest of the app
-  /// uses). Read-only analysis — never sends anything. Result shows briefly inline on the row.
-  private func scanCommitments(_ contact: ImportedContact) {
-    if case .scanning = commitmentStates[contact.id] { return }
-    commitmentStates[contact.id] = .scanning
-    Task {
-      // A commitment scan needs the "which one is you" identity for imported platforms so it
-      // can tell the user's own messages apart — reuse the same pickers Train/Backtest use.
-      if contact.platform == "telegram",
-        await TelegramImportService.shared.hasSelfIdentity() == false
-      {
-        telegramSenderPicker = TelegramSenderPickerState(
-          senders: await TelegramImportService.shared.currentSenders())
-        commitmentStates[contact.id] = nil
-        return
-      }
-      if contact.platform == "whatsapp",
-        await WhatsAppImportService.shared.hasSelfIdentity() == false
-      {
-        let options = await WhatsAppImportService.shared.currentSenderOptions()
-        let preselected = options.first(where: \.appearsInEveryChat)?.name
-        whatsAppSenderPicker = WhatsAppSenderPickerState(options: options, preselected: preselected)
-        commitmentStates[contact.id] = nil
-        return
-      }
-      do {
-        let messages = try await Self.loadMessages(for: contact, limit: 500)
-        let outcome = try await CommitmentExtractionService.shared.scanAndCreateTasks(
-          contact: contact, messages: messages)
-        commitmentStates[contact.id] = .done(Self.commitmentSummary(outcome))
-      } catch {
-        commitmentStates[contact.id] = .failed(error.localizedDescription)
-      }
-    }
-  }
-
-  /// Human-readable confirmation for a finished scan.
-  private static func commitmentSummary(_ outcome: CommitmentScanOutcome) -> String {
-    if outcome.created == 0 && outcome.duplicatesSkipped == 0 {
-      return "No new commitments found"
-    }
-    var parts: [String] = []
-    if outcome.created > 0 {
-      parts.append("Found \(outcome.created) — added to Tasks")
-    }
-    if outcome.duplicatesSkipped > 0 {
-      parts.append(
-        outcome.created > 0
-          ? "\(outcome.duplicatesSkipped) already tracked"
-          : "\(outcome.duplicatesSkipped) already tracked")
-    }
-    return parts.joined(separator: " · ")
-  }
-
   // MARK: - Import actions
 
   private func importTelegram() {
@@ -1024,12 +963,10 @@ private struct AICloneContactRow: View {
   let persona: ContactPersona?
   let errorMessage: String?
   let backtest: AICloneBacktestUIState?
-  let commitment: AICloneCommitmentUIState?
   let sendMode: SendMode
   let onSetMode: (SendMode) -> Void
   let onToggle: () -> Void
   let onTrain: () -> Void
-  let onScanCommitments: () -> Void
   let onPreviewChat: () -> Void
   let onRunBacktest: () -> Void
   let onShowBacktestDetail: () -> Void
@@ -1152,8 +1089,6 @@ private struct AICloneContactRow: View {
         modePicker
 
         backtestControl
-
-        commitmentControl
 
         // Live conversation + practice chat against the persona.
         Button(action: onPreviewChat) {
@@ -1286,70 +1221,6 @@ private struct AICloneContactRow: View {
         .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
     }
     .buttonStyle(.plain)
-  }
-
-  // MARK: - Commitment scan control (Scan / scanning / confirmation)
-
-  @ViewBuilder
-  private var commitmentControl: some View {
-    switch commitment {
-    case .scanning:
-      HStack(spacing: 8) {
-        ProgressView().scaleEffect(0.55).tint(.white)
-        Text("Scanning…")
-          .scaledFont(size: 13, weight: .semibold)
-          .foregroundColor(OmiColors.textSecondary)
-      }
-      .frame(minWidth: 96, alignment: .leading)
-
-    case .done(let message):
-      // Confirmation doubles as a re-scan button so the user can run it again.
-      Button(action: onScanCommitments) {
-        HStack(spacing: 6) {
-          Image(systemName: "checklist.checked")
-            .font(.system(size: 11, weight: .semibold))
-          Text(message)
-            .scaledFont(size: 12, weight: .semibold)
-            .lineLimit(1)
-        }
-        .foregroundColor(OmiColors.textPrimary)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
-      }
-      .buttonStyle(.plain)
-      .help("Re-scan \(contact.displayName)'s history for commitments")
-
-    case .failed(let message):
-      HStack(spacing: 6) {
-        Text(message)
-          .scaledFont(size: 11, weight: .regular)
-          .foregroundColor(OmiColors.warning)
-          .lineLimit(1)
-          .frame(maxWidth: 120)
-        commitmentScanButton(title: "Retry")
-      }
-
-    case nil:
-      commitmentScanButton(title: "Scan for Commitments")
-    }
-  }
-
-  private func commitmentScanButton(title: String) -> some View {
-    Button(action: onScanCommitments) {
-      HStack(spacing: 5) {
-        Image(systemName: "checklist")
-          .font(.system(size: 11, weight: .semibold))
-        Text(title)
-          .scaledFont(size: 13, weight: .semibold)
-      }
-      .foregroundColor(OmiColors.textPrimary)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 8)
-      .background(RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
-    }
-    .buttonStyle(.plain)
-    .help("Scan your history with \(contact.displayName) for promises you made and add them to Tasks")
   }
 
   private func trainButton(title: String, filled: Bool) -> some View {
@@ -2291,13 +2162,6 @@ private struct AICloneBacktestDetail: Identifiable {
   var id: String { contact.id }
 }
 
-/// Per-contact state for the "Scan for Commitments" action: scanning while the LLM runs,
-/// then a brief confirmation (or error) shown inline on the row.
-enum AICloneCommitmentUIState: Equatable {
-  case scanning
-  case done(String)
-  case failed(String)
-}
 
 enum AICloneScoreFormat {
   /// A cosine score in [-1, 1] rendered as a 0–100% match.
