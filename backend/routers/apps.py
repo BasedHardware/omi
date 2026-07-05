@@ -1302,9 +1302,9 @@ def reply_to_review(app_id: str, data: ReplyToReviewRequest, uid: str = Depends(
 
     # Send notification to reviewer
     send_app_review_reply_notification(
-        reviewer_uid,
+        data.reviewer_uid,
         app.uid,
-        response,
+        data.response,
         app_id,
         app.name,
     )
