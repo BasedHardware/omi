@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 final class KernelTurnProjection {
   private weak var host: ChatProvider?
-  private var bridge: AgentBridge?
+  private var client: AgentClient.Session?
   private var handlersAttached = false
   private var appliedKernelTurnKeys = Set<String>()
 
@@ -13,11 +13,11 @@ final class KernelTurnProjection {
     self.host = host
   }
 
-  func attachBridge(_ bridge: AgentBridge) async {
-    self.bridge = bridge
+  func attachClient(_ client: AgentClient.Session) async {
+    self.client = client
     guard !handlersAttached else { return }
     handlersAttached = true
-    await bridge.setTurnRecordedHandler { [weak self] turn in
+    await client.setTurnRecordedHandler { [weak self] turn in
       Task { @MainActor [weak self] in
         self?.apply(turn)
       }
@@ -57,8 +57,8 @@ final class KernelTurnProjection {
     idempotencyKey: String? = nil
   ) async {
     guard let host, await host.ensureBridgeStartedForKernel() else { return }
-    guard let bridge else { return }
-    await bridge.recordSurfaceTurn(
+    guard let client else { return }
+    await client.recordSurfaceTurn(
       surface: surface,
       userText: userText,
       assistantText: assistantText,
@@ -70,9 +70,9 @@ final class KernelTurnProjection {
 
   func fetchVoiceSeedContext(surface: AgentSurfaceReference) async -> String {
     guard let host, await host.ensureBridgeStartedForKernel() else { return "" }
-    guard let bridge else { return "" }
+    guard let client else { return "" }
     do {
-      return try await bridge.getVoiceSeedContext(surface: surface).context
+      return try await client.getVoiceSeedContext(surface: surface).context
     } catch {
       log("KernelTurnProjection: voice seed fetch failed: \(error.localizedDescription)")
       return ""

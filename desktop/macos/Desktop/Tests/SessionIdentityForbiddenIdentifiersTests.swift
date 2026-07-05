@@ -61,7 +61,6 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
 
     let allowedConstructors: Set<String> = [
       "Desktop/Sources/Chat/AgentClient.swift",
-      "Desktop/Sources/Providers/ChatProvider.swift",
     ]
 
     let swiftFiles = try FileManager.default.subpathsOfDirectory(atPath: sourcesRoot.path)

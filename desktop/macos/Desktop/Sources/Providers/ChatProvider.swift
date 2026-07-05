@@ -933,18 +933,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// When true, user can create multiple chat sessions
     @AppStorage("multiChatEnabled") var multiChatEnabled = false
 
-    // MARK: - Bridge
+    // MARK: - Agent client
     // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
     // not always defaulting to Omi mode on cold start.
-    //
-    // Default harness: piMono (Omi AI via the bundled pi-mono subprocess, authenticated
-    // with the user's Firebase ID token). Claude Code remains as an opt-in harness that
-    // uses the user's own Claude OAuth.
-    private lazy var agentBridge: AgentBridge = {
+    private var agentClient: AgentClient.Session?
+    private func resolvedAgentClient() -> AgentClient.Session {
+        if let agentClient { return agentClient }
         let harness = resolvedHarnessMode()
         activeBridgeHarness = harness
-        return AgentBridge(harnessMode: harness)
-    }()
+        let session = AgentClient.makeSession(harnessMode: harness)
+        agentClient = session
+        return session
+    }
     lazy var kernelTurnProjection = KernelTurnProjection(host: self)
     private var agentBridgeStarted = false
     /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
@@ -1172,8 +1172,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     guard let self = self else { return }
                     log("ChatProvider: userDidSignOut — clearing chat state so the next user gets fresh context")
                     if self.agentBridgeStarted {
-                        await self.agentBridge.clearOwnerState()
-                        await self.agentBridge.stop()
+                        await self.resolvedAgentClient().clearOwnerState()
+                        await self.resolvedAgentClient().stop()
                         self.agentBridgeStarted = false
                     }
                     self.resetSessionStateForAuthChange()
@@ -1208,7 +1208,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     log("ChatProvider: Playwright extension setting changed, restarting agent bridge")
                     self.agentBridgeStarted = false
                     do {
-                        try await self.agentBridge.restart()
+                        try await self.resolvedAgentClient().restart()
                         self.agentBridgeStarted = true
                         log("ChatProvider: agent bridge restarted with new Playwright settings")
                     } catch {
@@ -1232,7 +1232,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         ) { [weak self] _ in
             guard let self else { return }
             Task { @MainActor in
-                await self.agentBridge.stop()
+                await self.resolvedAgentClient().stop()
             }
         }
     }
@@ -1248,7 +1248,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Drop a cached agent surface so the next query recreates it with fresh prompt context.
     func invalidateAgentSurface(surface: AgentSurfaceReference) async {
         guard agentBridgeStarted else { return }
-        await agentBridge.invalidateSurface(surface)
+        await resolvedAgentClient().invalidateSurface(surface)
     }
 
     /// Test that the Playwright Chrome extension is connected and working.
@@ -1263,13 +1263,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Restart bridge to pick up new extension token
         agentBridgeStarted = false
         do {
-            try await agentBridge.restart()
+            try await resolvedAgentClient().restart()
             agentBridgeStarted = true
         } catch {
-            try await agentBridge.start()
+            try await resolvedAgentClient().start()
             agentBridgeStarted = true
         }
-        return try await agentBridge.testPlaywrightConnection()
+        return try await resolvedAgentClient().testPlaywrightConnection()
     }
 
     /// Whether we're currently in user's Claude account mode
@@ -1298,7 +1298,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
         if agentBridgeStarted {
-            let alive = await agentBridge.isAlive
+            let alive = await resolvedAgentClient().isAlive
             if !alive {
                 log("ChatProvider: agent bridge process died, will restart")
                 agentBridgeStarted = false
@@ -1309,11 +1309,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         await APIKeyService.shared.waitForKeys()
         do {
             await preparePromptContextIfNeeded()
-            try await agentBridge.start()
+            try await resolvedAgentClient().start()
             agentBridgeStarted = true
             log("ChatProvider: agent bridge started successfully")
             // Set up global auth handlers so auth_required during warmup is handled
-            await agentBridge.setGlobalAuthHandlers(
+            await resolvedAgentClient().setGlobalAuthHandlers(
                 onAuthRequired: { [weak self] methods, authUrl in
                     Task { @MainActor [weak self] in
                         self?.claudeAuthMethods = methods
@@ -1328,7 +1328,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             )
-            await kernelTurnProjection.attachBridge(agentBridge)
+            await kernelTurnProjection.attachClient(resolvedAgentClient())
             // Pre-warm ACP sessions with their respective system prompts.
             // This is the only place the system prompt is built and applied.
             let promptContext = formatMemoriesSection()
@@ -1350,7 +1350,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
             let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
             let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
-            await agentBridge.warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [
+            await resolvedAgentClient().warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [
                 .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
             ])
@@ -1437,7 +1437,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 createdAtMs: Int(message.createdAt.timeIntervalSince1970 * 1_000)
             )
         }
-        await agentBridge.importConversationTurns(surface: surface, turns: turns)
+        await resolvedAgentClient().importConversationTurns(surface: surface, turns: turns)
         UserDefaults.standard.set(true, forKey: key)
     }
 
@@ -1457,7 +1457,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Serialize overlapping switches. The SettingsPage picker fires onChange
         // in a new Task on each toggle, so rapid A→B→A→B can overlap multiple calls.
-        // Without serialization, overlapping calls could overwrite agentBridge and
+        // Without serialization, overlapping calls could overwrite agentClient and
         // leak intermediate bridge processes. Loop re-checks after waking because
         // another waiter may have started a new switch before this one resumes.
         while modeSwitchInProgress {
@@ -1485,12 +1485,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Stop the current bridge and wait for the subprocess to fully terminate.
         // This is critical: without the wait, the old Node.js process can still be
         // alive when the new one starts, causing log confusion and session reuse.
-        await agentBridge.stopAndWaitForExit()
+        await resolvedAgentClient().stopAndWaitForExit()
         agentBridgeStarted = false
 
-        // Switch mode and recreate bridge
+        // Switch mode and recreate client session
         bridgeMode = resolvedMode.rawValue
-        agentBridge = AgentBridge(harnessMode: newHarness)
+        agentClient = AgentClient.makeSession(harnessMode: newHarness)
         AnalyticsManager.shared.chatBridgeModeChanged(from: previousHarness, to: resolvedMode.rawValue)
 
         // Check Claude connection status when switching to user's Claude account
@@ -2358,7 +2358,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         do {
             let currentChatMode = chatMode
-            let result = try await agentBridge.query(
+            let result = try await resolvedAgentClient().query(
                 prompt: question,
                 systemPrompt: systemPrompt,
                 surface: .chatLab(labSessionId: labSessionId),
@@ -2871,7 +2871,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isStopping = true
         let myGen = sendGeneration
         Task {
-            await agentBridge.interrupt()
+            await resolvedAgentClient().interrupt()
             // Normal path: interrupt → bridge emits final result or .stopped →
             // sendMessage's do/catch resets isSending via its finally (line 2631).
             // Fallback: if the bridge drops the turn_end as "stray" (known
@@ -2960,7 +2960,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             surfaceRef: context.surfaceRef,
             turnOwner: context.turnOwner
         ))
-        await agentBridge.interrupt()
+        await resolvedAgentClient().interrupt()
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
@@ -3592,7 +3592,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
                 ? AgentClientScope.floatingPill
                 : nil
-            let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
+            let textDeltaHandler: AgentClient.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()
                 if responseMetrics.markFirstOutputIfNeeded() {
                     tracer?.end("ttft")
@@ -3607,7 +3607,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
-            let toolCallHandler: AgentBridge.ToolCallHandler = { callId, name, input in
+            let toolCallHandler: AgentClient.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 // QueryTracer: time the actual tool execution (client-side run of the
                 // tool, distinct from the model-visible tool span in toolActivity).
@@ -3628,7 +3628,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
             }
-            let toolActivityHandler: AgentBridge.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+            let toolActivityHandler: AgentClient.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
                 let nowMs = ChatProvider.monotonicNowMs()
                 // Tools without a toolUseId still get tracked under a
                 // synthetic key so the detector's per-tool timer fires.
@@ -3697,7 +3697,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
-            let thinkingDeltaHandler: AgentBridge.ThinkingDeltaHandler = { [weak self] text in
+            let thinkingDeltaHandler: AgentClient.ThinkingDeltaHandler = { [weak self] text in
                 let nowMs = ChatProvider.monotonicNowMs()
                 Task { @MainActor [weak self] in
                     self?.appendThinking(messageId: aiMessageId, text: text)
@@ -3705,7 +3705,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
             }
-            let toolResultDisplayHandler: AgentBridge.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
+            let toolResultDisplayHandler: AgentClient.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
                 let nowMs = ChatProvider.monotonicNowMs()
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
@@ -3747,7 +3747,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 tracer.begin("ttft")
             }
 
-            let queryResult = try await agentBridge.query(
+            let queryResult = try await resolvedAgentClient().query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
                 surface: resolvedSurface,
@@ -3976,7 +3976,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // On timeout, cancel the stuck ACP session so it's not left dangling
             if let bridgeError = error as? BridgeError, case .timeout = bridgeError {
                 log("ChatProvider: ACP query timed out, sending interrupt to cancel stuck session")
-                await agentBridge.interrupt()
+                await resolvedAgentClient().interrupt()
             }
 
             // Flush any remaining buffered streaming text before handling the error

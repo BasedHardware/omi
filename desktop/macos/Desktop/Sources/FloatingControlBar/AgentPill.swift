@@ -120,6 +120,8 @@ final class AgentPillsManager: ObservableObject {
     /// Configurable soft cap so the row never grows past a reasonable width.
     private let maxPills: Int = 8
 
+    /// INV-8: ephemeral UI only — tracks in-flight projection poll/send tasks per pill;
+    /// canonical run truth lives in the kernel (`canonicalSessionId` / `canonicalRunId`).
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
     private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
