@@ -1249,6 +1249,31 @@ class TestParakeetV4Protocol(unittest.TestCase):
         finally:
             loop.close()
 
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_close_path_uses_overlap_dedup(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'hello world', 'is_final': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': 'hello world again', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio])
+        texts = [s['text'] for s in segs]
+        self.assertIn('hello world', texts)
+        self.assertIn('again', texts)
+        hello_count = sum(1 for t in texts if 'hello' in t)
+        self.assertEqual(hello_count, 1, f"'hello' should appear once, got: {texts}")
+
 
 class TestParakeetVersionRouting(unittest.TestCase):
 

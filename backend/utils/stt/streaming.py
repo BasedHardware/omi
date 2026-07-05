@@ -1308,9 +1308,7 @@ class ParakeetWebSocketSocket(STTSocket):
                             self._partial_stable_task = None
                         close_text = (data.get("final_text") or "").strip()
                         if close_text and close_text != self._committed_text:
-                            suffix = close_text
-                            if self._committed_text and close_text.startswith(self._committed_text):
-                                suffix = close_text[len(self._committed_text) :].strip()
+                            suffix = _extract_new_text(self._committed_text, close_text)
                             if suffix:
                                 self._emit_segment(suffix)
         except Exception as e:
