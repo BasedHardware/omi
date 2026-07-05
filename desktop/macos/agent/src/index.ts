@@ -41,20 +41,19 @@ import type {
   OutboundMessage,
   QueryScopedOutbound,
   QueryMessage,
-  ProtocolVersion,
   WarmupMessage,
   RefreshTokenMessage,
   RecordSurfaceTurnMessage,
   GetVoiceSeedContextMessage,
   AuthMethod,
 } from "./protocol.js";
-import { requestIdFor } from "./protocol.js";
+import { PROTOCOL_VERSION } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
 import { AcpError, AcpRuntimeAdapter } from "./adapters/acp.js";
 import { AdapterRegistry } from "./runtime/adapter-registry.js";
-import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/compatibility-facade.js";
+import { JsonlTransport, type McpServerBuildContext } from "./runtime/jsonl-transport.js";
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
@@ -69,7 +68,6 @@ import {
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
-  legacyControlRequestKey,
   registerSignedDirectControlOwner,
   resolveControlRequestContext,
   withMergedOwnerGuard,
@@ -80,6 +78,7 @@ import {
 import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
+import { failureFromError } from "./runtime/failures.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -110,19 +109,26 @@ function withQueryCorrelation<T extends OutboundMessage>(
   query: QueryMessage,
   adapterSessionId?: string
 ): T {
-  if (query.protocolVersion !== 2) return msg;
   return {
     ...msg,
-    protocolVersion: 2,
-    requestId: requestIdFor(query),
+    protocolVersion: PROTOCOL_VERSION,
+    requestId: query.requestId,
     clientId: query.clientId,
     sessionId: query.sessionId,
     runId: query.runId,
     attemptId: query.attemptId,
     eventId: query.eventId,
     adapterSessionId,
-    legacyAdapterSessionId: query.legacyAdapterSessionId ?? query.resume,
   };
+}
+
+function runtimeErrorEnvelope(error: unknown): { message: string; failure: ReturnType<typeof failureFromError> } {
+  const failure = failureFromError(error, {
+    code: "runtime_error",
+    source: "runtime",
+    userMessage: error instanceof Error ? error.message : String(error),
+  });
+  return { message: failure.userMessage, failure };
 }
 
 function logErr(msg: string): void {
@@ -182,10 +188,8 @@ function registerActiveControlOwner(requestKey: string, ownerId: string): boolea
   return inserted;
 }
 
-function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
-  return input.clientId && input.requestId
-    ? `scoped\0${input.clientId}\0${input.requestId}\0${input.callId}`
-    : `legacy\0${input.callId}`;
+function toolCallPendingKey(input: { callId: string; clientId: string; requestId: string }): string {
+  return `scoped\0${input.clientId}\0${input.requestId}\0${input.callId}`;
 }
 
 /** Resolve a pending tool call with a result from Swift */
@@ -197,7 +201,7 @@ function resolveToolCall(msg: { callId: string; result: string; clientId?: strin
     clearTimeout(pending.timeout);
     pending.resolve(msg.result);
   } else {
-    logErr(`Warning: no pending tool call for callId=${msg.callId} clientId=${msg.clientId ?? "<legacy>"} requestId=${msg.requestId ?? "<legacy>"}`);
+    logErr(`Warning: no pending tool call for callId=${msg.callId} clientId=${msg.clientId ?? "<missing>"} requestId=${msg.requestId ?? "<missing>"}`);
   }
 }
 
@@ -240,52 +244,51 @@ function startOmiToolsRelay(): Promise<string> {
               callId: string;
               name: string;
               input: Record<string, unknown>;
-              protocolVersion?: number;
               requestId?: string;
               clientId?: string;
               sessionId?: string;
               runId?: string;
               attemptId?: string;
               adapterSessionId?: string;
-              legacyAdapterSessionId?: string;
               adapterId?: string;
             };
 
             if (msg.type === "tool_use") {
-              const protocolVersion: ProtocolVersion | undefined =
-                msg.protocolVersion === 1 || msg.protocolVersion === 2 ? msg.protocolVersion : undefined;
-              if (isAgentControlToolName(msg.name)) {
-                const resolvedCorrelation =
-                  toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
-                const messageRequestIsActive = Boolean(
-                  msg.requestId?.trim() &&
-                    msg.clientId?.trim() &&
-                    resolvedCorrelation.requestId === msg.requestId &&
-                    resolvedCorrelation.clientId === msg.clientId
+              const requestId = msg.requestId?.trim();
+              const clientId = msg.clientId?.trim();
+              if (!requestId || !clientId) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing active Omi request context for tool relay",
+                  }) + "\n"
                 );
-                if (protocolVersion === 2 && !messageRequestIsActive) {
-                  client.write(
-                    JSON.stringify({
-                      type: "tool_result",
-                      callId: msg.callId,
-                      result: "Error: missing active Omi request context for v2 control tool relay",
-                    }) + "\n"
-                  );
-                  continue;
-                }
+                continue;
+              }
+              const resolvedCorrelation =
+                toolCallCorrelation?.({ requestId, clientId, adapterId: msg.adapterId }) ?? {};
+              const messageRequestIsActive =
+                resolvedCorrelation.requestId === requestId && resolvedCorrelation.clientId === clientId;
+              if (!messageRequestIsActive) {
+                client.write(
+                  JSON.stringify({
+                    type: "tool_result",
+                    callId: msg.callId,
+                    result: "Error: missing active Omi request context for tool relay",
+                  }) + "\n"
+                );
+                continue;
+              }
+              if (isAgentControlToolName(msg.name)) {
                 void (async () => {
                   const controlToolContext = agentControlToolContext
                     ? {
                         ...agentControlToolContext,
-                        getProtocolVersion: () => protocolVersion,
                         getOwnerId: () =>
                           activeControlToolOwnerId({
-                            requestKey: controlRequestKey(msg) ?? (protocolVersion === 2 ? undefined : legacyControlRequestKey(msg)),
-                            runId: protocolVersion === 2 ? undefined : msg.runId,
-                            attemptId: protocolVersion === 2 ? undefined : msg.attemptId,
+                            requestKey: controlRequestKey({ requestId, clientId }),
                             ownerIdForRequest: (requestKey) => activeControlToolOwnersByRequest.get(requestKey),
-                            ownerIdForRun: (runId) => activeControlToolOwnersByRun.get(runId),
-                            ownerIdForAttempt: (attemptId) => activeControlToolOwnersByAttempt.get(attemptId),
                           }),
                       }
                     : undefined;
@@ -310,42 +313,22 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
-              // Forward tool call to Swift via stdout
-              const resolvedCorrelation =
-                toolCallCorrelation?.({ requestId: msg.requestId, clientId: msg.clientId, adapterId: msg.adapterId }) ?? {};
-              const messageRequestIsActive = Boolean(
-                msg.requestId &&
-                  msg.clientId &&
-                  resolvedCorrelation.requestId === msg.requestId &&
-                  resolvedCorrelation.clientId === msg.clientId
-              );
-              if (protocolVersion === 2 && !messageRequestIsActive) {
-                client.write(
-                  JSON.stringify({
-                    type: "tool_result",
-                    callId: msg.callId,
-                    result: "Error: missing active Omi request context for v2 tool relay",
-                  }) + "\n"
-                );
-                continue;
-              }
               const correlation = {
                 ...resolvedCorrelation,
-                ...(messageRequestIsActive && msg.requestId ? { requestId: msg.requestId } : {}),
-                ...(messageRequestIsActive && msg.clientId ? { clientId: msg.clientId } : {}),
-                ...(messageRequestIsActive && protocolVersion ? { protocolVersion } : {}),
-                ...(messageRequestIsActive && msg.sessionId ? { sessionId: msg.sessionId } : {}),
-                ...(messageRequestIsActive && msg.runId ? { runId: msg.runId } : {}),
-                ...(messageRequestIsActive && msg.attemptId ? { attemptId: msg.attemptId } : {}),
-                ...(messageRequestIsActive && msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
-                ...(messageRequestIsActive && msg.legacyAdapterSessionId ? { legacyAdapterSessionId: msg.legacyAdapterSessionId } : {}),
+                protocolVersion: PROTOCOL_VERSION,
+                requestId,
+                clientId,
+                ...(msg.sessionId ? { sessionId: msg.sessionId } : {}),
+                ...(msg.runId ? { runId: msg.runId } : {}),
+                ...(msg.attemptId ? { attemptId: msg.attemptId } : {}),
+                ...(msg.adapterSessionId ? { adapterSessionId: msg.adapterSessionId } : {}),
               };
 
               const callId = msg.callId;
               const pendingKey = toolCallPendingKey({
                 callId,
-                clientId: typeof correlation.clientId === "string" ? correlation.clientId : undefined,
-                requestId: typeof correlation.requestId === "string" ? correlation.requestId : undefined,
+                clientId,
+                requestId,
               });
               if (pendingToolCalls.has(pendingKey)) {
                 client.write(
@@ -781,7 +764,8 @@ process.on("uncaughtException", (err) => {
   logErr(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
   logCrash(`Uncaught exception: ${err.message}\n${err.stack ?? ""}`);
   try {
-    send({ type: "error", message: `Uncaught: ${err.message}` });
+    const envelope = runtimeErrorEnvelope(err);
+    send({ type: "error", message: envelope.message, failure: envelope.failure });
   } catch {
     // already broken
   }
@@ -953,7 +937,7 @@ async function main(): Promise<void> {
     getOwnerId: () => currentOwnerId,
     buildMcpServers,
   };
-  const facade = new JsonlCompatibilityFacade({
+  const transport = new JsonlTransport({
     kernel,
     send,
     log: logErr,
@@ -971,9 +955,9 @@ async function main(): Promise<void> {
       { requestId, clientId, adapterId },
       {
         forRequest: (scopedRequestId, scopedClientId) =>
-          facade.toolCallCorrelationForRequest(scopedRequestId, scopedClientId),
-        forAdapter: (scopedAdapterId) => facade.toolCallCorrelationForAdapter(scopedAdapterId),
-        unscoped: () => facade.unscopedToolCallCorrelation(),
+          transport.toolCallCorrelationForRequest(scopedRequestId, scopedClientId),
+        forAdapter: (scopedAdapterId) => transport.toolCallCorrelationForAdapter(scopedAdapterId),
+        unscoped: () => transport.unscopedToolCallCorrelation(),
       }
     );
   };
@@ -1001,19 +985,17 @@ async function main(): Promise<void> {
         (async () => {
           const query = msg as QueryMessage;
           const adapterId = query.adapterId ?? defaultAdapterId;
-          if (query.protocolVersion === 2 && !query.clientId?.trim()) {
-            throw new Error("protocol v2 query requires clientId");
+          if (!query.clientId?.trim()) {
+            throw new Error("query requires clientId");
           }
-          if (query.protocolVersion === 2 && !query.requestId?.trim()) {
-            throw new Error("protocol v2 query requires requestId");
+          if (!query.requestId?.trim()) {
+            throw new Error("query requires requestId");
           }
           const queryOwnerId = query.ownerId?.trim() || currentOwnerId;
           query.ownerId = queryOwnerId;
-          query.requestId = query.protocolVersion === 2 ? query.requestId!.trim() : requestIdFor(query)?.trim() || randomUUID();
-          const queryRequestId = requestIdFor(query);
-          const queryOwnerKey =
-            controlRequestKey({ requestId: queryRequestId, clientId: query.clientId }) ??
-            (query.protocolVersion === 2 ? undefined : legacyControlRequestKey({ requestId: queryRequestId, clientId: query.clientId }));
+          query.requestId = query.requestId.trim();
+          const queryRequestId = query.requestId;
+          const queryOwnerKey = controlRequestKey({ requestId: queryRequestId, clientId: query.clientId });
           const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
@@ -1031,7 +1013,7 @@ async function main(): Promise<void> {
                 throw new Error(adapterActivationError("openclaw"));
               }
             }
-            await facade.handleQuery(query);
+            await transport.handleQuery(query);
           } finally {
             if (queryOwnerKey && insertedOwner) {
               activeControlToolOwnersByRequest.delete(queryOwnerKey);
@@ -1040,11 +1022,13 @@ async function main(): Promise<void> {
         })().catch((err) => {
           logErr(`Unhandled query error: ${err}`);
           const query = msg as QueryMessage;
+          const envelope = runtimeErrorEnvelope(err);
           send({
             type: "error",
-            message: String(err),
-            protocolVersion: query.protocolVersion,
-            requestId: requestIdFor(query),
+            message: envelope.message,
+            failure: envelope.failure,
+            protocolVersion: PROTOCOL_VERSION,
+            requestId: query.requestId,
             clientId: query.clientId,
           });
         });
@@ -1052,7 +1036,7 @@ async function main(): Promise<void> {
 
       case "warmup": {
         const wm = msg as WarmupMessage;
-        facade.handleWarmup(wm);
+        transport.handleWarmup(wm);
         break;
       }
 
@@ -1062,7 +1046,7 @@ async function main(): Promise<void> {
 
       case "control_tool": {
         const control = msg as ControlToolRequestMessage;
-        const requestId = control.protocolVersion === 2 ? control.requestId?.trim() : requestIdFor(control);
+        const requestId = control.requestId.trim();
         const requestKey = controlRequestKey({ requestId, clientId: control.clientId });
         const activeOwnerId = requestKey ? activeControlToolOwnersByRequest.get(requestKey) : undefined;
         let controlContext;
@@ -1109,8 +1093,7 @@ async function main(): Promise<void> {
             if (controlRunOwnerKey) {
               controlRunOwnerInserted = registerActiveControlOwner(controlRunOwnerKey, controlContext.activeOwnerId);
             }
-            facade.registerExternalRequestContext({
-              protocolVersion: control.protocolVersion,
+            transport.registerExternalRequestContext({
               requestId: correlated.requestId,
               clientId: correlated.clientId,
               ownerId: controlContext.activeOwnerId,
@@ -1122,7 +1105,7 @@ async function main(): Promise<void> {
             activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
           }
           if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-            facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+            transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
           send({
             type: "control_tool_result",
@@ -1149,7 +1132,7 @@ async function main(): Promise<void> {
             activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
           }
           if (controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-            facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+            transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
           }
           send({
             type: "control_tool_result",
@@ -1174,7 +1157,6 @@ async function main(): Promise<void> {
                   {
                     ...agentControlToolContext,
                     trustedUserControl: false,
-                    getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () =>
                       activeControlToolOwnerId({
                         requestKey: controlOwnerKey,
@@ -1191,7 +1173,7 @@ async function main(): Promise<void> {
                   activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
                 }
                 if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-                  facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+                  transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
                 }
               }
             })()
@@ -1200,7 +1182,7 @@ async function main(): Promise<void> {
                 activeControlToolOwnersByRequest.delete(controlRunOwnerKey);
               }
               if (!preserveControlRunOwner && controlRunCorrelation.requestId && controlRunCorrelation.clientId && controlRunOwnerInserted) {
-                facade.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
+                transport.releaseExternalRequestContext(controlRunCorrelation.requestId, controlRunCorrelation.clientId);
               }
               return JSON.stringify({
                 ok: false,
@@ -1220,35 +1202,35 @@ async function main(): Promise<void> {
 
       case "direct_control_tool": {
         const control = msg as DirectControlToolRequestMessage;
-        if (control.protocolVersion === 2 && !control.clientId?.trim()) {
+        if (!control.clientId?.trim()) {
           send({
             type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
+            protocolVersion: PROTOCOL_VERSION,
             requestId: control.requestId?.trim(),
             clientId: control.clientId,
             name: control.name,
             result: JSON.stringify({
               ok: false,
-              error: { code: "invalid_request", message: "protocol v2 direct control requires clientId" },
+              error: { code: "invalid_request", message: "direct control requires clientId" },
             }),
           });
           break;
         }
-        if (control.protocolVersion === 2 && !control.requestId?.trim()) {
+        if (!control.requestId?.trim()) {
           send({
             type: "control_tool_result",
-            protocolVersion: control.protocolVersion,
+            protocolVersion: PROTOCOL_VERSION,
             requestId: control.requestId?.trim(),
             clientId: control.clientId,
             name: control.name,
             result: JSON.stringify({
               ok: false,
-              error: { code: "invalid_request", message: "protocol v2 direct control requires requestId" },
+              error: { code: "invalid_request", message: "direct control requires requestId" },
             }),
           });
           break;
         }
-        const requestId = control.protocolVersion === 2 ? control.requestId!.trim() : requestIdFor(control);
+        const requestId = control.requestId.trim();
         if (!isAgentControlToolName(control.name)) {
           send({
             type: "control_tool_result",
@@ -1319,7 +1301,6 @@ async function main(): Promise<void> {
                   {
                     ...agentControlToolContext,
                     trustedUserControl: true,
-                    getProtocolVersion: () => control.protocolVersion,
                     getOwnerId: () => controlContext.activeOwnerId,
                   },
                   control.name,
@@ -1346,7 +1327,7 @@ async function main(): Promise<void> {
 
       case "interrupt":
         logErr("Interrupt requested by user");
-        facade.handleInterrupt(msg).catch((err) => {
+        transport.handleInterrupt(msg).catch((err) => {
           logErr(`Interrupt error: ${err}`);
         });
         break;
@@ -1364,7 +1345,7 @@ async function main(): Promise<void> {
         const ownerId = msg.ownerId?.trim() || currentOwnerId;
         const entries = Array.isArray(msg.entries) ? msg.entries : [];
         const imported = kernel.importLegacyMainChatSessions({ ownerId, entries });
-        logErr(`Imported ${imported} legacy main-chat surface session(s) for ${ownerId}`);
+        logErr(`Imported ${imported} main-chat surface session(s) for ${ownerId}`);
         break;
       }
 
@@ -1441,7 +1422,7 @@ async function main(): Promise<void> {
       case "get_voice_seed_context": {
         const seed = msg as GetVoiceSeedContextMessage;
         const ownerId = seed.ownerId?.trim() || currentOwnerId;
-        const requestId = seed.protocolVersion === 2 ? seed.requestId?.trim() : requestIdFor(seed);
+        const requestId = seed.requestId.trim();
         let conversationId = typeof seed.conversationId === "string" ? seed.conversationId : "";
         let context = "";
         if (conversationId) {
@@ -1469,7 +1450,7 @@ async function main(): Promise<void> {
       }
 
       case "invalidate_session":
-        facade.handleInvalidateSession(msg);
+        transport.handleInvalidateSession(msg);
         break;
 
       case "refresh_token": {
@@ -1491,9 +1472,7 @@ async function main(): Promise<void> {
       }
 
       case "authenticate": {
-        // Legacy fallback: OAuth flow now handles auth internally.
-        // This handler is kept for backward compatibility.
-        logErr(`Authentication message received from Swift (legacy fallback)`);
+        logErr(`Authentication message received from Swift`);
         send({ type: "auth_success" });
         if (authResolve) {
           authResolve();
@@ -1530,6 +1509,7 @@ async function main(): Promise<void> {
 main().catch((err) => {
   logErr(`Fatal error: ${err}`);
   logCrash(`Fatal error: ${err}`);
-  send({ type: "error", message: `Fatal: ${err}` });
+  const envelope = runtimeErrorEnvelope(err);
+  send({ type: "error", message: envelope.message, failure: envelope.failure });
   process.exit(1);
 });

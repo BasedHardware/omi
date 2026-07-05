@@ -3590,7 +3590,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // text-streaming window so the `generation` span excludes tool time.
             let currentChatMode = chatMode
             let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
-                ? AgentLegacyClientScope.floatingPill
+                ? AgentClientScope.floatingPill
                 : nil
             let textDeltaHandler: AgentBridge.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()

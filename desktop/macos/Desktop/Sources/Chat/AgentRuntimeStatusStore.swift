@@ -53,7 +53,7 @@ struct AgentSurfaceReference: Hashable, Sendable {
   }
 }
 
-enum AgentLegacyClientScope {
+enum AgentClientScope {
   static let floatingPill = "floating-pill"
 }
 
@@ -314,7 +314,6 @@ final class AgentRuntimeStatusStore: ObservableObject {
     projection.attemptId = (payload["attemptId"] as? String) ?? projection.attemptId
     projection.adapterSessionId =
       (payload["adapterSessionId"] as? String)
-      ?? (payload["legacyAdapterSessionId"] as? String)
       ?? projection.adapterSessionId
     projection.status = status
     projection.statusText = statusText

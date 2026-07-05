@@ -52,14 +52,13 @@ interface PiRpcEvent {
 }
 
 interface PiMonoRelayContext {
-  protocolVersion?: 1 | 2;
+  protocolVersion: 2;
   requestId: string;
   clientId: string;
   sessionId: string;
   runId: string;
   attemptId: string;
   adapterSessionId?: string;
-  legacyAdapterSessionId?: string;
   disableSwiftBackedTools?: boolean;
 }
 
@@ -977,18 +976,13 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
         async () => "",
         signal,
         {
-          protocolVersion: context.metadata?.protocolVersion === 1 || context.metadata?.protocolVersion === 2
-            ? context.metadata.protocolVersion
-            : undefined,
+          protocolVersion: 2,
           requestId: context.requestId,
           clientId: context.clientId,
           sessionId: context.sessionId,
           runId: context.runId,
           attemptId: context.attemptId,
           adapterSessionId: context.binding.adapterNativeSessionId,
-          legacyAdapterSessionId: typeof context.metadata?.legacyAdapterSessionId === "string"
-            ? context.metadata.legacyAdapterSessionId
-            : undefined,
           disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
         }
       );

@@ -8,6 +8,7 @@ import type {
   ToolDef,
 } from "../adapters/interface.js";
 import type { OutboundMessage } from "../protocol.js";
+import { PROTOCOL_VERSION } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
 import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
@@ -101,7 +102,6 @@ const REQUEST_SCOPED_MCP_ENV_KEYS = new Set([
   "OMI_RUN_ID",
   "OMI_ATTEMPT_ID",
   "OMI_ADAPTER_SESSION_ID",
-  "OMI_LEGACY_ADAPTER_SESSION_ID",
 ]);
 
 function stableJsonStringify(value: unknown): string {
@@ -183,8 +183,6 @@ export interface KernelSessionResolutionInput {
   surfaceKind: string;
   externalRefKind?: string;
   externalRefId?: string;
-  legacyClientScope?: string;
-  legacySessionKey?: string;
   title?: string;
   defaultAdapterId?: string;
 }
@@ -200,7 +198,6 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   cwd?: string;
   model?: string;
   mcpServers?: Record<string, unknown>[];
-  legacyAdapterSessionId?: string;
   maxAttempts?: number;
   tools?: ToolDef[];
   metadata?: Record<string, unknown>;
@@ -832,12 +829,11 @@ export class AgentRuntimeKernel {
             ownerId: input.ownerId,
             requestId: accepted.run.requestId,
             clientId: accepted.run.clientId,
-            protocolVersion: input.metadata?.protocolVersion,
+            protocolVersion: PROTOCOL_VERSION,
             sessionId: accepted.session.sessionId,
             runId: accepted.run.runId,
             attemptId: attempt.attemptId,
             adapterSessionId: handle.adapterNativeSessionId,
-            legacyAdapterSessionId: input.legacyAdapterSessionId,
           });
           this.markAttemptRunning(attempt, binding);
           return worker.adapter.executeAttempt(
@@ -1491,7 +1487,7 @@ export class AgentRuntimeKernel {
           payload: {
             bindingId,
             adapterId: input.adapterId,
-            reason: input.reason ?? "compatibility_invalidate_session",
+            reason: input.reason ?? "invalidate_session",
           },
         });
       }
@@ -1721,14 +1717,11 @@ export class AgentRuntimeKernel {
     }
     const existing = this.findExistingSession(input);
     if (existing) return existing;
-    const shouldStoreLegacyAlias = !(input.externalRefKind && input.externalRefId);
     const session = this.store.insertSession({
       ownerId: input.ownerId,
       surfaceKind: input.surfaceKind,
       externalRefKind: input.externalRefKind ?? null,
       externalRefId: input.externalRefId ?? null,
-      legacyClientScope: shouldStoreLegacyAlias ? input.legacyClientScope ?? null : null,
-      legacySessionKey: shouldStoreLegacyAlias ? input.legacySessionKey ?? null : null,
       title: input.title ?? null,
       defaultAdapterId: input.defaultAdapterId ?? "acp",
     });
@@ -1766,18 +1759,11 @@ export class AgentRuntimeKernel {
       if (row) return sessionFromRow(row);
       return undefined;
     }
-    if (input.legacyClientScope && input.legacySessionKey) {
-      const row = this.store.getOptionalRow(
-        "SELECT * FROM sessions WHERE owner_id = ? AND legacy_client_scope = ? AND legacy_session_key = ?",
-        [input.ownerId, input.legacyClientScope, input.legacySessionKey],
-      );
-      if (row) return sessionFromRow(row);
-    }
     return undefined;
   }
 
   private findInvalidationSessionIds(input: KernelSessionResolutionInput): string[] {
-    if (input.sessionId || input.externalRefKind || input.externalRefId || input.legacyClientScope || input.legacySessionKey) {
+    if (input.sessionId || input.externalRefKind || input.externalRefId) {
       return [];
     }
     return this.store
@@ -1850,39 +1836,6 @@ export class AgentRuntimeKernel {
     }
 
     const nextGeneration = this.nextBindingGeneration(input.session.sessionId, input.adapterId);
-    if (input.input.legacyAdapterSessionId && input.adapter.capabilities.supportsNativeResume && nextGeneration === 1) {
-      const adopted = this.withTransaction(() => {
-        const binding = this.store.insertAdapterBinding({
-          sessionId: input.session.sessionId,
-          adapterId: input.adapterId,
-          bindingGeneration: 1,
-          adapterNativeSessionId: input.input.legacyAdapterSessionId,
-          adapterInstanceId: this.runtimeNodeId,
-          resumeFidelity: "native",
-          status: "active",
-          cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
-          modelId: input.input.model ?? null,
-          systemPromptHash: stableHash(input.input.systemPrompt),
-          metadataJson: bindingMetadata(input.input, input.adapter),
-        });
-        this.appendEvent({
-          sessionId: input.session.sessionId,
-          runId: input.attempt.runId,
-          attemptId: input.attempt.attemptId,
-          type: "binding.created",
-          payload: {
-            bindingId: binding.bindingId,
-            bindingGeneration: binding.bindingGeneration,
-            adapterId: input.adapterId,
-            adoptedLegacyAdapterSessionId: true,
-          },
-        });
-        return binding;
-      });
-      const handle = await this.resumeOrReplaceBinding(adopted, input);
-      return { binding: this.readBinding(handle.bindingId!), handle };
-    }
-
     const previousBinding = nextGeneration > 1 ? this.readLatestBinding(input.session.sessionId, input.adapterId) : undefined;
     return this.openNewBinding(input, nextGeneration, previousBinding?.bindingId ?? null);
   }
@@ -3198,8 +3151,6 @@ function sessionFromRow(row: Record<string, unknown>): AgentSession {
     surfaceKind: text(row.surface_kind),
     externalRefKind: nullableText(row.external_ref_kind),
     externalRefId: nullableText(row.external_ref_id),
-    legacyClientScope: nullableText(row.legacy_client_scope),
-    legacySessionKey: nullableText(row.legacy_session_key),
     defaultAdapterId: text(row.default_adapter_id),
     defaultCwd: nullableText(row.default_cwd),
     modelProfile: nullableText(row.model_profile),
@@ -3403,12 +3354,11 @@ function refreshMcpAttemptContext(
     ownerId: string;
     requestId: string;
     clientId: string;
-    protocolVersion?: unknown;
+    protocolVersion: number;
     sessionId: string;
     runId: string;
     attemptId: string;
     adapterSessionId?: string;
-    legacyAdapterSessionId?: string;
   }
 ): void {
   for (const server of mcpServers) {

@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { createInterface, type Interface as ReadlineInterface } from "readline";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
-import { legacyPermissionPolicy } from "../legacy-permission-policy.js";
+import { resolveAcpPermission, resolveExternalAcpPermission } from "../runtime/desktop-tool-policy.js";
 import { adapterCapabilitiesFor, type ProductionAdapterId } from "./interface.js";
 import type {
   AdapterAttemptContext,
@@ -536,14 +536,14 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   }
 
   async closeBinding(_binding: AdapterBindingHandle): Promise<void> {
-    // ACP exposes no explicit close primitive in the compatibility protocol.
+    // ACP exposes no explicit close primitive.
   }
 
   /**
    * OpenClaw (and any adapter configured with {@code sessionMcpServersMode:
    * "empty"}) strips per-session MCP servers before creating a session, so the
    * adapter-effective MCP set is always empty. Returning `[]` here lets the
-   * kernel's binding-compatibility hash reflect what the adapter actually saw,
+   * kernel's binding hash reflect what the adapter actually saw,
    * preventing spurious binding replacements when a request-scoped env var
    * (e.g. OMI_QUERY_MODE) changes in the raw input.
    */
@@ -596,8 +596,8 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       const options =
         (params?.options as Array<{ kind: string; optionId: string }>) ?? [];
       const decision = this.adapterId === "acp"
-        ? legacyPermissionPolicy.resolveAcpPermission({ requestId: id, options })
-        : legacyPermissionPolicy.resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
+        ? resolveAcpPermission({ requestId: id, options })
+        : resolveExternalAcpPermission({ adapterId: this.adapterId, requestId: id, options });
       this.log(`ACP permission resolved: ${JSON.stringify(decision.auditEvent)}`);
       if ("acpError" in decision) {
         this.stdinWriter?.(JSON.stringify({

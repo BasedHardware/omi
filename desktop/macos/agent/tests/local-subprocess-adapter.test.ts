@@ -527,16 +527,11 @@ describe("env-command local subprocess adapters", () => {
     await adapter.stop();
   });
 
-  it("does not import legacy permission policy from new adapter modules", () => {
-    for (const file of [
-      "src/adapters/local-subprocess.ts",
-      "src/adapters/hermes.ts",
-      "src/adapters/openclaw.ts",
-    ]) {
-      const source = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
-      expect(source).not.toContain("legacyPermissionPolicy");
-      expect(source).not.toContain("legacy-permission-policy");
-    }
+  it("routes ACP permission handling through desktop tool policy", () => {
+    const source = readFileSync(new URL("../src/adapters/acp.ts", import.meta.url), "utf8");
+    expect(source).toContain("resolveAcpPermission");
+    expect(source).toContain("resolveExternalAcpPermission");
+    expect(source).not.toContain("legacy-permission-policy");
   });
 
   it("tracks local ACP adapters for bridge shutdown", () => {

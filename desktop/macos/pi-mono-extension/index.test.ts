@@ -1531,7 +1531,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
     OMI_RUN_ID: process.env.OMI_RUN_ID,
     OMI_ATTEMPT_ID: process.env.OMI_ATTEMPT_ID,
     OMI_ADAPTER_SESSION_ID: process.env.OMI_ADAPTER_SESSION_ID,
-    OMI_LEGACY_ADAPTER_SESSION_ID: process.env.OMI_LEGACY_ADAPTER_SESSION_ID,
   };
   delete process.env.OMI_CONTEXT_FILE;
   Object.assign(process.env, {
@@ -1543,7 +1542,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
     OMI_RUN_ID: "run_relay",
     OMI_ATTEMPT_ID: "att_relay",
     OMI_ADAPTER_SESSION_ID: "native_relay",
-    OMI_LEGACY_ADAPTER_SESSION_ID: "legacy_relay",
   });
 
   try {
@@ -1574,7 +1572,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
       runId: "run_relay",
       attemptId: "att_relay",
       adapterSessionId: "native_relay",
-      legacyAdapterSessionId: "legacy_relay",
       protocolVersion: 2,
     });
     const msg = await received;
@@ -1592,7 +1589,6 @@ test("callSwiftTool: propagates Omi request correlation over the relay", async (
       runId: "run_relay",
       attemptId: "att_relay",
       adapterSessionId: "native_relay",
-      legacyAdapterSessionId: "legacy_relay",
     });
   } finally {
     __resetOmiPipeForTest();

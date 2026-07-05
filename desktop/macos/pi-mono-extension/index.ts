@@ -528,11 +528,7 @@ async function omiRelayCorrelation(): Promise<Record<string, string | number | b
   if (process.env.OMI_RUN_ID) correlation.runId = process.env.OMI_RUN_ID;
   if (process.env.OMI_ATTEMPT_ID) correlation.attemptId = process.env.OMI_ATTEMPT_ID;
   if (process.env.OMI_ADAPTER_SESSION_ID) correlation.adapterSessionId = process.env.OMI_ADAPTER_SESSION_ID;
-  if (process.env.OMI_LEGACY_ADAPTER_SESSION_ID) {
-    correlation.legacyAdapterSessionId = process.env.OMI_LEGACY_ADAPTER_SESSION_ID;
-  }
-  const protocolVersion = Number(process.env.OMI_PROTOCOL_VERSION);
-  if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+  correlation.protocolVersion = 2;
   Object.assign(correlation, await omiContextFileCorrelation());
   return correlation;
 }
@@ -551,13 +547,11 @@ async function omiContextFileCorrelation(): Promise<Record<string, string | numb
       "runId",
       "attemptId",
       "adapterSessionId",
-      "legacyAdapterSessionId",
     ]) {
       const value = parsed[key];
       if (typeof value === "string" && value.length > 0) correlation[key] = value;
     }
-    const protocolVersion = parsed.protocolVersion;
-    if (protocolVersion === 1 || protocolVersion === 2) correlation.protocolVersion = protocolVersion;
+    correlation.protocolVersion = 2;
     if (parsed.disableSwiftBackedTools === true) correlation.disableSwiftBackedTools = true;
     return correlation;
   } catch {

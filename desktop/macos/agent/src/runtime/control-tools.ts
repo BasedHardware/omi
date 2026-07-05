@@ -3,7 +3,7 @@ import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot } from "./kernel.js";
 import { serializeArtifact } from "./artifact-serialization.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
-import type { McpServerBuildContext } from "./compatibility-facade.js";
+import type { McpServerBuildContext } from "./jsonl-transport.js";
 import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 
@@ -330,7 +330,6 @@ export interface AgentControlToolContext {
     sessionKey: string | undefined,
     context: McpServerBuildContext
   ) => Record<string, unknown>[];
-  getProtocolVersion?: () => McpServerBuildContext["protocolVersion"];
 }
 
 export interface ActiveControlToolOwnerInput {
@@ -369,15 +368,10 @@ export interface ResolvedControlRequestContext {
   ownerGuard?: string;
 }
 
-export const DEFAULT_LEGACY_JSONL_CLIENT_ID = "legacy-jsonl-client";
 export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
 
 export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
   return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
-}
-
-export function legacyControlRequestKey(input: ControlRequestKeyInput): string | undefined {
-  return input.requestId ? JSON.stringify([input.clientId ?? DEFAULT_LEGACY_JSONL_CLIENT_ID, input.requestId]) : undefined;
 }
 
 export function registerSignedDirectControlOwner(input: SignedDirectControlOwnerInput): boolean {
@@ -823,7 +817,7 @@ function buildControlRunMcpServers(
     requestId: input.requestId,
     clientId: input.clientId,
     adapterId: input.adapterId,
-    protocolVersion: context.getProtocolVersion?.(),
+    protocolVersion: 2,
     includeSwiftBackedTools: false,
   });
   // Direct control-created runs do not have a Swift ActiveRequest with an
@@ -1021,8 +1015,6 @@ function serializeSession(session: AgentSession): Record<string, unknown> {
     surfaceKind: session.surfaceKind,
     externalRefKind: session.externalRefKind,
     externalRefId: session.externalRefId,
-    legacyClientScope: session.legacyClientScope,
-    legacySessionKey: session.legacySessionKey,
     defaultAdapterId: session.defaultAdapterId,
     defaultCwd: session.defaultCwd,
     modelProfile: session.modelProfile,

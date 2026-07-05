@@ -11,7 +11,6 @@ import {
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
-  legacyControlRequestKey,
   registerSignedDirectControlOwner,
   resolveControlRequestContext,
   type AgentControlToolContext,
@@ -574,9 +573,8 @@ describe("agent control tools", () => {
     ).toThrow("ownerId does not match active control owner");
     expect(controlRequestKey({ requestId: "request:a", clientId: "client" })).toBe(JSON.stringify(["client", "request:a"]));
     expect(controlRequestKey({ requestId: "request", clientId: "client:a" })).toBe(JSON.stringify(["client:a", "request"]));
-    expect(controlRequestKey({ requestId: "legacy-request" })).toBeUndefined();
-    expect(legacyControlRequestKey({ requestId: "legacy-request" })).toBe(
-      JSON.stringify(["legacy-jsonl-client", "legacy-request"]),
+    expect(controlRequestKey({ requestId: "request", clientId: "client" })).toBe(
+      JSON.stringify(["client", "request"]),
     );
   });
 
@@ -1566,7 +1564,7 @@ describe("agent control tools", () => {
     ]);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "run_agent_and_wait", {
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "use browser tools if needed",
         requestId: "delegate-tools-1",
@@ -1604,7 +1602,7 @@ describe("agent control tools", () => {
     const buildMcpServers = vi.fn(() => []);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "run_agent_and_wait", {
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "use OpenClaw for this child",
         adapterId: "openclaw",

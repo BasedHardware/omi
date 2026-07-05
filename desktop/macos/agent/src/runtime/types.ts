@@ -140,8 +140,6 @@ export interface AgentSession {
   surfaceKind: string;
   externalRefKind: string | null;
   externalRefId: string | null;
-  legacyClientScope: string | null;
-  legacySessionKey: string | null;
   defaultAdapterId: string;
   defaultCwd: string | null;
   modelProfile: string | null;

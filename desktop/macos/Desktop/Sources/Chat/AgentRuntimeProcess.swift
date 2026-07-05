@@ -988,9 +988,6 @@ actor AgentRuntimeProcess {
     if let requestKey = message.requestKey {
       return activeRequests[requestKey]
     }
-    if message.protocolVersion != 2 && activeRequests.count == 1 {
-      return activeRequests.values.first
-    }
     return nil
   }
 
@@ -1115,9 +1112,7 @@ actor AgentRuntimeProcess {
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
     let payload = message.payload
     let omiSessionId = payload["sessionId"] as? String ?? message.payload["omiSessionId"] as? String ?? ""
-    let adapterSessionId =
-      payload["adapterSessionId"] as? String
-      ?? payload["legacyAdapterSessionId"] as? String
+    let adapterSessionId = payload["adapterSessionId"] as? String
     return AgentBridge.QueryResult(
       text: payload["text"] as? String ?? "",
       costUsd: payload["costUsd"] as? Double ?? 0,

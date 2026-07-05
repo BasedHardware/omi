@@ -2,7 +2,7 @@ import {
   agentControlCapabilityManifest,
   agentControlInputSchema,
   type AgentControlManifestTool,
-} from "./control-tool-manifest.js";
+} from "./control-tool-manifest.ts";
 
 export type OmiToolAdapterId = "pi-mono" | "omi-tools-stdio" | "local-agent-api";
 export type OmiToolCondition = "always" | "onboardingOnly" | "nonOnboarding";

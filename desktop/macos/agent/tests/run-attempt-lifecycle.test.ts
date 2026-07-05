@@ -91,7 +91,6 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       ...baseRunInput,
       requestId: "request-2",
       clientId: "client-b",
-      legacyAdapterSessionId: "legacy-native-2",
       mcpServers: [
         {
           command: "node",
@@ -124,7 +123,6 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       clientId: "client-b",
       runId: adapter.executed[1].runId,
       attemptId: adapter.executed[1].attemptId,
-      legacyAdapterSessionId: "legacy-native-2",
     });
     store.close();
   });
@@ -264,7 +262,7 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
     store.close();
   });
 
-  it("does not fall back to a legacy alias when an explicit external ref is new", async () => {
+  it("creates separate sessions for distinct external refs", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
 
     const first = await kernel.executeRun({
@@ -272,16 +270,12 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       requestId: "chat-1",
       externalRefKind: "chat",
       externalRefId: "backend-chat-1",
-      legacyClientScope: "main-chat",
-      legacySessionKey: "main",
     });
     const second = await kernel.executeRun({
       ...baseRunInput,
       requestId: "chat-2",
       externalRefKind: "chat",
       externalRefId: "backend-chat-2",
-      legacyClientScope: "main-chat",
-      legacySessionKey: "main",
     });
 
     expect(second.session.sessionId).not.toBe(first.session.sessionId);

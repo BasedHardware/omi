@@ -2360,7 +2360,6 @@ workflows:
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
             cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-            cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
