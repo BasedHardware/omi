@@ -757,8 +757,10 @@ struct FocusSessionRow: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     FocusPage()
         .frame(width: 800, height: 600)
         .background(OmiColors.backgroundPrimary)
 }
+#endif

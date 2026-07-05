@@ -283,7 +283,7 @@ enum DesktopCapabilityRegistry {
       summary: "Create or continue a distinct delegated child agent session linked to a parent run.",
       bullets: [
         "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-        "Use spawn_agent instead when the user wants a visible floating-bar background agent pill.",
+        "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
         "Pass a concise objective and optional short context; do not pass full transcripts by default."
       ]),
     Capability(
@@ -291,12 +291,12 @@ enum DesktopCapabilityRegistry {
       title: "Spawn Agent",
       latency: .asyncBackground,
       surfaces: [.desktopChat, .realtimeHub],
-      summary: "Hand multi-step work to a floating background agent pill through the legacy floating-bar UI workflow.",
+      summary: "Start canonical Omi background work and show it in the floating-bar pill UI.",
       bullets: [
         "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
-        "The only way to start a floating-bar subagent is to call spawn_agent; saying you will start one does not start it.",
+        "The only way to start a visible floating-bar background agent is to call spawn_agent; saying you will start one does not start it.",
         "If the user asks to use OpenClaw or Hermes, call spawn_agent with provider set to openclaw or hermes.",
-        "Use delegate_agent instead for canonical Omi child sessions/runs that need durable delegation tracking."
+        "Use delegate_agent instead when the new work must be linked to a known parent run."
       ]),
     Capability(
       toolName: "manage_agent_pills",
@@ -356,7 +356,7 @@ enum DesktopCapabilityRegistry {
       - Agent output references/artifacts -> inspect_agent_artifacts.
       - Start a visible floating-bar subagent/background agent -> spawn_agent.
       - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
-      - delegate_agent records durable child sessions/runs/delegations; spawn_agent creates the legacy floating-pill UI workflow. Do not treat one as an alias for the other.
+      - delegate_agent records durable child sessions/runs/delegations under a known parent run; spawn_agent creates top-level canonical background work and projects it into the floating-pill UI. Do not treat one as an alias for the other.
       """
     } else {
       delegationGuidance = """

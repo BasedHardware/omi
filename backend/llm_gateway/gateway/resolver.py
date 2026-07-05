@@ -15,7 +15,6 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, validate_chat_completion_request
 
-SUPPORTED_AUTO_LANE_IDS = frozenset({'omi:auto:chat-structured'})
 AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
     {
@@ -72,12 +71,9 @@ def resolve_lane(config: GatewayConfig, model: str) -> LaneConfig:
             f'provider model names are not direct routes in gateway v1: {model}',
         )
 
-    if model not in SUPPORTED_AUTO_LANE_IDS:
-        raise GatewayModelNotFoundError(f'auto lane not found: {model}')
-
     lane = config.lanes.get(model)
     if lane is None:
-        raise GatewayModelNotFoundError(f'auto lane not configured: {model}')
+        raise GatewayModelNotFoundError(f'auto lane not found: {model}')
     if lane.surface != Surface.OPENAI_CHAT_COMPLETIONS:
         raise GatewayCapabilityMismatchError(f'unsupported lane surface: {lane.surface.value}', param='model')
     return lane

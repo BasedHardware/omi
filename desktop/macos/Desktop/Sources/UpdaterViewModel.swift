@@ -56,8 +56,17 @@ struct UpdateFailureDiagnostics: Equatable {
   let code: Int
   let underlyingDomain: String?
   let underlyingCode: Int?
+  let errorChainDomains: [String]
+  let errorChainCodes: [Int]
+  let nsurlErrorCode: Int?
+  let failingURLHost: String?
+  let failingURLPath: String?
   let updateChannel: String
   let launchLocationBucket: String
+  let sourceAppVersion: String
+  let sourceAppBuild: String
+  let appcastURLHost: String?
+  let appcastURLPath: String?
 
   var isRecoverableLaunchLocation: Bool {
     switch reason {
@@ -107,6 +116,10 @@ struct UpdateFailureDiagnostics: Equatable {
       "update_failure_code": code,
       "update_channel": updateChannel,
       "launch_location_bucket": launchLocationBucket,
+      "source_app_version": sourceAppVersion,
+      "source_app_build": sourceAppBuild,
+      "error_chain_domains": errorChainDomains,
+      "error_chain_codes": errorChainCodes,
     ]
 
     if let underlyingDomain {
@@ -115,6 +128,21 @@ struct UpdateFailureDiagnostics: Equatable {
     if let underlyingCode {
       properties["underlying_code"] = underlyingCode
     }
+    if let nsurlErrorCode {
+      properties["nsurl_error_code"] = nsurlErrorCode
+    }
+    if let failingURLHost {
+      properties["failing_url_host"] = failingURLHost
+    }
+    if let failingURLPath {
+      properties["failing_url_path"] = failingURLPath
+    }
+    if let appcastURLHost {
+      properties["appcast_url_host"] = appcastURLHost
+    }
+    if let appcastURLPath {
+      properties["appcast_url_path"] = appcastURLPath
+    }
 
     return properties
   }
@@ -122,16 +150,24 @@ struct UpdateFailureDiagnostics: Equatable {
   static func classify(
     error: NSError,
     updateChannel: String,
-    bundlePath: String = Bundle.main.bundlePath
+    bundlePath: String = Bundle.main.bundlePath,
+    sourceAppVersion: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+      ?? "unknown",
+    sourceAppBuild: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "unknown",
+    appcastURL: URL? = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL")
+      .flatMap({ ($0 as? String).flatMap(URL.init(string:)) })
   ) -> UpdateFailureDiagnostics {
     let underlying = error.userInfo[NSUnderlyingErrorKey] as? NSError
+    let chain = errorChain(from: error)
+    let nsurlError = chain.first { $0.domain == NSURLErrorDomain }
+    let failingURL = failingURL(in: chain)
     let message = error.localizedDescription
     let bucket = launchLocationBucket(for: bundlePath)
 
     return UpdateFailureDiagnostics(
       reason: reason(
         for: error,
-        underlying: underlying,
+        errorChain: chain,
         message: message.lowercased(),
         bucket: bucket
       ),
@@ -140,8 +176,17 @@ struct UpdateFailureDiagnostics: Equatable {
       code: error.code,
       underlyingDomain: underlying?.domain,
       underlyingCode: underlying?.code,
+      errorChainDomains: chain.map(\.domain),
+      errorChainCodes: chain.map(\.code),
+      nsurlErrorCode: nsurlError?.code,
+      failingURLHost: failingURL?.host,
+      failingURLPath: failingURL?.path,
       updateChannel: updateChannel,
-      launchLocationBucket: bucket
+      launchLocationBucket: bucket,
+      sourceAppVersion: sourceAppVersion,
+      sourceAppBuild: sourceAppBuild,
+      appcastURLHost: appcastURL?.host,
+      appcastURLPath: appcastURL?.path
     )
   }
 
@@ -171,7 +216,7 @@ struct UpdateFailureDiagnostics: Equatable {
 
   private static func reason(
     for error: NSError,
-    underlying: NSError?,
+    errorChain: [NSError],
     message: String,
     bucket: String
   ) -> UpdateFailureReason {
@@ -192,6 +237,9 @@ struct UpdateFailureDiagnostics: Equatable {
     if error.domain == SUSparkleErrorDomain && error.code == 4005 {
       return .installerLaunch
     }
+    if errorChain.contains(where: { $0.domain == NSURLErrorDomain }) {
+      return .network
+    }
     if message.contains("retrieving update information") || message.contains("appcast") {
       return .appcastRetrieval
     }
@@ -201,11 +249,98 @@ struct UpdateFailureDiagnostics: Equatable {
     if message.contains("signature") || message.contains("verify") || message.contains("ed25519") {
       return .signature
     }
-    if error.domain == NSURLErrorDomain || underlying?.domain == NSURLErrorDomain {
-      return .network
-    }
 
     return .unknown
+  }
+
+  private static func errorChain(from error: NSError) -> [NSError] {
+    var chain: [NSError] = []
+    var current: NSError? = error
+    var seen = Set<ObjectIdentifier>()
+
+    while let error = current {
+      let identifier = ObjectIdentifier(error)
+      guard !seen.contains(identifier) else { break }
+      seen.insert(identifier)
+      chain.append(error)
+      current = error.userInfo[NSUnderlyingErrorKey] as? NSError
+    }
+
+    return chain
+  }
+
+  private static func failingURL(in errorChain: [NSError]) -> URL? {
+    for error in errorChain {
+      if let url = error.userInfo[NSURLErrorFailingURLErrorKey] as? URL {
+        return url
+      }
+      if let urlString = error.userInfo[NSURLErrorFailingURLStringErrorKey] as? String,
+        let url = URL(string: urlString)
+      {
+        return url
+      }
+    }
+    return nil
+  }
+}
+
+struct UpdateAnalyticsContext {
+  let sourceAppVersion: String
+  let sourceAppBuild: String
+  let updateChannel: String
+  let appcastURLHost: String?
+  let appcastURLPath: String?
+
+  var properties: [String: Any] {
+    var properties: [String: Any] = [
+      "source_app_version": sourceAppVersion,
+      "source_app_build": sourceAppBuild,
+      "update_channel": updateChannel,
+    ]
+    if let appcastURLHost {
+      properties["appcast_url_host"] = appcastURLHost
+    }
+    if let appcastURLPath {
+      properties["appcast_url_path"] = appcastURLPath
+    }
+    return properties
+  }
+
+  static func current(updateChannel: String) -> UpdateAnalyticsContext {
+    let appcastURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL")
+      .flatMap { ($0 as? String).flatMap(URL.init(string:)) }
+
+    return UpdateAnalyticsContext(
+      sourceAppVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+        as? String ?? "unknown",
+      sourceAppBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        ?? "unknown",
+      updateChannel: updateChannel,
+      appcastURLHost: appcastURL?.host,
+      appcastURLPath: appcastURL?.path
+    )
+  }
+}
+
+struct UpdateItemAnalytics {
+  let targetVersion: String
+  let targetBuild: String
+  let itemChannel: String
+
+  var properties: [String: Any] {
+    [
+      "target_version": targetVersion,
+      "target_build": targetBuild,
+      "item_channel": itemChannel,
+    ]
+  }
+
+  static func from(item: SUAppcastItem) -> UpdateItemAnalytics {
+    UpdateItemAnalytics(
+      targetVersion: item.displayVersionString,
+      targetBuild: item.versionString,
+      itemChannel: (item.channel?.isEmpty == false) ? item.channel! : "stable"
+    )
   }
 }
 
@@ -251,9 +386,17 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Called when Sparkle finds a valid update
   func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
     let version = item.displayVersionString
+    let context = UpdateAnalyticsContext.current(
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Found update v\(version)")
     Task { @MainActor in
-      AnalyticsManager.shared.updateAvailable(version: version)
+      AnalyticsManager.shared.updateAvailable(
+        version: version,
+        context: context,
+        item: itemAnalytics
+      )
       self.viewModel?.updateAvailable = true
       self.viewModel?.availableVersion = version
       self.viewModel?.lastUpdateFailure = nil
@@ -366,6 +509,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Called when an update will be installed (app may terminate immediately after)
   func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {
     let version = item.displayVersionString
+    let context = UpdateAnalyticsContext.current(
+      updateChannel: UserDefaults.standard.string(forKey: kUpdateChannelKey) ?? "stable"
+    )
+    let itemAnalytics = UpdateItemAnalytics.from(item: item)
     logSync("Sparkle: Installing update v\(version)")
     let restoreMainWindow = AppDelegate.shouldRestoreMainWindowAfterUpdateRelaunch()
     UpdateRelaunchWindowPolicy.markPendingRelaunch(restoreMainWindow: restoreMainWindow)
@@ -373,7 +520,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       "Sparkle: Next launch will \(restoreMainWindow ? "restore" : "suppress") the main window after update"
     )
     Task { @MainActor in
-      AnalyticsManager.shared.updateInstalled(version: version)
+      AnalyticsManager.shared.updateInstalled(
+        version: version,
+        context: context,
+        item: itemAnalytics
+      )
       self.viewModel?.updateAvailable = false
     }
   }

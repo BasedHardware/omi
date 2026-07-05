@@ -119,12 +119,14 @@ def batch_update_staged_scores(uid: str, scores: List[dict]) -> None:
         batch.commit()
 
 
-def promote_staged_task(uid: str) -> Optional[dict]:
-    """Promote the top-scored staged task to an action_item.
+def promote_staged_task(uid: str, task_id: Optional[str] = None) -> Optional[dict]:
+    """Promote a staged task to an action_item.
 
-    Returns the new (or pre-existing) action_item dict, or None if no staged
-    tasks exist. Uses ``database.action_items.create_action_item()`` for
-    consistent field handling.
+    When ``task_id`` is given, promote that specific candidate; otherwise promote the
+    top-scored active staged task (the original behavior). Returns the new (or pre-existing)
+    action_item dict, or None if there is nothing to promote — no staged tasks exist, or the
+    given id does not exist or is already promoted/completed. Uses
+    ``database.action_items.create_action_item()`` for consistent field handling.
 
     Deduplicates against the live ``action_items`` collection: if a user
     already has an active (uncompleted, undeleted) action_item with the same
@@ -139,17 +141,26 @@ def promote_staged_task(uid: str) -> Optional[dict]:
     a few hours of activity.
     """
     col = _user_col(uid, 'staged_tasks')
-    query = (
-        col.where(filter=FieldFilter('completed', '==', False))
-        .order_by('relevance_score', direction=firestore.Query.ASCENDING)
-        .limit(1)
-    )
-    docs = list(query.stream())
-    if not docs:
-        return None
-
-    staged = docs[0].to_dict()
-    staged['id'] = docs[0].id
+    if task_id is not None:
+        snap = col.document(task_id).get()
+        if not snap.exists:
+            return None
+        staged = snap.to_dict() or {}
+        if staged.get('completed'):
+            # Already promoted/closed — nothing to do.
+            return None
+        staged['id'] = snap.id
+    else:
+        query = (
+            col.where(filter=FieldFilter('completed', '==', False))
+            .order_by('relevance_score', direction=firestore.Query.ASCENDING)
+            .limit(1)
+        )
+        docs = list(query.stream())
+        if not docs:
+            return None
+        staged = docs[0].to_dict()
+        staged['id'] = docs[0].id
 
     # Dedup: skip promotion if an active action_item with the same description
     # already exists. Close the staged task pointing at the existing item.
@@ -213,6 +224,27 @@ def promote_staged_task(uid: str) -> Optional[dict]:
 
     action_item = action_items_db.get_action_item(uid, action_id)
     return action_item
+
+
+def clear_staged_tasks(uid: str) -> int:
+    """Delete all active (uncompleted) staged tasks for a user in one call.
+
+    Returns the number deleted. Scoped to completed==False so promotion history
+    (completed/promoted staged tasks) is preserved.
+    """
+    col = _user_col(uid, 'staged_tasks')
+    active_query = col.where(filter=FieldFilter('completed', '==', False)).select([])
+    batch = db.batch()
+    count = 0
+    total = 0
+    for doc in active_query.stream():
+        batch.delete(col.document(doc.id))
+        count += 1
+        total += 1
+        batch, count = _commit_batch(batch, count)
+    if count > 0:
+        batch.commit()
+    return total
 
 
 def migrate_ai_tasks(uid: str) -> dict:

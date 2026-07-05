@@ -231,15 +231,7 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
         .format("%Y-%m-%dT%H:%M:%SZ")
         .to_string();
 
-    // Single use + short windows bound the cost. NOTE: only the bare token form is
-    // verified to connect to the BidiGenerateContentConstrained endpoint; locking the
-    // model/config via `liveConnectConstraints` is a follow-up that needs its own
-    // spike (the constraint shape wasn't verified) — see Phase 2 spike notes.
-    let body = serde_json::json!({
-        "uses": 1,
-        "expireTime": expire,
-        "newSessionExpireTime": new_session_expire,
-    });
+    let body = gemini_auth_token_body(&new_session_expire, &expire);
     let req = http_client()
         .post(GEMINI_AUTH_TOKENS_URL)
         .query(&[("key", key)])
@@ -268,13 +260,26 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
     })
 }
 
+fn gemini_auth_token_body(new_session_expire: &str, expire: &str) -> serde_json::Value {
+    // Google's CreateAuthTokenRequest wraps token settings under `authToken`.
+    // Top-level `uses`/`expireTime` fields are ignored/rejected by the v1alpha API.
+    serde_json::json!({
+        "authToken": {
+            "uses": 1,
+            "expireTime": expire,
+            "newSessionExpireTime": new_session_expire,
+        }
+    })
+}
+
 // =============================================================================
 // Usage reporting (Phase 2, v1 — client-reported)
 //
 // The realtime WS is client↔provider direct, so the backend never sees usage inline.
 // As a first pass, the CLIENT reports the provider's own per-turn token counts here and
 // we price + record them into the same llm_usage ledger chat uses (account "realtime"),
-// so realtime spend counts toward the user's quota. This is CLIENT-TRUSTED (a tampered
+// and separately increment the explicit desktop question quota counter for the
+// accepted managed turn. This is CLIENT-TRUSTED (a tampered
 // client could under-report) — acceptable for v1; the eventual hardening is server-side
 // reconciliation against the provider Usage API (OpenAI exposes per-user usage via the
 // OpenAI-Safety-Identifier; the minted realtime_sessions records are the audit trail).
@@ -369,6 +374,18 @@ async fn report_usage(
         tracing::error!("realtime usage record failed for uid={}: {}", user.uid, e);
         return StatusCode::BAD_GATEWAY;
     }
+    if let Err(e) = state
+        .firestore
+        .record_desktop_chat_quota_question_with_account(&user.uid, Some("realtime"))
+        .await
+    {
+        tracing::error!(
+            "realtime quota question record failed for uid={}: {}",
+            user.uid,
+            e
+        );
+        return StatusCode::BAD_GATEWAY;
+    }
     tracing::info!(
         "realtime usage uid={} provider={} in={} out={} cached={} cost=${:.5}",
         user.uid,
@@ -385,4 +402,24 @@ pub fn realtime_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/realtime/session", post(mint_session))
         .route("/v2/realtime/usage", post(report_usage))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gemini_auth_token_body_wraps_settings_under_auth_token() {
+        let body = gemini_auth_token_body("2026-07-03T18:40:00Z", "2026-07-03T19:08:00Z");
+
+        assert_eq!(body["authToken"]["uses"], 1);
+        assert_eq!(
+            body["authToken"]["newSessionExpireTime"],
+            "2026-07-03T18:40:00Z"
+        );
+        assert_eq!(body["authToken"]["expireTime"], "2026-07-03T19:08:00Z");
+        assert!(body.get("uses").is_none());
+        assert!(body.get("expireTime").is_none());
+        assert!(body.get("newSessionExpireTime").is_none());
+    }
 }

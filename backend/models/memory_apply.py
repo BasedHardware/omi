@@ -386,16 +386,26 @@ def apply_long_term_patch_transaction(
     for optional_key in (
         "corroboration_count",
         "last_corroborated_at",
+        "captured_at",
+        "updated_at",
+        "expires_at",
         "superseded_by",
         "kg_extracted",
         "confidence",
     ):
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
-    if "last_corroborated_at" in extra_item_updates and isinstance(extra_item_updates["last_corroborated_at"], str):
-        extra_item_updates["last_corroborated_at"] = datetime.fromisoformat(
-            extra_item_updates["last_corroborated_at"].replace("Z", "+00:00")
-        )
+    for timestamp_key in ("last_corroborated_at", "captured_at", "updated_at", "expires_at"):
+        if timestamp_key in extra_item_updates and isinstance(extra_item_updates[timestamp_key], str):
+            extra_item_updates[timestamp_key] = datetime.fromisoformat(
+                extra_item_updates[timestamp_key].replace("Z", "+00:00")
+            )
+    if (
+        "confidence" in extra_item_updates
+        and extra_item_updates["confidence"] is not None
+        and not isinstance(extra_item_updates["confidence"], (int, float))
+    ):
+        extra_item_updates.pop("confidence")
     evidence = raw.pop("evidence", None) or [
         MemoryEvidence(
             evidence_id=evidence_id,
@@ -505,6 +515,8 @@ def apply_long_term_patch_transaction(
             account_generation=control_state.account_generation,
             promotion=promotion_metadata,
         )
+        if extra_item_updates:
+            memory_item = MemoryItem(**{**memory_item.model_dump(), **extra_item_updates})
     outbox_events = [
         MemoryOutboxEvent(
             event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),

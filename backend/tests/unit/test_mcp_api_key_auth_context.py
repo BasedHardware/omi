@@ -1,48 +1,10 @@
-from datetime import datetime
-from types import ModuleType, SimpleNamespace
+from types import SimpleNamespace
 import asyncio
-import sys
 
 import pytest
 
-
-class _FakeHTTPException(Exception):
-    def __init__(self, status_code, detail):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
-
-
-def _identity_dependency(value=None):
-    return value
-
-
-try:
-    import fastapi  # noqa: F401
-    import fastapi.security  # noqa: F401
-except ImportError:
-    _fake_fastapi = ModuleType('fastapi')
-    setattr(_fake_fastapi, 'HTTPException', _FakeHTTPException)
-    setattr(_fake_fastapi, 'Depends', _identity_dependency)
-    setattr(_fake_fastapi, 'Security', _identity_dependency)
-    setattr(_fake_fastapi, 'Request', type('Request', (), {}))
-    setattr(_fake_fastapi, 'Response', type('Response', (), {}))
-    _fake_fastapi_security = ModuleType('fastapi.security')
-    setattr(_fake_fastapi_security, 'APIKeyHeader', lambda *args, **kwargs: None)
-    setattr(_fake_fastapi_security, 'HTTPBearer', lambda *args, **kwargs: None)
-    setattr(_fake_fastapi_security, 'HTTPAuthorizationCredentials', object)
-    sys.modules.setdefault('fastapi', _fake_fastapi)
-    sys.modules.setdefault('fastapi.security', _fake_fastapi_security)
-_fake_firebase_admin = ModuleType('firebase_admin')
-setattr(_fake_firebase_admin, 'auth', SimpleNamespace(verify_id_token=lambda _token: {'uid': 'unused'}))
-sys.modules.setdefault('firebase_admin', _fake_firebase_admin)
-
+import dependencies
 from fastapi import HTTPException
-
-_fake_client = ModuleType('database._client')
-setattr(_fake_client, 'db', SimpleNamespace())
-setattr(_fake_client, 'get_firestore_client', lambda: SimpleNamespace())
-sys.modules['database._client'] = _fake_client
 
 import database.mcp_api_key as mcp_api_key_db
 from dependencies import get_mcp_api_key_auth, get_mcp_memory_default_memory_read_context
@@ -251,6 +213,7 @@ def test_mcp_auth_dependency_preserves_uid_scope_identity_shape(monkeypatch):
         'get_user_and_scopes_by_api_key',
         lambda token: {'user_id': 'u1', 'scopes': ['memories.read'], 'key_id': 'key-1', 'app_id': 'mcp-api'},
     )
+    monkeypatch.setattr(dependencies, 'check_api_key_rate_limit', lambda **_kwargs: None)
 
     auth = asyncio.run(get_mcp_api_key_auth('Bearer omi_mcp_secret'))
     context = asyncio.run(get_mcp_memory_default_memory_read_context(auth))

@@ -30,6 +30,15 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["adapterAcknowledged"] as? Bool, false)
   }
 
+  func testInitMessageCarriesAdvertisedAgentControlTools() {
+    let message = AgentRuntimeProcess.RuntimeMessage.parse(
+      #"{"type":"init","sessionId":"","agentControlTools":["list_agent_sessions","spawn_background_agent"]}"#
+    )
+
+    XCTAssertEqual(message?.kind, .initMessage)
+    XCTAssertEqual(message?.payload["agentControlTools"] as? [String], ["list_agent_sessions", "spawn_background_agent"])
+  }
+
   func testControlToolResultRoutesByRequestId() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"control_tool_result","protocolVersion":2,"requestId":"control-1","clientId":"client-1","name":"inspect_agent_artifacts","result":"{\"ok\":true,\"artifacts\":[]}"}"#
@@ -85,18 +94,29 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
-    let first = AgentRuntimeProcess.defaultStateDirectory(
+    let firstState = AgentRuntimeProcess.defaultStateDirectory(
       bundleIdentifier: "com.omi.omi-ticket-five-a",
       homeDirectory: home
     )
-    let second = AgentRuntimeProcess.defaultStateDirectory(
+    let secondState = AgentRuntimeProcess.defaultStateDirectory(
+      bundleIdentifier: "com.omi.omi-ticket-five-b",
+      homeDirectory: home
+    )
+    let firstArtifacts = AgentRuntimeProcess.defaultArtifactsDirectory(
+      bundleIdentifier: "com.omi.omi-ticket-five-a",
+      homeDirectory: home
+    )
+    let secondArtifacts = AgentRuntimeProcess.defaultArtifactsDirectory(
       bundleIdentifier: "com.omi.omi-ticket-five-b",
       homeDirectory: home
     )
 
-    XCTAssertNotEqual(first, second)
-    XCTAssertTrue(first.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-a"))
-    XCTAssertTrue(second.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-b"))
+    XCTAssertNotEqual(firstState, secondState)
+    XCTAssertNotEqual(firstArtifacts, secondArtifacts)
+    XCTAssertTrue(firstState.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-a"))
+    XCTAssertTrue(secondState.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-b"))
+    XCTAssertTrue(firstArtifacts.hasSuffix("Artifacts/com.omi.omi-ticket-five-a"))
+    XCTAssertTrue(secondArtifacts.hasSuffix("Artifacts/com.omi.omi-ticket-five-b"))
   }
 
   func testCompatibilitySessionIdPrefersAdapterSession() {
@@ -239,6 +259,19 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
   }
 
+  func testClientRegistrationWaitsForInitWhenProcessIsAlreadyRunning() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("if isRunning {\n      try await waitForInit(timeout: 30.0)\n      return\n    }"))
+    XCTAssertTrue(source.contains("try await waitForInit(timeout: 30.0)"))
+    XCTAssertTrue(source.contains("case .initMessage:"))
+    XCTAssertTrue(source.contains("resolveInitContinuations()"))
+  }
+
   func testAppSurfacesUseDirectControlToolOnly() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -265,6 +298,8 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("func directControlTool("))
     XCTAssertTrue(source.contains("Agent control requires a signed-in owner"))
+    XCTAssertTrue(source.contains("advertisedAgentControlTools.contains(name)"))
+    XCTAssertTrue(source.contains("Agent runtime does not advertise direct control tool"))
     XCTAssertTrue(source.contains(#""type": "direct_control_tool""#))
     XCTAssertTrue(source.contains(#""ownerId": ownerId"#))
   }
@@ -292,5 +327,75 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(source.contains("resumeInitContinuations(throwing: BridgeError.timeout)"))
     XCTAssertFalse(source.contains("withThrowingTaskGroup(of: Void.self)"))
+  }
+
+  func testOutOfMemoryDiagnosticRequiresConfirmedRuntimeSignature() {
+    XCTAssertTrue(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory"
+      )
+    )
+    XCTAssertTrue(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "FatalProcessOutOfMemory: Zone Allocation failed"
+      )
+    )
+    XCTAssertTrue(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "Failed to reserve virtual memory for CodeRange"
+      )
+    )
+
+    XCTAssertFalse(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "Provider returned: the requested model is out of memory for this prompt"
+      )
+    )
+    XCTAssertFalse(
+      AgentRuntimeProcess.isConfirmedOutOfMemoryDiagnostic(
+        "The browser extension reported out of memory while reading a page"
+      )
+    )
+  }
+
+  func testRuntimeDoesNotTreatGenericAbortSignalsAsOutOfMemory() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("let likelyOOM = lastExitWasOOM || oomDiagnosticLatch.isConfirmed(generation: processGeneration)"))
+    XCTAssertFalse(source.contains("exitCode == 134"))
+    XCTAssertFalse(source.contains("exitCode == 133"))
+  }
+
+  func testStderrOutOfMemoryLatchIsSynchronousAndGenerationScoped() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("oomDiagnosticLatch.markIfConfirmed(text, generation: expectedGeneration)"))
+    XCTAssertTrue(source.contains("private final class AgentRuntimeOOMDiagnosticLatch: @unchecked Sendable"))
+    XCTAssertTrue(source.contains("guard self.generation == generation else { return }"))
+    XCTAssertFalse(source.contains("Task { await self?.markOOM"))
+  }
+
+  func testIntentionalStopInvalidatesOldProcessGenerationBeforeTerminating() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("""
+  private func stopProcess(resumeRequestsWith error: BridgeError) async {
+    let proc = process
+    processGeneration &+= 1
+    lastExitWasOOM = false
+    oomDiagnosticLatch.reset(generation: processGeneration)
+"""))
   }
 }

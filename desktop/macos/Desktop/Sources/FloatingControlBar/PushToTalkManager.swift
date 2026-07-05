@@ -95,6 +95,9 @@ class PushToTalkManager: ObservableObject {
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
+  /// Monotonic tag for the transient too-short "hold longer" hint, so an older
+  /// hint's 2s reset timer can't clear a newer hint from a rapid follow-up tap.
+  private var pttHintGeneration = 0
   private var hasMicPermission: Bool = false
   private var isCurrentSessionFollowUp = false
   private var currentContextSnapshot: PTTContextSnapshot?
@@ -289,11 +292,13 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
+    barState?.pttHintText = ""  // clear any lingering too-short hint from a prior tap
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
     }
     state = .listening
+    barState?.isThinking = false
     startActiveTracer()
     isCurrentSessionFollowUp = barState?.showingAIResponse == true
     transcriptSegments = []
@@ -402,6 +407,7 @@ class PushToTalkManager: ObservableObject {
     }
     stopAudioTranscription()
     state = .idle
+    barState?.isThinking = false
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
@@ -409,6 +415,7 @@ class PushToTalkManager: ObservableObject {
     batchAudioBuffer = Data()
     batchAudioLock.unlock()
     isCurrentSessionFollowUp = false
+    barState?.pttHintText = ""
     // Abandoned session (cancel / silent turn) — drop its tracer unsent so it
     // doesn't leak into the next PTT turn. No trace is written for these.
     activeTracer = nil
@@ -489,13 +496,13 @@ class PushToTalkManager: ObservableObject {
   /// RMS threshold (int16 samples) above which a 20ms frame counts as voiced.
   /// ~-41 dBFS: comfortably above quiet-room mic noise, far below soft speech.
   nonisolated private static let voicedRMSThreshold: Double = 300
-  // Hub silence gate is gentler than the omni gate: the realtime model tolerates a
-  // little noise, and a too-strict gate that drops real speech ("not even listening")
-  // is far worse than occasionally letting a marginal turn through. Lower RMS so a
-  // quieter / further mic still registers, and require only a sliver of voice.
-  nonisolated private static let hubVoicedRMSThreshold: Double = 170
-  nonisolated private static let hubMinTurnAudioSeconds: Double = 0.2
-  nonisolated private static let hubMinVoicedSeconds: Double = 0.08
+  // Hub admission is stricter than raw energy: realtime models will answer noise
+  // if we commit a no-speech turn. Strong speech-like frames pass immediately,
+  // while Silero remains available as a quiet-speech fallback.
+  nonisolated private static let hubSpeechLikeRMSThreshold: Double = 260
+  nonisolated private static let hubMaxSpeechZeroCrossingRate: Double = 0.24
+  nonisolated private static let hubMinTurnAudioSeconds: Double = 0.35
+  nonisolated private static let hubMinSpeechLikeSeconds: Double = 0.16
 
   /// Returns (totalSeconds, voicedSeconds) for raw PCM16 mono 16kHz audio,
   /// where voiced = 20ms frames whose RMS exceeds `rmsThreshold`.
@@ -523,6 +530,45 @@ class PushToTalkManager: ObservableObject {
       }
     }
     return (Double(sampleCount) / 16000.0, Double(voicedFrames) * 0.02)
+  }
+
+  /// Returns (totalSeconds, speechLikeSeconds) for PCM16 mono 16kHz audio.
+  /// A frame must have enough RMS and a plausible voiced-speech zero-crossing
+  /// rate. This rejects broadband white noise that clears a simple energy gate.
+  static func speechLikeAudioSeconds(
+    pcm16k data: Data,
+    rmsThreshold: Double = hubSpeechLikeRMSThreshold,
+    maxZeroCrossingRate: Double = hubMaxSpeechZeroCrossingRate
+  ) -> (total: Double, speechLike: Double) {
+    let sampleCount = data.count / 2
+    guard sampleCount > 0 else { return (0, 0) }
+    let frameSamples = 320  // 20ms at 16kHz
+    var speechLikeFrames = 0
+    data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+      let samples = raw.bindMemory(to: Int16.self)
+      var i = 0
+      while i + frameSamples <= sampleCount {
+        var sumSquares: Double = 0
+        var zeroCrossings = 0
+        var previous = Int(samples[i])
+        for j in i..<(i + frameSamples) {
+          let current = Int(samples[j])
+          let s = Double(current)
+          sumSquares += s * s
+          if j > i, (previous < 0 && current >= 0) || (previous >= 0 && current < 0) {
+            zeroCrossings += 1
+          }
+          previous = current
+        }
+        let rms = (sumSquares / Double(frameSamples)).squareRoot()
+        let zcr = Double(zeroCrossings) / Double(frameSamples - 1)
+        if rms > rmsThreshold && zcr <= maxZeroCrossingRate {
+          speechLikeFrames += 1
+        }
+        i += frameSamples
+      }
+    }
+    return (Double(sampleCount) / 16000.0, Double(speechLikeFrames) * 0.02)
   }
 
   // Real speech detector for the hub gate (Silero VAD, on-device). Energy ≠ speech:
@@ -557,11 +603,10 @@ class PushToTalkManager: ObservableObject {
   static func hubTurnHasSpeech(pcm16k data: Data) -> Bool {
     let count = data.count / 2
     guard Double(count) / 16000.0 >= hubMinTurnAudioSeconds else { return false }  // too short
-    // Energy gate FIRST: clear/audible speech (the common case) must always pass. The Silero
-    // classifier was intermittently misclassifying real speech as "no speech" and discarding
-    // whole turns — RMS energy is reliable for audible speech, so accept it outright.
-    let (total, voiced) = voicedAudioSeconds(pcm16k: data, rmsThreshold: hubVoicedRMSThreshold)
-    if total >= hubMinTurnAudioSeconds && voiced >= hubMinVoicedSeconds { return true }
+    // Speech-like energy gate FIRST: clear/audible speech must pass without
+    // waiting on model inference, but broadband noise/clicks should not.
+    let (total, speechLike) = speechLikeAudioSeconds(pcm16k: data)
+    if total >= hubMinTurnAudioSeconds && speechLike >= hubMinSpeechLikeSeconds { return true }
     // Softer speech that didn't clear the energy bar: a lenient Silero pass as a fallback
     // (only to catch quiet speech — it must never be the sole gate that drops loud speech).
     guard let vad = hubVAD, count >= 512 else { return false }
@@ -607,7 +652,7 @@ class PushToTalkManager: ObservableObject {
     activeTracer?.end("ptt_recording")
 
     if isWaitingForHub {
-      barState?.isVoiceResponseActive = true
+      barState?.beginVoiceResponseWaiting()
       updateBarState()
       log("PushToTalkManager: finalizing while realtime hub warms — holding buffered audio")
       return
@@ -650,20 +695,38 @@ class PushToTalkManager: ObservableObject {
         RealtimeHubController.shared.cancelTurn()
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
-        updateBarState()  // clears the listening UI (no "…")
+        // Too short to have captured anything (fast tap / capture not ready) — hint
+        // the user to hold longer instead of clearing silently. A longer hub turn
+        // that simply had no speech keeps the quiet reset.
+        if totalSec < Self.minTurnAudioSeconds {
+          finishTooShortPTTTurnWithHint(reason: "hub, \(String(format: "%.2f", totalSec))s")
+        } else {
+          updateBarState()  // clears the listening UI (no "…")
+        }
         return
       }
       // Real speech — commit. The hub speaks the reply and dispatches tools
       // itself; no transcript/router/LLM hop here.
-      RealtimeHubController.shared.commitTurn()
+      let commitResult = RealtimeHubController.shared.commitTurn()
+      if commitResult == .rejectedNoSession {
+        log("PushToTalkManager: realtime hub rejected commit — falling back to buffered transcription")
+        batchAudioLock.lock()
+        batchAudioBuffer = turnAudio
+        batchAudioLock.unlock()
+        transcribeBufferedWarmWaitAudio()
+        return
+      }
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
-      // Collapse the bar on release — the hub speaks its reply as audio (no inline
-      // status UI), the same as the legacy voice path.
+      barState?.beginVoiceResponseWaiting()
+      // Show the "thinking" indicator in the notch during the release→first-audio
+      // gap. It clears when the hub's spoken reply starts (isVoiceResponseActive),
+      // so the glow takes over.
+      barState?.isThinking = true
       updateBarState()
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-      log("PushToTalkManager: hub turn committed (instant ack)")
+      log("PushToTalkManager: hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed")")
       return
     }
 
@@ -695,11 +758,23 @@ class PushToTalkManager: ObservableObject {
         )
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
-        stopListening()
+        // A too-short turn means the release beat capture (or the user tapped
+        // instead of holding). Give visible feedback instead of a silent clear;
+        // longer holds that were merely quiet keep the quiet reset.
+        if totalSec < Self.minTurnAudioSeconds {
+          finishTooShortPTTTurnWithHint(reason: "\(isOmniSTT ? "omni" : "batch"), \(String(format: "%.2f", totalSec))s")
+        } else {
+          stopListening()
+        }
         return
       }
     }
 
+    // Past the silence gate — a real turn will be transcribed and answered. Show
+    // the "thinking" indicator through the transcription/first-token gap; it hands
+    // off to the conversation surface (or voice glow) the moment output arrives.
+    barState?.isThinking = true
+    updateBarState()
 
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
@@ -748,8 +823,9 @@ class PushToTalkManager: ObservableObject {
       stopAudioTranscription()
 
       guard !audioData.isEmpty else {
-        log("PushToTalkManager: batch mode — no audio recorded")
-        sendTranscript()
+        // Backstop: the silence gate above normally catches an empty turn first, but
+        // if a turn ever reaches here with no audio, hint rather than send nothing.
+        finishTooShortPTTTurnWithHint(reason: "batch, empty buffer")
         return
       }
 
@@ -808,6 +884,38 @@ class PushToTalkManager: ObservableObject {
       }
       liveFinalizationTimeout = timeout
       DispatchQueue.main.asyncAfter(deadline: .now() + 3.0, execute: timeout)
+    }
+  }
+
+  /// A PTT turn that ended too short to have captured usable audio — typically a
+  /// press+release faster than capture spins up (or a tap instead of a hold). This
+  /// happens in every mode (hub / omni / batch), so it is shared across their
+  /// discard paths. Surface a hint and reset the bar after a beat instead of
+  /// clearing it silently, so the user knows to hold the key longer. Callers have
+  /// already logged the discard and reported analytics.
+  private func finishTooShortPTTTurnWithHint(reason: String) {
+    log("PushToTalkManager: too-short PTT turn (\(reason)) — showing hold-longer hint")
+    activeTracer = nil
+    // Return to idle immediately. The hub path already reset state, but the
+    // omni/batch discard path leaves it in `.finalizing`; without this a new PTT
+    // press within the 2s hint window is dropped (handleShortcutDown ignores
+    // `.finalizing`). The bar stays voice-sized via pttHintText, not `state`.
+    state = .idle
+    barState?.pttHintText = "Hold longer to record"
+    updateBarState()  // keeps/expands the bar to its voice size so the hint shows
+
+    // Tag this hint so a newer too-short tap's hint isn't cleared early by this
+    // timer (rapid taps would otherwise share the identical hint string).
+    pttHintGeneration &+= 1
+    let generation = pttHintGeneration
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
+      guard let self, self.pttHintGeneration == generation else { return }
+      // Only reset if the hint is still on screen — a newer turn may have replaced it.
+      if self.barState?.pttHintText == "Hold longer to record" {
+        self.barState?.pttHintText = ""
+        self.stopListening()  // collapses the bar (pttHintText now empty)
+      }
     }
   }
 
@@ -885,6 +993,7 @@ class PushToTalkManager: ObservableObject {
     // openAIInputWithQuery / sendFollowUpQuery inherits the bound value.
     let tracer = activeTracer
     activeTracer = nil
+    barState?.beginVoiceResponseWaiting()
     let dispatch = {
       if wasFollowUp {
         log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
@@ -1075,13 +1184,22 @@ class PushToTalkManager: ObservableObject {
       updateBarState()
       return
     }
-    RealtimeHubController.shared.commitTurn()
+    let commitResult = RealtimeHubController.shared.commitTurn()
+    if commitResult == .rejectedNoSession {
+      log("PushToTalkManager: buffered hub commit rejected — falling back to buffered transcription")
+      batchAudioLock.lock()
+      batchAudioBuffer = turnAudio
+      batchAudioLock.unlock()
+      transcribeBufferedWarmWaitAudio()
+      return
+    }
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
+    barState?.beginVoiceResponseWaiting()
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
       mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
-    log("PushToTalkManager: buffered hub turn committed after warm wait")
+    log("PushToTalkManager: buffered hub turn \(commitResult == .deferredForReplacement ? "deferred for replacement session" : "committed") after warm wait")
   }
 
   private func transcribeBufferedWarmWaitAudio() {
@@ -1362,12 +1480,15 @@ class PushToTalkManager: ObservableObject {
   private func updateBarState(skipResize: Bool = false) {
     guard let barState = barState else { return }
     let wasListening = barState.isVoiceListening
-    let isShowingVoiceUI = (state == .listening || state == .lockedListening)
+    // A pending too-short hint keeps the bar in its voice-UI size/position so the
+    // inline "hold longer" text is visible (and correctly sized) for its brief window.
+    let isShowingVoiceUI =
+      (state == .listening || state == .lockedListening) || !barState.pttHintText.isEmpty
     barState.isVoiceListening = isShowingVoiceUI
     barState.isVoiceLocked = (state == .lockedListening)
     barState.isVoiceFollowUp = isCurrentSessionFollowUp && isShowingVoiceUI
     if isShowingVoiceUI {
-      barState.isVoiceResponseActive = false
+      barState.clearVoiceResponseState()
     }
     if !isShowingVoiceUI {
       barState.voiceTranscript = ""
@@ -1380,7 +1501,10 @@ class PushToTalkManager: ObservableObject {
     guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
-    } else if !barState.isVoiceListening && wasListening {
+    } else if !barState.isVoiceListening && wasListening && !(barState.isThinking && barState.usesNotchIsland) {
+      // Keep the notch expanded while "thinking" so the indicator has room; the
+      // view's isThinking observer collapses it when the response arrives. The
+      // pill (non-notch) display has no thinking indicator, so it collapses now.
       FloatingControlBarManager.shared.resizeForPTT(expanded: false)
     }
   }

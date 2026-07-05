@@ -1,4 +1,5 @@
 import asyncio
+import binascii
 import json
 import tempfile
 import uuid
@@ -27,6 +28,7 @@ from multipart.multipart import shutil
 
 import database.chat as chat_db
 import database.conversations as conversations_db
+import database.llm_usage as llm_usage_db
 from database.apps import record_app_usage
 from models.app import App, UsageHistoryType
 from models.chat import (
@@ -172,6 +174,28 @@ def _build_quota_exceeded_reply(
     return ResponseMessage(**ai_msg.dict(), ask_for_nps=False)
 
 
+def _record_chat_quota_question_safe(
+    uid: str,
+    *,
+    idempotency_key: str,
+    source: str,
+    message_id: Optional[str] = None,
+    chat_session_id: Optional[str] = None,
+    platform: Optional[str] = None,
+):
+    try:
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            idempotency_key=idempotency_key,
+            source=source,
+            message_id=message_id,
+            chat_session_id=chat_session_id,
+            platform=platform,
+        )
+    except Exception:
+        logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
+
+
 @router.post('/v2/messages', tags=['chat'], response_model=ResponseMessage)
 def send_message(
     data: SendMessageRequest,
@@ -244,6 +268,14 @@ def send_message(
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
     chat_db.add_message(uid, message.dict())
+    _record_chat_quota_question_safe(
+        uid,
+        idempotency_key=f'v2_messages:{message.id}',
+        source='v2_messages',
+        message_id=message.id,
+        chat_session_id=message.chat_session_id,
+        platform=x_app_platform,
+    )
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if try_acquire_goal_extraction_lock(uid):
@@ -254,7 +286,20 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Skip a malformed/legacy stored message rather than 500 the whole chat send.
+    messages = list(
+        reversed(
+            Message.deserialize_many_safe(
+                chat_db.get_messages(uid, limit=10, app_id=compat_app_id),
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
+            )
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -443,7 +488,25 @@ def create_voice_message_stream(
 
     # process
     async def generate_stream():
+        quota_recorded = False
         async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
+            if not quota_recorded and chunk.startswith('message: '):
+                payload = chunk.removeprefix('message: ').strip()
+                try:
+                    message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
+                    await run_blocking(
+                        db_executor,
+                        _record_chat_quota_question_safe,
+                        uid,
+                        idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
+                        source='v2_voice_messages',
+                        message_id=message_data.get('id'),
+                        chat_session_id=message_data.get('chat_session_id'),
+                        platform=x_app_platform,
+                    )
+                    quota_recorded = True
+                except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                    logger.warning('Failed to record voice chat quota question: %s', exc)
             yield chunk
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")

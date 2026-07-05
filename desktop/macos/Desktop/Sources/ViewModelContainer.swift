@@ -28,6 +28,7 @@ class ViewModelContainer: ObservableObject {
         let provider = ChatProvider()
         chatProvider = provider
         taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
+        ChatProvider.mainInstance = provider
     }
 
     // Loading state

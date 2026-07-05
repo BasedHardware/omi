@@ -242,25 +242,22 @@ actor ConversationFinalizationService {
     let finishedAt = session.finishedAt ?? session.startedAt.addingTimeInterval(1)
     let existing = try await APIClient.shared.getConversations(
       limit: 5,
+      statuses: DesktopConversationMatchPolicy.cloudReconciliationStatuses,
       includeDiscarded: true,
       startDate: session.startedAt.addingTimeInterval(-5),
       endDate: finishedAt.addingTimeInterval(5)
     )
-    if let match = existing.first(where: { conv in
+    let timestampMatches = existing.filter { conv in
       DesktopConversationMatchPolicy.matchesDesktopConversation(
         startedAt: conv.startedAt,
         source: conv.source,
         sessionStartedAt: session.startedAt
       )
-    }) {
-      let status = LocalConversationStatus(rawValue: match.status.rawValue) ?? .processing
-      try await TranscriptionStorage.shared.markSessionCompleted(
-        id: sessionId,
-        backendId: match.id,
-        conversationStatus: status
-      )
-      log("ConversationFinalization: Reconciled cloud session \(sessionId) by timestamp \(match.id)")
-      return
+    }
+    for match in timestampMatches {
+      if try await completeTimestampMatchedConversation(match, sessionId: sessionId) {
+        return
+      }
     }
 
     if session.retryCount >= maxRetries - 1 {
@@ -279,6 +276,34 @@ actor ConversationFinalizationService {
     }
 
     throw TranscriptionStorageError.invalidState("No matching backend conversation found")
+  }
+
+  private func completeTimestampMatchedConversation(
+    _ match: ServerConversation,
+    sessionId: Int64
+  ) async throws -> Bool {
+    let conversation: ServerConversation
+    if DesktopConversationMatchPolicy.shouldFinalizeTimestampMatchedConversation(status: match.status) {
+      conversation = try await APIClient.shared.finalizeConversation(id: match.id)
+    } else {
+      conversation = match
+    }
+
+    guard DesktopConversationMatchPolicy.canCompleteTimestampMatchedConversation(
+      status: conversation.status,
+      source: conversation.source
+    ), conversation.id == match.id else {
+      return false
+    }
+
+    let status = LocalConversationStatus(rawValue: conversation.status.rawValue) ?? .processing
+    try await TranscriptionStorage.shared.markSessionCompleted(
+      id: sessionId,
+      backendId: conversation.id,
+      conversationStatus: status
+    )
+    log("ConversationFinalization: Reconciled cloud session \(sessionId) by timestamp \(conversation.id)")
+    return true
   }
 
   @discardableResult
@@ -370,12 +395,16 @@ actor ConversationFinalizationService {
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
       let retryCount = (session?.retryCount ?? 0) + 1
       if retryCount >= maxRetries {
-        await AnalyticsManager.shared.recordingError(
+        let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+        await AnalyticsManager.shared.conversationReconciliationFailed(
           error: "session_reconciliation_failed",
           reason: "cloud_reconcile_exhausted",
           source: session?.source,
           stage: session?.finalizationStrategy?.rawValue,
-          retryCount: retryCount
+          retryCount: retryCount,
+          hasBackendId: session?.backendId?.isEmpty == false,
+          hasClientConversationId: session?.clientConversationId?.isEmpty == false,
+          segmentCount: segmentCount
         )
       }
       try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)

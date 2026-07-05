@@ -76,7 +76,7 @@ enum CloudConnectorFormAutomation {
     }
 
     let connectorName = nonEmptyString(args["name"]) ?? "Omi Memory"
-    let clientID = nonEmptyString(args["oauth_client_id"]) ?? "omi"
+    let clientID = nonEmptyString(args["oauth_client_id"]) ?? defaultOAuthClientID(for: provider)
     let clientSecret = nonEmptyString(args["oauth_client_secret"])
     let submit = (args["submit"] as? Bool) ?? false
 
@@ -116,7 +116,9 @@ enum CloudConnectorFormAutomation {
           aliases: ["authentication", "auth type"]),
         FieldValue(
           label: "Token auth method",
-          value: nonEmptyString(args["token_auth_method"]) ?? "client_secret_post",
+          value:
+            nonEmptyString(args["token_auth_method"])
+            ?? (clientSecret == nil ? "none" : "client_secret_post"),
           optional: true,
           aliases: ["token auth method", "token authentication method"]),
       ])
@@ -743,9 +745,9 @@ enum CloudConnectorFormAutomation {
     guard target.state == .addCustomConnectorModal else { return nil }
     guard let name = values.first(where: { $0.label == "Name" })?.value,
       let serverURL = values.first(where: { $0.label == "Remote MCP server URL" })?.value,
-      let clientID = values.first(where: { $0.label == "OAuth Client ID" })?.value,
-      let clientSecret = values.first(where: { $0.label == "OAuth Client Secret" })?.value
+      let clientID = values.first(where: { $0.label == "OAuth Client ID" })?.value
     else { return nil }
+    let clientSecret = values.first(where: { $0.label == "OAuth Client Secret" })?.value
 
     let pasteboardSnapshot = PasteboardSnapshot.capture()
     defer { pasteboardSnapshot.restore() }
@@ -769,14 +771,18 @@ enum CloudConnectorFormAutomation {
     pasteIntoFocusedField(serverURL)
     pressTab(count: 2)
     pasteIntoFocusedField(clientID)
-    pressTab(count: 1)
-    pasteIntoFocusedField(clientSecret)
+    if let clientSecret {
+      pressTab(count: 1)
+      pasteIntoFocusedField(clientSecret)
+    }
 
     var lines = [
       "Native connector form filler result:",
       "Provider: claude",
       "Browser/app: \(target.app.localizedName ?? target.app.bundleIdentifier ?? "unknown")",
-      "Filled: Name, Remote MCP server URL, OAuth Client ID, OAuth Client Secret",
+      clientSecret == nil
+        ? "Filled: Name, Remote MCP server URL, OAuth Client ID"
+        : "Filled: Name, Remote MCP server URL, OAuth Client ID, OAuth Client Secret",
       "Method: keyboard fallback",
     ]
 
@@ -908,6 +914,14 @@ enum CloudConnectorFormAutomation {
     guard let string = value as? String else { return nil }
     let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
     return trimmed.isEmpty ? nil : trimmed
+  }
+
+  private static func defaultOAuthClientID(for provider: String) -> String {
+    switch provider {
+    case "chatgpt": return MemoryExportDestination.chatgpt.cloudOAuthClientID ?? ""
+    case "claude": return MemoryExportDestination.claude.cloudOAuthClientID ?? ""
+    default: return ""
+    }
   }
 
   private static func accessibilityLooksUsable() -> Bool {

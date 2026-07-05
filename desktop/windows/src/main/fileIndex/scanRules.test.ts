@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { shouldVisitDir, shouldIndexFile, MAX_DEPTH, MAX_FILE_SIZE } from './scanRules'
+import { shouldVisitDir, shouldIndexFile, SKIP_DIRS, MAX_DEPTH, MAX_FILE_SIZE } from './scanRules'
 
 describe('shouldVisitDir', () => {
   it('skips noise directories', () => {
@@ -7,6 +7,12 @@ describe('shouldVisitDir', () => {
     expect(shouldVisitDir('.git', 1)).toBe(false)
     expect(shouldVisitDir('__pycache__', 1)).toBe(false)
     expect(shouldVisitDir('.Trash', 1)).toBe(false)
+    expect(SKIP_DIRS.has('.Trash')).toBe(true)
+  })
+  it('skips noise directories case-insensitively on Windows paths', () => {
+    expect(shouldVisitDir('Node_Modules', 1)).toBe(false)
+    expect(shouldVisitDir('.GIT', 1)).toBe(false)
+    expect(shouldVisitDir('__PYCACHE__', 1)).toBe(false)
   })
   it('visits normal dirs within depth', () => {
     expect(shouldVisitDir('src', 1)).toBe(true)

@@ -117,13 +117,13 @@ def main() -> int:
                 'strict': True,
                 'schema': {
                     'type': 'object',
-                    'properties': {'requires_context': {'type': 'boolean'}},
-                    'required': ['requires_context'],
+                    'properties': {'value': {'type': 'boolean'}},
+                    'required': ['value'],
                     'additionalProperties': False,
                 },
             },
         },
-        'metadata': {'omi_feature': 'chat_extraction.requires_context.smoke'},
+        'metadata': {'omi_feature': 'chat_extraction.requires_context'},
     }
 
     with httpx.Client(timeout=20.0) as client:
@@ -147,8 +147,8 @@ def main() -> int:
     except ValueError:
         print('ERROR: response content was not JSON')
         return 1
-    if not isinstance(decoded.get('requires_context'), bool):
-        print('ERROR: response JSON did not contain boolean requires_context')
+    if not isinstance(decoded.get('value'), bool):
+        print('ERROR: response JSON did not contain boolean value')
         return 1
     print('LLM gateway smoke passed')
     return 0

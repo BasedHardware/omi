@@ -6,8 +6,6 @@ compatibility with postprocess_words().
 """
 
 import os
-import sys
-import types
 import wave as _wave
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -18,123 +16,8 @@ import pytest
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 os.environ.setdefault('HOSTED_PARAKEET_API_URL', 'http://fake-parakeet:8080')
-os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret')
 
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
-
-_utils_pkg = sys.modules.get('utils')
-if isinstance(_utils_pkg, types.ModuleType):
-    _utils_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'utils')]
-_utils_other_pkg = sys.modules.get('utils.other')
-if isinstance(_utils_other_pkg, types.ModuleType):
-    _utils_other_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'utils', 'other')]
-sys.modules.pop('utils.stt', None)
-sys.modules.pop('utils.stt.pre_recorded', None)
-sys.modules.pop('utils.other.endpoints', None)
-sys.modules.pop('utils.http_client', None)
-
-_endpoints = types.ModuleType('utils.other.endpoints')
-_endpoints.timeit = lambda func: func
-sys.modules['utils.other.endpoints'] = _endpoints
-
-_database_pkg = sys.modules.setdefault('database', types.ModuleType('database'))
-_database_pkg.__path__ = [os.path.join(_BACKEND_DIR, 'database')]
-
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-_db_client.document_id_from_seed = lambda s: f'id-{s}'
-sys.modules.setdefault('database._client', _db_client)
-_redis_db = types.ModuleType('database.redis_db')
-_redis_db.check_rate_limit = MagicMock(return_value=(True, 0, 0))
-_redis_db.try_acquire_listen_lock = MagicMock(return_value=True)
-sys.modules['database.redis_db'] = _redis_db
-_database_users = types.ModuleType('database.users')
-_database_users.record_user_platform = MagicMock()
-sys.modules['database.users'] = _database_users
-
-_cachetools = types.ModuleType('cachetools')
-
-
-class _TTLCache(dict):
-    def __init__(self, maxsize, ttl, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.maxsize = maxsize
-        self.ttl = ttl
-
-    def __setitem__(self, key, value):
-        if len(self) >= self.maxsize and key not in self:
-            self.pop(next(iter(self)))
-        super().__setitem__(key, value)
-
-
-_cachetools.TTLCache = _TTLCache
-sys.modules.setdefault('cachetools', _cachetools)
-
-_prometheus_client = types.ModuleType('prometheus_client')
-
-
-class _Registry:
-    def __init__(self):
-        self._names_to_collectors = {}
-
-
-class _Metric:
-    def __init__(self, name, documentation, labelnames=(), **kwargs):
-        self._name = name
-        self._documentation = documentation
-        self._labelnames = labelnames
-        self._kwargs = kwargs
-
-    def labels(self, *args, **kwargs):
-        return self
-
-    def inc(self, amount=1):
-        return None
-
-    def time(self):
-        class _Timer:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        return _Timer()
-
-
-_prometheus_client.Counter = _Metric
-_prometheus_client.Histogram = _Metric
-_prometheus_client.REGISTRY = _Registry()
-sys.modules.setdefault('prometheus_client', _prometheus_client)
-
-_deepgram = types.ModuleType('deepgram')
-_deepgram.DeepgramClient = MagicMock
-_deepgram.DeepgramClientOptions = MagicMock
-_deepgram.LiveTranscriptionEvents = MagicMock()
-sys.modules.setdefault('deepgram', _deepgram)
-_deepgram_live = types.ModuleType('deepgram.clients.live.v1')
-_deepgram_live.LiveOptions = MagicMock
-sys.modules.setdefault('deepgram.clients.live.v1', _deepgram_live)
-sys.modules.setdefault('fal_client', MagicMock())
-
-
-class _WebSocketException(Exception):
-    pass
-
-
-class _ConnectionClosed(_WebSocketException):
-    pass
-
-
-_websockets = types.ModuleType('websockets')
-_websockets.connect = MagicMock()
-_websockets.exceptions = types.SimpleNamespace(
-    ConnectionClosed=_ConnectionClosed,
-    WebSocketException=_WebSocketException,
-)
-sys.modules.setdefault('websockets', _websockets)
+import utils.stt.pre_recorded as pr  # noqa: E402
 
 
 def _cdist(a, b, metric='cosine'):
@@ -155,21 +38,6 @@ def _cdist(a, b, metric='cosine'):
         distances = 1.0 - (a_mat @ b_mat.T) / denom
     distances = np.where(denom <= 0.0, 2.0, distances)
     return np.clip(distances, 0.0, 2.0).astype(np.float32)
-
-
-_scipy = types.ModuleType('scipy')
-_scipy.__path__ = []
-_scipy_spatial = types.ModuleType('scipy.spatial')
-_scipy_spatial.__path__ = []
-_scipy_distance = types.ModuleType('scipy.spatial.distance')
-_scipy_distance.cdist = _cdist
-_scipy_spatial.distance = _scipy_distance
-_scipy.spatial = _scipy_spatial
-sys.modules.setdefault('scipy', _scipy)
-sys.modules.setdefault('scipy.spatial', _scipy_spatial)
-sys.modules.setdefault('scipy.spatial.distance', _scipy_distance)
-
-import utils.stt.pre_recorded as pr  # noqa: E402
 
 
 def _make_wav(duration_s: float = 1.0, sample_rate: int = 16000) -> bytes:

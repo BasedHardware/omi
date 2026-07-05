@@ -2,106 +2,6 @@ import AppKit
 import MarkdownUI
 import SwiftUI
 
-// MARK: - Scroll Position Tracking
-
-/// Detects scroll position changes by observing the underlying NSScrollView
-struct ScrollPositionDetector: NSViewRepresentable {
-  let onScrollPositionChange: (Bool) -> Void  // true if at bottom
-
-  func makeNSView(context: Context) -> NSView {
-    let view = NSView()
-    // Delay to ensure scroll view is in hierarchy
-    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-      context.coordinator.setupScrollObserver(for: view)
-    }
-    return view
-  }
-
-  func updateNSView(_ nsView: NSView, context: Context) {}
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator(onScrollPositionChange: onScrollPositionChange)
-  }
-
-  class Coordinator: NSObject {
-    let onScrollPositionChange: (Bool) -> Void
-    private var scrollView: NSScrollView?
-    private var observation: NSObjectProtocol?
-    /// Coalesces rapid bounds-change notifications so we update SwiftUI
-    /// state at most once per ~60ms, preventing a feedback loop with
-    /// programmatic scrolls during streaming.
-    private var coalesceWorkItem: DispatchWorkItem?
-    private var lastReportedValue: Bool?
-
-    init(onScrollPositionChange: @escaping (Bool) -> Void) {
-      self.onScrollPositionChange = onScrollPositionChange
-    }
-
-    func setupScrollObserver(for view: NSView) {
-      // Find the enclosing NSScrollView
-      var current: NSView? = view
-      while let v = current {
-        if let sv = v as? NSScrollView {
-          scrollView = sv
-          break
-        }
-        current = v.superview
-      }
-
-      guard let scrollView = scrollView else {
-        return
-      }
-      let clipView = scrollView.contentView
-
-      // Observe bounds changes (scroll events)
-      clipView.postsBoundsChangedNotifications = true
-      observation = NotificationCenter.default.addObserver(
-        forName: NSView.boundsDidChangeNotification,
-        object: clipView,
-        queue: .main
-      ) { [weak self] _ in
-        self?.checkScrollPosition()
-      }
-
-      // Initial check
-      checkScrollPosition()
-    }
-
-    func checkScrollPosition() {
-      guard let scrollView = scrollView,
-        let documentView = scrollView.documentView
-      else { return }
-
-      let clipBounds = scrollView.contentView.bounds
-      let documentHeight = documentView.frame.height
-      let visibleMaxY = clipBounds.origin.y + clipBounds.height
-      let threshold: CGFloat = 100
-
-      // At bottom if we can see within threshold of the document bottom
-      let isAtBottom = visibleMaxY >= documentHeight - threshold
-
-      // Skip if the value hasn't changed — avoids redundant state updates
-      guard isAtBottom != lastReportedValue else { return }
-
-      // Coalesce rapid notifications into a single state update
-      coalesceWorkItem?.cancel()
-      let workItem = DispatchWorkItem { [weak self] in
-        self?.lastReportedValue = isAtBottom
-        self?.onScrollPositionChange(isAtBottom)
-      }
-      coalesceWorkItem = workItem
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
-    }
-
-    deinit {
-      coalesceWorkItem?.cancel()
-      if let observation = observation {
-        NotificationCenter.default.removeObserver(observation)
-      }
-    }
-  }
-}
-
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
@@ -481,7 +381,7 @@ struct ChatPage: View {
       sessionsLoadError: chatProvider.sessionsLoadError,
       onRetry: { Task { await chatProvider.retryLoad() } },
       localSendToken: chatProvider.localSendToken,
-      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent() },
+      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent(owner: .mainChat) },
       welcomeContent: { welcomeMessage }
     )
   }
@@ -557,7 +457,7 @@ struct ChatPage: View {
         Task { await chatProvider.sendFollowUp(text) }
       },
       onStop: {
-        chatProvider.stopAgent()
+        chatProvider.stopAgent(owner: .mainChat)
       },
       isSending: chatProvider.isSending,
       isStopping: chatProvider.isStopping,
@@ -638,6 +538,7 @@ struct ChatBubble: View {
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
+  @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
   /// Cached grouped content blocks — pre-computed on init to avoid recreating
   /// `[ContentBlockGroup]` on every SwiftUI layout pass.
@@ -759,6 +660,9 @@ struct ChatBubble: View {
               TypingIndicator()
             }
           }
+          if !message.displayResources.isEmpty {
+            ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
+          }
         } else if isDuplicate && !isExpanded {
           // Collapsed duplicate message
           Button(action: { isExpanded = true }) {
@@ -780,8 +684,19 @@ struct ChatBubble: View {
         } else {
           // User messages or AI messages without content blocks (loaded from Firestore)
           VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 6) {
-            if message.sender == .user && !message.attachments.isEmpty {
-              MessageAttachmentsView(attachments: message.attachments)
+            // User attachments read as "here's what I'm sending" and belong
+            // above the text; AI-generated artifacts are the result of the
+            // reply and always sit below it.
+            let resourceStrip = message.displayResources.isEmpty
+              ? nil
+              : ChatResourceStrip(
+                resources: message.displayResources,
+                density: .full,
+                alignment: message.sender == .user ? .trailing : .leading
+              )
+
+            if message.sender == .user, let resourceStrip {
+              resourceStrip
             }
 
             if !message.text.isEmpty {
@@ -804,6 +719,10 @@ struct ChatBubble: View {
                   .foregroundColor(.white)
               }
               .buttonStyle(.plain)
+            }
+
+            if message.sender != .user, let resourceStrip {
+              resourceStrip
             }
           }
         }
@@ -865,6 +784,10 @@ struct ChatBubble: View {
 
       if includeCopyButton {
         copyButton
+      }
+
+      if includeCopyButton, message.metadata != nil {
+        infoButton
       }
 
       Text(message.createdAt, format: .dateTime.hour().minute())
@@ -949,6 +872,25 @@ struct ChatBubble: View {
     .buttonStyle(.plain)
     .help("Copy message")
   }
+
+  /// Response Context popover — same developer info the floating bar shows
+  /// (model, screenshot, prompt context counts, tools). Only fresh responses
+  /// carry metadata; it is in-memory only and not persisted across restarts.
+  @ViewBuilder
+  private var infoButton: some View {
+    Button(action: { showInfoPopover.toggle() }) {
+      Image(systemName: "info.circle")
+        .scaledFont(size: 11)
+        .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
+    }
+    .buttonStyle(.plain)
+    .help("View response context")
+    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+      if let metadata = message.metadata {
+        MessageMetadataPopover(metadata: metadata)
+      }
+    }
+  }
 }
 
 extension ChatBubble: Equatable {
@@ -961,90 +903,6 @@ extension ChatBubble: Equatable {
       && lhs.message.rating == rhs.message.rating
       && lhs.app?.id == rhs.app?.id
       && lhs.isDuplicate == rhs.isDuplicate
-  }
-}
-
-// MARK: - Message Attachments
-
-/// Renders the attachments saved on a user message bubble: image thumbnails
-/// for images, document chips for everything else. Tapping an image opens it
-/// in Quick Look (via Finder) so the user can inspect what they sent.
-struct MessageAttachmentsView: View {
-  let attachments: [ChatAttachment]
-
-  var body: some View {
-    LazyVGrid(columns: gridColumns, alignment: .trailing, spacing: 6) {
-      ForEach(attachments) { att in
-        attachmentTile(att)
-      }
-    }
-    .frame(maxWidth: 360, alignment: .trailing)
-  }
-
-  private var gridColumns: [GridItem] {
-    let count = min(max(attachments.count, 1), 2)
-    return Array(repeating: GridItem(.flexible(), spacing: 6), count: count)
-  }
-
-  @ViewBuilder
-  private func attachmentTile(_ att: ChatAttachment) -> some View {
-    if att.isImage {
-      imageTile(att)
-        .frame(height: 140)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    } else {
-      HStack(spacing: 8) {
-        Image(systemName: "doc")
-          .scaledFont(size: 18)
-          .foregroundColor(OmiColors.textSecondary)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(att.fileName)
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-          Text(att.mimeType)
-            .scaledFont(size: 10)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .background(OmiColors.backgroundTertiary.opacity(0.9))
-      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-  }
-
-  @ViewBuilder
-  private func imageTile(_ att: ChatAttachment) -> some View {
-    // Local data wins (instant) — fall back to the server thumbnail URL after a reload.
-    if let data = att.data, let img = NSImage(data: data) {
-      Image(nsImage: img).resizable().scaledToFill()
-    } else if let urlString = att.thumbnailURL, let url = URL(string: urlString) {
-      AsyncImage(url: url) { phase in
-        switch phase {
-        case .success(let image):
-          image.resizable().scaledToFill()
-        case .failure:
-          fallbackPlaceholder
-        default:
-          ProgressView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
-        }
-      }
-    } else {
-      fallbackPlaceholder
-    }
-  }
-
-  private var fallbackPlaceholder: some View {
-    ZStack {
-      OmiColors.backgroundTertiary.opacity(0.6)
-      Image(systemName: "photo")
-        .scaledFont(size: 26)
-        .foregroundColor(OmiColors.textTertiary)
-    }
   }
 }
 
@@ -1110,14 +968,22 @@ struct ToolCallsGroup: View {
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
   var onCancel: (() -> Void)? = nil
+  var onOpenAgent: ((UUID) -> Void)? = nil
 
   @State private var isExpanded: Bool
 
-  init(calls: [ChatContentBlock], compact: Bool = false, expandRunning: Bool = true, onCancel: (() -> Void)? = nil) {
+  init(
+    calls: [ChatContentBlock],
+    compact: Bool = false,
+    expandRunning: Bool = true,
+    onCancel: (() -> Void)? = nil,
+    onOpenAgent: ((UUID) -> Void)? = nil
+  ) {
     self.calls = calls
     self.compact = compact
     self.expandRunning = expandRunning
     self.onCancel = onCancel
+    self.onOpenAgent = onOpenAgent
     self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
   }
 
@@ -1126,11 +992,15 @@ struct ToolCallsGroup: View {
     Self.hasRunningTool(in: calls)
   }
 
-  /// True iff at least one tool in the group is `.stalled`. Drives the
-  /// message-level banner.
+  /// True iff at least one tool in the group is `.stalled` and is not a
+  /// tool we expect to run long (shell, file writes, web fetches, agents).
+  /// Drives the message-level "taking longer than usual" banner, which we
+  /// suppress for long-by-design work so it doesn't cry wolf.
   private var hasStalledTool: Bool {
     calls.contains { block in
-      if case .toolCall(_, _, .stalled, _, _, _) = block { return true }
+      if case .toolCall(_, let name, .stalled, _, _, _) = block {
+        return !ChatContentBlock.isSlowExpectedTool(name)
+      }
       return false
     }
   }
@@ -1143,9 +1013,12 @@ struct ToolCallsGroup: View {
     var hasSlow = false
     var hasRunning = false
     for block in calls {
-      if case .toolCall(_, _, let status, _, _, _) = block {
+      if case .toolCall(_, let name, let status, _, _, _) = block {
         switch status {
-        case .stalled: hasStalled = true
+        case .stalled:
+          // Long-by-design tools surface as "slow" (spinner), never the
+          // alarming stalled triangle.
+          if ChatContentBlock.isSlowExpectedTool(name) { hasSlow = true } else { hasStalled = true }
         case .failed: hasFailed = true
         case .slow: hasSlow = true
         case .running: hasRunning = true
@@ -1189,6 +1062,10 @@ struct ToolCallsGroup: View {
     return nil
   }
 
+  private var spawnedAgentID: UUID? {
+    calls.compactMap(\.spawnedAgentID).last
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: compact ? 0 : 6) {
       if hasStalledTool, let onCancel {
@@ -1213,6 +1090,10 @@ struct ToolCallsGroup: View {
 
   private var header: some View {
     Button(action: {
+      if let spawnedAgentID, let onOpenAgent {
+        onOpenAgent(spawnedAgentID)
+        return
+      }
       withAnimation(.easeInOut(duration: 0.2)) {
         isExpanded.toggle()
       }
@@ -1247,7 +1128,7 @@ struct ToolCallsGroup: View {
 
         Spacer(minLength: compact ? 0 : 4)
 
-        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+        Image(systemName: spawnedAgentID != nil && onOpenAgent != nil ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
           .scaledFont(size: 9)
           .foregroundColor(OmiColors.textTertiary)
       }
@@ -1267,7 +1148,14 @@ struct ToolCallsGroup: View {
       VStack(alignment: .leading, spacing: 4) {
         ForEach(calls) { block in
           if case .toolCall(_, let name, let status, _, let input, let output) = block {
-            ToolCallCard(name: name, status: status, input: input, output: output)
+            ToolCallCard(
+              name: name,
+              status: status,
+              input: input,
+              output: output,
+              spawnedAgentID: block.spawnedAgentID,
+              onOpenAgent: onOpenAgent
+            )
           }
         }
       }
@@ -1298,6 +1186,8 @@ struct ToolCallCard: View {
   let status: ToolCallStatus
   let input: ToolCallInput?
   let output: String?
+  var spawnedAgentID: UUID? = nil
+  var onOpenAgent: ((UUID) -> Void)? = nil
 
   @State private var isExpanded = false
 
@@ -1309,6 +1199,10 @@ struct ToolCallCard: View {
     VStack(alignment: .leading, spacing: 0) {
       // Compact header row
       Button(action: {
+        if let spawnedAgentID, let onOpenAgent {
+          onOpenAgent(spawnedAgentID)
+          return
+        }
         if hasExpandableContent {
           withAnimation(.easeInOut(duration: 0.2)) {
             isExpanded.toggle()
@@ -1342,7 +1236,11 @@ struct ToolCallCard: View {
           Spacer(minLength: 4)
 
           // Expand chevron
-          if hasExpandableContent {
+          if spawnedAgentID != nil && onOpenAgent != nil {
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: 9)
+              .foregroundColor(OmiColors.textTertiary)
+          } else if hasExpandableContent {
             Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
               .scaledFont(size: 9)
               .foregroundColor(OmiColors.textTertiary)
@@ -1392,6 +1290,31 @@ struct ToolCallCard: View {
       }
     }
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.8), radius: 16)
+  }
+}
+
+extension ChatContentBlock {
+  var spawnedAgentID: UUID? {
+    guard case .toolCall(_, let name, let status, _, _, let output) = self,
+      Self.cleanToolName(name) == "spawn_agent",
+      !status.isInFlight,
+      let output
+    else { return nil }
+
+    for line in output.components(separatedBy: .newlines) {
+      let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard trimmed.lowercased().hasPrefix("id:") else { continue }
+      let value = trimmed.dropFirst(3).trimmingCharacters(in: .whitespacesAndNewlines)
+      if let uuid = UUID(uuidString: value) {
+        return uuid
+      }
+    }
+    return nil
+  }
+
+  private static func cleanToolName(_ name: String) -> String {
+    guard name.hasPrefix("mcp__") else { return name }
+    return String(name.split(separator: "__").last ?? Substring(name))
   }
 }
 
@@ -2099,10 +2022,12 @@ struct HistorySessionRow: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())
     .frame(width: 600, height: 700)
 }
+#endif
 
 // MARK: - Markdown Themes
 

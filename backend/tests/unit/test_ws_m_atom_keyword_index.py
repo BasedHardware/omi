@@ -81,6 +81,7 @@ from utils.memory.atom_keyword_index import (
     build_atom_keyword_document,
     is_indexable_long_term_atom,
     keyword_search_memory_ids,
+    memories_collection_name,
     merge_memory_search_ids,
     rebuild_atom_keyword_index,
     sync_atom_keyword_index_for_item,
@@ -142,6 +143,13 @@ def _long_term_item(
     )
 
 
+def _data_protection_db(level: str = "enhanced") -> MagicMock:
+    user_doc = MagicMock(exists=True, to_dict=lambda: {"data_protection_level": level})
+    db_client = MagicMock()
+    db_client.document.return_value = MagicMock(get=lambda: user_doc)
+    return db_client
+
+
 @pytest.fixture(autouse=True)
 def _canonical_cohort(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
@@ -195,7 +203,10 @@ def mock_typesense():
     typesense_client.collections.__getitem__.return_value = memories_collection
     typesense_client.collections.create.return_value = None
 
-    with patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client):
+    with (
+        patch("utils.memory.atom_keyword_index._typesense_client", return_value=typesense_client),
+        patch("utils.memory.atom_keyword_index.default_db_client", _data_protection_db()),
+    ):
         yield typesense_client, docs_store
 
 
@@ -222,6 +233,35 @@ class TestMergeMemorySearchIds:
 
 
 class TestKeywordSearchAndHybrid:
+    def test_canonical_atoms_use_isolated_collection_by_default(self, mock_typesense):
+        typesense_client, _ = mock_typesense
+        upsert_atom_keyword_doc(_long_term_item())
+        assert memories_collection_name() == "canonical_memory_atoms"
+        assert typesense_client.collections.__getitem__.call_args_list[-1].args[0] == "canonical_memory_atoms"
+
+    def test_e2ee_user_skips_index_using_explicit_db_client(self, mock_typesense):
+        _, docs_store = mock_typesense
+        db_client = _data_protection_db("e2ee")
+
+        assert upsert_atom_keyword_doc(_long_term_item(), db_client=db_client) is False
+        assert docs_store == {}
+        db_client.document.assert_called_with(f"users/{CANONICAL_UID}")
+
+    def test_existing_wrong_typesense_schema_does_not_index(self, mock_typesense):
+        typesense_client, docs_store = mock_typesense
+        collection = typesense_client.collections.__getitem__.return_value
+        collection.retrieve.side_effect = None
+        collection.retrieve.return_value = {
+            "fields": [
+                {"name": "userId"},
+                {"name": "transcript_segments"},
+            ]
+        }
+
+        assert upsert_atom_keyword_doc(_long_term_item()) is False
+        assert docs_store == {}
+        typesense_client.collections.create.assert_not_called()
+
     def test_canonical_keyword_search_returns_exact_needle(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
         item = _long_term_item()
@@ -257,6 +297,7 @@ class TestKeywordSearchAndHybrid:
             NEEDLE,
             limit=5,
             vector_query=_empty_vector,
+            db_client=_data_protection_db(),
         )
         assert len(results) == 1
         assert results[0]["memory_id"] == item.memory_id
@@ -275,7 +316,7 @@ class TestKeywordSearchAndHybrid:
 
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.keyword_search_memory_ids",
-            lambda uid, query, limit=5: ["mem_active", "mem_superseded"],
+            lambda uid, query, limit=5, db_client=None: ["mem_active", "mem_superseded"],
         )
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.fetch_authoritative_product_memory_items",
@@ -286,6 +327,7 @@ class TestKeywordSearchAndHybrid:
             NEEDLE,
             limit=5,
             vector_query=_empty_vector,
+            db_client=_data_protection_db(),
         )
         assert [row["memory_id"] for row in results] == ["mem_active"]
 
@@ -388,12 +430,15 @@ class TestPurgeAndRebuild:
             "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
             lambda **_: types.SimpleNamespace(account_generation=1, head_commit_id="head0", read_error_reason=None),
         )
-        monkeypatch.setattr("utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph", lambda uid: None)
+        delete_kg = MagicMock()
+        monkeypatch.setattr("utils.memory.canonical_memory_adapter.kg_db.delete_knowledge_graph", delete_kg)
 
-        result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=MagicMock())
+        db_client = MagicMock()
+        result = purge_canonical_derived_user_data(CANONICAL_UID, db_client=db_client)
         assert result["purged"] is True
         assert result["keyword_docs_deleted"] >= 0
         assert item.memory_id not in docs_store
+        delete_kg.assert_called_once_with(CANONICAL_UID, db_client=db_client)
 
     def test_conversation_cascade_deletes_keyword_doc(self, mock_typesense, monkeypatch):
         _, docs_store = mock_typesense
@@ -416,7 +461,7 @@ class TestPurgeAndRebuild:
         )
         monkeypatch.setattr(
             "utils.memory.canonical_memory_adapter.kg_db.prune_memory_citations_from_kg",
-            lambda uid, memory_ids: 0,
+            lambda uid, memory_ids, db_client=None: 0,
         )
 
         retract_conversation_sourced_memories(CANONICAL_UID, "conv-1", db_client=MagicMock())
@@ -457,5 +502,19 @@ class TestDocumentShape:
         doc = build_atom_keyword_document(_long_term_item())
         assert doc["layer"] == MemoryTier.long_term.value
         assert doc["status"] == MemoryItemStatus.active.value
+        assert doc["schema_version"] == 1
         assert doc["userId"] == CANONICAL_UID
         assert NEEDLE in doc["content"]
+
+    def test_build_document_indexes_flat_subject_predicate_arguments(self):
+        item = _long_term_item().model_copy(
+            update={
+                "subject_entity_id": "ent_user",
+                "predicate": "works_at",
+                "arguments": {"company": "Omi"},
+            }
+        )
+        doc = build_atom_keyword_document(item)
+        assert doc["predicate"] == "works_at"
+        assert "ent_user" in doc["entity_terms"]
+        assert "Omi" in doc["entity_terms"]

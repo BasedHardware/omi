@@ -133,6 +133,7 @@ export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelat
 export interface InitMessage extends OutboundEnvelope {
   type: "init";
   sessionId: string;
+  agentControlTools: string[];
 }
 
 export interface TextDeltaMessage extends QueryScopedOutbound {
@@ -158,6 +159,25 @@ export interface ResultMessage extends QueryScopedOutbound {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  artifacts?: SerializedArtifact[];
+}
+
+export interface SerializedArtifact {
+  artifactId: string;
+  omiSessionId: string;
+  runId: string | null;
+  attemptId: string | null;
+  kind: string;
+  role: string;
+  uri: string;
+  displayName: string | null;
+  mimeType: string | null;
+  contentHash: string | null;
+  sizeBytes: number | null;
+  lifecycleState: string;
+  lifecycleUpdatedAtMs: number | null;
+  metadata: Record<string, unknown>;
+  createdAtMs: number;
 }
 
 export interface RuntimeFailurePayload {

@@ -15,18 +15,21 @@ from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
-from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction, StructuredExtraction
-from .clients import get_llm, parser
+from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
+from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from utils.byok import has_byok_keys
-from utils.llm.gateway_client import invoke_chat_structured_gateway, record_chat_extraction_gateway_result
+from utils.llm.gateway_client import record_chat_extraction_gateway_result
 from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
+from utils.llm.gateway_observability import record_gateway_shadow_comparison
 import logging
 
 logger = logging.getLogger(__name__)
 CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
 CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED'
 CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE'
-LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = None
+CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
+CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
+CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
 
 # =============================================
 #            FOLDER ASSIGNMENT
@@ -43,11 +46,17 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def _invoke_gateway_unless_byok(prompt: str, output_model: type[BaseModel], *, feature: str) -> BaseModel | None:
+def _invoke_gateway_shadow_chain(chain, values: dict, *, feature: str) -> BaseModel | None:
     if has_byok_keys():
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
         return None
-    return invoke_chat_structured_gateway(prompt, output_model, feature=feature)
+    try:
+        response = chain.invoke(values)
+    except Exception:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='unexpected_error')
+        return None
+    record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
+    return response
 
 
 def _word_count(text: str) -> int:
@@ -69,16 +78,31 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
     return response
 
 
-def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
-    try:
-        global LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS
-        if LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS is None:
-            from utils.metrics import LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS as comparison_counter
+def _normalize_action_item_due_dates(
+    action_items: List[ActionItem],
+    *,
+    user_tz,
+    now: datetime,
+    log_past_due_clears: bool,
+) -> List[ActionItem]:
+    for action_item in action_items:
+        if action_item.due_at is None:
+            continue
+        if action_item.due_at.tzinfo is None:
+            action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
+        else:
+            action_item.due_at = action_item.due_at.astimezone(timezone.utc)
+        if action_item.due_at < now - timedelta(days=1):
+            if log_past_due_clears:
+                logger.warning(
+                    f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
+                )
+            action_item.due_at = None
+    return action_items
 
-            LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = comparison_counter
-        LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS.labels(feature=feature, field=field, outcome=outcome).inc()
-    except Exception:
-        pass
+
+def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
+    record_gateway_shadow_comparison(feature=feature, field=field, outcome=outcome)
 
 
 def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
@@ -98,27 +122,35 @@ def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
         return default
 
 
-def _should_run_conversation_structure_shadow(uid: str, started_at: datetime, conversation_context: str) -> bool:
+def _should_run_gateway_shadow(
+    *,
+    feature: str,
+    enabled_env: str,
+    sample_rate_env: str,
+    sample_id: str,
+    started_at: datetime,
+    conversation_context: str,
+) -> bool:
     if has_byok_keys():
         record_chat_extraction_gateway_result(
-            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            feature=feature,
             outcome='skipped',
             reason='byok',
         )
         return False
 
-    if not _env_flag_enabled(CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV):
+    if not _env_flag_enabled(enabled_env):
         record_chat_extraction_gateway_result(
-            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            feature=feature,
             outcome='skipped',
             reason='disabled',
         )
         return False
 
-    sample_rate = _env_sample_rate(CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV, default=1.0)
+    sample_rate = _env_sample_rate(sample_rate_env, default=1.0)
     if sample_rate <= 0:
         record_chat_extraction_gateway_result(
-            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            feature=feature,
             outcome='skipped',
             reason='sample_rate_zero',
         )
@@ -126,17 +158,41 @@ def _should_run_conversation_structure_shadow(uid: str, started_at: datetime, co
     if sample_rate >= 1:
         return True
 
-    sample_key = f'{uid}:{started_at.isoformat()}:{len(conversation_context)}'
+    sample_key = f'{sample_id}:{started_at.isoformat()}:{len(conversation_context)}'
     sample_value = int(hashlib.sha256(sample_key.encode('utf-8')).hexdigest()[:8], 16) / 0xFFFFFFFF
     if sample_value < sample_rate:
         return True
 
     record_chat_extraction_gateway_result(
-        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        feature=feature,
         outcome='skipped',
         reason='sampled_out',
     )
     return False
+
+
+def _should_run_conversation_structure_shadow(uid: str, started_at: datetime, conversation_context: str) -> bool:
+    return _should_run_gateway_shadow(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        enabled_env=CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV,
+        sample_rate_env=CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV,
+        sample_id=uid,
+        started_at=started_at,
+        conversation_context=conversation_context,
+    )
+
+
+def _should_run_conversation_action_items_shadow(
+    sample_id: str, started_at: datetime, conversation_context: str
+) -> bool:
+    return _should_run_gateway_shadow(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        enabled_env=CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV,
+        sample_rate_env=CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV,
+        sample_id=sample_id,
+        started_at=started_at,
+        conversation_context=conversation_context,
+    )
 
 
 def _normalized_text(value: object) -> str:
@@ -188,7 +244,7 @@ def _length_ratio_bucket(left: object, right: object) -> str:
 
 
 def _record_conversation_structure_shadow_comparison(
-    gateway_response: ConversationStructureExtraction | None,
+    gateway_response: Structured | None,
     legacy_response: Structured,
 ) -> None:
     if gateway_response is None:
@@ -224,13 +280,119 @@ def _record_conversation_structure_shadow_comparison(
     )
 
 
-def _run_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
-    gateway_response = _invoke_gateway_unless_byok(
-        prompt,
-        ConversationStructureExtraction,
+def _count_comparison_bucket(legacy_count: int, gateway_count: int) -> str:
+    if legacy_count == gateway_count:
+        return 'exact_match'
+    if gateway_count < legacy_count:
+        return 'gateway_fewer'
+    return 'gateway_more'
+
+
+def _ordered_description_similarity_bucket(legacy_items: List[ActionItem], gateway_items: List[ActionItem]) -> str:
+    if not legacy_items and not gateway_items:
+        return 'both_empty'
+    if not legacy_items:
+        return 'legacy_empty_gateway_present'
+    if not gateway_items:
+        return 'legacy_present_gateway_empty'
+    if len(legacy_items) != len(gateway_items):
+        return 'count_mismatch'
+
+    buckets = [
+        _text_similarity_bucket(left.description, right.description) for left, right in zip(legacy_items, gateway_items)
+    ]
+    if all(bucket == 'exact_match' for bucket in buckets):
+        return 'all_exact_match'
+    if all(bucket in {'exact_match', 'high_similarity'} for bucket in buckets):
+        return 'all_high_similarity'
+    if all(bucket in {'exact_match', 'high_similarity', 'medium_similarity'} for bucket in buckets):
+        return 'all_medium_similarity'
+    return 'low_similarity'
+
+
+def _due_at_presence_bucket(legacy_items: List[ActionItem], gateway_items: List[ActionItem]) -> str:
+    if not legacy_items and not gateway_items:
+        return 'both_empty'
+    if len(legacy_items) != len(gateway_items):
+        return 'count_mismatch'
+    legacy_presence = [item.due_at is not None for item in legacy_items]
+    gateway_presence = [item.due_at is not None for item in gateway_items]
+    return 'exact_match' if legacy_presence == gateway_presence else 'mismatch'
+
+
+def _due_at_value_bucket(legacy_items: List[ActionItem], gateway_items: List[ActionItem]) -> str:
+    if not legacy_items and not gateway_items:
+        return 'both_empty'
+    if len(legacy_items) != len(gateway_items):
+        return 'count_mismatch'
+
+    legacy_due_at = [item.due_at for item in legacy_items]
+    gateway_due_at = [item.due_at for item in gateway_items]
+    if not any(legacy_due_at) and not any(gateway_due_at):
+        return 'no_due_dates'
+    if legacy_due_at == gateway_due_at:
+        return 'exact_match'
+    return 'mismatch'
+
+
+def _record_conversation_action_items_shadow_comparison(
+    gateway_response: ActionItemsExtraction | None,
+    legacy_response: List[ActionItem],
+    *,
+    user_tz,
+    now: datetime,
+) -> None:
+    if gateway_response is None:
+        return
+
+    gateway_items = _coerce_action_items(gateway_response)
+    _normalize_action_item_due_dates(gateway_items, user_tz=user_tz, now=now, log_past_due_clears=False)
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='count',
+        outcome=_count_comparison_bucket(len(legacy_response), len(gateway_items)),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='description_similarity',
+        outcome=_ordered_description_similarity_bucket(legacy_response, gateway_items),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='due_at_presence',
+        outcome=_due_at_presence_bucket(legacy_response, gateway_items),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='due_at_value',
+        outcome=_due_at_value_bucket(legacy_response, gateway_items),
+    )
+
+
+def _run_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
+    gateway_chain = prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser
+    gateway_response = _invoke_gateway_shadow_chain(
+        gateway_chain,
+        prompt_values,
         feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
     )
-    _record_conversation_structure_shadow_comparison(gateway_response, legacy_response)
+    _record_conversation_structure_shadow_comparison(_coerce_structured(gateway_response), legacy_response)
+
+
+def _run_conversation_action_items_shadow(
+    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
+) -> None:
+    gateway_chain = (
+        prompt
+        | get_llm_gateway_chat_structured(cache_key='omi-extract-actions')
+        | PydanticOutputParser(pydantic_object=ActionItemsExtraction)
+    )
+    gateway_response = _invoke_gateway_shadow_chain(
+        gateway_chain,
+        prompt_values,
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+    )
+    _record_conversation_action_items_shadow_comparison(gateway_response, legacy_response, user_tz=user_tz, now=now)
 
 
 def _submit_llm_background(fn, *args):
@@ -239,12 +401,17 @@ def _submit_llm_background(fn, *args):
     return submit_with_context(llm_executor, fn, *args)
 
 
-def _submit_conversation_structure_shadow(prompt: str, legacy_response: Structured) -> None:
+def _submit_gateway_shadow(
+    worker_fn,
+    feature: str,
+    log_label: str,
+    *args,
+) -> None:
     try:
-        future = _submit_llm_background(_run_conversation_structure_shadow, prompt, legacy_response)
+        future = _submit_llm_background(worker_fn, *args)
     except Exception:
         record_chat_extraction_gateway_result(
-            feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+            feature=feature,
             outcome='skipped',
             reason='submit_error',
         )
@@ -254,9 +421,35 @@ def _submit_conversation_structure_shadow(prompt: str, legacy_response: Structur
         try:
             completed_future.result()
         except Exception:
-            logger.exception('conversation_structure shadow task failed')
+            logger.exception('%s shadow task failed', log_label)
 
     future.add_done_callback(_log_shadow_failure)
+
+
+def _submit_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
+    _submit_gateway_shadow(
+        _run_conversation_structure_shadow,
+        CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        'conversation_structure',
+        prompt,
+        prompt_values,
+        legacy_response,
+    )
+
+
+def _submit_conversation_action_items_shadow(
+    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
+) -> None:
+    _submit_gateway_shadow(
+        _run_conversation_action_items_shadow,
+        CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        'conversation_action_items',
+        prompt,
+        prompt_values,
+        legacy_response,
+        user_tz,
+        now,
+    )
 
 
 def should_discard_conversation(
@@ -332,14 +525,6 @@ Content:
         'duration_context': duration_context,
         'format_instructions': custom_parser.get_format_instructions(),
     }
-
-    gateway_response = _invoke_gateway_unless_byok(
-        prompt_template.format(**prompt_values),
-        DiscardConversation,
-        feature='conversation_discard.should_discard',
-    )
-    if gateway_response is not None:
-        return gateway_response.discard
 
     prompt = ChatPromptTemplate.from_messages([prompt_template])
     chain = prompt | get_llm('conv_discard') | custom_parser
@@ -666,12 +851,6 @@ def extract_action_items(
         'existing_items_context': existing_items_context,
     }
 
-    _invoke_gateway_unless_byok(
-        f'{instructions_text}\n\n{context_message.format(**prompt_values)}',
-        ActionItemsExtraction,
-        feature='conversation_action_items.extract.shadow',
-    )
-
     try:
         response = chain.invoke(prompt_values)
         action_items = _coerce_action_items(response)
@@ -681,18 +860,12 @@ def extract_action_items(
         for action_item in action_items:
             if action_item.created_at is None:
                 action_item.created_at = now
-            # The LLM returns naive LOCAL time; convert to UTC deterministically (and normalize any
-            # tz-aware value), then clear due dates more than 1 day in the past.
-            if action_item.due_at is not None:
-                if action_item.due_at.tzinfo is None:
-                    action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
-                else:
-                    action_item.due_at = action_item.due_at.astimezone(timezone.utc)
-                if action_item.due_at < now - timedelta(days=1):
-                    logger.warning(
-                        f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
-                    )
-                    action_item.due_at = None
+        # The LLM returns naive LOCAL time; convert to UTC deterministically (and normalize any
+        # tz-aware value), then clear due dates more than 1 day in the past.
+        _normalize_action_item_due_dates(action_items, user_tz=user_tz, now=now, log_past_due_clears=True)
+
+        if _should_run_conversation_action_items_shadow('conversation_action_items', started_at, conversation_context):
+            _submit_conversation_action_items_shadow(prompt, prompt_values, action_items, user_tz, now)
 
         return action_items
 
@@ -793,13 +966,9 @@ def get_transcript_structure(
 
     response = _coerce_structured(chain.invoke(legacy_prompt_values))
     if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
-        structure_shadow_parser = PydanticOutputParser(pydantic_object=ConversationStructureExtraction)
-        shadow_prompt_values = {
-            **legacy_prompt_values,
-            'format_instructions': structure_shadow_parser.get_format_instructions(),
-        }
         _submit_conversation_structure_shadow(
-            f'{instructions_text.format(**shadow_prompt_values)}\n\n{context_message.format(**shadow_prompt_values)}',
+            prompt,
+            legacy_prompt_values,
             response,
         )
 

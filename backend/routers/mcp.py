@@ -532,7 +532,10 @@ def search_conversations(
     response_model=FullConversation,
     tags=["mcp"],
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_conversation_by_id(
+    conversation_id: str,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_conversation_by_id {uid} {conversation_id}")
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
@@ -605,7 +608,11 @@ def _action_item_write_error(exc: Exception) -> HTTPException:
 
 
 @router.get("/v1/mcp/action-items/search", response_model=List[SimpleActionItem], tags=["mcp"])
-def search_action_items(query: str, limit: int = 10, uid: str = Depends(get_uid_from_mcp_api_key)):
+def search_action_items(
+    query: str,
+    limit: int = 10,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"search_action_items {uid} limit={limit}")
     try:
         return mcp_action_items.search_action_items(uid, query, limit=limit)
@@ -628,7 +635,11 @@ def create_action_item(
 
 
 @router.post("/v1/mcp/action-items/{action_item_id}/complete", response_model=SimpleActionItem, tags=["mcp"])
-def complete_action_item(action_item_id: str, completed: bool = True, uid: str = Depends(get_uid_from_mcp_api_key)):
+def complete_action_item(
+    action_item_id: str,
+    completed: bool = True,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"complete_action_item {uid} id={action_item_id} completed={completed}")
     try:
         return mcp_action_items.set_completed(uid, action_item_id, completed=completed)
@@ -637,7 +648,11 @@ def complete_action_item(action_item_id: str, completed: bool = True, uid: str =
 
 
 @router.patch("/v1/mcp/action-items/{action_item_id}", response_model=SimpleActionItem, tags=["mcp"])
-def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str = Depends(get_uid_from_mcp_api_key)):
+def update_action_item(
+    action_item_id: str,
+    body: McpUpdateActionItem,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"update_action_item {uid} id={action_item_id}")
     try:
         return mcp_action_items.update_action_item(
@@ -650,7 +665,10 @@ def update_action_item(action_item_id: str, body: McpUpdateActionItem, uid: str 
 
 
 @router.delete("/v1/mcp/action-items/{action_item_id}", tags=["mcp"])
-def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_api_key)):
+def delete_action_item(
+    action_item_id: str,
+    uid: str = Depends(with_rate_limit(get_uid_from_mcp_api_key, "action_items:write")),
+):
     logger.info(f"delete_action_item {uid} id={action_item_id}")
     try:
         mcp_action_items.delete_action_item(uid, action_item_id)
@@ -665,7 +683,10 @@ def delete_action_item(action_item_id: str, uid: str = Depends(get_uid_from_mcp_
 
 
 @router.get("/v1/mcp/goals", tags=["mcp"])
-def get_goals(include_inactive: bool = False, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_goals(
+    include_inactive: bool = False,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_goals {uid} include_inactive={include_inactive}")
     return goals_db.get_all_goals(uid, include_inactive=include_inactive)
 
@@ -684,7 +705,11 @@ class SimpleChatMessage(BaseModel):
 
 
 @router.get("/v1/mcp/chat", response_model=List[SimpleChatMessage], tags=["mcp"])
-def get_chat_messages(limit: int = 50, offset: int = 0, uid: str = Depends(get_uid_from_mcp_api_key)):
+def get_chat_messages(
+    limit: int = 50,
+    offset: int = 0,
+    uid: str = Depends(get_uid_from_mcp_api_key),
+):
     logger.info(f"get_chat_messages {uid} limit={limit} offset={offset}")
     limit = max(1, min(limit, 200))
     offset = max(0, offset)
@@ -727,7 +752,7 @@ def get_screen_activity(
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
     if summary:
         return screen_activity_db.get_screen_activity_summary(uid, start_date=start_date, end_date=end_date)
-    limit = max(1, min(limit, 1000))
+    limit = max(1, min(limit, 200))
     rows = screen_activity_db.get_screen_activity(
         uid, start_date=start_date, end_date=end_date, app_filter=app, limit=limit
     )

@@ -21,6 +21,7 @@ struct AIResponseView: View {
     var onSendFollowUp: ((String) -> Void)?
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
+    var onOpenAgent: ((UUID) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -29,58 +30,30 @@ struct AIResponseView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        // Previous chat exchanges
-                        ForEach(chatHistory) { exchange in
-                            chatExchangeView(exchange)
-                        }
-
-                        if hasUserInput(userInput) {
-                            questionBar
-                        }
-
-                        // Current response
-                        currentContentView
-
-                        // Voice follow-up indicator (shown inline when PTT is active during conversation)
-                        if isVoiceFollowUp {
-                            voiceFollowUpView
-                                .id("voiceFollowUp")
-                        }
-
-                        // Anchor for auto-scroll
-                        Color.clear.frame(height: 1).id("bottom")
-                    }
-                    .padding(.trailing, 26)
-                    .background(
-                        GeometryReader { geo -> Color in
-                            let h = geo.size.height
-                            DispatchQueue.main.async {
-                                state.reportContentHeight(h, for: .mainResponse)
-                            }
-                            return Color.clear
-                        }
-                    )
+            ChatScrollContainer(
+                bottomAnchorId: "bottom",
+                contentChangeToken: scrollContentToken,
+                scrollPaddingTrailing: 26,
+                onContentHeightChange: { height in
+                    state.reportContentHeight(height, for: .mainResponse)
                 }
-                .onChange(of: currentMessage?.text) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+            ) {
+                // Previous chat exchanges
+                ForEach(chatHistory) { exchange in
+                    chatExchangeView(exchange)
                 }
-                .onChange(of: currentMessage?.contentBlocks.count) {
-                    proxy.scrollTo("bottom", anchor: .bottom)
+
+                if hasUserInput(userInput) {
+                    questionBar
                 }
-                .onChange(of: chatHistory.count) {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottom", anchor: .bottom)
-                    }
-                }
-                .onChange(of: isVoiceFollowUp) {
-                    if isVoiceFollowUp {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("voiceFollowUp", anchor: .bottom)
-                        }
-                    }
+
+                // Current response
+                currentContentView
+
+                // Voice follow-up indicator (shown inline when PTT is active during conversation)
+                if isVoiceFollowUp {
+                    voiceFollowUpView
+                        .id("voiceFollowUp")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -119,6 +92,44 @@ struct AIResponseView: View {
                 }
             }
         }
+    }
+
+    private var scrollContentToken: AnyHashable {
+        AnyHashable(
+            [
+                String(chatHistory.count),
+                chatHistory.last?.aiMessage.id ?? "",
+                currentMessage?.id ?? "",
+                currentMessage?.text ?? "",
+                contentBlocksToken(currentMessage?.contentBlocks ?? []),
+                String(isVoiceFollowUp),
+                voiceFollowUpTranscript,
+            ].joined(separator: "\u{1F}")
+        )
+    }
+
+    private func contentBlocksToken(_ blocks: [ChatContentBlock]) -> String {
+        blocks.map { block in
+            switch block {
+            case .text(let id, let text):
+                return ["text", id, text].joined(separator: "\u{1E}")
+            case .toolCall(let id, let name, let status, let toolUseId, let input, let output):
+                return [
+                    "tool",
+                    id,
+                    name,
+                    String(describing: status),
+                    toolUseId ?? "",
+                    input?.summary ?? "",
+                    input?.details ?? "",
+                    output ?? "",
+                ].joined(separator: "\u{1E}")
+            case .thinking(let id, let text):
+                return ["thinking", id, text].joined(separator: "\u{1E}")
+            case .discoveryCard(let id, let title, let summary, let fullText):
+                return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+            }
+        }.joined(separator: "\u{1D}")
     }
 
     private var headerView: some View {
@@ -169,7 +180,7 @@ struct AIResponseView: View {
                         .environment(\.colorScheme, .dark)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .toolCalls(_, let calls):
-                    ToolCallsGroup(calls: calls)
+                    ToolCallsGroup(calls: calls, onOpenAgent: onOpenAgent)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .thinking(_, let text):
                     ThinkingBlock(text: text)
@@ -185,6 +196,15 @@ struct AIResponseView: View {
                 .environment(\.colorScheme, .dark)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        if !message.displayResources.isEmpty {
+            ChatResourceStrip(
+                resources: message.displayResources,
+                density: .compact,
+                alignment: .leading
+            )
+            .environment(\.colorScheme, .dark)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {
@@ -195,7 +215,9 @@ struct AIResponseView: View {
             switch group {
             case .text, .discoveryCard:
                 return true
-            case .toolCalls, .thinking:
+            case .toolCalls(_, let calls):
+                return calls.contains { $0.spawnedAgentID != nil }
+            case .thinking:
                 return false
             }
         }
@@ -318,7 +340,12 @@ struct AIResponseView: View {
                         // While streaming, show content without hover actions
                         contentBlocksView(for: message)
 
-                        if message.text.isEmpty && message.contentBlocks.isEmpty {
+                        // Only show the typing dots when nothing has rendered yet.
+                        // A message can carry a delivered artifact card (resources)
+                        // with no text/blocks — that's already content, not "still
+                        // thinking", so the trailing "..." must not linger under it.
+                        if message.text.isEmpty && message.contentBlocks.isEmpty
+                            && message.displayResources.isEmpty {
                             TypingIndicator()
                         }
                     } else {

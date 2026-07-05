@@ -1,22 +1,6 @@
-"""MemoryDB ``memory_id`` alias: mirrors ``id`` only, not ``conversation_id``."""
+"""MemoryDB ``memory_id`` alias: always mirrors ``id``, never a stored legacy value."""
 
-import os
-import sys
-import types
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
-import pytest
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-_db_client_mod = types.ModuleType("database._client")
-_db_client_mod.db = MagicMock()
-_db_client_mod.document_id_from_seed = lambda seed: "id-" + str(abs(hash(seed)) % (10**12))
-sys.modules.setdefault("database._client", _db_client_mod)
 
 from models.memories import MemoryDB
 
@@ -60,13 +44,20 @@ def test_legacy_id_only_row_sets_memory_id_from_id():
     assert serialized["memory_id"] == "legacy-mem-only"
 
 
-def test_explicit_memory_id_is_not_overwritten():
+def test_stored_legacy_memory_id_is_normalized_to_id():
+    # Docs written while `memory_id = conversation_id` was live carry a stored
+    # mismatched alias; serving it verbatim makes desktop reject the whole
+    # memories list (ServerMemory throws on id != memory_id).
     memory = MemoryDB(
         **_minimal_payload(
             id="mem_primary",
-            memory_id="mem_explicit",
-            conversation_id="conv_other",
+            memory_id="conv_legacy_ref",
+            conversation_id="conv_legacy_ref",
         )
     )
 
-    assert memory.memory_id == "mem_explicit"
+    assert memory.memory_id == "mem_primary"
+
+    serialized = memory.model_dump(mode="json")
+    assert serialized["memory_id"] == "mem_primary"
+    assert serialized["conversation_id"] == "conv_legacy_ref"

@@ -32,6 +32,10 @@ class MemoryCollections:
         return f"{self.user_root}/memory_control/state"
 
     @property
+    def memory_apply_control_state(self) -> str:
+        return f"{self.user_root}/memory_state/apply_control"
+
+    @property
     def memory_lineage(self) -> str:
         return f"{self.user_root}/memory_lineage"
 
@@ -42,6 +46,18 @@ class MemoryCollections:
     @property
     def memory_runs(self) -> str:
         return f"{self.user_root}/memory_runs"
+
+    @property
+    def memory_import_runs(self) -> str:
+        return f"{self.user_root}/memory_import_runs"
+
+    @property
+    def memory_import_artifacts(self) -> str:
+        return f"{self.user_root}/memory_import_artifacts"
+
+    @property
+    def memory_import_candidates(self) -> str:
+        return f"{self.user_root}/memory_import_candidates"
 
     @property
     def non_active_memory_routes(self) -> str:
@@ -58,6 +74,10 @@ class MemoryCollections:
     @property
     def memory_commits(self) -> str:
         return f"{self.user_root}/memory_commits"
+
+    @property
+    def memory_state(self) -> str:
+        return f"{self.user_root}/memory_state"
 
     @property
     def memory_state_head(self) -> str:
@@ -79,10 +99,14 @@ class MemoryCollections:
             self.memory_lineage,
             self.memory_evidence,
             self.memory_runs,
+            self.memory_import_runs,
+            self.memory_import_artifacts,
+            self.memory_import_candidates,
             self.non_active_memory_routes,
             self.short_term_lifecycle_transitions,
             self.legacy_fallback,
             self.memory_commits,
+            self.memory_state,
             self.v3_compatibility_projection_items,
         ]
 

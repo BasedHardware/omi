@@ -33,10 +33,15 @@ jobs:
           echo "has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_web_app=$(echo "$FILES" | grep -q '^web/app/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_admin=$(echo "$FILES" | grep -q '^web/admin/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/validate-backend-runtime-env\.py$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           # Also run the Rust check when this workflow changes so CI PRs dogfood
           # the new guard instead of only validating YAML syntax.
           echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
@@ -78,12 +83,15 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Check release process guards
+        run: python3 .github/scripts/check-release-process-guards.py
+
       - name: Check backend runtime env manifest
         if: steps.changed.outputs.has_backend_runtime_env == 'true'
         run: |
           python3 -m pip install -q pyyaml
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
-          python3 backend/scripts/validate-backend-runtime-env.py --env prod
+          python3 backend/scripts/validate-backend-runtime-env.py --env prod --check-workflows
 
       - name: Summarize deferred-work markers
         continue-on-error: true
@@ -100,15 +108,45 @@ jobs:
 
       # -- Dart --
       - name: Setup Flutter
-        if: steps.changed.outputs.has_dart == 'true'
+        if: steps.changed.outputs.has_dart == 'true' || steps.changed.outputs.has_app_codegen == 'true' || steps.changed.outputs.has_app_l10n == 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
       - name: Resolve Flutter dependencies
-        if: steps.changed.outputs.has_dart == 'true'
+        if: steps.changed.outputs.has_dart == 'true' || steps.changed.outputs.has_app_codegen == 'true' || steps.changed.outputs.has_app_l10n == 'true'
         working-directory: app
         run: flutter pub get
+
+      - name: Check Flutter generated code
+        if: steps.changed.outputs.has_app_codegen == 'true'
+        working-directory: app
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- lib || {
+            echo "Generated Dart files are stale. Run: cd app && dart run build_runner build --delete-conflicting-outputs"
+            exit 1
+          }
+          if [ -n "$(git ls-files --others --exclude-standard -- lib)" ]; then
+            echo "Generated Dart files are stale; untracked generated files were produced:"
+            git ls-files --others --exclude-standard -- lib
+            exit 1
+          fi
+
+      - name: Check Flutter l10n
+        if: steps.changed.outputs.has_app_l10n == 'true'
+        working-directory: app
+        run: |
+          flutter gen-l10n
+          git diff --exit-code -- lib/l10n || {
+            echo "Generated localization files are stale. Run: cd app && flutter gen-l10n"
+            exit 1
+          }
+          if [ -n "$(git ls-files --others --exclude-standard -- lib/l10n)" ]; then
+            echo "Generated localization files are stale; untracked generated files were produced:"
+            git ls-files --others --exclude-standard -- lib/l10n
+            exit 1
+          fi
 
       - name: Check Dart formatting
         if: steps.changed.outputs.has_dart == 'true'
@@ -207,15 +245,32 @@ jobs:
           cd desktop/macos/Backend-Rust
           cargo check --locked
 
-      # -- Frontend --
-      - name: Setup Node.js
-        if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true'
+      # -- Desktop agent runtime --
+      - name: Setup Node.js for desktop agent runtime
+        if: steps.changed.outputs.has_desktop_agent_runtime == 'true'
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            desktop/macos/agent/package-lock.json
+            desktop/macos/pi-mono-extension/package-lock.json
+
+      - name: Check desktop agent runtime
+        if: steps.changed.outputs.has_desktop_agent_runtime == 'true'
+        run: desktop/macos/scripts/test-tool-surfaces.sh
+
+      # -- Frontend --
+      - name: Setup Node.js
+        if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true' || steps.changed.outputs.has_web_app == 'true' || steps.changed.outputs.has_admin == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
             web/frontend/package-lock.json
+            web/app/package-lock.json
+            web/admin/package-lock.json
             web/personas-open-source/package-lock.json
 
       - name: Lint Frontend
@@ -232,3 +287,35 @@ jobs:
         run: |
           npm ci --legacy-peer-deps
           npm run lint
+
+      - name: Build Web App
+        if: steps.changed.outputs.has_web_app == 'true'
+        working-directory: ./web/app
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: dummy
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: dummy
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dummy.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:dummy"
+          NEXT_PUBLIC_FIREBASE_VAPID_KEY: dummy
+        run: |
+          npm ci
+          npm run build
+
+      - name: Build Admin Dashboard
+        if: steps.changed.outputs.has_admin == 'true'
+        working-directory: ./web/admin
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: dummy
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: dummy
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: dummy.appspot.com
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "123456789"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:dummy"
+          NEXT_PUBLIC_FIREBASE_VAPID_KEY: dummy
+          NEXT_PUBLIC_PLUGINS_APP_ID: dummy
+          NEXT_PUBLIC_OMI_API_URL: https://api.omiapi.com
+        run: |
+          npm ci
+          npm run build
