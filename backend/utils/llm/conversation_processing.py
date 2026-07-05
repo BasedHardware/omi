@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import Runnable
 from pydantic import BaseModel, Field
 
 from models.app import App
@@ -46,9 +45,7 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def _invoke_gateway_shadow_chain(
-    chain: Runnable[Any, Any], values: dict[str, Any], *, feature: str
-) -> BaseModel | None:
+def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature: str) -> BaseModel | None:
     if has_byok_keys():
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
         return None
@@ -380,7 +377,7 @@ def _run_conversation_structure_shadow(
     prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
 ) -> None:
     gateway_chain = cast(
-        Runnable[Any, Any],
+        Any,
         prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser,
     )
     gateway_response = _invoke_gateway_shadow_chain(
@@ -402,7 +399,7 @@ def _run_conversation_action_items_shadow(
     now: datetime,
 ) -> None:
     gateway_chain = cast(
-        Runnable[Any, Any],
+        Any,
         prompt
         | get_llm_gateway_chat_structured(cache_key='omi-extract-actions')
         | PydanticOutputParser(pydantic_object=ActionItemsExtraction),

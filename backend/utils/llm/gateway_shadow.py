@@ -8,7 +8,6 @@ from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, Call
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
-from langchain_core.runnables import Runnable
 
 from pydantic import ConfigDict
 
@@ -133,16 +132,14 @@ class GatewayShadowChatModel(BaseChatModel):
         )
         return result
 
-    def with_structured_output(
-        self, schema: dict[str, Any] | type, *, include_raw: bool = False, **kwargs: Any
-    ) -> Runnable[Any, Any]:
+    def with_structured_output(self, schema: dict[str, Any] | type, *, include_raw: bool = False, **kwargs: Any) -> Any:
         legacy = self.legacy_model.with_structured_output(schema, include_raw=include_raw, **kwargs)
         gateway = self.gateway_model.with_structured_output(schema, include_raw=include_raw, **kwargs)
-        return GatewayShadowRunnable(feature=_shadow_feature(self.feature), legacy=legacy, gateway=gateway)
+        return GatewayShadowAny(feature=_shadow_feature(self.feature), legacy=legacy, gateway=gateway)
 
 
-class GatewayShadowRunnable(Runnable[Any, Any]):
-    def __init__(self, *, feature: str, legacy: Runnable[Any, Any], gateway: Runnable[Any, Any]):
+class GatewayShadowAny(Any):
+    def __init__(self, *, feature: str, legacy: Any, gateway: Any):
         self._feature = feature
         self._legacy = legacy
         self._gateway = gateway
