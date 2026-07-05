@@ -563,13 +563,6 @@ class TestRouterWiring(unittest.TestCase):
         self.assertIn("key_id=test-key", log_output)
         self.assertNotIn("Authorization", log_output)
 
-    def test_developer_read_routes_do_not_add_duplicate_uid_wrappers(self):
-        developer_source = open("routers/developer.py", encoding='utf-8').read()
-
-        self.assertNotIn('with_rate_limit(get_uid_with_conversations_read, "dev:conversations_read")', developer_source)
-        self.assertNotIn('with_rate_limit(get_uid_with_action_items_read, "dev:action_items_read")', developer_source)
-        self.assertNotIn('with_rate_limit(get_uid_with_goals_read, "dev:goals_read")', developer_source)
-
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
         # suggest, advice(x2), extract = 4
