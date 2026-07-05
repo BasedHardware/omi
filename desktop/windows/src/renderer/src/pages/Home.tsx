@@ -6,6 +6,7 @@ import { useAppState } from '../state/appState'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
 import { Markdown } from '../components/Markdown'
+import { RevealMarkdown } from '../components/chat/ChatMessages'
 import { maybeBuildLocalGraph } from '../lib/kgSynthesis'
 import { cn } from '../lib/utils'
 import omiMark from '../assets/omi-logo.png'
@@ -406,8 +407,13 @@ export function Home(): React.JSX.Element {
                       >
                         {isUser ? (
                           <div className="whitespace-pre-wrap">{m.content}</div>
+                        ) : m.content ? (
+                          <RevealMarkdown
+                            text={m.content}
+                            startRevealed={!(isLast && chat.sending)}
+                          />
                         ) : (
-                          <Markdown text={m.content || (chat.sending && isLast ? '…' : '')} />
+                          <Markdown text={chat.sending && isLast ? '…' : ''} />
                         )}
                       </div>
                     </div>
