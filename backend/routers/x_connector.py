@@ -16,10 +16,11 @@ themselves without the backend needing to know which is calling.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
+import database.x_posts as x_posts_db
 from utils import x_connector
 from utils.executors import start_background_task
 from utils.other import endpoints as auth
@@ -28,6 +29,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 DEFAULT_DEEP_LINK = 'omi://x/callback'
+X_POST_KINDS = (x_posts_db.KIND_TWEET, x_posts_db.KIND_BOOKMARK, x_posts_db.KIND_LIKE)
 
 
 class OAuthUrlResponse(BaseModel):
@@ -135,6 +137,23 @@ async def x_oauth_callback(
 @router.get('/v1/x/connection-status', tags=['x'], response_model=XConnectionStatusResponse)
 def x_connection_status(uid: str = Depends(auth.get_current_user_uid)):
     return x_connector.connection_status(uid)
+
+
+@router.get('/v1/x/posts', tags=['x'])
+def list_x_posts(
+    kind: Optional[str] = Query(None, description="Filter by kind: 'tweet', 'bookmark', or 'like'"),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of posts to return"),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """List the user's synced X posts, newest first.
+
+    The connector stores every synced post under the user's account and mines memories
+    from them, but there was no endpoint to read the raw posts back. Supports an optional
+    kind filter ('tweet', 'bookmark', 'like') and a bounded limit.
+    """
+    if kind is not None and kind not in X_POST_KINDS:
+        raise HTTPException(status_code=400, detail="kind must be one of: tweet, bookmark, like")
+    return {'posts': x_posts_db.get_x_posts(uid, limit=limit, kind=kind)}
 
 
 @router.post('/v1/x/sync', tags=['x'], response_model=XSyncResponse)

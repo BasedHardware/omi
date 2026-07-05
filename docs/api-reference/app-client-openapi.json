@@ -3752,14 +3752,35 @@
             "title": "Connected",
             "type": "boolean"
           },
+          "needs_reconnect": {
+            "title": "Needs Reconnect",
+            "type": "boolean"
+          },
           "onboarding_completed": {
             "title": "Onboarding Completed",
             "type": "boolean"
+          },
+          "reauth_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reauth Reason"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
           }
         },
         "required": [
           "connected",
-          "onboarding_completed"
+          "onboarding_completed",
+          "needs_reconnect",
+          "state"
         ],
         "title": "CalendarOnboardingStatusResponse",
         "type": "object"
@@ -23214,6 +23235,82 @@
         ]
       }
     },
+    "/v1/calendar/onboarding/reset": {
+      "post": {
+        "description": "Clear the skipped / reauth flags so the connect-calendar prompt is shown again.",
+        "operationId": "reset_calendar_onboarding_v1_calendar_onboarding_reset_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Reset Calendar Onboarding",
+        "tags": [
+          "calendar_onboarding"
+        ]
+      }
+    },
     "/v1/calendar/onboarding/skip": {
       "post": {
         "description": "Mark calendar onboarding as skipped so the prompt is not shown again.",
@@ -23294,7 +23391,7 @@
     },
     "/v1/calendar/onboarding/status": {
       "get": {
-        "description": "Return whether the user has completed (or skipped) calendar onboarding.",
+        "description": "Return the calendar onboarding state, including whether a previously-connected calendar now\nneeds reconnecting (its OAuth token expired).",
         "operationId": "get_calendar_onboarding_status_v1_calendar_onboarding_status_get",
         "parameters": [
           {
@@ -43039,6 +43136,61 @@
           }
         ],
         "summary": "Get Stable Version"
+      }
+    },
+    "/v2/firmware/version": {
+      "get": {
+        "description": "Return the OTA metadata for a specific published firmware version of a device.\n\nComplements /v2/firmware/stable by making any individual published build addressable, e.g. to pin\nor roll a device back to a known-good earlier version, or for QA/support to flash a named build.",
+        "operationId": "get_firmware_version_v2_firmware_version_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "device_model",
+            "required": true,
+            "schema": {
+              "title": "Device Model",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "version",
+            "required": true,
+            "schema": {
+              "title": "Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Firmware Version"
       }
     },
     "/v2/initial-message": {
