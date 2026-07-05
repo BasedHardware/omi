@@ -18,8 +18,6 @@ logger = logging.getLogger(__name__)
 _AND_OP: Any = 'AND'
 
 
-# Firestore composite-filter operator. The string 'AND' is accepted at runtime
-# but is untyped to pyright; use the typed enum value instead (byte-identical
 def _typed_doc(doc: Any) -> Dict[str, Any]:
     raw: object = doc.to_dict()
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}

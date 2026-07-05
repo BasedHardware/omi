@@ -74,7 +74,7 @@ def save_token(
     # Create key: ios_abc123, android_xyz456, macos_def789
     device_key = f"{platform}_{device_hash}"
 
-    token_data: Dict[str, Any] = data.dict()
+    token_data: Dict[str, Any] = data.model_dump()
     token_data['device_key'] = device_key
 
     notification_db.save_token(uid, token_data)

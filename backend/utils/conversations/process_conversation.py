@@ -792,8 +792,10 @@ TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED
 
 
 def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments: List[Dict[str, Any]] = [s.dict() for s in (conversation.transcript_segments or [])]
-    chunks = build_transcript_chunks(segments, conversation.started_at or conversation.created_at)
+    segments: List[Any] = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
+    chunks = build_transcript_chunks(
+        cast(List[Dict[str, Any]], segments), conversation.started_at or conversation.created_at
+    )
     if chunks:
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
 

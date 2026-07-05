@@ -93,7 +93,7 @@ class Event(BaseModel):
     created: bool = False
 
     def as_dict_cleaned_dates(self) -> dict[str, Any]:
-        event_dict = self.dict()
+        event_dict = self.model_dump()
         start_time = event_dict['start']
         if start_time.tzinfo is None:
             event_dict['start'] = start_time.isoformat() + 'Z'
