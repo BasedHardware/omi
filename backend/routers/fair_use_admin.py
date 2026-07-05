@@ -85,7 +85,9 @@ class FairUseUserDetailResponse(BaseModel):
     uid: str = Field(description='User UID.')
     state: Dict[str, Any] = Field(description='Current fair-use state document.')
     events: list[Dict[str, Any]] = Field(description='Recent fair-use events.')
-    current_speech_ms: int = Field(description='Rolling speech usage in milliseconds.')
+    current_speech_ms: Dict[str, int] = Field(
+        description='Rolling speech usage in milliseconds: daily_ms, three_day_ms, weekly_ms.'
+    )
 
 
 class FairUseSetStageResponse(BaseModel):
