@@ -1,0 +1,377 @@
+"""OMI Telegram AI-Clone plugin.
+
+Routes:
+- GET  /health
+- POST /setup     Register a new bot token, return a deep-link URL.
+- POST /webhook   Receive Telegram updates: handle /start handshake, dispatch
+                  to persona if auto-reply is on, otherwise nudge (rate-limited).
+- POST /toggle    Flip auto_reply_enabled for a chat (called by Chat Tools).
+
+The plugin is intentionally minimal: no framework, no async lifecycle beyond
+FastAPI's request handler. Mirrors plugins/omi-slack-app/main.py in shape.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import secrets
+import sys
+from typing import Optional
+
+# Add plugins/_shared to sys.path so `from persona_client import chat` works.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_SHARED = os.path.abspath(os.path.join(_HERE, "..", "_shared"))
+if _SHARED not in sys.path:
+    sys.path.insert(0, _SHARED)
+
+import httpx  # noqa: E402
+from fastapi import FastAPI, Header, HTTPException, Request  # noqa: E402
+from pydantic import BaseModel  # noqa: E402
+
+import simple_storage  # noqa: E402
+import telegram_client  # noqa: E402
+from persona_client import chat as _persona_chat  # noqa: E402  (re-export of plugins/_shared/persona_client.chat)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger("omi-telegram-clone")
+
+
+# ---------------------------------------------------------------------------
+# Webhook secret
+# ---------------------------------------------------------------------------
+# WEBHOOK_SECRET is the value Telegram sends back in X-Telegram-Bot-Api-Secret-Token
+# on every webhook delivery. Set via env in production (so it survives restarts);
+# fall back to a fresh random value at startup so dev installs work out of the box.
+WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET") or secrets.token_urlsafe(32)
+if os.getenv("TELEGRAM_WEBHOOK_SECRET"):
+    logger.info("Webhook secret: configured via env")
+else:
+    logger.warning("Webhook secret: auto-generated (set TELEGRAM_WEBHOOK_SECRET to persist across restarts)")
+
+# Base URL of the Omi backend that the persona API lives on. Defaults to prod.
+OMI_BASE_URL = os.getenv("OMI_BASE_URL", "https://api.omi.me")
+
+# How often we re-nudge a user who has auto-reply disabled. Default 4 hours.
+try:
+    _NUDGE_COOLDOWN_SECONDS = float(os.getenv("NUDGE_COOLDOWN_SECONDS", "14400"))
+except ValueError:
+    logger.warning("NUDGE_COOLDOWN_SECONDS is not a float; defaulting to 14400")
+    _NUDGE_COOLDOWN_SECONDS = 14400.0
+
+
+app = FastAPI(
+    title="OMI Telegram AI-Clone",
+    description="Self-hosted Telegram plugin that lets Omi reply on the user's behalf.",
+    version="0.1.0",
+)
+
+
+# ---------------------------------------------------------------------------
+# /health
+# ---------------------------------------------------------------------------
+@app.get("/health")
+def health():
+    return {"status": "ok", "service": "omi-telegram-clone", "version": "0.1.0"}
+
+
+# ---------------------------------------------------------------------------
+# /setup
+# ---------------------------------------------------------------------------
+class SetupRequest(BaseModel):
+    bot_token: str
+    omi_uid: str
+    persona_id: str
+    omi_dev_api_key: str
+    public_base_url: str  # where Telegram will POST updates (e.g. https://clone.example.com)
+
+
+class SetupResponse(BaseModel):
+    deep_link: str
+    bot_username: str
+    setup_token: str
+
+
+@app.post("/setup", response_model=SetupResponse)
+async def setup(req: SetupRequest):
+    """Register the user's bot and return a one-time deep link for the user to click."""
+    webhook_url = f"{req.public_base_url.rstrip('/')}/webhook"
+
+    # setWebhook — tells Telegram where to POST updates. The secret_token is
+    # what Telegram echoes back in X-Telegram-Bot-Api-Secret-Token; we use it
+    # to verify requests actually came from Telegram.
+    #
+    # IMPORTANT: never log str(e) or include it in the HTTP detail. For
+    # httpx.HTTPStatusError, str(e) contains the full request URL — which
+    # includes the bot token. We log only the status code and return a
+    # generic 502 message.
+    try:
+        await telegram_client.set_webhook(req.bot_token, webhook_url, WEBHOOK_SECRET)
+    except httpx.HTTPStatusError as e:
+        logger.error("set_webhook failed: HTTP %s", e.response.status_code)
+        raise HTTPException(status_code=502, detail="Telegram setWebhook failed")
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
+        logger.error("set_webhook failed: %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="Telegram setWebhook failed")
+
+    # getMe — fetch the bot's username so we can build the deep link.
+    try:
+        me = await telegram_client.get_me(req.bot_token)
+        bot_username = (me.get("result") or {}).get("username") or "bot"
+    except httpx.HTTPStatusError as e:
+        logger.error("getMe failed: HTTP %s", e.response.status_code)
+        raise HTTPException(status_code=502, detail="Telegram getMe failed")
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
+        logger.error("getMe failed: %s", type(e).__name__)
+        raise HTTPException(status_code=502, detail="Telegram getMe failed")
+
+    # Generate a one-shot setup token. The user clicks the deep link, sends
+    # /start <token> to the bot, and we know which chat_id maps to which user.
+    setup_token = secrets.token_urlsafe(16)
+
+    simple_storage.save_pending_setup(
+        setup_token,
+        {
+            "omi_uid": req.omi_uid,
+            "persona_id": req.persona_id,
+            "omi_dev_api_key": req.omi_dev_api_key,
+            "bot_token": req.bot_token,
+            "bot_username": bot_username,
+        },
+    )
+
+    deep_link = f"https://t.me/{bot_username}?start={setup_token}"
+    logger.info("setup complete for user %s (bot=%s, token=%s...)", req.omi_uid, bot_username, setup_token[:8])
+
+    return SetupResponse(deep_link=deep_link, bot_username=bot_username, setup_token=setup_token)
+
+
+# ---------------------------------------------------------------------------
+# /webhook
+# ---------------------------------------------------------------------------
+async def _send_auto_reply_disabled_notice(bot_token: str, chat_id: int | str) -> None:
+    """Tell the user the auto-reply toggle is off. Cheap reassurance; not spammy."""
+    await telegram_client.send_message(
+        bot_token,
+        chat_id,
+        "Auto-reply is currently disabled for this chat. Open the Omi desktop "
+        "and turn on AI Clone → Telegram to enable replies.",
+    )
+
+
+def _extract_text_and_chat(update: dict) -> tuple[Optional[int | str], Optional[str]]:
+    """Pull chat_id and text from a Telegram update payload. Returns (None, None) if absent."""
+    msg = update.get("message") or update.get("edited_message")
+    if not msg:
+        return None, None
+    chat = msg.get("chat") or {}
+    return chat.get("id"), msg.get("text")
+
+
+def _is_setup_start(text: str) -> tuple[bool, Optional[str]]:
+    """If text is `/start <token>`, return (True, token). Else (False, None)."""
+    if not text or not text.startswith("/start"):
+        return False, None
+    parts = text.split(maxsplit=1)
+    if len(parts) != 2 or not parts[1]:
+        return False, None
+    return True, parts[1].strip()
+
+
+@app.post("/webhook")
+async def webhook(
+    request: Request,
+    x_telegram_bot_api_secret_token: Optional[str] = Header(default=None),
+):
+    """Receive a Telegram update. Always returns 200 on success, 401 on bad secret.
+
+    Paths:
+    - `/start <setup_token>` from a chat that completed /setup: register chat_id.
+    - Regular text from a known private chat with auto_reply enabled: dispatch
+      to the persona, send the reply.
+    - Regular text from a known private chat with auto_reply disabled: nudge
+      (rate-limited by last_nudge_at).
+    - Anything else (unknown chat, group/channel, bot sender, no text,
+      malformed JSON): silently return 200.
+
+    Telegram retries indefinitely on non-2xx, so we never raise from here
+    unless the secret is wrong (then 401).
+    """
+    # Auth: Telegram echoes the secret_token we set at setWebhook time.
+    # Use secrets.compare_digest for constant-time comparison.
+    presented = x_telegram_bot_api_secret_token or ""
+    if not secrets.compare_digest(presented, WEBHOOK_SECRET):
+        raise HTTPException(status_code=401, detail="Invalid or missing Telegram webhook secret")
+
+    # Telegram's webhook sends JSON; if the body is malformed, log and 200 (don't retry).
+    try:
+        update = await request.json()
+    except json.JSONDecodeError:
+        logger.warning("webhook received malformed JSON, ignoring")
+        return {"ok": True}
+    if not isinstance(update, dict):
+        logger.warning("webhook received non-dict JSON, ignoring")
+        return {"ok": True}
+
+    chat_id, text = _extract_text_and_chat(update)
+    if chat_id is None:
+        return {"ok": True}
+
+    # Path 1: /start handshake — bind chat_id to the user who clicked the deep link.
+    is_start, setup_token = _is_setup_start(text or "")
+    if is_start:
+        payload = simple_storage.pop_pending_setup(setup_token)
+        if payload is None:
+            # Stale or forged token. Reply so the user knows setup didn't work,
+            # but don't leak that the token is invalid vs. unknown.
+            await telegram_client.send_message(
+                _bot_token_for_unknown_chat(chat_id),
+                chat_id,
+                "This setup link is invalid or already used. Please re-run the " "setup from the Omi desktop.",
+            )
+            return {"ok": True}
+
+        simple_storage.save_user(
+            chat_id=str(chat_id),
+            omi_uid=payload["omi_uid"],
+            persona_id=payload["persona_id"],
+            omi_dev_api_key=payload["omi_dev_api_key"],
+            bot_token=payload["bot_token"],
+            auto_reply_enabled=False,
+        )
+        await telegram_client.send_message(
+            payload["bot_token"],
+            chat_id,
+            "Connected! Open the Omi desktop and toggle AI Clone → Telegram " "to start receiving auto-replies.",
+        )
+        logger.info("setup handshake complete: chat_id=%s user=%s", chat_id, payload["omi_uid"])
+        return {"ok": True}
+
+    # Path 2: regular message. Look up the user; if known and auto_reply is off,
+    # nudge. Otherwise (unknown chat, group, or auto_reply on) we fall through
+    # to T-004.
+    # Safety filters for the auto-reply path: skip groups/channels (out of scope
+    # for v1), skip bot senders (own-message safety), skip non-text payloads.
+    if _is_group_or_channel(update):
+        return {"ok": True}
+    if _is_bot_sender(update):
+        return {"ok": True}
+    if not text:
+        return {"ok": True}
+
+    user = simple_storage.get_user_by_chat_id(str(chat_id))
+    if user is None:
+        return {"ok": True}
+
+    # Auto-reply disabled -> nudge (rate-limited) instead of spamming the user.
+    if not user.get("auto_reply_enabled"):
+        if simple_storage.should_nudge(user, _NUDGE_COOLDOWN_SECONDS):
+            await _send_auto_reply_disabled_notice(user["bot_token"], chat_id)
+            simple_storage.mark_nudged(str(chat_id))
+        return {"ok": True}
+
+    # Auto-reply on -> call the persona, send the reply.
+    await _dispatch_auto_reply(user, str(chat_id), text)
+    return {"ok": True}
+
+
+async def _dispatch_auto_reply(user: dict, chat_id: str, text: str) -> None:
+    """Call the persona API and send the reply back to Telegram.
+
+    Empty replies (timeout/connect error) and HTTP errors are logged but do not
+    raise — the webhook must always return 200 to Telegram. The except clause
+    is narrowed to httpx + asyncio errors so genuine bugs in our code surface
+    via FastAPI's error middleware rather than being silently swallowed.
+    """
+    try:
+        reply = await _persona_chat(
+            app_id=user["persona_id"],
+            api_key=user["omi_dev_api_key"],
+            omi_base=OMI_BASE_URL,
+            text=text,
+            uid=user["omi_uid"],
+        )
+    except httpx.HTTPStatusError as e:
+        # httpx.HTTPStatusError.__str__ includes the request URL (which contains
+        # the API key in the query string). Log only the status code to keep
+        # the key out of logs.
+        logger.error("persona chat HTTP error for chat %s: HTTP %s", chat_id, e.response.status_code)
+        return
+    except httpx.HTTPError as e:
+        # Other HTTP errors (connect, timeout). Log exception type name only.
+        logger.error("persona chat HTTP error for chat %s: %s", chat_id, type(e).__name__)
+        return
+    except asyncio.TimeoutError as e:
+        logger.error("persona chat timeout for chat %s: %s", chat_id, type(e).__name__)
+        return
+
+    if not reply:
+        logger.info("persona chat returned empty reply for chat %s (skipping send)", chat_id)
+        return
+
+    await telegram_client.send_message(user["bot_token"], chat_id, reply)
+    logger.info("auto-reply sent to chat %s (%d chars)", chat_id, len(reply))
+
+
+def _is_group_or_channel(update: dict) -> bool:
+    chat = (update.get("message") or update.get("edited_message") or {}).get("chat") or {}
+    return chat.get("type") in {"group", "supergroup", "channel"}
+
+
+def _is_bot_sender(update: dict) -> bool:
+    sender = (update.get("message") or update.get("edited_message") or {}).get("from") or {}
+    return bool(sender.get("is_bot"))
+
+
+# ---------------------------------------------------------------------------
+# /toggle — flips auto_reply_enabled for a chat (called by Chat Tools).
+#
+# Auth: the request must include the bot_token that was registered for that
+# chat_id. The bot_token is a real secret (only the user has it; calling
+# setWebhook with the wrong token fails at Telegram). chat_id alone is NOT
+# sufficient — it's exposed in Telegram update payloads and could be guessed
+# by anyone scraping a public channel. Pairing the two raises the bar from
+# "knows chat_id" to "knows chat_id AND bot_token".
+# ---------------------------------------------------------------------------
+class ToggleRequest(BaseModel):
+    chat_id: str
+    enabled: bool
+    bot_token: str  # required: must match the stored token for chat_id
+
+
+class ToggleResponse(BaseModel):
+    chat_id: str
+    auto_reply_enabled: bool
+
+
+@app.post("/toggle", response_model=ToggleResponse)
+async def toggle(req: ToggleRequest):
+    """Enable or disable auto-reply for the given chat_id.
+
+    Returns 403 with a generic message for both unknown chat_id AND wrong
+    bot_token, so callers can't enumerate which chat_ids are registered by
+    distinguishing 404 (unknown) from 403 (wrong token).
+
+    Called by the Chat Tools manifest entry `toggle_auto_reply` (T-008).
+    """
+    user = simple_storage.get_user_by_chat_id(req.chat_id)
+    # Same response for both 'unknown chat_id' and 'wrong bot_token' so the
+    # endpoint doesn't leak which chat_ids exist (chat_ids are exposed in
+    # Telegram update payloads and could be enumerated otherwise).
+    if user is None or not secrets.compare_digest(req.bot_token, user["bot_token"]):
+        raise HTTPException(status_code=403, detail="Invalid chat_id or bot_token")
+    simple_storage.update_auto_reply(req.chat_id, req.enabled)
+    return ToggleResponse(chat_id=req.chat_id, auto_reply_enabled=req.enabled)
+
+
+def _bot_token_for_unknown_chat(chat_id: int | str) -> str:
+    """Look up the bot token for any user whose chat_id matches; empty if none.
+
+    Used only to send the "invalid setup token" notice to a chat we otherwise
+    don't recognize. If we have no record we can't reply (no token), so the
+    function returns "" — telegram_client.send_message will then silently fail.
+    """
+    user = simple_storage.get_user_by_chat_id(str(chat_id))
+    return user["bot_token"] if user else ""
