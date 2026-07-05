@@ -67,7 +67,9 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
     }
     XCTAssertEqual(rows.count, 1)
     XCTAssertEqual(rows[0]["id"] as? Int64, canonicalId)
-    XCTAssertEqual(rows[0]["backendSynced"] as? Bool, true)
+    // backendSynced is a Bool stored as SQLite INTEGER (1); read it as Int64 to avoid a
+    // failing `as? Bool` bridge on the raw column value.
+    XCTAssertEqual(rows[0]["backendSynced"] as? Int64, 1)
 
     let duplicateExists = try await dbQueue.read { db in
       try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM staged_tasks WHERE id = ?", arguments: [duplicateId]) ?? 0
