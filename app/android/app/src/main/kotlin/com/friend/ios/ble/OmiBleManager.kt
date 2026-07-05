@@ -1,4 +1,6 @@
-package com.friend.ios
+package com.friend.ios.ble
+
+import com.friend.ios.*
 
 import android.annotation.SuppressLint
 import android.app.Application

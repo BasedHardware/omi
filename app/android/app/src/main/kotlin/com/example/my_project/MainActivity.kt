@@ -1,6 +1,11 @@
 package com.friend.ios
 
 import android.content.Intent
+import com.friend.ios.ble.BleHostApiImpl
+import com.friend.ios.ble.OmiBleForegroundService
+import com.friend.ios.ble.OmiBleManager
+import com.friend.ios.ble.OmiCompanionManager
+import com.friend.ios.batch.OmiBackgroundAudioStreamer
 import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
