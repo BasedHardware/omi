@@ -21,7 +21,6 @@
 
 #include "sd_card.h"
 #include "t5838_aad.h"
-#include "transport.h"
 #endif
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
@@ -65,8 +64,6 @@ static int16_t mono_buffer[MAX_FRAMES];
  * (PDM off, ~20uA) and its WAKE pin (P1.02, active-HIGH) resumes it on sound.
  * Owned here since it shares the PDM peripheral and CLK pin. See AAD_HARDWARE.md.
  */
-extern bool is_connected; /* from main.c: never AAD-sleep while streaming to a phone */
-
 static const struct gpio_dt_spec aad_wake = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_wake_pin), gpios, {0});
 static struct gpio_callback aad_wake_cb;
 
@@ -353,8 +350,14 @@ static void enter_hw_aad(void)
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
 
-    transport_ble_pause();   /* turn BLE radio off while the mic is asleep (offline) */
+    /* BLE keeps advertising during sleep so a phone can connect at any time. */
     sd_request_power(false); /* cut SD NAND power while idle */
+
+#ifdef CONFIG_OMI_AAD_POWER_OFF_MIC
+    /* Cut PDM_EN: fully powers off the T5838 + TXS0104 level-shifter (kills the
+     * ~1.5 mA shifter pull-up leak). NOTE: disables wake-on-sound. */
+    t5838_aad_power(false);
+#endif
 
     atomic_set(&aad_in_sleep, 1);
 
@@ -380,12 +383,15 @@ static void enter_hw_aad(void)
 static void exit_hw_aad(void)
 {
     aad_wake_irq(false);
+#ifdef CONFIG_OMI_AAD_POWER_OFF_MIC
+    t5838_aad_power(true); /* re-power the mic + level-shifter */
+    k_msleep(AAD_PDM_SETTLE_MS);
+#endif
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
     sd_request_power(true);   /* power on + remount SD before audio starts flowing */
     mic_resume();             /* dmic START reclaims CLK via pinctrl */
-    transport_ble_resume();   /* re-advertise so a phone can connect while recording */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 
@@ -407,11 +413,6 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
                 exit_hw_aad();
             }
         }
-
-        /* Never stay asleep while a phone is connected: we must stream live. */
-        if (atomic_get(&aad_in_sleep) && is_connected) {
-            exit_hw_aad();
-        }
     }
 }
 
@@ -432,7 +433,9 @@ static void aad_track_silence(const int16_t *buf, size_t n)
     if (avg_abs_amplitude(buf, n) >= CONFIG_OMI_VAD_ABS_THRESHOLD) {
         aad_last_voice_ms = now;
     }
-    if (!is_connected && !atomic_get(&aad_in_sleep) && (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
+    /* Sleep after a long silence whether online or offline. When connected, the
+     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming. */
+    if (!atomic_get(&aad_in_sleep) && (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
     }

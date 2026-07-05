@@ -133,6 +133,18 @@ config OMI_AAD_TEST_MODE
          The difference is the power the mic saves under hardware AAD. Keep 0 for
          production."
 
+config OMI_AAD_POWER_OFF_MIC
+    bool "Cut PDM_EN (mic + TXS0104 level-shifter power) during AAD sleep"
+    depends on OMI_ENABLE_T5838_AAD
+    default n
+    help
+        "During AAD sleep, drive PDM_EN low to fully power off the T5838 and the
+         TXS0104 level-shifter (the shifter's internal pull-ups leak ~1.5 mA when
+         mic lines are held low). This eliminates that leak but DISABLES hardware
+         wake-on-sound (an unpowered mic cannot assert WAKE). Use for measuring the
+         true mic-off floor, or with an alternate wake source. Keep n if relying on
+         T5838 acoustic wake."
+
 config OMI_DEBUG_FAKE_RTC
     bool "Debug: set a fake UTC time at boot if none is synced"
     default n
