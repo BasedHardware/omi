@@ -47,7 +47,7 @@ LOG_MODULE_REGISTER(storage, CONFIG_LOG_DEFAULT_LEVEL);
 #define STORAGE_CONTROL_NOTIFY_SIZE 32
 #define STORAGE_NOTIFY_VALUE_MAX_LEN ((CONFIG_BT_L2CAP_TX_MTU > 3U) ? (CONFIG_BT_L2CAP_TX_MTU - 3U) : 20U)
 
-#define SYNC_SPEED_LOG_INTERVAL_MS (30 * 1000)
+#define SYNC_SPEED_LOG_INTERVAL_MS (2 * 1000)
 
 static void storage_config_changed_handler(const struct bt_gatt_attr *attr, uint16_t value);
 static ssize_t storage_write_handler(struct bt_conn *conn,
