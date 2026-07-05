@@ -80,7 +80,8 @@ Set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/` for local backend tests
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
-- No integration tests currently (integration_test dependency exists but unused)
+- Prefer focused unit, widget, provider, and hermetic tests that run in CI.
+- Keep live-service integration tests off CI; they are acceptable only when self-driven by agents, documented, and not required for normal validation.
 
 ## Localization (l10n)
 

@@ -13,10 +13,24 @@ description: "Contribute to Omi and earn rewards! Some tasks have paid bounties.
   <Step title="Make Your Changes">
     Clone your fork, create a branch, and implement your changes.
   </Step>
+  <Step title="Test Your Changes">
+    Add focused tests and include the commands or manual steps you used to verify the change.
+  </Step>
   <Step title="Create a Pull Request">
     Submit a PR and specify which issue it relates to.
   </Step>
 </Steps>
+
+---
+
+## Pull Request Quality
+
+Good PRs are easy to review and come with evidence that the change works.
+
+- **Bug fixes** should include tests that would have caught the bug or give high confidence it will not regress.
+- **Small features** can go straight to PR when they are well scoped, include useful automated tests, and describe any manual testing performed.
+- **Large or ambiguous features** should start as a GitHub issue so maintainers can discuss scope and direction before major implementation work begins.
+- Prefer unit, widget, provider, and hermetic tests that run reliably in CI. Live-service integration tests are useful for validation, but should not be the only proof that a PR works.
 
 ---
 
@@ -59,7 +73,7 @@ Get rewarded for approved PRs with significant contributions:
     Either a new feature or a major bug fix.
   </Accordion>
   <Accordion title="Quality" icon="check">
-    Quality code with clear explanations.
+    Quality code with clear explanations, focused tests, and verification notes.
   </Accordion>
 </AccordionGroup>
 
