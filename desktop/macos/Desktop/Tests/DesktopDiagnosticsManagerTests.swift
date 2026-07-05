@@ -44,6 +44,56 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertFalse(json.contains("id=123"))
   }
 
+  func testSilentTurnRecordsRecoveryActionAndResult() throws {
+    DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+      source: "omni_stt",
+      mode: "hold",
+      audioSeconds: 1.2,
+      voicedSeconds: 0,
+      peak: 0,
+      rms: 0,
+      deviceDescription: "built-in microphone",
+      micPermissionGranted: true,
+      hubActive: false,
+      recoveryAction: "capture_rebuild",
+      recoveryResult: "attempted")
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let snapshot = try XCTUnwrap(snapshots.last)
+
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "capture_rebuild")
+    XCTAssertEqual(snapshot["recovery_result"] as? String, "attempted")
+  }
+
+  func testSilentTurnRecoveryFieldsDefaultToNone() throws {
+    DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+      source: "hub",
+      mode: "hold",
+      audioSeconds: 1.2,
+      voicedSeconds: nil,
+      peak: 0,
+      rms: 0,
+      deviceDescription: "built-in microphone",
+      micPermissionGranted: true,
+      hubActive: true)
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let snapshot = try XCTUnwrap(snapshots.last)
+
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "none")
+    XCTAssertEqual(snapshot["recovery_result"] as? String, "not_attempted")
+  }
+
   func testShortSilentTurnsDoNotAdvanceWatchdogCounter() throws {
     for _ in 0..<3 {
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(

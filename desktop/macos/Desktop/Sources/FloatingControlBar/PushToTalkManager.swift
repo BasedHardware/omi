@@ -674,6 +674,7 @@ class PushToTalkManager: ObservableObject {
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedHubTurn(totalSec: totalSec, peak: peak)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: "hub",
           mode: finalizedMode,
@@ -683,13 +684,15 @@ class PushToTalkManager: ObservableObject {
           rms: rms,
           deviceDescription: dev,
           micPermissionGranted: hasMicPermission,
-          hubActive: true)
+          hubActive: true,
+          recoveryAction: attemptRecovery ? "capture_rebuild" : "none",
+          recoveryResult: attemptRecovery ? "attempted" : "not_attempted")
         log(
           "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
             + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] "
             + "(peak≈0 ⇒ dead mic; high peak ⇒ classifier misfire; low ⇒ quiet/far mic) — not committing"
         )
-        if silentMicRecoveryPolicy.recordDiscardedHubTurn(totalSec: totalSec, peak: peak) {
+        if attemptRecovery {
           requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: false)
         }
         RealtimeHubController.shared.cancelTurn()
@@ -743,6 +746,10 @@ class PushToTalkManager: ObservableObject {
       let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
       if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+        // A dead mic (peak≈0 for a real hold) leaves omni/batch users stuck on
+        // repeated silent turns with no recovery. Mirror the hub path: rebuild the
+        // CoreAudio capture after consecutive dead-mic turns.
+        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedHubTurn(totalSec: totalSec, peak: peak)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: isOmniSTT ? "omni_stt" : "batch_stt",
           mode: finalizedMode,
@@ -752,12 +759,17 @@ class PushToTalkManager: ObservableObject {
           rms: rms,
           deviceDescription: audioCaptureService?.currentDeviceDescription,
           micPermissionGranted: hasMicPermission,
-          hubActive: false)
+          hubActive: false,
+          recoveryAction: attemptRecovery ? "capture_rebuild" : "none",
+          recoveryResult: attemptRecovery ? "attempted" : "not_attempted")
         log(
           "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
         )
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+        if attemptRecovery {
+          requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: isBatch)
+        }
         // A too-short turn means the release beat capture (or the user tapped
         // instead of holding). Give visible feedback instead of a silent clear;
         // longer holds that were merely quiet keep the quiet reset.

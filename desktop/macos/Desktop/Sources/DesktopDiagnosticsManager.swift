@@ -69,7 +69,9 @@ final class DesktopDiagnosticsManager {
     rms: Int,
     deviceDescription: String?,
     micPermissionGranted: Bool,
-    hubActive: Bool
+    hubActive: Bool,
+    recoveryAction: String = "none",
+    recoveryResult: String = "not_attempted"
   ) {
     let nearZero = peak <= 5 && rms <= 5
     let watchdogEligible = audioSeconds >= pttWatchdogMinimumAudioSeconds
@@ -91,8 +93,8 @@ final class DesktopDiagnosticsManager {
       "consecutive_silent_turns": consecutiveNearZeroPTTTurns,
       "tcc_microphone_granted": micPermissionGranted,
       "input_device_class": classifyInputDevice(deviceDescription),
-      "recovery_action": "none",
-      "recovery_result": "not_attempted",
+      "recovery_action": recoveryAction,
+      "recovery_result": recoveryResult,
     ]
     if let voicedSeconds {
       properties["voiced_audio_seconds"] = rounded(voicedSeconds)
