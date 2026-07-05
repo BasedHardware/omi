@@ -106,6 +106,13 @@ class PushToTalkManager: ObservableObject {
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
   private let batchAudioLock = NSLock()
+  /// Hard cap on a single turn's buffered PCM (16 kHz mono int16) so a runaway
+  /// (>~4.5 min) dictation can't grow RSS without bound. Kept just under the
+  /// backend's ~5-min limit (HTTP 413) so we surface a client-side warning before
+  /// buffering forever and failing at submit. 4.5 min × 16000 Hz × 2 bytes.
+  nonisolated static let maxBatchAudioBytes = Int(4.5 * 60) * 16_000 * 2
+  /// Set once per turn when the buffer hits the cap, so the warning fires once.
+  private var batchAudioOverflowSignaled = false
 
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
@@ -292,7 +299,8 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
-    barState?.pttHintText = ""  // clear any lingering too-short hint from a prior tap
+    batchAudioOverflowSignaled = false  // fresh turn — allow the too-long warning again
+    barState?.pttHintText = ""  // clear any lingering too-short/too-long hint from a prior tap
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -919,6 +927,31 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// Append a mic chunk to the per-turn buffer under the lock, capped at
+  /// `maxBatchAudioBytes`. Called from the audio thread. Once the cap is hit the
+  /// buffer stops growing (bounded RSS) and the user is warned once; the buffered
+  /// (~4.5 min) audio still transcribes normally when the turn is released.
+  private func appendBatchAudioBounded(_ audioData: Data) {
+    batchAudioLock.lock()
+    let atCap = batchAudioBuffer.count >= Self.maxBatchAudioBytes
+    if !atCap { batchAudioBuffer.append(audioData) }
+    batchAudioLock.unlock()
+    if atCap { signalBatchAudioOverflowOnce() }
+  }
+
+  /// Surface a one-time "recording too long" warning when the turn buffer is
+  /// capped. Hops to main (called from the audio thread) and reuses the rendered
+  /// `pttHintText` surface (the legacy `voiceTranscript` error field is unrendered).
+  private func signalBatchAudioOverflowOnce() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, !self.batchAudioOverflowSignaled else { return }
+      self.batchAudioOverflowSignaled = true
+      log("PushToTalkManager: turn audio hit \(Self.maxBatchAudioBytes)-byte cap — bounding buffer, warning user")
+      self.barState?.pttHintText = "Recording too long — keep it under 5 min"
+      self.updateBarState()
+    }
+  }
+
   private func sendTranscript() {
     // QueryTracer: close the omni finalization span opened in finalize() (no-op on
     // the batch/live fallback paths, which never opened it).
@@ -1289,9 +1322,7 @@ class PushToTalkManager: ObservableObject {
               // Realtime hub owns this turn — stream mic PCM straight to it, and
               // retain it so finalize() can silence-gate the turn.
               RealtimeHubController.shared.feedAudio(audioData)
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData)
               return
             }
             if self.isOmniSTT {
@@ -1303,14 +1334,10 @@ class PushToTalkManager: ObservableObject {
                 self.omniPreconnectBuffer.append(audioData)
               }
               // Also retain the raw turn for a Deepgram fallback if omni fails.
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData)
             } else if batchMode {
               // Batch mode: accumulate audio in buffer
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData)
             } else {
               // Live mode: stream to Deepgram
               self.transcriptionService?.sendAudio(audioData)
