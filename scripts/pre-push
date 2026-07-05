@@ -71,6 +71,13 @@ SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tes
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
 trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
+# Use backend/.venv/bin/python for backend Python scripts that need backend
+# dependencies (fastapi, pydantic, firebase_admin, etc.). Falls back to system
+# python3 when the venv doesn't exist (e.g. CI, fresh clone).
+BACKEND_PYTHON="python3"
+if [[ -x "$PWD/backend/.venv/bin/python" ]]; then
+  BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+fi
 
 run_step() {
   echo "==> $*"
@@ -220,8 +227,8 @@ check_backend_runtime_env_if_needed() {
     return
   fi
 
-  python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
-  python3 backend/scripts/validate-backend-runtime-env.py --env prod
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env prod
 }
 
 check_backend_async_blockers_if_needed() {
@@ -234,7 +241,7 @@ check_backend_async_blockers_if_needed() {
     return
   fi
 
-  python3 backend/scripts/scan_async_blockers.py \
+  "$BACKEND_PYTHON" backend/scripts/scan_async_blockers.py \
     --dirs backend/routers backend/utils \
     --diff-base "$BASE_REF" \
     --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
@@ -265,14 +272,14 @@ check_module_stub_pollution_if_needed() {
   done
 
   if [ -s "$filter_file" ]; then
-    python3 backend/scripts/check_module_stub_pollution.py --files "$filter_file"
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --files "$filter_file"
   else
-    python3 backend/scripts/check_module_stub_pollution.py --quiet
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --quiet
   fi
   rm -f "$filter_file"
 
   # Enforce monotone-shrinking allowlist regardless of which files changed.
-  python3 backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
+  "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
 }
 
 check_import_time_side_effects_if_needed() {
@@ -302,13 +309,13 @@ check_import_time_side_effects_if_needed() {
   done
 
   if [ -s "$filter_file" ]; then
-    python3 backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
   else
-    python3 backend/scripts/scan_import_time_side_effects.py --quiet
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --quiet
   fi
   rm -f "$filter_file"
 
-  python3 backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
+  "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
 }
 
 check_backend_unit_tests_if_needed() {
@@ -327,7 +334,7 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
-  python3 backend/scripts/select_backend_unit_tests.py \
+  "$BACKEND_PYTHON" backend/scripts/select_backend_unit_tests.py \
     --changed-files "$CHANGED_FILES_LIST" \
     --output "$SELECTED_BACKEND_TESTS" \
     --reason-output "$SELECTED_BACKEND_TESTS_REASON"
@@ -365,8 +372,8 @@ check_backend_unit_tests_if_needed() {
   echo "Selected $selected_count backend unit test file(s): $reason"
   (
     cd backend
-    bash test-preflight.sh
-    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
+    PYTHON="$BACKEND_PYTHON" bash test-preflight.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
   )
 }
 
@@ -388,7 +395,7 @@ check_openapi_contract_if_needed() {
 
   (
     cd backend
-    python3 scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+    "$BACKEND_PYTHON" scripts/export_openapi.py --check ../docs/api-reference/openapi.json
   )
 }
 
