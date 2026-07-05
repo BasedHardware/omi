@@ -103,6 +103,10 @@ class ActionItemsSearchResponse(BaseModel):
     action_items: List[ActionItemResponse]
 
 
+class ActionItemIdsResponse(BaseModel):
+    ids: List[str]
+
+
 class ConversationActionItemsResponse(BaseModel):
     action_items: List[ActionItemResponse]
     conversation_id: str
@@ -441,7 +445,7 @@ def search_action_items(
     return {"action_items": _safe_action_item_responses(action_items, uid=uid)}
 
 
-@router.get("/v1/action-items/ids", tags=['action-items'])
+@router.get("/v1/action-items/ids", response_model=ActionItemIdsResponse, tags=['action-items'])
 def list_action_item_ids(uid: str = Depends(auth.get_current_user_uid)):
     """Return all of the user's action-item IDs (IDs only, no field reads).
 

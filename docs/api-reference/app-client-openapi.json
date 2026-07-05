@@ -202,6 +202,22 @@
         "title": "ActionItem",
         "type": "object"
       },
+      "ActionItemIdsResponse": {
+        "properties": {
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ids"
+        ],
+        "title": "ActionItemIdsResponse",
+        "type": "object"
+      },
       "ActionItemResponse": {
         "properties": {
           "apple_reminder_id": {
@@ -17334,7 +17350,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ActionItemIdsResponse"
+                }
               }
             },
             "description": "Successful Response"
