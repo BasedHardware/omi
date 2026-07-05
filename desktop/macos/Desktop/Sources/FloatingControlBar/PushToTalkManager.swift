@@ -106,6 +106,13 @@ class PushToTalkManager: ObservableObject {
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
   private let batchAudioLock = NSLock()
+  /// Hard cap on a single turn's buffered PCM (16 kHz mono int16) so a runaway
+  /// (>~4.5 min) dictation can't grow RSS without bound. Kept just under the
+  /// backend's ~5-min limit (HTTP 413) so we surface a client-side warning before
+  /// buffering forever and failing at submit. 4.5 min × 16000 Hz × 2 bytes.
+  nonisolated static let maxBatchAudioBytes = Int(4.5 * 60) * 16_000 * 2
+  /// Set once per turn when the buffer hits the cap, so the warning fires once.
+  private var batchAudioOverflowSignaled = false
 
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
@@ -292,7 +299,12 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
-    barState?.pttHintText = ""  // clear any lingering too-short hint from a prior tap
+    // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
+    // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
+    batchAudioLock.lock()
+    batchAudioOverflowSignaled = false
+    batchAudioLock.unlock()
+    barState?.pttHintText = ""  // clear any lingering too-short/too-long hint from a prior tap
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -919,6 +931,52 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// Append a mic chunk to the per-turn buffer under the lock, capped at
+  /// `maxBatchAudioBytes`. Called from the audio thread. Once the cap is hit the
+  /// buffer stops growing (bounded RSS) and the user is warned once; the buffered
+  /// (~4.5 min) audio still transcribes normally when the turn is released.
+  private func appendBatchAudioBounded(_ audioData: Data, turn: UInt64) {
+    batchAudioLock.lock()
+    // Append while under the cap (the chunk that reaches it is kept, so the warning
+    // fires exactly at the crossing). Set the once-flag atomically under the lock so
+    // the warning is enqueued exactly once, not on every subsequent chunk.
+    var justHitCap = false
+    if batchAudioBuffer.count < Self.maxBatchAudioBytes {
+      batchAudioBuffer.append(audioData)
+      if batchAudioBuffer.count >= Self.maxBatchAudioBytes && !batchAudioOverflowSignaled {
+        batchAudioOverflowSignaled = true
+        justHitCap = true
+      }
+    }
+    batchAudioLock.unlock()
+    if justHitCap { showBatchAudioOverflowWarning(turn: turn) }
+  }
+
+  /// Surface the one-time "recording too long" warning when the turn buffer is
+  /// capped. Hops to main (called from the audio thread) and reuses the rendered
+  /// `pttHintText` surface (the legacy `voiceTranscript` error field is unrendered).
+  /// `turn` guards against a stale warning painting a *newer* turn if this turn
+  /// ended before the block ran. Self-clears after a beat (like the too-short hint)
+  /// so it doesn't linger on the bar after the capped turn is submitted.
+  private func showBatchAudioOverflowWarning(turn: UInt64) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.micCaptureGeneration == turn else { return }
+      log("PushToTalkManager: turn audio hit \(Self.maxBatchAudioBytes)-byte cap — bounding buffer, warning user")
+      self.barState?.pttHintText = "Recording too long — keep it under 5 min"
+      self.updateBarState()
+      self.pttHintGeneration &+= 1
+      let generation = self.pttHintGeneration
+      Task { @MainActor [weak self] in
+        try? await Task.sleep(nanoseconds: 4_000_000_000)
+        guard let self, self.pttHintGeneration == generation else { return }
+        if self.barState?.pttHintText == "Recording too long — keep it under 5 min" {
+          self.barState?.pttHintText = ""
+          self.updateBarState()
+        }
+      }
+    }
+  }
+
   private func sendTranscript() {
     // QueryTracer: close the omni finalization span opened in finalize() (no-op on
     // the batch/live fallback paths, which never opened it).
@@ -1289,9 +1347,7 @@ class PushToTalkManager: ObservableObject {
               // Realtime hub owns this turn — stream mic PCM straight to it, and
               // retain it so finalize() can silence-gate the turn.
               RealtimeHubController.shared.feedAudio(audioData)
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData, turn: generation)
               return
             }
             if self.isOmniSTT {
@@ -1303,14 +1359,10 @@ class PushToTalkManager: ObservableObject {
                 self.omniPreconnectBuffer.append(audioData)
               }
               // Also retain the raw turn for a Deepgram fallback if omni fails.
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData, turn: generation)
             } else if batchMode {
               // Batch mode: accumulate audio in buffer
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData, turn: generation)
             } else {
               // Live mode: stream to Deepgram
               self.transcriptionService?.sendAudio(audioData)
