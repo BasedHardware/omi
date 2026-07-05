@@ -74,6 +74,7 @@ static struct gpio_callback aad_wake_cb;
 #define AAD_THREAD_PRIORITY 5
 static K_THREAD_STACK_DEFINE(aad_stack, AAD_THREAD_STACK_SIZE);
 static struct k_thread aad_thread_data;
+static bool aad_thread_started; /* aad_thread_data is a live thread */
 static K_SEM_DEFINE(aad_sem, 0, 1);
 #define AAD_PDM_SETTLE_MS 20
 
@@ -245,7 +246,12 @@ int mic_start()
     k_thread_start(mic_thread_id);
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
-    aad_hw_start(); /* WAKE pin ISR + hardware-AAD thread */
+    ret = aad_hw_start(); /* WAKE pin ISR + hardware-AAD thread */
+    if (ret) {
+        /* Non-fatal: the mic still records, it just won't power-save via AAD.
+         * Log loudly so a broken AAD (device never sleeps) is diagnosable. */
+        LOG_ERR("AAD start failed (%d): mic runs without hardware sleep", ret);
+    }
 #endif
 
     LOG_INF("Microphone started");
@@ -432,11 +438,9 @@ static void aad_track_silence(const int16_t *buf, size_t n)
 
 static int aad_hw_start(void)
 {
-    int ret = t5838_aad_init();
-    if (ret) {
-        LOG_ERR("AAD: t5838 low-level init failed (%d)", ret);
-        return ret;
-    }
+    /* t5838_aad_init() already ran in mic_start() (to power the rail before the
+     * PDM was configured); don't re-init here. */
+    int ret;
     if (!gpio_is_ready_dt(&aad_wake)) {
         LOG_ERR("AAD: WAKE gpio not ready");
         return -ENODEV;
@@ -466,6 +470,7 @@ static int aad_hw_start(void)
                     0,
                     K_NO_WAIT);
     k_thread_name_set(&aad_thread_data, "aad");
+    aad_thread_started = true;
     LOG_INF("AAD (hardware) started: WAKE=P1.%d thr=%d hold=%dms settle=%dms",
             aad_wake.pin,
             CONFIG_OMI_VAD_ABS_THRESHOLD,
@@ -491,10 +496,15 @@ void mic_off()
     }
 
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
-    /* Cut PDM_EN so the T5838 mic AND the TXS0104 level-shifter lose power.
-     * Otherwise the shifter's pull-ups keep leaking ~1 mA through system-off
-     * (mic_off is only called on the power-down path). */
+    /* Stop the AAD worker first so it can't run a sleep/wake transition (re-driving
+     * pins or the rail) after we cut power. Mask WAKE, then drop PDM_EN so the
+     * T5838 + TXS0104 level-shifter lose power (otherwise the shifter's pull-ups
+     * keep leaking ~1 mA through system-off). mic_off is the power-down path. */
     aad_wake_irq(false);
+    if (aad_thread_started) {
+        k_thread_abort(&aad_thread_data);
+        aad_thread_started = false;
+    }
     t5838_aad_power(false);
 #endif
 }
@@ -502,6 +512,12 @@ void mic_off()
 void mic_on()
 {
     if (!mic_running) {
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+        /* Restore the mic/level-shifter rail in case a prior mic_off() cut it,
+         * so capture works again after an off/on cycle. */
+        t5838_aad_power(true);
+        k_msleep(AAD_PDM_SETTLE_MS);
+#endif
         int ret = dmic_trigger(dmic_dev, DMIC_TRIGGER_START);
         if (ret < 0) {
             LOG_ERR("START trigger failed: %d", ret);
