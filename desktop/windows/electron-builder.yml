@@ -77,7 +77,7 @@ npmRebuild: false
 # dependency, there is no `autoUpdater` wiring in src/main, and no `publish`
 # target. Shipped users cannot receive fixes without a manual re-download.
 # To enable (do this deliberately, then test on a real release channel):
-#   1. npm i electron-updater
+#   1. pnpm add electron-updater
 #   2. wire autoUpdater.checkForUpdatesAndNotify() in src/main (guarded to
 #      packaged builds), with a NSIS differential-update-friendly flow.
 #   3. uncomment and point this at your release host:
