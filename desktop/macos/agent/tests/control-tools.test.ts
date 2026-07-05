@@ -1630,6 +1630,36 @@ describe("agent control tools", () => {
     store.close();
   });
 
+  it("spawn_agent generates a pill external ref when visible without externalRefId", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+        objective: "summarize inbox",
+        visible: true,
+        requestId: "spawn-visible-pill-1",
+        clientId: "spawn-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    expect(spawned.session).toMatchObject({
+      ownerId: "owner",
+      surfaceKind: "floating_bar",
+      externalRefKind: "pill",
+    });
+    expect(spawned.session.externalRefId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+    );
+    const row = store.getRow("SELECT external_ref_kind, external_ref_id FROM sessions WHERE session_id = ?", [
+      spawned.session.omiSessionId,
+    ]);
+    expect(row.external_ref_kind).toBe("pill");
+    expect(row.external_ref_id).toBe(spawned.session.externalRefId);
+    store.close();
+  });
+
   it("spawn_agent with parentRunId returns child handles before the child finishes", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);

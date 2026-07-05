@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot } from "./kernel.js";
@@ -673,6 +674,9 @@ export async function handleAgentControlToolCall(
           clientId: parsed.clientId,
           adapterId: adapterId ?? "acp",
         });
+        const visiblePillExternalRefId = parsed.visible
+          ? (parsed.externalRefId ?? randomUUID())
+          : parsed.externalRefId;
         if (parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
             mode: "spawn",
@@ -684,7 +688,7 @@ export async function handleAgentControlToolCall(
             defaultAdapterId: adapterId,
             childSurfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
             childExternalRefKind: parsed.visible ? "pill" : undefined,
-            childExternalRefId: parsed.externalRefId,
+            childExternalRefId: visiblePillExternalRefId,
             childTitle: parsed.title ?? `Delegated: ${parsed.objective.slice(0, 80)}`,
             cwd: parsed.cwd,
             model: parsed.model,
@@ -708,7 +712,7 @@ export async function handleAgentControlToolCall(
           title: parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`,
           surfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
           externalRefKind: parsed.visible ? "pill" : undefined,
-          externalRefId: parsed.externalRefId,
+          externalRefId: visiblePillExternalRefId,
           adapterId,
           defaultAdapterId: adapterId,
           cwd: parsed.cwd,
