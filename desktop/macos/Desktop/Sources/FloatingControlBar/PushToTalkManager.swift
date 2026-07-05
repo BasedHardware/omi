@@ -10,7 +10,7 @@ struct PTTSilentMicRecoveryPolicy {
 
   private(set) var consecutiveDeadMicTurns = 0
 
-  mutating func recordDiscardedHubTurn(totalSec: TimeInterval, peak: Int) -> Bool {
+  mutating func recordDiscardedTurn(totalSec: TimeInterval, peak: Int) -> Bool {
     if totalSec >= Self.minDeadTurnSeconds && peak <= Self.deadMicPeakThreshold {
       consecutiveDeadMicTurns += 1
     } else {
@@ -19,7 +19,7 @@ struct PTTSilentMicRecoveryPolicy {
     return consecutiveDeadMicTurns >= Self.consecutiveDeadTurnThreshold
   }
 
-  mutating func recordSuccessfulHubTurn() {
+  mutating func recordSuccessfulTurn() {
     consecutiveDeadMicTurns = 0
   }
 
@@ -674,7 +674,7 @@ class PushToTalkManager: ObservableObject {
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
-        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedHubTurn(totalSec: totalSec, peak: peak)
+        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: "hub",
           mode: finalizedMode,
@@ -719,7 +719,7 @@ class PushToTalkManager: ObservableObject {
         transcribeBufferedWarmWaitAudio()
         return
       }
-      silentMicRecoveryPolicy.recordSuccessfulHubTurn()
+      silentMicRecoveryPolicy.recordSuccessfulTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       barState?.beginVoiceResponseWaiting()
       // Show the "thinking" indicator in the notch during the release→first-audio
@@ -749,7 +749,7 @@ class PushToTalkManager: ObservableObject {
         // A dead mic (peak≈0 for a real hold) leaves omni/batch users stuck on
         // repeated silent turns with no recovery. Mirror the hub path: rebuild the
         // CoreAudio capture after consecutive dead-mic turns.
-        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedHubTurn(totalSec: totalSec, peak: peak)
+        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: isOmniSTT ? "omni_stt" : "batch_stt",
           mode: finalizedMode,
@@ -785,6 +785,7 @@ class PushToTalkManager: ObservableObject {
     // Past the silence gate — a real turn will be transcribed and answered. Show
     // the "thinking" indicator through the transcription/first-token gap; it hands
     // off to the conversation surface (or voice glow) the moment output arrives.
+    silentMicRecoveryPolicy.recordSuccessfulTurn()
     barState?.isThinking = true
     updateBarState()
 
