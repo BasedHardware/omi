@@ -9,7 +9,11 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
     XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    XCTAssertTrue(source.contains("output: \"Agent started.\""))
+    // Routed spawns narrate the provider choice; explicit/default spawns keep
+    // the legacy result text so acknowledgment behavior is unchanged there.
+    XCTAssertTrue(source.contains("startedOutput = \"Agent started.\""))
+    XCTAssertTrue(source.contains("Agent started via \\(directedProvider.displayName)"))
+    XCTAssertTrue(source.contains("output: startedOutput"))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
   }
 

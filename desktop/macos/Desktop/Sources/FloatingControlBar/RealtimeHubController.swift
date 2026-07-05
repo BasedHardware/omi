@@ -1599,9 +1599,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // final ASR transcript is used instead of a partial interim transcript.
     pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)
     suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck
+    // When the router picked the provider (not the user), tell the model so
+    // it can narrate the choice — the routing decision should be observable
+    // to the user, not just to the logs. Explicit mentions and default-
+    // orchestrator spawns keep the exact legacy result text.
+    let startedOutput: String
+    if let directedProvider, dispatch.reason != "explicit" {
+      startedOutput =
+        "Agent started via \(directedProvider.displayName) — Omi picked it as the best fit for this task. In your brief acknowledgment, mention that \(directedProvider.displayName) is handling it."
+    } else {
+      startedOutput = "Agent started."
+    }
     sendToolResultIfCurrent(
       source: source, callId: callId, name: name,
-      output: "Agent started.",
+      output: startedOutput,
       expectedTurnEpoch: expectedTurnEpoch)
   }
 

@@ -1,0 +1,3 @@
+{
+  "change": "When Omi auto-picks the best agent for a voice task, it now says which agent is handling it instead of leaving the choice invisible"
+}
