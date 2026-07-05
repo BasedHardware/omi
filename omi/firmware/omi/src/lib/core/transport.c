@@ -50,6 +50,9 @@ extern bool is_connected;
 extern bool is_charging;
 #endif
 static atomic_t pusher_stop_flag;
+/* Set while we deliberately hold the link at low-power (slow) params during AAD
+ * sleep, so the auto "interval too high -> re-request fast" logic stays quiet. */
+static atomic_t conn_lowpower = ATOMIC_INIT(0);
 
 struct bt_conn *current_connection = NULL;
 uint16_t current_mtu = 0;
@@ -665,6 +668,7 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
     mtu_recheck_attempts = 0;
 
     is_connected = false;
+    atomic_set(&conn_lowpower, 0); /* next connection starts at fast params */
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         shell_bt_nus_disable();
@@ -710,7 +714,7 @@ static void _le_param_updated(struct bt_conn *conn, uint16_t interval, uint16_t 
             latency,
             supervision_timeout);
 
-    if (interval > 24) {
+    if (interval > 24 && !atomic_get(&conn_lowpower)) {
         LOG_WRN("Connection interval still high (%u units). Re-requesting preferred params.", interval);
         update_conn_params(conn);
     }
@@ -793,6 +797,9 @@ static void update_conn_params(struct bt_conn *conn)
 
 void transport_conn_set_lowpower(bool low)
 {
+    /* Flag first so _le_param_updated() does not fight a slow interval. */
+    atomic_set(&conn_lowpower, low ? 1 : 0);
+
     struct bt_conn *conn = current_connection;
     if (conn == NULL) {
         return; /* advertising-only: no link to slow down */
