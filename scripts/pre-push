@@ -71,12 +71,15 @@ SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tes
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
 trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
-# Use backend/.venv/bin/python for backend Python scripts that need backend
-# dependencies (fastapi, pydantic, firebase_admin, etc.). Falls back to system
-# python3 when the venv doesn't exist (e.g. CI, fresh clone).
-BACKEND_PYTHON="python3"
-if [[ -x "$PWD/backend/.venv/bin/python" ]]; then
-  BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+# Require backend/.venv/bin/python for all backend Python scripts. The system
+# python3 does not have backend deps (fastapi, pydantic, etc.) and using it
+# silently produces misleading failures. If the venv is missing, tell the
+# developer exactly how to create it.
+BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+if [[ ! -x "$BACKEND_PYTHON" ]]; then
+  echo "FAIL: backend/.venv/bin/python not found." >&2
+  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  exit 1
 fi
 
 run_step() {
