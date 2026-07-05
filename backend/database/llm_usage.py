@@ -7,7 +7,7 @@ Schema: users/{uid}/llm_usage/{date} -> {feature -> {model -> {input_tokens, out
 
 import hashlib
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
 
@@ -77,7 +77,7 @@ def record_llm_usage(
     usage_ref.set(update_data, merge=True)
 
 
-@transactional
+@transactional  # pyright: ignore[reportUntypedFunctionDecorator]
 def _record_chat_quota_question_transaction(
     transaction: Any,
     usage_ref: Any,
