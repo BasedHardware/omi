@@ -170,8 +170,16 @@ describe("agent control tools", () => {
   it("documents run_agent_and_wait as synchronous parent-linked delegation", () => {
     const runAndWait = agentControlCapabilityManifest.find((tool) => tool.name === "run_agent_and_wait");
     expect(runAndWait?.description).toContain("synchronously");
-    expect(runAndWait?.promptGuidelines?.join("\n")).toContain("send_agent_message");
     expect(runAndWait?.runtimePreconditions).toContain("Requires parentRunId.");
+    expect(runAndWait?.promptGuidelines?.join("\n")).not.toMatch(/send_agent_message|instead of/i);
+  });
+
+  it("documents send_agent_message as session continuation only", () => {
+    const sendMessage = agentControlCapabilityManifest.find((tool) => tool.name === "send_agent_message");
+    expect(sendMessage?.runtimePreconditions).toContain(
+      "Requires an existing sessionId from list_agent_sessions; cannot create a new session.",
+    );
+    expect(sendMessage?.promptGuidelines?.join("\n")).not.toMatch(/do not|instead of|delegated child/i);
   });
 
   it("resolves desktop approval dispatches with a scoped grant and event evidence", async () => {

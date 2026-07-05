@@ -1138,17 +1138,19 @@ test("OMI_TOOLS: agent control schemas keep runtime precondition guidance withou
 
   const runAgentAndWait = OMI_TOOLS.find((tool) => tool.name === "run_agent_and_wait");
   assert.equal((runAgentAndWait?.parameters as any).allOf, undefined);
-  assert.ok(
-    runAgentAndWait?.promptGuidelines?.some((guideline) =>
-      guideline.includes("send_agent_message")
-    ),
-  );
+  assert.doesNotMatch(runAgentAndWait?.promptGuidelines?.join("\n") ?? "", /send_agent_message|instead of/i);
+});
+
+test("OMI_TOOLS: run_agent_and_wait requires parentRunId without sibling arbitration", () => {
+  const runAgentAndWait = OMI_TOOLS.find((tool) => tool.name === "run_agent_and_wait");
+  assert.match(runAgentAndWait?.description ?? "", /synchronously/);
+  assert.doesNotMatch(runAgentAndWait?.description ?? "", /send_agent_message|instead of/i);
+  assert.doesNotMatch(runAgentAndWait?.promptGuidelines?.join("\n") ?? "", /send_agent_message|instead of/i);
 });
 
 test("OMI_TOOLS: spawn_agent and run_agent_and_wait describe separate session surfaces", () => {
   const runAgentAndWait = OMI_TOOLS.find((tool) => tool.name === "run_agent_and_wait");
   assert.match(runAgentAndWait?.description ?? "", /synchronously/);
-  assert.match(runAgentAndWait?.description ?? "", /send_agent_message/);
 
   const spawnAgent = OMI_TOOLS.find((tool) => tool.name === "spawn_agent");
   assert.match(spawnAgent?.description ?? "", /floating-bar pills/);
@@ -1157,7 +1159,7 @@ test("OMI_TOOLS: spawn_agent and run_agent_and_wait describe separate session su
       "Use visible=false for parent-linked background work that should not appear as a pill.",
     ),
   );
-  assert.match(spawnAgent?.description ?? "", /run_agent_and_wait/);
+  assert.doesNotMatch(spawnAgent?.description ?? "", /run_agent_and_wait/);
 });
 
 test("OMI_TOOLS: agent control tools match canonical capability manifest", () => {

@@ -234,7 +234,7 @@ enum GeneratedToolCapabilities {
       summary: "Send a follow-up message to an existing canonical Omi agent session.",
       bullets: [
       "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
-      "Creates a new run in the existing session; do not use it to create a delegated child."
+      "Creates a new run in the existing session."
     ]
     ),
     Capability(
@@ -244,7 +244,7 @@ enum GeneratedToolCapabilities {
       surfaces: Set([]),
       summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
       bullets: [
-      "Internal coordinator use only; agent-facing callers should use spawn_agent."
+      "Swift coordinator entrypoint only; not advertised to agent-facing surfaces."
     ]
     ),
     Capability(
@@ -266,8 +266,7 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Run a parent-linked child agent synchronously and return its structured result.",
       bullets: [
-      "Use for synchronous structured child results linked to a known parent run.",
-      "For another turn in an existing child session, use send_agent_message instead."
+      "Use for synchronous structured child results linked to a known parent run."
     ]
     ),
     Capability(

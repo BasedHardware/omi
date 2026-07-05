@@ -577,18 +577,18 @@ This only records artifact metadata state and ordered kernel events. It does not
     label: "Send Agent Message",
     description: `Send a follow-up message to an existing canonical Omi agent session.
 
-Creates a new run in that session through the runtime kernel. Use this for multi-turn conversations with Omi-managed agents when you already have a sessionId.`,
+Creates a new run in that session through the runtime kernel.`,
     promptSnippet: "send_agent_message - Continue an Omi-managed agent session",
     promptGuidelines: [
       "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
-      "Creates a new run in the existing session; do not use it to create a delegated child.",
+      "Creates a new run in the existing session.",
     ],
     capabilityDoc: controlDoc(
       "Send Agent Message",
       "Send a follow-up message to an existing canonical Omi agent session.",
       [
         "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
-        "Creates a new run in the existing session; do not use it to create a delegated child.",
+        "Creates a new run in the existing session.",
       ],
     ),
     latency: "async background",
@@ -600,6 +600,7 @@ Creates a new run in that session through the runtime kernel. Use this for multi
     allowedSurfaces: ["desktopChat"],
     runtimePreconditions: [
       "Defaults ownerId to the active signed-in owner when omitted.",
+      "Requires an existing sessionId from list_agent_sessions; cannot create a new session.",
       "Rejects synchronous nested runs when the selected adapter is already executing for the session or has no capacity.",
     ],
     timeoutClass: "long",
@@ -622,15 +623,13 @@ Creates a new run in that session through the runtime kernel. Use this for multi
     label: "Spawn Background Agent",
     description: `Internal Swift coordinator entrypoint for creating canonical floating-bar runs.
 
-Agent-facing callers should use spawn_agent instead.`,
+Not exposed to agent-facing surfaces.`,
     promptSnippet: "spawn_background_agent - Internal coordinator spawn",
-    promptGuidelines: [
-      "Internal coordinator use only; agent-facing callers should use spawn_agent.",
-    ],
+    promptGuidelines: ["Swift coordinator entrypoint only."],
     capabilityDoc: controlDoc(
       "Spawn Background Agent",
       "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
-      ["Internal coordinator use only; agent-facing callers should use spawn_agent."],
+      ["Swift coordinator entrypoint only; not advertised to agent-facing surfaces."],
     ),
     latency: "async background",
     surfaces: [],
@@ -664,7 +663,7 @@ Agent-facing callers should use spawn_agent instead.`,
     label: "Spawn Agent",
     description: `Start canonical Omi background work. Visible runs project into floating-bar pills; invisible runs stay kernel-only child work.
 
-Pass parentRunId to link the new run to a parent. Use run_agent_and_wait when you need a synchronous structured child result.`,
+Pass parentRunId to link the new run to a parent.`,
     promptSnippet: "spawn_agent - Start canonical Omi background work",
     promptGuidelines: [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
@@ -686,6 +685,7 @@ Pass parentRunId to link the new run to a parent. Use run_agent_and_wait when yo
     ...agentControlManagePolicy,
     runtimePreconditions: [
       "Defaults ownerId to the active signed-in owner when omitted.",
+      "With parentRunId, creates a delegated child session; without it, creates a new top-level background session.",
       "Creates a canonical floating_bar session/run when visible=true.",
     ],
     timeoutClass: "long",
@@ -709,21 +709,15 @@ Pass parentRunId to link the new run to a parent. Use run_agent_and_wait when yo
   {
     name: "run_agent_and_wait",
     label: "Run Agent And Wait",
-    description: `Run a parent-linked child agent synchronously and return its structured result.
-
-Use when you need an immediate child result instead of spawning background work. Continue an existing child session with send_agent_message.`,
+    description: `Run a parent-linked child agent synchronously and return its structured result.`,
     promptSnippet: "run_agent_and_wait - Run a linked child agent and wait for the result",
     promptGuidelines: [
       "Use for synchronous structured child results linked to a known parent run.",
-      "For another turn in an existing child session, use send_agent_message instead.",
     ],
     capabilityDoc: controlDoc(
       "Run Agent And Wait",
       "Run a parent-linked child agent synchronously and return its structured result.",
-      [
-        "Use for synchronous structured child results linked to a known parent run.",
-        "For another turn in an existing child session, use send_agent_message instead.",
-      ],
+      ["Use for synchronous structured child results linked to a known parent run."],
     ),
     latency: "async background",
     surfaces: ["desktopChat"],
