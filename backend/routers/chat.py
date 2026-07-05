@@ -90,13 +90,11 @@ def _rate_limited_uid(policy: str) -> Any:
     return Depends(auth.with_rate_limit(auth.get_current_user_uid, policy))
 
 
-def _current_uid() -> Any:
-    """Typed wrapper for the untyped endpoints.get_current_user_uid dependency."""
+def _current_uid():
     return Depends(auth.get_current_user_uid)
 
 
-def _current_uid_ws_listen() -> Any:
-    """Typed wrapper for the untyped endpoints.get_current_user_uid_ws_listen dependency."""
+def _current_uid_ws_listen():
     return Depends(auth.get_current_user_uid_ws_listen)
 
 

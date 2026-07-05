@@ -41,7 +41,10 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: uv pip sync pylock.toml --system
+        run: |
+          uv venv
+          uv pip sync pylock.toml
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run preflight
         working-directory: backend
