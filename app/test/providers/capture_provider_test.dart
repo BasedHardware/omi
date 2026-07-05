@@ -724,10 +724,11 @@ void main() {
       provider.dispose();
     });
 
-    test('returns false for Limitless', () {
+    test('returns true for Limitless (flash-drain route) but no background-stream route', () {
       final provider = CaptureProvider();
       provider.updateRecordingDevice(_device(id: 'AA:BB:CC:DD:EE:FF', type: DeviceType.limitless));
-      expect(provider.hasNativeBleAudioRoute, isFalse);
+      expect(provider.hasNativeBleAudioRoute, isTrue);
+      expect(provider.hasNativeBackgroundStreamRoute, isFalse);
       provider.dispose();
     });
 

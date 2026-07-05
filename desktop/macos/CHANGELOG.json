@@ -2,6 +2,64 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.22",
+      "date": "2026-07-05",
+      "changes": [
+        "Show onboarding data-source read failures instead of stale or empty metrics",
+        "Reported invalid realtime WebSocket URLs instead of leaving the connection stuck"
+      ]
+    },
+    {
+      "version": "0.12.21",
+      "date": "2026-07-05",
+      "changes": [
+        "Fixed push-to-talk silently dropping a tap too short to capture audio; it now shows a hint to hold longer",
+        "Fixed the too-short push-to-talk hint not appearing on Macs with a notch (the notch-island control bar)"
+      ]
+    },
+    {
+      "version": "0.12.20",
+      "date": "2026-07-05",
+      "changes": [
+        "Fixed import connector status so sources no longer appear connected before setup and zero-item imports stay connected."
+      ]
+    },
+    {
+      "version": "0.12.19",
+      "date": "2026-07-05",
+      "changes": [
+        "Fixed onboarding permission checks so notification permission is reported and can be requested correctly"
+      ]
+    },
+    {
+      "version": "0.12.18",
+      "date": "2026-07-05",
+      "changes": [
+        "Improved long language dropdowns with built-in search"
+      ]
+    },
+    {
+      "version": "0.12.17",
+      "date": "2026-07-05",
+      "changes": [
+        "Screen capture now resumes automatically when a temporary usage-limit paywall clears instead of staying paused until you switch back to the app"
+      ]
+    },
+    {
+      "version": "0.12.16",
+      "date": "2026-07-05",
+      "changes": [
+        "The Listening status pill now stays compact — its mode label (Always / In meeting) and the mode toggle appear only on hover"
+      ]
+    },
+    {
+      "version": "0.12.15",
+      "date": "2026-07-05",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.14",
       "date": "2026-07-05",
       "changes": [

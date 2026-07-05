@@ -9284,7 +9284,8 @@ class AppLocalizationsAr extends AppLocalizations {
       'سجّل الصوت الآن وفرّغه نصيًا عند الطلب بدلًا من التفريغ المباشر. تُحفظ التسجيلات على هاتفك، ثم ترفعها لإنشاء المحادثات.';
 
   @override
-  String get transcribeLaterNote => 'يعمل مع أجهزة Omi في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
+  String get transcribeLaterNote =>
+      'يعمل مع أجهزة Omi وLimitless في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9433,4 +9434,21 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'تحديث البرنامج الثابت';
+
+  @override
+  String get pendantRecordingTitle => 'التسجيل على القلادة';
+
+  @override
+  String get pendantRecordingNote => 'تسجّل قلادتك من تلقاء نفسها. تتم مزامنة التسجيلات مع هاتفك أثناء فتح التطبيق.';
+
+  @override
+  String get pendantSyncingRecordings => 'جارٍ مزامنة التسجيلات من قلادتك…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes دقيقة مخزّنة';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'مساحة تخزين القلادة ممتلئة تقريبًا — أبقِ التطبيق مفتوحًا للمزامنة.';
 }

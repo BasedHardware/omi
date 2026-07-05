@@ -36,9 +36,9 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "write"},
+        {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
         {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
         {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "false"},'''
     return payload.replace(

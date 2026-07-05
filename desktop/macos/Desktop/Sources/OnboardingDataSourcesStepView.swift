@@ -75,7 +75,9 @@ struct OnboardingDataSourcesStepView: View {
           memoryCount: coordinator.calendarMemoriesSaved
         ),
         isOn: true,
-        isDisabled: true
+        isDisabled: true,
+        scanFinished: coordinator.calendarInsightsFinished,
+        scanFailed: coordinator.calendarInsightsFailed
       )
       listDivider
 
@@ -89,7 +91,9 @@ struct OnboardingDataSourcesStepView: View {
           memoryCount: coordinator.gmailMemoriesSaved
         ),
         isOn: true,
-        isDisabled: true
+        isDisabled: true,
+        scanFinished: coordinator.gmailInsightsFinished,
+        scanFailed: coordinator.gmailInsightsFailed
       )
       listDivider
 
@@ -118,6 +122,8 @@ struct OnboardingDataSourcesStepView: View {
         ),
         isOn: true,
         isDisabled: coordinator.appleNotesInsightCount > 0,
+        scanFinished: coordinator.appleNotesInsightsFinished,
+        scanFailed: coordinator.appleNotesInsightsFailed,
         actionTitle: coordinator.appleNotesInsightCount > 0 ? nil : "Select Folder",
         action: coordinator.appleNotesInsightCount > 0
           ? nil
@@ -263,11 +269,19 @@ struct OnboardingDataSourcesStepView: View {
     metrics: String,
     isOn: Bool,
     isDisabled: Bool,
+    scanFinished: Bool? = nil,
+    scanFailed: Bool = false,
     actionTitle: String? = nil,
     action: (() -> Void)? = nil,
     onToggle: ((Bool) -> Void)? = nil
   ) -> some View {
-    HStack(alignment: .center, spacing: 12) {
+    let status = OnboardingDataSourceRowStatus.resolve(
+      metrics: metrics,
+      scanFinished: scanFinished,
+      scanFailed: scanFailed
+    )
+
+    return HStack(alignment: .center, spacing: 12) {
       ConnectorBrandIcon(brand: brand, size: 38, cornerRadius: 11)
 
       VStack(alignment: .leading, spacing: 3) {
@@ -275,9 +289,9 @@ struct OnboardingDataSourcesStepView: View {
           .font(.system(size: 15, weight: .semibold))
           .foregroundColor(OmiColors.textPrimary)
 
-        Text(metrics)
+        Text(status.text)
           .font(.system(size: 12, weight: .medium))
-          .foregroundColor(OmiColors.textTertiary)
+          .foregroundColor(status.isError ? OmiColors.warning : OmiColors.textTertiary)
           .monospacedDigit()
           .lineLimit(1)
       }
@@ -321,5 +335,29 @@ struct OnboardingDataSourcesStepView: View {
 
   private func countLabel(_ count: Int, singular: String, plural: String) -> String {
     count == 1 ? "1 \(singular)" : "\(count.formatted()) \(plural)"
+  }
+}
+
+struct OnboardingDataSourceRowStatus: Equatable {
+  let text: String
+  let isError: Bool
+
+  static func resolve(
+    metrics: String,
+    scanFinished: Bool?,
+    scanFailed: Bool
+  ) -> OnboardingDataSourceRowStatus {
+    if scanFailed {
+      return OnboardingDataSourceRowStatus(
+        text: "Couldn't read - check access",
+        isError: true
+      )
+    }
+
+    if scanFinished == false {
+      return OnboardingDataSourceRowStatus(text: "Scanning...", isError: false)
+    }
+
+    return OnboardingDataSourceRowStatus(text: metrics, isError: false)
   }
 }

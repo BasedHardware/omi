@@ -1,4 +1,13 @@
-package com.friend.ios
+package com.friend.ios.ble
+
+import com.friend.ios.BleDeviceDiagnostics
+import com.friend.ios.BleDisconnectEvent
+import com.friend.ios.BleService
+
+import com.friend.ios.batch.LimitlessBatchAudioWriter
+import com.friend.ios.batch.OmiBackgroundAudioStreamer
+import com.friend.ios.batch.OmiBatchAudioWriter
+import com.friend.ios.limitless.LimitlessFlashDrainEngine
 
 import android.annotation.SuppressLint
 import android.app.*
@@ -161,6 +170,8 @@ class OmiBleForegroundService : Service() {
     private val bleManager get() = OmiBleManager.instance
     private val backgroundAudioStreamer by lazy { OmiBackgroundAudioStreamer(applicationContext) }
     private val batchAudioWriter by lazy { OmiBatchAudioWriter(applicationContext) }
+    private val limitlessBatchWriter by lazy { LimitlessBatchAudioWriter(applicationContext) }
+    private val limitlessDrainEngine by lazy { LimitlessFlashDrainEngine(applicationContext, limitlessBatchWriter) }
 
     // ── Connection listener — receives GATT events from OmiBleManager ──
 
@@ -261,6 +272,7 @@ class OmiBleForegroundService : Service() {
     private fun fireDeviceReady(address: String, services: List<BleService>) {
         val addr = address.uppercase()
         ensureBackgroundAudioSubscription(addr, services)
+        limitlessDrainEngine.onDeviceReady(addr)
         if (OmiBleManager.isFlutterAlive) {
             bleManager.mainHandler.post {
                 bleManager.flutterApi?.onDeviceReady(addr, services) {}
@@ -488,6 +500,7 @@ class OmiBleForegroundService : Service() {
         // Finalize the in-progress batch recording so it's saved + ingestable right away
         // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
         batchAudioWriter.stop("ble_disconnected")
+        limitlessDrainEngine.onDeviceDisconnected(address)
 
         val addr = address.uppercase()
 
@@ -654,16 +667,27 @@ class OmiBleForegroundService : Service() {
                 value: ByteArray
             ) {
                 // Batch mode and background streaming are mutually exclusive (gated by
-                // their respective prefs); calling both is safe — each self-gates.
+                // their respective prefs); calling all sinks is safe — each self-gates.
                 batchAudioWriter.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
                 backgroundAudioStreamer.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
+                limitlessDrainEngine.handleCharacteristic(address, serviceUuid, characteristicUuid, value)
             }
         }
         Log.d(TAG, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
+        // On Android 12+ startForeground() throws ForegroundServiceStartNotAllowedException when the
+        // service is (re)started while the app is in the background — e.g. START_STICKY redelivery after
+        // a process kill with the screen locked, or a CompanionDeviceService callback. An uncaught throw
+        // silently kills the whole process ("app just disappears"). Stop cleanly instead of crashing.
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification("Connecting to Omi..."))
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed; stopping service instead of crashing", e)
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         val backgroundMode = isBackgroundModeEnabled(this)
         val persistentMode = isPersistentModeEnabled(this)
@@ -707,6 +731,7 @@ class OmiBleForegroundService : Service() {
         isDestroying = true
         backgroundAudioStreamer.stop("service_destroyed")
         batchAudioWriter.stop("service_destroyed")
+        limitlessDrainEngine.stop("service_destroyed")
 
         for ((addr, managed) in managedDevices) {
             managed.pendingReconnect?.let { handler.removeCallbacks(it) }

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.16",
+  "date": "2026-07-05",
+  "changes": [
+    "The Listening status pill now stays compact — its mode label (Always / In meeting) and the mode toggle appear only on hover"
+  ]
+}

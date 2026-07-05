@@ -1,4 +1,5 @@
-package com.friend.ios
+package com.friend.ios.ble
+
 
 import android.companion.AssociationInfo
 import android.companion.CompanionDeviceManager
@@ -38,8 +39,8 @@ class BleCompanionService : CompanionDeviceService() {
         Log.i(TAG, "Device appeared: $address")
 
         if (!hasBluetoothPermission()) return
-        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) {
-            Log.i(TAG, "Device appeared but Background Mode is off; not starting service")
+        if (!OmiBleForegroundService.isPersistentModeEnabled(applicationContext)) {
+            Log.i(TAG, "Device appeared but Background Mode and Transcribe Later are off; not starting service")
             return
         }
 
@@ -75,7 +76,7 @@ class BleCompanionService : CompanionDeviceService() {
         Log.i(TAG, "onCreate")
 
         if (!hasBluetoothPermission()) return
-        if (!OmiBleForegroundService.isBackgroundModeEnabled(applicationContext)) return
+        if (!OmiBleForegroundService.isPersistentModeEnabled(applicationContext)) return
 
         val prefs = applicationContext.getSharedPreferences("ble_config", Context.MODE_PRIVATE)
         if (prefs.getBoolean("user_disconnected", false)) return

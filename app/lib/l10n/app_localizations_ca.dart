@@ -9394,7 +9394,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'De moment, funciona amb dispositius Omi. L\'àudio es queda al teu telèfon fins que decideixis pujar-lo.';
+      'De moment, funciona amb dispositius Omi i Limitless. L\'àudio es queda al teu telèfon fins que decideixis pujar-lo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9544,4 +9544,23 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Grava el microprogramari';
+
+  @override
+  String get pendantRecordingTitle => 'Gravant al penjoll';
+
+  @override
+  String get pendantRecordingNote =>
+      'El teu penjoll grava pel seu compte. Les gravacions se sincronitzen amb el teu telèfon mentre l\'aplicació és oberta.';
+
+  @override
+  String get pendantSyncingRecordings => 'S\'estan sincronitzant les gravacions del teu penjoll…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min emmagatzemats';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'L\'emmagatzematge del penjoll és gairebé ple: mantén l\'aplicació oberta per sincronitzar.';
 }

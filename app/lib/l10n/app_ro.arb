@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.",
     "transcribeLaterTitle": "Transcrie mai târziu",
     "transcribeLaterDescription": "Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.",
-    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
+    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
     "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.",
     "unmute": "Reactivează sunetul",
     "newRecording": "Înregistrare nouă",
@@ -3104,5 +3104,17 @@
     "deviceOnboardingIntroDuration": "Aproximativ 1 minut",
     "jumpToLatestMessage": "Sari la cel mai recent mesaj",
     "latest": "Recent",
-    "flashFirmware": "Instalați firmware-ul"
+    "flashFirmware": "Instalați firmware-ul",
+    "pendantRecordingTitle": "Înregistrare pe pandantiv",
+    "pendantRecordingNote": "Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.",
+    "pendantSyncingRecordings": "Se sincronizează înregistrările de pe pandantivul tău…",
+    "pendantMinutesStored": "~{minutes} min stocat(e)",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare."
 }

@@ -9188,7 +9188,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcribeLaterDescription => '실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.';
 
   @override
-  String get transcribeLaterNote => '현재는 Omi 기기에서만 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
+  String get transcribeLaterNote => '현재는 Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
 
   @override
   String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
@@ -9336,4 +9336,21 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get flashFirmware => '펌웨어 플래시';
+
+  @override
+  String get pendantRecordingTitle => '펜던트에서 녹음 중';
+
+  @override
+  String get pendantRecordingNote => '펜던트가 자동으로 녹음하고 있습니다. 앱이 열려 있는 동안 녹음이 휴대폰으로 동기화됩니다.';
+
+  @override
+  String get pendantSyncingRecordings => '펜던트에서 녹음을 동기화하는 중…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes분 저장됨';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요.';
 }

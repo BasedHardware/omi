@@ -1,4 +1,10 @@
-package com.friend.ios
+package com.friend.ios.ble
+
+import com.friend.ios.BleBatteryPoint
+import com.friend.ios.BleFlutterApi
+import com.friend.ios.BlePeripheral
+import com.friend.ios.BleService
+
 
 import android.annotation.SuppressLint
 import android.app.Application
