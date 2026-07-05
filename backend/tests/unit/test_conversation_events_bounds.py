@@ -110,6 +110,7 @@ def router():
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
         "database.redis_db": _pkg("database.redis_db"),
+        "database.cache": _pkg("database.cache"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         # firebase
