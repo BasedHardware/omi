@@ -9,10 +9,6 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 
-try:
-    from langchain_core.runnables import Runnable
-except ImportError:
-    Runnable = object  # type: ignore[assignment, misc]  # fallback for environments where langchain_core.runnables is unavailable
 
 from pydantic import ConfigDict
 
@@ -143,7 +139,7 @@ class GatewayShadowChatModel(BaseChatModel):
         return GatewayShadowRunnable(feature=_shadow_feature(self.feature), legacy=legacy, gateway=gateway)
 
 
-class GatewayShadowRunnable(Runnable):  # pyright: ignore[reportMissingTypeArgument]
+class GatewayShadowRunnable:
     def __init__(self, *, feature: str, legacy: Any, gateway: Any):
         self._feature = feature
         self._legacy = legacy
