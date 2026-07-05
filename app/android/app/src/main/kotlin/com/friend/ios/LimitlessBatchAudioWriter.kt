@@ -74,10 +74,7 @@ class LimitlessBatchAudioWriter(context: Context) : BaseBatchAudioWriter(context
 
     /** Fsync barrier: returns true when everything appended so far is durable on disk.
      *  The drain engine must get `true` here before ACKing the covered pages. */
-    fun sync(): Boolean = synchronized(lock) { !isOpenLocked || fsyncLocked() }
-
-    /** Finalize the current file (drain caught up / disconnect / batch disabled). */
-    fun finalizeCurrent(reason: String) = stop(reason)
+    fun sync(): Boolean = synchronized(lock) { !consumeCloseSyncFailureLocked() && (!isOpenLocked || fsyncLocked()) }
 
     override fun onClosedLocked() {
         lastPageTimestampMs = 0

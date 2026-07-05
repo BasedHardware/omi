@@ -29,6 +29,7 @@ class BaseBatchAudioWriter {
     private var lastFsyncMs: Int64 = 0
     private var storageFull = false
     private var recovered = false
+    private var closeSyncFailed = false
 
     private let fsyncIntervalMs: Int64 = 2_000
     private let minFreeBytes: Int64 = 200 * 1024 * 1024 // stop below 200 MB free
@@ -114,6 +115,7 @@ class BaseBatchAudioWriter {
             return true
         } catch {
             NSLog("[\(tag)] write failed: \(error)")
+            try? fh.truncate(atOffset: UInt64(currentBytes)) // drop a torn frame tail
             closeCurrentLocked("write_error")
             return false
         }
@@ -138,12 +140,23 @@ class BaseBatchAudioWriter {
         }
     }
 
+    func consumeCloseSyncFailureLocked() -> Bool {
+        let failed = closeSyncFailed
+        closeSyncFailed = false
+        return failed
+    }
+
     func closeCurrentLocked(_ reason: String) {
         if let fh = fileHandle {
-            try? fh.synchronize()
+            var synced = true
+            do {
+                try fh.synchronize()
+            } catch {
+                synced = false
+            }
             try? fh.close()
             if let part = currentURL {
-                if currentBytes > 0 {
+                if currentBytes > 0, synced {
                     // Atomically promote .bin.part -> .bin so it becomes ingestable.
                     let finalURL = part.deletingPathExtension() // strip ".part" -> "....bin"
                     try? FileManager.default.removeItem(at: finalURL)
@@ -154,6 +167,11 @@ class BaseBatchAudioWriter {
                     } catch {
                         NSLog("[\(tag)] finalize failed: \(error)")
                     }
+                } else if currentBytes > 0 {
+                    // Durability unconfirmed — hold the ACK barrier and leave the
+                    // .part for stale-part recovery instead of publishing it.
+                    closeSyncFailed = true
+                    NSLog("[\(tag)] close fsync failed — leaving \(part.lastPathComponent) unfinalized")
                 } else {
                     try? FileManager.default.removeItem(at: part) // nothing written — drop the placeholder
                 }

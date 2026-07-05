@@ -170,6 +170,7 @@ class LimitlessFlashDrainEngine(
         }
 
         val address = deviceAddress ?: run { phase = Phase.IDLE; return }
+        fragmentBuffer.clear()
         endPage = state.newestFlashPage
         maxSeenPageIndex = -1
         lastAppendedPageIndex = -1

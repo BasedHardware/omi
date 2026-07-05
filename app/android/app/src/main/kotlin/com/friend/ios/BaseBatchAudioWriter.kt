@@ -47,6 +47,7 @@ abstract class BaseBatchAudioWriter(
     private var lastFsyncMs: Long = 0
     private var storageFull = false
     private var recovered = false
+    private var closeSyncFailed = false
 
     protected val isOpenLocked: Boolean
         get() = raf != null
@@ -131,6 +132,10 @@ abstract class BaseBatchAudioWriter(
             true
         } catch (e: Exception) {
             Log.e(tag, "write failed: ${e.message}")
+            try {
+                out.setLength(currentBytes) // drop a torn frame tail; keep only complete frames
+            } catch (_: Exception) {
+            }
             closeCurrentLocked("write_error")
             false
         }
@@ -152,26 +157,39 @@ abstract class BaseBatchAudioWriter(
             false
         }
 
+    protected fun consumeCloseSyncFailureLocked(): Boolean {
+        val failed = closeSyncFailed
+        closeSyncFailed = false
+        return failed
+    }
+
     protected fun closeCurrentLocked(reason: String) {
         val out = raf
         if (out != null) {
             val partFile = currentFile
+            var synced = true
             try {
                 out.fd.sync()
             } catch (_: Exception) {
+                synced = false
             }
             try {
                 out.close()
             } catch (_: Exception) {
             }
             if (partFile != null) {
-                if (currentBytes > 0) {
+                if (currentBytes > 0 && synced) {
                     // Atomically promote .bin.part -> .bin so it becomes ingestable.
                     val finalFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
                     val renamed = partFile.renameTo(finalFile)
                     if (!renamed) Log.w(tag, "failed to finalize ${partFile.name}")
                     Log.i(tag, "finalized ${finalFile.name} ($currentFrames frames, $currentBytes bytes, reason=$reason)")
                     if (renamed) notifyFinalized(finalFile.name)
+                } else if (currentBytes > 0) {
+                    // Durability unconfirmed — hold the ACK barrier and leave the
+                    // .part for stale-part recovery instead of publishing it.
+                    closeSyncFailed = true
+                    Log.w(tag, "close fsync failed — leaving ${partFile.name} unfinalized")
                 } else {
                     partFile.delete() // nothing written — drop the empty placeholder
                 }

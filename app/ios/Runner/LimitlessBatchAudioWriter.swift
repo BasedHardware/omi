@@ -51,12 +51,7 @@ final class LimitlessBatchAudioWriter: BaseBatchAudioWriter {
     /// Fsync barrier: returns true when everything appended so far is durable on disk.
     /// The drain engine must get `true` here before ACKing the covered pages.
     func syncToDisk() -> Bool {
-        return queue.sync { !self.isOpen || self.fsyncLocked() }
-    }
-
-    /// Finalize the current file (drain caught up / disconnect / batch disabled).
-    func finalizeCurrent(_ reason: String) {
-        stop(reason)
+        return queue.sync { !self.consumeCloseSyncFailureLocked() && (!self.isOpen || self.fsyncLocked()) }
     }
 
     override func onClosedLocked() {

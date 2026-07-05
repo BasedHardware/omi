@@ -186,6 +186,7 @@ final class LimitlessFlashDrainEngine {
             phase = .idle
             return
         }
+        fragmentBuffer.removeAll()
         endPage = state.newestFlashPage
         maxSeenPageIndex = -1
         lastAppendedPageIndex = -1
