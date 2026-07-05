@@ -597,3 +597,31 @@ class TestStreamMetricsEndpoint:
         resp = client.get("/stream/metrics")
         assert resp.status_code == 200
         assert resp.json() == {}
+
+    def test_vram_metrics_returns_data(self):
+        from unittest.mock import PropertyMock
+
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        type(mod.gpu_worker).vram_info = PropertyMock(
+            return_value={
+                "total_mb": 23034.0,
+                "baseline_mb": 9500.0,
+                "current_used_mb": 10200.0,
+                "current_free_mb": 12834.0,
+                "attention_mode": "auto",
+            }
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/gpu/vram")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_mb"] == 23034.0
+        assert data["current_used_mb"] == 10200.0
+
+    def test_vram_metrics_returns_empty_without_worker(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=False)
+        mod.gpu_worker = None
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/gpu/vram")
+        assert resp.status_code == 200
+        assert resp.json() == {}

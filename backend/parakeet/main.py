@@ -428,3 +428,10 @@ async def stream_metrics():
     if stream_engine is not None:
         return stream_engine.metrics
     return {}
+
+
+@app.get("/gpu/vram")
+async def vram_metrics():
+    if gpu_worker is not None:
+        return gpu_worker.vram_info
+    return {}

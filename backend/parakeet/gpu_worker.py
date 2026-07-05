@@ -126,12 +126,20 @@ class GPUWorker:
 
     @property
     def vram_info(self) -> dict:
-        return {
+        info = {
             "total_mb": self._vram_total_mb,
             "baseline_mb": self._vram_baseline_mb,
             "attention_mode": self._attn_mode,
             "auto_threshold_sec": self._attn_auto_threshold_sec,
         }
+        if torch.cuda.is_available():
+            try:
+                free_bytes, total_bytes = torch.cuda.mem_get_info(0)
+                info["current_used_mb"] = round((total_bytes - free_bytes) / (1024 * 1024), 1)
+                info["current_free_mb"] = round(free_bytes / (1024 * 1024), 1)
+            except Exception:
+                pass
+        return info
 
     def start(self) -> None:
         self._running = True
@@ -645,8 +653,11 @@ class GPUWorker:
         self._stream_pipeline.open_session()
 
         if torch.cuda.is_available():
-            vram_after = torch.cuda.memory_allocated() / (1024 * 1024)
-            logger.info(f"VRAM after stream model load: {vram_after:.0f}MiB")
+            free_bytes, total_bytes = torch.cuda.mem_get_info(0)
+            vram_used = (total_bytes - free_bytes) / (1024 * 1024)
+            logger.info(
+                f"VRAM after stream model load: {vram_used:.0f}MiB used / {total_bytes / (1024 * 1024):.0f}MiB total"
+            )
 
         logger.info("Streaming pipeline built and session opened")
 
