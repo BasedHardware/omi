@@ -34,6 +34,10 @@ export interface ActionItem {
   updated_at?: string | null;
 }
 
+export interface ActionItemIdsResponse {
+  ids: Array<string>;
+}
+
 export interface ActionItemResponse {
   apple_reminder_id?: string | null;
   completed: boolean;
@@ -621,13 +625,20 @@ export interface CalendarMeetingContext {
   title: string;
 }
 
+export interface CalendarOnboardingResetResponse {
+  reset: boolean;
+}
+
 export interface CalendarOnboardingSkipResponse {
   skipped: boolean;
 }
 
 export interface CalendarOnboardingStatusResponse {
   connected: boolean;
+  needs_reconnect: boolean;
   onboarding_completed: boolean;
+  reauth_reason?: string | null;
+  state: string;
 }
 
 export interface CancelSubscriptionRequest {
@@ -1015,6 +1026,11 @@ export interface DeleteAccountRequest {
 export interface DeleteActionItemRequest {
   completed: boolean;
   description: string;
+}
+
+export interface DeleteImportJobResponse {
+  job_id: string;
+  status: string;
 }
 
 export interface DeleteKnowledgeGraphResponse {
@@ -1469,7 +1485,7 @@ export interface ImportJobResponse {
   total_files?: number | null;
 }
 
-export type ImportJobStatus = "pending" | "processing" | "completed" | "failed";
+export type ImportJobStatus = "pending" | "processing" | "completed" | "failed" | "cancelled";
 
 export interface IntegrationData {
   access_token?: string | null;
@@ -1709,6 +1725,12 @@ export type MemoryLayer = "short_term" | "long_term" | "archive";
 
 export interface MemoryMutationResponse {
   status: string;
+}
+
+export interface MemoryReviewItemResponse {
+  review_id: string;
+  status?: string;
+  [key: string]: unknown;
 }
 
 export interface MemorySummaryRatingResponse {
@@ -2835,6 +2857,7 @@ export interface OmiApiSchemas {
   "AcceptSharedTasksRequest": AcceptSharedTasksRequest;
   "Action": Action;
   "ActionItem": ActionItem;
+  "ActionItemIdsResponse": ActionItemIdsResponse;
   "ActionItemResponse": ActionItemResponse;
   "ActionItemsResponse": ActionItemsResponse;
   "ActionItemsSearchResponse": ActionItemsSearchResponse;
@@ -2918,6 +2941,7 @@ export interface OmiApiSchemas {
   "BulkMoveConversationsResponse": BulkMoveConversationsResponse;
   "CalendarEventLink": CalendarEventLink;
   "CalendarMeetingContext": CalendarMeetingContext;
+  "CalendarOnboardingResetResponse": CalendarOnboardingResetResponse;
   "CalendarOnboardingSkipResponse": CalendarOnboardingSkipResponse;
   "CalendarOnboardingStatusResponse": CalendarOnboardingStatusResponse;
   "CancelSubscriptionRequest": CancelSubscriptionRequest;
@@ -2979,6 +3003,7 @@ export interface OmiApiSchemas {
   "DefaultTaskIntegrationResponse": DefaultTaskIntegrationResponse;
   "DeleteAccountRequest": DeleteAccountRequest;
   "DeleteActionItemRequest": DeleteActionItemRequest;
+  "DeleteImportJobResponse": DeleteImportJobResponse;
   "DeleteKnowledgeGraphResponse": DeleteKnowledgeGraphResponse;
   "DeleteLimitlessConversationsResponse": DeleteLimitlessConversationsResponse;
   "DevApiKey": DevApiKey;
@@ -3070,6 +3095,7 @@ export interface OmiApiSchemas {
   "MemoryDB": MemoryDB;
   "MemoryLayer": MemoryLayer;
   "MemoryMutationResponse": MemoryMutationResponse;
+  "MemoryReviewItemResponse": MemoryReviewItemResponse;
   "MemorySummaryRatingResponse": MemorySummaryRatingResponse;
   "MentorNotificationSettingsResponse": MentorNotificationSettingsResponse;
   "MentorNotificationSettingsUpdate": MentorNotificationSettingsUpdate;
@@ -3286,6 +3312,16 @@ export interface OmiApiPaths {
       operationId: "batch_delete_action_items_v1_action_items_batch_delete_post";
       responses: {
         "200": BatchDeleteActionItemsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/action-items/ids": {
+    get: {
+      operationId: "list_action_item_ids_v1_action_items_ids_get";
+      responses: {
+        "200": ActionItemIdsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -3990,6 +4026,16 @@ export interface OmiApiPaths {
         "200": CalendarMeetingContext;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/calendar/onboarding/reset": {
+    post: {
+      operationId: "reset_calendar_onboarding_v1_calendar_onboarding_reset_post";
+      responses: {
+        "200": CalendarOnboardingResetResponse;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -4851,6 +4897,25 @@ export interface OmiApiPaths {
         "200": ImportJobResponse;
         "401": void;
         "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_import_job_v1_import_jobs__job_id__delete";
+      responses: {
+        "200": DeleteImportJobResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/import/jobs/{job_id}/cancel": {
+    post: {
+      operationId: "cancel_import_job_v1_import_jobs__job_id__cancel_post";
+      responses: {
+        "200": ImportJobResponse;
+        "401": void;
         "422": HTTPValidationError;
       };
     };
@@ -6351,6 +6416,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v2/firmware/version": {
+    get: {
+      operationId: "get_firmware_version_v2_firmware_version_get";
+      responses: {
+        "200": FirmwareVersionResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v2/initial-message": {
     post: {
       operationId: "create_initial_message_v2_initial_message_post";
@@ -6521,6 +6596,17 @@ export interface OmiApiPaths {
       responses: {
         "200": Array<Record<string, unknown>>;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v3/memories/review-queue/{review_id}": {
+    get: {
+      operationId: "get_memory_review_item_v3_memories_review_queue__review_id__get";
+      responses: {
+        "200": MemoryReviewItemResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -6739,6 +6825,21 @@ export async function batch_delete_action_items_v1_action_items_batch_delete_pos
       ...init?.headers,
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function list_action_item_ids_v1_action_items_ids_get(init?: OmiApiClientInit): Promise<ActionItemIdsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/action-items/ids`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -7883,6 +7984,21 @@ export async function get_calendar_meeting_v1_calendar_meetings__meeting_id__get
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function reset_calendar_onboarding_v1_calendar_onboarding_reset_post(init?: OmiApiClientInit): Promise<CalendarOnboardingResetResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/calendar/onboarding/reset`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -9305,6 +9421,36 @@ export async function get_import_job_status_v1_import_jobs__job_id__get(path: { 
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_import_job_v1_import_jobs__job_id__delete(path: { job_id: string }, init?: OmiApiClientInit): Promise<DeleteImportJobResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/import/jobs/${path.job_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function cancel_import_job_v1_import_jobs__job_id__cancel_post(path: { job_id: string }, init?: OmiApiClientInit): Promise<ImportJobResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/import/jobs/${path.job_id}/cancel`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
     headers: {
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
@@ -11726,6 +11872,24 @@ export async function get_stable_version_v2_firmware_stable_get(query: { device_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_firmware_version_v2_firmware_version_get(query: { device_model: string, version: string }, init?: OmiApiClientInit): Promise<FirmwareVersionResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/firmware/version`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function create_initial_message_v2_initial_message_post(query: { app_id?: string | null, plugin_id?: string | null }, init?: OmiApiClientInit): Promise<Message> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/initial-message`;
@@ -11997,6 +12161,21 @@ export async function list_memory_review_queue_v3_memories_review_queue_get(quer
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_memory_review_item_v3_memories_review_queue__review_id__get(path: { review_id: string }, init?: OmiApiClientInit): Promise<MemoryReviewItemResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v3/memories/review-queue/${path.review_id}`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function resolve_memory_review_item_v3_memories_review_queue__review_id__resolve_post(path: { review_id: string }, body: ReviewResolutionRequest, init?: OmiApiClientInit): Promise<ReviewResolutionResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v3/memories/review-queue/${path.review_id}/resolve`;
@@ -12164,4 +12343,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 337 client methods generated.
+// Total: 343 client methods generated.

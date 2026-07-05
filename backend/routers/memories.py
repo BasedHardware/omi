@@ -678,7 +678,14 @@ def list_memory_review_queue(
     return review_queue.list_review_conflicts(uid, status=status, limit=limit)
 
 
-@router.get('/v3/memories/review-queue/{review_id}', tags=['memories'])
+class MemoryReviewItemResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    review_id: str
+    status: str = 'pending'
+
+
+@router.get('/v3/memories/review-queue/{review_id}', response_model=MemoryReviewItemResponse, tags=['memories'])
 def get_memory_review_item(
     review_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),

@@ -81,7 +81,13 @@ def skip_calendar_onboarding(uid: str = Depends(auth.get_current_user_uid)):
     return {'skipped': True}
 
 
-@router.post('/v1/calendar/onboarding/reset', tags=['calendar_onboarding'])
+class CalendarOnboardingResetResponse(BaseModel):
+    reset: bool
+
+
+@router.post(
+    '/v1/calendar/onboarding/reset', response_model=CalendarOnboardingResetResponse, tags=['calendar_onboarding']
+)
 def reset_calendar_onboarding(uid: str = Depends(auth.get_current_user_uid)):
     """Clear the skipped / reauth flags so the connect-calendar prompt is shown again."""
     users_db.set_integration(

@@ -286,7 +286,7 @@ async def get_stable_version(device_model: str):
     return _extract_firmware_response(device, candidates[0])
 
 
-@router.get("/v2/firmware/version")
+@router.get("/v2/firmware/version", response_model=FirmwareVersionResponse)
 async def get_firmware_version(device_model: str, version: str):
     """Return the OTA metadata for a specific published firmware version of a device.
 

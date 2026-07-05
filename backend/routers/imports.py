@@ -198,7 +198,12 @@ def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)
     )
 
 
-@router.delete('/v1/import/jobs/{job_id}', tags=['import'])
+class DeleteImportJobResponse(BaseModel):
+    status: str
+    job_id: str
+
+
+@router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
 def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a finished (completed, failed, or cancelled) import job."""
     job = import_jobs_db.get_import_job(job_id)

@@ -3733,6 +3733,19 @@
         "title": "CalendarMeetingContext",
         "type": "object"
       },
+      "CalendarOnboardingResetResponse": {
+        "properties": {
+          "reset": {
+            "title": "Reset",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reset"
+        ],
+        "title": "CalendarOnboardingResetResponse",
+        "type": "object"
+      },
       "CalendarOnboardingSkipResponse": {
         "properties": {
           "skipped": {
@@ -6187,6 +6200,24 @@
           "completed"
         ],
         "title": "DeleteActionItemRequest",
+        "type": "object"
+      },
+      "DeleteImportJobResponse": {
+        "properties": {
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "job_id"
+        ],
+        "title": "DeleteImportJobResponse",
         "type": "object"
       },
       "DeleteKnowledgeGraphResponse": {
@@ -10152,6 +10183,25 @@
           "status"
         ],
         "title": "MemoryMutationResponse",
+        "type": "object"
+      },
+      "MemoryReviewItemResponse": {
+        "additionalProperties": true,
+        "properties": {
+          "review_id": {
+            "title": "Review Id",
+            "type": "string"
+          },
+          "status": {
+            "default": "pending",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "review_id"
+        ],
+        "title": "MemoryReviewItemResponse",
         "type": "object"
       },
       "MemorySummaryRatingResponse": {
@@ -23281,7 +23331,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/CalendarOnboardingResetResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -30578,7 +30630,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/DeleteImportJobResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -43166,7 +43220,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FirmwareVersionResponse"
+                }
               }
             },
             "description": "Successful Response"
@@ -44940,7 +44996,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryReviewItemResponse"
+                }
               }
             },
             "description": "Successful Response"
