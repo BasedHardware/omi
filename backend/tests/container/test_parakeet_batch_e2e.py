@@ -279,6 +279,11 @@ class TestHealthAndMetrics:
         conn = http.client.HTTPConnection(parsed.hostname, parsed.port or 80, timeout=5)
         conn.request("GET", "/metrics")
         resp = conn.getresponse()
+        if resp.status == 307:
+            location = resp.getheader("Location", "/metrics/")
+            resp.read()
+            conn.request("GET", location)
+            resp = conn.getresponse()
         body = resp.read().decode()
         conn.close()
         assert resp.status == 200
