@@ -30,7 +30,7 @@ defaults:
 
 jobs:
   checks:
-    name: Typecheck · Test
+    name: Typecheck · Lint · Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
