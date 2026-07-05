@@ -47,6 +47,30 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("signInWithIdp?key=\\(apiKey)"))
   }
 
+  // MARK: BL-020 — checkSystemAudioPermission() must report the real state
+
+  /// The check is no longer a no-op: it must derive `hasSystemAudioPermission`
+  /// from the real screen-recording TCC preflight the rest of the app uses,
+  /// mirroring `checkScreenRecordingPermission()`.
+  func testCheckSystemAudioPermissionReadsRealTccState() throws {
+    let src = try source(relativePath: "Sources/AppState/AppState+SystemActions.swift")
+
+    guard let range = src.range(of: "func checkSystemAudioPermission() {") else {
+      return XCTFail("checkSystemAudioPermission not found")
+    }
+    let body = String(src[range.lowerBound...].prefix(600))
+
+    XCTAssertFalse(
+      body.contains("No-op"),
+      "checkSystemAudioPermission must no longer be a no-op")
+    XCTAssertTrue(
+      body.contains("hasSystemAudioPermission ="),
+      "it must actually assign the reported permission state")
+    XCTAssertTrue(
+      body.contains("ScreenCaptureService.checkPermission()"),
+      "it must query the real TCC preflight the rest of the app relies on")
+  }
+
   // MARK: Helper
 
   private func source(relativePath: String) throws -> String {
