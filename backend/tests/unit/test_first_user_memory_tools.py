@@ -79,7 +79,17 @@ def _head(uid: str, generation: int = 7) -> dict:
     }
 
 
-def _memory_item(uid: str, memory_id: str = "m1", *, content: str = "private memory text", labels=None) -> dict:
+def _memory_item(
+    uid: str,
+    memory_id: str = "m1",
+    *,
+    content: str = "private memory text",
+    labels=None,
+    created_at: datetime | None = None,
+    updated_at: datetime | None = None,
+    user_review=None,
+    promotion: dict | None = None,
+) -> dict:
     now = datetime(2026, 7, 4, tzinfo=timezone.utc)
     return {
         "uid": uid,
@@ -94,9 +104,12 @@ def _memory_item(uid: str, memory_id: str = "m1", *, content: str = "private mem
         "sensitivity_labels": labels or [],
         "visibility": "private",
         "user_asserted": True,
+        "created_at": created_at or now,
         "captured_at": now,
-        "updated_at": now,
+        "updated_at": updated_at or now,
         "expires_at": now + timedelta(days=1),
+        "user_review": user_review,
+        "promotion": promotion,
     }
 
 
@@ -209,6 +222,61 @@ def test_projection_refuses_restricted_sensitivity_by_default():
         projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
 
 
+def test_projection_item_preserves_source_created_at_before_updated_at():
+    uid = "uid-a"
+    old_created_at = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    newer_updated_at = datetime(2026, 7, 4, tzinfo=timezone.utc)
+    docs = _ready_docs(uid)
+    docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(
+        uid,
+        created_at=old_created_at,
+        updated_at=newer_updated_at,
+    )
+    db = _Db(docs)
+
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+    projection_item = build.writes[projection_tool.projection_target_item_path(uid, "m1")]
+
+    assert projection_item["created_at"] == old_created_at
+    assert projection_item["memorydb"]["updated_at"] == newer_updated_at
+
+
+def test_projection_refuses_top_level_user_rejected_memory():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(uid, user_review=False)
+    db = _Db(docs)
+
+    with pytest.raises(RuntimeError, match="user-rejected"):
+        projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+
+
+def test_projection_refuses_nested_promotion_user_rejected_memory():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(uid, promotion={"user_review": False})
+    db = _Db(docs)
+
+    with pytest.raises(RuntimeError, match="user-rejected"):
+        projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+
+
+def test_projection_memorydb_uses_nested_promotion_user_review_when_present():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    docs[f"{MemoryCollections(uid=uid).memory_items}/m1"] = _memory_item(
+        uid,
+        user_review=None,
+        promotion={"user_review": True},
+    )
+    db = _Db(docs)
+
+    build = projection_tool.build_projection(db, uid=uid, project="based-hardware", memory_id="m1", limit=10)
+    projection_item = build.writes[projection_tool.projection_target_item_path(uid, "m1")]
+
+    assert projection_item["memorydb"]["user_review"] is True
+
+
 def test_first_user_proof_passes_with_fake_firestore_and_http():
     uid = "uid-a"
     db = _Db(_ready_docs(uid))
@@ -252,4 +320,50 @@ def test_first_user_proof_fails_generation_mismatch():
     assert any(
         check["name"] == "projection_generation_fences_match_head" and check["status"] == "fail"
         for check in report["checks"]
+    )
+
+
+def test_first_user_proof_fails_when_projection_generation_missing():
+    uid = "uid-a"
+    docs = _ready_docs(uid)
+    del docs[MemoryCollections(uid=uid).v3_compatibility_projection_state]["projection_generation"]
+    db = _Db(docs)
+
+    report = proof_tool.verify_firestore_state(db, uid=uid, limit=10)
+
+    assert report["status"] == "fail"
+    assert any(
+        check["name"] == "projection_generation_fences_match_head" and check["status"] == "fail"
+        for check in report["checks"]
+    )
+
+
+def test_first_user_api_proof_fails_non_list_authenticated_response():
+    uid = "uid-a"
+
+    def fake_get(url, headers, timeout_seconds):
+        if headers.get("Authorization"):
+            return proof_tool.HttpResult(200, {"items": []}, {})
+        return proof_tool.HttpResult(401, {"detail": "not authenticated"}, {})
+
+    api_report = proof_tool.verify_api_behavior(
+        backend_url="https://dev.example",
+        uid=uid,
+        id_token="redacted-token",
+        limit=10,
+        timeout_seconds=1.0,
+        http_get=fake_get,
+    )
+    report = proof_tool.build_report(
+        uid=uid,
+        project="based-hardware",
+        firestore_report={"status": "pass", "checks": []},
+        api_report=api_report,
+    )
+
+    assert api_report["status"] == "fail"
+    assert report["status"] == "fail"
+    assert any(
+        check["name"] == "authenticated_get_v3_memories_body_list" and check["status"] == "fail"
+        for check in api_report["checks"]
     )

@@ -68,7 +68,7 @@ def _check(name: str, ok: bool, **details) -> dict[str, Any]:
 
 
 def _int_matches(data: dict[str, Any], expected: int, *fields: str) -> bool:
-    return all(data.get(field) == expected for field in fields)
+    return all(type(data.get(field)) is int and data.get(field) == expected for field in fields)
 
 
 def _decode_http_body(raw: str) -> Any:
@@ -107,13 +107,17 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
 
     expected_generation = head.get("account_generation") if isinstance(head, dict) else None
     projection_ready = isinstance(projection_state, dict) and projection_state.get("ready") is True
+    projection_generation = (
+        projection_state.get("projection_generation") if isinstance(projection_state, dict) else None
+    )
     fences_match = (
-        isinstance(expected_generation, int)
+        type(expected_generation) is int
         and isinstance(projection_state, dict)
+        and type(projection_generation) is int
         and projection_state.get("account_generation") == expected_generation
         and _int_matches(
             projection_state,
-            projection_state.get("projection_generation"),
+            projection_generation,
             "freshness_fence_generation",
             "tombstone_fence_generation",
             "vector_cleanup_fence_generation",
@@ -121,7 +125,7 @@ def verify_firestore_state(db_client, *, uid: str, limit: int) -> dict[str, Any]
         and all(
             item["uid"] == uid
             and item["account_generation"] == expected_generation
-            and item["projection_generation"] == projection_state.get("projection_generation")
+            and item["projection_generation"] == projection_generation
             for item in items
         )
     )
@@ -200,7 +204,8 @@ def verify_api_behavior(
     url = backend_url.rstrip("/") + "/v3/memories?" + urlencode({"limit": str(limit)})
     authenticated = http_get(url, {"Authorization": f"Bearer {id_token}"}, timeout_seconds)
     unauthenticated = http_get(url, {}, timeout_seconds)
-    body = authenticated.body if isinstance(authenticated.body, list) else []
+    body_is_list = isinstance(authenticated.body, list)
+    body = authenticated.body if body_is_list else []
     only_requested_uid = all(isinstance(item, dict) and item.get("uid") == uid for item in body)
     lifecycle_fields_present = all(
         isinstance(item, dict) and ("layer" in item or "memory_tier" in item) for item in body
@@ -221,6 +226,7 @@ def verify_api_behavior(
         _check(
             "authenticated_get_v3_memories_200", authenticated.status_code == 200, status_code=authenticated.status_code
         ),
+        _check("authenticated_get_v3_memories_body_list", body_is_list, body_type=type(authenticated.body).__name__),
         _check("response_only_requested_uid", only_requested_uid, uid=uid),
         _check(
             "canonical_lifecycle_fields_present",

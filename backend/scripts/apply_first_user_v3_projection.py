@@ -137,6 +137,13 @@ def _content(data: dict[str, Any]) -> str:
     return content
 
 
+def _user_review_value(data: dict[str, Any]):
+    promotion = data.get("promotion")
+    if isinstance(promotion, dict) and "user_review" in promotion:
+        return promotion.get("user_review")
+    return data.get("user_review")
+
+
 def _require_safe_active_item(uid: str, memory_id: str, path: str, data: dict[str, Any]) -> None:
     if not path.startswith(f"users/{uid}/memory_items/"):
         raise RuntimeError(f"refusing cross-user source path: {path}")
@@ -155,6 +162,11 @@ def _require_safe_active_item(uid: str, memory_id: str, path: str, data: dict[st
     restricted = _labels(data).intersection(RESTRICTED_SENSITIVITY_LABELS)
     if restricted or data.get("restricted_sensitivity") is True:
         raise RuntimeError(f"refusing restricted sensitivity memory item at {path}: {sorted(restricted)}")
+    if data.get("user_review") is False:
+        raise RuntimeError(f"refusing user-rejected memory item at {path}")
+    promotion = data.get("promotion")
+    if isinstance(promotion, dict) and promotion.get("user_review") is False:
+        raise RuntimeError(f"refusing user-rejected memory item at {path}")
     _content(data)
 
 
@@ -206,7 +218,7 @@ def _memorydb_payload(uid: str, memory_id: str, data: dict[str, Any]) -> dict[st
         "created_at": captured_at,
         "updated_at": updated_at,
         "reviewed": data.get("reviewed") if isinstance(data.get("reviewed"), bool) else True,
-        "user_review": data.get("user_review"),
+        "user_review": _user_review_value(data),
         "manually_added": data.get("manually_added") if isinstance(data.get("manually_added"), bool) else False,
         "edited": data.get("edited") if isinstance(data.get("edited"), bool) else False,
         "conversation_id": data.get("conversation_id"),
@@ -216,7 +228,7 @@ def _memorydb_payload(uid: str, memory_id: str, data: dict[str, Any]) -> dict[st
 
 
 def _projection_item(uid: str, memory_id: str, data: dict[str, Any], fences: dict[str, Any]) -> dict[str, Any]:
-    created_at = _timestamp(data, "updated_at", "captured_at", "created_at")
+    created_at = _timestamp(data, "created_at", "captured_at", "updated_at")
     return {
         "uid": uid,
         "memory_id": memory_id,
