@@ -34,7 +34,32 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
-def bridge_request(port: int, method: str, route: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
+def bridge_action_timeout_sec(
+    name: str,
+    params: dict[str, str] | None,
+    turn_timeout_ms: int,
+) -> float:
+    """HTTP client timeout for bridge actions that may block for a full turn."""
+    params = params or {}
+    turn_sec = max(190.0, (turn_timeout_ms / 1000.0) + 10.0)
+    if name == "ptt_test_turn":
+        action_sec = float(params.get("timeout", "0"))
+        return max(turn_sec, action_sec + 10.0)
+    if name == "wait_main_chat_idle":
+        wait_ms = int(params.get("timeoutMs", "2000"))
+        if wait_ms >= 30_000:
+            return max(turn_sec, (wait_ms / 1000.0) + 10.0)
+    return 60.0
+
+
+def bridge_request(
+    port: int,
+    method: str,
+    route: str,
+    body: dict[str, Any] | None = None,
+    *,
+    timeout_sec: float = 60,
+) -> dict[str, Any]:
     payload = None
     headers = {"Accept": "application/json"}
     if body is not None:
@@ -47,7 +72,7 @@ def bridge_request(port: int, method: str, route: str, body: dict[str, Any] | No
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=timeout_sec) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         raw = exc.read().decode("utf-8", errors="replace")
@@ -61,8 +86,23 @@ def bridge_request(port: int, method: str, route: str, body: dict[str, Any] | No
         return {"ok": False, "error": f"connection_failed: {exc.reason}"}
 
 
-def bridge_action(port: int, name: str, params: dict[str, str] | None = None) -> dict[str, Any]:
-    return bridge_request(port, "POST", "/action", {"name": name, "params": params or {}})
+def bridge_action(
+    port: int,
+    name: str,
+    params: dict[str, str] | None = None,
+    *,
+    turn_timeout_ms: int | None = None,
+) -> dict[str, Any]:
+    timeout_sec = 60.0
+    if turn_timeout_ms is not None:
+        timeout_sec = bridge_action_timeout_sec(name, params, turn_timeout_ms)
+    return bridge_request(
+        port,
+        "POST",
+        "/action",
+        {"name": name, "params": params or {}},
+        timeout_sec=timeout_sec,
+    )
 
 
 def bridge_state(port: int) -> dict[str, Any]:
@@ -253,6 +293,9 @@ class GauntletRunner:
         self.steps: list[dict[str, Any]] = []
         self.pcm_path = self.run_dir / "fixtures" / "ptt-voice.pcm"
 
+    def bridge_act(self, name: str, params: dict[str, str] | None = None) -> dict[str, Any]:
+        return bridge_action(self.port, name, params, turn_timeout_ms=self.args.turn_timeout_ms)
+
     def fail(self, message: str) -> None:
         self.failures.append(message)
 
@@ -299,7 +342,7 @@ class GauntletRunner:
         capture_log_excerpt(self.log_path, self.log_offset, step_dir / "app-log-excerpt.txt")
         self.log_offset = self.log_path.stat().st_size if self.log_path.exists() else self.log_offset
 
-        runtime = bridge_action(self.port, "agent_runtime_evidence")
+        runtime = self.bridge_act( "agent_runtime_evidence")
         runtime_detail = runtime.get("result", {}).get("detail", runtime)
         write_json(step_dir / "runtime-sqlite.json", runtime_detail)
 
@@ -332,7 +375,7 @@ class GauntletRunner:
 
     def send_and_wait(self, query: str, timeout_ms: int) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
         trace_start = trace_line_count()
-        send = bridge_action(self.port, "ask_main_chat", {"query": query})
+        send = self.bridge_act( "ask_main_chat", {"query": query})
         if send.get("ok") is False:
             raise SystemExit(f"ask_main_chat failed: {send.get('error', send)}")
         detail = send.get("result", {}).get("detail", {})
@@ -354,7 +397,7 @@ class GauntletRunner:
         else:
             self.fail(f"timed out waiting for main chat idle after query: {query[:120]}")
 
-        snapshot = bridge_action(self.port, "main_chat_snapshot", {"limit": "80"})
+        snapshot = self.bridge_act( "main_chat_snapshot", {"limit": "80"})
         snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
         traces = read_new_traces(trace_start)
         return send, snapshot_detail, traces
@@ -423,8 +466,8 @@ class GauntletRunner:
 
         # Allow kernel turn_recorded projection + backend persistence to settle.
         time.sleep(2.0)
-        wait = bridge_action(self.port, "wait_main_chat_idle", {"timeoutMs": str(self.args.turn_timeout_ms)})
-        snapshot = bridge_action(self.port, "main_chat_snapshot", {"limit": "80"})
+        wait = self.bridge_act( "wait_main_chat_idle", {"timeoutMs": str(self.args.turn_timeout_ms)})
+        snapshot = self.bridge_act( "main_chat_snapshot", {"limit": "80"})
         snapshot_detail = snapshot.get("result", {}).get("detail", wait.get("result", {}).get("detail", {}))
         traces = read_new_traces(trace_start)
         self.record_step(
@@ -474,7 +517,7 @@ class GauntletRunner:
             for tool in (trace.get("tool_executions") or [])
             if isinstance(tool, dict) and tool.get("name") in {"spawn_agent", "list_agent_sessions"}
         ]
-        coordinator = bridge_action(self.port, "coordinator_awareness_snapshot")
+        coordinator = self.bridge_act( "coordinator_awareness_snapshot")
         self.record_step(
             "04-spawn-agent",
             "background agent spawn",
