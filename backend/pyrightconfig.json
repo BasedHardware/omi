@@ -128,7 +128,8 @@
         "utils/app_integrations.py",
         "utils/webhooks.py",
         "routers/payment.py",
-        "models/conversation.py"
+        "models/conversation.py",
+        "utils/conversations/merge_conversations.py"
     ],
     "extraPaths": [
         "."
