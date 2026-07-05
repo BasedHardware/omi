@@ -7652,6 +7652,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get removeFilter => 'Eliminare Filtru';
 
   @override
+  String get filterByDate => 'Filtrează după dată';
+
+  @override
   String get categoryConversationAnalysis => 'Analiză conversații';
 
   @override

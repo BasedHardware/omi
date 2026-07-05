@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Tuvastati suured ajavahed ({gaps})",
     "dailyRecaps": "Päevased Kokkuvõtted",
     "removeFilter": "Eemalda Filter",
+    "filterByDate": "Filtreeri kuupäeva järgi",
     "appleHealthNotAvailable": "Apple Health pole selles seadmes saadaval",
     "downloadAudio": "Laadi heli alla",
     "audioDownloadSuccess": "Heli on edukalt alla laaditud",

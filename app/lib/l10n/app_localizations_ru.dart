@@ -7639,6 +7639,9 @@ class AppLocalizationsRu extends AppLocalizations {
   String get removeFilter => 'Удалить фильтр';
 
   @override
+  String get filterByDate => 'Фильтр по дате';
+
+  @override
   String get categoryConversationAnalysis => 'Анализ разговоров';
 
   @override

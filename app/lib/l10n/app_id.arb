@@ -2470,6 +2470,7 @@
     "largeTimeGapsDetected": "Terdeteksi jeda waktu besar ({gaps})",
     "dailyRecaps": "Ringkasan Harian",
     "removeFilter": "Hapus Filter",
+    "filterByDate": "Filter berdasarkan tanggal",
     "appleHealthNotAvailable": "Apple Health tidak tersedia di perangkat ini",
     "downloadAudio": "Unduh Audio",
     "audioDownloadSuccess": "Audio berhasil diunduh",

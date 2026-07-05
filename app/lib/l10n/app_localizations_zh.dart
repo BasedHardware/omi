@@ -7478,6 +7478,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get removeFilter => '移除筛选';
 
   @override
+  String get filterByDate => '按日期筛选';
+
+  @override
   String get categoryConversationAnalysis => '对话分析';
 
   @override

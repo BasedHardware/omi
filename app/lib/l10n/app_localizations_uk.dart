@@ -7627,6 +7627,9 @@ class AppLocalizationsUk extends AppLocalizations {
   String get removeFilter => 'Видалити фільтр';
 
   @override
+  String get filterByDate => 'Фільтрувати за датою';
+
+  @override
   String get categoryConversationAnalysis => 'Аналіз розмов';
 
   @override

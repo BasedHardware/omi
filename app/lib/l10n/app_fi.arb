@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Havaittu suuria aikavälejä ({gaps})",
     "dailyRecaps": "Päivittäiset Yhteenvedot",
     "removeFilter": "Poista Suodatin",
+    "filterByDate": "Suodata päivämäärän mukaan",
     "appleHealthNotAvailable": "Apple Health ei ole käytettävissä tässä laitteessa",
     "downloadAudio": "Lataa ääni",
     "audioDownloadSuccess": "Ääni ladattu onnistuneesti",

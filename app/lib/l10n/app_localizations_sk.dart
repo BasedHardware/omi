@@ -7606,6 +7606,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get removeFilter => 'Odstrániť Filter';
 
   @override
+  String get filterByDate => 'Filtrovať podľa dátumu';
+
+  @override
   String get categoryConversationAnalysis => 'Analýza konverzácií';
 
   @override

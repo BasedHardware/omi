@@ -7670,6 +7670,9 @@ class AppLocalizationsTa extends AppLocalizations {
   String get removeFilter => 'வடிப்பிலை நீக்கவும்';
 
   @override
+  String get filterByDate => 'தேதியின்படி வடிகட்டு';
+
+  @override
   String get categoryConversationAnalysis => 'உரையாடல் பகுப்பாய்வு';
 
   @override

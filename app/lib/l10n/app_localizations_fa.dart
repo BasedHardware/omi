@@ -7619,6 +7619,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get removeFilter => 'حذف فیلتر';
 
   @override
+  String get filterByDate => 'فیلتر بر اساس تاریخ';
+
+  @override
   String get categoryConversationAnalysis => 'تجزیه و تحلیل گفتگو';
 
   @override

@@ -7590,6 +7590,9 @@ class AppLocalizationsHi extends AppLocalizations {
   String get removeFilter => 'फ़िल्टर हटाएं';
 
   @override
+  String get filterByDate => 'तारीख के अनुसार फ़िल्टर करें';
+
+  @override
   String get categoryConversationAnalysis => 'वार्तालाप विश्लेषण';
 
   @override

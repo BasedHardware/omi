@@ -7625,6 +7625,9 @@ class AppLocalizationsId extends AppLocalizations {
   String get removeFilter => 'Hapus Filter';
 
   @override
+  String get filterByDate => 'Filter berdasarkan tanggal';
+
+  @override
   String get categoryConversationAnalysis => 'Analisis Percakapan';
 
   @override

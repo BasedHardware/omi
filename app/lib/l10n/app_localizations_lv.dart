@@ -7633,6 +7633,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get removeFilter => 'Noņemt Filtru';
 
   @override
+  String get filterByDate => 'Filtrēt pēc datuma';
+
+  @override
   String get categoryConversationAnalysis => 'Sarunu analīze';
 
   @override

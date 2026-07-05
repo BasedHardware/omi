@@ -2433,6 +2433,7 @@
     "largeTimeGapsDetected": "Zistené veľké časové medzery ({gaps})",
     "dailyRecaps": "Denné Súhrny",
     "removeFilter": "Odstrániť Filter",
+    "filterByDate": "Filtrovať podľa dátumu",
     "appleHealthNotAvailable": "Apple Health nie je na tomto zariadení k dispozícii",
     "downloadAudio": "Stiahnuť zvuk",
     "audioDownloadSuccess": "Zvuk bol úspešne stiahnutý",

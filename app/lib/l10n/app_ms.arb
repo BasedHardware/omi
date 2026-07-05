@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Jurang masa besar dikesan ({gaps})",
     "dailyRecaps": "Ringkasan Harian",
     "removeFilter": "Alih Keluar Penapis",
+    "filterByDate": "Tapis mengikut tarikh",
     "appleHealthNotAvailable": "Apple Health tidak tersedia pada peranti ini",
     "downloadAudio": "Muat turun Audio",
     "audioDownloadSuccess": "Audio berjaya dimuat turun",

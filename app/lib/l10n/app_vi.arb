@@ -2433,6 +2433,7 @@
     "largeTimeGapsDetected": "Phát hiện các khoảng cách thời gian lớn ({gaps})",
     "dailyRecaps": "Tóm tắt hàng ngày",
     "removeFilter": "Xóa bộ lọc",
+    "filterByDate": "Lọc theo ngày",
     "appleHealthNotAvailable": "Apple Health không khả dụng trên thiết bị này",
     "downloadAudio": "Tải xuống âm thanh",
     "audioDownloadSuccess": "Tải xuống âm thanh thành công",

@@ -7622,6 +7622,9 @@ class AppLocalizationsLt extends AppLocalizations {
   String get removeFilter => 'Pašalinti Filtrą';
 
   @override
+  String get filterByDate => 'Filtruoti pagal datą';
+
+  @override
   String get categoryConversationAnalysis => 'Pokalbių analizė';
 
   @override

@@ -7650,6 +7650,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get removeFilter => 'Szűrő Eltávolítása';
 
   @override
+  String get filterByDate => 'Szűrés dátum szerint';
+
+  @override
   String get categoryConversationAnalysis => 'Beszélgetéselemzés';
 
   @override

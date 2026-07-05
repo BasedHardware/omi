@@ -7644,6 +7644,9 @@ class AppLocalizationsBg extends AppLocalizations {
   String get removeFilter => 'Премахни филтъра';
 
   @override
+  String get filterByDate => 'Филтриране по дата';
+
+  @override
   String get categoryConversationAnalysis => 'Анализ на разговори';
 
   @override

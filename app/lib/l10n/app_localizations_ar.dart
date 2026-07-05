@@ -7561,6 +7561,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get removeFilter => 'إزالة الفلتر';
 
   @override
+  String get filterByDate => 'تصفية حسب التاريخ';
+
+  @override
   String get categoryConversationAnalysis => 'تحليل المحادثة';
 
   @override

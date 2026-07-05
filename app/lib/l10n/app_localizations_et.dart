@@ -7614,6 +7614,9 @@ class AppLocalizationsEt extends AppLocalizations {
   String get removeFilter => 'Eemalda Filter';
 
   @override
+  String get filterByDate => 'Filtreeri kuupäeva järgi';
+
+  @override
   String get categoryConversationAnalysis => 'Vestluste analüüs';
 
   @override

@@ -7658,6 +7658,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get removeFilter => 'Отстрани Филтер';
 
   @override
+  String get filterByDate => 'Филтрирај по датум';
+
+  @override
   String get categoryConversationAnalysis => 'Анализа на Разговор';
 
   @override

@@ -2429,6 +2429,7 @@
     "largeTimeGapsDetected": "大きな時間差が検出されました ({gaps})",
     "dailyRecaps": "日次の要約",
     "removeFilter": "フィルターを削除",
+    "filterByDate": "日付でフィルター",
     "appleHealthNotAvailable": "Apple Healthはこのデバイスでは利用できません",
     "downloadAudio": "音声をダウンロード",
     "audioDownloadSuccess": "音声のダウンロードに成功しました",

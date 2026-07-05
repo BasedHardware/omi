@@ -7637,6 +7637,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get removeFilter => 'Alih Keluar Penapis';
 
   @override
+  String get filterByDate => 'Tapis mengikut tarikh';
+
+  @override
   String get categoryConversationAnalysis => 'Analisis Perbualan';
 
   @override

@@ -7627,6 +7627,9 @@ class AppLocalizationsUr extends AppLocalizations {
   String get removeFilter => 'فلٹر ہٹائیں';
 
   @override
+  String get filterByDate => 'تاریخ کے لحاظ سے فلٹر کریں';
+
+  @override
   String get categoryConversationAnalysis => 'بات چیت کا تجزیہ';
 
   @override

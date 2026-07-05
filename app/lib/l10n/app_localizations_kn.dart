@@ -7643,6 +7643,9 @@ class AppLocalizationsKn extends AppLocalizations {
   String get removeFilter => 'ಫಿಲ್ಟರ್ ತೆಗೆದುಹಾಕಿ';
 
   @override
+  String get filterByDate => 'ದಿನಾಂಕದ ಪ್ರಕಾರ ಫಿಲ್ಟರ್ ಮಾಡಿ';
+
+  @override
   String get categoryConversationAnalysis => 'ಸಂಭಾಷಣೆ ವಿಶ್ಲೇಷಣೆ';
 
   @override

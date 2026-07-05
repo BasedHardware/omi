@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Stora tidsgap upptäckta ({gaps})",
     "dailyRecaps": "Dagliga Sammanfattningar",
     "removeFilter": "Ta Bort Filter",
+    "filterByDate": "Filtrera efter datum",
     "appleHealthNotAvailable": "Apple Health är inte tillgängligt på denna enhet",
     "downloadAudio": "Ladda ner ljud",
     "audioDownloadSuccess": "Ljud nedladdat framgångsrikt",

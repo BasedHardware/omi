@@ -7616,6 +7616,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get removeFilter => 'Xóa bộ lọc';
 
   @override
+  String get filterByDate => 'Lọc theo ngày';
+
+  @override
   String get categoryConversationAnalysis => 'Phân tích cuộc trò chuyện';
 
   @override

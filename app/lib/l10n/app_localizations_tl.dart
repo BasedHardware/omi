@@ -7685,6 +7685,9 @@ class AppLocalizationsTl extends AppLocalizations {
   String get removeFilter => 'Alisin ang Filter';
 
   @override
+  String get filterByDate => 'I-filter ayon sa petsa';
+
+  @override
   String get categoryConversationAnalysis => 'Conversation Analysis';
 
   @override

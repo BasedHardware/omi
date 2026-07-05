@@ -2428,6 +2428,7 @@
     "largeTimeGapsDetected": "Rilevati grandi divari temporali ({gaps})",
     "dailyRecaps": "Riepiloghi Giornalieri",
     "removeFilter": "Rimuovi Filtro",
+    "filterByDate": "Filtra per data",
     "appleHealthNotAvailable": "Apple Health non è disponibile su questo dispositivo",
     "downloadAudio": "Scarica audio",
     "audioDownloadSuccess": "Audio scaricato con successo",

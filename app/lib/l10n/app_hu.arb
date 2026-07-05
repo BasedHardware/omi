@@ -2524,6 +2524,7 @@
     "largeTimeGapsDetected": "Nagy időeltérések észlelve ({gaps})",
     "dailyRecaps": "Napi Összefoglalók",
     "removeFilter": "Szűrő Eltávolítása",
+    "filterByDate": "Szűrés dátum szerint",
     "appleHealthNotAvailable": "Az Apple Health nem érhető el ezen az eszközön",
     "downloadAudio": "Hang letöltése",
     "audioDownloadSuccess": "Hang sikeresen letöltve",

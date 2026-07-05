@@ -7660,6 +7660,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get removeFilter => 'ఫిల్టర్‌ను తీసివేయండి';
 
   @override
+  String get filterByDate => 'తేదీ ప్రకారం ఫిల్టర్ చేయండి';
+
+  @override
   String get categoryConversationAnalysis => 'సంభాషణ విశ్లేషణ';
 
   @override
