@@ -1,3 +1,0 @@
-{
-  "change": "Fixed import connector status so sources no longer appear connected before setup and zero-item imports stay connected."
-}
