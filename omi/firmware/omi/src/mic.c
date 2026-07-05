@@ -20,6 +20,7 @@
 #include <zephyr/sys/atomic.h>
 
 #include "sd_card.h"
+#include "storage.h"
 #include "t5838_aad.h"
 #include "transport.h"
 #endif
@@ -429,8 +430,11 @@ static void aad_track_silence(const int16_t *buf, size_t n)
         aad_last_voice_ms = now;
     }
     /* Sleep after a long silence whether online or offline. When connected, the
-     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming. */
-    if (!atomic_get(&aad_in_sleep) && (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
+     * BLE link stays up (only the mic + PDM sleep); sound resumes streaming.
+     * BUT never sleep while a BLE sync transfer is running: the AAD entry +
+     * conn-param low-power would stall the sync. Defer sleep until it finishes. */
+    if (!atomic_get(&aad_in_sleep) && !storage_transfer_active() &&
+        (now - aad_last_voice_ms) >= CONFIG_OMI_VAD_HOLD_MS) {
         atomic_set(&aad_req_sleep, 1);
         k_sem_give(&aad_sem);
     }
