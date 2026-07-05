@@ -35,7 +35,7 @@ router = APIRouter()
 _image_generation_client: httpx.AsyncClient | None = None
 
 
-@router.post('/v1/chat/completions')
+@router.post('/v1/chat/completions', response_model=None)
 async def create_chat_completion(
     request: Request,
     caller: ServiceAuthDependency,
