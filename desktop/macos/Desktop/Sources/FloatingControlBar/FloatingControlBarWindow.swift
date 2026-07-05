@@ -1816,6 +1816,83 @@ class FloatingControlBarManager {
         guard let window else { return }
         window.leaveAgentConversation()
     }
+
+    func handleAgentInstallPromptAction(
+        messageId: String,
+        action: AgentInstallPromptAction
+    ) {
+        guard let window,
+              let prompt = window.state.agentInstallPrompt(for: messageId),
+              !prompt.status.isBusy
+        else { return }
+
+        switch action {
+        case .openDocs:
+            openAgentInstallDocs(messageId: messageId, plan: prompt.plan)
+        case .install:
+            guard let command = prompt.plan.installCommand else {
+                openAgentInstallDocs(messageId: messageId, plan: prompt.plan)
+                return
+            }
+            guard confirmAgentInstall(plan: prompt.plan, command: command) else {
+                window.state.updateAgentInstallPrompt(for: messageId) { $0.status = .cancelled }
+                window.resizeToResponseHeightPublic(animated: true)
+                return
+            }
+            runAgentInstaller(messageId: messageId, plan: prompt.plan, command: command)
+        }
+    }
+
+    private func openAgentInstallDocs(messageId: String, plan: LocalAgentInstallPlan) {
+        NSWorkspace.shared.open(plan.documentationURL)
+        window?.state.updateAgentInstallPrompt(for: messageId) { $0.status = .docsOpened }
+        window?.resizeToResponseHeightPublic(animated: true)
+    }
+
+    private func confirmAgentInstall(plan: LocalAgentInstallPlan, command: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Install \(plan.provider.displayName)?"
+        alert.informativeText = """
+        Omi will run this command in /bin/zsh:
+
+        \(command)
+
+        Source: \(plan.documentationURL.absoluteString)
+        """
+        alert.addButton(withTitle: "Run Install")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    private func runAgentInstaller(
+        messageId: String,
+        plan: LocalAgentInstallPlan,
+        command: String
+    ) {
+        guard let window else { return }
+        window.state.updateAgentInstallPrompt(for: messageId) { $0.status = .installing }
+        window.resizeToResponseHeightPublic(animated: true)
+
+        Task { [weak self] in
+            let result = await AgentInstallCommandRunner.run(command)
+            guard let self, let window = self.window else { return }
+            if result.exitCode != 0 {
+                window.state.updateAgentInstallPrompt(for: messageId) {
+                    $0.status = .commandFailed(exitCode: result.exitCode, output: result.output)
+                }
+            } else {
+                let availability = LocalAgentProviderDetector.availability(for: plan.provider)
+                window.state.updateAgentInstallPrompt(for: messageId) {
+                    $0.status = availability.isAvailable
+                        ? .connected
+                        : .finishedButMissing(output: result.output)
+                }
+            }
+            window.resizeToResponseHeightPublic(animated: true)
+        }
+    }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
@@ -2097,6 +2174,23 @@ class FloatingControlBarManager {
             isVoiceResponseActive: window.state.isVoiceResponseActive,
             usesNotchIsland: window.state.usesNotchIsland
         )
+    }
+
+    func agentInstallPromptStateForAutomation() -> [String: String] {
+        guard let window,
+              let message = window.state.currentAIMessage,
+              let prompt = window.state.agentInstallPrompt(for: message.id)
+        else {
+            return ["present": "false"]
+        }
+        return [
+            "present": "true",
+            "provider": prompt.plan.provider.rawValue,
+            "command": prompt.plan.installCommand ?? "",
+            "docs": prompt.plan.documentationURL.absoluteString,
+            "detail": prompt.detailText,
+            "busy": prompt.status.isBusy ? "true" : "false",
+        ]
     }
 
     func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {
@@ -2597,9 +2691,14 @@ class FloatingControlBarManager {
                 )
                 switch presentation {
                 case .visible:
+                    let assistantMessage = recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai)
+                    barWindow.state.setAgentInstallPrompt(
+                        AgentInstallPromptState(plan: directive.provider.installPlan),
+                        for: assistantMessage.id
+                    )
                     completeVisibleAgentResponse(
                         userText: message,
-                        assistantMessage: recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai),
+                        assistantMessage: assistantMessage,
                         barWindow: barWindow
                     )
                 case .voiceOnly:

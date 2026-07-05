@@ -111,6 +111,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var inputViewHeight: CGFloat = 120
     @Published var responseContentHeight: CGFloat = 0
     @Published private(set) var responseContentHeights: [String: CGFloat] = [:]
+    @Published private(set) var agentInstallPrompts: [String: AgentInstallPromptState] = [:]
     @Published var chatHistory: [FloatingChatExchange] = []
     @Published var lastConversationActivityAt: Date? = nil
     @Published var activeAgentChatPillID: UUID? = nil
@@ -254,6 +255,23 @@ class FloatingControlBarState: NSObject, ObservableObject {
         }
     }
 
+    func setAgentInstallPrompt(_ prompt: AgentInstallPromptState, for messageId: String) {
+        agentInstallPrompts[messageId] = prompt
+    }
+
+    func agentInstallPrompt(for messageId: String) -> AgentInstallPromptState? {
+        agentInstallPrompts[messageId]
+    }
+
+    func updateAgentInstallPrompt(
+        for messageId: String,
+        _ update: (inout AgentInstallPromptState) -> Void
+    ) {
+        guard var prompt = agentInstallPrompts[messageId] else { return }
+        update(&prompt)
+        agentInstallPrompts[messageId] = prompt
+    }
+
     func measuredContentHeight(for surface: FloatingConversationSurface) -> CGFloat? {
         responseContentHeights[surface.measurementKey]
     }
@@ -288,6 +306,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         displayedQuery = ""
         currentAIMessage = nil
         currentQuestionMessageId = nil
+        agentInstallPrompts = [:]
         chatHistory = []
         showingAIConversation = false
         showingAIResponse = false

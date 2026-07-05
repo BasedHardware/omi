@@ -87,11 +87,11 @@ struct LocalAgentProviderAvailability: Equatable {
     var setupPrompt: String {
         switch provider {
         case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
+            return "I don't see Hermes connected. I can run the official Hermes installer or open setup docs."
         case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+            return "I don't see OpenClaw connected. I can run the official OpenClaw installer or open setup docs."
         case .codex:
-            return "I don't see Codex installed. Install the Codex CLI, sign in, then try again."
+            return "I don't see Codex connected. I can run the official Codex CLI installer or open setup docs."
         }
     }
 
@@ -165,6 +165,8 @@ enum LocalAgentProviderDetector {
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
+            "\(homeDirectory)/.openclaw/bin",
+            "\(homeDirectory)/.openclaw/node/bin",
             "\(homeDirectory)/.local/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",

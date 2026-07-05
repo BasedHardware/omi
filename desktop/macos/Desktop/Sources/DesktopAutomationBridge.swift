@@ -425,6 +425,13 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "agent_install_prompt_state",
+      summary: "Return the current floating-bar missing-agent install prompt, if present"
+    ) { _ in
+      FloatingControlBarManager.shared.agentInstallPromptStateForAutomation()
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]

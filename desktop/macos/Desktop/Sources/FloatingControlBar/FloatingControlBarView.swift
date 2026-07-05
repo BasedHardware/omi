@@ -1139,7 +1139,13 @@ struct FloatingControlBarView: View {
                 onSendQuery(message)
             },
             onRate: onRate,
-            onShareLink: onShareLink
+            onShareLink: onShareLink,
+            onAgentInstallAction: { messageId, action in
+                FloatingControlBarManager.shared.handleAgentInstallPromptAction(
+                    messageId: messageId,
+                    action: action
+                )
+            }
         )
         .transition(
             .asymmetric(

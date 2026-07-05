@@ -580,6 +580,8 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/hermes-agent/venv/bin",
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
+      "\(home)/.openclaw/bin",
+      "\(home)/.openclaw/node/bin",
     ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     let existingPathDirs = existingPath.split(separator: ":").map(String.init)

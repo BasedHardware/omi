@@ -74,6 +74,25 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
+  func testLocalAgentProviderDetectorFindsExecutableInOpenClawInstallPath() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-provider-openclaw-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".openclaw/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("openclaw")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .openclaw,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
   func testLocalAgentProviderDetectorFindsExecutableInPathEnvironment() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-provider-path-\(UUID().uuidString)", isDirectory: true)
@@ -101,10 +120,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+      "I don't see OpenClaw connected. I can run the official OpenClaw installer or open setup docs.")
     XCTAssertEqual(
       availability.toolError,
-      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+      "Error: I don't see OpenClaw connected. I can run the official OpenClaw installer or open setup docs.")
   }
 
   func testLocalAgentProviderDetectorCodexMissingPromptIsUserFacing() {
@@ -116,10 +135,25 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see Codex installed. Install the Codex CLI, sign in, then try again.")
+      "I don't see Codex connected. I can run the official Codex CLI installer or open setup docs.")
     XCTAssertEqual(
       availability.toolError,
-      "Error: I don't see Codex installed. Install the Codex CLI, sign in, then try again.")
+      "Error: I don't see Codex connected. I can run the official Codex CLI installer or open setup docs.")
+  }
+
+  func testDirectedProviderInstallPlansUseOfficialSetupSources() {
+    XCTAssertEqual(
+      AgentPillsManager.DirectedProvider.hermes.installPlan.installCommand,
+      "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash")
+    XCTAssertEqual(
+      AgentPillsManager.DirectedProvider.hermes.installPlan.documentationURL.absoluteString,
+      "https://hermes-agent.nousresearch.com/docs/getting-started/installation")
+    XCTAssertEqual(
+      AgentPillsManager.DirectedProvider.openclaw.installPlan.installCommand,
+      "curl -fsSL https://openclaw.ai/install.sh | bash -s -- --no-onboard")
+    XCTAssertEqual(
+      AgentPillsManager.DirectedProvider.codex.installPlan.installCommand,
+      "curl -fsSL https://chatgpt.com/codex/install.sh | sh")
   }
 
   // MARK: - ApiKeysResponse shape assertion
