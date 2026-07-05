@@ -1,6 +1,5 @@
 package com.friend.ios.phonecalls
 
-import com.friend.ios.*
 
 import android.media.AudioManager
 import android.media.AudioRecord

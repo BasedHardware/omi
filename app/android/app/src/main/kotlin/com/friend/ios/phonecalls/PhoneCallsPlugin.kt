@@ -1,6 +1,5 @@
 package com.friend.ios.phonecalls
 
-import com.friend.ios.*
 
 import android.app.Activity
 import android.content.Context

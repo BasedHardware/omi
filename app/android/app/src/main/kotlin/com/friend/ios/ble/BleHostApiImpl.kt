@@ -1,6 +1,9 @@
 package com.friend.ios.ble
 
-import com.friend.ios.*
+import com.friend.ios.BleBatteryPoint
+import com.friend.ios.BleDeviceDiagnostics
+import com.friend.ios.BleHostApi
+
 
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter

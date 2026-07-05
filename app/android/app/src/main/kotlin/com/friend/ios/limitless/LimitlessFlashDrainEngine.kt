@@ -1,6 +1,5 @@
 package com.friend.ios.limitless
 
-import com.friend.ios.*
 import com.friend.ios.ble.OmiBleManager
 import com.friend.ios.batch.LimitlessBatchAudioWriter
 

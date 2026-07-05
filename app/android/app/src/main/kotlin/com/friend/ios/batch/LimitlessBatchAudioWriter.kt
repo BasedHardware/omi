@@ -1,6 +1,5 @@
 package com.friend.ios.batch
 
-import com.friend.ios.*
 import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context

@@ -1,6 +1,5 @@
 package com.friend.ios.ble
 
-import com.friend.ios.*
 
 import android.app.Activity
 import android.bluetooth.le.ScanFilter
