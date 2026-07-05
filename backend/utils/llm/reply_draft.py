@@ -882,20 +882,31 @@ def _select_best(name: str, style_block: str, thread_text: str, candidates: List
 # from noisy summaries under the anti-fabrication rules. So for recount questions we distill the
 # noisy context into a short, concrete "things you actually did" recap and put that in front of the
 # drafter. Gated on the question shape so normal drafts pay no extra call.
-_RECOUNT_RE = re.compile(
-    r"("
-    r"what(?:'?d| did| have| ?ve| you)?\s+(?:you\s+)?(?:been\s+|end\s+up\s+|get(?:ting)?\s+)?"
-    r"(?:up\s+to|doing|do\b|been\s+up\s+to)"
-    r"|what\s+did\s+you\s+(?:do|get\s+up\s+to|end\s+up)"
-    r"|what\s+have\s+you\s+been\s+up\s+to"
-    r"|how(?:'?s| was| were| wa)\s+(?:your|the|ur)\s+\w+"
-    r"|how(?:'?d| did)\s+(?:it|that|the|your|ur)\b.*\bgo\b"
-    r"|how\s+did\s+(?:it|that|the|your|ur)\s+\w+\s+go"
-    r"|(?:do|did)\s+(?:you\s+)?(?:do\s+)?anything\s+(?:fun|cool|nice|good)"
-    r"|tell me (?:everything|all about|about your)"
-    r")",
-    re.IGNORECASE,
+# Recount intent = an open question asking the user to report their OWN recent activities.
+# Built from signals and tested against many real phrasings (positives like "did you end up
+# doing anything fun for 4th", "how was your weekend", "any plans for the 4th"; negatives like
+# "what did you think of the game", "who won", "what time works"). The trailing activity must be a
+# real doing-verb (do/doing/up to/end up/plans/anything) — NOT bare "did", which appears in every
+# past-tense question ("what did you think") and would false-positive.
+_RECOUNT_PERIOD = (
+    r"(?:day|days|weekend|wknd|week|night|nite|morning|arvo|evening|holidays?|long weekend|trip"
+    r"|vacation|vaca|break|4th|fourth|july|birthday|bday|christmas|xmas|thanksgiving|new ?years?"
+    r"|nye|halloween|easter|labor day|memorial|super ?bowl)"
 )
+_RECOUNT_PATTERNS = [
+    r"what(?:'?d| did| do| you| ya| have| ?ve| you been| you get| you end)?[\w' ]*"
+    r"\b(?:do|doing|get up to|got up to|been up to|up to|end up|plans?|anything)\b",
+    r"what(?:'?re| are| you| ya| have| ?ve| you been)?[\w' ]*\bup to\b",
+    r"how(?:'?s| was| were| wa|'?d| did| has| have| been| ?is| ?was)[\w' ]*\b" + _RECOUNT_PERIOD + r"\b",
+    r"how(?:'?d| did| was| were)\b[\w' ]*\bgo\b",
+    r"\b(?:do|did|doing)\b[\w' ]*\banything\b",
+    r"\banything\b[\w' ]*\b(?:fun|cool|nice|good|exciting|going on|for )",
+    r"\bget up to (?:anything|much)\b",
+    r"\bplans?\b[\w' ]*\bfor\b[\w' ]*\b" + _RECOUNT_PERIOD + r"\b",
+    r"what(?:'?s| is| are|'?re)[\w' ]*\bplans?\b",
+    r"\bany plans\b",
+]
+_RECOUNT_RE = re.compile("|".join(f"(?:{p})" for p in _RECOUNT_PATTERNS), re.IGNORECASE)
 
 
 def _is_recount_question(thread: List[dict]) -> bool:
