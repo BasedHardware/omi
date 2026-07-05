@@ -1,4 +1,5 @@
-package com.friend.ios
+package com.friend.ios.ble
+
 
 import android.companion.AssociationInfo
 import android.companion.CompanionDeviceManager

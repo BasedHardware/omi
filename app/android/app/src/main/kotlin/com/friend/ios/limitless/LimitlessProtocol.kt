@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.friend.ios.limitless
 
 /**
  * Pure packet-level codec for the Limitless pendant's protobuf-over-BLE protocol,

@@ -1,4 +1,13 @@
-package com.friend.ios
+package com.friend.ios.ble
+
+import com.friend.ios.BleDeviceDiagnostics
+import com.friend.ios.BleDisconnectEvent
+import com.friend.ios.BleService
+
+import com.friend.ios.batch.LimitlessBatchAudioWriter
+import com.friend.ios.batch.OmiBackgroundAudioStreamer
+import com.friend.ios.batch.OmiBatchAudioWriter
+import com.friend.ios.limitless.LimitlessFlashDrainEngine
 
 import android.annotation.SuppressLint
 import android.app.*

@@ -1,4 +1,4 @@
-package com.friend.ios
+package com.friend.ios.limitless
 
 import org.json.JSONObject
 import org.junit.Assert.assertEquals

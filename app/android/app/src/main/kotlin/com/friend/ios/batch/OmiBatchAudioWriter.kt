@@ -1,4 +1,6 @@
-package com.friend.ios
+package com.friend.ios.batch
+
+import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context
 import android.util.Log
