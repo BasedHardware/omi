@@ -45,7 +45,7 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-_MAX_GPU_QUEUE = 512
+_MAX_GPU_QUEUE = 4096
 
 _VALID_ATTN_MODES = ("full", "local", "auto")
 
@@ -303,6 +303,13 @@ class GPUWorker:
                 try:
                     item = self._queue.get_nowait()
                 except queue.Empty:
+                    try:
+                        item = self._stream_queue.get(timeout=self._poll_timeout)
+                    except queue.Empty:
+                        continue
+                    if item.work_type == WorkType.SHUTDOWN:
+                        break
+                    self._process_stream_item(item)
                     continue
             else:
                 try:
@@ -608,7 +615,8 @@ class GPUWorker:
         source_lang = os.getenv("PARAKEET_STREAM_LANGUAGE", "English")
         overrides["source_language"] = source_lang
         self._source_language = source_lang
-        overrides["streaming"] = {"att_context_size": None}
+        max_streams = int(os.getenv("PARAKEET_MAX_CONCURRENT_STREAMS", "128"))
+        overrides["streaming"] = {"att_context_size": None, "num_slots": max_streams}
         cfg = OmegaConf.merge(base_cfg, overrides)
 
         logger.info(f"Building streaming pipeline: {stream_model}")

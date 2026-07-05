@@ -244,7 +244,9 @@ class TestGPUWorkerQueueFull:
         worker = GPUWorker()
         worker._running = True
         worker._ready.set()
-        for _ in range(512):
+        from gpu_worker import _MAX_GPU_QUEUE
+
+        for _ in range(_MAX_GPU_QUEUE):
             try:
                 worker._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, {}))
             except queue.Full:
