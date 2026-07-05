@@ -78,3 +78,15 @@ def test_endpoint_coerces_none_duration_to_zero():
     assert resp["duration_seconds"] == 0.0
     assert resp["has_profile"] is False
     assert resp["url"] is None
+
+
+@pytest.mark.skipif(not _SP_IMPORTABLE, reason="PyAV (av) unavailable locally")
+def test_endpoint_zeroes_stale_duration_when_no_profile():
+    # Write-ahead cache can outlive a deleted profile: has_profile False must not report a
+    # positive duration (the inconsistent state David flagged).
+    with patch.object(sp_router, "get_user_has_speech_profile", return_value=False), patch.object(
+        sp_router, "get_speech_profile_duration", return_value=42.5
+    ), patch.object(sp_router, "get_profile_audio_if_exists", return_value=None):
+        resp = sp_router.get_speech_profile_status(uid="u1")
+    assert resp["has_profile"] is False
+    assert resp["duration_seconds"] == 0.0  # not the stale 42.5
