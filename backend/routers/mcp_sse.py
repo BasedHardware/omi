@@ -1377,8 +1377,8 @@ def handle_mcp_message(
         try:
             mcp_auth_context = auth_context
             _require_tool_scope(mcp_auth_context, tool_name)
-            memory_context = mcp_auth_context.memory_context
-            result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=memory_context)
+            auth_context = mcp_auth_context.memory_context
+            result = execute_tool(mcp_auth_context.uid, tool_name, arguments, auth_context=auth_context)
         except ToolExecutionError as e:
             error = create_mcp_error(msg_id, e.code, e.message)
             if e.code == -32003:
