@@ -28,6 +28,7 @@ final class AgentContinuityGauntletTests: XCTestCase {
       "agent_runtime_evidence",
       "ask_main_chat",
       "coordinator_awareness_snapshot",
+      "swap_test_owner",
     ]
     for name in required {
       XCTAssertTrue(
@@ -47,5 +48,6 @@ final class AgentContinuityGauntletTests: XCTestCase {
       encoding: .utf8
     )
     XCTAssertTrue(providerSource.contains("automationMainChatSnapshot"))
+    XCTAssertTrue(providerSource.contains("automationSwapTestOwner"))
   }
 }

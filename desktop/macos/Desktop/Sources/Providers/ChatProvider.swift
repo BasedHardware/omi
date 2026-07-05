@@ -4734,6 +4734,45 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Local automation (continuity gauntlet)
 
+  private static let automationAuthUserIdKey = "auth_userId"
+
+  /// Test-bundle-only owner swap: clear kernel state for owner A, register synthetic
+  /// owner B, and run one main-chat probe turn under a QueryTracer context.
+  func automationSwapTestOwner(ownerBId: String, probeQuery: String) async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "swap_test_owner is disabled on production bundles"]
+    }
+    let trimmedOwnerB = ownerBId.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedQuery = probeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedOwnerB.isEmpty else { return ["error": "missing 'owner_b'"] }
+    guard !trimmedQuery.isEmpty else { return ["error": "missing 'query'"] }
+    guard let ownerA = runtimeOwnerId, !ownerA.isEmpty else {
+      return ["error": "owner A is not signed in"]
+    }
+    guard trimmedOwnerB != ownerA else {
+      return ["error": "owner_b must differ from the active owner"]
+    }
+
+    _ = await ensureBridgeStarted()
+    if agentBridgeStarted {
+      await resolvedAgentClient().clearOwnerState()
+    }
+
+    UserDefaults.standard.set(trimmedOwnerB, forKey: Self.automationAuthUserIdKey)
+    resetSessionStateForAuthChange()
+
+    let tracer = QueryTracer(query: trimmedQuery, inputMode: .text)
+    await QueryTracerContext.$current.withValue(tracer) {
+      _ = await sendMessage(trimmedQuery)
+    }
+
+    var detail = automationMainChatSnapshot(limit: 20)
+    detail["owner_a"] = ownerA
+    detail["owner_b"] = trimmedOwnerB
+    detail["probe_query"] = trimmedQuery
+    return detail
+  }
+
     /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.
     func automationMainChatSnapshot(limit: Int) -> [String: String] {
         let boundedLimit = max(1, limit)

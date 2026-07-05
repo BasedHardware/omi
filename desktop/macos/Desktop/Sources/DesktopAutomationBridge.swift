@@ -456,6 +456,25 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
+    // Gauntlet step 06: clear owner A kernel bindings, re-register synthetic owner B,
+    // and run one assembled-context probe turn. Non-production bundles only.
+    register(
+      name: "swap_test_owner",
+      summary: "Clear owner A kernel state, swap to synthetic owner B, and run one probe turn",
+      params: ["owner_b", "query"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "swap_test_owner is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      return await provider.automationSwapTestOwner(
+        ownerBId: params["owner_b"] ?? "",
+        probeQuery: params["query"] ?? ""
+      )
+    }
+
     register(
       name: "main_chat_snapshot",
       summary: "Export main-chat transcript, session ids, and stream state for continuity harnesses",

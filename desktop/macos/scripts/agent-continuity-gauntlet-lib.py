@@ -49,6 +49,8 @@ def bridge_action_timeout_sec(
         wait_ms = int(params.get("timeoutMs", "2000"))
         if wait_ms >= 30_000:
             return max(turn_sec, (wait_ms / 1000.0) + 10.0)
+    if name in {"ask_main_chat", "swap_test_owner"}:
+        return turn_sec
     return 60.0
 
 
@@ -167,6 +169,45 @@ def read_new_traces(since_line: int) -> list[dict[str, Any]]:
             except json.JSONDecodeError:
                 continue
     return traces
+
+
+def read_all_traces() -> list[dict[str, Any]]:
+    if not TRACE_LOG.exists():
+        return []
+    traces: list[dict[str, Any]] = []
+    with TRACE_LOG.open("r", encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                traces.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return traces
+
+
+def wait_for_new_traces(
+    since_line: int,
+    *,
+    min_count: int = 1,
+    timeout_sec: float = 8.0,
+    poll_sec: float = 0.25,
+) -> list[dict[str, Any]]:
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        traces = read_new_traces(since_line)
+        if len(traces) >= min_count:
+            return traces
+        time.sleep(poll_sec)
+    return read_new_traces(since_line)
+
+
+def traces_for_query(traces: list[dict[str, Any]], query_text: str) -> list[dict[str, Any]]:
+    needle = query_text.strip()
+    if not needle:
+        return traces
+    return [trace for trace in traces if str(trace.get("query_text", "")).strip() == needle]
 
 
 def flatten_trace_text(trace: dict[str, Any]) -> str:
@@ -407,6 +448,12 @@ class GauntletRunner:
         if needle not in haystack:
             self.fail(f"{label}: model-visible trace missing marker {needle}")
 
+    def assert_trace_excludes(self, traces: list[dict[str, Any]], needles: list[str], label: str) -> None:
+        haystack = "\n".join(flatten_trace_text(trace) for trace in traces)
+        leaked = [needle for needle in needles if needle in haystack]
+        if leaked:
+            self.fail(f"{label}: owner-B assembled trace leaked owner-A marker(s): {leaked}")
+
     def assert_assistant_mentions(self, assistant_text: str, needles: list[str], label: str) -> None:
         lowered = assistant_text.lower()
         if not any(needle.lower() in lowered for needle in needles):
@@ -590,28 +637,112 @@ class GauntletRunner:
         if self.markers["spawn"] not in status_blob and not list_tools:
             self.fail(f"status query missing spawn marker {self.markers['spawn']}")
 
-        # Step 6 — owner-switch isolation (kernel unit test; live sign-out/sign-in E2E is manual)
-        owner_ok, owner_detail = run_owner_switch_kernel_check()
+        # Step 6 — owner-switch isolation (in-process via swap_test_owner)
+        if not self.baseline_identity or not self.baseline_identity.get("conversation_id"):
+            self.fail("owner-switch: missing owner-A baseline identity from steps 1-5")
+
+        owner_a_identity = dict(self.baseline_identity)
+        owner_b_id = f"gauntlet-owner-b-{self.run_id}"
+        probe_query = (
+            "Reply with the single word PROBE only. "
+            "Do not reference any prior GAUNTLET continuity markers."
+        )
+        trace_start = trace_line_count()
+        swap = self.bridge_act(
+            "swap_test_owner",
+            {"owner_b": owner_b_id, "query": probe_query},
+        )
+        swap_detail = swap.get("result", {}).get("detail", {})
+        if swap.get("ok") is False or swap_detail.get("error"):
+            self.fail(f"owner-switch swap_test_owner failed: {swap_detail.get('error', swap.get('error', swap))}")
+
+        deadline = time.monotonic() + (self.args.turn_timeout_ms / 1000.0)
+        snapshot_detail: dict[str, str] = swap_detail
+        while time.monotonic() < deadline:
+            wait = bridge_action(
+                self.port,
+                "wait_main_chat_idle",
+                {"timeoutMs": "2000", "pollMs": "250"},
+            )
+            snapshot_detail = wait.get("result", {}).get("detail", snapshot_detail)
+            if wait.get("ok") and snapshot_detail.get("idle") == "true":
+                break
+            time.sleep(0.25)
+        else:
+            self.fail("owner-switch: timed out waiting for owner-B probe turn to finish")
+
+        snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+        traces = wait_for_new_traces(trace_start, min_count=1, timeout_sec=10.0)
+        if not traces:
+            traces = traces_for_query(read_all_traces(), probe_query)
+        if not traces:
+            self.fail("owner-switch: owner-B probe produced no QueryTracer evidence")
+
+        runtime = self.bridge_act("agent_runtime_evidence")
+        runtime_detail = runtime.get("result", {}).get("detail", runtime)
+        owner_b_identity = identity_keys(snapshot_detail, runtime_detail)
+        owner_a_kernel = kernel_surface_identity(
+            runtime_detail.get("database_path", ""),
+            owner_a_identity.get("owner_id", ""),
+        )
+        owner_b_kernel = kernel_surface_identity(
+            runtime_detail.get("database_path", ""),
+            owner_b_id,
+        )
+
+        isolation_checks = {
+            "owner_b_id_matches": owner_b_identity.get("owner_id") == owner_b_id,
+            "conversation_id_disjoint": (
+                bool(owner_a_kernel and owner_b_kernel)
+                and owner_a_kernel.get("conversation_id")
+                != owner_b_kernel.get("conversation_id")
+            ),
+            "trace_count": len(traces),
+        }
+        self.assert_trace_excludes(
+            traces,
+            list(self.markers.values()),
+            "owner-switch probe",
+        )
+        if owner_b_identity.get("owner_id") != owner_b_id:
+            self.fail(
+                f"owner-switch: owner B id mismatch "
+                f"(expected={owner_b_id}, actual={owner_b_identity.get('owner_id')})"
+            )
+        if not owner_a_kernel or not owner_b_kernel:
+            self.fail("owner-switch: could not read kernel surface_conversations for both owners")
+        if owner_a_kernel.get("conversation_id") == owner_b_kernel.get("conversation_id"):
+            self.fail(
+                "owner-switch: owner B reused owner A conversation_id "
+                f"({owner_a_kernel.get('conversation_id')})"
+            )
+
         self.record_step(
-            "06-owner-switch-kernel",
-            "owner-switch surface isolation (kernel)",
-            user_text="(kernel vitest: owner B does not reuse owner A conversation)",
-            action_response={"ok": owner_ok, "detail": owner_detail},
-            snapshot_detail={},
-            traces=[],
+            "06-owner-switch-isolation",
+            "owner-switch surface isolation (in-process)",
+            user_text=probe_query,
+            action_response=swap,
+            snapshot_detail=snapshot_detail,
+            traces=traces,
             extra={
+                "owner_a_identity": owner_a_identity,
+                "owner_a_kernel": owner_a_kernel,
+                "owner_b_identity": owner_b_identity,
+                "owner_b_kernel": owner_b_kernel,
+                "isolation_checks": isolation_checks,
                 "owner_switch_note": (
-                    "Live sign-out/sign-in E2E is not automated here; kernel surface_conversations "
-                    "owner isolation is verified via surface-session.test.ts."
+                    "Kernel owner isolation exercised in-process via swap_test_owner; "
+                    "full Firebase auth-UI swap remains manual."
                 ),
             },
             skip_identity_drift=True,
         )
-        if not owner_ok:
-            self.fail(f"owner-switch kernel check failed: {owner_detail}")
 
         manifest["owner_switch_note"] = (
-            "Step 06 runs kernel owner-isolation vitest; full auth swap E2E remains manual."
+            "Step 06 swaps to synthetic owner B in-process, captures owner-B QueryTracer "
+            "evidence, and asserts owner-A markers are absent with disjoint conversation_id; "
+            "full Firebase auth-UI swap remains manual."
         )
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
         manifest["steps"] = self.steps
@@ -654,6 +785,7 @@ def self_check() -> int:
         "wait_main_chat_idle",
         "agent_runtime_evidence",
         "coordinator_awareness_snapshot",
+        "swap_test_owner",
     }
     hub_actions = {"ptt_test_turn"}
     bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
@@ -676,7 +808,7 @@ def self_check() -> int:
     if not owner_ok:
         print(f"self-check failed: owner-switch kernel check: {owner_detail}", file=sys.stderr)
         return 1
-    print("self-check passed (owner-switch: kernel unit test; live auth swap still manual)")
+    print("self-check passed (owner-switch: kernel vitest + swap_test_owner action registered)")
     return 0
 
 
