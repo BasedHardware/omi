@@ -12,9 +12,11 @@ then let the model self-select the one that best matches this user's voice, fits
 the conversation, and obeys the grounding/commitment guardrails.
 """
 
+import datetime as _dt
 import html
 import json
 import logging
+import math
 import re
 from typing import List, Optional
 
@@ -26,7 +28,8 @@ from database import memories as memories_db
 from database._client import db as firestore_db
 from database.entities import person_entity_id
 from models.conversation_enums import ConversationSource
-from utils.llm.clients import get_llm
+from utils.conversations.transcript_chunks import hydrate_chunk_texts
+from utils.llm.clients import embeddings, get_llm
 from utils.llm.style_fingerprint import (
     StyleFingerprint,
     compute_fingerprint,
@@ -104,79 +107,261 @@ def _thread_query(thread: List[dict]) -> str:
     return " ".join(reversed(recents)).strip()
 
 
-def _relevant_context(uid: str, thread: List[dict]) -> str:
-    """Context Omi has that grounds the draft in what's being discussed: relevance-
-    ranked semantic memory hits keyed off the recent thread, plus recent + relevant
-    conversations Omi captured. When semantic search finds nothing relevant, no facts
-    are injected — an ungrounded-but-clean reply beats one polluted with memories that
-    don't relate to the conversation.
+# --- grounding retrieval helpers -------------------------------------------------------------
+# The draft is only as specific as what it retrieves. Beyond ranked memory FACTS and conversation
+# SUMMARIES, we pull VERBATIM transcript chunks (the concrete detail — "grilled smash burgers",
+# "$15k a month") and embedding-rerank chunks + summaries together so a precise chunk can outrank a
+# vague summary. Primary path uses the vector index; a local embedding rerank over recently-captured
+# transcripts is the fallback when the index returns nothing.
 
-    Degrades gracefully: any lookup that fails or returns nothing is skipped."""
-    query = _thread_query(thread)
+MEMORY_CONV_TOP = 5  # top conversation/chunk items injected after the unified rerank
+MEMORY_CONV_MIN_SIM = 0.20  # min cosine to inject a conversation/chunk
+MEMORY_MEM_TOP = 5  # cap on injected memory facts
+MEMORY_SCORE_MIN = 0.30  # min memory relevance score (when the search returns scores)
+MEMORY_RECENCY_BOOST = 0.15  # bonus for items whose date falls in a time-scoped question's window
 
-    bits: List[str] = []
+_TEMPORAL_CUES = [
+    (("yesterday", "last night", "y'day", "yday"), 2, 0),
+    (("today", "this morning", "this afternoon", "tonight", "just now", "earlier"), 1, 0),
+    (("this week", "past few days", "last few days", "couple days", "recently", "lately", "these days"), 8, 0),
+    (("last week", "past week"), 15, 6),
+    (("this month", "past month", "last month"), 40, 0),
+]
 
-    # Facts Omi knows about the user, keyed off what's being discussed. Only
-    # RELEVANCE-RANKED semantic hits ground the draft. The former durable-read and
-    # AI-profile fallbacks fired whenever semantic search returned nothing (any short
-    # or off-topic thread, or a cold/unavailable index) and injected the user's top-N
-    # memories UNRANKED — which measured out as dumping raw inbox/newsletter ingest
-    # (and sensitive items like dating-app or financial notifications) into the prompt,
-    # labeled "relevant to this chat", with zero real relevance. That let the model
-    # confirm private facts the conversation never raised. No relevant hit ⇒ no facts
-    # block: a clean, ungrounded reply beats a junk-polluted one.
-    facts: List[str] = []
-    if query:
+
+def _to_date(value) -> Optional[_dt.date]:
+    """Best-effort date from a datetime, epoch int/float, or ISO/human string."""
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    if isinstance(value, (int, float)):
         try:
-            matches = MemoryService(db_client=firestore_db).search(uid, query, limit=10)
-            facts = [m.memory.content for m in matches if getattr(m.memory, 'content', None)]
-        except Exception as e:
-            logger.warning(f"reply_draft: relevant memory search failed uid={uid}: {e}")
-    if facts:
-        bits.append("WHAT OMI KNOWS ABOUT YOU (relevant to this chat):\n" + "\n".join(f"- {f}" for f in facts))
+            return _dt.datetime.utcfromtimestamp(float(value)).date()
+        except (ValueError, OSError, OverflowError):
+            return None
+    s = str(value).strip()
+    m = re.match(r"(\d{4})-(\d{2})-(\d{2})", s)
+    if m:
+        try:
+            return _dt.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    return None
 
-    # Conversations Omi captured — BOTH the topic-relevant ones (semantic) AND the
-    # most recent ones. Something referenced in the chat could be an audio
-    # transcript from minutes ago that isn't vector-indexed yet, so recency matters
-    # as much as relevance here.
+
+def _when(value) -> str:
+    """Human date label so the model can reason about recency: today / yesterday / N days ago / on date."""
+    d = _to_date(value)
+    if d is None:
+        return "at some point"
+    delta = (_dt.datetime.utcnow().date() - d).days
+    if delta <= 0:
+        return "today"
+    if delta == 1:
+        return "yesterday"
+    if delta < 7:
+        return f"{delta} days ago"
+    return f"on {d.isoformat()}"
+
+
+def _temporal_window(text: str):
+    """If the inbound references a time, a (start,end) date window to recency-boost items into."""
+    low = (text or "").lower()
+    today = _dt.datetime.utcnow().date()
+    for phrases, back_start, back_end in _TEMPORAL_CUES:
+        if any(p in low for p in phrases):
+            return (today - _dt.timedelta(days=back_start), today - _dt.timedelta(days=back_end))
+    return None
+
+
+def _in_window(value, window) -> bool:
+    if not window:
+        return False
+    d = _to_date(value)
+    return bool(d and window[0] <= d <= window[1])
+
+
+def _cosine(a, b) -> float:
+    if not a or not b:
+        return 0.0
+    num = sum(x * y for x, y in zip(a, b))
+    da = math.sqrt(sum(x * x for x in a))
+    db = math.sqrt(sum(y * y for y in b))
+    return num / (da * db) if da and db else 0.0
+
+
+def _embed_rank(query: str, items: List[dict], top: int, min_sim: float, boost_fn=None) -> List[dict]:
+    """Rerank items by embedding cosine to the query (one batch embed). Gate on RAW cosine so a
+    recency boost never rescues an off-topic item. Pass-through top-N if embedding is unavailable."""
+    items = [it for it in items if (it.get("_text") or "").strip()]
+    if not items or not (query or "").strip():
+        return items[:top]
     try:
-        seen_ids = set()
-        lines = []
+        vecs = embeddings.embed_documents([query] + [it["_text"] for it in items])
+    except Exception as e:
+        logger.warning(f"reply_draft: embed rerank failed: {e}")
+        return items[:top]
+    qv = vecs[0]
+    scored = []
+    for it, v in zip(items, vecs[1:]):
+        sim = _cosine(qv, v)
+        if sim < min_sim:
+            continue
+        boost = boost_fn(it) if boost_fn else 0.0
+        scored.append((sim + boost, it))
+    scored.sort(key=lambda x: -x[0])
+    return [it for _, it in scored[:top]]
 
-        def _add(c: dict) -> None:
-            cid = c.get('id')
-            if cid in seen_ids:
-                return
-            seen_ids.add(cid)
-            structured = c.get('structured') or {}
-            title = structured.get('title')
-            if not title:
-                return
-            overview = structured.get('overview') or ''
-            lines.append(f"- {title}" + (f": {overview}" if overview else ""))
 
-        # Most recent first (today / minutes ago), then topic-relevant matches.
+def _retrieve_chunks(uid: str, query: str, limit: int = 8) -> List[dict]:
+    """Verbatim transcript chunks relevant to the query — the concrete detail summaries drop. Uses
+    the vector chunk index; falls back to slicing recently-captured transcripts and ranking locally
+    (also covers audio captured minutes ago that isn't indexed yet)."""
+    try:
+        rows = vector_db.search_transcript_chunks(uid, query, limit=limit)
+        rows = hydrate_chunk_texts(uid, rows) if rows else []
+        chunks = [
+            {"kind": "chunk", "text": r["text"], "date": r.get("created_at"), "_text": r["text"]}
+            for r in rows
+            if (r.get("text") or "").strip()
+        ]
+        if chunks:
+            return chunks
+    except Exception as e:
+        logger.warning(f"reply_draft: chunk index search failed uid={uid}: {e}")
+    # local fallback: window recent transcripts, embedding-rank
+    try:
+        raw = []
+        for c in conversations_db.get_conversations(uid, limit=40):
+            date = c.get("created_at") or c.get("started_at")
+            texts = [
+                (s.get("text") or "").strip()
+                for s in (c.get("transcript_segments") or [])
+                if (s.get("text") or "").strip()
+            ]
+            for i in range(0, len(texts), 4):
+                window = " ".join(texts[i : i + 6]).strip()
+                if len(window) > 24:
+                    raw.append({"kind": "chunk", "text": window, "date": date, "_text": window})
+        return _embed_rank(query, raw, top=limit, min_sim=0.22)
+    except Exception as e:
+        logger.warning(f"reply_draft: local chunk fallback failed uid={uid}: {e}")
+        return []
+
+
+def _rank_memories(uid: str, query: str, top: int = MEMORY_MEM_TOP) -> List[dict]:
+    """Durable memory FACTS relevant to the query. Prefers the scored semantic search; falls back to
+    embedding-ranking a broad memory fetch when the search returns no usable scores."""
+    try:
+        matches = MemoryService(db_client=firestore_db).search(uid, query, limit=12)
+        scored = [
+            (getattr(m, "score", None), getattr(m.memory, "content", None), getattr(m.memory, "created_at", None))
+            for m in matches
+            if getattr(m.memory, "content", None)
+        ]
+        if scored and any(s is not None for s, _, _ in scored):
+            kept = sorted([x for x in scored if (x[0] or 0) >= MEMORY_SCORE_MIN], key=lambda x: -(x[0] or 0))[:top]
+            return [{"content": c, "date": d} for _, c, d in kept]
+    except Exception as e:
+        logger.warning(f"reply_draft: memory search failed uid={uid}: {e}")
+    # fallback: broad fetch + local embedding rank (e.g. semantic scores unavailable)
+    try:
+        mems = memories_db.get_memories(uid, limit=200)
+        cand = [
+            {"content": m.get("content"), "date": m.get("created_at"), "_text": m.get("content")}
+            for m in mems
+            if (m.get("content") or "").strip()
+        ]
+        return [{"content": x["content"], "date": x["date"]} for x in _embed_rank(query, cand, top=top, min_sim=0.28)]
+    except Exception as e:
+        logger.warning(f"reply_draft: memory fallback failed uid={uid}: {e}")
+        return []
+
+
+def _relevant_context(uid: str, thread: List[dict]) -> str:
+    """Context Omi has that grounds the draft, keyed off what's being discussed: ranked memory FACTS,
+    relevant conversation SUMMARIES, and VERBATIM transcript chunks (the concrete detail). Chunks and
+    summaries are embedding-reranked together so a precise chunk outranks a vague summary; a time cue
+    ('yesterday') recency-boosts that day's items. Nothing relevant ⇒ no block (a clean ungrounded
+    reply beats one polluted with off-topic memories). Degrades gracefully; any failed lookup skipped."""
+    query = _thread_query(thread)
+    if not query:
+        return ""
+
+    raw_inbound = " ".join((m.get("text") or "") for m in thread if not m.get("is_from_me"))
+    window = _temporal_window(raw_inbound)
+    boost_fn = (lambda x: MEMORY_RECENCY_BOOST if _in_window(x.get("date"), window) else 0.0) if window else None
+
+    # verbatim chunks + conversation summaries → one pool, reranked together
+    pool: List[dict] = list(_retrieve_chunks(uid, query, limit=8))
+    try:
+        cids = vector_db.query_vectors(query=query, uid=uid, k=6) or []
+        convos = conversations_db.get_conversations_by_id(uid, cids) if cids else []
+    except Exception as e:
+        logger.warning(f"reply_draft: conversation search failed uid={uid}: {e}")
+        convos = []
+    if not convos:
         try:
-            for c in conversations_db.get_conversations(uid, limit=6):
-                _add(c)
+            convos = conversations_db.get_conversations(uid, limit=6)
         except Exception as e:
             logger.warning(f"reply_draft: recent conversation lookup failed uid={uid}: {e}")
+            convos = []
+    seen = set()
+    for c in convos:
+        cid = c.get("id")
+        if cid in seen:
+            continue
+        seen.add(cid)
+        st = c.get("structured") or {}
+        title = st.get("title")
+        if not title:
+            continue
+        ov = st.get("overview") or ""
+        pool.append(
+            {
+                "kind": "conversation",
+                "title": title,
+                "summary": ov,
+                "date": c.get("created_at") or c.get("started_at"),
+                "_text": f"{title}. {ov}",
+            }
+        )
 
-        if query:
-            cids = vector_db.query_vectors(query=query, uid=uid, k=4)
-            if cids:
-                for c in conversations_db.get_conversations_by_id(uid, cids):
-                    _add(c)
+    ranked = _embed_rank(query, pool, top=MEMORY_CONV_TOP, min_sim=MEMORY_CONV_MIN_SIM, boost_fn=boost_fn)
+    kept_convos = [x for x in ranked if x["kind"] == "conversation"]
+    kept_chunks = [x for x in ranked if x["kind"] == "chunk"][:3]  # supplementary detail; few, to limit STT noise
+    kept_mems = _rank_memories(uid, query)
 
-        if lines:
-            bits.append(
-                "YOUR RECENT & RELEVANT CONVERSATIONS (from what Omi captured — use ONLY if it relates to "
-                "what's being discussed; otherwise ignore):\n" + "\n".join(lines)
+    # Order matters: LEAD with clean, authoritative memory FACTS (the reliable signal), then
+    # conversation SUMMARIES, then a few verbatim transcript SNIPPETS last (raw multi-speaker STT —
+    # useful for a concrete detail but noisy, so it must not outweigh the facts above).
+    blocks: List[str] = []
+    if kept_mems:
+        blocks.append(
+            "WHAT OMI KNOWS ABOUT YOU (facts — trust these):\n"
+            + "\n".join(f"- {m['content']}" + (f" ({_when(m['date'])})" if m.get("date") else "") for m in kept_mems)
+        )
+    if kept_convos:
+        blocks.append(
+            "RELATED CONVERSATIONS:\n"
+            + "\n".join(
+                f"- (conversation {_when(c.get('date'))}) {c['title']}"
+                + (f": {c['summary']}" if c.get("summary") else "")
+                for c in kept_convos
             )
-    except Exception as e:
-        logger.warning(f"reply_draft: conversation context lookup failed uid={uid}: {e}")
+        )
+    if kept_chunks:
+        blocks.append(
+            "SNIPPETS FROM CONVERSATIONS (raw transcript — may be rough; use only if clearly relevant):\n"
+            + "\n".join(f"- (said {_when(c.get('date'))}) {c['text'][:300]}" for c in kept_chunks)
+        )
 
-    return "\n\n".join(bits)
+    if not blocks:
+        return ""
+    return "\n\n".join(blocks)
 
 
 # Config/code identifiers require an underscore or fence — so all-caps SHOUTING
