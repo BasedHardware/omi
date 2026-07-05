@@ -17,7 +17,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +28,8 @@ DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
 DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
 TRACE_LOG = Path.home() / "Library/Logs/Omi/traces.jsonl"
 DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
+GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
+PRUNE_ABORTED_BUNDLE_DAYS = 7
 
 
 def now_iso() -> str:
@@ -120,6 +122,60 @@ def append_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(text)
+
+
+def parse_manifest_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def finalize_evidence_hygiene(run_dir: Path, *, passed: bool, git_sha: str) -> None:
+    """Update latest-green pointer, INDEX.md, and prune stale aborted bundles."""
+    GAUNTLET_ROOT.mkdir(parents=True, exist_ok=True)
+    if passed:
+        latest = GAUNTLET_ROOT / "latest-green"
+        if latest.is_symlink() or latest.exists():
+            latest.unlink()
+        latest.symlink_to(run_dir.name, target_is_directory=True)
+        index_path = GAUNTLET_ROOT / "INDEX.md"
+        line = f"- `{run_dir.name}` — `{git_sha[:12]}` — green\n"
+        existing = index_path.read_text(encoding="utf-8") if index_path.exists() else ""
+        if line not in existing:
+            with index_path.open("a", encoding="utf-8") as handle:
+                if not existing:
+                    handle.write("# Agent continuity gauntlet evidence index\n\n")
+                handle.write(line)
+    prune_aborted_bundles(GAUNTLET_ROOT, keep_dir=run_dir, max_age_days=PRUNE_ABORTED_BUNDLE_DAYS)
+
+
+def prune_aborted_bundles(root: Path, *, keep_dir: Path, max_age_days: int) -> None:
+    cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+    if not root.is_dir():
+        return
+    for entry in root.iterdir():
+        if not entry.is_dir():
+            continue
+        if entry.resolve() == keep_dir.resolve():
+            continue
+        manifest_path = entry / "manifest.json"
+        if not manifest_path.is_file():
+            continue
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            continue
+        if manifest.get("passed") is True:
+            continue
+        stamp = parse_manifest_timestamp(manifest.get("finished_at")) or parse_manifest_timestamp(
+            manifest.get("started_at")
+        )
+        if stamp is None or stamp >= cutoff:
+            continue
+        shutil.rmtree(entry, ignore_errors=True)
 
 
 def git_sha() -> str:
@@ -331,6 +387,7 @@ class GauntletRunner:
         }
         self.baseline_identity: dict[str, str] | None = None
         self.failures: list[str] = []
+        self.warnings: list[str] = []
         self.steps: list[dict[str, Any]] = []
         self.pcm_path = self.run_dir / "fixtures" / "ptt-voice.pcm"
 
@@ -339,6 +396,9 @@ class GauntletRunner:
 
     def fail(self, message: str) -> None:
         self.failures.append(message)
+
+    def warn(self, message: str) -> None:
+        self.warnings.append(message)
 
     def ensure_bridge(self) -> None:
         health = bridge_request(self.port, "GET", "/health")
@@ -504,6 +564,13 @@ class GauntletRunner:
             "markers": self.markers,
             "trace_log": str(TRACE_LOG),
             "app_log": str(self.log_path),
+            "ptt_config": {
+                "force_transcript_used": True,
+                "local_stt_note": (
+                    "Gauntlet drives PTT with force_transcript; local_transcript is populated "
+                    "only when provider language mismatches user voice languages."
+                ),
+            },
         }
         write_json(self.run_dir / "manifest.json", manifest)
 
@@ -560,6 +627,20 @@ class GauntletRunner:
         messages_blob = snapshot_detail.get("messages_json", "")
         if self.markers["ptt"] not in messages_blob:
             self.fail("PTT turn marker not visible in main chat transcript after voice turn")
+
+        assistant_reply = str(ptt_detail.get("assistant_reply") or "")
+        if self.markers["ptt"] not in assistant_reply:
+            self.warn(
+                f"PTT step 02: assistant reply did not acknowledge marker {self.markers['ptt']} "
+                f"(reply={assistant_reply[:120]!r})"
+            )
+        local_transcript = str(ptt_detail.get("local_transcript") or "").strip()
+        provider_transcript = str(ptt_detail.get("provider_transcript") or "").strip()
+        if not local_transcript and provider_transcript:
+            self.warn(
+                "PTT step 02: local_transcript empty while provider_transcript populated "
+                "(expected when force_transcript bypasses local STT fallback)"
+            )
 
         # Step 3 — typed follow-up referencing PTT turn
         followup_query = (
@@ -747,8 +828,14 @@ class GauntletRunner:
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
         manifest["steps"] = self.steps
         manifest["failures"] = self.failures
+        manifest["warnings"] = self.warnings
         manifest["passed"] = not self.failures
         write_json(self.run_dir / "manifest.json", manifest)
+        finalize_evidence_hygiene(self.run_dir, passed=manifest["passed"], git_sha=manifest["git"])
+
+        if self.warnings:
+            for warning in self.warnings:
+                print(f"GAUNTLET WARN: {warning}", file=sys.stderr)
 
         if self.failures:
             for failure in self.failures:
