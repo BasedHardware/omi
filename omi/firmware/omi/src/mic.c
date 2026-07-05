@@ -294,6 +294,15 @@ bool mic_is_running()
     return mic_running;
 }
 
+bool mic_in_aad_sleep(void)
+{
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    return atomic_get(&aad_in_sleep) != 0;
+#else
+    return false;
+#endif
+}
+
 #ifdef CONFIG_OMI_ENABLE_T5838_AAD
 
 /* Force-disable the PDM hardware so the CLK/DIN pins revert to GPIO control.
