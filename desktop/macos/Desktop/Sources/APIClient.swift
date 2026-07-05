@@ -1772,6 +1772,9 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
+  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
+  private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
+
   struct MemoryListPage {
     let memories: [ServerMemory]
     let canonicalLifecycleExposed: Bool
@@ -1855,11 +1858,13 @@ extension APIClient {
     }
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
-    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: "X-Omi-Memory-Device-Scope-Supported")
+    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
+    let canonicalLifecycleExposed = lifecycleHeader == "true"
+    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
     return MemoryListPage(
       memories: memories,
-      canonicalLifecycleExposed: deviceScopeSupported == true,
+      canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported
     )
   }
