@@ -1,6 +1,5 @@
 import asyncio
 import os
-import struct
 import sys
 from unittest.mock import AsyncMock, MagicMock
 
@@ -11,21 +10,21 @@ _PARAKEET_DIR = os.path.join(os.path.dirname(__file__), "../../parakeet")
 if _PARAKEET_DIR not in sys.path:
     sys.path.insert(0, _PARAKEET_DIR)
 
-# stream_engine imports gpu_worker which imports torch etc.  Stub only what's
-# needed so the module loads without real GPU deps.
-_orig_gpu_worker = sys.modules.get("gpu_worker")
+from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 
-_fake_gpu_worker_mod = MagicMock()
-_fake_gpu_worker_mod.GPUWorker = MagicMock
-sys.modules["gpu_worker"] = _fake_gpu_worker_mod
+_STREAM_ENGINE_PATH = os.path.join(_PARAKEET_DIR, "stream_engine.py")
 
-from stream_engine import ChunkTooLargeError, StreamEngine, TooManyStreamsError
 
-# Restore after import
-if _orig_gpu_worker is not None:
-    sys.modules["gpu_worker"] = _orig_gpu_worker
-else:
-    del sys.modules["gpu_worker"]
+@pytest.fixture(scope="module", autouse=True)
+def _stream_engine_module():
+    _fake_gpu_worker = AutoMockModule("gpu_worker")
+    _fake_gpu_worker.GPUWorker = MagicMock
+    with stub_modules({"gpu_worker": _fake_gpu_worker}):
+        mod = load_module_fresh("stream_engine", _STREAM_ENGINE_PATH)
+        globals()["StreamEngine"] = mod.StreamEngine
+        globals()["TooManyStreamsError"] = mod.TooManyStreamsError
+        globals()["ChunkTooLargeError"] = mod.ChunkTooLargeError
+        yield
 
 
 def _make_mock_gpu_worker():

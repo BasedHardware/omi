@@ -63,6 +63,7 @@ def _parakeet_modules():
     with stub_modules(fakes):
         gpu_worker = load_module_fresh("gpu_worker", os.path.join(PARAKEET_DIR, "gpu_worker.py"))
         batch_engine = load_module_fresh("batch_engine", os.path.join(PARAKEET_DIR, "batch_engine.py"))
+        stream_engine_mod = load_module_fresh("stream_engine", os.path.join(PARAKEET_DIR, "stream_engine.py"))
         load_module_fresh("speaker_math", os.path.join(PARAKEET_DIR, "speaker_math.py"))
         load_module_fresh("transcribe", os.path.join(PARAKEET_DIR, "transcribe.py"))
         load_module_fresh("stream_handler", os.path.join(PARAKEET_DIR, "stream_handler.py"))
@@ -73,10 +74,12 @@ def _parakeet_modules():
         g.AudioDurationExceededError = gpu_worker.AudioDurationExceededError
         g.BatchEngine = batch_engine.BatchEngine
         g.QueueFullError = batch_engine.QueueFullError
+        g.StreamEngine = stream_engine_mod.StreamEngine
+        g.TooManyStreamsError = stream_engine_mod.TooManyStreamsError
         yield
 
 
-def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
+def _make_app_with_mocks(gpu_ready=True, nim_mode=False, streaming=False):
     import importlib.util
 
     parakeet_main = sys.modules.get("main")
@@ -110,6 +113,14 @@ def _make_app_with_mocks(gpu_ready=True, nim_mode=False):
     else:
         parakeet_main.gpu_worker = mock_gpu
         parakeet_main.batch_engine = mock_engine
+
+    if streaming:
+        mock_gpu.has_stream = True
+        mock_stream_engine = MagicMock(spec=StreamEngine)
+        parakeet_main.stream_engine = mock_stream_engine
+    else:
+        mock_gpu.has_stream = False
+        parakeet_main.stream_engine = None
 
     return parakeet_main.app, parakeet_main, mock_gpu, mock_engine
 
@@ -478,3 +489,65 @@ class TestMetricsEndpoint:
             "parakeet_requests_total",
         ]:
             assert name in body, f"Missing metric: {name}"
+
+
+class TestV4StreamEndpoint:
+
+    def test_unsupported_sample_rate_closes_with_1003(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        with client.websocket_connect("/v4/stream?sample_rate=8000") as ws:
+            data = ws.receive()
+            assert data.get("type") == "websocket.close" or data == {"type": "websocket.close"}
+
+    def test_streaming_unavailable_closes_with_1013(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=False)
+        client = TestClient(app, raise_server_exceptions=False)
+        with client.websocket_connect("/v4/stream") as ws:
+            data = ws.receive()
+            assert data.get("type") == "websocket.close"
+
+    def test_model_loading_closes_with_1013(self):
+        app, mod, mock_gpu, _ = _make_app_with_mocks(gpu_ready=False, streaming=True)
+        client = TestClient(app, raise_server_exceptions=False)
+        with client.websocket_connect("/v4/stream") as ws:
+            data = ws.receive()
+            assert data.get("type") == "websocket.close"
+
+    def test_too_many_streams_closes_with_1013(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        mod.stream_engine.open_stream = AsyncMock(side_effect=TooManyStreamsError("limit reached"))
+        client = TestClient(app, raise_server_exceptions=False)
+        with client.websocket_connect("/v4/stream") as ws:
+            data = ws.receive()
+            assert data.get("type") == "websocket.close"
+
+    def test_finalize_closes_stream(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        mod.stream_engine.open_stream = AsyncMock(return_value={"stream_id": "s1", "status": "opened"})
+        mod.stream_engine.close_stream = AsyncMock(
+            return_value={"stream_id": "s1", "final_text": "hello", "status": "closed"}
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+        with client.websocket_connect("/v4/stream") as ws:
+            ws.send_text("finalize")
+            data = ws.receive_json()
+            assert data["status"] == "closed"
+            assert data["stream_id"] == "s1"
+
+    def test_binary_chunk_returns_transcript(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        mod.stream_engine.open_stream = AsyncMock(return_value={"stream_id": "s1", "status": "opened"})
+        mod.stream_engine.process_chunk = AsyncMock(
+            return_value={"stream_id": "s1", "partial_transcript": "hello", "final_transcript": "", "is_final": False}
+        )
+        mod.stream_engine.close_stream = AsyncMock(
+            return_value={"stream_id": "s1", "final_text": "hello", "status": "closed"}
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+        pcm = np.zeros(160, dtype=np.int16).tobytes()
+        with client.websocket_connect("/v4/stream") as ws:
+            ws.send_bytes(pcm)
+            data = ws.receive_json()
+            assert data["partial_transcript"] == "hello"
+            ws.send_text("finalize")

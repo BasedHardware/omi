@@ -5,7 +5,7 @@ asr:
   model_name: nvidia/nemotron-speech-streaming-en-0.6b         # Pre-trained CTC/hybrid model from NGC/HuggingFace or local .nemo file path
   device: cuda                                                          # Device for inference: 'cuda' or 'cpu'
   device_id: 0                                                          # GPU device ID
-  compute_dtype: bfloat16                                               # Compute precision: 'bfloat16' for Ampere+, 'float16' for older GPUs, or 'float32'               
+  compute_dtype: bfloat16                                               # Compute precision: 'bfloat16' for Ampere+, 'float16' for older GPUs, or 'float32'
   use_amp: false                                                         # Enable Automatic Mixed Precision
   decoding:
     strategy: "greedy_batch"
@@ -73,9 +73,9 @@ confidence:
   aggregation: mean                           # Aggregation method for confidence across time steps
   method_cfg:
     name: entropy                             # Confidence estimation method: 'max_prob' or 'entropy'
-    entropy_type: tsallis                     
-    alpha: 0.5                                
-    entropy_norm: exp     
+    entropy_type: tsallis
+    alpha: 0.5
+    entropy_norm: exp
 
 
 # ========================
