@@ -5,7 +5,11 @@ import XCTest
 
 final class ImportConnectorSheetSizingTests: XCTestCase {
     func testSimpleImportConnectorsUseCompactSheetSize() {
-        for connector in ImportConnector.all where !connector.isManualMemoryImport {
+        let simpleImportConnectors = ImportConnector.all.filter { !$0.isManualMemoryImport }
+
+        XCTAssertFalse(simpleImportConnectors.isEmpty)
+
+        for connector in simpleImportConnectors {
             XCTAssertEqual(connector.sheetPreferredSize, CGSize(width: 520, height: 360), connector.id)
         }
     }
