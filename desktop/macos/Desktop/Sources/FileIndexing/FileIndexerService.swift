@@ -118,10 +118,11 @@ actor FileIndexerService {
 
     /// Incremental background re-scan of all standard folders.
     /// Updates metadata for existing files and adds new ones.
-    func backgroundRescan() async {
+    @discardableResult
+    func backgroundRescan() async -> FileIndexingScanResult? {
         guard !isScanning else {
             log("FileIndexer: Scan already in progress, skipping background rescan")
-            return
+            return nil
         }
 
         isScanning = true
@@ -135,9 +136,10 @@ actor FileIndexerService {
         let scanResult = await scanFolders(folders, incremental: true)
         if let failure = scanResult.failure {
             log("FileIndexer: Background rescan failed after \(scanResult.indexedCount) files: \(failure.logMessage)")
-            return
+            return scanResult
         }
         log("FileIndexer: Background rescan complete, \(scanResult.indexedCount) files indexed")
+        return scanResult
     }
 
     // MARK: - File Scanning

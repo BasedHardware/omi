@@ -754,7 +754,7 @@ struct DesktopHomeView: View {
       onCancel: { initialFileIndexingBackfill.releaseReservation() }
     ) {
       log("DesktopHomeView: Running delayed background file scan for existing user")
-      await FileIndexerService.shared.backgroundRescan()
+      let scanResult = await FileIndexerService.shared.backgroundRescan()
       guard !Task.isCancelled,
             sessionScope.matches(
               currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
@@ -763,11 +763,16 @@ struct DesktopHomeView: View {
         initialFileIndexingBackfill.releaseReservation()
         return
       }
-      initialFileIndexingBackfill.markScanCompleted()
+      let scanSucceeded = scanResult.map { $0.failure == nil } ?? false
+      initialFileIndexingBackfill.finishScan(succeeded: scanSucceeded)
       if initialFileIndexingBackfill.shouldMarkComplete {
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
         log(
           "DesktopHomeView: Marked existing-user file indexing backfill complete after background scan returned"
+        )
+      } else {
+        log(
+          "DesktopHomeView: Existing-user file indexing backfill did not complete successfully; leaving completion flag unset"
         )
       }
     }
