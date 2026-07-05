@@ -1068,6 +1068,86 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertGreaterEqual(segs[1]['start'], segs[0]['end'])
         self.assertGreaterEqual(segs[1]['end'], segs[1]['start'])
 
+    def test_rapid_finals_non_decreasing_timestamps(self):
+        responses = [
+            {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': f'word{i}', 'is_final': True}
+            for i in range(5)
+        ]
+        ws = _FakeV4WebSocket(
+            chunk_responses=responses,
+            close_response={
+                'stream_id': 's1',
+                'final_text': ' '.join(f'word{i}' for i in range(5)),
+                'status': 'closed',
+            },
+        )
+        import struct
+
+        call_count = [0]
+
+        def fake_clock():
+            call_count[0] += 1
+            return 100.0 + call_count[0] * 0.001
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio] * 5, clock=fake_clock)
+        self.assertEqual(len(segs), 5)
+        for i in range(1, len(segs)):
+            self.assertGreaterEqual(segs[i]['start'], segs[i - 1]['end'], f"Segment {i} start < segment {i-1} end")
+            self.assertGreaterEqual(segs[i]['end'], segs[i]['start'], f"Segment {i} end < start")
+
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_large_gap_clock_injection(self):
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+            segments = []
+
+            async def run():
+                mock_ws_mod = MagicMock()
+                mock_ws_mod.__version__ = '12.0'
+                ws = _FakeV4WebSocket(
+                    chunk_responses=[],
+                    close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'},
+                )
+                mock_ws_mod.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+
+                call_count = [0]
+                times = [100.5, 160.5]
+
+                def fake_clock():
+                    idx = min(call_count[0], len(times) - 1)
+                    call_count[0] += 1
+                    return times[idx]
+
+                with patch('utils.stt.streaming.websockets', mock_ws_mod), patch(
+                    'utils.stt.streaming.asyncio.sleep', AsyncMock()
+                ):
+                    sock = ParakeetWebSocketSocket(
+                        segments.extend, 'ws://parakeet.local/v4/stream', 16000, clock=fake_clock
+                    )
+                    await sock.start()
+                    sock._stream_start = 100.0
+                    sock._emit_segment("before pause")
+                    sock._emit_segment("after pause")
+                return segments
+
+            result = loop.run_until_complete(run())
+            self.assertEqual(len(result), 2)
+            self.assertAlmostEqual(result[0]['end'], 0.5, places=1)
+            self.assertAlmostEqual(result[1]['end'], 60.5, places=1)
+            self.assertGreater(result[1]['end'] - result[0]['end'], 50, "Expected large elapsed gap in end timestamps")
+        finally:
+            loop.close()
+
     @patch.dict(
         'os.environ',
         {
@@ -1280,12 +1360,66 @@ class TestParakeetV4Protocol(unittest.TestCase):
                     await sock.start()
                     sock._stream_start = 100.0
                     sock._committed_text = "hello world"
-                    sock._emit_stable_partial("hello world again")
+                    sock._emit_stable_partial("world again")
                 return segments
 
             result = loop.run_until_complete(run())
             texts = [s['text'] for s in result]
-            self.assertEqual(texts, ['again'], f"Should only emit 'again' via overlap dedup, got: {texts}")
+            self.assertEqual(texts, ['again'], f"Should only emit 'again' via word-boundary overlap, got: {texts}")
+        finally:
+            loop.close()
+
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_partial_word_correction_no_duplicate(self):
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+            segments = []
+
+            async def run():
+                mock_ws_mod = MagicMock()
+                mock_ws_mod.__version__ = '12.0'
+                ws = _FakeV4WebSocket(
+                    chunk_responses=[
+                        {
+                            'stream_id': 's1',
+                            'partial_transcript': '',
+                            'final_transcript': 'hello world',
+                            'is_final': True,
+                        },
+                    ],
+                    close_response={'stream_id': 's1', 'final_text': 'hello world', 'status': 'closed'},
+                )
+                mock_ws_mod.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+
+                with patch('utils.stt.streaming.websockets', mock_ws_mod), patch(
+                    'utils.stt.streaming.asyncio.sleep', AsyncMock()
+                ):
+                    sock = ParakeetWebSocketSocket(segments.extend, 'ws://parakeet.local/v4/stream', 16000)
+                    await sock.start()
+                    sock._stream_start = 100.0
+                    sock._committed_text = "hello wor"
+                    import struct as _struct
+
+                    sock.send(_struct.pack('<160h', *([1000] * 160)))
+                    await asyncio.sleep(0)
+                    await sock.drain_and_close()
+                return segments
+
+            result = loop.run_until_complete(run())
+            texts = [s['text'] for s in result]
+            hello_count = sum(1 for t in texts if 'hello' in t)
+            self.assertLessEqual(
+                hello_count, 0, f"'hello' should not re-emit after partial word correction, got: {texts}"
+            )
         finally:
             loop.close()
 
@@ -1412,6 +1546,55 @@ class TestResamplePcm16(unittest.TestCase):
 
         self.assertEqual(_resample_pcm16(b'', 8000, 16000), b'')
 
+    def test_spectral_fidelity_below_nyquist(self):
+        from utils.stt.streaming import _resample_pcm16
+
+        import struct
+        import math
+
+        freq = 440.0
+        source_rate = 8000
+        target_rate = 16000
+        duration = 0.1
+        n_samples = int(source_rate * duration)
+        samples = [int(16000 * math.sin(2 * math.pi * freq * i / source_rate)) for i in range(n_samples)]
+        data = struct.pack(f'<{n_samples}h', *samples)
+        result = _resample_pcm16(data, source_rate, target_rate)
+        resampled = list(struct.unpack(f'<{len(result)//2}h', result))
+        ref = [int(16000 * math.sin(2 * math.pi * freq * i / target_rate)) for i in range(len(resampled))]
+        mse = sum((a - b) ** 2 for a, b in zip(resampled, ref)) / len(ref)
+        rms_error = math.sqrt(mse)
+        self.assertLess(rms_error, 500, f"RMS error {rms_error:.0f} too high for 440Hz sine at 8kHz→16kHz")
+
+    def test_multi_frequency_preservation(self):
+        from utils.stt.streaming import _resample_pcm16
+
+        import struct
+        import math
+
+        source_rate = 8000
+        target_rate = 16000
+        duration = 0.05
+        n_samples = int(source_rate * duration)
+        samples = []
+        for i in range(n_samples):
+            val = 8000 * math.sin(2 * math.pi * 200 * i / source_rate) + 8000 * math.sin(
+                2 * math.pi * 1000 * i / source_rate
+            )
+            samples.append(int(val))
+        data = struct.pack(f'<{n_samples}h', *samples)
+        result = _resample_pcm16(data, source_rate, target_rate)
+        resampled = list(struct.unpack(f'<{len(result)//2}h', result))
+        ref = []
+        for i in range(len(resampled)):
+            val = 8000 * math.sin(2 * math.pi * 200 * i / target_rate) + 8000 * math.sin(
+                2 * math.pi * 1000 * i / target_rate
+            )
+            ref.append(int(val))
+        mse = sum((a - b) ** 2 for a, b in zip(resampled, ref)) / len(ref)
+        rms_error = math.sqrt(mse)
+        self.assertLess(rms_error, 800, f"RMS error {rms_error:.0f} too high for multi-freq at 8kHz→16kHz")
+
 
 class TestPartialStabilityConfig(unittest.TestCase):
     @patch.dict('os.environ', {'PARAKEET_PARTIAL_STABILITY_MS': '150'})
@@ -1472,6 +1655,31 @@ class TestExtractNewText(unittest.TestCase):
         from utils.stt.streaming import _extract_new_text
 
         self.assertEqual(_extract_new_text("hello", ""), "")
+
+    def test_partial_word_correction_no_new_text(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello wor", "hello world"), "")
+
+    def test_partial_word_correction_with_continuation(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello wor", "hello world again"), "again")
+
+    def test_single_partial_word_correction(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hel", "hello"), "")
+
+    def test_single_partial_word_with_continuation(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hel", "hello world"), "world")
+
+    def test_prefix_match_returns_suffix(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello", "hello world"), "world")
 
 
 class TestPrerecordedRequestShape(unittest.TestCase):

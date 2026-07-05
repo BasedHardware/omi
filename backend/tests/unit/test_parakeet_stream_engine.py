@@ -416,3 +416,49 @@ class TestIdleReaping:
         finally:
             await eng.stop()
             assert eng._reaper_task.done()
+
+
+class TestConcurrentStress:
+
+    @pytest.mark.asyncio
+    async def test_concurrent_opens_respect_limit(self, gpu_worker):
+        max_streams = 8
+        eng = StreamEngine(gpu_worker=gpu_worker, max_concurrent_streams=max_streams, idle_timeout=0)
+        await eng.start()
+        try:
+            results = await asyncio.gather(*[eng.open_stream() for _ in range(max_streams)], return_exceptions=True)
+            opened = [r for r in results if not isinstance(r, Exception)]
+            assert len(opened) == max_streams
+            assert eng.active_streams == max_streams
+
+            overflow_results = await asyncio.gather(*[eng.open_stream() for _ in range(4)], return_exceptions=True)
+            errors = [r for r in overflow_results if isinstance(r, TooManyStreamsError)]
+            assert len(errors) == 4
+
+            for r in opened:
+                await eng.close_stream(r["stream_id"])
+            assert eng.active_streams == 0
+
+            r = await eng.open_stream()
+            assert r["status"] == "opened"
+            assert eng.active_streams == 1
+        finally:
+            await eng.stop()
+
+    @pytest.mark.asyncio
+    async def test_concurrent_open_close_cycle(self, gpu_worker):
+        eng = StreamEngine(gpu_worker=gpu_worker, max_concurrent_streams=4, idle_timeout=0)
+        await eng.start()
+        try:
+            for cycle in range(5):
+                ids = []
+                for _ in range(4):
+                    r = await eng.open_stream()
+                    ids.append(r["stream_id"])
+                assert eng.active_streams == 4
+
+                for sid in ids:
+                    await eng.close_stream(sid)
+                assert eng.active_streams == 0
+        finally:
+            await eng.stop()

@@ -1088,6 +1088,15 @@ def _extract_new_text(committed: str, incoming: str) -> str:
         if committed_words[-overlap_len:] == incoming_words[:overlap_len]:
             remainder = incoming_words[overlap_len:]
             return " ".join(remainder) if remainder else ""
+    if len(committed_words) <= len(incoming_words):
+        all_match = True
+        for i in range(len(committed_words) - 1):
+            if committed_words[i] != incoming_words[i]:
+                all_match = False
+                break
+        if all_match and incoming_words[len(committed_words) - 1].startswith(committed_words[-1]):
+            remainder = incoming_words[len(committed_words) :]
+            return " ".join(remainder) if remainder else ""
     return incoming
 
 
