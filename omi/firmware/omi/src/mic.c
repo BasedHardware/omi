@@ -511,6 +511,14 @@ void mic_off()
 
         LOG_INF("Microphone stopped");
     }
+
+#ifdef CONFIG_OMI_ENABLE_T5838_AAD
+    /* Cut PDM_EN so the T5838 mic AND the TXS0104 level-shifter lose power.
+     * Otherwise the shifter's pull-ups keep leaking ~1 mA through system-off
+     * (mic_off is only called on the power-down path). */
+    aad_wake_irq(false);
+    t5838_aad_power(false);
+#endif
 }
 
 void mic_on()
