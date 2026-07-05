@@ -89,18 +89,6 @@ static int lsm6dsl_power_ensure_on(void)
     return 0;
 }
 
-void lsm6dsl_power_off(void)
-{
-    if (!device_is_ready(lsm6dsl_en.port)) {
-        return;
-    }
-    /* Cut the IMU regulator: it is only needed at boot (read cross-off delta)
-     * and just before system-off (save base + keep counting while off). */
-    (void) gpio_pin_configure_dt(&lsm6dsl_en, GPIO_OUTPUT);
-    (void) gpio_pin_set_dt(&lsm6dsl_en, 0);
-    LOG_INF("lsm6dsl powered off");
-}
-
 static int lsm6dsl_timestamp_enable(void)
 {
     if (!device_is_ready(lsm6dsl_i2c.bus)) {
