@@ -151,21 +151,40 @@ final class LocalAgentProviderInstaller {
     try? stderrPipe.fileHandleForWriting.close()
 
     let exited = LockedFlag()
-    let timedOut = LockedFlag()
+    let timeoutStarted = LockedFlag()
+    let groupTornDown = LockedFlag()
+    let teardownDone = DispatchSemaphore(value: 0)
     let timeoutWork = DispatchWorkItem {
+      defer { teardownDone.signal() }
+      // Set the started sentinel BEFORE checking exited: the reaper below
+      // only skips waiting on the semaphore when it reads timeoutStarted ==
+      // false, which proves this closure had not yet reached the sentinel —
+      // and the reaper's exited.set() already happened by then, so the guard
+      // stops us from ever signalling. Either way, no signal can race the
+      // reap.
+      timeoutStarted.set()
       guard !exited.isSet() else { return }
-      timedOut.set()
+      groupTornDown.set()
       terminateProcessGroup(leader: pid)
     }
     DispatchQueue.global().asyncAfter(deadline: .now() + installTimeoutSeconds, execute: timeoutWork)
-    let exitCode = waitForInstallProcessExit(pid: pid)
+    // Wait WITHOUT reaping (WNOWAIT): as long as the leader stays a zombie,
+    // its pid — and therefore the group id — cannot be recycled, so teardown
+    // signals can never reach a stranger's process group.
+    waitForInstallProcessExitWithoutReaping(pid: pid)
     exited.set()
     timeoutWork.cancel()
+    if timeoutStarted.isSet() {
+      // The teardown may still be signalling the group — let it finish before
+      // reaping makes the group id recyclable.
+      teardownDone.wait()
+    }
+    let exitCode = reapInstallProcess(pid: pid)
 
     return ProviderInstallOutcome(
       launchFailure: nil,
       exitCode: exitCode,
-      timedOut: timedOut.isSet(),
+      timedOut: groupTornDown.isSet(),
       stdoutTail: stdoutTail.text(),
       stderrTail: stderrTail.text())
   }
@@ -232,9 +251,19 @@ final class LocalAgentProviderInstaller {
     return pid
   }
 
+  /// Block until the spawned shell exits, WITHOUT reaping it (`WNOWAIT`).
+  /// The zombie keeps the pid — and therefore the process-group id — from
+  /// being recycled while teardown signals may still be in flight.
+  nonisolated private static func waitForInstallProcessExitWithoutReaping(pid: pid_t) {
+    var info = siginfo_t()
+    while waitid(P_PID, id_t(pid), &info, WEXITED | WNOWAIT) == -1 {
+      if errno != EINTR { return }
+    }
+  }
+
   /// Reap the spawned shell and derive a reportable exit code (128 + signal
   /// for a signalled death, matching the shell convention).
-  nonisolated private static func waitForInstallProcessExit(pid: pid_t) -> Int32 {
+  nonisolated private static func reapInstallProcess(pid: pid_t) -> Int32 {
     var status: Int32 = 0
     while waitpid(pid, &status, 0) == -1 {
       if errno != EINTR { return -1 }
@@ -245,20 +274,21 @@ final class LocalAgentProviderInstaller {
     return 128 + (status & 0x7f)
   }
 
-  /// SIGTERM the whole install process group, then SIGKILL anything still in
-  /// it after a short grace. `spawnInstallProcessGroup` guarantees the leader
-  /// is our direct child and pgid == pid, so `kill(-pid, …)` reaches every
-  /// descendant (bash → curl → nested installer), not just the top shell.
-  /// Internal (not private) so the teardown contract is covered by a real
-  /// test.
+  /// SIGTERM the whole install process group, give it a short grace, then
+  /// SIGKILL anything still in it. Blocking — runs on the timeout worker
+  /// thread, and completing before the caller reaps the leader is what makes
+  /// it safe: the caller guarantees the leader is still unreaped (WNOWAIT),
+  /// so the group id cannot have been recycled and every signal lands on our
+  /// own install tree (bash → curl → nested installer), never a stranger's.
+  /// `spawnInstallProcessGroup` guarantees pgid == pid. Internal (not
+  /// private) so the teardown contract is covered by a real test.
   nonisolated static func terminateProcessGroup(leader pid: pid_t) {
     guard pid > 0 else { return }
     kill(-pid, SIGTERM)
-    DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
-      // Probe before escalating: once every member is dead and the leader is
-      // reaped, the group id could in principle be recycled — never signal a
-      // group we no longer own.
-      guard kill(-pid, 0) == 0 else { return }
+    Thread.sleep(forTimeInterval: 2)
+    // Escalate only if members are still alive (ESRCH means the whole group,
+    // zombie leader aside, is already gone).
+    if kill(-pid, 0) == 0 {
       kill(-pid, SIGKILL)
     }
   }

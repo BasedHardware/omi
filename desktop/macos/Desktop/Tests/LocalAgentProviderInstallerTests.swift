@@ -159,6 +159,13 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
     XCTAssertTrue(source.contains("kill(-pid, SIGTERM)"))
     XCTAssertTrue(source.contains("kill(-pid, SIGKILL)"))
 
+    // Reap ordering makes group signals identity-safe: exit is detected
+    // WITHOUT reaping (WNOWAIT keeps the pid/pgid un-recyclable), any
+    // started teardown finishes first, and only then is the leader reaped.
+    XCTAssertTrue(source.contains("WEXITED | WNOWAIT"))
+    XCTAssertTrue(source.contains("teardownDone.wait()"))
+    XCTAssertTrue(source.contains("reapInstallProcess(pid: pid)"))
+
     // Verification is the shared detector — no agent-side probing — and a
     // successful install re-warms the hub session directly.
     XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: provider)"))
