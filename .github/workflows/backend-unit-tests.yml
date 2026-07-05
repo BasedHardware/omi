@@ -42,7 +42,7 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: |
-          uv venv
+          uv venv --force
           uv pip sync pylock.toml
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
