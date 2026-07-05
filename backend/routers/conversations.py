@@ -1,7 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
@@ -11,8 +11,7 @@ import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
 from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
-from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
-from utils.other.storage import delete_conversation_audio_files, get_app_thumbnail_url
+from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
     BulkAssignSegmentsRequest,
@@ -38,7 +37,6 @@ from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
-from models.app import App
 from models.other import Person
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
@@ -49,10 +47,6 @@ from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
-from utils.conversations.merge_conversations import (
-    perform_merge_async,
-    validate_merge_compatibility,
-)
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
@@ -73,7 +67,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> Dict[str, Any]:
+def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -84,17 +78,16 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> Dict[str, A
     return conversation
 
 
-def _enrich_deferred_conversation(uid: str, conversation: Dict[str, Any]) -> Dict[str, Any]:
+def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
     the conversation immediately: the client gets an instant open (transcript already present) and
     polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
     repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
     re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
-    raw_id: object = conversation.get('id')
-    conversation_id: Optional[str] = raw_id if isinstance(raw_id, str) else None
+    conversation_id = conversation.get('id')
     try:
-        conversations_db.update_conversation(uid, cast(str, conversation_id), {'deferred': False})
+        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
     except Exception as e:
         logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
         return conversation
@@ -109,7 +102,7 @@ def _enrich_deferred_conversation(uid: str, conversation: Dict[str, Any]) -> Dic
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
             try:
                 conversations_db.update_conversation(
-                    uid, cast(str, conversation_id), {'deferred': True, 'status': ConversationStatus.completed.value}
+                    uid, conversation_id, {'deferred': True, 'status': ConversationStatus.completed.value}
                 )
             except Exception:
                 pass
@@ -126,7 +119,7 @@ class ProcessConversationRequest(BaseModel):
 
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
 def process_in_progress_conversation(
-    request: Optional[ProcessConversationRequest] = None,
+    request: ProcessConversationRequest = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     conversation = retrieve_in_progress_conversation(uid)
@@ -140,7 +133,7 @@ def process_in_progress_conversation(
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
 
     # Geolocation
     geolocation = redis_db.get_cached_user_geolocation(uid)
@@ -149,11 +142,8 @@ def process_in_progress_conversation(
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-    conversation = process_conversation(uid, conversation.language or 'en', conversation, force_process=True)
-    messages: List[Any] = cast(
-        List[Any],
-        asyncio.run(trigger_external_integrations(uid, conversation)),
-    )
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
@@ -163,7 +153,7 @@ def process_in_progress_conversation(
 )
 def finalize_conversation(
     conversation_id: str,
-    request: Optional[ProcessConversationRequest] = None,
+    request: ProcessConversationRequest = None,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
 ):
     """Finalize exactly one backend conversation.
@@ -178,11 +168,11 @@ def finalize_conversation(
     if conversation.status != ConversationStatus.in_progress:
         return CreateConversationResponse(conversation=conversation, messages=[])
 
-    claim_updates: Dict[str, Any] = {}
+    claim_updates = {}
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
         claim_updates['external_data'] = conversation.external_data
 
     if not conversations_db.claim_conversation_status(
@@ -207,13 +197,10 @@ def finalize_conversation(
         geolocation = Geolocation(**geolocation)
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    conversation = process_conversation(uid, conversation.language or 'en', conversation, force_process=True)
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
     if conversation.status:
         conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
-    messages: List[Any] = cast(
-        List[Any],
-        asyncio.run(trigger_external_integrations(uid, conversation)),
-    )
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
 
@@ -263,7 +250,7 @@ def _ensure_aware(value: datetime) -> datetime:
 def get_conversations(
     limit: PositiveLimit = 100,
     offset: NonNegativeOffset = 0,
-    statuses: str = "processing,completed",
+    statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
     end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
@@ -275,7 +262,7 @@ def get_conversations(
         raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
-    if not statuses:
+    if len(statuses) == 0:
         statuses = "processing,completed"
 
     conversations = conversations_db.get_conversations_without_photos(
@@ -283,7 +270,7 @@ def get_conversations(
         limit,
         offset,
         include_discarded=include_discarded,
-        statuses=statuses.split(",") if statuses else [],
+        statuses=statuses.split(",") if len(statuses) > 0 else [],
         start_date=start_date,
         end_date=end_date,
         folder_id=folder_id,
@@ -338,7 +325,7 @@ def get_conversations_count(
         "may include an empty transcript_segments array even though transcript data exists."
     ),
 )
-def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, Any]:
+def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
@@ -370,7 +357,7 @@ class LinkCalendarEventRequest(BaseModel):
     event_id: str
 
 
-def _event_to_calendar_event_link(event: Dict[str, Any]) -> Optional[CalendarEventLink]:
+def _event_to_calendar_event_link(event: dict) -> Optional[CalendarEventLink]:
     """Convert a raw Google Calendar event to CalendarEventLink model."""
     start_time, end_time = parse_event_times(event)
     if start_time is None or end_time is None:
@@ -463,26 +450,17 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     """
     conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
-    # Get conversation times. Stored timestamps may be either datetime objects or ISO strings
-    # (legacy/imported data); accept both and normalize below.
-    started_at_raw: object = conversation.get('started_at')
-    finished_at_raw: object = conversation.get('finished_at')
-    started_at: Optional[Union[datetime, str]] = started_at_raw if isinstance(started_at_raw, (datetime, str)) else None
-    finished_at: Optional[Union[datetime, str]] = (
-        finished_at_raw if isinstance(finished_at_raw, (datetime, str)) else None
-    )
+    # Get conversation times
+    started_at = conversation.get('started_at')
+    finished_at = conversation.get('finished_at')
 
     # Fall back to created_at if times are not available
     if not started_at:
-        created_raw: object = conversation.get('created_at')
-        started_at = created_raw if isinstance(created_raw, (datetime, str)) else None
+        started_at = conversation.get('created_at')
     if not finished_at:
         finished_at = started_at
 
     if not started_at:
-        raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
-    if not finished_at:
-        # Unreachable: finished_at falls back to started_at above, which is now confirmed set.
         raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
 
     # Parse datetimes if they're strings. A stored timestamp that is not valid ISO (legacy or imported
@@ -603,14 +581,9 @@ def delete_conversation(
 
 
 @router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
-def conversation_has_audio_recording(
-    conversation_id: str, uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, Any]:
+def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
-    # get_conversation_recording_if_exists is annotated as returning str but actually returns
-    # None when the recording is missing; treat the value as Optional[str].
-    recording: Optional[str] = get_conversation_recording_if_exists(uid, conversation_id)
-    return {'has_recording': recording is not None}
+    return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
 @router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
@@ -627,13 +600,13 @@ def set_conversation_events_state(
             continue
         events[event_idx].created = data.values[i]
 
-    conversations_db.update_conversation_events(uid, conversation_id, [event.model_dump() for event in events])
+    conversations_db.update_conversation_events(uid, conversation_id, [event.dict() for event in events])
     return {"status": "Ok"}
 
 
 @router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
 def set_action_item_status(
-    data: SetConversationActionItemsStateRequest, conversation_id: str, uid: str = Depends(auth.get_current_user_uid)
+    data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
 ):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
@@ -661,14 +634,14 @@ def set_action_item_status(
             action_item.completed_at = None
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
+        uid, conversation_id, [action_item.dict() for action_item in action_items]
     )
 
     # Mirror status updates to the standalone action_items collection
     try:
         existing_items = action_items_db.get_action_items_by_conversation(uid, conversation_id)
         # Map descriptions to item IDs for quick lookup
-        description_to_ids: Dict[str, List[str]] = {}
+        description_to_ids = {}
         for ai in existing_items:
             desc = ai.get('description')
             if not desc:
@@ -694,7 +667,7 @@ def set_action_item_status(
     "/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations']
 )
 def update_action_item_description(
-    conversation_id: str, data: UpdateActionItemDescriptionRequest, uid: str = Depends(auth.get_current_user_uid)
+    conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
 ):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
@@ -711,7 +684,7 @@ def update_action_item_description(
         raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
+        uid, conversation_id, [action_item.dict() for action_item in action_items]
     )
 
     # Mirror description update in the standalone action_items collection
@@ -726,15 +699,13 @@ def update_action_item_description(
 
 
 @router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
-def delete_action_item(
-    data: DeleteActionItemRequest, conversation_id: str, uid: str = Depends(auth.get_current_user_uid)
-):
+def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     updated_action_items = [item for item in action_items if not (item.description == data.description)]
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.model_dump() for action_item in updated_action_items]
+        uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
     )
 
     # Mirror deletion in the standalone action_items collection
@@ -753,7 +724,7 @@ def delete_action_item(
     response_model=Conversation,
     tags=['conversations'],
 )
-def set_assignee_conversation_segment(  # type: ignore[reportRedeclaration]  # both routes register with FastAPI before module-level shadowing
+def set_assignee_conversation_segment(
     conversation_id: str,
     segment_idx: int,
     assign_type: str,
@@ -788,7 +759,7 @@ def set_assignee_conversation_segment(  # type: ignore[reportRedeclaration]  # b
     if value == 'null':
         value = None
 
-    # `is_unassigning` (value is None) previously fed the now-disabled speech-training block below.
+    is_unassigning = value is None or value is False
 
     if assign_type == 'is_user':
         conversation.transcript_segments[segment_idx].is_user = bool(value) if value is not None else False
@@ -801,7 +772,7 @@ def set_assignee_conversation_segment(  # type: ignore[reportRedeclaration]  # b
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -857,7 +828,7 @@ def set_assignee_conversation_segment(
     if value == 'null':
         value = None
 
-    # `is_unassigning` (value is None) previously fed the now-disabled speech-training block below.
+    is_unassigning = value is None or value is False
 
     if assign_type == 'is_user':
         for segment in conversation.transcript_segments:
@@ -875,7 +846,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -932,7 +903,7 @@ def assign_segments_bulk(
                 raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -979,7 +950,7 @@ def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Dep
 
 
 @router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
-def get_shared_conversation_by_id(conversation_id: str) -> Dict[str, Any]:
+def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)
     if not uid:
         raise HTTPException(status_code=404, detail="Conversation is private")
@@ -993,14 +964,14 @@ def get_shared_conversation_by_id(conversation_id: str) -> Dict[str, Any]:
 
     # Fetch people data for speaker names
     person_ids = conversation.get_person_ids()
-    people: List[Person] = []
+    people = []
     if person_ids:
         people_data = users_db.get_people_by_ids(uid, person_ids)
         people = [Person(**p) for p in people_data]
 
     # Return conversation with people data
     response_dict = conversation_to_dict(conversation)
-    response_dict['people'] = [p.model_dump() for p in people]
+    response_dict['people'] = [p.dict() for p in people]
     return response_dict
 
 
@@ -1008,15 +979,15 @@ def get_shared_conversation_by_id(conversation_id: str) -> Dict[str, Any]:
 def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
-) -> Dict[str, Any]:
+):
     if search_request.speaker_id and search_request.speaker_id != 'user':
         person = users_db.get_person(uid, search_request.speaker_id)
         if person is None:
             raise HTTPException(status_code=404, detail="Speaker not found")
 
     # Convert ISO datetime strings to Unix timestamps if provided
-    start_timestamp: Optional[int] = None
-    end_timestamp: Optional[int] = None
+    start_timestamp = None
+    end_timestamp = None
 
     if search_request.start_date:
         try:
@@ -1032,32 +1003,33 @@ def search_conversations_endpoint(
 
     return search_conversations(
         query=search_request.query,
-        page=search_request.page if search_request.page is not None else 1,
-        per_page=search_request.per_page if search_request.per_page is not None else 10,
+        page=search_request.page,
+        per_page=search_request.per_page,
         uid=uid,
-        include_discarded=(search_request.include_discarded if search_request.include_discarded is not None else True),
-        # search_conversations accepts None for these (does `is None` checks internally)
-        # but its signature is declared non-Optional; cast carries that runtime contract.
-        start_date=cast(int, start_timestamp),
-        end_date=cast(int, end_timestamp),
-        speaker_id=cast(str, search_request.speaker_id),
+        include_discarded=search_request.include_discarded,
+        start_date=start_timestamp,
+        end_date=end_timestamp,
+        speaker_id=search_request.speaker_id,
     )
 
 
 @router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
-def get_conversation_suggested_apps(
-    conversation_id: str, uid: str = Depends(auth.get_current_user_uid)
-) -> Dict[str, Any]:
+def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
+    from models.app import App
+
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
 
     # Get suggested app models with full data (similar to /v1/apps endpoint)
-    suggested_apps: List[App] = []
+    suggested_apps = []
     for app_id in conversation.suggested_summarization_apps:
-        app_data_raw = get_available_app_by_id_with_reviews(app_id, uid)
-        if app_data_raw:
-            app = App(**app_data_raw)
+        app_data = get_available_app_by_id_with_reviews(app_id, uid)
+        if app_data:
+            app = App(**app_data)
             # Add user-specific data
+            from utils.apps import get_is_user_paid_app
+
             app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
             # Add payment link with user reference
@@ -1066,11 +1038,13 @@ def get_conversation_suggested_apps(
 
             # Generate thumbnail URLs if thumbnails exist
             if app.thumbnails:
+                from utils.other.storage import get_app_thumbnail_url
+
                 app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
 
             suggested_apps.append(app)
 
-    return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
+    return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
 
 
 @router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
@@ -1120,12 +1094,14 @@ def merge_conversations(
     - Copied audio chunks
     - Regenerated title, summary, action items, memories via process_conversation()
     """
+    from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
+
     # Validate minimum number of conversations
     if len(request.conversation_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
 
     # Fetch all conversations
-    conversations: List[Dict[str, Any]] = []
+    conversations = []
     for conv_id in request.conversation_ids:
         conv = conversations_db.get_conversation(uid, conv_id)
         if conv is None:
