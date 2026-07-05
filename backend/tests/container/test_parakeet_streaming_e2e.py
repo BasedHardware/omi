@@ -103,6 +103,21 @@ except ImportError:
 skip_no_ws = pytest.mark.skipif(not HAS_WEBSOCKETS, reason="websockets package not installed")
 
 
+async def _drain_until_closed(ws, timeout=5.0):
+    """Drain responses after finalize until we get a terminal status."""
+    responses = []
+    for _ in range(20):
+        try:
+            msg = await asyncio.wait_for(ws.recv(), timeout=timeout)
+            data = json.loads(msg)
+            responses.append(data)
+            if data.get("status") in ("closed", "close_failed", "not_found"):
+                break
+        except asyncio.TimeoutError:
+            break
+    return responses
+
+
 @skip_no_ws
 @skip_no_streaming
 class TestStreamConnection:
@@ -220,8 +235,9 @@ class TestStreamConcurrency:
                     except asyncio.TimeoutError:
                         pass
                 await ws.send("finalize")
-                msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
-                return json.loads(msg)
+                responses = await _drain_until_closed(ws)
+                closed = [r for r in responses if r.get("status") == "closed"]
+                return closed[0] if closed else None
 
         results = await asyncio.gather(*[run_stream() for _ in range(4)], return_exceptions=True)
         successes = [r for r in results if isinstance(r, dict) and r.get("status") == "closed"]
@@ -242,8 +258,9 @@ class TestStreamConcurrency:
                     except asyncio.TimeoutError:
                         pass
                 await ws.send("finalize")
-                msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
-                return json.loads(msg)
+                responses = await _drain_until_closed(ws)
+                closed = [r for r in responses if r.get("status") == "closed"]
+                return closed[0] if closed else None
 
         results = await asyncio.gather(*[run_stream() for _ in range(8)], return_exceptions=True)
         successes = [r for r in results if isinstance(r, dict) and r.get("status") == "closed"]
@@ -268,9 +285,10 @@ class TestStreamLifecycle:
                     pass
 
             await ws.send("finalize")
-            msg = await asyncio.wait_for(ws.recv(), timeout=5.0)
-            data = json.loads(msg)
-            assert data["status"] == "closed"
+            responses = await _drain_until_closed(ws)
+            closed = [r for r in responses if r.get("status") == "closed"]
+            assert len(closed) == 1, f"Expected closed response, got: {responses}"
+            data = closed[0]
             assert "stream_id" in data
             assert "final_text" in data
 

@@ -410,7 +410,7 @@ def main():
         report["batch"] = run_batch_bench(args.url, audio_files, concurrency)
 
     if args.mode in ("stream", "all"):
-        report["stream"] = asyncio.run(run_stream_bench(args.url, audio_files, [c for c in concurrency if c <= 32]))
+        report["stream"] = asyncio.run(run_stream_bench(args.url, audio_files, concurrency))
 
     if args.mode in ("combined", "all"):
         report["combined"] = asyncio.run(run_combined_bench(args.url, audio_files))

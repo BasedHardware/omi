@@ -170,7 +170,9 @@ class TestV2Transcribe:
         segments = data.get("segments", [])
         texts = [s.get("text", "") for s in segments]
         combined = " ".join(texts).strip()
-        assert len(combined) >= 0
+        assert isinstance(combined, str)
+        if segments:
+            assert len(combined) > 0, "Segments present but all have empty text"
 
     def test_diarize_false(self):
         wav = _get_test_wav()
