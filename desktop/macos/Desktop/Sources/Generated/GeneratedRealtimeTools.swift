@@ -297,7 +297,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "run_agent_and_wait",
-    "description": "Run a parent-linked child agent synchronously and return its structured result.\n\nUse when you need an immediate child result instead of spawning background work. Continue an existing child session with send_agent_message.",
+    "description": "Run a parent-linked child agent synchronously and return its structured result.\\n\\nUse when you need an immediate child result instead of spawning background work. Continue an existing child session with send_agent_message.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -369,7 +369,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "set_desktop_attention_override",
-    "description": "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.\n\nPill dismissal writes here; it never deletes canonical run state.",
+    "description": "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.\\n\\nPill dismissal writes here; it never deletes canonical run state.",
     "parameters": {
       "type": "object",
       "properties": {

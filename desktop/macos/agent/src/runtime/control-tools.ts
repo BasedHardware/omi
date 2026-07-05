@@ -671,7 +671,7 @@ export async function handleAgentControlToolCall(
           ownerId,
           requestId,
           clientId: parsed.clientId,
-          adapterId,
+          adapterId: adapterId ?? "acp",
         });
         if (parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({

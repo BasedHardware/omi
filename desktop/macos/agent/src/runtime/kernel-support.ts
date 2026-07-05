@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import type { RuntimeAdapter } from "../adapters/interface.js";
 import { AdapterRuntimeError } from "./failures.js";
 import { StaleAdapterBindingError } from "./kernel-types.js";
-import type { OutboundMessage } from "../protocol.js";
+import type { OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import type { AgentStore, RunStatus, AttemptStatus, DelegationMode, DelegationStatus, ResumeFidelity, ArtifactRole, RunMode, ArtifactLifecycleState, DesktopCandidateStatus, DesktopAttentionOverride } from "./types.js";
@@ -557,7 +557,7 @@ export function artifactFromRow(row: Record<string, unknown>): AgentArtifact {
   };
 }
 
-export function canonicalAdapterEventType(event: OutboundMessage): string | undefined {
+export function canonicalAdapterEventType(event: OutboundMessageDraft): string | undefined {
   switch (event.type) {
     case "text_delta":
       return "message.delta";

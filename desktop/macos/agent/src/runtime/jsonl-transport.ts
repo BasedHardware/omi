@@ -6,6 +6,7 @@ import type {
   ErrorMessage,
   InvalidateSessionMessage,
   OutboundMessage,
+  OutboundMessageDraft,
   ProtocolVersion,
   QueryMessage,
   QueryScopedOutbound,
@@ -19,7 +20,7 @@ import { failureFromError, type RuntimeFailure } from "./failures.js";
 import type { AgentEvent, RunMode } from "./types.js";
 import { AgentRuntimeKernel, type ExecuteAgentRunInput } from "./kernel.js";
 
-export type JsonlTransportSend = (message: OutboundMessage) => void;
+export type JsonlTransportSend = (message: OutboundMessageDraft) => void;
 export type JsonlTransportLog = (message: string) => void;
 
 export interface McpServerBuildContext {
@@ -209,8 +210,8 @@ export class JsonlTransport {
       if (result.terminalStatus === "failed") {
         const failure = failureFromResultJson(result.run.resultJson);
         const messageText = failure?.userMessage ?? result.run.errorMessage ?? "Agent run failed";
-        const errorMessage: ErrorMessage = {
-          type: "error",
+        const errorMessage = {
+          type: "error" as const,
           message: messageText,
           failure,
         };
@@ -218,8 +219,8 @@ export class JsonlTransport {
         return;
       }
 
-      const resultMessage: ResultMessage = {
-        type: "result",
+      const resultMessage = {
+        type: "result" as const,
         text: result.text,
         sessionId: result.session.sessionId,
         adapterSessionId: result.adapterSessionId ?? undefined,
@@ -241,8 +242,8 @@ export class JsonlTransport {
         userMessage: error instanceof Error ? error.message : String(error),
       });
       this.log(`Jsonl transport query error: ${failure.userMessage}`);
-      const errorMessage: ErrorMessage = {
-        type: "error",
+      const errorMessage = {
+        type: "error" as const,
         message: failure.userMessage,
         failure,
       };
@@ -301,8 +302,8 @@ export class JsonlTransport {
       : undefined;
     const ownerId = message.ownerId ?? activeRequestContext?.ownerId ?? this.ownerId;
     if (explicitRunId && !activeRequestContext && !message.ownerId?.trim()) {
-      const cancelAck: CancelAckMessage = {
-        type: "cancel_ack",
+      const cancelAck = {
+        type: "cancel_ack" as const,
         accepted: false,
         dispatchAttempted: false,
         adapterAcknowledged: false,
@@ -319,8 +320,8 @@ export class JsonlTransport {
       return;
     }
     if (requestId && !activeRequestContext && !message.runId && !message.attemptId) {
-      const cancelAck: CancelAckMessage = {
-        type: "cancel_ack",
+      const cancelAck = {
+        type: "cancel_ack" as const,
         accepted: false,
         dispatchAttempted: false,
         adapterAcknowledged: false,
@@ -353,8 +354,8 @@ export class JsonlTransport {
       };
 
     if (!runId) {
-      const cancelAck: CancelAckMessage = {
-        type: "cancel_ack",
+      const cancelAck = {
+        type: "cancel_ack" as const,
         accepted: false,
         dispatchAttempted: false,
         adapterAcknowledged: false,
@@ -378,8 +379,8 @@ export class JsonlTransport {
         runId,
       };
     }
-    const cancelAck: CancelAckMessage = {
-      type: "cancel_ack",
+    const cancelAck = {
+      type: "cancel_ack" as const,
       accepted: ack.accepted,
       dispatchAttempted: ack.dispatchAttempted,
       adapterAcknowledged: ack.adapterAcknowledged,
@@ -581,7 +582,7 @@ export class JsonlTransport {
     }
   }
 
-  private withCorrelation<T extends OutboundMessage & Partial<QueryScopedOutbound>>(
+  private withCorrelation<T extends OutboundMessageDraft & Partial<QueryScopedOutbound>>(
     message: T,
     context: ActiveRequestContext & { eventId?: string }
   ): T {

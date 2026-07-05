@@ -5,7 +5,7 @@ import type {
   OpenedBinding,
   RuntimeAdapter,
 } from "../adapters/interface.js";
-import type { OutboundMessage } from "../protocol.js";
+import type { OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { PROTOCOL_VERSION } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
@@ -1305,7 +1305,7 @@ export class KernelCore {
     return true;
   }
 
-  protected persistAdapterEvent(sessionId: string, runId: string, attemptId: string, event: OutboundMessage): void {
+  protected persistAdapterEvent(sessionId: string, runId: string, attemptId: string, event: OutboundMessageDraft): void {
     if (this.isTerminalAttempt(attemptId) || this.isTerminalRun(runId)) {
       return;
     }

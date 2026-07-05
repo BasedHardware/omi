@@ -292,6 +292,7 @@ async function handleJsonRpc(
             result: { content: [{ type: "text", text: result }] },
           });
         }
+      } else if (toolName === "search_tasks") {
         const input: Record<string, unknown> = { query: args.query };
         if (args.include_completed) input.include_completed = args.include_completed;
         const result = await requestSwiftTool("search_tasks", input);

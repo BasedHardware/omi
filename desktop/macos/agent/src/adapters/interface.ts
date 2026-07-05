@@ -3,7 +3,7 @@
 // Issue #6592: Support multiple AI harnesses via common interface.
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
-import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
+import type { OutboundMessageDraft, WarmupSessionConfig } from "../protocol.js";
 import type { RuntimeFailure } from "../runtime/failures.js";
 import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
@@ -67,7 +67,7 @@ export type ToolExecutor = (
 /**
  * Event callback for streaming updates.
  */
-export type EventCallback = (event: OutboundMessage) => void;
+export type EventCallback = (event: OutboundMessageDraft) => void;
 
 /**
  * Features that a harness may or may not support.
@@ -349,7 +349,7 @@ export interface AdapterAttemptContext {
   metadata?: Record<string, unknown>;
 }
 
-export type AdapterEventSink = (event: OutboundMessage) => void;
+export type AdapterEventSink = (event: OutboundMessageDraft) => void;
 
 export interface AdapterArtifactReference {
   kind: string;

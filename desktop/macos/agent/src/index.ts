@@ -39,6 +39,7 @@ import type {
   ControlToolRequestMessage,
   DirectControlToolRequestMessage,
   OutboundMessage,
+  OutboundMessageDraft,
   QueryScopedOutbound,
   QueryMessage,
   WarmupMessage,
@@ -47,7 +48,7 @@ import type {
   GetVoiceSeedContextMessage,
   AuthMethod,
 } from "./protocol.js";
-import { PROTOCOL_VERSION } from "./protocol.js";
+import { PROTOCOL_VERSION, ensureOutboundProtocolVersion } from "./protocol.js";
 import { startOAuthFlow, type OAuthFlowHandle } from "./oauth-flow.js";
 import type { PromptBlock, RuntimeAdapter } from "./adapters/interface.js";
 import { detectImageMimeType } from "./mime-detect.js";
@@ -79,6 +80,7 @@ import { SqliteAgentStore } from "./runtime/sqlite-store.js";
 import { OmiArtifactStorage, defaultArtifactRoot } from "./runtime/artifact-storage.js";
 import { configuredPiMonoMaxWorkers } from "./runtime/worker-pool.js";
 import { failureFromError } from "./runtime/failures.js";
+import type { ConversationTurnImportEntry } from "./runtime/conversation-turns.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -96,15 +98,15 @@ const omiToolsStdioScript = join(__dirname, "omi-tools-stdio.js");
 
 // --- Helpers ---
 
-function send(msg: OutboundMessage): void {
+function send(msg: OutboundMessageDraft): void {
   try {
-    process.stdout.write(JSON.stringify(msg) + "\n");
+    process.stdout.write(JSON.stringify(ensureOutboundProtocolVersion(msg)) + "\n");
   } catch (err) {
     logErr(`Failed to write to stdout: ${err}`);
   }
 }
 
-function withQueryCorrelation<T extends OutboundMessage>(
+function withQueryCorrelation<T extends OutboundMessageDraft>(
   msg: T,
   query: QueryMessage,
   adapterSessionId?: string
@@ -188,8 +190,8 @@ function registerActiveControlOwner(requestKey: string, ownerId: string): boolea
   return inserted;
 }
 
-function toolCallPendingKey(input: { callId: string; clientId: string; requestId: string }): string {
-  return `scoped\0${input.clientId}\0${input.requestId}\0${input.callId}`;
+function toolCallPendingKey(input: { callId: string; clientId?: string; requestId?: string }): string {
+  return `scoped\0${input.clientId ?? ""}\0${input.requestId ?? ""}\0${input.callId}`;
 }
 
 /** Resolve a pending tool call with a result from Swift */
@@ -1359,7 +1361,7 @@ async function main(): Promise<void> {
           ownerId,
           surfaceRef: { surfaceKind, externalRefKind, externalRefId },
           turns: turns
-            .map((turn) => {
+            .map((turn): ConversationTurnImportEntry | null => {
               if (!turn || typeof turn !== "object") return null;
               const record = turn as Record<string, unknown>;
               const role = record.role === "assistant" ? "assistant" : record.role === "user" ? "user" : null;
@@ -1373,7 +1375,7 @@ async function main(): Promise<void> {
                 metadataJson: typeof record.metadataJson === "string" ? record.metadataJson : undefined,
               };
             })
-            .filter((turn): turn is NonNullable<typeof turn> => turn !== null),
+            .filter((turn): turn is ConversationTurnImportEntry => turn !== null),
         });
         logErr(`Imported ${imported} conversation turn(s) for ${ownerId}/${surfaceKind}`);
         break;

@@ -82,6 +82,20 @@ export interface ImportLegacyMainChatSessionsMessage extends ProtocolEnvelope {
   entries: Array<{ chatId: string; agentSessionId: string }>;
 }
 
+export interface ImportConversationTurnsMessage extends ProtocolEnvelope {
+  type: "import_conversation_turns";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  turns: Array<{
+    role?: string;
+    content?: string;
+    surfaceKind?: string;
+    createdAtMs?: number;
+    metadataJson?: string;
+  }>;
+}
+
 /** Swift tells the bridge which auth method the user chose */
 export interface AuthenticateMessage {
   type: "authenticate";
@@ -140,6 +154,7 @@ export type InboundMessage =
   | InvalidateSessionMessage
   | ClearOwnerStateMessage
   | ImportLegacyMainChatSessionsMessage
+  | ImportConversationTurnsMessage
   | RecordSurfaceTurnMessage
   | GetVoiceSeedContextMessage
   | AuthenticateMessage
@@ -314,3 +329,34 @@ export type OutboundMessage =
   | ControlToolResultMessage
   | TurnRecordedMessage
   | VoiceSeedContextMessage;
+
+type OutboundWithEnvelope = Exclude<OutboundMessage, InitMessage | AuthRequiredMessage | AuthSuccessMessage>;
+
+type DraftEnvelope<T extends OutboundWithEnvelope> = Omit<T, "protocolVersion"> & Partial<Pick<T, "protocolVersion">>;
+
+/** Outbound payload before correlation / envelope enrichment (adapters, transport internals). */
+export type OutboundMessageDraft =
+  | InitMessage
+  | AuthRequiredMessage
+  | AuthSuccessMessage
+  | DraftEnvelope<TextDeltaMessage>
+  | DraftEnvelope<ToolUseMessage>
+  | DraftEnvelope<ToolActivityMessage>
+  | DraftEnvelope<ToolResultDisplayMessage>
+  | DraftEnvelope<ThinkingDeltaMessage>
+  | DraftEnvelope<ResultMessage>
+  | DraftEnvelope<ErrorMessage>
+  | DraftEnvelope<CancelAckMessage>
+  | DraftEnvelope<ControlToolResultMessage>
+  | DraftEnvelope<TurnRecordedMessage>
+  | DraftEnvelope<VoiceSeedContextMessage>;
+
+export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
+  if (message.type === "init" || message.type === "auth_required" || message.type === "auth_success") {
+    return message;
+  }
+  if ("protocolVersion" in message && message.protocolVersion === PROTOCOL_VERSION) {
+    return message as OutboundMessage;
+  }
+  return { ...message, protocolVersion: PROTOCOL_VERSION } as OutboundMessage;
+}
