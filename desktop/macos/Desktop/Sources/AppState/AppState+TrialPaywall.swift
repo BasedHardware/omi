@@ -104,8 +104,8 @@ extension AppState {
         ) {
           log("AppState: paywall lifted — resuming screen analysis monitoring")
           ProactiveAssistantsPlugin.shared.startMonitoring { success, error in
-            if !success {
-              log("AppState: paywall-lifted monitoring restart failed: \(error ?? "unknown")")
+            if !success, let error, !error.isEmpty {
+              log("AppState: paywall-lifted monitoring restart failed: \(error)")
             }
           }
         }
