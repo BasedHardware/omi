@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.23",
+      "date": "2026-07-05",
+      "changes": [
+        "Fixed memory lifecycle controls so Short-term and Long-term UI only appears for accounts explicitly enabled by the backend"
+      ]
+    },
+    {
       "version": "0.12.22",
       "date": "2026-07-05",
       "changes": [
