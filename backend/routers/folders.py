@@ -63,6 +63,21 @@ def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
     return folder
 
 
+@router.get('/v1/folders/by-category/{category_mapping}', response_model=Folder, tags=['folders'])
+def get_folder_by_category(category_mapping: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get the folder mapped to a given conversation category (404 if none is mapped).
+
+    Categories are auto-routed into folders via `category_mapping`, but the reverse
+    lookup (which folder does this category go to) had no HTTP surface. Registered
+    before `/v1/folders/{folder_id}/conversations` so the literal `by-category`
+    segment is not shadowed.
+    """
+    folder = folders_db.get_folder_by_category_mapping(uid, category_mapping)
+    if not folder:
+        raise HTTPException(status_code=404, detail="Folder not found")
+    return folder
+
+
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
 def update_folder(folder_id: str, request: UpdateFolderRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Update folder metadata (name, description, color, icon, order)."""
