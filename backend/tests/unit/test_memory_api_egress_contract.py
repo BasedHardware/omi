@@ -15,7 +15,10 @@ def test_v3_memories_route_uses_memory_response_builders_for_public_egress():
         in source
     )
     assert 'jsonable_encoder(' not in source
-    assert 'memory_list_response(memory_response.body or [], MemoryApiExposure.CANONICAL' in source
+    assert (
+        'exposure = MemoryApiExposure.CANONICAL if canonical_lifecycle_exposed else MemoryApiExposure.LEGACY' in source
+    )
+    assert 'memory_list_response(memory_response.body or [], exposure' in source
     assert 'memory_list_response(\n        memories,\n        MemoryApiExposure.LEGACY' in source
     assert 'memory_item_response(memory, MemoryApiExposure.LEGACY)' in source
     assert 'memory_batch_response(memories, MemoryApiExposure.LEGACY' in source
