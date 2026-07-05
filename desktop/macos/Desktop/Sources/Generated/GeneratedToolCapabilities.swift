@@ -242,7 +242,7 @@ enum GeneratedToolCapabilities {
       toolName: "spawn_background_agent",
       title: "Spawn Background Agent",
       latency: .asyncBackground,
-      surfaces: Set([.desktopChat, .realtimeHub]),
+      surfaces: Set([]),
       summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
       bullets: [
       "Internal coordinator use only; agent-facing callers should use spawn_agent."

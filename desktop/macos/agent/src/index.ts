@@ -65,6 +65,7 @@ import {
 import {
   activeControlToolOwnerId,
   AGENT_CONTROL_TOOL_NAMES,
+  SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES,
   controlRequestKey,
   handleAgentControlToolCall,
   isAgentControlToolName,
@@ -978,7 +979,7 @@ async function main(): Promise<void> {
   };
 
   // 3. Signal readiness
-  send({ type: "init", sessionId: "", agentControlTools: AGENT_CONTROL_TOOL_NAMES });
+  send({ type: "init", sessionId: "", agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES });
   logErr("Agent runtime bridge started, waiting for queries...");
 
   // 4. Read JSON lines from Swift

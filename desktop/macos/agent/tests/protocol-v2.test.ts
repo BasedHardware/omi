@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { CancelAckMessage, InboundMessage, OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { requestIdFor } from "../src/protocol.js";
-import { AGENT_CONTROL_TOOL_NAMES } from "../src/runtime/control-tools.js";
+import { AGENT_CONTROL_TOOL_NAMES, SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES } from "../src/runtime/control-tools.js";
 
 describe("protocol v2 compatibility", () => {
   it("continues to accept v1 query fields", () => {
@@ -67,7 +67,8 @@ describe("protocol v2 compatibility", () => {
 
     expect(initSendStart).toBeGreaterThanOrEqual(0);
     expect(AGENT_CONTROL_TOOL_NAMES).toContain("spawn_background_agent");
-    expect(initSendBlock).toContain("agentControlTools: AGENT_CONTROL_TOOL_NAMES");
+    expect(SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES).not.toContain("spawn_background_agent");
+    expect(initSendBlock).toContain("agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES");
   });
 
   it("defines direct app control as an owner-guarded inbound message", () => {

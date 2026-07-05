@@ -1363,7 +1363,10 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
 };
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
-  const adapters = tool.name === "resolve_desktop_dispatch" ? trustedDirectControlOnly() : piAndStdio();
+  const adapters =
+    tool.name === "resolve_desktop_dispatch" || tool.name === "spawn_background_agent"
+      ? trustedDirectControlOnly()
+      : piAndStdio();
   return {
     name: tool.name,
     label: tool.label,
@@ -1383,10 +1386,10 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     annotations: readOnlyLocal,
     timeoutClass: tool.timeoutClass,
     executor: { kind: "runtimeControl" },
-    surfaces: mapControlSurfaces(tool.surfaces),
+    surfaces: tool.name === "spawn_background_agent" ? [] : mapControlSurfaces(tool.surfaces),
     capabilityDoc: tool.capabilityDoc,
     voice: controlVoicePatches[tool.name],
-    intendedForAgents: true,
+    intendedForAgents: tool.name !== "spawn_background_agent",
     runtimePreconditions: tool.runtimePreconditions,
     adapters,
   };

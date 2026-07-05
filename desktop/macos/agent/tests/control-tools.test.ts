@@ -113,7 +113,9 @@ describe("agent control tools", () => {
       expect(tool.privacyTier).toMatch(/^(low|local_private|sensitive)$/);
       expect(tool.approvalPolicy).toMatch(/^(allow|user_approval|policy_grant)$/);
       expect(tool.bundles.length).toBeGreaterThan(0);
-      expect(tool.allowedSurfaces.length).toBeGreaterThan(0);
+      if (tool.name !== "spawn_background_agent" && tool.name !== "resolve_desktop_dispatch") {
+        expect(tool.allowedSurfaces.length).toBeGreaterThan(0);
+      }
     }
 
     expect(agentControlCapabilityManifest.find((tool) => tool.name === "list_agent_sessions")).toMatchObject({

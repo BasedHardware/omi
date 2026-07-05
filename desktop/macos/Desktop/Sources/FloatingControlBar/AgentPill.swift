@@ -1233,26 +1233,6 @@ final class AgentPillsManager: ObservableObject {
         return "Floating agent pills:\n" + lines.joined(separator: "\n")
     }
 
-    func manage(action: String, agentId: String?) -> String {
-        switch action.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "list", "status":
-            return statusSummary()
-        case "dismiss":
-            guard let agentId, !agentId.isEmpty else {
-                return "Missing agent_id. Call list_agent_sessions first and pass the floating_agent_pills id."
-            }
-            return dismiss(pillIdString: agentId)
-                ? "Dismissed floating agent pill \(agentId)."
-                : "No floating agent pill matched \(agentId)."
-        case "clear_completed":
-            let count = pills.filter { $0.status.isFinished }.count
-            clearCompleted()
-            return "Cleared \(count) completed floating agent pill(s)."
-        default:
-            return "Unknown action. Use list_agent_sessions, cancel_agent_run, or update_agent_artifact_lifecycle instead."
-        }
-    }
-
     private func findPillId(from text: String) -> UUID? {
         let needle = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !needle.isEmpty else { return nil }

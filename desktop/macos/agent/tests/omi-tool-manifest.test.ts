@@ -33,7 +33,6 @@ describe("omi tool manifest", () => {
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
-      "spawn_background_agent",
       "spawn_agent",
       "run_agent_and_wait",
       "set_desktop_attention_override",
@@ -52,6 +51,11 @@ describe("omi tool manifest", () => {
       "capture_screen",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
+  });
+
+  it("keeps spawn_background_agent internal to coordinator RPC only", () => {
+    expect(toolNamesForAdapter("pi-mono")).not.toContain("spawn_background_agent");
+    expect(toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent")).toBeDefined();
   });
 
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {

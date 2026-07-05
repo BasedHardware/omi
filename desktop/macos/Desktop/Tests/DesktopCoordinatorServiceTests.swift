@@ -29,7 +29,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   }
 
   @MainActor
-  func testBackgroundAgentSpawnUsesCanonicalDirectControlPayload() async throws {
+  func testSpawnAgentUsesCanonicalDirectControlPayload() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
       {
@@ -48,10 +48,13 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     )
     let pillId = UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!
 
-    let accepted = try await service.spawnBackgroundAgent(
-      prompt: "Search my recent memories and write a short story.",
+    let accepted = try await service.spawnAgent(
+      objective: "Search my recent memories and write a short story.",
       title: "Create Memory Story",
       pillId: pillId,
+      provider: nil,
+      parentRunId: nil,
+      visible: true,
       model: "gpt-test",
       harnessMode: .piMono,
       cwd: "/tmp/omi-test"
@@ -66,14 +69,12 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let call = try XCTUnwrap(runtime.calls.first)
     XCTAssertEqual(call.clientId, "test-desktop-coordinator")
     XCTAssertEqual(call.harnessMode, AgentHarnessMode.piMono.rawValue)
-    XCTAssertEqual(call.name, "spawn_background_agent")
-    XCTAssertEqual(call.input["prompt"] as? String, "Search my recent memories and write a short story.")
+    XCTAssertEqual(call.name, "spawn_agent")
+    XCTAssertEqual(call.input["objective"] as? String, "Search my recent memories and write a short story.")
     XCTAssertEqual(call.input["title"] as? String, "Create Memory Story")
-    XCTAssertEqual(call.input["surfaceKind"] as? String, "floating_bar")
-    XCTAssertEqual(call.input["externalRefKind"] as? String, "pill")
+    XCTAssertEqual(call.input["visible"] as? Bool, true)
     XCTAssertEqual(call.input["externalRefId"] as? String, pillId.uuidString)
     XCTAssertEqual(call.input["clientId"] as? String, "desktop-floating-pill")
-    XCTAssertEqual(call.input["mode"] as? String, "act")
     XCTAssertEqual(call.input["model"] as? String, "gpt-test")
     XCTAssertEqual(call.input["adapterId"] as? String, "pi-mono")
     XCTAssertEqual(call.input["cwd"] as? String, "/tmp/omi-test")
@@ -84,7 +85,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   }
 
   @MainActor
-  func testBackgroundAgentSpawnOmitsModelWhenCallerLeavesModelNil() async throws {
+  func testSpawnAgentOmitsModelWhenCallerLeavesModelNil() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
       {
@@ -102,17 +103,20 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.spawn.nilModel")!
     )
 
-    _ = try await service.spawnBackgroundAgent(
-      prompt: "Use Hermes to work on this.",
+    _ = try await service.spawnAgent(
+      objective: "Use Hermes to work on this.",
       title: "Hermes Task",
       pillId: UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!,
+      provider: "hermes",
+      parentRunId: nil,
+      visible: true,
       model: nil,
       harnessMode: .hermes,
       cwd: nil
     )
 
     let call = try XCTUnwrap(runtime.calls.first)
-    XCTAssertEqual(call.name, "spawn_background_agent")
+    XCTAssertEqual(call.name, "spawn_agent")
     XCTAssertEqual(call.input["adapterId"] as? String, "hermes")
     XCTAssertNil(call.input["model"])
   }
@@ -169,6 +173,17 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(nodeSource.contains("agentControlTools: AGENT_CONTROL_TOOL_NAMES"))
     XCTAssertTrue(swiftSource.contains(#"message.payload["agentControlTools"] as? [String]"#))
     XCTAssertTrue(swiftSource.contains("advertisedAgentControlTools = Set(tools)"))
+  }
+
+  func testCoordinatorServiceDoesNotExposeInternalSpawnRPC() throws {
+    let source = try sourceFile("Chat/DesktopCoordinatorService.swift")
+    XCTAssertFalse(source.contains("spawnBackgroundAgent"))
+    XCTAssertFalse(source.contains("spawn_background_agent"))
+  }
+
+  func testAgentPillsManagerDoesNotExposeLegacyManageTool() throws {
+    let source = try sourceFile("FloatingControlBar/AgentPill.swift")
+    XCTAssertFalse(source.contains("func manage(action:"))
   }
 
   func testCoordinatorServiceDoesNotOwnDispatchOrLifecycleAuthority() throws {
@@ -274,7 +289,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
-    XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnBackgroundAgent("))
+    XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
 
@@ -294,6 +309,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(managerSource.contains("kernelTurnProjection.fetchVoiceSeedContext("))
     XCTAssertTrue(managerSource.contains("kernelVoiceSeedContext()"))
     XCTAssertTrue(managerSource.contains("floatingAgentStatusContext()"))
+    XCTAssertTrue(managerSource.contains("DesktopCoordinatorService.shared.floatingAgentStatusSummary"))
     XCTAssertTrue(managerSource.contains("Recent floating background agents:"))
     XCTAssertTrue(hubSource.contains("prefetchVoiceSeedContextIfNeeded()"))
     XCTAssertTrue(hubSource.contains("voiceSessionSeedContext()"))

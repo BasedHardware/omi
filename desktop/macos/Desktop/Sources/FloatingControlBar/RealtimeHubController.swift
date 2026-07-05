@@ -179,6 +179,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var turnIdempotencyKey = ""
   /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
   private var prefetchedVoiceSeedContext = ""
+  private var prefetchedFloatingAgentStatus = ""
   private var voiceSeedPrefetchTask: Task<Void, Never>?
   private var bargeInContinuityTask: Task<Void, Never>?
   private var pendingBargeInProvider: RealtimeHubProvider?
@@ -591,7 +592,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if !kernelSeed.isEmpty {
       sections.append(kernelSeed)
     }
-    let floatingAgents = FloatingControlBarManager.shared.floatingAgentStatusContext()
+    let floatingAgents = prefetchedFloatingAgentStatus
       .trimmingCharacters(in: .whitespacesAndNewlines)
     if !floatingAgents.isEmpty {
       sections.append(floatingAgents)
@@ -602,10 +603,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func prefetchVoiceSeedContextIfNeeded() {
     voiceSeedPrefetchTask?.cancel()
     voiceSeedPrefetchTask = Task { [weak self] in
-      let seed = await FloatingControlBarManager.shared.kernelVoiceSeedContext()
+      async let seed = FloatingControlBarManager.shared.kernelVoiceSeedContext()
+      async let floatingStatus = FloatingControlBarManager.shared.floatingAgentStatusContext()
+      let resolvedSeed = await seed
+      let resolvedFloatingStatus = await floatingStatus
       await MainActor.run {
         guard let self, !Task.isCancelled else { return }
-        self.prefetchedVoiceSeedContext = seed
+        self.prefetchedVoiceSeedContext = resolvedSeed
+        self.prefetchedFloatingAgentStatus = resolvedFloatingStatus
       }
     }
   }
@@ -614,6 +619,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     voiceSeedPrefetchTask?.cancel()
     voiceSeedPrefetchTask = nil
     prefetchedVoiceSeedContext = await FloatingControlBarManager.shared.kernelVoiceSeedContext()
+    prefetchedFloatingAgentStatus = await FloatingControlBarManager.shared.floatingAgentStatusContext()
   }
 
   private func recordTurnToKernel(

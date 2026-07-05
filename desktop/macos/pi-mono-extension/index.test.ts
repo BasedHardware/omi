@@ -1092,7 +1092,6 @@ test("OMI_TOOLS: required fields match expected per tool", () => {
     update_agent_artifact_lifecycle: ["artifactId", "state"],
     load_skill: ["name"],
     send_agent_message: ["sessionId", "prompt"],
-    spawn_background_agent: ["prompt"],
     spawn_agent: ["objective"],
     run_agent_and_wait: ["objective", "parentRunId"],
     set_desktop_attention_override: ["subjectKind", "subjectId"],

@@ -2847,7 +2847,7 @@ class FloatingControlBarManager {
         if !kernelSeed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             topLevelSections.append(kernelSeed)
         }
-        let floatingAgents = floatingAgentStatusContext()
+        let floatingAgents = await floatingAgentStatusContext()
         if !floatingAgents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             topLevelSections.append(floatingAgents)
         }
@@ -3288,9 +3288,13 @@ class FloatingControlBarManager {
         )
     }
 
-    func floatingAgentStatusContext() -> String {
-        guard !AgentPillsManager.shared.pills.isEmpty else { return "" }
-        let floatingStatus = AgentPillsManager.shared.statusSummary()
+    func floatingAgentStatusContext() async -> String {
+        let floatingStatus = await DesktopCoordinatorService.shared.floatingAgentStatusSummary(limit: 8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !floatingStatus.isEmpty,
+              floatingStatus != "No floating agent pills are running or recently finished." else {
+            return ""
+        }
         return """
         Recent floating background agents:
         \(floatingStatus)

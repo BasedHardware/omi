@@ -10,6 +10,13 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertEqual(record.messageId, "message-1")
   }
 
+  func testTaskChatStateUsesSharedRuntimeNotPerTaskBridge() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    XCTAssertTrue(source.contains("TaskChatRuntime.query("))
+    XCTAssertFalse(source.contains("private var agentBridge"))
+    XCTAssertFalse(source.contains("ensureBridgeStarted"))
+  }
+
   func testTaskChatStateUsesKernelSurfaceRef() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 

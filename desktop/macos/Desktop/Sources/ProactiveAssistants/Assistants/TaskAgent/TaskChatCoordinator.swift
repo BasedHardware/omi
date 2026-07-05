@@ -1,9 +1,8 @@
 import SwiftUI
 import Combine
 
-/// Manages task-scoped chat sessions using independent TaskChatState per task.
-/// Each task gets its own bridge process, messages, and sending state.
-/// The sidebar ChatProvider is completely untouched.
+/// Manages task-scoped chat sessions. Each task keeps UI state in TaskChatState;
+/// execution uses the shared TaskChatRuntime bridge and kernel task_chat sessions.
 @MainActor
 class TaskChatCoordinator: ObservableObject {
     @Published var activeTaskId: String?
@@ -35,7 +34,7 @@ class TaskChatCoordinator: ObservableObject {
     /// The currently active TaskChatState (drives the UI)
     @Published var activeTaskState: TaskChatState?
 
-    /// Per-task chat states — each has its own bridge process and messages
+    /// Per-task chat UI states — execution is shared via TaskChatRuntime
     private var taskStates: [String: TaskChatState] = [:]
 
     private let chatProvider: ChatProvider
@@ -193,7 +192,7 @@ class TaskChatCoordinator: ObservableObject {
     // MARK: - Background Investigation
 
     /// Run an AI investigation for a task without opening the panel.
-    /// Uses the agent bridge via TaskChatState. Skips tasks already sending.
+    /// Uses the shared task-chat runtime via TaskChatState. Skips tasks already sending.
     func investigateInBackground(for task: TaskActionItem) async {
         log("TaskChatCoordinator: investigateInBackground for \(task.id)")
         TaskAgentStatusRegistry.shared.registerTask(taskId: task.id, title: task.description)

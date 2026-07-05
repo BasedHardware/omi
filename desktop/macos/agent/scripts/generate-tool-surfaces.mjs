@@ -78,7 +78,7 @@ function validateManifest() {
   const aliases = new Map();
 
   for (const tool of omiToolManifest) {
-    if (!tool.surfaces?.length) {
+    if (tool.intendedForAgents !== false && !tool.surfaces?.length) {
       throw new Error(`Tool ${tool.name} is missing surfaces`);
     }
     if (!tool.capabilityDoc?.title) {

@@ -1,9 +1,8 @@
 import SwiftUI
 import Combine
 
-/// Per-task chat state with its own bridge process and message history.
-/// Each task chat is fully independent — no shared state with the sidebar chat.
-/// Session identity is owned by the kernel (`surface_conversations` for `task_chat`).
+/// Per-task chat UI state. Execution uses the shared `TaskChatRuntime` bridge and
+/// kernel-owned `task_chat` sessions — no per-task bridge or session identity.
 @MainActor
 class TaskChatState: ObservableObject {
     let taskId: String
@@ -17,10 +16,6 @@ class TaskChatState: ObservableObject {
     /// Monotonic token that increments each time the local user sends a message
     /// in this task chat. ChatMessagesView observes this for turn anchoring.
     @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
-
-    /// Own bridge process — completely independent from sidebar chat
-    private var agentBridge: AgentBridge?
-    private var bridgeStarted = false
 
     /// Workspace path for file-system tools
     let workspacePath: String
@@ -113,41 +108,6 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    deinit {
-        if let bridge = agentBridge {
-            Task { await bridge.stop() }
-        }
-    }
-
-    // MARK: - Bridge Lifecycle
-
-    private func ensureBridgeStarted() async -> Bool {
-        if bridgeStarted {
-            let alive = await agentBridge?.isAlive ?? false
-            if !alive {
-                log("TaskChatState[\(taskId)]: Bridge process died, will restart")
-                bridgeStarted = false
-            }
-        }
-        guard !bridgeStarted else { return true }
-        do {
-            let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-            let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
-            let bridge = AgentClient.makeBridge(harnessMode: harness)
-            try await bridge.start()
-            agentBridge = bridge
-            bridgeStarted = true
-
-            log("TaskChatState[\(taskId)]: agent bridge started")
-            return true
-        } catch {
-            logError("TaskChatState[\(taskId)]: Failed to start bridge", error: error)
-            errorMessage = "AI not available: \(error.localizedDescription)"
-            TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: errorMessage ?? error.localizedDescription)
-            return false
-        }
-    }
-
     // MARK: - Send Message
 
     func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
@@ -155,15 +115,6 @@ class TaskChatState: ObservableObject {
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
             log("TaskChatState[\(taskId)]: sendMessage called while already sending, ignoring")
-            return
-        }
-
-        guard await ensureBridgeStarted() else { return }
-
-        // Re-check isSending after the async bridge start — another sendMessage call
-        // could have slipped through the initial guard while the bridge was starting.
-        guard !isSending else {
-            log("TaskChatState[\(taskId)]: sendMessage racing after bridge start, ignoring")
             return
         }
 
@@ -233,15 +184,11 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            guard let bridge = agentBridge else {
-                throw BridgeError.notRunning
-            }
-
-            let queryResult = try await bridge.query(
+            let queryResult = try await TaskChatRuntime.query(
                 prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                surface: .taskChat(taskId: taskId),
-                cwd: workspacePath.isEmpty ? nil : workspacePath,
+                taskId: taskId,
+                workspacePath: workspacePath,
                 mode: chatMode.rawValue,
                 surfaceContextJson: taskContext,
                 onTextDelta: textDeltaHandler,
@@ -449,7 +396,7 @@ class TaskChatState: ObservableObject {
 
         // Queue follow-up and interrupt current query
         pendingFollowUpText = trimmedText
-        await agentBridge?.interrupt()
+        await TaskChatRuntime.interrupt()
         log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
     }
 
@@ -459,7 +406,7 @@ class TaskChatState: ObservableObject {
         guard isSending else { return }
         isStopping = true
         Task {
-            await agentBridge?.interrupt()
+            await TaskChatRuntime.interrupt()
         }
     }
 

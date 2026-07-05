@@ -2280,10 +2280,7 @@
     "executor": {
       "kind": "runtimeControl"
     },
-    "surfaces": [
-      "desktop_chat",
-      "realtime_voice"
-    ],
+    "surfaces": [],
     "capabilityDoc": {
       "title": "Spawn Background Agent",
       "summary": "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
@@ -2291,19 +2288,12 @@
         "Internal coordinator use only; agent-facing callers should use spawn_agent."
       ]
     },
-    "intendedForAgents": true,
+    "intendedForAgents": false,
     "runtimePreconditions": [
       "Defaults ownerId to the active signed-in owner when omitted.",
       "Creates a canonical floating_bar session/run by default."
     ],
-    "adapters": {
-      "pi-mono": {
-        "advertised": true
-      },
-      "omi-tools-stdio": {
-        "advertised": true
-      }
-    }
+    "adapters": {}
   },
   {
     "name": "spawn_agent",

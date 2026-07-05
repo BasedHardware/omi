@@ -301,6 +301,11 @@ export type AgentControlToolName = keyof typeof agentControlToolSchemas;
 
 export const AGENT_CONTROL_TOOL_NAMES = Object.keys(agentControlToolSchemas) as AgentControlToolName[];
 
+/** Control tools advertised to Swift on runtime init (excludes coordinator-internal RPC). */
+export const SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES = AGENT_CONTROL_TOOL_NAMES.filter(
+  (name) => name !== "spawn_background_agent",
+) as AgentControlToolName[];
+
 const CONTROL_TOOL_NAME_SET = new Set<string>(AGENT_CONTROL_TOOL_NAMES);
 
 export interface AgentControlToolDefinition {

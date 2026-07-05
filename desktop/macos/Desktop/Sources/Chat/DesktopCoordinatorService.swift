@@ -143,7 +143,6 @@ final class DesktopCoordinatorService {
     static let cancelAgentRun = "cancel_agent_run"
     static let inspectAgentArtifacts = "inspect_agent_artifacts"
     static let sendAgentMessage = "send_agent_message"
-    static let spawnBackgroundAgent = "spawn_background_agent"
     static let spawnAgent = "spawn_agent"
     static let runAgentAndWait = "run_agent_and_wait"
     static let setDesktopAttentionOverride = "set_desktop_attention_override"
@@ -280,35 +279,6 @@ final class DesktopCoordinatorService {
       ToolName.cancelAgentRun,
       input: ["runId": runId]
     )
-  }
-
-  func spawnBackgroundAgent(
-    prompt: String,
-    title: String?,
-    pillId: UUID,
-    model: String?,
-    harnessMode: AgentHarnessMode?,
-    cwd: String?
-  ) async throws -> DesktopCoordinatorSpawnedAgent {
-    var input: [String: Any] = [
-      "prompt": prompt,
-      "surfaceKind": "floating_bar",
-      "externalRefKind": "pill",
-      "externalRefId": pillId.uuidString,
-      "clientId": "desktop-floating-pill",
-      "mode": "act",
-      "metadata": [
-        "uiProjection": "floating_bar",
-        "pillId": pillId.uuidString,
-      ],
-    ]
-    if let title, !title.isEmpty { input["title"] = title }
-    if let model, !model.isEmpty { input["model"] = model }
-    if let harnessMode { input["adapterId"] = AgentRuntimeRouting.adapterId(for: harnessMode).rawValue }
-    if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
-
-    let raw = try await callRuntimeControlTool(ToolName.spawnBackgroundAgent, input: input)
-    return try parseSpawnedAgent(from: raw)
   }
 
   func spawnAgent(
@@ -548,7 +518,6 @@ final class DesktopCoordinatorService {
       ToolName.cancelAgentRun,
       ToolName.inspectAgentArtifacts,
       ToolName.sendAgentMessage,
-      ToolName.spawnBackgroundAgent,
       ToolName.spawnAgent,
       ToolName.runAgentAndWait,
       ToolName.setDesktopAttentionOverride,
@@ -567,6 +536,26 @@ final class DesktopCoordinatorService {
       return []
     }
     return object["floating_agent_pills"] as? [[String: Any]] ?? []
+  }
+
+  func floatingAgentStatusSummary(limit: Int = 8) async -> String {
+    do {
+      let pills = try await listFloatingAgentPills(limit: limit)
+      guard !pills.isEmpty else {
+        return "No floating agent pills are running or recently finished."
+      }
+      let lines = pills.map { entry -> String in
+        let title = stringValue(entry["title"]) ?? "Background agent"
+        let id = (stringValue(entry["id"]) ?? "").prefix(8)
+        let status = stringValue(entry["status"]) ?? "unknown"
+        let activity = stringValue(entry["latestActivity"]) ?? ""
+        return "- \(title) [\(id)]: \(status); \(activity)"
+      }
+      return "Floating agent pills:\n" + lines.joined(separator: "\n")
+    } catch {
+      logError("DesktopCoordinatorService: floating agent status unavailable", error: error)
+      return ""
+    }
   }
 
   private func callRuntimeControlTool(_ name: String, input: [String: Any]) async throws -> String {
