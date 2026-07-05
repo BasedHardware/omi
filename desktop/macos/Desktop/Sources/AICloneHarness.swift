@@ -95,6 +95,65 @@ enum AICloneHarness {
         as: persona, to: message, includeLiveContext: liveContext)
       return ["reply": reply]
     }
+
+    registry.register(
+      name: "ai_clone_commitments",
+      summary: "Scan a contact's history for commitments; create Tasks unless create=false",
+      params: ["rank", "messages", "create", "out"]
+    ) { params in
+      let rank = Int(params["rank"] ?? "") ?? 1
+      let messageLimit = Int(params["messages"] ?? "") ?? 500
+      let create = (params["create"] ?? "true") != "false"
+      let contacts = try await IMessageReaderService.shared.topContacts(limit: rank)
+      guard contacts.count >= rank else { return ["error": "no contact at rank \(rank)"] }
+      let contact = contacts[rank - 1].asImportedContact()
+      let messages = try await IMessageReaderService.shared.messages(
+        for: contacts[rank - 1], limit: messageLimit
+      ).map { $0.asImportedMessage() }
+
+      let commitments: [ExtractedCommitment]
+      var created = 0
+      var duplicates = 0
+      if create {
+        let outcome = try await CommitmentExtractionService.shared.scanAndCreateTasks(
+          contact: contact, messages: messages)
+        commitments = outcome.found
+        created = outcome.created
+        duplicates = outcome.duplicatesSkipped
+      } else {
+        commitments = try await CommitmentExtractionService.shared.scanForCommitments(
+          contact: contact, messages: messages)
+      }
+
+      let dayFormatter = ISO8601DateFormatter()
+      dayFormatter.formatOptions = [.withFullDate]
+      let foundJSON = commitments.map { commitment -> [String: Any] in
+        [
+          "commitment_text": commitment.commitmentText,
+          "said_on": commitment.saidOn.map { dayFormatter.string(from: $0) } ?? "",
+          "context": commitment.context,
+          "confidence": commitment.confidence,
+        ]
+      }
+      if let out = params["out"] {
+        try? writeJSON(
+          [
+            "contact": contact.displayName, "platform": contact.platform,
+            "created": created, "duplicatesSkipped": duplicates, "found": foundJSON,
+          ], to: out)
+      }
+
+      let readable = commitments.map {
+        "• \($0.commitmentText)  [\(Int($0.confidence * 100))%]"
+      }.joined(separator: "\n")
+      return [
+        "contact": contact.displayName,
+        "count": String(commitments.count),
+        "created": String(created),
+        "duplicatesSkipped": String(duplicates),
+        "commitments": readable,
+      ]
+    }
   }
 
   // MARK: - Run execution
