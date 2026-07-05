@@ -74,7 +74,7 @@ struct OnboardingDataSourcesStepView: View {
           sourcePlural: "events",
           memoryCount: coordinator.calendarMemoriesSaved
         ),
-        isOn: !coordinator.calendarInsightsFailed,
+        isOn: true,
         isDisabled: true,
         scanFinished: coordinator.calendarInsightsFinished,
         scanFailed: coordinator.calendarInsightsFailed
@@ -90,7 +90,7 @@ struct OnboardingDataSourcesStepView: View {
           sourcePlural: "emails",
           memoryCount: coordinator.gmailMemoriesSaved
         ),
-        isOn: !coordinator.gmailInsightsFailed,
+        isOn: true,
         isDisabled: true,
         scanFinished: coordinator.gmailInsightsFinished,
         scanFailed: coordinator.gmailInsightsFailed
@@ -122,7 +122,7 @@ struct OnboardingDataSourcesStepView: View {
         ),
         isOn: true,
         isDisabled: coordinator.appleNotesInsightCount > 0,
-        scanFinished: !coordinator.isSyncingAppleNotes,
+        scanFinished: coordinator.appleNotesInsightsFinished,
         scanFailed: coordinator.appleNotesInsightsFailed,
         actionTitle: coordinator.appleNotesInsightCount > 0 ? nil : "Select Folder",
         action: coordinator.appleNotesInsightCount > 0
