@@ -221,6 +221,7 @@ export interface AdapterBinding {
   updatedAtMs: number;
   lastUsedAtMs: number | null;
   invalidatedAtMs: number | null;
+  lastDeliveredTurnCreatedAtMs: number;
 }
 
 export interface AgentEvent {

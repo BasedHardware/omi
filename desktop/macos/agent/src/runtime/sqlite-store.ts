@@ -52,6 +52,7 @@ const DESKTOP_ATTENTION_OVERRIDES_MIGRATION_VERSION = 8;
 const ACTIVE_ATTEMPT_AUTHORITY_MIGRATION_VERSION = 9;
 const SURFACE_CONVERSATIONS_MIGRATION_VERSION = 10;
 const CONVERSATION_TURNS_MIGRATION_VERSION = 11;
+const BINDING_TURN_DELIVERY_MIGRATION_VERSION = 12;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -428,6 +429,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(CONVERSATION_TURNS_MIGRATION_VERSION)) {
       runConversationTurnsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(BINDING_TURN_DELIVERY_MIGRATION_VERSION)) {
+      runBindingTurnDeliveryMigration(this.db, this.nowMs());
     }
   }
 
@@ -822,6 +826,7 @@ export class SqliteAgentStore implements AgentStore {
       updatedAtMs: input.updatedAtMs ?? now,
       lastUsedAtMs: input.lastUsedAtMs ?? null,
       invalidatedAtMs: input.invalidatedAtMs ?? null,
+      lastDeliveredTurnCreatedAtMs: input.lastDeliveredTurnCreatedAtMs ?? 0,
     };
     this.withTransaction(() => {
       if (binding.adapterNativeSessionId) {
@@ -835,8 +840,9 @@ export class SqliteAgentStore implements AgentStore {
         `INSERT INTO adapter_bindings (
           binding_id, session_id, adapter_id, binding_generation, adapter_native_session_id,
           adapter_instance_id, resume_fidelity, status, cwd, model_id, system_prompt_hash,
-          metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          metadata_json, created_at_ms, updated_at_ms, last_used_at_ms, invalidated_at_ms,
+          last_delivered_turn_created_at_ms
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).run(...bindingValues(binding));
     });
     return binding;
@@ -1714,6 +1720,29 @@ function runConversationTurnsMigration(db: Pick<DatabaseSync, "exec" | "prepare"
   });
 }
 
+function runBindingTurnDeliveryMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
+  runTransaction(db, () => {
+    db.exec(`
+      ALTER TABLE adapter_bindings
+        ADD COLUMN last_delivered_turn_created_at_ms INTEGER NOT NULL DEFAULT 0;
+    `);
+    db.exec(`
+      UPDATE adapter_bindings
+      SET last_delivered_turn_created_at_ms = COALESCE((
+        SELECT MAX(ct.created_at_ms)
+        FROM conversation_turns ct
+        JOIN surface_conversations sc ON sc.conversation_id = ct.conversation_id
+        WHERE sc.agent_session_id = adapter_bindings.session_id
+      ), 0)
+      WHERE resume_fidelity = 'native' AND status = 'active';
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      BINDING_TURN_DELIVERY_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
 function runActiveAttemptAuthorityMigration(db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">, appliedAtMs: number): void {
   runTransaction(db, () => {
     const repairedAttempts = db.prepare(`
@@ -1914,6 +1943,7 @@ function bindingValues(binding: AdapterBinding): SQLInputValue[] {
     binding.updatedAtMs,
     binding.lastUsedAtMs,
     binding.invalidatedAtMs,
+    binding.lastDeliveredTurnCreatedAtMs,
   ];
 }
 

@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 import {
   appendConversationTurn,
+  advanceBindingTurnDelivery,
   importConversationTurnsBackfill,
   recordSurfaceTurn,
   listRecentConversationTurns,
@@ -36,7 +37,7 @@ describe("turn-context", () => {
     }
   });
 
-  it("does not inject transcript history when binding is native-resumable", () => {
+  it("does not inject undelivered transcript delta when native binding has seen all turns", () => {
     const { store, stateDir } = newStore();
     cleanupDir = stateDir;
     store.migrate();
@@ -86,13 +87,113 @@ describe("turn-context", () => {
         resumeFidelity: "native",
         adapterNativeSessionId: "adapter-native-1",
       }),
+      lastDeliveredTurnCreatedAtMs: 1_700_000_000_001,
       nowMs: 1_700_000_000_100,
     });
 
+    expect(assembled.prompt).not.toContain("# Recent turns from other surfaces");
     expect(assembled.prompt).not.toContain("<conversation_history>");
     expect(assembled.prompt).not.toContain("Earlier question");
     expect(assembled.prompt).toContain("# User Message");
     expect(assembled.prompt).toContain("Follow up");
+  });
+
+  it("injects voice turns once into warm native binding delta", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-native-voice-delta";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+    appendConversationTurn(store, {
+      conversationId: resolved.conversationId,
+      role: "user",
+      surfaceKind: "main_chat",
+      content: "Typed question",
+      createdAtMs: 1_700_000_000_000,
+    });
+    appendConversationTurn(store, {
+      conversationId: resolved.conversationId,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      content: "Typed answer",
+      createdAtMs: 1_700_000_000_001,
+    });
+    const binding = store.insertAdapterBinding({
+      sessionId: resolved.agentSessionId,
+      adapterId: "pi-mono",
+      bindingGeneration: 1,
+      adapterNativeSessionId: "native-warm-1",
+      resumeFidelity: "native",
+      status: "active",
+      lastDeliveredTurnCreatedAtMs: 1_700_000_000_001,
+    });
+
+    recordSurfaceTurn(store, {
+      ownerId,
+      surfaceRef,
+      userText: "Hello from PTT",
+      assistantText: "Hi back from voice",
+      origin: "realtime_voice",
+      nowMs: 1_700_000_000_010,
+    });
+
+    const services = {
+      persistDesktopContextPacket: (input: { objective: string }) => ({
+        packet: {
+          packetId: "ctx_test",
+          redactedPreviewJson: { objective: input.objective },
+        },
+      }),
+      routeDesktopIntent: () => ({ intent: "new_run" as const, explanation: "test" }),
+      listSessions: () => [],
+      inspectArtifacts: () => [],
+    };
+
+    const first = assembleTurnContext({
+      store,
+      services,
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: "Follow up after voice",
+      imagePresent: false,
+      bindingCarriesNativeHistory: bindingCarriesNativeHistory(binding),
+      lastDeliveredTurnCreatedAtMs: binding.lastDeliveredTurnCreatedAtMs,
+      nowMs: 1_700_000_000_020,
+    });
+
+    expect(first.prompt).toContain("# Recent turns from other surfaces");
+    expect(first.prompt).toContain("Hello from PTT");
+    expect(first.prompt).toContain("Hi back from voice");
+    expect(first.prompt).not.toContain("Typed question");
+
+    advanceBindingTurnDelivery(store, binding.bindingId, resolved.conversationId, 1_700_000_000_021);
+    const updatedBinding = store.getRow(
+      "SELECT last_delivered_turn_created_at_ms FROM adapter_bindings WHERE binding_id = ?",
+      [binding.bindingId],
+    );
+    const second = assembleTurnContext({
+      store,
+      services,
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: "Another follow up",
+      imagePresent: false,
+      bindingCarriesNativeHistory: bindingCarriesNativeHistory(binding),
+      lastDeliveredTurnCreatedAtMs: Number(updatedBinding.last_delivered_turn_created_at_ms),
+      nowMs: 1_700_000_000_030,
+    });
+
+    expect(second.prompt).not.toContain("# Recent turns from other surfaces");
+    expect(second.prompt).not.toContain("Hello from PTT");
   });
 
   it("injects bounded transcript tail for fresh bindings", () => {

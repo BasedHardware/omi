@@ -18,6 +18,7 @@ import {
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
 import {
+  advanceBindingTurnDelivery,
   appendConversationTurn,
   conversationIdForSession,
   importConversationTurnsForSurface,
@@ -338,6 +339,7 @@ export class KernelCore {
           surfaceContextJson: input.surfaceContextJson,
           imagePresent: Boolean(input.imagePresent),
           bindingCarriesNativeHistory: bindingCarriesNativeHistory(binding),
+          lastDeliveredTurnCreatedAtMs: binding.lastDeliveredTurnCreatedAtMs,
           runId: accepted.run.runId,
         });
         effectivePrompt = assembled.prompt;
@@ -366,6 +368,7 @@ export class KernelCore {
           createdAtMs: Date.now(),
           metadataJson: JSON.stringify({ runId: accepted.run.runId }),
         });
+        advanceBindingTurnDelivery(this.store, binding.bindingId, conversationId);
       }
 
       try {

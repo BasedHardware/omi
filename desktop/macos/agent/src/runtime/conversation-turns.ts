@@ -40,6 +40,47 @@ export function listRecentConversationTurns(
     .reverse();
 }
 
+export function maxConversationTurnCreatedAtMs(store: AgentStore, conversationId: string): number {
+  const row = store.getOptionalRow(
+    "SELECT COALESCE(MAX(created_at_ms), 0) AS max_ms FROM conversation_turns WHERE conversation_id = ?",
+    [conversationId],
+  );
+  return Number(row?.max_ms ?? 0);
+}
+
+export function listUndeliveredConversationTurns(
+  store: AgentStore,
+  conversationId: string,
+  afterCreatedAtMs: number,
+  limit = CONVERSATION_TRANSCRIPT_TAIL_LIMIT,
+): ConversationTurn[] {
+  return store
+    .allRows(
+      `SELECT conversation_id, turn_id, role, surface_kind, content, created_at_ms, metadata_json
+       FROM conversation_turns
+       WHERE conversation_id = ? AND created_at_ms > ?
+       ORDER BY created_at_ms ASC
+       LIMIT ?`,
+      [conversationId, afterCreatedAtMs, limit],
+    )
+    .map(conversationTurnFromRow);
+}
+
+export function advanceBindingTurnDelivery(
+  store: AgentStore,
+  bindingId: string,
+  conversationId: string,
+  nowMs?: number,
+): void {
+  const maxMs = maxConversationTurnCreatedAtMs(store, conversationId);
+  store.execute(
+    `UPDATE adapter_bindings
+     SET last_delivered_turn_created_at_ms = ?, updated_at_ms = ?
+     WHERE binding_id = ?`,
+    [maxMs, nowMs ?? Date.now(), bindingId],
+  );
+}
+
 export function appendConversationTurn(store: AgentStore, input: NewConversationTurn): ConversationTurn {
   return store.insertConversationTurn(input);
 }

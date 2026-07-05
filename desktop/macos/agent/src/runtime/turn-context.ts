@@ -6,6 +6,7 @@ import type { DesktopIntentRoute } from "./desktop-intent-router.js";
 import {
   CONVERSATION_TRANSCRIPT_TAIL_LIMIT,
   listRecentConversationTurns,
+  listUndeliveredConversationTurns,
 } from "./conversation-turns.js";
 
 export const VOICE_SEED_MAX_TURNS = 8;
@@ -59,6 +60,7 @@ export interface AssembleTurnContextInput {
   surfaceContextJson?: string | null;
   imagePresent: boolean;
   bindingCarriesNativeHistory: boolean;
+  lastDeliveredTurnCreatedAtMs?: number;
   runId?: string | null;
   nowMs?: number;
 }
@@ -131,12 +133,26 @@ export function assembleTurnContext(input: AssembleTurnContextInput): AssembledT
     sections.push(`# Task Context\n\n${input.surfaceContextJson.trim()}`);
   }
 
-  if (!input.bindingCarriesNativeHistory && input.conversationId) {
-    const transcript = formatTranscriptTail(
-      listRecentConversationTurns(input.store, input.conversationId, CONVERSATION_TRANSCRIPT_TAIL_LIMIT),
-    );
-    if (transcript) {
-      sections.push(transcript);
+  if (input.conversationId) {
+    if (input.bindingCarriesNativeHistory) {
+      const delta = formatTranscriptDelta(
+        listUndeliveredConversationTurns(
+          input.store,
+          input.conversationId,
+          input.lastDeliveredTurnCreatedAtMs ?? 0,
+          CONVERSATION_TRANSCRIPT_TAIL_LIMIT,
+        ),
+      );
+      if (delta) {
+        sections.push(delta);
+      }
+    } else {
+      const transcript = formatTranscriptTail(
+        listRecentConversationTurns(input.store, input.conversationId, CONVERSATION_TRANSCRIPT_TAIL_LIMIT),
+      );
+      if (transcript) {
+        sections.push(transcript);
+      }
     }
   }
 
@@ -467,6 +483,17 @@ function formatTranscriptTail(turns: readonly ConversationTurn[]): string | null
 Below is the recent conversation history between you and the user. Use this to maintain continuity.
 ${lines.join("\n")}
 </conversation_history>`;
+}
+
+function formatTranscriptDelta(turns: readonly ConversationTurn[]): string | null {
+  if (turns.length === 0) return null;
+  const lines = turns.map((turn) => {
+    const role = turn.role === "user" ? "User" : "Assistant";
+    return `${role}: ${turn.content}`;
+  });
+  return `# Recent turns from other surfaces
+
+${lines.join("\n")}`;
 }
 
 function sanitizeCoordinatorField(text: string, maxLength = 500): string {

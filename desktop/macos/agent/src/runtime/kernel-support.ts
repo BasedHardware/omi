@@ -519,6 +519,7 @@ export function bindingFromRow(row: Record<string, unknown>): AdapterBinding {
     updatedAtMs: Number(row.updated_at_ms),
     lastUsedAtMs: nullableNumber(row.last_used_at_ms),
     invalidatedAtMs: nullableNumber(row.invalidated_at_ms),
+    lastDeliveredTurnCreatedAtMs: Number(row.last_delivered_turn_created_at_ms ?? 0),
   };
 }
 
@@ -712,5 +713,6 @@ export const bindingColumnMap: Record<string, string> = {
   updatedAtMs: "updated_at_ms",
   lastUsedAtMs: "last_used_at_ms",
   invalidatedAtMs: "invalidated_at_ms",
+  lastDeliveredTurnCreatedAtMs: "last_delivered_turn_created_at_ms",
 };
 

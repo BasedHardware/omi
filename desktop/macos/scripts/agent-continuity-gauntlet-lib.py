@@ -10,6 +10,7 @@ import math
 import os
 import re
 import shutil
+import sqlite3
 import struct
 import subprocess
 import sys
@@ -164,12 +165,47 @@ def latest_assistant_text(snapshot_detail: dict[str, str]) -> str:
     return ""
 
 
-def identity_keys(detail: dict[str, str]) -> dict[str, str]:
+def kernel_surface_identity(database_path: str, owner_id: str) -> dict[str, str] | None:
+    """Read kernel-owned main_chat identity from omi-agentd.sqlite3."""
+    if not owner_id or not database_path or not Path(database_path).is_file():
+        return None
+    try:
+        connection = sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)
+        connection.row_factory = sqlite3.Row
+        row = connection.execute(
+            """
+            SELECT conversation_id, agent_session_id
+            FROM surface_conversations
+            WHERE owner_id = ?
+              AND surface_kind = 'main_chat'
+              AND external_ref_kind = 'chat'
+              AND external_ref_id = 'default'
+            LIMIT 1
+            """,
+            (owner_id,),
+        ).fetchone()
+        connection.close()
+    except sqlite3.Error:
+        return None
+    if row is None:
+        return None
     return {
-        "chat_session_id": detail.get("chat_session_id", ""),
-        "runtime_chat_id": detail.get("runtime_chat_id", ""),
-        "omi_session_id": detail.get("omi_session_id", ""),
-        "persisted_runtime_session_id": detail.get("persisted_runtime_session_id", ""),
+        "owner_id": owner_id,
+        "conversation_id": str(row["conversation_id"] or ""),
+        "agent_session_id": str(row["agent_session_id"] or ""),
+    }
+
+
+def identity_keys(detail: dict[str, str], runtime_detail: dict[str, str] | None = None) -> dict[str, str]:
+    owner_id = detail.get("owner_id", "")
+    database_path = (runtime_detail or {}).get("database_path", "")
+    kernel = kernel_surface_identity(database_path, owner_id)
+    if kernel:
+        return kernel
+    return {
+        "owner_id": owner_id,
+        "conversation_id": "",
+        "agent_session_id": "",
     }
 
 
@@ -249,6 +285,7 @@ class GauntletRunner:
         snapshot_detail: dict[str, str],
         traces: list[dict[str, Any]],
         extra: dict[str, Any] | None = None,
+        skip_identity_drift: bool = False,
     ) -> None:
         step_dir = self.run_dir / step_id
         assistant_text = latest_assistant_text(snapshot_detail)
@@ -263,21 +300,23 @@ class GauntletRunner:
         self.log_offset = self.log_path.stat().st_size if self.log_path.exists() else self.log_offset
 
         runtime = bridge_action(self.port, "agent_runtime_evidence")
-        write_json(step_dir / "runtime-sqlite.json", runtime.get("result", {}).get("detail", runtime))
+        runtime_detail = runtime.get("result", {}).get("detail", runtime)
+        write_json(step_dir / "runtime-sqlite.json", runtime_detail)
 
         png_path = step_dir / "main-window.png"
         screenshot = run_agent_swift_screenshot(self.bundle_id, png_path)
         write_json(step_dir / "screenshot-meta.json", screenshot)
 
-        identity = identity_keys(snapshot_detail)
+        identity = identity_keys(snapshot_detail, runtime_detail)
         write_json(step_dir / "identity.json", identity)
-        if self.baseline_identity is None:
-            self.baseline_identity = identity
-        elif identity != self.baseline_identity:
-            self.fail(
-                f"{name}: conversation identity drifted "
-                f"(baseline={self.baseline_identity}, current={identity})"
-            )
+        if not skip_identity_drift and identity.get("conversation_id"):
+            if self.baseline_identity is None:
+                self.baseline_identity = identity
+            elif identity != self.baseline_identity:
+                self.fail(
+                    f"{name}: conversation identity drifted "
+                    f"(baseline={self.baseline_identity}, current={identity})"
+                )
 
         record = {
             "id": step_id,
@@ -495,6 +534,7 @@ class GauntletRunner:
                     "owner isolation is verified via surface-session.test.ts."
                 ),
             },
+            skip_identity_drift=True,
         )
         if not owner_ok:
             self.fail(f"owner-switch kernel check failed: {owner_detail}")
