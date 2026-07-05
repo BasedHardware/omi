@@ -1250,6 +1250,9 @@ final class AgentPillsManager: ObservableObject {
         Self.ensureFailureMessage(errorText, for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
+        // Canonical run failures land here (not in complete()), so the
+        // auto-route fallback chain must be consumed on this path too.
+        attemptProviderFallback(for: pill)
     }
 
     private static func ensureStreamingAssistantMessage(for pill: AgentPill) {
@@ -1466,6 +1469,26 @@ final class AgentPillsManager: ObservableObject {
                     pill.latestActivity = String(line.prefix(140))
                     pill.transcript.append(line)
                     pill.markContentChanged()
+                }
+            }
+            // The shared Node runtime reads adapter commands from its
+            // environment only at process start, so a provider installed
+            // mid-session is invisible to a running runtime ("Adapter not
+            // registered"). Restart it before dispatching the task; if a
+            // request is momentarily active, retry once — the fallback chain
+            // covers the residual case.
+            if case .success = result, AgentProviderHealth.report(for: provider).readiness == .ready {
+                await MainActor.run {
+                    guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
+                    pill.latestActivity = "Restarting agent runtime to pick up \(provider.displayName)…"
+                    pill.markContentChanged()
+                }
+                do {
+                    try await AgentRuntimeProcess.shared.restart(harnessMode: provider.harnessMode.rawValue)
+                } catch {
+                    log("AgentPills: runtime restart after \(provider.rawValue) setup failed (\(error)) — retrying once")
+                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    try? await AgentRuntimeProcess.shared.restart(harnessMode: provider.harnessMode.rawValue)
                 }
             }
             await MainActor.run {

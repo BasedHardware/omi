@@ -89,9 +89,13 @@ enum AgentProviderInstaller {
             steps.append(Step(
                 title: "Connect Hermes to Nous Portal",
                 kind: .userAction(
-                    instructions: "Finish the Nous Portal sign-in in your browser.",
-                    launch: "hermes setup --portal",
-                    isComplete: { executable("hermes") != nil }),
+                    instructions: "Complete the Nous Portal sign-in in your browser, then answer the prompts in the Terminal window.",
+                    // `hermes setup --portal` has interactive terminal prompts
+                    // (model choice), so it must run in a real Terminal.
+                    launch: openInTerminalScript(command: "hermes setup --portal"),
+                    // Binary presence is NOT auth — a fresh install reports
+                    // "logged out" and every run fails until portal auth lands.
+                    isComplete: { hermesNousAuthenticated() }),
                 timeout: 420))
             return steps
 
@@ -115,6 +119,23 @@ enum AgentProviderInstaller {
             }
             return steps
         }
+    }
+
+    /// `hermes auth status nous` prints "logged in" once portal auth lands.
+    static func hermesNousAuthenticated() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", "hermes auth status nous 2>/dev/null"]
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(NSHomeDirectory())/.local/bin:\(env["PATH"] ?? "/usr/bin:/bin")"
+        process.environment = env
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do { try process.run() } catch { return false }
+        process.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        return output.contains("logged in")
     }
 
     /// `openclaw onboard` is a TUI and must run in a real terminal.
