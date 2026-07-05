@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a rare hang during push-to-talk audio-device teardown, and now warns when a recording runs too long instead of only failing when you finish"
-}
