@@ -129,7 +129,10 @@ final class DesktopDiagnosticsManager {
     provider: String,
     reason: String,
     phase: String,
-    httpStatusCode: Int? = nil
+    httpStatusCode: Int? = nil,
+    backendRoute: String? = nil,
+    upstreamStatusCode: Int? = nil,
+    retryable: Bool? = nil
   ) {
     var properties: [String: Any] = [
       "provider": safeProvider(provider),
@@ -138,6 +141,15 @@ final class DesktopDiagnosticsManager {
     ]
     if let httpStatusCode {
       properties["http_status_code"] = httpStatusCode
+    }
+    if let backendRoute {
+      properties["backend_route"] = backendRoute
+    }
+    if let upstreamStatusCode {
+      properties["upstream_status_code"] = upstreamStatusCode
+    }
+    if let retryable {
+      properties["retryable"] = retryable
     }
     record(
       .realtimeTokenMintFailed,

@@ -111,7 +111,10 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
       provider: "gemini",
       reason: "backend_transient",
       phase: "warm",
-      httpStatusCode: 503)
+      httpStatusCode: 503,
+      backendRoute: "/v2/realtime/session",
+      upstreamStatusCode: 503,
+      retryable: true)
 
     let snapshot = try latestSnapshot()
 
@@ -120,6 +123,9 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["reason"] as? String, "backend_transient")
     XCTAssertEqual(snapshot["phase"] as? String, "warm")
     XCTAssertEqual(snapshot["http_status_code"] as? Int, 503)
+    XCTAssertEqual(snapshot["backend_route"] as? String, "/v2/realtime/session")
+    XCTAssertEqual(snapshot["upstream_status_code"] as? Int, 503)
+    XCTAssertEqual(snapshot["retryable"] as? Bool, true)
   }
 
   private func latestSnapshot() throws -> [String: Any] {

@@ -16,6 +16,8 @@ private struct CapturedRequest {
 private final class URLCapture: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()
     private static var _requests: [CapturedRequest] = []
+    private static var _statusCode = 403
+    private static var _responseBody = Data("{\"detail\":\"test\"}".utf8)
 
     static var capturedRequests: [CapturedRequest] {
         lock.lock()
@@ -26,6 +28,15 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
     static func reset() {
         lock.lock()
         _requests.removeAll()
+        _statusCode = 403
+        _responseBody = Data("{\"detail\":\"test\"}".utf8)
+        lock.unlock()
+    }
+
+    static func setResponse(statusCode: Int, body: Data) {
+        lock.lock()
+        _statusCode = statusCode
+        _responseBody = body
         lock.unlock()
     }
 
@@ -78,13 +89,20 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
                 body: Self.bodyData(from: request)
             ))
         }
-        let response = HTTPURLResponse(url: request.url!, statusCode: 403, httpVersion: nil, headerFields: nil)!
+        let (statusCode, body) = Self.response()
+        let response = HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("{\"detail\":\"test\"}".utf8))
+        client?.urlProtocol(self, didLoad: body)
         client?.urlProtocolDidFinishLoading(self)
     }
 
     override func stopLoading() {}
+
+    private static func response() -> (Int, Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (_statusCode, _responseBody)
+    }
 }
 
 // MARK: - Assertion helpers
@@ -264,6 +282,35 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(base, "http://python:8080/")
         XCTAssertEqual(rust, "http://rust:8787/")
         XCTAssertNotEqual(base, rust)
+    }
+
+    func testRealtimeMintStructuredFailurePreservesDiagnostics() async throws {
+        let body = Data(
+            """
+            {
+              "error": "quota exhausted",
+              "reason": "provider_quota_exceeded",
+              "provider": "openai",
+              "backend_route": "/v2/realtime/session",
+              "upstream_status_code": 429,
+              "retryable": true,
+              "code": "insufficient_quota"
+            }
+            """.utf8)
+        URLCapture.setResponse(statusCode: 429, body: body)
+        let client = await makeTestClient()
+
+        do {
+            _ = try await client.mintRealtimeToken(provider: "openai")
+            XCTFail("Expected structured realtime mint failure")
+        } catch let error as RealtimeTokenMintError {
+            XCTAssertEqual(error.statusCode, 429)
+            XCTAssertEqual(error.payload?.reason, "provider_quota_exceeded")
+            XCTAssertEqual(error.payload?.backendRoute, "/v2/realtime/session")
+            XCTAssertEqual(error.payload?.upstreamStatusCode, 429)
+            XCTAssertEqual(error.payload?.retryable, true)
+            XCTAssertEqual(error.healthError.failureClass.logValue, "provider_quota_exceeded")
+        }
     }
 
     // MARK: - Routing behavior: Python-routed endpoints (default baseURL)

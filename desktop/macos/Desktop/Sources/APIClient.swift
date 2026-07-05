@@ -198,6 +198,9 @@ actor APIClient {
 
     do {
       return try await performRealtimeMintRequest(request, provider: providerType, retriedAuth: false)
+    } catch let error as RealtimeTokenMintError {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
     } catch let error as CredentialHealthError {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
       throw error
@@ -242,10 +245,11 @@ actor APIClient {
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let payload = Self.extractErrorPayload(from: data)
-      throw CredentialHealthManager.classifyHTTPFailure(
+      let healthError = CredentialHealthManager.classifyHTTPFailure(
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
+      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -434,6 +438,16 @@ enum APIError: LocalizedError {
     case .unsupportedTierScopedBulkMutation(let operation):
       return "Layer-scoped bulk memory \(operation) is not supported yet."
     }
+  }
+}
+
+struct RealtimeTokenMintError: LocalizedError {
+  let statusCode: Int
+  let healthError: CredentialHealthError
+  let payload: APIErrorPayload?
+
+  var errorDescription: String? {
+    healthError.localizedDescription
   }
 }
 
