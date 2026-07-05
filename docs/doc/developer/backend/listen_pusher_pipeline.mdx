@@ -309,3 +309,28 @@ Both `transcribe.py` and `pusher.py` use an `asyncio.wait(FIRST_COMPLETED)` supe
 
 After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) before force-cancel. The connection gauge (`inc`/`dec`) is always paired in `try`/`finally`.
 
+## 9. Parakeet Streaming (v3 / v4)
+
+When `STT_SERVICE_MODELS` selects `parakeet`, the backend opens a WebSocket to the self-hosted Parakeet service. The version is controlled by `PARAKEET_STREAM_VERSION` (default `v3`).
+
+**v3** (`/v3/stream`): Server-side VAD + diarization via `parakeet-rnnt-1.1b`. The server emits speaker-labeled segments directly — the backend forwards them to the client as-is.
+
+**v4** (`/v4/stream`): NeMo CacheAwareRNNT pipeline via `nemotron-3.5-asr-streaming-0.6b`. The server emits raw `partial_transcript` / `final_transcript` messages. The backend handles:
+
+- **Resampling**: `_resample_pcm16()` upsamples non-16kHz input using linear interpolation.
+- **Text deduplication**: `_extract_new_text()` performs word-boundary suffix overlap matching with partial-word prefix fallback to prevent re-emitting already-committed text.
+- **Partial stability**: If a partial transcript is unchanged for `PARAKEET_PARTIAL_STABILITY_MS` (default 300ms), it is promoted to a segment and emitted to the client.
+- **Wall-clock timestamps**: Segments use `time.monotonic()` elapsed time, non-decreasing.
+
+On the Parakeet service side, `StreamEngine` manages concurrent sessions with a semaphore cap (`PARAKEET_MAX_CONCURRENT_STREAMS`), idle reaper (`PARAKEET_STREAM_IDLE_TIMEOUT`), and chunk size guard. The `GPUWorker` runs a combined batch + streaming scheduler with stream-priority fairness (`PARAKEET_MAX_STREAM_DRAIN`).
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `PARAKEET_STREAM_VERSION` | `v3` | Which streaming endpoint the backend connects to |
+| `PARAKEET_STREAM_MODEL` | — | v4 NeMo model name |
+| `PARAKEET_V3_STREAM_MODEL` | — | v3 RNNT model name (separate from v4) |
+| `PARAKEET_PARTIAL_STABILITY_MS` | `300` | Delay before promoting stable partials |
+| `PARAKEET_MAX_CONCURRENT_STREAMS` | `128` | Semaphore cap on concurrent v4 sessions |
+| `PARAKEET_STREAM_IDLE_TIMEOUT` | `300` | Seconds before idle stream is reaped |
+| `PARAKEET_MAX_STREAM_DRAIN` | `16` | Max stream items drained per scheduler tick |
+

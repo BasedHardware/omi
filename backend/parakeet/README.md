@@ -1,6 +1,6 @@
 # Parakeet ASR GPU Service
 
-Self-hosted speech-to-text using **NVIDIA Parakeet** — dual-model architecture with TDT 0.6b (batch) and RNNT 1.1b (streaming). Runs on GKE GPU node pool behind internal load balancer.
+Self-hosted speech-to-text using **NVIDIA Parakeet** — multi-model architecture with TDT 0.6b (batch), RNNT 1.1b (v3 streaming), and NeMo CacheAwareRNNT (v4 streaming). Runs on GKE GPU node pool behind internal load balancer.
 
 ## API
 
@@ -25,8 +25,22 @@ WebSocket: send raw PCM16 chunks, receive JSON segments in real-time.
 - Send text `"finalize"` to end session
 - No punctuation (RNNT limitation — lowercase output)
 
+### `WS /v4/stream` — NeMo Streaming ASR
+WebSocket: send raw PCM16 chunks, receive JSON with partial/final transcripts.
+- Model: NeMo CacheAwareRNNT (`nemotron-3.5-asr-streaming-0.6b`)
+- Raw transcript output — backend handles text dedup + partial stability
+- Concurrent session cap via `PARAKEET_MAX_CONCURRENT_STREAMS`
+- Idle session reaper via `PARAKEET_STREAM_IDLE_TIMEOUT`
+- Query params: `sample_rate` (default 16000)
+- Send text `"finalize"` to end session
+- Response: `{"stream_id", "partial_transcript", "final_transcript", "is_final"}`
+- On finalize: `{"stream_id", "final_text", "status": "closed"}`
+
+### `GET /stream/metrics` — Stream engine stats
+Returns `{"total_streams_opened", "total_streams_closed", "total_chunks_processed", "total_streams_reaped", "active_streams"}`.
+
 ### `GET /health` — Health check
-Returns `{"status": "healthy", "ready": true}` (200) when model is loaded, or `{"status": "loading", "ready": false}` (503) during model initialization. K8s readiness/startup probes use this endpoint.
+Returns `{"status": "healthy", "ready": true, "streaming": true/false}` (200) when models are loaded, or `{"status": "loading", "ready": false}` (503) during initialization. `streaming` indicates whether the v4 NeMo streaming pipeline is available.
 
 ### `GET /batch/metrics` — Batch engine stats
 Returns `{"total_requests", "total_batches", "total_files", "rejected_requests", "pending_requests"}`.
@@ -53,16 +67,32 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 | `PARAKEET_BATCH_WAIT_SECONDS` | `0.002` | Timer flush interval for partial batches |
 | `PARAKEET_MAX_QUEUE_DEPTH` | `4096` | Backpressure limit (503 when exceeded) |
 
-### Streaming
+### v3 Streaming (RNNT 1.1b)
 
 | Var | Default | Effect |
 |-----|---------|--------|
-| `PARAKEET_STREAM_MODEL` | (required) | Streaming model (RNNT 1.1b) |
+| `PARAKEET_V3_STREAM_MODEL` | (required) | v3 streaming model (RNNT 1.1b) |
 | `PARAKEET_MAX_SPEECH_S` | `30` | Max segment duration before forced emission |
 | `PARAKEET_AGC_TARGET` | `0.8` | AGC normalization target peak |
 | `PARAKEET_VAD_THRESHOLD` | `0.5` | Silero VAD speech probability threshold |
 | `PARAKEET_CHUNK_S` | `2.0` | RNNT chunk size in seconds |
 | `PARAKEET_LEFT_CONTEXT_S` | `10.0` | RNNT left context in seconds |
+
+### v4 Streaming (NeMo CacheAwareRNNT)
+
+| Var | Default | Effect |
+|-----|---------|--------|
+| `PARAKEET_STREAM_MODEL` | | v4 NeMo streaming model name |
+| `PARAKEET_MAX_CONCURRENT_STREAMS` | `128` | Max concurrent v4 sessions |
+| `PARAKEET_STREAM_IDLE_TIMEOUT` | `300` | Seconds before idle stream is reaped |
+| `PARAKEET_MAX_STREAM_DRAIN` | `16` | Max stream items drained per scheduler tick |
+
+### Backend Integration
+
+| Var | Default | Effect |
+|-----|---------|--------|
+| `PARAKEET_STREAM_VERSION` | `v3` | Which streaming version backend connects to (`v3` or `v4`) |
+| `PARAKEET_PARTIAL_STABILITY_MS` | `300` | Delay before promoting stable partials (v4 only) |
 
 ### Other
 
