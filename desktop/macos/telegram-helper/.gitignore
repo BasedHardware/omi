@@ -1,0 +1,7 @@
+# Build + runtime artifacts (never commit sessions — they authorize the account)
+.venv*/
+build/
+dist/
+__pycache__/
+*.session
+*.session.login

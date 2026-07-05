@@ -191,6 +191,30 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_by_person_id(uid: str, person_id: str, limit: int = 20):
+    """Recent, non-discarded conversations that involve a given person.
+
+    Filters the unencrypted `person_ids` index (array_contains) together with
+    `discarded == False` and orders by `created_at` server-side, so the newest valid
+    conversations are returned even when the person also has many discarded ones and
+    without relying on a Python recency sort (which broke on legacy non-datetime
+    `created_at` values).
+
+    Requires a composite index on the `conversations` subcollection:
+    person_ids (array-contains) + discarded (asc) + created_at (desc).
+    """
+    user_ref = db.collection('users').document(uid)
+    conversations_ref = user_ref.collection(conversations_collection)
+    conversations_ref = (
+        conversations_ref.where(filter=FieldFilter('person_ids', 'array_contains', person_id))
+        .where(filter=FieldFilter('discarded', '==', False))
+        .order_by('created_at', direction=firestore.Query.DESCENDING)
+        .limit(limit)
+    )
+    return [doc.to_dict() for doc in conversations_ref.stream()]
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
@@ -948,7 +972,12 @@ def update_conversation_segments(
         if not doc_snapshot.exists:
             return
         doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    update_payload = {'transcript_segments': segments}
+    # Keep the unencrypted person_ids index in sync with segment (re)assignments so
+    # get_conversations_by_person_id reflects speaker/person edits made after creation.
+    update_payload = {
+        'transcript_segments': segments,
+        'person_ids': sorted({s.get('person_id') for s in segments if s.get('person_id')}),
+    }
     if finished_at:
         update_payload['finished_at'] = finished_at
     prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
@@ -957,6 +986,67 @@ def update_conversation_segments(
     except NotFound:
         # Document was deleted between cache read and write — safe to skip
         return
+
+
+def append_transcript_segments(
+    uid: str,
+    conversation_id: str,
+    new_segments: List[dict],
+    finished_at: datetime = None,
+) -> bool:
+    """Atomically append transcript segments to a conversation inside a transaction.
+
+    Transcript segments are persisted as a single compressed/encrypted blob, so an
+    append is inherently a read-modify-write of the whole field. Doing that
+    non-transactionally (as update_conversation_segments does) loses data under
+    concurrency: two ingests appending to the same (chat, day) conversation both
+    read the same base list and the last writer overwrites the other's segments —
+    permanently dropping already-claimed messages. Running the read-append-write
+    inside a Firestore transaction serializes concurrent appends so none are lost.
+
+    Returns False if the conversation no longer exists (deleted mid-ingest)."""
+    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _append(transaction):
+        snapshot = doc_ref.get(transaction=transaction)
+        if not snapshot.exists:
+            return False
+        data = snapshot.to_dict() or {}
+        doc_level = data.get('data_protection_level', 'standard')
+        existing = _prepare_conversation_for_read(data, uid) or {}
+        existing_segments = existing.get('transcript_segments') or []
+        # _prepare_conversation_for_read leaves an undecompressible/corrupt blob as raw
+        # bytes rather than a list of dicts. Guard so we neither crash the transaction on
+        # `s.get(...)` nor fold garbage into the write — append the new segments only.
+        # Decrypt (HKDF-derived key, no network) and zlib decompression are deterministic:
+        # a failure here means the stored bytes are genuinely corrupt, never a transient
+        # fault, so dropping the already-unreadable prior blob loses no recoverable data.
+        if not isinstance(existing_segments, list) or any(not isinstance(s, dict) for s in existing_segments):
+            logger.warning(
+                f'append_transcript_segments: unreadable existing segments for {conversation_id}; appending new only'
+            )
+            existing_segments = []
+        combined = list(existing_segments) + list(new_segments)
+        update_payload = {
+            'transcript_segments': combined,
+            'person_ids': sorted({s.get('person_id') for s in combined if s.get('person_id')}),
+        }
+        if finished_at:
+            existing_finished = existing.get('finished_at')
+            # Only ever extend finished_at; never shrink it under a reordered append.
+            try:
+                should_extend = existing_finished is None or finished_at > existing_finished
+            except TypeError:
+                should_extend = True
+            if should_extend:
+                update_payload['finished_at'] = finished_at
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return True
+
+    return _append(transaction)
 
 
 # ***********************************

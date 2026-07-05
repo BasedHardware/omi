@@ -1,0 +1,3 @@
+{
+  "change": "Fixed iMessage contact-name resolution and Sync Contacts by reading the macOS address book directly, and moved Sync Contacts into the iMessage connector popup"
+}

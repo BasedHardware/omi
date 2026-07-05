@@ -321,6 +321,7 @@ def _get_agentic_module():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "get_person_context_tool",
     ]
     for name in tool_names:
         mock_tool = MagicMock()
@@ -554,10 +555,11 @@ def test_static_prefix_exceeds_minimum_cache_tokens():
 # ---------------------------------------------------------------------------
 
 
-def test_core_tools_has_26_tools():
-    """CORE_TOOLS must contain exactly 26 tools (web search is now a built-in server tool)."""
+def test_core_tools_has_27_tools():
+    """CORE_TOOLS must contain exactly 27 tools (web search is a built-in server tool;
+    get_person_context_tool is appended last to preserve the prompt-cached tool prefix)."""
     agentic_mod = _get_agentic_module()
-    assert len(agentic_mod.CORE_TOOLS) == 26, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 26"
+    assert len(agentic_mod.CORE_TOOLS) == 27, f"CORE_TOOLS has {len(agentic_mod.CORE_TOOLS)} tools, expected 27"
 
 
 def test_core_tools_list_creates_independent_copy():
@@ -580,9 +582,9 @@ def test_core_tools_list_creates_independent_copy():
     mock_app_tool.name = "custom_app_tool"
     tools_a.append(mock_app_tool)
 
-    assert len(tools_a) == 27
-    assert len(tools_b) == 26
-    assert len(agentic_mod.CORE_TOOLS) == 26, "CORE_TOOLS was mutated!"
+    assert len(tools_a) == 28
+    assert len(tools_b) == 27
+    assert len(agentic_mod.CORE_TOOLS) == 27, "CORE_TOOLS was mutated!"
 
 
 def test_core_tools_order_matches_exports():
@@ -619,6 +621,7 @@ def test_core_tools_order_matches_exports():
         "save_user_preference_tool",
         "fetch_url_tool",
         "traverse_knowledge_graph_tool",
+        "get_person_context_tool",
     ]
 
     actual_names = [t.name for t in agentic_mod.CORE_TOOLS]

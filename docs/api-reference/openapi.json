@@ -191,6 +191,9 @@
           "workflow",
           "sdcard",
           "external_integration",
+          "imessage",
+          "telegram",
+          "whatsapp",
           "limitless",
           "onboarding",
           "unknown"

@@ -59,12 +59,16 @@ from .web_tools import (
 from .graph_tools import (
     traverse_knowledge_graph_tool,
 )
+from .person_tools import (
+    get_person_context_tool,
+)
 
 __all__ = [
     'get_conversations_tool',
     'search_conversations_tool',
     'get_memories_tool',
     'search_memories_tool',
+    'get_person_context_tool',
     'get_action_items_tool',
     'create_action_item_tool',
     'update_action_item_tool',

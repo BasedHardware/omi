@@ -26,3 +26,14 @@ class Person(BaseModel):
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
+    # External identity handles (e.g. normalized iMessage phone/email). Lets us map a
+    # chat-app contact back to a canonical Person across multiple handles.
+    handles: List[str] = []
+    # Where this person record originated: None (voice/manual) or 'imessage', etc.
+    source: Optional[str] = None
+    # Per-person profile (populated in Phase 2 by generate_person_profile).
+    relationship: Optional[str] = None
+    profile_summary: Optional[str] = None
+    tone_notes: Optional[str] = None
+    profile_updated_at: Optional[datetime] = None
+    message_count: Optional[int] = None

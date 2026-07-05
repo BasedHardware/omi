@@ -93,6 +93,9 @@ class Conversation(BaseModel):
     structured: Structured
     transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
+    # Unencrypted index of person_ids present in transcript_segments so we can query
+    # "conversations involving person X" (segments themselves are encrypted at rest).
+    person_ids: List[str] = []
     geolocation: Optional[Geolocation] = None
     photos: List[ConversationPhoto] = []
     audio_files: List[AudioFile] = []
@@ -152,6 +155,19 @@ class Conversation(BaseModel):
         if not self.transcript_segments:
             return []
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
+
+    @model_validator(mode='after')
+    def _sync_person_ids_index(self):
+        # Derive the unencrypted person_ids index from transcript_segments on every
+        # construction so it is persisted consistently across all create/save paths
+        # (segments themselves are encrypted at rest and can't be queried directly).
+        # Recompute only when transcript_segments was explicitly provided — checked via
+        # model_fields_set, NOT truthiness. An explicitly-emptied segment list ([]) must
+        # clear the index too; only a genuinely OMITTED list (lightweight projections)
+        # should preserve an already-set person_ids to avoid clobbering it.
+        if 'transcript_segments' in self.model_fields_set:
+            self.person_ids = sorted({s.person_id for s in self.transcript_segments if s.person_id})
+        return self
 
     def as_dict_cleaned_dates(self):
         def convert_datetime_to_iso(obj):

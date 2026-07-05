@@ -145,7 +145,8 @@ actor APIClient {
     body: B,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    timeout: TimeInterval? = nil
   ) async throws -> T {
     let base = customBaseURL ?? baseURL
     let url = URL(string: base + endpoint)!
@@ -154,6 +155,7 @@ actor APIClient {
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
     request.httpBody = try JSONEncoder().encode(body)
+    if let timeout { request.timeoutInterval = timeout }
 
     return try await performRequest(request)
   }
@@ -169,6 +171,23 @@ actor APIClient {
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+
+    return try await performRequest(request)
+  }
+
+  func put<T: Decodable, B: Encodable>(
+    _ endpoint: String,
+    body: B,
+    requireAuth: Bool = true,
+    customBaseURL: String? = nil,
+    includeBYOK: Bool = true
+  ) async throws -> T {
+    let base = customBaseURL ?? baseURL
+    let url = URL(string: base + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "PUT"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.httpBody = try JSONEncoder().encode(body)
 
     return try await performRequest(request)
   }
@@ -414,6 +433,11 @@ enum APIError: LocalizedError {
   case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
   case unsupportedTierScopedBulkMutation(String)
+  /// A well-formed 200 response whose body reported a business-level failure
+  /// (`success: false`). Distinct from `invalidResponse`/`decodingError`, which mean
+  /// the response was malformed or unparseable, so callers can tell a backend
+  /// operation failure apart from a transport/decoding problem.
+  case operationFailed(String)
 
   var detail: String? {
     if case .httpError(_, let detail) = self { return detail }
@@ -433,6 +457,8 @@ enum APIError: LocalizedError {
       return "Failed to decode response: \(error.localizedDescription)"
     case .unsupportedTierScopedBulkMutation(let operation):
       return "Layer-scoped bulk memory \(operation) is not supported yet."
+    case .operationFailed(let operation):
+      return "The server could not complete \(operation)."
     }
   }
 }
@@ -5842,6 +5868,120 @@ extension APIClient {
 
   func xDisconnect() async throws {
     let _: XSimpleOK = try await post("v1/x/disconnect")
+  }
+
+  // MARK: - iMessage connector
+
+  @discardableResult
+  func imessageIngest(threads: [IMessageThreadPayload], lastRowID: Int64?) async throws
+    -> IMessageIngestResponsePayload
+  {
+    let body = IMessageIngestRequestPayload(threads: threads, language: "en", lastRowid: lastRowID)
+    return try await post("v1/imessage/threads", body: body)
+  }
+
+  func imessageConnectionStatus() async throws -> IMessageStatusPayload {
+    try await get("v1/imessage/connection-status")
+  }
+
+  /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
+  /// a disambiguation ask as if it were a reply.
+  func imessageDraftReply(
+    person: String, thread: [IMessageDraftMessagePayload], intent: String?, isGroup: Bool = false
+  ) async throws
+    -> IMessageDraftResponsePayload
+  {
+    let body = IMessageDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
+    return try await post("v1/imessage/draft-reply", body: body, timeout: 90)
+  }
+
+  func imessageSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
+    let body = IMessageContactsSyncRequestPayload(contacts: contacts)
+    let resp: IMessageContactsSyncResponsePayload = try await post("v1/imessage/contacts/sync", body: body)
+    // A 200 with success:false is a backend-level partial failure; surface it as a
+    // business-failure error (not invalidResponse, which means a malformed response)
+    // instead of returning 0, which is indistinguishable from a genuine zero-upsert.
+    guard resp.success else { throw APIError.operationFailed("iMessage contact sync") }
+    return resp.peopleUpserted
+  }
+
+  // MARK: - Telegram connector
+
+  @discardableResult
+  func telegramIngest(threads: [TelegramThreadPayload]) async throws
+    -> TelegramIngestResponsePayload
+  {
+    let body = TelegramIngestRequestPayload(threads: threads, language: "en")
+    return try await post("v1/telegram/threads", body: body)
+  }
+
+  func telegramConnectionStatus() async throws -> TelegramStatusPayload {
+    try await get("v1/telegram/connection-status")
+  }
+
+  // MARK: - WhatsApp connector
+
+  @discardableResult
+  func whatsappIngest(threads: [WhatsAppThreadPayload]) async throws -> WhatsAppIngestResponsePayload {
+    // The Z_PK cursor stays client-side (UserDefaults) — no `last_rowid` on the wire.
+    let body = WhatsAppIngestRequestPayload(threads: threads, language: "en")
+    return try await post("v1/whatsapp/threads", body: body)
+  }
+
+  func whatsappConnectionStatus() async throws -> WhatsAppStatusPayload {
+    try await get("v1/whatsapp/connection-status")
+  }
+
+  func whatsappGetSettings() async throws -> WhatsAppSettingsPayload {
+    try await get("v1/whatsapp/settings")
+  }
+
+  @discardableResult
+  func whatsappUpdateSettings(_ settings: WhatsAppSettingsPayload) async throws
+    -> WhatsAppSettingsPayload
+  {
+    try await put("v1/whatsapp/settings", body: settings)
+  }
+
+  func whatsappDisconnect() async throws {
+    let _: WhatsAppSimpleOK = try await post("v1/whatsapp/disconnect")
+  }
+
+  /// Returns the full payload (draft + `ambiguous`) so callers can refuse to send
+  /// a disambiguation ask as if it were a reply.
+  func telegramDraftReply(
+    person: String, thread: [TelegramDraftMessagePayload], intent: String?, isGroup: Bool = false
+  ) async throws
+    -> TelegramDraftResponsePayload
+  {
+    let body = TelegramDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
+    return try await post("v1/telegram/draft-reply", body: body, timeout: 90)
+  }
+
+  func telegramDisconnect() async throws {
+    let _: XSimpleOK = try await post("v1/telegram/disconnect")
+  }
+
+  func whatsappDraftReply(
+    person: String, thread: [WhatsAppDraftMessagePayload], intent: String?, isGroup: Bool = false
+  ) async throws
+    -> WhatsAppDraftResponsePayload
+  {
+    let body = WhatsAppDraftRequestPayload(person: person, thread: thread, intent: intent, isGroup: isGroup)
+    return try await post("v1/whatsapp/draft-reply", body: body, timeout: 90)
+  }
+
+  /// Uploads local address-book contacts so the backend can resolve WhatsApp
+  /// handles to People. Reuses the shared iMessage contact payload — the JSON
+  /// shape (`{name, handles}`) is identical.
+  func whatsappSyncContacts(_ contacts: [IMessageContactSyncPayload]) async throws -> Int {
+    let body = IMessageContactsSyncRequestPayload(contacts: contacts)
+    let resp: WhatsAppContactsSyncResponsePayload = try await post("v1/whatsapp/contacts/sync", body: body)
+    // A 200 with success:false is a backend-level partial failure; surface it as a
+    // business-failure error (not invalidResponse, which means a malformed response)
+    // instead of returning 0, which is indistinguishable from a genuine zero-upsert.
+    guard resp.success else { throw APIError.operationFailed("WhatsApp contact sync") }
+    return resp.peopleUpserted
   }
 }
 

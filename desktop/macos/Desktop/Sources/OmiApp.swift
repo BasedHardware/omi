@@ -611,6 +611,19 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
 
+    // Start the WhatsApp + iMessage watchers app-wide so auto-reply fires on new
+    // messages even when that tab was never opened this session (the stores are
+    // singletons). Gate only on sign-in (so we don't run a watcher for a signed-out
+    // user). We do NOT gate on Full Disk Access or DB presence here: those can be
+    // granted/created after launch, and syncNewMessages() re-checks FDA every cycle
+    // and re-reads the DB fresh, so the watchers self-heal when they arrive — folding
+    // them into this one-time launch check would instead strand users who finish
+    // setup post-launch.
+    if AuthState.shared.isSignedIn {
+      Task { @MainActor in WhatsAppInboxStore.shared.startWatching() }
+      Task { @MainActor in IMessageInboxStore.shared.startWatching() }
+    }
+
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 

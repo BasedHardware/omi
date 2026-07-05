@@ -46,9 +46,19 @@ if [[ -n "$PYTHON_BIN" ]]; then
   python_version="$("$PYTHON_BIN" --version 2>&1 | awk '{print $2}')"
   ok "$PYTHON_BIN $python_version"
   if [[ -n "$EXPECTED_PYTHON_VERSION" ]]; then
+    expected_mm="$(echo "$EXPECTED_PYTHON_VERSION" | cut -d. -f1,2)"
+    actual_mm="$(echo "$python_version" | cut -d. -f1,2)"
+    actual_patch="$(echo "$python_version" | cut -d. -f3)"
     if [[ "$python_version" == "$EXPECTED_PYTHON_VERSION" ]]; then
       ok "Python version matches .python-version ($EXPECTED_PYTHON_VERSION)"
+    elif [[ "$actual_mm" == "$expected_mm" && "$actual_patch" =~ ^[0-9]+$ ]]; then
+      # Patch-level drift between FINAL releases (e.g. 3.11.13 vs 3.11.15) is
+      # ABI/behavior-compatible for our deps, so warn instead of hard-failing the gate.
+      # The numeric-patch guard excludes pre-release/dev builds (e.g. 3.11.0a7,
+      # 3.11.0rc1) — those are NOT ABI-stable and must not slip through as a warning.
+      skip "Python patch mismatch: expected $EXPECTED_PYTHON_VERSION, got $python_version (same $expected_mm series — OK)"
     else
+      # Different major.minor, OR a pre-release/dev build of the right series.
       bad "Python version mismatch: expected $EXPECTED_PYTHON_VERSION from .python-version, got $python_version from $PYTHON_BIN"
       echo -e "  ${YELLOW}→${NC} Run: ./scripts/sync-python-deps.sh, then PYTHON=.venv/bin/python bash test-preflight.sh"
     fi
