@@ -499,7 +499,7 @@ struct MemoryExportDestinationSheet: View {
     .autoconnect()
 
   var body: some View {
-    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+    let sheet = VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       HStack(alignment: .top, spacing: OmiSpacing.md) {
         ConnectorBrandIcon(brand: destination.brand, size: 56, cornerRadius: OmiChrome.controlRadius)
 
@@ -554,12 +554,17 @@ struct MemoryExportDestinationSheet: View {
         await model.generateMCPKey()
       }
     }
-    .onReceive(permissionRefreshTimer) { _ in
-      refreshPermissionStateIfNeeded()
-    }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
       refreshCloudGrantConnectionIfNeeded()
+    }
+
+    if MemoryExportExecutor.accessibilityPreflightMissing(for: destination) {
+      sheet.onReceive(permissionRefreshTimer) { _ in
+        refreshPermissionStateIfNeeded()
+      }
+    } else {
+      sheet
     }
   }
 
