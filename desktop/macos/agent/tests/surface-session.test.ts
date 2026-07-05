@@ -89,6 +89,61 @@ describe("surface_conversations", () => {
     expect(ownerA.agentSessionId).not.toBe(ownerB.agentSessionId);
   });
 
+  it("links orphan sessions by external ref instead of violating uniqueness", () => {
+    const orphan = store.insertSession({
+      ownerId: "owner-a",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      defaultAdapterId: "acp",
+    });
+
+    const resolved = resolveSurfaceSession(
+      store,
+      {
+        ownerId: "owner-a",
+        surfaceRef: {
+          surfaceKind: "main_chat",
+          externalRefKind: "chat",
+          externalRefId: "default",
+        },
+      },
+      () => 5,
+    );
+
+    expect(resolved.agentSessionId).toBe(orphan.sessionId);
+    expect(store.allRows("SELECT * FROM sessions")).toHaveLength(1);
+    expect(store.allRows("SELECT * FROM surface_conversations")).toHaveLength(1);
+  });
+
+  it("importLegacyMainChatSessions links surface when session already exists by external ref", () => {
+    const existing = store.insertSession({
+      ownerId: "owner-a",
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+      defaultAdapterId: "acp",
+    });
+
+    const imported = importLegacyMainChatSessions(
+      store,
+      {
+        ownerId: "owner-a",
+        entries: [{ chatId: "default", agentSessionId: "ses_legacy_other" }],
+      },
+      () => 1,
+    );
+    expect(imported).toBe(1);
+
+    const row = store.getRow(
+      `SELECT conversation_id, agent_session_id FROM surface_conversations
+       WHERE owner_id = ? AND external_ref_id = ?`,
+      ["owner-a", "default"],
+    );
+    expect(String(row.agent_session_id)).toBe(existing.sessionId);
+    expect(store.allRows("SELECT * FROM sessions")).toHaveLength(1);
+  });
+
   it("imports legacy main-chat UserDefaults sessions once", () => {
     const imported = importLegacyMainChatSessions(
       store,

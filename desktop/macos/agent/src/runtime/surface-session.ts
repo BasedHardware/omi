@@ -28,13 +28,19 @@ export function surfaceRefKey(surfaceRef: SurfaceRef): string {
   return `${surfaceRef.surfaceKind}|${surfaceRef.externalRefKind}|${surfaceRef.externalRefId}`;
 }
 
-export function resolveSurfaceSession(
+function isSqliteUniqueConstraintError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return (
+    error.message.includes("UNIQUE constraint failed") ||
+    error.message.includes("SQLITE_CONSTRAINT_UNIQUE")
+  );
+}
+
+function readSurfaceConversation(
   store: AgentStore,
   input: ResolveSurfaceSessionInput,
-  nowMs: () => number,
-): ResolveSurfaceSessionResult {
-  const now = nowMs();
-  const existing = store.getOptionalRow(
+): ResolveSurfaceSessionResult | undefined {
+  const row = store.getOptionalRow(
     `SELECT conversation_id, agent_session_id
      FROM surface_conversations
      WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
@@ -45,46 +51,150 @@ export function resolveSurfaceSession(
       input.surfaceRef.externalRefId,
     ],
   );
-  if (existing) {
-    const agentSessionId = String(existing.agent_session_id);
-    const conversationId = String(existing.conversation_id);
-    store.execute(
-      `UPDATE surface_conversations
-       SET last_active_at_ms = ?
-       WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
-      [
-        now,
-        input.ownerId,
-        input.surfaceRef.surfaceKind,
-        input.surfaceRef.externalRefKind,
-        input.surfaceRef.externalRefId,
-      ],
-    );
-    return { conversationId, agentSessionId };
-  }
+  if (!row) return undefined;
+  return {
+    conversationId: String(row.conversation_id),
+    agentSessionId: String(row.agent_session_id),
+  };
+}
 
-  return store.withTransaction(() => {
-    const session = store.insertSession({
-      ownerId: input.ownerId,
-      surfaceKind: input.surfaceRef.surfaceKind,
-      externalRefKind: input.surfaceRef.externalRefKind,
-      externalRefId: input.surfaceRef.externalRefId,
-      title: input.title ?? null,
-      defaultAdapterId: input.defaultAdapterId ?? "acp",
-    });
-    const conversationId = generateAgentId("conversation");
+function readSessionIdByExternalRef(store: AgentStore, input: ResolveSurfaceSessionInput): string | undefined {
+  const row = store.getOptionalRow(
+    `SELECT session_id FROM sessions
+     WHERE owner_id = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+    [input.ownerId, input.surfaceRef.externalRefKind, input.surfaceRef.externalRefId],
+  );
+  return row ? String(row.session_id) : undefined;
+}
+
+function touchSurfaceConversation(store: AgentStore, input: ResolveSurfaceSessionInput, now: number): void {
+  store.execute(
+    `UPDATE surface_conversations
+     SET last_active_at_ms = ?
+     WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
+    [
+      now,
+      input.ownerId,
+      input.surfaceRef.surfaceKind,
+      input.surfaceRef.externalRefKind,
+      input.surfaceRef.externalRefId,
+    ],
+  );
+}
+
+function createSurfaceConversationMapping(
+  store: AgentStore,
+  input: ResolveSurfaceSessionInput,
+  agentSessionId: string,
+  now: number,
+): ResolveSurfaceSessionResult {
+  const conversationId = generateAgentId("conversation");
+  try {
     store.insertSurfaceConversation({
       ownerId: input.ownerId,
       surfaceKind: input.surfaceRef.surfaceKind,
       externalRefKind: input.surfaceRef.externalRefKind,
       externalRefId: input.surfaceRef.externalRefId,
       conversationId,
-      agentSessionId: session.sessionId,
+      agentSessionId,
       createdAtMs: now,
       lastActiveAtMs: now,
     });
-    return { conversationId, agentSessionId: session.sessionId };
+    return { conversationId, agentSessionId };
+  } catch (error) {
+    if (!isSqliteUniqueConstraintError(error)) throw error;
+    const mapped = readSurfaceConversation(store, input);
+    if (!mapped) throw error;
+    touchSurfaceConversation(store, input, now);
+    return mapped;
+  }
+}
+
+function recoverResolveSurfaceSessionAfterConflict(
+  store: AgentStore,
+  input: ResolveSurfaceSessionInput,
+  now: number,
+  error: unknown,
+): ResolveSurfaceSessionResult {
+  if (!isSqliteUniqueConstraintError(error)) throw error;
+  const mapped = readSurfaceConversation(store, input);
+  if (mapped) {
+    touchSurfaceConversation(store, input, now);
+    return mapped;
+  }
+  const existingSessionId = readSessionIdByExternalRef(store, input);
+  if (!existingSessionId) throw error;
+  return createSurfaceConversationMapping(store, input, existingSessionId, now);
+}
+
+export function resolveSurfaceSession(
+  store: AgentStore,
+  input: ResolveSurfaceSessionInput,
+  nowMs: () => number,
+): ResolveSurfaceSessionResult {
+  return store.withTransaction(() => {
+    const now = nowMs();
+    const mapped = readSurfaceConversation(store, input);
+    if (mapped) {
+      touchSurfaceConversation(store, input, now);
+      return mapped;
+    }
+
+    const existingSessionId = readSessionIdByExternalRef(store, input);
+    if (existingSessionId) {
+      return createSurfaceConversationMapping(store, input, existingSessionId, now);
+    }
+
+    try {
+      const session = store.insertSession({
+        ownerId: input.ownerId,
+        surfaceKind: input.surfaceRef.surfaceKind,
+        externalRefKind: input.surfaceRef.externalRefKind,
+        externalRefId: input.surfaceRef.externalRefId,
+        title: input.title ?? null,
+        defaultAdapterId: input.defaultAdapterId ?? "acp",
+      });
+      return createSurfaceConversationMapping(store, input, session.sessionId, now);
+    } catch (error) {
+      return recoverResolveSurfaceSessionAfterConflict(store, input, now, error);
+    }
   });
+}
+
+function resolveLegacyAgentSessionId(
+  store: AgentStore,
+  input: { ownerId: string; surfaceRef: SurfaceRef; legacySessionId: string; defaultAdapterId?: string },
+): string {
+  const existingByRef = readSessionIdByExternalRef(store, {
+    ownerId: input.ownerId,
+    surfaceRef: input.surfaceRef,
+  });
+  if (existingByRef) return existingByRef;
+
+  const sessionRow = store.getOptionalRow(
+    "SELECT session_id FROM sessions WHERE session_id = ? AND owner_id = ?",
+    [input.legacySessionId, input.ownerId],
+  );
+  if (sessionRow) return String(sessionRow.session_id);
+
+  try {
+    return store.insertSession({
+      ownerId: input.ownerId,
+      sessionId: input.legacySessionId,
+      surfaceKind: input.surfaceRef.surfaceKind,
+      externalRefKind: input.surfaceRef.externalRefKind,
+      externalRefId: input.surfaceRef.externalRefId,
+      defaultAdapterId: input.defaultAdapterId ?? "acp",
+    }).sessionId;
+  } catch (error) {
+    if (!isSqliteUniqueConstraintError(error)) throw error;
+    const raced = readSessionIdByExternalRef(store, {
+      ownerId: input.ownerId,
+      surfaceRef: input.surfaceRef,
+    });
+    if (!raced) throw error;
+    return raced;
+  }
 }
 
 export function importLegacyMainChatSessions(
@@ -111,32 +221,31 @@ export function importLegacyMainChatSessions(
     );
     if (existing) continue;
 
-    const sessionRow = store.getOptionalRow(
-      "SELECT session_id FROM sessions WHERE session_id = ? AND owner_id = ?",
-      [agentSessionId, input.ownerId],
-    );
-    const agentSession = sessionRow
-      ? agentSessionId
-      : store.insertSession({
-          ownerId: input.ownerId,
-          sessionId: agentSessionId,
-          surfaceKind: surfaceRef.surfaceKind,
-          externalRefKind: surfaceRef.externalRefKind,
-          externalRefId: surfaceRef.externalRefId,
-          defaultAdapterId: "acp",
-        }).sessionId;
+    const resolvedSessionId = resolveLegacyAgentSessionId(store, {
+      ownerId: input.ownerId,
+      surfaceRef,
+      legacySessionId: agentSessionId,
+      defaultAdapterId: "acp",
+    });
 
     const conversationId = generateAgentId("conversation");
-    store.insertSurfaceConversation({
-      ownerId: input.ownerId,
-      surfaceKind: surfaceRef.surfaceKind,
-      externalRefKind: surfaceRef.externalRefKind,
-      externalRefId: surfaceRef.externalRefId,
-      conversationId,
-      agentSessionId,
-      createdAtMs: now,
-      lastActiveAtMs: now,
-    });
+    try {
+      store.insertSurfaceConversation({
+        ownerId: input.ownerId,
+        surfaceKind: surfaceRef.surfaceKind,
+        externalRefKind: surfaceRef.externalRefKind,
+        externalRefId: surfaceRef.externalRefId,
+        conversationId,
+        agentSessionId: resolvedSessionId,
+        createdAtMs: now,
+        lastActiveAtMs: now,
+      });
+    } catch (error) {
+      if (!isSqliteUniqueConstraintError(error)) throw error;
+      const mapped = readSurfaceConversation(store, { ownerId: input.ownerId, surfaceRef });
+      if (mapped) continue;
+      throw error;
+    }
     imported += 1;
   }
   return imported;
