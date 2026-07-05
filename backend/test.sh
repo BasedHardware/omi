@@ -122,6 +122,8 @@ pytest tests/unit/test_developer_auth_context_static.py -v
 pytest tests/unit/test_mcp_auth_context_static.py -v
 pytest tests/unit/test_mcp_api_key_auth_context.py -v
 pytest tests/unit/test_mcp_api_key_scope_readiness.py -v
+pytest tests/unit/test_mcp_oauth_template.py -v
+pytest tests/unit/test_sync_firebase_google_provider_secret.py -v
 pytest tests/unit/test_short_term_lifecycle_worker.py -v
 pytest tests/unit/test_short_term_lifecycle_firestore_store.py -v
 pytest tests/unit/test_memory_contracts.py -v
@@ -213,6 +215,7 @@ pytest tests/unit/test_llm_gateway_dependencies.py -v
 pytest tests/unit/test_llm_gateway_chat_extraction_pilot.py -v
 pytest tests/unit/test_llm_gateway_coverage_guardrails.py -v
 pytest tests/unit/test_backend_runtime_env_validator.py -v
+pytest tests/unit/test_render_backend_runtime_env.py -v
 pytest tests/unit/test_google_credentials.py -v
 pytest tests/unit/test_llm_usage_tracker.py -v
 pytest tests/unit/test_llm_provider_plugin_structure.py -v
@@ -343,6 +346,7 @@ pytest tests/unit/test_rate_limiting.py -v
 pytest tests/unit/test_rate_limit_json_failopen.py -v
 pytest tests/unit/test_memories_batch.py -v
 pytest tests/unit/test_memories_create.py -v
+pytest tests/unit/test_per_file_import_guard.py -v
 pytest tests/unit/test_memories_pagination_clamp.py -v
 pytest tests/unit/test_sync_v2.py -v
 pytest tests/unit/test_sync_file_paths_filename_none.py -v

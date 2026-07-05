@@ -294,6 +294,7 @@ class PushToTalkManager: ObservableObject {
       SystemAudioMuteController.shared.muteForListening()
     }
     state = .listening
+    barState?.isThinking = false
     startActiveTracer()
     isCurrentSessionFollowUp = barState?.showingAIResponse == true
     transcriptSegments = []
@@ -402,6 +403,7 @@ class PushToTalkManager: ObservableObject {
     }
     stopAudioTranscription()
     state = .idle
+    barState?.isThinking = false
     transcriptSegments = []
     lastInterimText = ""
     currentContextSnapshot = nil
@@ -645,7 +647,7 @@ class PushToTalkManager: ObservableObject {
     activeTracer?.end("ptt_recording")
 
     if isWaitingForHub {
-      barState?.isVoiceResponseActive = true
+      barState?.beginVoiceResponseWaiting()
       updateBarState()
       log("PushToTalkManager: finalizing while realtime hub warms — holding buffered audio")
       return
@@ -704,8 +706,11 @@ class PushToTalkManager: ObservableObject {
       }
       silentMicRecoveryPolicy.recordSuccessfulHubTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
-      // Collapse the bar on release — the hub speaks its reply as audio (no inline
-      // status UI), the same as the legacy voice path.
+      barState?.beginVoiceResponseWaiting()
+      // Show the "thinking" indicator in the notch during the release→first-audio
+      // gap. It clears when the hub's spoken reply starts (isVoiceResponseActive),
+      // so the glow takes over.
+      barState?.isThinking = true
       updateBarState()
       AnalyticsManager.shared.floatingBarPTTEnded(
         mode: finalizedMode, hadTranscript: true, transcriptLength: 0)
@@ -746,6 +751,11 @@ class PushToTalkManager: ObservableObject {
       }
     }
 
+    // Past the silence gate — a real turn will be transcribed and answered. Show
+    // the "thinking" indicator through the transcription/first-token gap; it hands
+    // off to the conversation surface (or voice glow) the moment output arrives.
+    barState?.isThinking = true
+    updateBarState()
 
     // Realtime omni: commit the turn and wait for the final transcript.
     if isOmniSTT {
@@ -931,6 +941,7 @@ class PushToTalkManager: ObservableObject {
     // openAIInputWithQuery / sendFollowUpQuery inherits the bound value.
     let tracer = activeTracer
     activeTracer = nil
+    barState?.beginVoiceResponseWaiting()
     let dispatch = {
       if wasFollowUp {
         log("PushToTalkManager: sending follow-up query (\(query.count) chars): \(query)")
@@ -1131,6 +1142,7 @@ class PushToTalkManager: ObservableObject {
       return
     }
     DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
+    barState?.beginVoiceResponseWaiting()
     state = .idle
     updateBarState()
     AnalyticsManager.shared.floatingBarPTTEnded(
@@ -1421,7 +1433,7 @@ class PushToTalkManager: ObservableObject {
     barState.isVoiceLocked = (state == .lockedListening)
     barState.isVoiceFollowUp = isCurrentSessionFollowUp && isShowingVoiceUI
     if isShowingVoiceUI {
-      barState.isVoiceResponseActive = false
+      barState.clearVoiceResponseState()
     }
     if !isShowingVoiceUI {
       barState.voiceTranscript = ""
@@ -1434,7 +1446,10 @@ class PushToTalkManager: ObservableObject {
     guard !skipResize && !barState.isVoiceFollowUp && !barState.showingAIConversation && !isOnboarding else { return }
     if barState.isVoiceListening && !wasListening {
       FloatingControlBarManager.shared.resizeForPTT(expanded: true)
-    } else if !barState.isVoiceListening && wasListening {
+    } else if !barState.isVoiceListening && wasListening && !(barState.isThinking && barState.usesNotchIsland) {
+      // Keep the notch expanded while "thinking" so the indicator has room; the
+      // view's isThinking observer collapses it when the response arrives. The
+      // pill (non-notch) display has no thinking indicator, so it collapses now.
       FloatingControlBarManager.shared.resizeForPTT(expanded: false)
     }
   }

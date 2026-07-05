@@ -44,6 +44,7 @@ enum StartupWarmupTaskID: Hashable {
     case databaseWarmup
     case dashboardNetworkRefresh
     case chatPromptContextWarmup
+    case mcpKeyWarmup
     case databaseRetry
     case crispInitialPoll
     case agentVMProvisioning
@@ -93,6 +94,7 @@ enum StartupWarmupPolicy {
     static let deferredWarmupDelay: TimeInterval = 2.0
     static let databaseRetryInitialDelay: TimeInterval = 1.0
     static let databaseRetryMaxDelay: TimeInterval = 30.0
+    static let mcpKeyWarmupDelay: TimeInterval = 0.5
     static let dashboardNetworkRefreshDelay: TimeInterval = 4.0
     static let initialSettingsSyncDelay: TimeInterval = 5.0
     static let apiKeyFetchDelay: TimeInterval = 9.0
@@ -101,9 +103,20 @@ enum StartupWarmupPolicy {
     static let floatingBarPlanFetchDelay: TimeInterval = 0.0
     static let crispInitialPollDelay: TimeInterval = 15.0
     static let agentVMProvisioningDelay: TimeInterval = 20.0
-    static let proactiveAssistantsStartDelay: TimeInterval = 30.0
+    static let proactiveAssistantsStartDelay: TimeInterval = 6.0
     static let conversationWarmupDelay: TimeInterval = 6.0
     static let transcriptionRetryRecoveryDelay: TimeInterval = 8.0
     static let recurringTaskSchedulerInitialDelay: TimeInterval = 12.0
     static let initialFileIndexingDelay: TimeInterval = 45.0
+
+    /// Remaining delay before proactive monitoring may start, measured from a
+    /// launch anchor rather than from the triggering event. The warmup delay
+    /// exists to keep capture out of the busy launch window, so late triggers
+    /// (API-key load, app re-activation) must not re-pay the full delay —
+    /// that compounding is what made the Capture pill sit "paused" for
+    /// 30-60+ seconds after launch. Negative elapsed values (clock changes)
+    /// clamp to the full delay.
+    static func remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: TimeInterval) -> TimeInterval {
+        max(0, proactiveAssistantsStartDelay - max(0, elapsedSinceLaunch))
+    }
 }

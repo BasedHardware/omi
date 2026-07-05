@@ -44,12 +44,14 @@ function isLongRunning(utterance: string): boolean {
 }
 
 function chooseCandidate(input: DesktopIntentRouteInput): DesktopIntentSessionCandidate | undefined {
+  const longRunningNewWork = isLongRunning(input.utterance);
   const candidates = [...(input.sessionCandidates ?? [])].sort(
     (left, right) => right.relevance - left.relevance || right.lastActivityAtMs - left.lastActivityAtMs,
   );
   return candidates.find((candidate) => {
     if (candidate.relevance < 0.55) return false;
     if (input.taskId) return candidate.taskId === input.taskId;
+    if (longRunningNewWork && candidate.surfaceKind === input.surfaceKind) return false;
     return candidate.surfaceKind === input.surfaceKind || candidate.taskId === input.taskId;
   });
 }

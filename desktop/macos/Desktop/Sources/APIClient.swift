@@ -4288,8 +4288,13 @@ extension APIClient {
     return try await get("v1/users/language")
   }
 
-  /// Updates user language preference
-  func updateUserLanguage(_ language: String) async throws -> UserLanguageResponse {
+  /// Updates user language preference. The PATCH endpoint's response shape differs
+  /// from GET's (`{status, single_language_mode}`, not `{language}`) — decoding into
+  /// UserLanguageResponse here always threw ("data couldn't be read because it is
+  /// missing") even though the backend had already saved the language, silently
+  /// (pre-await-fix) or now visibly blocking the caller on a save that succeeded.
+  @discardableResult
+  func updateUserLanguage(_ language: String) async throws -> SetUserLanguageResponse {
     struct UpdateRequest: Encodable {
       let language: String
     }
@@ -4570,9 +4575,17 @@ struct TranscriptionPreferences: Codable {
   }
 }
 
-/// User language response
+/// User language response (GET /v1/users/language)
 struct UserLanguageResponse: Codable {
   let language: String
+}
+
+/// Response shape for PATCH /v1/users/language — deliberately distinct from
+/// UserLanguageResponse; the backend's set_user_language handler returns
+/// {status, single_language_mode}, never {language}.
+struct SetUserLanguageResponse: Codable {
+  let status: String
+  let single_language_mode: Bool
 }
 
 /// Recording permission response
