@@ -1,9 +1,10 @@
-import logging
-import os
+from __future__ import annotations
+
 import re
 import uuid
-from datetime import datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional, Union, cast
+from typing import List, Dict, Any, Union, Optional
+import hashlib
+import os
 
 import pytz
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -43,47 +44,22 @@ from database.redis_db import (
 )
 
 from database.users import (
-    create_person,
-    delete_person,
-    finalize_migration,
-    get_conversation_summary_rating_score,
-    get_people,
-    get_person,
-    get_person_by_name,
-    get_user_language_preference,
-    get_user_onboarding_state,
-    get_user_private_cloud_sync_enabled,
-    get_user_profile,
-    get_user_store_recording_permission,
-    get_user_subscription,
-    get_user_training_data_opt_in,
     get_user_transcription_preferences,
-    get_user_valid_subscription,
-    remove_person_speech_sample,
-    set_chat_message_rating_score,
-    set_conversation_summary_rating_score,
-    set_migration_status,
-    set_user_language_preference,
-    set_user_onboarding_state,
-    set_user_private_cloud_sync_enabled,
-    set_user_store_recording_permission,
-    set_user_training_data_opt_in,
     set_user_transcription_preferences,
-    update_person,
 )
 from utils.stt.streaming import deepgram_nova3_multi_languages
+from database.users import *
+from models.conversation import Conversation
 from models.geolocation import Geolocation
-from utils.conversations.factory import (
-    deserialize_conversation,
-    deserialize_conversations,
-)
+from utils.conversations.factory import deserialize_conversation, deserialize_conversations
 from models.other import Person, CreatePerson
+from typing import Optional
 from models.user_usage import UserUsageResponse, UsagePeriod
+from datetime import datetime, time, timedelta
 
 from models.users import (
     ChatUsageQuota,
     ChatQuotaUnit,
-    PlanLimits,
     WebhookType,
     UserSubscriptionResponse,
     Subscription,
@@ -98,7 +74,6 @@ from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapsho
 from utils.apps import get_available_app_by_id
 from utils.subscription import (
     get_chat_quota_snapshot,
-    get_default_basic_subscription,
     get_paid_plan_definitions,
     get_plan_display_name,
     get_plan_limits,
@@ -119,14 +94,8 @@ from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
-from utils.notifications import (
-    send_notification,
-    send_training_data_submitted_notification,
-)
-from utils.llm.external_integrations import (
-    generate_comprehensive_daily_summary,
-)
-from utils.observability import submit_langsmith_feedback
+from utils.notifications import send_notification, send_training_data_submitted_notification
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -137,6 +106,7 @@ from utils.other.storage import (
 )
 from utils.webhooks import webhook_first_time_setup
 from utils.byok import has_byok_keys, invalidate_byok_state_cache
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -216,8 +186,8 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
 
 @router.post('/v1/users/developer/webhook/{wtype}', tags=['v1'])
-def set_user_webhook_endpoint(wtype: WebhookType, data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
-    url: Any = data.get('url')
+def set_user_webhook_endpoint(wtype: WebhookType, data: dict, uid: str = Depends(auth.get_current_user_uid)):
+    url = data.get('url')
     if url is None:
         raise HTTPException(status_code=400, detail='url is required')
     if url == '' or url == ',':
@@ -307,7 +277,7 @@ def get_onboarding_state(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.patch('/v1/users/onboarding', tags=['v1'])
-def update_onboarding_state(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
+def update_onboarding_state(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """Update the user's onboarding state."""
     current_state = get_user_onboarding_state(uid)
     if 'completed' in data:
@@ -432,6 +402,8 @@ def delete_person_speech_sample_endpoint(
     delete_user_person_speech_sample(uid, person_id, filename)
 
     # Remove from Firestore
+    from database.users import remove_person_speech_sample
+
     remove_person_speech_sample(uid, person_id, path_to_delete)
 
     return {'status': 'ok'}
@@ -443,7 +415,7 @@ def delete_person_speech_sample_endpoint(
 
 
 @router.delete('/v1/joan/{memory_id}/followup-question', tags=['v1'], status_code=204)
-def delete_followup_question_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
+def delete_person_endpoint(memory_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if memory_id == '0':
         memory = get_in_progress_conversation(uid)
         if not memory:
@@ -489,7 +461,7 @@ def get_memory_summary_rating(
 def set_chat_message_analytics(
     message_id: str,
     value: int,
-    reason: Optional[str] = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
+    reason: str = None,  # Reason for thumbs down (e.g. 'too_verbose', 'incorrect_or_hallucination')
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """
@@ -514,15 +486,17 @@ def set_chat_message_analytics(
 
     # Try to submit feedback to LangSmith if the message has a run_id
     try:
+        from utils.observability import submit_langsmith_feedback
+
         # Look up the message to get langsmith_run_id
         message_result = chat_db.get_message(uid, message_id)
         if message_result:
             message, _ = message_result
-            run_id_raw: object = getattr(message, 'langsmith_run_id', None)
-            if not run_id_raw and isinstance(message, dict):
-                message_dict = cast(Dict[str, Any], message)
-                run_id_raw = message_dict.get('langsmith_run_id')
-            if run_id_raw:
+            langsmith_run_id = getattr(message, 'langsmith_run_id', None)
+            if not langsmith_run_id and isinstance(message, dict):
+                langsmith_run_id = message.get('langsmith_run_id')
+
+            if langsmith_run_id:
                 # Map value to score: 1 (thumbs up) -> 1.0, -1 (thumbs down) -> 0.0
                 score = 1.0 if value == 1 else (0.0 if value == -1 else 0.5)
 
@@ -531,7 +505,7 @@ def set_chat_message_analytics(
 
                 # Submit feedback to LangSmith (non-blocking, errors are logged)
                 submit_langsmith_feedback(
-                    run_id=cast(str, run_id_raw),
+                    run_id=langsmith_run_id,
                     score=score,
                     key="chat_message_rating",
                     comment=comment,
@@ -558,9 +532,9 @@ def get_user_language(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.patch('/v1/users/language', tags=['v1'])
-def set_user_language(data: Dict[str, Any], uid: str = Depends(auth.get_current_user_uid)):
+def set_user_language(data: dict, uid: str = Depends(auth.get_current_user_uid)):
     """Set the user's preferred language (e.g., 'en', 'vi', etc.)."""
-    language: Any = data.get('language')
+    language = data.get('language')
     if not language:
         raise HTTPException(status_code=400, detail="Language is required")
     set_user_language_preference(uid, language)
@@ -644,7 +618,7 @@ def handle_migration_requests(
                 raise HTTPException(status_code=500, detail=f"Failed to migrate chat message {request.id}: {e}")
         else:
             raise HTTPException(status_code=400, detail=f"Unknown object type for migration: {request.type}")
-    else:
+    elif isinstance(request, MigrationTargetRequest):
         # This is for starting the migration process
         if request.target_level != 'enhanced':
             raise HTTPException(
@@ -673,7 +647,7 @@ def handle_batch_migration_requests(
     batch_request: BatchMigrationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Migrates a batch of data objects to the target protection level."""
-    errors: List[str] = []
+    errors = []
 
     # Group requests by type and target_level
     grouped_requests: Dict[tuple[str, str], List[str]] = {}
@@ -721,9 +695,10 @@ def set_preferred_app_for_user(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Sets the user's preferred app for future processing."""
+
     app_id_to_set = app_id
 
-    selected_app: Optional[Dict[str, Any]] = get_available_app_by_id(app_id_to_set, uid)
+    selected_app = get_available_app_by_id(app_id_to_set, uid)
     if not selected_app:
         raise HTTPException(status_code=410, detail=f"App with ID '{app_id_to_set}' not found or not accessible.")
 
@@ -905,7 +880,7 @@ def get_user_subscription_endpoint(
     if subscription.stripe_subscription_id:
         try:
             stripe_sub = stripe_utils.stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-            stripe_sub_dict = cast(Dict[str, Any], stripe_sub.to_dict())  # type: ignore[reportDeprecated]  # stripe to_dict deprecated, interface stable
+            stripe_sub_dict = stripe_sub.to_dict()
             if stripe_sub_dict and stripe_sub_dict.get('items', {}).get('data'):
                 subscription.current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
         except Exception as e:
@@ -924,7 +899,7 @@ def get_user_subscription_endpoint(
         subscription.plan = PlanType.unlimited
 
     # Get current usage
-    usage: Dict[str, Any] = get_monthly_usage_for_subscription(uid)
+    usage = get_monthly_usage_for_subscription(uid)
 
     # Calculate usage metrics
     transcription_seconds_used = usage.get('transcription_seconds', 0)
@@ -938,12 +913,12 @@ def get_user_subscription_endpoint(
 
     # Build available plans. Version-gated: new clients see Operator + Architect,
     # old clients get legacy plan names. Legacy plans filtered from purchase catalog.
-    all_definitions: List[Dict[str, Any]] = get_paid_plan_definitions()
+    all_definitions = get_paid_plan_definitions()
     if not new_plans_enabled:
         all_definitions = adapt_plans_for_legacy_client(all_definitions)
     available_plans: List[SubscriptionPlan] = []
     ever_purchased = has_ever_purchased(uid, raw_subscription)
-    definitions_for_user: List[Dict[str, Any]] = filter_plans_for_user(
+    definitions_for_user = filter_plans_for_user(
         all_definitions, subscription.plan, platform=x_app_platform, ever_purchased=ever_purchased
     )
     for definition in definitions_for_user:
@@ -956,7 +931,7 @@ def get_user_subscription_endpoint(
                 price_data = get_generic_cache(f'stripe_price:{monthly_price_id}')
                 if not price_data:
                     price = stripe_utils.stripe.Price.retrieve(monthly_price_id)
-                    price_data = cast(Dict[str, Any], price.to_dict_recursive())  # type: ignore[reportDeprecated]  # stripe to_dict_recursive deprecated, interface stable
+                    price_data = price.to_dict_recursive()
                     set_generic_cache(f'stripe_price:{monthly_price_id}', price_data, ttl=3600 * 24)
 
                 plan_prices.append(
@@ -978,7 +953,7 @@ def get_user_subscription_endpoint(
                 price_data = get_generic_cache(f'stripe_price:{annual_price_id}')
                 if not price_data:
                     price = stripe_utils.stripe.Price.retrieve(annual_price_id)
-                    price_data = cast(Dict[str, Any], price.to_dict_recursive())  # type: ignore[reportDeprecated]  # stripe to_dict_recursive deprecated, interface stable
+                    price_data = price.to_dict_recursive()
                     set_generic_cache(f'stripe_price:{annual_price_id}', price_data, ttl=3600 * 24)
 
                 plan_prices.append(
@@ -1017,10 +992,10 @@ def get_user_subscription_endpoint(
     show_subscription_ui = not should_hide_subscription_ui(uid, x_app_platform, x_app_version)
 
     # Phone-call feature access + monthly free-tier usage snapshot.
-    phone_call_quota_dict = cast(Dict[str, Any], get_phone_call_quota_snapshot(uid).to_client_dict())  # type: ignore[reportUnknownMemberType]  # QuotaSnapshot.to_client_dict returns bare dict
-    phone_call_quota = PhoneCallQuota(**phone_call_quota_dict)
+    phone_call_quota = PhoneCallQuota(**get_phone_call_quota_snapshot(uid).to_client_dict())
+
     # Chat quota — reuse the shared snapshot helper
-    chat_snapshot: Dict[str, Any] = get_chat_quota_snapshot(uid, platform=x_app_platform)
+    chat_snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
     chat_percent = 0.0
     if chat_snapshot['limit'] is not None and chat_snapshot['limit'] > 0:
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
@@ -1070,8 +1045,8 @@ def get_user_chat_usage_quota(
             reset_at=None,
         )
 
-    snapshot: Dict[str, Any] = get_chat_quota_snapshot(uid, platform=x_app_platform)
-    plan: PlanType = snapshot['plan']
+    snapshot = get_chat_quota_snapshot(uid, platform=x_app_platform)
+    plan = snapshot['plan']
 
     if snapshot['limit'] is not None and snapshot['limit'] > 0:
         percent = min(100.0, round(100.0 * snapshot['used'] / snapshot['limit'], 2))
@@ -1197,9 +1172,7 @@ class TestDailySummaryRequest(BaseModel):
 
 
 @router.post('/v1/users/daily-summary-settings/test', tags=['v1'])
-def test_daily_summary(
-    request: Optional[TestDailySummaryRequest] = None, uid: str = Depends(auth.get_current_user_uid)
-):
+def test_daily_summary(request: TestDailySummaryRequest = None, uid: str = Depends(auth.get_current_user_uid)):
     """
     Test endpoint to manually trigger daily summary for the authenticated user.
     This bypasses the time check and sends a summary immediately.
@@ -1274,16 +1247,14 @@ def test_daily_summary(
     conversations = deserialize_conversations(conversations_data)
 
     # Generate summary (pass date range for fetching actual action items)
-    summary_data: Dict[str, Any] = generate_comprehensive_daily_summary(
-        uid, conversations, date_str, start_date_utc, end_date_utc
-    )
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
 
     # Store in database
     summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
 
     # Send notification
     daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
-    summary_body: Any = summary_data.get('overview', 'Tap to see your daily summary')
+    summary_body = summary_data.get('overview', 'Tap to see your daily summary')
     if len(summary_body) > 150:
         summary_body = summary_body[:147] + "..."
 
@@ -1398,7 +1369,7 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
     # window was wide enough that two concurrent requests could both pass
     # the guard and double-bill the LLM. This isn't atomic SETNX, but the
     # eager set closes the practical race for accidental double-taps.
-    set_generic_cache(cooldown_key, {'at': datetime.now(timezone.utc).isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
+    set_generic_cache(cooldown_key, {'at': datetime.utcnow().isoformat()}, ttl=_REGENERATE_COOLDOWN_SECONDS)
 
     # Resolve the user's local day boundaries the same way the scheduled job
     # does, so the regenerated payload uses the identical conversation set.
@@ -1426,9 +1397,7 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
 
     conversations = deserialize_conversations(conversations_data)
 
-    summary_data: Dict[str, Any] = generate_comprehensive_daily_summary(
-        uid, conversations, date_str, start_date_utc, end_date_utc
-    )
+    summary_data = generate_comprehensive_daily_summary(uid, conversations, date_str, start_date_utc, end_date_utc)
     # Preserve fields readers care about that the generator silently resets:
     # - visibility: sharing state shouldn't toggle off on regenerate
     # - created_at: generator stamps a fresh utcnow(), but UI sorts/displays
@@ -1437,7 +1406,7 @@ def regenerate_daily_summary(summary_id: str, uid: str = Depends(auth.get_curren
         summary_data['visibility'] = summary['visibility']
     if 'created_at' in summary:
         summary_data['created_at'] = summary['created_at']
-    summary_data['regenerated_at'] = datetime.now(timezone.utc).isoformat()
+    summary_data['regenerated_at'] = datetime.utcnow().isoformat()
 
     daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
 
