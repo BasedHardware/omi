@@ -84,7 +84,7 @@ Nothing merges to `main` until G1–G3 are closed with a green evidence bundle a
 1. After G1/G2 land, run the full live gauntlet against a named `omi-*` bundle built from branch HEAD: `cd desktop/macos && OMI_APP_NAME=omi-gauntlet OMI_SKIP_TUNNEL=1 ./run.sh`, seed auth, then `./scripts/agent-continuity-gauntlet.sh`.
 2. The evidence bundle (`.harness/agent-continuity-gauntlet/<ts>/`) must show `passed: true` with `git` equal to the branch HEAD SHA. Commit the manifest path + SHA into the parent plan's §7 table.
 3. Investigate the two older PTT failures (`hub session did not become active`) only if they reproduce at HEAD — they predate the last fixes and may be environment (sign-in/provider keys). If they reproduce, they block; if not, note the runs as superseded.
-4. From this point forward: **no commit lands on this branch train without a gauntlet run at that commit**, per INV-6. If a commit is Swift-comment-only or docs-only, say so in the commit body instead.
+4. From this point forward: a green gauntlet bundle is required **at train HEAD before the train is declared done or merged**, plus at any single commit that touches `turn-context.ts`, `conversation-turns.ts`, `kernel-*.ts`, or surface-session code *if more commits will follow it on the train*. Docs-only commits must say so in the commit body instead.
 
 **Definition of Done for the whole plan:** one evidence bundle, `passed: true`, `git == HEAD`, all six steps green.
 
