@@ -1252,9 +1252,7 @@ class ParakeetWebSocketSocket(STTSocket):
         )
 
     def _emit_stable_partial(self, text: str):
-        new_text = text
-        if self._committed_text and text.startswith(self._committed_text):
-            new_text = text[len(self._committed_text) :].strip()
+        new_text = _extract_new_text(self._committed_text, text)
         if not new_text:
             return
         self._committed_text = text

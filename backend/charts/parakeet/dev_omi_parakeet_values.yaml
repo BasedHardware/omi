@@ -98,6 +98,8 @@ env:
     value: "nvidia/parakeet-tdt-0.6b-v3"
   - name: PARAKEET_STREAM_MODEL
     value: "nvidia/nemotron-3.5-asr-streaming-0.6b"
+  - name: PARAKEET_V3_STREAM_MODEL
+    value: "nvidia/parakeet-rnnt-1.1b"
   - name: PARAKEET_STREAM_LATENCY_MODE
     value: "480ms"
   - name: PARAKEET_MAX_CONCURRENT_STREAMS
