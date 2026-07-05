@@ -1,4 +1,4 @@
-import threading
+import threading  # pyright: ignore[reportUnusedImport]  # patched by test_no_threading_used
 import os
 import time
 from datetime import datetime
