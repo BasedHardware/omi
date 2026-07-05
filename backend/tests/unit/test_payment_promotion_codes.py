@@ -76,7 +76,7 @@ def test_upgrade_catches_stripe_invalid_request_error():
     source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
     upgrade_section = source[upgrade_start:]
-    assert "stripe.InvalidRequestError" in upgrade_section
+    assert "stripe.error.InvalidRequestError" in upgrade_section
 
 
 def test_upgrade_releases_attached_schedule_before_change():
@@ -97,7 +97,7 @@ def test_checkout_catches_stripe_invalid_request_error():
     source = _read_source(PAYMENT_SOURCE)
     checkout_start = source.index("def create_checkout_session_endpoint")
     checkout_section = source[checkout_start : source.index("def upgrade_subscription_endpoint")]
-    assert "stripe.InvalidRequestError" in checkout_section
+    assert "stripe.error.InvalidRequestError" in checkout_section
 
 
 # ---------------------------------------------------------------------------
