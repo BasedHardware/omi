@@ -70,6 +70,7 @@ export function Home(): React.JSX.Element {
   const { chat } = useAppState()
   const [user, setUser] = useState<User | null>(auth.currentUser)
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const threadContentRef = useRef<HTMLDivElement>(null)
   const widgetsGridRef = useRef<HTMLDivElement>(null)
   const lastLenRef = useRef(0)
   const [scrollMode, setScrollModeState] = useState<ChatScrollMode>('followingBottom')
@@ -269,6 +270,39 @@ export function Home(): React.JSX.Element {
     setOverflowing(el.scrollHeight > el.clientHeight + 4)
   }, [chat.history, chat.sending, showThread, scrollToLatest, widgetsReady, widgetsH])
 
+  // The effect above fires on history/sending/layout deps, so it misses the
+  // smooth reveal ticks: RevealMarkdown grows the streaming bubble WITHOUT a
+  // new history reference, and a reader at the live edge would drift above the
+  // newest text (worst at end-of-message, when the last scroll ran before the
+  // metered tail finished typing). A ResizeObserver re-pins on every content
+  // height change while following the live edge.
+  //
+  // The pin runs SYNCHRONOUSLY here (not via scrollToLatest, which defers to
+  // rAF): ResizeObserver fires after layout but before paint, so scrolling in
+  // the callback lands the grown content already pinned. Deferring to the next
+  // frame instead paints the taller content at the old scrollTop first, then
+  // corrects — a per-tick vertical bounce during the reveal. Mirrors the
+  // overlay's pin-on-resize; re-binds when the thread mounts.
+  //
+  // No `isProgrammaticScrollRef` guard: the pin only ever scrolls to the
+  // bottom, so the scroll event it fires lands at distFromBottom≈0 — the
+  // resume-follow branch (a no-op while already following), never the release
+  // or paging branch. Setting the flag here would instead stay ~always true
+  // during the ~16ms reveal ticks and swallow a real scrollbar/keyboard
+  // scroll-up as "programmatic", trapping the reader at the live edge.
+  useEffect(() => {
+    const el = chatScrollRef.current
+    const content = threadContentRef.current
+    if (!el || !content) return
+    const ro = new ResizeObserver(() => {
+      if (scrollModeRef.current !== 'followingBottom') return
+      el.style.scrollBehavior = 'auto'
+      el.scrollTop = el.scrollHeight
+    })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [showThread, started])
+
   // Reveal an older page when the user scrolls near the top, capturing the
   // current distance-from-bottom so the view can be pinned in place afterward.
   const onThreadScroll = (): void => {
@@ -357,7 +391,7 @@ export function Home(): React.JSX.Element {
           style={{ WebkitMaskImage: mask, maskImage: mask }}
         >
           <div className="mx-auto flex min-h-full w-full max-w-4xl flex-col">
-            <div className="mt-auto space-y-2 pb-2">
+            <div ref={threadContentRef} className="mt-auto space-y-2 pb-2">
               {started && showThread ? (
                 windowed.map((m, i) => {
                   const isUser = m.role === 'user'
