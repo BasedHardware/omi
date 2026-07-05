@@ -56,11 +56,26 @@ def _gpu_worker_module():
     _pyannote_audio_core = MagicMock()
     _pyannote_audio_core_model = MagicMock()
 
+    _nemo_asr_inference = MagicMock()
+    _nemo_asr_inference_factory = MagicMock()
+    _nemo_asr_inference_factory_pipeline_builder = MagicMock()
+    _nemo_asr_inference_streaming = MagicMock()
+    _nemo_asr_inference_streaming_framing = MagicMock()
+    _nemo_asr_inference_streaming_framing_request = MagicMock()
+    _nemo_asr_inference_streaming_framing_request_options = MagicMock()
+
     fakes = {
         "torch": _torch,
         "nemo": _nemo,
         "nemo.collections": _nemo.collections,
         "nemo.collections.asr": _nemo_asr,
+        "nemo.collections.asr.inference": _nemo_asr_inference,
+        "nemo.collections.asr.inference.factory": _nemo_asr_inference_factory,
+        "nemo.collections.asr.inference.factory.pipeline_builder": _nemo_asr_inference_factory_pipeline_builder,
+        "nemo.collections.asr.inference.streaming": _nemo_asr_inference_streaming,
+        "nemo.collections.asr.inference.streaming.framing": _nemo_asr_inference_streaming_framing,
+        "nemo.collections.asr.inference.streaming.framing.request": _nemo_asr_inference_streaming_framing_request,
+        "nemo.collections.asr.inference.streaming.framing.request_options": _nemo_asr_inference_streaming_framing_request_options,
         "pyannote": _pyannote,
         "pyannote.audio": _pyannote_audio,
         "pyannote.audio.core": _pyannote_audio_core,
@@ -1269,6 +1284,129 @@ class TestStreamOpenChunkClose:
         big = np.zeros(worker._MAX_BUFFER_SAMPLES + 200, dtype=np.float32)
         worker._stream_chunk({"stream_id": "s1", "audio_chunk": big})
         assert worker._stream_sessions["s1"]["buffer_samples"] <= worker._MAX_BUFFER_SAMPLES
+
+    def test_stream_chunk_at_exact_limit_no_trim(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_chunk_samples = 999999
+        worker._stream_open({"stream_id": "s1"})
+        exact = np.zeros(worker._MAX_BUFFER_SAMPLES, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": exact})
+        assert worker._stream_sessions["s1"]["buffer_samples"] == worker._MAX_BUFFER_SAMPLES
+
+    def test_stream_chunk_one_over_limit_trims(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_chunk_samples = 999999
+        worker._stream_open({"stream_id": "s1"})
+        one_over = np.zeros(worker._MAX_BUFFER_SAMPLES + 1, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": one_over})
+        assert worker._stream_sessions["s1"]["buffer_samples"] == worker._MAX_BUFFER_SAMPLES
+
+    def test_stream_chunk_overflow_trims_oldest_audio(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_chunk_samples = 999999
+        worker._stream_open({"stream_id": "s1"})
+        excess = 100
+        total = worker._MAX_BUFFER_SAMPLES + excess
+        chunk = np.arange(total, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": chunk})
+        buf = worker._stream_sessions["s1"]["audio_buffer"]
+        remaining = np.frombuffer(buf[: worker._MAX_BUFFER_SAMPLES * 4], dtype=np.float32)
+        assert remaining[0] == float(excess)
+        assert remaining[-1] == float(total - 1)
+
+
+class TestFrameConstruction:
+
+    def _get_frame_class(self):
+        import importlib
+
+        mod = sys.modules["nemo.collections.asr.inference.streaming.framing.request"]
+        return mod.Frame
+
+    def _get_asr_options_class(self):
+        mod = sys.modules["nemo.collections.asr.inference.streaming.framing.request_options"]
+        return mod.ASRRequestOptions
+
+    def test_first_chunk_frame_has_options_and_is_first(self):
+        frame_cls = self._get_frame_class()
+        frame_cls.reset_mock()
+        worker = GPUWorker()
+        mock_pipeline = MagicMock()
+        out = MagicMock()
+        out.partial_transcript = "hello"
+        out.final_transcript = ""
+        mock_pipeline.transcribe_step.return_value = [out]
+        worker._stream_pipeline = mock_pipeline
+        worker._stream_chunk_samples = 100
+        worker._stream_open({"stream_id": "s1"})
+        chunk = np.zeros(100, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": chunk})
+        assert frame_cls.call_count == 1
+        kwargs = frame_cls.call_args[1]
+        assert kwargs["is_first"] is True
+        assert kwargs["is_last"] is False
+        assert kwargs["options"] is not None
+
+    def test_second_chunk_frame_has_no_options(self):
+        frame_cls = self._get_frame_class()
+        frame_cls.reset_mock()
+        worker = GPUWorker()
+        mock_pipeline = MagicMock()
+        out = MagicMock()
+        out.partial_transcript = ""
+        out.final_transcript = ""
+        mock_pipeline.transcribe_step.return_value = [out]
+        worker._stream_pipeline = mock_pipeline
+        worker._stream_chunk_samples = 100
+        worker._stream_open({"stream_id": "s1"})
+        chunk = np.zeros(200, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": chunk})
+        assert frame_cls.call_count == 2
+        second_kwargs = frame_cls.call_args_list[1][1]
+        assert second_kwargs["is_first"] is False
+        assert second_kwargs["options"] is None
+
+    def test_close_flush_frame_not_is_last(self):
+        frame_cls = self._get_frame_class()
+        frame_cls.reset_mock()
+        worker = GPUWorker()
+        mock_pipeline = MagicMock()
+        out = MagicMock()
+        out.final_transcript = ""
+        out.partial_transcript = ""
+        mock_pipeline.transcribe_step.return_value = [out]
+        worker._stream_pipeline = mock_pipeline
+        worker._stream_chunk_samples = 999999
+        worker._stream_open({"stream_id": "s1"})
+        chunk = np.zeros(50, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": chunk})
+        worker._stream_close({"stream_id": "s1"})
+        flush_kwargs = frame_cls.call_args_list[0][1]
+        assert flush_kwargs["is_last"] is False
+
+    def test_close_final_frame_is_last_true(self):
+        frame_cls = self._get_frame_class()
+        frame_cls.reset_mock()
+        worker = GPUWorker()
+        mock_pipeline = MagicMock()
+        out = MagicMock()
+        out.final_transcript = ""
+        out.partial_transcript = ""
+        mock_pipeline.transcribe_step.return_value = [out]
+        worker._stream_pipeline = mock_pipeline
+        worker._stream_chunk_samples = 100
+        worker._stream_open({"stream_id": "s1"})
+        chunk = np.zeros(100, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": chunk})
+        mock_pipeline.transcribe_step.reset_mock()
+        mock_pipeline.transcribe_step.return_value = [out]
+        worker._stream_close({"stream_id": "s1"})
+        last_kwargs = frame_cls.call_args_list[-1][1]
+        assert last_kwargs["is_last"] is True
+        assert last_kwargs["is_first"] is False
 
 
 class TestCombinedModeFairness:

@@ -382,12 +382,31 @@ class TestIdleReaping:
             r = await eng.open_stream()
             assert eng.active_streams == 1
             await asyncio.sleep(0.05)
-            await eng._reap_idle_streams.__wrapped__(eng) if hasattr(eng._reap_idle_streams, '__wrapped__') else None
-            now = __import__('time').monotonic()
-            to_reap = [sid for sid, s in eng._sessions.items() if now - s.last_chunk_at > eng._idle_timeout]
-            for sid in to_reap:
-                await eng.close_stream(sid)
-                eng._metrics["total_streams_reaped"] += 1
+            # Cancel the background reaper and run a single-pass reap manually
+            eng._reaper_task.cancel()
+            try:
+                await eng._reaper_task
+            except asyncio.CancelledError:
+                pass
+            # Directly invoke the reaping logic by running the coroutine with
+            # asyncio.sleep patched to break after one iteration
+            call_count = 0
+            original_sleep = asyncio.sleep
+
+            async def _break_after_one(*a, **kw):
+                nonlocal call_count
+                call_count += 1
+                if call_count > 1:
+                    raise asyncio.CancelledError
+                # Don't actually sleep — sessions are already idle
+
+            import unittest.mock
+
+            with unittest.mock.patch('asyncio.sleep', side_effect=_break_after_one):
+                try:
+                    await eng._reap_idle_streams()
+                except asyncio.CancelledError:
+                    pass
             assert eng.active_streams == 0
             assert eng.metrics["total_streams_reaped"] >= 1
         finally:
@@ -400,9 +419,30 @@ class TestIdleReaping:
         try:
             r = await eng.open_stream()
             assert eng.active_streams == 1
-            now = __import__('time').monotonic()
-            to_reap = [sid for sid, s in eng._sessions.items() if now - s.last_chunk_at > eng._idle_timeout]
-            assert len(to_reap) == 0
+            # Cancel the background reaper and do a single-pass reap
+            eng._reaper_task.cancel()
+            try:
+                await eng._reaper_task
+            except asyncio.CancelledError:
+                pass
+
+            call_count = 0
+
+            async def _break_after_one(*a, **kw):
+                nonlocal call_count
+                call_count += 1
+                if call_count > 1:
+                    raise asyncio.CancelledError
+
+            import unittest.mock
+
+            with unittest.mock.patch('asyncio.sleep', side_effect=_break_after_one):
+                try:
+                    await eng._reap_idle_streams()
+                except asyncio.CancelledError:
+                    pass
+            assert eng.active_streams == 1
+            assert eng.metrics["total_streams_reaped"] == 0
         finally:
             await eng.stop()
 
