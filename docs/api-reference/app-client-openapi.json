@@ -17755,14 +17755,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "401": {
@@ -36115,14 +36108,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "401": {
@@ -40707,14 +40693,7 @@
           }
         ],
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StatusResponse"
-                }
-              }
-            },
+          "204": {
             "description": "Successful Response"
           },
           "401": {

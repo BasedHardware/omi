@@ -231,6 +231,13 @@ DateTime? _readDateTime(dynamic value) {
   return null;
 }
 
+List<DateTime>? _readDateTimeList(dynamic value) {
+  if (value is! List) return null;
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
+}
+
 Map<String, dynamic>? _readMap(dynamic value) {
   if (value is Map<String, dynamic>) return value;
   if (value is Map) return Map<String, dynamic>.from(value);

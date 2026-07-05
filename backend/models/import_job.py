@@ -31,13 +31,12 @@ class ImportJob(BaseModel):
 
     def model_dump(self, **kwargs):
         d = super().model_dump(**kwargs)
-        # Convert datetime objects to ISO format strings for Firestore
-        if d.get('created_at'):
-            d['created_at'] = d['created_at'].isoformat()
-        if d.get('started_at'):
-            d['started_at'] = d['started_at'].isoformat()
-        if d.get('completed_at'):
-            d['completed_at'] = d['completed_at'].isoformat()
+        # Convert datetime objects to ISO format strings for Firestore.
+        # Guard against mode='json', which already serializes datetimes to
+        # strings (Pydantic v2), so .isoformat() would raise AttributeError.
+        for field in ('created_at', 'started_at', 'completed_at'):
+            if isinstance(d.get(field), datetime):
+                d[field] = d[field].isoformat()
         return d
 
 

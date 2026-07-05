@@ -525,11 +525,10 @@ def update_person_name(
     return {'status': 'ok'}
 
 
-@router.delete('/v1/users/people/{person_id}', tags=['v1'], response_model=StatusResponse)
+@router.delete('/v1/users/people/{person_id}', tags=['v1'], status_code=204)
 def delete_person_endpoint(person_id: str, uid: str = Depends(auth.get_current_user_uid)):
     delete_person(uid, person_id)
     delete_user_person_speech_samples(uid, person_id)
-    return {'status': 'ok'}
 
 
 @router.delete(

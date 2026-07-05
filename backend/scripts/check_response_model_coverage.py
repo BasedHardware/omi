@@ -66,6 +66,9 @@ LEGIT_NON_JSON: dict[tuple[str, str], str] = {
     ("integrations.py", "delete_integration"): "204 No Content",
     ("mcp.py", "delete_key"): "204 No Content",
     ("mcp.py", "revoke_oauth_grant"): "204 No Content",
+    ("action_items.py", "delete_action_item"): "204 No Content",
+    ("task_integrations.py", "delete_task_integration"): "204 No Content",
+    ("users.py", "delete_person_endpoint"): "204 No Content",
     ("mcp_sse.py", "mcp_delete_session"): "raw Response (MCP session delete, no JSON body)",
     # --- OAuth / OpenID well-known discovery documents (spec-defined, not app-consumed) ---
     ("mcp_sse.py", "oauth_protected_resource_metadata"): "RFC 9728 OAuth discovery JSON (spec-defined)",
@@ -86,10 +89,13 @@ def find_routes() -> list[dict]:
     for p in sorted(ROUTER_DIR.glob("*.py")):
         if p.name == "__init__.py":
             continue
+        source = p.read_text()
         try:
-            tree = ast.parse(p.read_text())
-        except SyntaxError:
-            continue
+            tree = ast.parse(source)
+        except SyntaxError as exc:
+            # Treat parse failures as gate failures so untyped routes cannot
+            # slip through in files with syntax errors.
+            raise SystemExit(f"❌ {p.name}: syntax error blocks response_model coverage scan: {exc}")
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue

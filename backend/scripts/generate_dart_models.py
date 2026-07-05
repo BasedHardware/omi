@@ -499,6 +499,8 @@ def converter_name(typ: DartType) -> str:
         item = typ.list_item
         if item.ref_schema:
             return f'(value) => _readObjectList(value, {item.name}.fromJson)'
+        if item.is_date_time:
+            return '_readDateTimeList'
         if item.name == 'String':
             return '_readStringList'
         if item.name == 'double':
@@ -738,6 +740,13 @@ DateTime? _readDateTime(dynamic value) {
   if (value == null) return null;
   if (value is String) return DateTime.tryParse(value)?.toLocal();
   return null;
+}
+
+List<DateTime>? _readDateTimeList(dynamic value) {
+  if (value is! List) return null;
+  return [
+    for (final item in value) _required(_readDateTime(item), 'list item')
+  ];
 }
 
 Map<String, dynamic>? _readMap(dynamic value) {

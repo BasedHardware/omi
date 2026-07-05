@@ -59,7 +59,7 @@ Future<GetMemoriesResult> getMemoriesResult({int limit = 100, int offset = 0, bo
     try {
       return GetMemoriesResult(_decodeMemoriesResponse(response.body), true);
     } catch (e) {
-      Logger.debug('Failed to decode memories response: $e');
+      Logger.error('Failed to decode memories 200 response: $e');
       return const GetMemoriesResult([], true);
     }
   }

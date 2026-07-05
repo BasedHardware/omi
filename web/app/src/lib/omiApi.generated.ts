@@ -3363,7 +3363,7 @@ export interface OmiApiPaths {
     delete: {
       operationId: "delete_action_item_v1_action_items__action_item_id__delete";
       responses: {
-        "200": StatusResponse;
+        "204": void;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -5623,7 +5623,7 @@ export interface OmiApiPaths {
     delete: {
       operationId: "delete_task_integration_v1_task_integrations__app_key__delete";
       responses: {
-        "200": StatusResponse;
+        "204": void;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -6130,7 +6130,7 @@ export interface OmiApiPaths {
     delete: {
       operationId: "delete_person_endpoint_v1_users_people__person_id__delete";
       responses: {
-        "200": StatusResponse;
+        "204": void;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -6861,7 +6861,7 @@ export async function update_action_item_v1_action_items__action_item_id__patch(
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_action_item_v1_action_items__action_item_id__delete(path: { action_item_id: string }, init?: OmiApiClientInit): Promise<StatusResponse> {
+export async function delete_action_item_v1_action_items__action_item_id__delete(path: { action_item_id: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/action-items/${path.action_item_id}`;
   const _search = "";
@@ -6873,7 +6873,7 @@ export async function delete_action_item_v1_action_items__action_item_id__delete
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
 export async function toggle_action_item_completion_v1_action_items__action_item_id__completed_patch(path: { action_item_id: string }, query: { completed: boolean }, init?: OmiApiClientInit): Promise<ActionItemResponse> {
@@ -10483,7 +10483,7 @@ export async function save_task_integration_v1_task_integrations__app_key__put(p
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_task_integration_v1_task_integrations__app_key__delete(path: { app_key: string }, init?: OmiApiClientInit): Promise<StatusResponse> {
+export async function delete_task_integration_v1_task_integrations__app_key__delete(path: { app_key: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/task-integrations/${path.app_key}`;
   const _search = "";
@@ -10495,7 +10495,7 @@ export async function delete_task_integration_v1_task_integrations__app_key__del
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
 export async function get_oauth_url_v1_task_integrations__app_key__oauth_url_get(path: { app_key: string }, init?: OmiApiClientInit): Promise<OAuthUrlResponse> {
@@ -11352,7 +11352,7 @@ export async function get_single_person_v1_users_people__person_id__get(path: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function delete_person_endpoint_v1_users_people__person_id__delete(path: { person_id: string }, init?: OmiApiClientInit): Promise<StatusResponse> {
+export async function delete_person_endpoint_v1_users_people__person_id__delete(path: { person_id: string }, init?: OmiApiClientInit): Promise<void> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/people/${path.person_id}`;
   const _search = "";
@@ -11364,7 +11364,7 @@ export async function delete_person_endpoint_v1_users_people__person_id__delete(
     },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
-  return _res.status === 204 ? (undefined as any) : await _res.json();
+  return;
 }
 
 export async function update_person_name_v1_users_people__person_id__name_patch(path: { person_id: string }, query: { value: string }, init?: OmiApiClientInit): Promise<UserStatusResponse> {

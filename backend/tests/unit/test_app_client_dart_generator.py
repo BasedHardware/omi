@@ -111,8 +111,11 @@ def test_action_items_folders_wire_dart_is_generated_from_app_client_openapi():
 def test_action_items_adapter_uses_generated_envelope_defaults():
     adapter = (ROOT_DIR / 'app' / 'lib' / 'backend' / 'schema' / 'action_item.dart').read_text()
 
-    assert 'hasMore: generated.hasMore' in adapter
-    assert 'hasMore: generated.hasMore ?? false' not in adapter
+    # Phase 4.1 collapsed the hand-written wrappers into typedefs over the
+    # generated wire types, so JSON encode/decode is provided by GeneratedX.
+    assert 'typedef ActionItemsResponse = wire.GeneratedActionItemsResponse' in adapter
+    assert 'typedef PendingSyncResponse = wire.GeneratedPendingSyncResponse' in adapter
+    assert 'typedef ActionItemWithMetadata = wire.GeneratedActionItemResponse' in adapter
 
 
 def test_api_keys_wire_dart_is_generated_from_app_client_openapi():

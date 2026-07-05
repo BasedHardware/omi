@@ -566,7 +566,7 @@ def toggle_action_item_completion(
     return ActionItemResponse(**updated_item)
 
 
-@router.delete("/v1/action-items/{action_item_id}", response_model=StatusResponse, tags=['action-items'])
+@router.delete("/v1/action-items/{action_item_id}", status_code=204, tags=['action-items'])
 def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete an action item."""
     _get_valid_action_item(uid, action_item_id)
@@ -578,8 +578,6 @@ def delete_action_item(action_item_id: str, uid: str = Depends(auth.get_current_
 
     # Send FCM deletion message to cancel scheduled notification
     send_action_item_deletion_message(user_id=uid, action_item_id=action_item_id)
-
-    return {"status": "Ok"}
 
 
 class BatchDeleteActionItemsRequest(BaseModel):

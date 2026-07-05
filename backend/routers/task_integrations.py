@@ -248,7 +248,7 @@ def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = De
     return {"status": "ok", "app_key": app_key}
 
 
-@router.delete("/v1/task-integrations/{app_key}", response_model=StatusResponse, tags=['task-integrations'])
+@router.delete("/v1/task-integrations/{app_key}", status_code=204, tags=['task-integrations'])
 def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
     """Delete a task integration connection."""
     success = users_db.delete_task_integration(uid, app_key)
@@ -260,8 +260,6 @@ def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_us
     default_app = users_db.get_default_task_integration(uid)
     if default_app == app_key:
         users_db.set_default_task_integration(uid, '')
-
-    return {"status": "ok"}
 
 
 # *****************************

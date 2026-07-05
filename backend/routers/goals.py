@@ -25,7 +25,6 @@ from models.goal import (
     GoalHistoryEntryResponse,
     GoalResponse,
     GoalSuggestionResponse,
-    GoalType,
     GoalUpdate,
 )
 

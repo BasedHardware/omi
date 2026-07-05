@@ -36,7 +36,10 @@ def _is_route_handler(node: ast.AST) -> bool:
 
 
 def _has_data_dict_arg(node: ast.FunctionDef | ast.AsyncFunctionDef) -> bool:
-    for arg in node.args.args:
+    # Inspect every parameter kind (positional, positional-only, keyword-only)
+    # so a `def route(*, data: dict)` cannot bypass the gate.
+    all_args = list(node.args.args) + list(node.args.kwonlyargs) + list(node.args.posonlyargs)
+    for arg in all_args:
         ann = arg.annotation
         if arg.arg == "data" and isinstance(ann, ast.Name) and ann.id == "dict":
             return True
