@@ -5,17 +5,18 @@ import XCTest
 
 final class ImportConnectorSheetSizingTests: XCTestCase {
     func testSimpleImportConnectorsUseCompactSheetSize() {
-        let memoryImportIDs: Set<String> = ["chatgpt", "claude"]
-
-        for connector in ImportConnector.all where !memoryImportIDs.contains(connector.id) {
+        for connector in ImportConnector.all where !connector.isManualMemoryImport {
             XCTAssertEqual(connector.sheetPreferredSize, CGSize(width: 520, height: 360), connector.id)
         }
     }
 
     func testMemoryImportConnectorsKeepEditorSheetSize() throws {
-        for connectorID in ["chatgpt", "claude"] {
-            let connector = try XCTUnwrap(ImportConnector.all.first { $0.id == connectorID })
-            XCTAssertEqual(connector.sheetPreferredSize, CGSize(width: 520, height: 620), connectorID)
+        let memoryImportConnectors = ImportConnector.all.filter(\.isManualMemoryImport)
+
+        XCTAssertFalse(memoryImportConnectors.isEmpty)
+
+        for connector in memoryImportConnectors {
+            XCTAssertEqual(connector.sheetPreferredSize, CGSize(width: 520, height: 620), connector.id)
         }
     }
 }

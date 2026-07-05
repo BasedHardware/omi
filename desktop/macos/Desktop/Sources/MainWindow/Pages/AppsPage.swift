@@ -629,6 +629,8 @@ struct AppsPage: View {
 // MARK: - Imports Section
 
 struct ImportConnector: Identifiable {
+    private static let manualMemoryImportIDs: Set<String> = ["chatgpt", "claude"]
+
     let id: String
     let title: String
     let subtitle: String
@@ -639,13 +641,12 @@ struct ImportConnector: Identifiable {
     let actionTitle: String
     let isConnected: Bool
 
+    var isManualMemoryImport: Bool {
+        Self.manualMemoryImportIDs.contains(id)
+    }
+
     var sheetPreferredSize: CGSize {
-        switch id {
-        case "chatgpt", "claude":
-            return CGSize(width: 520, height: 620)
-        default:
-            return CGSize(width: 520, height: 360)
-        }
+        isManualMemoryImport ? CGSize(width: 520, height: 620) : CGSize(width: 520, height: 360)
     }
 
     static let all: [ImportConnector] = [
@@ -755,7 +756,6 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let lastDeltaCountKeyPrefix = "appsImportConnectorLastDeltaCount."
     private let hasLastDeltaKeyPrefix = "appsImportConnectorHasLastDelta."
     private let availabilityTextKeyPrefix = "appsImportConnectorAvailabilityText."
-    private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
 
@@ -772,7 +772,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             || metrics.availabilityText != nil
             || connector.id == "local-files"
         let actionTitle: String
-        if manualConnectorIDs.contains(connector.id) {
+        if connector.isManualMemoryImport {
             actionTitle = isConnected ? "Update" : "Connect"
         } else {
             actionTitle = isConnected ? "Sync now" : "Connect"
@@ -974,7 +974,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             return metricText
         }
 
-        return manualConnectorIDs.contains(connector.id) && isConnected ? "Imported earlier" : nil
+        return connector.isManualMemoryImport && isConnected ? "Imported earlier" : nil
     }
 
     private func sourceLabel(for connector: ImportConnector, count: Int) -> String {
