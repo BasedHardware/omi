@@ -1,3 +1,4 @@
+import Darwin
 import XCTest
 
 @testable import Omi_Computer
@@ -130,25 +131,33 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
     XCTAssertTrue(source.contains(#"alert.addButton(withTitle: "Cancel")"#))
     XCTAssertTrue(source.contains("guard response == .alertFirstButtonReturn else"))
 
-    // Deterministic Process install: /bin/bash -c with the code-owned
-    // command — never a login shell, never an agent pill.
-    XCTAssertTrue(source.contains(#"URL(fileURLWithPath: "/bin/bash")"#))
-    XCTAssertTrue(source.contains(#"["-c", provider.unattendedInstallCommand]"#))
+    // Deterministic spawn: /bin/bash -c with the code-owned command — never
+    // a login shell, never an agent pill.
+    XCTAssertTrue(source.contains(#"["/bin/bash", "-c", command]"#))
+    XCTAssertTrue(source.contains("command: provider.unattendedInstallCommand"))
     XCTAssertFalse(source.contains("AgentPillsManager.shared.spawn"))
     XCTAssertFalse(source.contains("ChatProvider"))
 
     // The subprocess environment is built through the allowlist — the app
     // environment appears exactly once, as the filter input, and is never
     // assigned wholesale.
-    XCTAssertTrue(source.contains("process.environment = installEnvironment("))
+    XCTAssertTrue(source.contains("environment: installEnvironment("))
     XCTAssertEqual(
       source.components(separatedBy: "ProcessInfo.processInfo.environment").count - 1, 1,
       "the app environment must appear once, as installEnvironment's base argument")
 
-    // Timeout tears the whole process tree down.
+    // The installer must start in a NEW process group (leader = child), and
+    // no app fds may leak into it — Foundation's Process provides neither, so
+    // the spawn must stay on posix_spawn with these attributes.
+    XCTAssertTrue(source.contains("POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT"))
+    XCTAssertTrue(source.contains("posix_spawnattr_setpgroup(&attributes, 0)"))
+    XCTAssertFalse(source.contains("Process()"), "Foundation Process cannot guarantee group teardown")
+
+    // Timeout tears the whole process GROUP down — SIGTERM, then SIGKILL.
     XCTAssertTrue(source.contains("installTimeoutSeconds: TimeInterval = 600"))
-    XCTAssertTrue(source.contains("terminateProcessTree(process)"))
+    XCTAssertTrue(source.contains("terminateProcessGroup(leader: pid)"))
     XCTAssertTrue(source.contains("kill(-pid, SIGTERM)"))
+    XCTAssertTrue(source.contains("kill(-pid, SIGKILL)"))
 
     // Verification is the shared detector — no agent-side probing — and a
     // successful install re-warms the hub session directly.
@@ -160,6 +169,63 @@ final class LocalAgentProviderInstallerTests: XCTestCase {
     XCTAssertTrue(source.contains(#"title: "\(provider.displayName) installed""#))
     XCTAssertTrue(source.contains(#"title: "\(provider.displayName) install failed""#))
     XCTAssertTrue(source.contains("Install guide: \\(provider.installDocsURL)"))
+  }
+
+  // MARK: - Process-group teardown (the timeout security boundary)
+
+  func testSpawnedInstallShellLeadsItsOwnProcessGroupAndTeardownKillsDescendants() throws {
+    // Real spawn: bash starts a long-sleeping grandchild, reports its pid,
+    // then waits — the shape of a hung curl/npm installer. The install
+    // command executes remote code, so the timeout MUST be able to take the
+    // whole tree down, not just the top shell.
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    let pid = try LocalAgentProviderInstaller.spawnInstallProcessGroup(
+      command: "sleep 600 & echo $!; wait",
+      environment: ["PATH": "/usr/bin:/bin"],
+      stdout: stdoutPipe.fileHandleForWriting.fileDescriptor,
+      stderr: stderrPipe.fileHandleForWriting.fileDescriptor)
+    defer { kill(-pid, SIGKILL) }  // safety net if an assertion fails mid-test
+    try? stdoutPipe.fileHandleForWriting.close()
+    try? stderrPipe.fileHandleForWriting.close()
+
+    // The shell must lead its OWN process group — the teardown contract that
+    // makes kill(-pid) reach every descendant.
+    XCTAssertEqual(getpgid(pid), pid, "install shell must be its own process-group leader")
+
+    let firstLine = try firstStdoutLine(stdoutPipe.fileHandleForReading)
+    let grandchild = try XCTUnwrap(pid_t(firstLine), "expected the grandchild pid, got: \(firstLine)")
+    XCTAssertEqual(getpgid(grandchild), pid, "descendants must inherit the install process group")
+
+    LocalAgentProviderInstaller.terminateProcessGroup(leader: pid)
+
+    var status: Int32 = 0
+    XCTAssertEqual(waitpid(pid, &status, 0), pid, "install shell must exit after group teardown")
+    XCTAssertTrue(
+      waitForProcessDeath(grandchild, timeout: 5),
+      "grandchild must die with the group — a surviving descendant is the reviewer-reported leak")
+  }
+
+  /// Blocking read until the first newline (bash echoes immediately; EOF on
+  /// early death breaks the loop, so this cannot hang the suite).
+  private func firstStdoutLine(_ handle: FileHandle) throws -> String {
+    var buffer = Data()
+    while !buffer.contains(0x0A) {
+      let chunk = handle.availableData
+      if chunk.isEmpty { break }
+      buffer.append(chunk)
+    }
+    let line = buffer.prefix(while: { $0 != 0x0A })
+    return String(decoding: line, as: UTF8.self).trimmingCharacters(in: .whitespaces)
+  }
+
+  private func waitForProcessDeath(_ pid: pid_t, timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+      if kill(pid, 0) != 0 { return true }
+      usleep(50_000)
+    }
+    return kill(pid, 0) != 0
   }
 
   private func installerSource() throws -> String {

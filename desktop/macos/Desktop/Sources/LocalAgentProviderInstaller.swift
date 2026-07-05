@@ -4,16 +4,17 @@ import Foundation
 
 /// Deterministic, code-owned installer for missing local agent providers
 /// (OpenClaw, Hermes, Codex). Runs the provider's official unattended install
-/// command via `Process` after the user confirms in a native dialog — never
+/// command via `posix_spawn` after the user confirms in a native dialog — never
 /// through an agent. The previous design spawned an auto-approving DEFAULT
 /// agent pill that shell-ran `curl … | bash`, which meant a prompt-injected
 /// tool call could execute remote scripts with no code-level gate; this
 /// component is the fix (integrations philosophy: code owns contracts).
 ///
 /// Flow: setup_agent_provider tool → `beginInstall` (tool result returns
-/// immediately) → NSAlert consent gate on the main actor → `Process` off the
-/// main actor (`/bin/bash -c`, no login shell, no TTY, minimal allowlisted
-/// environment, 10-minute cap, process-tree kill) → verification via
+/// immediately) → NSAlert consent gate on the main actor → `posix_spawn` off
+/// the main actor (`/bin/bash -c`, no login shell, no TTY, minimal
+/// allowlisted environment, its own process group, 10-minute cap with a
+/// group-wide kill) → verification via
 /// `LocalAgentProviderDetector` → a
 /// floating-bar notification with the outcome → hub session re-warm so voice
 /// picks up the freshly installed provider.
@@ -29,7 +30,7 @@ final class LocalAgentProviderInstaller {
 
   /// Hard cap for one install run. Generous — npm and curl installers can be
   /// slow on cold caches — but nothing interactive can be waiting (no TTY),
-  /// so anything longer is stuck and gets its process tree terminated.
+  /// so anything longer is stuck and gets its whole process group killed.
   nonisolated static let installTimeoutSeconds: TimeInterval = 600
 
   /// Providers with an install currently pending (dialog up) or running —
@@ -105,23 +106,16 @@ final class LocalAgentProviderInstaller {
 
   /// Run the code-owned unattended install command. `/bin/bash -c` only —
   /// never a login shell — with pipe stdio, so there is no TTY and nothing
-  /// interactive can hang forever; the timeout tears down the whole tree.
-  /// The subprocess gets a minimal allowlisted environment
-  /// (`installEnvironment`), never the app environment wholesale.
+  /// interactive can hang forever. The shell is spawned as the leader of its
+  /// OWN process group (`spawnInstallProcessGroup`), so the timeout can tear
+  /// down the entire installer tree with one signal to `-pid`. The subprocess
+  /// gets a minimal allowlisted environment (`installEnvironment`), never the
+  /// app environment wholesale.
   nonisolated private static func runInstallProcess(
     for provider: AgentPillsManager.DirectedProvider
   ) -> ProviderInstallOutcome {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = ["-c", provider.unattendedInstallCommand]
-    process.environment = installEnvironment(
-      base: ProcessInfo.processInfo.environment, homeDirectory: NSHomeDirectory())
-
     let stdoutPipe = Pipe()
     let stderrPipe = Pipe()
-    process.standardOutput = stdoutPipe
-    process.standardError = stderrPipe
-    process.standardInput = FileHandle.nullDevice
 
     // Bounded tail buffers — install logs can be huge and we only ever report
     // a short tail, so never accumulate the full output in memory.
@@ -136,8 +130,14 @@ final class LocalAgentProviderInstaller {
       if data.isEmpty { handle.readabilityHandler = nil } else { stderrTail.append(data) }
     }
 
+    let pid: pid_t
     do {
-      try process.run()
+      pid = try spawnInstallProcessGroup(
+        command: provider.unattendedInstallCommand,
+        environment: installEnvironment(
+          base: ProcessInfo.processInfo.environment, homeDirectory: NSHomeDirectory()),
+        stdout: stdoutPipe.fileHandleForWriting.fileDescriptor,
+        stderr: stderrPipe.fileHandleForWriting.fileDescriptor)
     } catch {
       stdoutPipe.fileHandleForReading.readabilityHandler = nil
       stderrPipe.fileHandleForReading.readabilityHandler = nil
@@ -145,41 +145,121 @@ final class LocalAgentProviderInstaller {
         launchFailure: error.localizedDescription, exitCode: -1, timedOut: false,
         stdoutTail: "", stderrTail: "")
     }
+    // The child holds dup'd copies of the pipe write ends — close ours so the
+    // readers see EOF once the install tree exits.
+    try? stdoutPipe.fileHandleForWriting.close()
+    try? stderrPipe.fileHandleForWriting.close()
 
+    let exited = LockedFlag()
     let timedOut = LockedFlag()
     let timeoutWork = DispatchWorkItem {
-      guard process.isRunning else { return }
+      guard !exited.isSet() else { return }
       timedOut.set()
-      terminateProcessTree(process)
+      terminateProcessGroup(leader: pid)
     }
     DispatchQueue.global().asyncAfter(deadline: .now() + installTimeoutSeconds, execute: timeoutWork)
-    process.waitUntilExit()
+    let exitCode = waitForInstallProcessExit(pid: pid)
+    exited.set()
     timeoutWork.cancel()
 
     return ProviderInstallOutcome(
       launchFailure: nil,
-      exitCode: process.terminationStatus,
+      exitCode: exitCode,
       timedOut: timedOut.isSet(),
       stdoutTail: stdoutTail.text(),
       stderrTail: stderrTail.text())
   }
 
-  /// SIGTERM, then SIGKILL after a short grace. `Process` children get their
-  /// own process group on macOS, so signalling the negative pid takes the
-  /// whole install tree down (bash → curl → nested installer), not just the
-  /// top shell; falls back to the single pid if the child is not the leader.
-  nonisolated private static func terminateProcessTree(_ process: Process) {
-    let pid = process.processIdentifier
-    guard pid > 0 else { return }
-    let isGroupLeader = getpgid(pid) == pid
-    if isGroupLeader {
-      kill(-pid, SIGTERM)
-    } else {
-      process.terminate()
+  /// Spawn `/bin/bash -c <command>` as the leader of a NEW process group —
+  /// `POSIX_SPAWN_SETPGROUP` with pgroup 0 makes the child's pgid its own
+  /// pid, and every descendant (curl, npm, postinstall scripts, nested
+  /// installers) inherits that group. This is the teardown contract
+  /// `terminateProcessGroup` relies on; Foundation's `Process` leaves the
+  /// child in the app's process group, which is why it is not used here.
+  /// `POSIX_SPAWN_CLOEXEC_DEFAULT` keeps every app fd except the three stdio
+  /// descriptors from crossing into the third-party installer. Internal (not
+  /// private) so the group-leadership contract is covered by a real test.
+  nonisolated static func spawnInstallProcessGroup(
+    command: String,
+    environment: [String: String],
+    stdout stdoutDescriptor: Int32,
+    stderr stderrDescriptor: Int32
+  ) throws -> pid_t {
+    // Every setup call is checked: if an attribute silently failed, the child
+    // could start WITHOUT its own process group and the timeout teardown —
+    // part of the security boundary — would not reach its descendants.
+    func check(_ rc: Int32) throws {
+      guard rc == 0 else { throw InstallSpawnError(code: rc) }
     }
+
+    var fileActions: posix_spawn_file_actions_t? = nil
+    try check(posix_spawn_file_actions_init(&fileActions))
+    defer { posix_spawn_file_actions_destroy(&fileActions) }
+    try check(posix_spawn_file_actions_addopen(&fileActions, 0, "/dev/null", O_RDONLY, 0))
+    try check(posix_spawn_file_actions_adddup2(&fileActions, stdoutDescriptor, 1))
+    try check(posix_spawn_file_actions_adddup2(&fileActions, stderrDescriptor, 2))
+
+    var attributes: posix_spawnattr_t? = nil
+    try check(posix_spawnattr_init(&attributes))
+    defer { posix_spawnattr_destroy(&attributes) }
+    let flags = POSIX_SPAWN_SETPGROUP | POSIX_SPAWN_CLOEXEC_DEFAULT | POSIX_SPAWN_SETSIGDEF | POSIX_SPAWN_SETSIGMASK
+    try check(posix_spawnattr_setflags(&attributes, Int16(flags)))
+    try check(posix_spawnattr_setpgroup(&attributes, 0))
+    // Reset inherited signal state — dispositions back to default and an
+    // empty mask — so an app-ignored or app-masked SIGTERM cannot neutralize
+    // the graceful phase of the group teardown.
+    var defaultSignals = sigset_t()
+    sigfillset(&defaultSignals)
+    sigdelset(&defaultSignals, SIGKILL)
+    sigdelset(&defaultSignals, SIGSTOP)
+    try check(posix_spawnattr_setsigdefault(&attributes, &defaultSignals))
+    var emptyMask = sigset_t()
+    sigemptyset(&emptyMask)
+    try check(posix_spawnattr_setsigmask(&attributes, &emptyMask))
+
+    var argv: [UnsafeMutablePointer<CChar>?] = ["/bin/bash", "-c", command].map { strdup($0) }
+    argv.append(nil)
+    var envp: [UnsafeMutablePointer<CChar>?] = environment.map { strdup("\($0.key)=\($0.value)") }
+    envp.append(nil)
+    defer {
+      argv.forEach { free($0) }
+      envp.forEach { free($0) }
+    }
+
+    var pid: pid_t = 0
+    let rc = posix_spawn(&pid, "/bin/bash", &fileActions, &attributes, &argv, &envp)
+    guard rc == 0 else { throw InstallSpawnError(code: rc) }
+    return pid
+  }
+
+  /// Reap the spawned shell and derive a reportable exit code (128 + signal
+  /// for a signalled death, matching the shell convention).
+  nonisolated private static func waitForInstallProcessExit(pid: pid_t) -> Int32 {
+    var status: Int32 = 0
+    while waitpid(pid, &status, 0) == -1 {
+      if errno != EINTR { return -1 }
+    }
+    if (status & 0x7f) == 0 {
+      return (status >> 8) & 0xff
+    }
+    return 128 + (status & 0x7f)
+  }
+
+  /// SIGTERM the whole install process group, then SIGKILL anything still in
+  /// it after a short grace. `spawnInstallProcessGroup` guarantees the leader
+  /// is our direct child and pgid == pid, so `kill(-pid, …)` reaches every
+  /// descendant (bash → curl → nested installer), not just the top shell.
+  /// Internal (not private) so the teardown contract is covered by a real
+  /// test.
+  nonisolated static func terminateProcessGroup(leader pid: pid_t) {
+    guard pid > 0 else { return }
+    kill(-pid, SIGTERM)
     DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
-      guard process.isRunning else { return }
-      kill(isGroupLeader ? -pid : pid, SIGKILL)
+      // Probe before escalating: once every member is dead and the leader is
+      // reaped, the group id could in principle be recycled — never signal a
+      // group we no longer own.
+      guard kill(-pid, 0) == 0 else { return }
+      kill(-pid, SIGKILL)
     }
   }
 
@@ -291,6 +371,12 @@ final class LocalAgentProviderInstaller {
       message: message,
       respectFrequency: false)
   }
+}
+
+/// `posix_spawn` launch failure with the errno text.
+struct InstallSpawnError: LocalizedError, Sendable {
+  let code: Int32
+  var errorDescription: String? { "posix_spawn failed: \(String(cString: strerror(code))) (\(code))" }
 }
 
 /// Result of one install process run (file-scope so it is not pulled onto
