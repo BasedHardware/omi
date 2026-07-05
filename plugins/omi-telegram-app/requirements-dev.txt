@@ -1,0 +1,22 @@
+# Test/dev dependencies for the Omi Telegram AI-clone plugin.
+#
+# These are separate from requirements.txt (production runtime deps) so a
+# minimal deployment doesn't pull in pytest and its plugins.
+#
+# Install both for development:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Then run the tests:
+#   pytest plugins/omi-telegram-app/test/ -v
+#
+# Why pytest-asyncio: the test files test_auto_reply.py
+# (TestDispatchErrorPathDoesNotLeakSecrets) and test_fixes.py
+# (TestReplyTruncation) contain `async def test_*` methods and rely on
+# explicit `@pytest.mark.asyncio` decorators. Without pytest-asyncio they
+# fail with "async def functions are not natively supported".
+# test_setup_token_leak.py has no async tests, but is listed in the
+# plugin's test/ directory alongside the others.
+# See https://pytest-asyncio.readthedocs.io/ for configuration.
+
+pytest>=8.0
+pytest-asyncio>=0.23
