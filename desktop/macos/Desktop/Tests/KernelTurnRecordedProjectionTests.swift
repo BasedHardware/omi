@@ -7,8 +7,9 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
 
   func testApplyKernelTurnRecordedAppendsMainChatMessages() {
     let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
     let surface = provider.mainChatSurfaceReference()
-    provider.applyKernelTurnRecorded(
+    projection.apply(
       .init(
         conversationId: "conv-1",
         surfaceKind: surface.surfaceKind,
@@ -30,6 +31,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
 
   func testApplyKernelTurnRecordedDedupesByIdempotencyKey() {
     let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
     let surface = provider.mainChatSurfaceReference()
     let turn = AgentRuntimeProcess.KernelTurnRecorded(
       conversationId: "conv-1",
@@ -44,8 +46,8 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       userTurnId: nil,
       assistantTurnId: nil
     )
-    provider.applyKernelTurnRecorded(turn)
-    provider.applyKernelTurnRecorded(turn)
+    projection.apply(turn)
+    projection.apply(turn)
 
     XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
@@ -53,7 +55,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
 
   func testApplyKernelTurnRecordedIgnoresOtherSurfaces() {
     let provider = ChatProvider()
-    provider.applyKernelTurnRecorded(
+    provider.kernelTurnProjection.apply(
       .init(
         conversationId: "conv-1",
         surfaceKind: "floating_chat",

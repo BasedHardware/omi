@@ -955,6 +955,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         activeBridgeHarness = harness
         return AgentBridge(harnessMode: harness)
     }()
+    lazy var kernelTurnProjection = KernelTurnProjection(host: self)
     private var agentBridgeStarted = false
     /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
     /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
@@ -1290,6 +1291,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// - Parameter fromModeSwitch: true when called from within switchBridgeMode,
     ///   which already holds modeSwitchInProgress. External callers (sendMessage)
     ///   pass false (the default) and will wait for any in-flight switch.
+    func ensureBridgeStartedForKernel() async -> Bool {
+        await ensureBridgeStarted()
+    }
+
     private func ensureBridgeStarted(fromModeSwitch: Bool = false) async -> Bool {
         // Wait for any in-flight mode switch to finish before touching the bridge.
         // Without this, a query arriving mid-switch could restart the OLD bridge
@@ -1333,11 +1338,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             )
-            await agentBridge.setTurnRecordedHandler { [weak self] turn in
-                Task { @MainActor [weak self] in
-                    self?.applyKernelTurnRecorded(turn)
-                }
-            }
+            await kernelTurnProjection.attachBridge(agentBridge)
             // Pre-warm ACP sessions with their respective system prompts.
             // This is the only place the system prompt is built and applied.
             let promptContext = formatMemoriesSection()
@@ -3081,63 +3082,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return (userMessage, aiMessage)
     }
 
-    private var appliedKernelTurnKeys = Set<String>()
-
-    func applyKernelTurnRecorded(_ turn: AgentRuntimeProcess.KernelTurnRecorded) {
-        let runtimeChatId = mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId)
-        let expectedSurface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-        guard turn.surfaceKind == expectedSurface.surfaceKind,
-              turn.externalRefKind == expectedSurface.externalRefKind,
-              turn.externalRefId == expectedSurface.externalRefId
-        else {
-            return
-        }
-        if let key = turn.idempotencyKey, !key.isEmpty {
-            guard !appliedKernelTurnKeys.contains(key) else { return }
-            appliedKernelTurnKeys.insert(key)
-            if appliedKernelTurnKeys.count > 64 {
-                appliedKernelTurnKeys = Set(Array(appliedKernelTurnKeys).suffix(32))
-            }
-        }
-        _ = recordCompletedTurn(
-            userText: turn.userText,
-            assistantText: turn.assistantText,
-            logLabel: turn.origin == "realtime_voice" ? "voice" : "kernel_turn",
-            messageSource: turn.origin
-        )
-    }
-
-    func recordSurfaceTurnViaKernel(
-        surface: AgentSurfaceReference,
-        userText: String,
-        assistantText: String,
-        origin: String = "realtime_voice",
-        interrupted: Bool = false,
-        idempotencyKey: String? = nil
-    ) async {
-        guard await ensureBridgeStarted() else { return }
-        await agentBridge.recordSurfaceTurn(
-            surface: surface,
-            userText: userText,
-            assistantText: assistantText,
-            origin: origin,
-            interrupted: interrupted,
-            idempotencyKey: idempotencyKey
-        )
-    }
-
     func mainChatSurfaceReference() -> AgentSurfaceReference {
         .mainChat(chatId: mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId))
-    }
-
-    func fetchKernelVoiceSeedContext(surface: AgentSurfaceReference) async -> String {
-        guard await ensureBridgeStarted() else { return "" }
-        do {
-            return try await agentBridge.getVoiceSeedContext(surface: surface).context
-        } catch {
-            log("ChatProvider: voice seed fetch failed: \(error.localizedDescription)")
-            return ""
-        }
     }
 
     /// Persist one recorded-turn message and sync its server ID back into `messages` so a

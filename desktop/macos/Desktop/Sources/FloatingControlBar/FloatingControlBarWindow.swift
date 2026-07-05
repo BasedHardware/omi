@@ -3265,7 +3265,9 @@ class FloatingControlBarManager {
 
     func kernelVoiceSeedContext() async -> String {
         guard let provider = historyChatProvider else { return "" }
-        return await provider.fetchKernelVoiceSeedContext(surface: provider.mainChatSurfaceReference())
+        return await provider.kernelTurnProjection.fetchVoiceSeedContext(
+            surface: provider.mainChatSurfaceReference()
+        )
     }
 
     func recordSurfaceTurn(
@@ -3276,7 +3278,7 @@ class FloatingControlBarManager {
         interrupted: Bool = false,
         idempotencyKey: String? = nil
     ) async {
-        await historyChatProvider?.recordSurfaceTurnViaKernel(
+        await historyChatProvider?.kernelTurnProjection.recordSurfaceTurn(
             surface: surface,
             userText: userText,
             assistantText: assistantText,

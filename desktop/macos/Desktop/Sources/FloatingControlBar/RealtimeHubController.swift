@@ -77,6 +77,27 @@ private struct PendingBargeInReplacementTurn {
   var audioBuffer: [Data] = []
 }
 
+struct InterruptedTurnPayload: Equatable {
+  let userText: String
+  let assistantText: String
+  let idempotencyKey: String
+}
+
+enum RealtimeHubBargeInContinuity {
+  static func prepareReplacementSession(
+    interruptedTurn: InterruptedTurnPayload?,
+    recordInterruptedTurn: (InterruptedTurnPayload) async -> Void,
+    refreshVoiceSeed: () async -> Void,
+    startReplacementSession: () -> Void
+  ) async {
+    if let interruptedTurn {
+      await recordInterruptedTurn(interruptedTurn)
+    }
+    await refreshVoiceSeed()
+    startReplacementSession()
+  }
+}
+
 /// Keeps the response glow tied to perceived playback instead of raw PCM chunk
 /// boundaries. Realtime providers can leave short gaps between streamed audio
 /// buffers; clearing the glow on every empty queue makes the notch resize and
@@ -159,6 +180,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
   private var prefetchedVoiceSeedContext = ""
   private var voiceSeedPrefetchTask: Task<Void, Never>?
+  private var bargeInContinuityTask: Task<Void, Never>?
+  private var pendingBargeInProvider: RealtimeHubProvider?
+  private var pendingBargeInAuth: HubAuth?
 
   // Per-turn language identification (multi-language PTT).
   /// Local copy of this turn's mic audio (16 kHz s16le mono) for on-device language ID.
@@ -586,22 +610,42 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  private func refreshVoiceSeedContext() async {
+    voiceSeedPrefetchTask?.cancel()
+    voiceSeedPrefetchTask = nil
+    prefetchedVoiceSeedContext = await FloatingControlBarManager.shared.kernelVoiceSeedContext()
+  }
+
   private func recordTurnToKernel(
     userText: String,
     assistantText: String,
     interrupted: Bool
   ) {
-    let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
     Task {
-      await FloatingControlBarManager.shared.recordSurfaceTurn(
-        surface: surface,
+      await recordTurnToKernelAwaiting(
         userText: userText,
         assistantText: assistantText,
-        origin: "realtime_voice",
         interrupted: interrupted,
         idempotencyKey: turnIdempotencyKey
       )
     }
+  }
+
+  private func recordTurnToKernelAwaiting(
+    userText: String,
+    assistantText: String,
+    interrupted: Bool,
+    idempotencyKey: String
+  ) async {
+    let surface = FloatingControlBarManager.shared.mainChatSurfaceReference()
+    await FloatingControlBarManager.shared.recordSurfaceTurn(
+      surface: surface,
+      userText: userText,
+      assistantText: assistantText,
+      origin: "realtime_voice",
+      interrupted: interrupted,
+      idempotencyKey: idempotencyKey
+    )
   }
 
   private func teardownSession() {
@@ -621,10 +665,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private func clearBargeInReplacementState() {
     pendingBargeInReplacement = nil
+    pendingBargeInProvider = nil
+    pendingBargeInAuth = nil
+    bargeInContinuityTask?.cancel()
+    bargeInContinuityTask = nil
   }
 
   @discardableResult
-  private func restartSessionForBargeIn() -> Bool {
+  private func prepareBargeInReplacement() -> Bool {
     guard let provider = sessionProvider, let auth = sessionAuth else { return false }
     session?.detach()
     session?.stop()
@@ -633,12 +681,52 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionAuth = nil
     hubConnected = false
     pendingBargeInReplacement = PendingBargeInReplacementTurn()
-    switch auth {
-    case .byokKey:
-      startReplacementSessionForBargeIn(provider: provider, auth: auth)
-    case .ephemeral:
-      remintReplacementSessionForBargeIn(provider: provider)
+    pendingBargeInProvider = provider
+    pendingBargeInAuth = auth
+    return true
+  }
+
+  private func completeBargeInReplacementAfterContinuity(
+    interruptedTurn: InterruptedTurnPayload?
+  ) {
+    bargeInContinuityTask?.cancel()
+    bargeInContinuityTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+      await RealtimeHubBargeInContinuity.prepareReplacementSession(
+        interruptedTurn: interruptedTurn,
+        recordInterruptedTurn: { [weak self] turn in
+          await self?.recordTurnToKernelAwaiting(
+            userText: turn.userText,
+            assistantText: turn.assistantText,
+            interrupted: true,
+            idempotencyKey: turn.idempotencyKey
+          )
+        },
+        refreshVoiceSeed: { [weak self] in
+          await self?.refreshVoiceSeedContext()
+        },
+        startReplacementSession: { [weak self] in
+          guard let self,
+                let provider = self.pendingBargeInProvider,
+                let auth = self.pendingBargeInAuth
+          else { return }
+          self.pendingBargeInProvider = nil
+          self.pendingBargeInAuth = nil
+          switch auth {
+          case .byokKey:
+            self.startReplacementSessionForBargeIn(provider: provider, auth: auth)
+          case .ephemeral:
+            self.remintReplacementSessionForBargeIn(provider: provider)
+          }
+        }
+      )
     }
+  }
+
+  @discardableResult
+  private func restartSessionForBargeIn(interruptedTurn: InterruptedTurnPayload?) -> Bool {
+    guard prepareBargeInReplacement() else { return false }
+    completeBargeInReplacementAfterContinuity(interruptedTurn: interruptedTurn)
     return true
   }
 
@@ -766,13 +854,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let providerResponseInFlight = responding
     let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking
     let bargeIn = responding || realtimePlaybackActive || voicePlaybackActive
-    if bargeIn {
-      preserveInterruptedTurnForContinuity()
-    }
+    let interruptedTurn = bargeIn ? captureInterruptedTurnPayloadIfNeeded() : nil
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
     var replacementSessionOwnsInputTurn = false
+    var deferredFreshSessionSeedPrefetch = false
     turnTranscript = ""
     assistantText = ""
     speculativeWarmDone = false
@@ -783,7 +870,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
     turnIdempotencyKey = UUID().uuidString
-    prefetchVoiceSeedContextIfNeeded()
+    if let interruptedTurn {
+      turnRecorded = true
+      if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {
+        Task {
+          await recordTurnToKernelAwaiting(
+            userText: interruptedTurn.userText,
+            assistantText: interruptedTurn.assistantText,
+            interrupted: true,
+            idempotencyKey: interruptedTurn.idempotencyKey
+          )
+        }
+      }
+    }
     turnEpoch += 1
     turnAudio16k.removeAll(keepingCapacity: true)
     earlyLIDTask = nil
@@ -811,8 +910,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         // Gemini Live has no reliable in-session cancel for a streaming reply. Reusing
         // that socket can leave the next PTT turn queued behind the old generation, so
         // replace the connection and let the fresh session buffer this new turn while it opens.
-        if restartSessionForBargeIn() {
+        if restartSessionForBargeIn(interruptedTurn: interruptedTurn) {
           replacementSessionOwnsInputTurn = true
+          deferredFreshSessionSeedPrefetch = true
           log("RealtimeHub: barge-in — replacing session for clean next turn")
         } else {
           session?.cancelActiveResponse()
@@ -820,6 +920,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     } else if bargeIn {
       log("RealtimeHub[\(providerTag)]: barge-in — stopping local playback tail")
+    }
+    if !deferredFreshSessionSeedPrefetch {
+      prefetchVoiceSeedContextIfNeeded()
     }
     ensureWarm()  // (re)connect only if the socket idle-closed
     // Open a fresh speech window for this turn (Gemini manual-VAD needs it EVERY
@@ -844,10 +947,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  private func preserveInterruptedTurnForContinuity() {
-    guard !turnRecorded else { return }
+  private func captureInterruptedTurnPayloadIfNeeded() -> InterruptedTurnPayload? {
+    guard !turnRecorded else { return nil }
     let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !heard.isEmpty else { return }
+    guard !heard.isEmpty else { return nil }
     let partialReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     let interruptedReply: String
     if partialReply.isEmpty {
@@ -855,11 +958,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } else {
       interruptedReply = "\(partialReply)\n\n[Interrupted by the next push-to-talk turn before completion.]"
     }
-    turnRecorded = true
-    recordTurnToKernel(
+    return InterruptedTurnPayload(
       userText: heard,
       assistantText: interruptedReply,
-      interrupted: true)
+      idempotencyKey: turnIdempotencyKey
+    )
   }
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
