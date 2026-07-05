@@ -410,11 +410,20 @@ class TranscriptionService {
         webSocketTask = task
 
         delegate.onOpen = { [weak self, weak task] in
-            guard let self, let task, self.webSocketTask === task else { return }
-            self.handleWebSocketOpen()
+            guard let self,
+                  WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
+            else { return }
+            DispatchQueue.main.async { [weak self, weak task] in
+                guard let self,
+                      WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
+                else { return }
+                self.handleWebSocketOpen()
+            }
         }
         delegate.onClose = { [weak self, weak task] closeCode in
-            guard let self, let task, self.webSocketTask === task else { return }
+            guard let self,
+                  WebSocketConnectionAttempt.matches(task, current: self.webSocketTask)
+            else { return }
             log("TranscriptionService: WebSocket closed with code \(closeCode.rawValue)")
             if self.isConnected {
                 self.handleDisconnection()
@@ -432,7 +441,11 @@ class TranscriptionService {
         // Connect timeout: if still not connected after 10s, force reconnect
         Task { [weak self, weak task] in
             try? await Task.sleep(nanoseconds: 10_000_000_000)
-            guard let self, let task, self.webSocketTask === task, !self.isConnected, self.shouldReconnect else { return }
+            guard let self,
+                  WebSocketConnectionAttempt.matches(task, current: self.webSocketTask),
+                  !self.isConnected,
+                  self.shouldReconnect
+            else { return }
             log("TranscriptionService: Connect timeout (10s) — forcing reconnect")
             self.cleanupAndReconnect()
         }
@@ -624,6 +637,13 @@ final class WebSocketConnectionDelegate: NSObject, URLSessionWebSocketDelegate {
         reason: Data?
     ) {
         onClose?(closeCode)
+    }
+}
+
+enum WebSocketConnectionAttempt {
+    static func matches(_ candidate: URLSessionWebSocketTask?, current: URLSessionWebSocketTask?) -> Bool {
+        guard let candidate, let current else { return false }
+        return candidate === current
     }
 }
 

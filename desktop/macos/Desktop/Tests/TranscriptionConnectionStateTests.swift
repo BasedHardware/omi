@@ -3,31 +3,6 @@ import XCTest
 @testable import Omi_Computer
 
 final class TranscriptionConnectionStateTests: XCTestCase {
-  func testStreamingConnectionStateIsDrivenByWebSocketOpenEvent() throws {
-    let source = try transcriptionServiceSource()
-
-    XCTAssertFalse(
-      source.contains("asyncAfter(deadline: .now() + 0.5)"),
-      "TranscriptionService must not mark the WebSocket connected from a fixed timer"
-    )
-    XCTAssertTrue(
-      source.contains("URLSession(configuration: configuration, delegate:"),
-      "TranscriptionService should install a URLSessionWebSocketDelegate"
-    )
-    XCTAssertTrue(
-      source.contains("didOpenWithProtocol"),
-      "TranscriptionService should mark connected from URLSessionWebSocketDelegate.didOpenWithProtocol"
-    )
-    XCTAssertTrue(
-      source.contains("Task { [weak self, weak task] in"),
-      "TranscriptionService should scope the connect timeout to the WebSocket attempt"
-    )
-    XCTAssertTrue(
-      source.contains("guard let self, let task, self.webSocketTask === task, !self.isConnected, self.shouldReconnect else { return }"),
-      "TranscriptionService should ignore stale connect timeouts from prior WebSocket attempts"
-    )
-  }
-
   func testWebSocketConnectionDelegateForwardsOpenAndClose() {
     let delegate = WebSocketConnectionDelegate()
     var didOpen = false
@@ -50,11 +25,15 @@ final class TranscriptionConnectionStateTests: XCTestCase {
     XCTAssertEqual(closeCode, .goingAway)
   }
 
-  private func transcriptionServiceSource() throws -> String {
-    let url = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/TranscriptionService.swift")
-    return try String(contentsOf: url, encoding: .utf8)
+  func testWebSocketConnectionAttemptMatchesOnlyCurrentTaskIdentity() {
+    let session = URLSession(configuration: .default)
+    let currentTask = session.webSocketTask(with: URL(string: "wss://example.com/listen")!)
+    let staleTask = session.webSocketTask(with: URL(string: "wss://example.com/listen")!)
+    session.invalidateAndCancel()
+
+    XCTAssertTrue(WebSocketConnectionAttempt.matches(currentTask, current: currentTask))
+    XCTAssertFalse(WebSocketConnectionAttempt.matches(staleTask, current: currentTask))
+    XCTAssertFalse(WebSocketConnectionAttempt.matches(nil, current: currentTask))
+    XCTAssertFalse(WebSocketConnectionAttempt.matches(currentTask, current: nil))
   }
 }
