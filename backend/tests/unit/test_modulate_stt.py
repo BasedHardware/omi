@@ -1681,6 +1681,11 @@ class TestExtractNewText(unittest.TestCase):
 
         self.assertEqual(_extract_new_text("hello", "hello world"), "world")
 
+    def test_suffix_overlap_with_partial_last_word(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("good morning hello wor", "hello world again"), "again")
+
 
 class TestPrerecordedRequestShape(unittest.TestCase):
     @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
