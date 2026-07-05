@@ -207,7 +207,7 @@ def new_learnings_extractor(
     language: Optional[str] = None,
 ) -> List[Memory]:
     if user_name is None or learnings_str is None:
-        user_name, _ = get_prompt_memories(uid)
+        user_name, learnings_str = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
     people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []

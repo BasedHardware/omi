@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import FastAPI, UploadFile, File
 
@@ -14,19 +14,19 @@ app = FastAPI()
 
 
 @app.post('/v1/diarization')
-def diarization(file: UploadFile = File(...)) -> Any:
+def diarization(file: UploadFile = File(...)) -> List[Dict[str, Any]]:
     logger.info('diarization')
     return diarization_endpoint(file)
 
 
 @app.post('/v1/embedding')
-def embedding(file: UploadFile = File(...)) -> Any:
+def embedding(file: UploadFile = File(...)) -> List[float]:
     logger.info('embedding')
     return embedding_endpoint(file)
 
 
 @app.post('/v2/embedding')
-def embedding_v2(file: UploadFile = File(...)) -> Any:
+def embedding_v2(file: UploadFile = File(...)) -> List[float]:
     logger.info('embedding v2')
     return embedding_endpoint_v2(file)
 

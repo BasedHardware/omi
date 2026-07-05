@@ -33,7 +33,7 @@ def _response_text(response: object) -> str:
             elif item is not None:
                 parts.append(str(item))
         return ''.join(parts)
-    return str(content)
+    return '' if content is None else str(content)
 
 
 def _memory_content(memory: MemoryRecord) -> str:

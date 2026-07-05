@@ -28,7 +28,7 @@ def _response_text(response: object) -> str:
             elif item is not None:
                 parts.append(str(item))
         return "".join(parts)
-    return str(content)
+    return "" if content is None else str(content)
 
 
 async def describe_image(uid: str, base64_data: str) -> str:

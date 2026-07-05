@@ -1,7 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Any, Callable, Dict, List, Optional, cast
+from typing import List, Optional
 from pydantic import ValidationError
 
 import database.folders as folders_db
@@ -15,20 +15,12 @@ from models.folder import (
     ReorderFoldersRequest,
 )
 from models.conversation import Conversation
-from utils.conversations import render as _conversation_render
+from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# `utils.conversations.render.redact_conversations_for_list` is declared with a
-# bare `Dict` parameter/return; bind it through a typed alias so this
-# strict-checked file sees `Dict[str, Any]` instead of `Dict[Unknown, Unknown]`.
-redact_conversations_for_list: Callable[[List[Dict[str, Any]]], List[Dict[str, Any]]] = cast(
-    Callable[[List[Dict[str, Any]]], List[Dict[str, Any]]],
-    getattr(_conversation_render, "redact_conversations_for_list"),
-)
 
 
 @router.get('/v1/folders', response_model=List[Folder], tags=['folders'])

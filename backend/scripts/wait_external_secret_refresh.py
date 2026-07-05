@@ -10,10 +10,15 @@ import sys
 import time
 from typing import Any, cast
 
-EXIT_REFRESH_OBSERVED = 0
-EXIT_HARD_ERROR = 1
-EXIT_TIMEOUT = 2
-EXIT_NOT_READY_AFTER_REFRESH = 3
+exit_refresh_observed = 0
+exit_hard_error = 1
+exit_timeout = 2
+exit_not_ready_after_refresh = 3
+
+exit_refresh_observed = 0
+exit_hard_error = 1
+exit_timeout = 2
+exit_not_ready_after_refresh = 3
 
 
 def main() -> int:
@@ -38,11 +43,11 @@ def main() -> int:
             state = load_json(args.state_json) if args.state_json else fetch_external_secret(args.namespace, args.name)
         except Exception as exc:
             print(f'ERROR: failed to read ExternalSecret state: {exc}', file=sys.stderr)
-            return EXIT_HARD_ERROR
+            return exit_hard_error
         observed, reason = external_secret_refresh_observed(state, min_refresh_time)
         if observed:
             print(f'ExternalSecret refresh observed: {reason}')
-            return EXIT_REFRESH_OBSERVED
+            return exit_refresh_observed
         last_reason = reason
         if reason.startswith('status.refreshTime') and 'Ready condition is not true' in reason:
             saw_fresh_refresh = True
@@ -56,13 +61,13 @@ def main() -> int:
             f'{last_reason}',
             file=sys.stderr,
         )
-        return EXIT_NOT_READY_AFTER_REFRESH
+        return exit_not_ready_after_refresh
 
     print(
         f'ERROR: timed out waiting for ExternalSecret refresh after {min_refresh_time.isoformat()}: {last_reason}',
         file=sys.stderr,
     )
-    return EXIT_TIMEOUT
+    return exit_timeout
 
 
 def fetch_external_secret(namespace: str, name: str) -> dict[str, Any]:

@@ -20,9 +20,12 @@ def hume_expression_measurement_callback(request: Request, data: Dict[str, Any])
     if job_callback is None:
         raise HTTPException(status_code=400, detail="Job callback is invalid")
 
+    if job_callback.job_id is None:
+        raise HTTPException(status_code=400, detail="Job callback missing job_id")
+
     process_user_expression_measurement_callback(
         task.TaskActionProvider.HUME,
-        cast(str, job_callback.job_id),
+        job_callback.job_id,
         job_callback,
     )
 

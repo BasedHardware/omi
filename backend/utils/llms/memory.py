@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import database.memories as memories_db
 from database._client import db as firestore_db
@@ -52,7 +52,7 @@ def safe_create_memory(memory_data: Dict[str, Any]) -> Memory:
         raise
 
 
-def get_prompt_data(uid: str) -> Tuple[Any, List[Memory], List[Memory]]:
+def get_prompt_data(uid: str) -> Tuple[Optional[str], List[Memory], List[Memory]]:
     # TODO: cache this
     if resolve_memory_system(uid, db_client=firestore_db) == MemorySystem.CANONICAL:
         existing_memories = [

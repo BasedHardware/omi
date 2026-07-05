@@ -81,11 +81,10 @@ def get_user_name(uid: str, use_default: bool = True) -> Optional[str]:
         firestore_name = _get_firestore_user_name(uid)
         if firestore_name:
             display_name = firestore_name
+        elif use_default:
+            display_name = 'The User'
         else:
-            # default_name may be None when use_default=False; in that case fall
-            # back to the raw (already split) display name so cache_user_name
-            # always receives a str.
-            display_name = default_name or display_name
+            return None
 
     cache_user_name(uid, display_name, ttl=60 * 60)
     return display_name

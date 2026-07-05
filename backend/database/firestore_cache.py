@@ -105,7 +105,9 @@ def get_or_fetch(policy: CachePolicy, entity_id: str, fetch_fn: Callable[[], Any
             loaded = json.loads(raw_str, object_hook=_json_object_hook)
             if not isinstance(loaded, dict):
                 record_request(policy.namespace, 'decode_error')
-                return _fetch(policy, fetch_fn)
+                payload = _fetch(policy, fetch_fn)
+                _set(policy, key, payload, time.time())
+                return payload
             envelope: dict[str, Any] = cast(dict[str, Any], loaded)
             if envelope.get('v') == policy.version and envelope.get('fresh_until', 0) >= now:
                 record_request(policy.namespace, 'hit')

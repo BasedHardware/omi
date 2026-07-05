@@ -52,7 +52,9 @@ def iter_user_data_export(uid: str) -> Iterator[str]:
 
     yield '  "conversations": [\n'
     first = True
-    for conv in cast(Iterable[Mapping[str, Any]], conversations_db.iter_all_conversations(uid, include_discarded=True)):
+    for conv in conversations_db.iter_all_conversations(uid, include_discarded=True):
+        if conv is None:
+            continue
         if not first:
             yield ',\n'
         first = False

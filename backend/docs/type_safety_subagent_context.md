@@ -5,11 +5,11 @@ Enroll backend .py files into Pyright strict mode (reportUnknown* at warning).
 Fix every file to **0 errors, 0 warnings** then add it to pyrightconfig.json.
 
 ## Worktree
-`/Users/david/.codex/worktrees/1ed8/omi`
+`<repo-root>`
 
 ## Verify a file
 ```bash
-cd /Users/david/.codex/worktrees/1ed8/omi/backend
+cd $(git rev-parse --show-toplevel)/backend
 .venv/bin/python -m pyright -p pyrightconfig.json <path> \
   --pythonpath .venv/bin/python --level warning --warnings
 ```
@@ -17,7 +17,7 @@ File is ready to enroll ONLY when output shows `0 errors, 0 warnings`.
 
 ## Full typecheck
 ```bash
-cd /Users/david/.codex/worktrees/1ed8/omi/backend && bash scripts/typecheck.sh
+cd $(git rev-parse --show-toplevel)/backend && bash scripts/typecheck.sh
 ```
 
 ## CRITICAL RULES
@@ -63,6 +63,7 @@ def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
 
 ### Decorator factory
 ```python
+from functools import wraps
 F = TypeVar("F", bound=Callable[..., Any])
 def my_decorator(...) -> Callable[[F], F]:
     @wraps(func)

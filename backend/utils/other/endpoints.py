@@ -313,12 +313,14 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
     remaining = 0
     if current:
         current_time = int(time.time())
+        remaining = current.get("remaining", 0)
+        timestamp = current.get("timestamp", 0)
 
         # Check if the time window has expired
-        if current_time - current.get("timestamp", 0) >= window_seconds:
+        if current_time - timestamp >= window_seconds:
             remaining = requests_per_window - 1  # Reset the counter for the new window
             timestamp = current_time
-        elif current.get("remaining", 0) == 0:
+        elif remaining == 0:
             raise HTTPException(status_code=429, detail="Too Many Requests")
 
         remaining -= 1
