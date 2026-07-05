@@ -17,6 +17,7 @@ struct FileIndexingView: View {
     @State private var showInfoPopover: Bool = false
     @State private var chatMessages: [String] = []
     @State private var pipelineStarted = false
+    @State private var scanFailed = false
 
     @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -63,7 +64,9 @@ struct FileIndexingView: View {
                 .padding(.bottom, 6)
 
             // Subtitle — folder being scanned or general message
-            if !scanningFolder.isEmpty {
+            if scanFailed {
+                EmptyView()
+            } else if !scanningFolder.isEmpty {
                 Text("Scanning ~/\(scanningFolder)" + (totalFilesScanned > 0 ? " · \(totalFilesScanned.formatted()) files found" : ""))
                     .scaledFont(size: 13)
                     .foregroundColor(OmiColors.textTertiary)
@@ -268,6 +271,7 @@ struct FileIndexingView: View {
     private func startLoadingPipeline() {
         totalFilesScanned = 0
         progress = 0.0
+        scanFailed = false
 
         // Set flag immediately so DesktopHomeView won't spawn a duplicate sheet
         // when onboarding completes mid-pipeline
@@ -275,7 +279,13 @@ struct FileIndexingView: View {
 
         Task {
             // Stage 1: File Scanning (0% → 60%)
-            await runFileScanning()
+            let scanSucceeded = await runFileScanning()
+            guard scanSucceeded else {
+                await MainActor.run {
+                    UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
+                }
+                return
+            }
 
             // Stage 2: AI Exploration (60% → 90%)
             await runAIExploration()
@@ -294,7 +304,7 @@ struct FileIndexingView: View {
     }
 
     /// Stage 1: Scan folders, progress 0% → 60%
-    private func runFileScanning() async {
+    private func runFileScanning() async -> Bool {
         // Check if files were already indexed (e.g., during onboarding chat via scan_files tool)
         let existingCount = await FileIndexerService.shared.getIndexedFileCount()
         if existingCount > 0 {
@@ -304,7 +314,7 @@ struct FileIndexingView: View {
                 progress = 0.6
                 statusText = "Analyzing your files..."
             }
-            return
+            return true
         }
 
         await MainActor.run {
@@ -333,21 +343,30 @@ struct FileIndexingView: View {
             await MainActor.run {
                 scanningFolder = name
             }
-            let count = await FileIndexerService.shared.scanFolders([url])
+            let scanResult = await FileIndexerService.shared.scanFolders([url])
+            if let failure = scanResult.failure {
+                await showScanFailure(failure)
+                return false
+            }
             completedFolders += 1
             await MainActor.run {
-                totalFilesScanned += count
+                totalFilesScanned += scanResult.indexedCount
                 progress = Double(completedFolders) / Double(folderCount) * 0.6
             }
         }
 
         // Also index installed app names from /Applications
-        let appCount = await scanApplicationNames()
+        let appScanResult = await scanApplicationNames()
+        if let failure = appScanResult.failure {
+            await showScanFailure(failure)
+            return false
+        }
         await MainActor.run {
-            totalFilesScanned += appCount
+            totalFilesScanned += appScanResult.indexedCount
             progress = 0.6
             scanningFolder = ""
         }
+        return true
     }
 
     /// Stage 2: AI exploration chat in background, progress 60% → 90%
@@ -465,7 +484,7 @@ struct FileIndexingView: View {
     // MARK: - Helpers
 
     /// Scan /Applications and ~/Applications for app names
-    private func scanApplicationNames() async -> Int {
+    private func scanApplicationNames() async -> FileIndexingScanResult {
         await MainActor.run {
             scanningFolder = "Applications"
         }
@@ -478,10 +497,25 @@ struct FileIndexingView: View {
 
         var count = 0
         for dir in appDirs {
-            let scanned = await FileIndexerService.shared.scanFolders([dir])
-            count += scanned
+            let scanResult = await FileIndexerService.shared.scanFolders([dir])
+            if let failure = scanResult.failure {
+                return FileIndexingScanResult(
+                    indexedCount: count + scanResult.indexedCount,
+                    failure: failure
+                )
+            }
+            count += scanResult.indexedCount
         }
-        return count
+        return FileIndexingScanResult(indexedCount: count)
+    }
+
+    private func showScanFailure(_ failure: FileIndexingFailure) async {
+        log("FileIndexingView: File scan failed: \(failure.logMessage)")
+        await MainActor.run {
+            scanFailed = true
+            statusText = failure.userMessage
+            scanningFolder = ""
+        }
     }
 
     /// Send the exploration prompt to the chat

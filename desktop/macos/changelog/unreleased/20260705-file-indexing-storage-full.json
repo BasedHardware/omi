@@ -1,0 +1,3 @@
+{
+  "change": "Fixed local file scans crashing or appearing complete when Mac storage is full"
+}

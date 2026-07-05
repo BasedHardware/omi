@@ -1232,7 +1232,9 @@ class ChatToolExecutor {
   private static func executeScanFiles(_: [String: Any]) async -> String {
     let outcome = await scanLocalFiles()
     fileScanFileCount = outcome.indexedFileCount
-    onScanFilesCompleted?(outcome.indexedFileCount)
+    if outcome.didCompleteSuccessfully {
+      onScanFilesCompleted?(outcome.indexedFileCount)
+    }
     return outcome.summaryText
   }
 
@@ -1305,7 +1307,20 @@ class ChatToolExecutor {
     }
 
     // Actually scan accessible folders (blocking)
-    let count = await FileIndexerService.shared.scanFolders(accessibleFolders)
+    let scanResult = await FileIndexerService.shared.scanFolders(accessibleFolders)
+    if let failure = scanResult.failure {
+      log(
+        "Onboarding file scan failed after \(scanResult.indexedCount) files indexed, \(deniedFolders.count) folders denied: \(failure.logMessage)"
+      )
+      return LocalFileScanOutcome(
+        hasReadableUserFileTarget: readableUserFileTargetCount > 0,
+        didCompleteSuccessfully: false,
+        indexedFileCount: scanResult.indexedCount,
+        summaryText: failure.toolErrorMessage
+      )
+    }
+
+    let count = scanResult.indexedCount
     log(
       "Onboarding file scan completed: \(count) files indexed, \(deniedFolders.count) folders denied"
     )

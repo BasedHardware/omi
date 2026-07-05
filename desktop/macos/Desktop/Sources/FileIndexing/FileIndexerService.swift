@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import GRDB
 
@@ -77,7 +78,13 @@ actor FileIndexerService {
         let foldersToScan = scanPolicy.standardScanRoots(homeURL: home)
 
         // 1. Scan files
-        let totalFiles = await scanFolders(foldersToScan)
+        let scanResult = await scanFolders(foldersToScan)
+        if let failure = scanResult.failure {
+            log("FileIndexer: Onboarding scan failed after \(scanResult.indexedCount) files: \(failure.logMessage)")
+            return
+        }
+
+        let totalFiles = scanResult.indexedCount
         guard totalFiles > 0 else {
             log("FileIndexer: No files found, skipping")
             await MainActor.run {
@@ -125,22 +132,26 @@ actor FileIndexerService {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let folders = scanPolicy.standardScanRoots(homeURL: home)
 
-        let count = await scanFolders(folders, incremental: true)
-        log("FileIndexer: Background rescan complete, \(count) files indexed")
+        let scanResult = await scanFolders(folders, incremental: true)
+        if let failure = scanResult.failure {
+            log("FileIndexer: Background rescan failed after \(scanResult.indexedCount) files: \(failure.logMessage)")
+            return
+        }
+        log("FileIndexer: Background rescan complete, \(scanResult.indexedCount) files indexed")
     }
 
     // MARK: - File Scanning
 
     /// Scan folders and store file metadata in indexed_files table
-    /// Returns total number of files indexed
+    /// Returns the number of files indexed, plus a failure when the local index could not be saved.
     @discardableResult
-    func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
+    func scanFolders(_ folders: [URL], incremental: Bool = false) async -> FileIndexingScanResult {
         let db: DatabasePool
         do {
             db = try await ensureDB()
         } catch {
             log("FileIndexer: DB init failed: \(error.localizedDescription)")
-            return 0
+            return FileIndexingScanResult(indexedCount: 0, failure: FileIndexingFailure.classify(error))
         }
 
         // For incremental scans, load existing index for O(1) lookup
@@ -167,7 +178,7 @@ actor FileIndexerService {
             let folderName = folder.lastPathComponent
             log("FileIndexer: Scanning ~/\(folderName)")
 
-            scanDirectory(
+            if let failure = scanDirectory(
                 url: folder,
                 folderName: folderName,
                 homePath: home,
@@ -179,20 +190,32 @@ actor FileIndexerService {
                 db: db,
                 existingIndex: existingIndex,
                 scannedPaths: &scannedPaths
-            )
+            ) {
+                return FileIndexingScanResult(indexedCount: totalFiles, failure: failure)
+            }
         }
 
         // Flush remaining batch
         if !batch.isEmpty {
-            insertBatch(batch, into: db)
+            let insertedCount = batch.count
+            if let failure = insertBatch(batch, into: db) {
+                return FileIndexingScanResult(indexedCount: totalFiles, failure: failure)
+            }
+            totalFiles += insertedCount
         }
 
         // For incremental scans, remove files that no longer exist on disk
         if incremental && !existingIndex.isEmpty {
-            deleteRemovedFiles(scannedPaths: scannedPaths, existingPaths: Set(existingIndex.keys), db: db)
+            if let failure = deleteRemovedFiles(
+                scannedPaths: scannedPaths,
+                existingPaths: Set(existingIndex.keys),
+                db: db
+            ) {
+                return FileIndexingScanResult(indexedCount: totalFiles, failure: failure)
+            }
         }
 
-        return totalFiles
+        return FileIndexingScanResult(indexedCount: totalFiles)
     }
 
     private func scanDirectory(
@@ -207,8 +230,8 @@ actor FileIndexerService {
         db: DatabasePool,
         existingIndex: [String: Date?],
         scannedPaths: inout Set<String>
-    ) {
-        guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return }
+    ) -> FileIndexingFailure? {
+        guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return nil }
 
         let contents: [URL]
         do {
@@ -219,7 +242,7 @@ actor FileIndexerService {
             )
         } catch {
             log("FileIndexer: Cannot read \(url.lastPathComponent): \(error.localizedDescription)")
-            return
+            return nil
         }
 
         for item in contents {
@@ -251,14 +274,17 @@ actor FileIndexerService {
                         continue
                     }
                     batch.append(record)
-                    totalFiles += 1
                     if batch.count >= batchSize {
-                        insertBatch(batch, into: db)
+                        let insertedCount = batch.count
+                        if let failure = insertBatch(batch, into: db) {
+                            return failure
+                        }
+                        totalFiles += insertedCount
                         batch.removeAll(keepingCapacity: true)
                     }
                     continue
                 case .descend:
-                    scanDirectory(
+                    if let failure = scanDirectory(
                         url: item,
                         folderName: folderName,
                         homePath: homePath,
@@ -270,7 +296,9 @@ actor FileIndexerService {
                         db: db,
                         existingIndex: existingIndex,
                         scannedPaths: &scannedPaths
-                    )
+                    ) {
+                        return failure
+                    }
                     continue
                 }
             }
@@ -299,16 +327,21 @@ actor FileIndexerService {
             }
 
             batch.append(record)
-            totalFiles += 1
 
             if batch.count >= batchSize {
-                insertBatch(batch, into: db)
+                let insertedCount = batch.count
+                if let failure = insertBatch(batch, into: db) {
+                    return failure
+                }
+                totalFiles += insertedCount
                 batch.removeAll(keepingCapacity: true)
             }
         }
+
+        return nil
     }
 
-    private func insertBatch(_ records: [IndexedFileRecord], into db: DatabasePool) {
+    private func insertBatch(_ records: [IndexedFileRecord], into db: DatabasePool) -> FileIndexingFailure? {
         do {
             try db.write { database in
                 for record in records {
@@ -330,8 +363,11 @@ actor FileIndexerService {
                     )
                 }
             }
+            return nil
         } catch {
-            log("FileIndexer: Batch insert error: \(error.localizedDescription)")
+            let failure = FileIndexingFailure.classify(error)
+            log("FileIndexer: Batch insert error (\(failure.logMessage)): \(error.localizedDescription)")
+            return failure
         }
     }
 
@@ -357,9 +393,13 @@ actor FileIndexerService {
     }
 
     /// Delete files from the index that no longer exist on disk
-    private func deleteRemovedFiles(scannedPaths: Set<String>, existingPaths: Set<String>, db: DatabasePool) {
+    private func deleteRemovedFiles(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        db: DatabasePool
+    ) -> FileIndexingFailure? {
         let removed = existingPaths.subtracting(scannedPaths)
-        guard !removed.isEmpty else { return }
+        guard !removed.isEmpty else { return nil }
 
         log("FileIndexer: Removing \(removed.count) deleted files from index")
 
@@ -377,10 +417,13 @@ actor FileIndexerService {
                     )
                 }
             } catch {
-                log("FileIndexer: Batch delete error: \(error.localizedDescription)")
+                let failure = FileIndexingFailure.classify(error)
+                log("FileIndexer: Batch delete error (\(failure.logMessage)): \(error.localizedDescription)")
+                return failure
             }
             offset = end
         }
+        return nil
     }
 
     // MARK: - Summary Generation
@@ -534,6 +577,69 @@ actor FileIndexerService {
 }
 
 // MARK: - Errors
+
+struct FileIndexingScanResult: Equatable {
+    let indexedCount: Int
+    let failure: FileIndexingFailure?
+
+    init(indexedCount: Int, failure: FileIndexingFailure? = nil) {
+        self.indexedCount = indexedCount
+        self.failure = failure
+    }
+}
+
+enum FileIndexingFailure: Error, Equatable, LocalizedError {
+    case diskFull
+    case localWriteFailed
+
+    static func classify(_ error: Error) -> FileIndexingFailure {
+        if isDiskFull(error) {
+            return .diskFull
+        }
+        return .localWriteFailed
+    }
+
+    var userMessage: String {
+        switch self {
+        case .diskFull:
+            return "Mac storage is full. Free up space and try again."
+        case .localWriteFailed:
+            return "Omi couldn't save the file index. Try again."
+        }
+    }
+
+    var toolErrorMessage: String {
+        "Error: \(userMessage)"
+    }
+
+    var logMessage: String {
+        switch self {
+        case .diskFull:
+            return "disk full"
+        case .localWriteFailed:
+            return "local file index write failed"
+        }
+    }
+
+    var errorDescription: String? {
+        userMessage
+    }
+
+    private static func isDiskFull(_ error: Error) -> Bool {
+        if let dbError = error as? DatabaseError {
+            return dbError.resultCode == .SQLITE_FULL
+        }
+
+        let nsError = error as NSError
+        if nsError.domain == NSPOSIXErrorDomain && nsError.code == Int(ENOSPC) {
+            return true
+        }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? Error {
+            return isDiskFull(underlying)
+        }
+        return false
+    }
+}
 
 enum FileIndexerError: LocalizedError {
     case databaseNotInitialized
