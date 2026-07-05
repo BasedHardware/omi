@@ -56,6 +56,7 @@ from routers import (
     announcements,
     phone_calls,
     agent_tools,
+    agent_vm,
     tools,
     metrics,
     fair_use_admin,
@@ -156,6 +157,7 @@ app.include_router(goals.router)
 app.include_router(announcements.router)
 app.include_router(phone_calls.router)
 app.include_router(agent_tools.router)
+app.include_router(agent_vm.router)
 app.include_router(tools.router)
 app.include_router(metrics.router)
 app.include_router(fair_use_admin.router)
