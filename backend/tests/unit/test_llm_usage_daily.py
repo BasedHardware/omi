@@ -1,7 +1,8 @@
-"""Unit tests for GET /v1/users/me/llm-usage/daily.
+"""Unit tests for GET /v1/users/me/llm-usage/daily and get_daily_usage_summary.
 
-routers.llm_usage imports cleanly, so the endpoint is tested directly with patch.object
-on the llm_usage_db seam (no sys.modules mutation).
+Both routers.llm_usage and database.llm_usage import cleanly, so both the endpoint and the
+db helpers are tested directly with patch.object (no sys.modules mutation). The per-feature
+token aggregation is shared with get_usage_summary via _sum_model_tokens.
 """
 
 import os
@@ -12,68 +13,80 @@ os.environ.setdefault(
 )
 os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
 
+from datetime import date, datetime, timezone
 from unittest.mock import patch
-
-import pytest
-from fastapi import HTTPException
 
 import database.llm_usage as llm_usage_db
 from routers import llm_usage as llm_usage_router
 
-
-def test_no_data_returns_zeros():
-    with patch.object(llm_usage_db, "get_daily_usage", return_value={}):
-        resp = llm_usage_router.get_daily_llm_usage(date="2026-07-05", uid="u1")
-    assert resp["has_data"] is False
-    assert resp["features"] == {}
-    assert resp["total"] == {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "call_count": 0}
-    assert resp["date"] == "2026-07-05"
+_DAY = datetime(2026, 7, 5, tzinfo=timezone.utc)
 
 
-def test_normalizes_features_and_totals():
+# ---------------------------------------------------------------------------
+# shared aggregation helper
+# ---------------------------------------------------------------------------
+def test_sum_model_tokens_sums_and_skips_non_dicts():
+    models = {
+        "gpt-4.1-mini": {"input_tokens": 100, "output_tokens": 50, "call_count": 2},
+        "o4-mini": {"input_tokens": 10, "output_tokens": 5, "call_count": 1},
+        "cost_only": 0.05,  # non-dict -> skipped
+    }
+    assert llm_usage_db._sum_model_tokens(models) == (110, 55, 3)
+
+
+# ---------------------------------------------------------------------------
+# db: get_daily_usage_summary
+# ---------------------------------------------------------------------------
+def test_summary_normalizes_features_and_totals():
     raw = {
         "date": "2026-07-05",
-        "last_updated": "2026-07-05T12:00:00Z",
-        "chat": {
-            "gpt-4.1-mini": {"input_tokens": 100, "output_tokens": 50, "call_count": 2},
-            "o4-mini": {"input_tokens": 10, "output_tokens": 5, "call_count": 1},
-        },
-        "memory": {"gpt-4.1-mini": {"input_tokens": 20, "output_tokens": 8, "call_count": 1}},
-        "some_scalar": 5,  # non-dict feature -> skipped
+        "last_updated": "x",
+        "chat": {"m1": {"input_tokens": 100, "output_tokens": 50, "call_count": 2}},
+        "memory": {"m1": {"input_tokens": 20, "output_tokens": 8, "call_count": 1}},
+        "scalar": 5,  # non-dict feature -> skipped
     }
     with patch.object(llm_usage_db, "get_daily_usage", return_value=raw):
-        resp = llm_usage_router.get_daily_llm_usage(date=None, uid="u1")  # default = today
-    assert set(resp["features"].keys()) == {"chat", "memory"}
-    assert resp["features"]["chat"] == {
-        "input_tokens": 110,
-        "output_tokens": 55,
-        "total_tokens": 165,
-        "call_count": 3,
-    }
-    assert resp["features"]["memory"] == {
-        "input_tokens": 20,
-        "output_tokens": 8,
-        "total_tokens": 28,
-        "call_count": 1,
-    }
-    assert resp["total"] == {"input_tokens": 130, "output_tokens": 63, "total_tokens": 193, "call_count": 4}
-    assert resp["has_data"] is True
+        out = llm_usage_db.get_daily_usage_summary("u1", _DAY)
+    assert set(out["features"]) == {"chat", "memory"}
+    assert out["features"]["chat"] == {"input_tokens": 100, "output_tokens": 50, "total_tokens": 150, "call_count": 2}
+    assert out["total"] == {"input_tokens": 120, "output_tokens": 58, "total_tokens": 178, "call_count": 3}
+    assert out["date"] == "2026-07-05"
+    assert out["has_data"] is True
 
 
-def test_skips_cost_only_and_zero_sum_buckets():
+def test_summary_no_data():
+    with patch.object(llm_usage_db, "get_daily_usage", return_value={}):
+        out = llm_usage_db.get_daily_usage_summary("u1", _DAY)
+    assert out["has_data"] is False
+    assert out["features"] == {}
+    assert out["total"] == {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0, "call_count": 0}
+
+
+def test_summary_skips_cost_only_and_zero_sum_buckets():
     raw = {
-        "cost_only": {"gpt-4.1-mini": 0.05},  # inner value not a dict -> contributes nothing -> dropped
+        "cost_only": {"m": 0.05},  # inner value not a dict -> contributes nothing -> dropped
         "empty": {"m": {"input_tokens": 0, "output_tokens": 0, "call_count": 0}},  # zero-sum -> dropped
     }
     with patch.object(llm_usage_db, "get_daily_usage", return_value=raw):
-        resp = llm_usage_router.get_daily_llm_usage(date="2026-07-05", uid="u1")
-    assert resp["features"] == {}
-    assert resp["has_data"] is False
+        out = llm_usage_db.get_daily_usage_summary("u1", _DAY)
+    assert out["features"] == {}
+    assert out["has_data"] is False
 
 
-def test_bad_date_raises_400_before_db():
-    # Parse failure happens before any DB access; patching to explode proves the DB is not hit.
-    with patch.object(llm_usage_db, "get_daily_usage", side_effect=AssertionError("db must not be called")):
-        with pytest.raises(HTTPException) as exc:
-            llm_usage_router.get_daily_llm_usage(date="2026/07/05", uid="u1")
-    assert exc.value.status_code == 400
+# ---------------------------------------------------------------------------
+# router: thin delegation + typed date
+# ---------------------------------------------------------------------------
+def test_endpoint_delegates_with_converted_datetime():
+    sentinel = {"date": "2026-07-05", "features": {}, "total": {}, "has_data": False}
+    with patch.object(llm_usage_db, "get_daily_usage_summary", return_value=sentinel) as m:
+        resp = llm_usage_router.get_daily_llm_usage(date=date(2026, 7, 5), uid="u1")
+    assert resp is sentinel
+    uid_arg, day_arg = m.call_args[0]
+    assert uid_arg == "u1"
+    assert day_arg == _DAY  # date param converted to a UTC datetime
+
+
+def test_endpoint_default_date_passes_none():
+    with patch.object(llm_usage_db, "get_daily_usage_summary", return_value={}) as m:
+        llm_usage_router.get_daily_llm_usage(date=None, uid="u1")
+    assert m.call_args[0] == ("u1", None)

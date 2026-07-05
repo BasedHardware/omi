@@ -159,6 +159,62 @@ def get_daily_usage(uid: str, date: Optional[datetime] = None) -> Dict:
     return {}
 
 
+def _sum_model_tokens(models: Dict) -> tuple:
+    """Sum (input_tokens, output_tokens, call_count) across a feature's per-model dicts.
+
+    Skips non-dict values (cost-only scalar buckets). Shared by get_usage_summary and
+    get_daily_usage_summary so token aggregation lives in one place and cannot drift.
+    """
+    total_in = total_out = total_calls = 0
+    for _model, tokens in models.items():
+        if isinstance(tokens, dict):
+            total_in += tokens.get("input_tokens", 0)
+            total_out += tokens.get("output_tokens", 0)
+            total_calls += tokens.get("call_count", 0)
+    return total_in, total_out, total_calls
+
+
+def get_daily_usage_summary(uid: str, date: Optional[datetime] = None) -> Dict:
+    """Normalized per-feature LLM token usage for a single day, with day-level totals.
+
+    Wraps get_daily_usage and applies the same per-feature aggregation as get_usage_summary
+    (via _sum_model_tokens). Returns {date, features, total, has_data}; only buckets with
+    nonzero usage are included.
+    """
+    if date is None:
+        date = datetime.now(timezone.utc)
+
+    raw = get_daily_usage(uid, date)
+    features: Dict[str, Dict[str, int]] = {}
+    total_in = total_out = total_calls = 0
+    for feature, models in raw.items():
+        if feature in ("last_updated", "date") or not isinstance(models, dict):
+            continue
+        f_in, f_out, f_calls = _sum_model_tokens(models)
+        if f_in or f_out or f_calls:
+            features[feature] = {
+                "input_tokens": f_in,
+                "output_tokens": f_out,
+                "total_tokens": f_in + f_out,
+                "call_count": f_calls,
+            }
+            total_in += f_in
+            total_out += f_out
+            total_calls += f_calls
+
+    return {
+        "date": f"{date.year}-{date.month:02d}-{date.day:02d}",
+        "features": features,
+        "total": {
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "total_tokens": total_in + total_out,
+            "call_count": total_calls,
+        },
+        "has_data": bool(features),
+    }
+
+
 def get_usage_summary(uid: str, days: int = 30) -> Dict:
     """
     Get aggregated LLM usage summary for the last N days.
@@ -193,11 +249,10 @@ def get_usage_summary(uid: str, days: int = 30) -> Dict:
             if feature not in summary:
                 summary[feature] = {"input_tokens": 0, "output_tokens": 0, "call_count": 0}
 
-            for model, tokens in models.items():
-                if isinstance(tokens, dict):
-                    summary[feature]["input_tokens"] += tokens.get("input_tokens", 0)
-                    summary[feature]["output_tokens"] += tokens.get("output_tokens", 0)
-                    summary[feature]["call_count"] += tokens.get("call_count", 0)
+            m_in, m_out, m_calls = _sum_model_tokens(models)
+            summary[feature]["input_tokens"] += m_in
+            summary[feature]["output_tokens"] += m_out
+            summary[feature]["call_count"] += m_calls
 
     return summary
 
