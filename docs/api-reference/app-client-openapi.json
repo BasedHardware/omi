@@ -14826,6 +14826,7 @@
             "type": "string"
           },
           "text": {
+            "maxLength": 5000,
             "minLength": 1,
             "title": "Text",
             "type": "string"
