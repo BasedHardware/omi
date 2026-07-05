@@ -121,19 +121,29 @@ function validateManifest() {
 function collectCapabilities() {
   const capabilities = [];
 
-  const pushCapability = (toolName, tool, doc, surfaces) => {
+  const pushCapability = (toolName, tool, doc, surfaces, { mergeGuidelines = false } = {}) => {
+    // Canonical entries fold promptGuidelines into the capability bullets so
+    // the manifest stays the single declaration site (guidelines are never
+    // hand-mirrored into capabilityDoc; ChatDiscoverabilityTests enforces the
+    // superset). Aliases keep their own doc verbatim.
+    const bullets = [...doc.bullets];
+    if (mergeGuidelines) {
+      for (const guideline of tool.promptGuidelines ?? []) {
+        if (!bullets.includes(guideline)) bullets.push(guideline);
+      }
+    }
     capabilities.push({
       toolName,
       title: doc.title,
       latency: tool.latency,
       surfaces,
       summary: doc.summary,
-      bullets: doc.bullets,
+      bullets,
     });
   };
 
   for (const tool of omiToolManifest) {
-    pushCapability(tool.name, tool, tool.capabilityDoc, tool.surfaces);
+    pushCapability(tool.name, tool, tool.capabilityDoc, tool.surfaces, { mergeGuidelines: true });
     for (const [alias, doc] of Object.entries(tool.aliasCapabilityDocs ?? {})) {
       const aliasSurfaces = doc.surfaces ?? tool.surfaces;
       pushCapability(alias, tool, doc, aliasSurfaces);

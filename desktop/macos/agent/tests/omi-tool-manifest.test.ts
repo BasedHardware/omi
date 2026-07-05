@@ -155,8 +155,13 @@ describe("omi tool manifest", () => {
   });
 
   it("requires surfaces and capabilityDoc on every manifest entry", () => {
+    // spawn_background_agent is the coordinator-RPC-only entrypoint and is
+    // deliberately advertised on no agent-facing surface (see sibling test).
+    const internalOnlyTools = new Set(["spawn_background_agent"]);
     for (const tool of omiToolManifest) {
-      expect(tool.surfaces.length, `${tool.name} surfaces`).toBeGreaterThan(0);
+      if (!internalOnlyTools.has(tool.name)) {
+        expect(tool.surfaces.length, `${tool.name} surfaces`).toBeGreaterThan(0);
+      }
       expect(tool.capabilityDoc.title, `${tool.name} capabilityDoc.title`).toBeTruthy();
       expect(tool.capabilityDoc.summary, `${tool.name} capabilityDoc.summary`).toBeTruthy();
       expect(tool.capabilityDoc.bullets.length, `${tool.name} capabilityDoc.bullets`).toBeGreaterThan(0);

@@ -248,7 +248,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ),
     voice: {
       realtimeDescription:
-        "Get a recap of what the user actually DID on their Mac — apps used (with minutes), conversations, tasks, focus sessions, and screen activity — for a day. THIS is the tool for 'what did I do yesterday', 'what did I do today', 'which apps did I use the most', 'how did I spend my time'. Do NOT use search_conversations or spawn_agent for these. Fast synchronous read — speak a short summary of what it returns.",
+        "Get a recap of what the user actually DID on their Mac — apps used (with minutes), conversations, tasks, focus sessions, and screen activity — for a day. First choice for 'what did I do yesterday', 'what did I do today', 'which apps did I use the most', 'how did I spend my time': one fast synchronous read, where searching conversations or spawning an agent would be slower and less complete. Speak a short summary of what it returns.",
     },
   },
   fill_cloud_connector_form: {
@@ -288,7 +288,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Do NOT use spawn_agent for reading tasks.",
+        "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work.",
     },
   },
   complete_task: {
@@ -550,7 +550,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "Get a second opinion from a smarter model and receive text to speak. Use ONLY when the user is dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, or asks for a better/deeper answer), OR when you genuinely need precise up-to-date facts you don't know. Do NOT use it for general, creative, or long-form requests — answer those yourself.",
+        "Get a second opinion from a smarter model and receive text to speak. Use it when the user is dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, or asks for a better/deeper answer), or when you genuinely need precise up-to-date facts you don't know. Answer general, creative, and long-form requests yourself.",
       schemaOverride: schema(
         {
           query: { type: "string", description: "The full question to escalate." },

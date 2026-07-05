@@ -290,6 +290,15 @@ def flatten_trace_text(trace: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def trace_tool_executions(traces: list[dict[str, Any]], names: set[str] | None = None) -> list[dict[str, Any]]:
+    return [
+        tool
+        for trace in traces
+        for tool in (trace.get("tool_executions") or [])
+        if isinstance(tool, dict) and (names is None or tool.get("name") in names)
+    ]
+
+
 def strip_probe_text(haystack: str, probe_texts: list[str]) -> str:
     """Remove the probe turn's own text from an assertion haystack (R8).
 
@@ -401,6 +410,7 @@ class GauntletRunner:
             "ptt": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-PTT",
             "spawn": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-SPAWN",
         }
+        self.suites = expand_suites(getattr(args, "suite", "core"))
         self.baseline_identity: dict[str, str] | None = None
         self.failures: list[str] = []
         self.warnings: list[str] = []
@@ -605,11 +615,25 @@ class GauntletRunner:
                 ),
             },
         }
+        manifest["suites"] = sorted(self.suites)
+        self.manifest = manifest
         write_json(self.run_dir / "manifest.json", manifest)
 
         self.ensure_bridge()
         self.navigate_chat()
 
+        if "continuity" in self.suites:
+            self.run_continuity_suite()
+        if "agents" in self.suites:
+            self.run_agents_suite()
+        if "prompts" in self.suites:
+            self.run_prompts_suite()
+        if "owner" in self.suites:
+            self.run_owner_suite()
+
+        return self.finalize()
+
+    def run_continuity_suite(self) -> None:
         # Step 1 — typed turn
         typed_query = (
             f"Remember this continuity marker exactly: {self.markers['typed']}. "
@@ -642,11 +666,15 @@ class GauntletRunner:
             if self.markers["ptt"] not in saved_user:
                 self.fail(f"PTT turn did not persist marker in saved_user_text ({saved_user!r})")
 
-        # Allow kernel turn_recorded projection + backend persistence to settle.
-        time.sleep(2.0)
-        wait = self.bridge_act( "wait_main_chat_idle", {"timeoutMs": str(self.args.turn_timeout_ms)})
-        snapshot = self.bridge_act( "main_chat_snapshot", {"limit": "80"})
-        snapshot_detail = snapshot.get("result", {}).get("detail", wait.get("result", {}).get("detail", {}))
+        # Poll for the kernel turn_recorded projection instead of a fixed sleep.
+        snapshot_detail: dict[str, str] = {}
+        settle_deadline = time.monotonic() + 10.0
+        while time.monotonic() < settle_deadline:
+            snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+            snapshot_detail = snapshot.get("result", {}).get("detail", {})
+            if self.markers["ptt"] in snapshot_detail.get("messages_json", ""):
+                break
+            time.sleep(0.25)
         traces = read_new_traces(trace_start)
         self.record_step(
             "02-ptt-turn",
@@ -696,6 +724,7 @@ class GauntletRunner:
             extra={"continuity_checks": continuity_checks},
         )
 
+    def run_agents_suite(self) -> None:
         # Step 4 — background agent spawn
         spawn_query = (
             f"Use spawn_agent now to start a visible background agent. "
@@ -789,9 +818,26 @@ class GauntletRunner:
                 "(answer derived from injected context)"
             )
 
+    def run_owner_suite(self) -> None:
         # Step 6 — owner-switch isolation (in-process via swap_test_owner)
         if not self.baseline_identity or not self.baseline_identity.get("conversation_id"):
-            self.fail("owner-switch: missing owner-A baseline identity from steps 1-5")
+            # Standalone owner suite: plant an owner-A baseline turn first.
+            baseline_query = (
+                f"Remember this continuity marker exactly: {self.markers['typed']}. "
+                "Reply with one short sentence acknowledging the marker."
+            )
+            send, snapshot, traces = self.send_and_wait(baseline_query, self.args.turn_timeout_ms)
+            self.record_step(
+                "00-owner-baseline",
+                "owner-A baseline turn",
+                user_text=baseline_query,
+                action_response=send,
+                snapshot_detail=snapshot,
+                traces=traces,
+            )
+        if not self.baseline_identity or not self.baseline_identity.get("conversation_id"):
+            self.fail("owner-switch: missing owner-A baseline identity")
+            return
 
         owner_a_identity = dict(self.baseline_identity)
         owner_b_id = f"gauntlet-owner-b-{self.run_id}"
@@ -891,11 +937,101 @@ class GauntletRunner:
             skip_identity_drift=True,
         )
 
-        manifest["owner_switch_note"] = (
+        self.manifest["owner_switch_note"] = (
             "Step 06 swaps to synthetic owner B in-process, captures owner-B QueryTracer "
             "evidence, and asserts owner-A markers are absent with disjoint conversation_id; "
             "full Firebase auth-UI swap remains manual."
         )
+
+    def run_prompts_suite(self) -> None:
+        """Fast typed-only prompt-regression probes (no PTT, no spawns).
+
+        Guards the prompt-tuning loop: models must not over-refuse or mis-route
+        tools because of injected policy prose, and register rules must hold.
+        Run with --suite prompts for quick iteration after prompt edits.
+        """
+        # P1 — over-refusal: a direct, benign tool request must execute the tool
+        # even with coordinator/context-packet policy prose in the prompt (R9).
+        p1_query = "Use execute_sql to count the rows in the memories table and tell me just the number."
+        send, snapshot, traces = self.send_and_wait(p1_query, self.args.turn_timeout_ms)
+        assistant = latest_assistant_text(snapshot)
+        sql_calls = trace_tool_executions(traces, {"execute_sql"})
+        self.record_step(
+            "p1-over-refusal",
+            "prompt probe: direct tool request must not be refused",
+            user_text=p1_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={"execute_sql_calls": len(sql_calls)},
+        )
+        if not sql_calls:
+            self.fail(
+                "P1 over-refusal: model did not execute execute_sql for a direct benign request "
+                f"(assistant={assistant[:160]!r})"
+            )
+
+        # P2 — tool selection: a recap-shaped question should consult a data
+        # tool, preferably get_daily_recap.
+        p2_query = "What did I do yesterday? One short paragraph."
+        send, snapshot, traces = self.send_and_wait(p2_query, self.args.turn_timeout_ms)
+        assistant = latest_assistant_text(snapshot)
+        data_tools = trace_tool_executions(
+            traces,
+            {"get_daily_recap", "execute_sql", "get_conversations", "search_conversations", "semantic_search"},
+        )
+        tool_names = [str(tool.get("name")) for tool in data_tools]
+        self.record_step(
+            "p2-tool-selection",
+            "prompt probe: recap question routes to a data tool",
+            user_text=p2_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={"data_tools": tool_names},
+        )
+        if not data_tools:
+            self.fail(
+                "P2 tool selection: recap question answered without consulting any data tool "
+                f"(assistant={assistant[:160]!r})"
+            )
+        elif "get_daily_recap" not in tool_names:
+            self.warn(f"P2 tool selection: answered without get_daily_recap (used {tool_names})")
+
+        # P3 — register: unknown-person question must stay short and human,
+        # with no robotic data-source phrasing.
+        p3_query = "What should I know about my new colleague Zebulon Quarkfinder?"
+        send, snapshot, traces = self.send_and_wait(p3_query, self.args.turn_timeout_ms)
+        assistant = latest_assistant_text(snapshot)
+        robotic = [
+            phrase
+            for phrase in (
+                "in the logs",
+                "recorded conversations",
+                "captured calls",
+                "no data available",
+                "based on available memories",
+                "in the database",
+                "according to the tools",
+            )
+            if phrase in assistant.lower()
+        ]
+        self.record_step(
+            "p3-register",
+            "prompt probe: unknown-person answer stays short and human",
+            user_text=p3_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={"robotic_phrases": robotic, "reply_chars": len(assistant)},
+        )
+        if robotic:
+            self.fail(f"P3 register: robotic phrasing in reply: {robotic}")
+        if len(assistant) > 450:
+            self.warn(f"P3 register: unknown-person reply too long ({len(assistant)} chars)")
+
+    def finalize(self) -> int:
+        manifest = self.manifest
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
         manifest["steps"] = self.steps
         manifest["failures"] = self.failures
@@ -970,6 +1106,30 @@ def self_check() -> int:
     return 0
 
 
+SUITE_ALIASES: dict[str, set[str]] = {
+    "core": {"continuity", "agents", "owner"},
+    "all": {"continuity", "agents", "owner", "prompts"},
+}
+SUITE_NAMES = {"continuity", "agents", "owner", "prompts"}
+
+
+def expand_suites(raw: str) -> set[str]:
+    enabled: set[str] = set()
+    for token in raw.split(","):
+        token = token.strip().lower()
+        if not token:
+            continue
+        if token in SUITE_ALIASES:
+            enabled |= SUITE_ALIASES[token]
+        elif token in SUITE_NAMES:
+            enabled.add(token)
+        else:
+            raise SystemExit(
+                f"unknown suite {token!r}; choose from {sorted(SUITE_NAMES | set(SUITE_ALIASES))}"
+            )
+    return enabled or SUITE_ALIASES["core"]
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Desktop agent continuity gauntlet (INV-6)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
@@ -978,6 +1138,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--run-dir", default=None)
     parser.add_argument("--log-path", default=str(DEFAULT_LOG))
     parser.add_argument("--turn-timeout-ms", type=int, default=180_000)
+    parser.add_argument(
+        "--suite",
+        default="core",
+        help=(
+            "Comma-separated suites: continuity (steps 1-3, includes PTT), agents (4-5), "
+            "owner (6), prompts (fast typed-only prompt-regression probes), "
+            "core (default: continuity+agents+owner), all (core+prompts). "
+            "Example: --suite prompts for fast prompt iteration."
+        ),
+    )
     parser.add_argument("--self-check", action="store_true")
     return parser.parse_args()
 

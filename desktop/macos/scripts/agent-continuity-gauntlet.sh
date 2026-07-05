@@ -22,6 +22,9 @@
 # Usage:
 #   cd desktop/macos && ./scripts/agent-continuity-gauntlet.sh
 #   ./scripts/agent-continuity-gauntlet.sh --self-check          # validate hooks only
+#   ./scripts/agent-continuity-gauntlet.sh --suite prompts       # fast typed-only prompt probes (P1-P3)
+#   ./scripts/agent-continuity-gauntlet.sh --suite continuity    # steps 1-3 only (includes PTT)
+#   ./scripts/agent-continuity-gauntlet.sh --suite all           # core 6 steps + prompt probes
 #   OMI_AUTOMATION_PORT=47778 ./scripts/agent-continuity-gauntlet.sh --bundle-id com.omi.omi-gauntlet
 #   ./scripts/agent-continuity-gauntlet.sh --turn-timeout-ms 240000
 #

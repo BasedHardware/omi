@@ -40,7 +40,9 @@ enum GeneratedToolCapabilities {
       "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
       "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
       "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-      "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks."
+      "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
+      "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
+      "Use semantic_search instead for fuzzy or conceptual queries about screen content."
     ]
     ),
     Capability(
@@ -52,7 +54,8 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Use for fuzzy/conceptual questions about what the user saw, read, or worked on where exact SQL keywords will not work.",
       "Examples: \"reading about machine learning\", \"working on design mockups\".",
-      "Parameters: query (required), days (default 7), app_filter (optional)."
+      "Parameters: query (required), days (default 7), app_filter (optional).",
+      "Prefer semantic_search over execute_sql when the user asks about something they 'saw' or worked on."
     ]
     ),
     Capability(
@@ -84,7 +87,8 @@ enum GeneratedToolCapabilities {
       summary: "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
       bullets: [
       "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
-      "Do not install browser extensions before trying this tool."
+      "Do not install browser extensions before trying this tool.",
+      "If it reports missing Accessibility permission, missing form, or missing required fields, wait for the missing condition or use guarded screenshots before any keyboard automation."
     ]
     ),
     Capability(
@@ -244,7 +248,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([]),
       summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
       bullets: [
-      "Swift coordinator entrypoint only; not advertised to agent-facing surfaces."
+      "Swift coordinator entrypoint only; not advertised to agent-facing surfaces.",
+      "Swift coordinator entrypoint only."
     ]
     ),
     Capability(
@@ -254,9 +259,12 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Start canonical Omi background work and optionally project it into floating-bar pills.",
       bullets: [
-      "Calling spawn_agent is the only way to start a visible floating-bar background agent.",
-      "Use visible=false with parentRunId for invisible delegated background work.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'."
+      "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
+      "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
+      "Prefer spawning when a request needs more than ~30 seconds of tool work or research — start the agent and tell the user in one line instead of making them wait.",
+      "Use visible=false for parent-linked background work that should not appear as a pill.",
+      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "Inspect progress with list_agent_sessions or get_agent_run."
     ]
     ),
     Capability(
@@ -276,7 +284,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.",
       bullets: [
-      "Use dismissed=true to hide floating-bar pills without deleting canonical run state."
+      "Use dismissed=true to hide floating-bar pills without deleting canonical run state.",
+      "Use dismissed=true to hide a floating-bar pill without deleting its canonical run.",
+      "Use subjectKind=run and subjectId=<runId> for pill dismissal."
     ]
     ),
     Capability(
@@ -332,7 +342,9 @@ enum GeneratedToolCapabilities {
       "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
       "node_type must be one of: person, organization, place, thing, concept.",
       "Use when exploring the user's files during onboarding to build their knowledge graph.",
-      "Deduplication is handled automatically; provide all entities you find."
+      "Deduplication is handled automatically; provide all entities you find.",
+      "Use when exploring the user's files during onboarding or knowledge-graph building.",
+      "Deduplication is handled automatically; include all meaningful entities and relationships you found."
     ]
     ),
     Capability(
@@ -416,7 +428,9 @@ enum GeneratedToolCapabilities {
       summary: "Capture a screenshot of the user's current screen.",
       bullets: [
       "Call capture_screen when the user asks about what's on their screen.",
-      "After capture_screen returns a file path, use Read to view the image."
+      "After capture_screen returns a file path, use Read to view the image.",
+      "Call capture_screen when the user asks about what's on their screen or what they're looking at.",
+      "Do NOT use bash screencapture - always use this tool instead."
     ]
     ),
     Capability(

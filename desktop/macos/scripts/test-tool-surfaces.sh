@@ -78,5 +78,7 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
 ensure_npm_deps "$DESKTOP_DIR/pi-mono-extension"
 (
   cd "$DESKTOP_DIR/pi-mono-extension"
-  "$NODE22" --experimental-strip-types --test index.test.ts
+  # tsx (not --experimental-strip-types): the manifest imports use ESM .js
+  # specifiers for .ts files, which strip-types cannot resolve (G8).
+  npx --yes tsx --test index.test.ts
 )
