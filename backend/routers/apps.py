@@ -1519,7 +1519,7 @@ def _serialize_chat_tools_for_firestore(tools: List[ChatTool]) -> List[Dict[str,
     """
     result: List[Dict[str, Any]] = []
     for t in tools:
-        d = t.model_dump()
+        d = t.dict()
         if d.get('parameters') is not None:
             d['parameters'] = json.dumps(d['parameters'])
         result.append(d)

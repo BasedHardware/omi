@@ -1324,11 +1324,11 @@ def select_structured_filters(question: str, filters_available: dict[str, Any]) 
     with_parser = get_llm('chat_extraction').with_structured_output(FiltersToUse)
     try:
         response = cast(FiltersToUse, with_parser.invoke(prompt))
-        # print('select_structured_filters:', response.model_dump())
+        # print('select_structured_filters:', response.dict())
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
-        return response.model_dump()
+        return response.dict()
     except ValidationError:
         return {}
 

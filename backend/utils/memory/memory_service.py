@@ -125,7 +125,7 @@ def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayl
         item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
+        return memory_item_to_memorydb(item).dict()
 
     memory = memories_db.get_memory(uid, memory_id)
     if memory is None:
@@ -556,7 +556,7 @@ class MemoryService:
         if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
             uid, self._db_client
         ):
-            payload = memory_db.model_dump()
+            payload = memory_db.dict()
             if require_canonical_promotion:
                 payload = required_promotion_payload(payload, source_surface=consumer)
             committed_id = self._canonical.write(uid, payload)
@@ -604,7 +604,7 @@ class MemoryService:
         if memory_system == MemorySystem.CANONICAL and _canonical_external_write_enabled_or_fail_closed(
             uid, self._db_client
         ):
-            payloads = [memory.model_dump() for memory in memory_dbs]
+            payloads = [memory.dict() for memory in memory_dbs]
             if require_canonical_promotion:
                 payloads = [required_promotion_payload(payload, source_surface=consumer) for payload in payloads]
             committed_ids = self._canonical.write_batch(uid, payloads)

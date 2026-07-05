@@ -199,13 +199,13 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
             if last_lat == new_lat and last_lon == new_lon:
                 return {'status': 'ok', 'message': 'Location not changed significantly.'}
 
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, geolocation.dict())
         except Exception as e:
             logger.error(f"Error processing geolocation update, caching new location anyway. Error: {e}")
-            cache_user_geolocation(uid, geolocation.model_dump())
+            cache_user_geolocation(uid, geolocation.dict())
     else:
         # No previous location, so cache the new one
-        cache_user_geolocation(uid, geolocation.model_dump())
+        cache_user_geolocation(uid, geolocation.dict())
 
     return {'status': 'ok'}
 

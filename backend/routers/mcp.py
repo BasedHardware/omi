@@ -78,7 +78,7 @@ def create_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_user_id
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
     raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
-    return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
+    return McpApiKeyCreated(**api_key_data.dict(), key=raw_key)
 
 
 @router.delete("/v1/mcp/keys/{key_id}", status_code=204, tags=["mcp"])

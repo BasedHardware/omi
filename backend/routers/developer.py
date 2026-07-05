@@ -168,7 +168,7 @@ def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id
     # The proactive-notification cap exempts developers, so refresh that cache now
     # that this user has a key, rather than waiting out its TTL.
     invalidate_developer_cache(uid)
-    return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
+    return DevApiKeyCreated(**api_key_data.dict(), key=raw_key)
 
 
 @router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
@@ -813,7 +813,7 @@ def update_memory(
         item = _read_canonical_memory_item(uid, memory_id, db_client=db)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
-        return memory_item_to_memorydb(item).model_dump()
+        return memory_item_to_memorydb(item).dict()
 
     write_guard = guard_legacy_memory_write(uid, db, consumer='developer_api', operation='update_memory')
     if not write_guard.allowed:
@@ -1738,7 +1738,7 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
+        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.dict()):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1775,7 +1775,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.model_dump())
+        conversations_db.upsert_conversation(uid, conversation.dict())
 
     return ConversationResponse(
         id=conversation.id,

@@ -522,7 +522,7 @@ def synthesize_durable_memory_patch_result(
                 )
                 continue
             patch = _with_server_control_ids(patch, packet, observed_head_commit_id)
-            patch = DurableMemoryPatch(**patch.model_dump())
+            patch = DurableMemoryPatch(**patch.dict())
         except ValidationError:
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="validation_error")

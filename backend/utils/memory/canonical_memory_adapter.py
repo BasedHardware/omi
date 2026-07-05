@@ -497,7 +497,7 @@ def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
         artifact_ref=data.get("artifact_ref") or {},
         independence_group=source_id,
     )
-    return [_legacy_evidence_to_memory(evidence.model_dump(), conversation_id=conversation_id)]
+    return [_legacy_evidence_to_memory(evidence.dict(), conversation_id=conversation_id)]
 
 
 def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:

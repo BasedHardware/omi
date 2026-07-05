@@ -332,7 +332,7 @@ def _apply_update_memory_item(
 
 
 def _stale_operation(operation: MemoryOperation) -> MemoryOperation:
-    data = operation.model_dump()
+    data = operation.dict()
     data.update({"status": MemoryOperationStatus.stale_generation, "updated_at": datetime.now(timezone.utc)})
     return MemoryOperation(**data)
 
@@ -516,7 +516,7 @@ def apply_long_term_patch_transaction(
             promotion=promotion_metadata,
         )
         if extra_item_updates:
-            memory_item = MemoryItem(**{**memory_item.model_dump(), **extra_item_updates})
+            memory_item = MemoryItem(**{**memory_item.dict(), **extra_item_updates})
     outbox_events = [
         MemoryOutboxEvent(
             event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),

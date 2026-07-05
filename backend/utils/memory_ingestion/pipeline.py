@@ -720,13 +720,13 @@ def _frames_from_structured_payload(event: RawContextEvent, actor: ActorDescript
         if not isinstance(raw_frame, dict):
             continue
         frame_payload: Dict[str, Any] = dict(cast(Dict[str, Any], raw_frame))
-        frame_payload.setdefault("subject", _actor_subject(actor).model_dump())
-        frame_payload.setdefault("temporal", TemporalScope().model_dump())
-        frame_payload.setdefault("modality", Modality().model_dump())
-        frame_payload.setdefault("sensitivity", SensitivityClassification().model_dump())
-        frame_payload.setdefault("evidence", [_evidence_for_event(event, index).model_dump()])
+        frame_payload.setdefault("subject", _actor_subject(actor).dict())
+        frame_payload.setdefault("temporal", TemporalScope().dict())
+        frame_payload.setdefault("modality", Modality().dict())
+        frame_payload.setdefault("sensitivity", SensitivityClassification().dict())
+        frame_payload.setdefault("evidence", [_evidence_for_event(event, index).dict()])
         frame_payload.setdefault("source_event_ids", [event.event_id])
-        frame_payload.setdefault("extraction", ExtractionMetadata(source_block_id=event.event_id).model_dump())
+        frame_payload.setdefault("extraction", ExtractionMetadata(source_block_id=event.event_id).dict())
         try:
             frames.append(MemoryEventFrame.model_validate(frame_payload))
         except ValidationError:

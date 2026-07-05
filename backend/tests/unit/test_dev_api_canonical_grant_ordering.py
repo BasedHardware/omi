@@ -341,7 +341,7 @@ def test_get_memories_allowed_grant_canonical_lists():
     from datetime import datetime, timezone
 
     now = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    # MemoryService.read() returns List[MemoryDB]; the router calls .model_dump() on each
+    # MemoryService.read() returns List[MemoryDB]; the router calls .dict() on each
     from models.memories import MemoryDB
 
     canonical_memory = MemoryDB(

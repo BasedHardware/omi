@@ -55,7 +55,7 @@ def _model_dump(obj: Any) -> Any:
             return obj.model_dump(mode="json")
         except Exception:
             try:
-                return obj.model_dump()
+                return obj.dict()
             except Exception:
                 pass
     if hasattr(obj, "content") and obj.__class__.__name__.endswith("Message"):

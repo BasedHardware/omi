@@ -630,7 +630,7 @@ def upsert_app_payment_link(
         app.payment_link = payment_link.url
 
     # updates
-    update_app_in_db(app.model_dump())
+    update_app_in_db(app.dict())
     return app
 
 
@@ -848,7 +848,7 @@ async def update_persona_prompt(persona: Dict[str, Any]):
     memory_system = pin_memory_system(uid, db_client=firestore_db)
     if memory_system == MemorySystem.CANONICAL:
         canonical_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
-        memories = [memory.model_dump() for memory in canonical_memories if memory.visibility == 'public']
+        memories = [memory.dict() for memory in canonical_memories if memory.visibility == 'public']
     else:
         memories = await run_blocking(db_executor, get_user_public_memories, uid, limit=250)
     user_name = await run_blocking(db_executor, get_user_name, uid)

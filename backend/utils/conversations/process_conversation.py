@@ -293,7 +293,7 @@ def _get_conversation_obj(
 ) -> Conversation:
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
-        conversation_dict = conversation.model_dump()
+        conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
         calendar_context = conversation_dict.pop('calendar_meeting_context', None)
 
@@ -323,12 +323,12 @@ def _get_conversation_obj(
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         result = Conversation(
             id=str(uuid.uuid4()),
-            **conversation.model_dump(),
+            **conversation.dict(),
             created_at=created_at,
             structured=structured,
             discarded=discarded,
         )
-        result.external_data = create_conversation.model_dump()
+        result.external_data = create_conversation.dict()
         result.app_id = create_conversation.app_id
         return result
     else:
@@ -792,7 +792,7 @@ TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED
 
 
 def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments: List[Dict[str, Any]] = [s.model_dump() for s in (conversation.transcript_segments or [])]
+    segments: List[Dict[str, Any]] = [s.dict() for s in (conversation.transcript_segments or [])]
     chunks = build_transcript_chunks(segments, conversation.started_at or conversation.created_at)
     if chunks:
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
@@ -819,7 +819,7 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
                 metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
     else:
         # For regular conversations with transcript segments
-        segments: List[Dict[str, Any]] = [t.model_dump() for t in conversation.transcript_segments]
+        segments: List[Dict[str, Any]] = [t.dict() for t in conversation.transcript_segments]
         metadata = retrieve_metadata_fields_from_transcript(
             uid, conversation.created_at, segments, tz, photos=conversation.photos
         )
@@ -884,7 +884,7 @@ def _store_deferred_conversation(
     # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
     # back to `completed`.
     conversation.status = ConversationStatus.processing
-    conversations_db.upsert_conversation(uid, conversation.model_dump())
+    conversations_db.upsert_conversation(uid, conversation.dict())
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -1065,15 +1065,15 @@ def process_conversation(
             if audio_files:
                 conversation.audio_files = audio_files
                 conversations_db.update_conversation(
-                    uid, conversation.id, {'audio_files': [af.model_dump() for af in audio_files]}
+                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
                 )
                 # Pre-cache audio files in background
-                precache_conversation_audio(uid, conversation.id, [af.model_dump() for af in audio_files])
+                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.model_dump())
+    conversations_db.upsert_conversation(uid, conversation.dict())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:
@@ -1149,7 +1149,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
         created_at=now,
         status=TaskStatus.PROCESSING,
     )
-    tasks_db.create(task.model_dump())
+    tasks_db.create(task.dict())
 
     # emotion
     ok = get_hume().request_user_expression_mersurement(urls)
@@ -1166,7 +1166,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     # update task
     task.request_id = request_id
     task.updated_at = datetime.now()
-    tasks_db.update(task.id, task.model_dump())
+    tasks_db.update(task.id, task.dict())
 
     return
 
@@ -1211,7 +1211,7 @@ def process_user_expression_measurement_callback(
 
     task.status = task_status
     task.updated_at = datetime.now()
-    tasks_db.update(task.id, task.model_dump())
+    tasks_db.update(task.id, task.dict())
 
     # done or not
     if task.status != TaskStatus.DONE:

@@ -428,7 +428,7 @@ EvidenceInput = Evidence | Mapping[str, Any]
 
 def _model_or_dict_to_dict(item: EvidenceInput) -> Dict[str, Any]:
     if isinstance(item, BaseModel):
-        return item.model_dump()
+        return item.dict()
     return dict(item)
 
 

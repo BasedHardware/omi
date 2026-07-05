@@ -257,7 +257,7 @@ def get_memories_via_integration(
         memory_items: List[integration_models.MemoryItem] = []
         for memory in memory_objects:
             try:
-                memory_items.append(integration_models.MemoryItem(**memory.model_dump()))
+                memory_items.append(integration_models.MemoryItem(**memory.dict()))
             except Exception as e:  # noqa: BLE001
                 logger.error(f"Error parsing memory {memory.id}: {str(e)}")
                 continue

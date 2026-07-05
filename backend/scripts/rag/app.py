@@ -35,7 +35,7 @@ class CustomEncoder(json.JSONEncoder):
         if isinstance(o, datetime):
             return {'__datetime__': o.isoformat()}
         if isinstance(o, Conversation):
-            return {'__memory__': o.model_dump()}
+            return {'__memory__': o.dict()}
         return super().default(o)
 
 

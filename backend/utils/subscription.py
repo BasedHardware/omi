@@ -1089,7 +1089,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
                 subscription.limits = get_plan_limits(plan_type)
 
                 # Persist the corrected subscription back to Firestore (without dynamic fields).
-                users_db.update_user_subscription(uid, subscription.model_dump())
+                users_db.update_user_subscription(uid, subscription.dict())
                 return subscription
 
         # Stored sub is canceled / unknown / not a paid plan. The user may have
@@ -1099,7 +1099,7 @@ def reconcile_basic_plan_with_stripe(uid: str, subscription: Subscription | None
         # can't leave a paying user stranded on basic.
         active = find_active_paid_subscription_for_user(uid)
         if active:
-            users_db.update_user_subscription(uid, active.model_dump())
+            users_db.update_user_subscription(uid, active.dict())
             return active
 
     except Exception as e:

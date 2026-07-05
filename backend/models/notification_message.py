@@ -20,7 +20,7 @@ class NotificationMessage(BaseModel):
         message: 'NotificationMessage',
     ) -> dict[str, object]:
 
-        message_dict = message.model_dump()
+        message_dict = message.dict()
 
         # Remove 'plugin_id' if it is None
         if message.plugin_id is None:

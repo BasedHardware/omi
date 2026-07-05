@@ -37,7 +37,7 @@ def add_model_result_segments(model: str, new_segments: List[Dict[str, Any]], re
     segments = [TranscriptSegment(**s) for s in result[model]]
     new_seg_objs = [TranscriptSegment(**s) for s in new_segments]
     segments, _, _ = TranscriptSegment.combine_segments(segments, new_seg_objs)
-    result[model] = [s.model_dump() for s in segments]
+    result[model] = [s.dict() for s in segments]
 
 
 def execute_groq(file_path: str) -> str:
@@ -113,7 +113,7 @@ async def _execute_single(file_path: str) -> None:
         signed_url = upload_postprocessing_audio(file_path)
         words = fal_whisperx(signed_url)
         fal_segments = postprocess_words(cast(List[Dict[str, Any]], words), int(duration))
-        result['fal_whisperx'] = [s.model_dump() for s in fal_segments]
+        result['fal_whisperx'] = [s.dict() for s in fal_segments]
     except Exception as e:
         print('fal_whisperx', e)
         result['fal_whisperx'] = []

@@ -236,7 +236,7 @@ class MemoryOperation(BaseModel):
     def _transition(self, *, status: MemoryOperationStatus, **updates: Any) -> "MemoryOperation":
         if self.status in _TERMINAL_STATUSES:
             raise ValueError(f"cannot transition terminal operation from {self.status.value}")
-        data = self.model_dump()
+        data = self.dict()
         data.update(updates)
         data["status"] = status
         data["updated_at"] = datetime.now(timezone.utc)

@@ -294,7 +294,7 @@ def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> Mem
         item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise HTTPException(status_code=404, detail='Memory not found')
-        return memory_item_to_memorydb(item).model_dump()
+        return memory_item_to_memorydb(item).dict()
     return fetch_memory_dict(uid, memory_id, db_client=db_client)
 
 
@@ -326,7 +326,7 @@ async def create_memory(
 
     # Build payload outside try so serialization bugs aren't misreported as
     # transient 503s — only the Firestore write should be retryable.
-    payload = memory_db.model_dump()
+    payload = memory_db.dict()
 
     db_client = getattr(db_client_module, 'db', None)
     if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
@@ -451,7 +451,7 @@ async def create_memories_batch(
                 )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            payload = memory_db.model_dump()
+            payload = memory_db.dict()
             if memory_db.manually_added:
                 payload = required_promotion_payload(payload, source_surface="v3_manual")
             committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)

@@ -58,7 +58,7 @@ def get_memories_from_conversations(
         response += memories
         for memory in memories:
             parsed_memories.append(MemoryDB.from_memory(memory, uid, conversation['id'], False))
-        memories_db.save_memories(uid, [memory.model_dump() for memory in parsed_memories])
+        memories_db.save_memories(uid, [memory.dict() for memory in parsed_memories])
 
     return response
 
@@ -107,7 +107,7 @@ def migration_fact_scoring_for_user(uid: str) -> None:
         print('execute_for_user', uid, 'found facts', len(facts))
         for fact in facts:
             fact.scoring = MemoryDB.calculate_score(fact)
-        memories_db.save_memories(uid, [fact.model_dump() for fact in facts])
+        memories_db.save_memories(uid, [fact.dict() for fact in facts])
         offset += len(facts)
 
 

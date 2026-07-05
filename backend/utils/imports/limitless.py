@@ -327,7 +327,7 @@ def process_limitless_import(job_id: str, uid: str, zip_path: str, language_code
                     )
 
                     # Save directly to database (skip all AI processing)
-                    conversations_db.upsert_conversation(uid, conversation.model_dump())
+                    conversations_db.upsert_conversation(uid, conversation.dict())
                     conversations_created += 1
 
                 except Exception as e:

@@ -150,5 +150,6 @@
     "reportMissingParameterType": "warning",
     "reportMissingTypeArgument": "warning",
     "reportUnnecessaryTypeIgnoreComment": "warning",
-    "reportInvalidTypeForm": "error"
+    "reportInvalidTypeForm": "error",
+    "reportDeprecated": "none"
 }
