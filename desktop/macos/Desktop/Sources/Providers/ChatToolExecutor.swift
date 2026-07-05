@@ -62,6 +62,11 @@ class ChatToolExecutor {
     ]
   }
 
+  struct LocalFileScanOutcome {
+    let hasReadableUserFileTarget: Bool
+    let summaryText: String
+  }
+
   static func resumeFollowup(with reply: String) {
     followupContinuation?.resume(returning: reply)
     followupContinuation = nil
@@ -1247,36 +1252,42 @@ class ChatToolExecutor {
   }
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results
-  private static func executeScanFiles(_ args: [String: Any]) async -> String {
+  private static func executeScanFiles(_: [String: Any]) async -> String {
+    await scanLocalFiles().summaryText
+  }
+
+  static func scanLocalFiles() async -> LocalFileScanOutcome {
     let fm = FileManager.default
     let homeDir = fm.homeDirectoryForCurrentUser
-    let scanTargets: [(label: String, pathForUser: String, url: URL)] = {
-      var targets: [(String, String, URL)] = []
+    let scanTargets: [(label: String, pathForUser: String, url: URL, countsAsUserFileAccess: Bool)] = {
+      var targets: [(String, String, URL, Bool)] = []
 
       let homeFolders = ["Downloads", "Documents", "Desktop", "Developer", "Projects"]
       for folder in homeFolders {
         let url = homeDir.appendingPathComponent(folder)
         if fm.fileExists(atPath: url.path) {
-          targets.append((folder, "~/\(folder)", url))
+          targets.append((folder, "~/\(folder)", url, true))
         }
       }
 
       let applicationsURL = URL(fileURLWithPath: "/Applications")
       if fm.fileExists(atPath: applicationsURL.path) {
-        targets.append(("Applications", "/Applications", applicationsURL))
+        targets.append(("Applications", "/Applications", applicationsURL, false))
       }
 
       // Apple Notes local stores (container + group container)
-      let notesCandidates: [(String, String, URL)] = [
+      let notesCandidates: [(String, String, URL, Bool)] = [
         (
           "Apple Notes (Container)",
           "~/Library/Containers/com.apple.Notes/Data/Library/Notes",
-          homeDir.appendingPathComponent("Library/Containers/com.apple.Notes/Data/Library/Notes")
+          homeDir.appendingPathComponent("Library/Containers/com.apple.Notes/Data/Library/Notes"),
+          false
         ),
         (
           "Apple Notes (Group)",
           "~/Library/Group Containers/group.com.apple.notes",
-          homeDir.appendingPathComponent("Library/Group Containers/group.com.apple.notes")
+          homeDir.appendingPathComponent("Library/Group Containers/group.com.apple.notes"),
+          false
         ),
       ]
       for candidate in notesCandidates where fm.fileExists(atPath: candidate.2.path) {
@@ -1289,6 +1300,7 @@ class ChatToolExecutor {
     // Pre-check folder access — this triggers macOS TCC dialogs
     var deniedFolders: [String] = []
     var accessibleFolders: [URL] = []
+    var readableUserFileTargetCount = 0
     for target in scanTargets {
       do {
         _ = try fm.contentsOfDirectory(
@@ -1297,6 +1309,9 @@ class ChatToolExecutor {
           options: [.skipsHiddenFiles]
         )
         accessibleFolders.append(target.url)
+        if target.countsAsUserFileAccess {
+          readableUserFileTargetCount += 1
+        }
       } catch {
         let nsError = error as NSError
         if nsError.domain == NSCocoaErrorDomain && nsError.code == 257 {
@@ -1334,7 +1349,9 @@ class ChatToolExecutor {
     // Notify that scan completed — triggers parallel exploration
     onScanFilesCompleted?(count)
 
-    return out
+    return LocalFileScanOutcome(
+      hasReadableUserFileTarget: readableUserFileTargetCount > 0,
+      summaryText: out)
   }
 
   /// Get file scan results from the database
