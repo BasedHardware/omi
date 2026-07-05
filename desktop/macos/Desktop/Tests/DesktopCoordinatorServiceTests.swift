@@ -34,7 +34,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       response: """
       {
         "ok": true,
-        "session": {"omiSessionId": "ses_pill", "title": "Create Memory Story"},
+        "session": {"sessionId": "ses_pill", "title": "Create Memory Story"},
         "run": {"runId": "run_pill"},
         "attempt": {"attemptId": "att_pill"}
       }
@@ -90,7 +90,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       response: """
       {
         "ok": true,
-        "session": {"omiSessionId": "ses_pill", "title": "Hermes Task"},
+        "session": {"sessionId": "ses_pill", "title": "Hermes Task"},
         "run": {"runId": "run_pill"},
         "attempt": {"attemptId": "att_pill"}
       }
@@ -127,7 +127,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       response: """
       {
         "ok": true,
-        "session": {"omiSessionId": "ses_pill"},
+        "session": {"sessionId": "ses_pill"},
         "run": {"runId": "run_pill", "status": "running"}
       }
       """
@@ -399,7 +399,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       "ok": true,
       "sessions": [
         {
-          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Dog File"},
+          "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Dog File"},
           "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
         }
       ]
@@ -408,12 +408,12 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let runResponse = """
     {
       "ok": true,
-      "session": {"omiSessionId": "ses_child"},
+      "session": {"sessionId": "ses_child"},
       "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
       "artifacts": [
         {
           "artifactId": "art_dog",
-          "omiSessionId": "ses_child",
+          "sessionId": "ses_child",
           "runId": "run_child",
           "kind": "html",
           "role": "result",
@@ -461,7 +461,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       "ok": true,
       "sessions": [
         {
-          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Penguin File"},
+          "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Penguin File"},
           "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
         }
       ]
@@ -470,12 +470,12 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let runResponse = """
     {
       "ok": true,
-      "session": {"omiSessionId": "ses_child"},
+      "session": {"sessionId": "ses_child"},
       "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
       "artifacts": [
         {
           "artifactId": "art_penguin",
-          "omiSessionId": "ses_child",
+          "sessionId": "ses_child",
           "runId": "run_child",
           "kind": "html",
           "role": "result",
@@ -516,7 +516,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       "ok": true,
       "sessions": [
         {
-          "session": {"omiSessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML File"},
+          "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML File"},
           "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
         }
       ]
@@ -531,7 +531,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       "artifacts": [
         {
           "artifactId": "art_fallback",
-          "omiSessionId": "ses_child",
+          "sessionId": "ses_child",
           "runId": "run_child",
           "kind": "html",
           "role": "result",

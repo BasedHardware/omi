@@ -3,20 +3,17 @@ import XCTest
 @testable import Omi_Computer
 
 final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
+  // Protocol-layer files that decode wire session ids from the bundled agent runtime.
   private let protocolLayerFiles: Set<String> = [
-    "Desktop/Sources/Chat/AgentBridge.swift",
-    "Desktop/Sources/Chat/AgentRuntimeProcess.swift",
-    "Desktop/Sources/Chat/AgentClient.swift",
-    "Desktop/Sources/Chat/AgentArtifactProjection.swift",
-    "Desktop/Sources/Chat/ChatResource.swift",
-    "Desktop/Sources/Chat/AgentControlService.swift",
-    "Desktop/Sources/Chat/DesktopCoordinatorService.swift",
+    "Desktop/Sources/Chat/AgentBridge.swift", // query result wire decode
+    "Desktop/Sources/Chat/AgentRuntimeProcess.swift", // JSONL transport decode
+    "Desktop/Sources/Chat/AgentClient.swift", // facade over AgentBridge.QueryResult
   ]
 
   private let forbiddenIdentifiers = [
-    "sessionKey",
-    "omiSessionId",
-    "legacyClientScope",
+    "sessionkey",
+    "omisessionid",
+    "legacyclientscope",
     "resume:",
   ]
 
@@ -40,9 +37,10 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
       for line in text.components(separatedBy: .newlines) {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         if trimmed.hasPrefix("//") { continue }
+        let lower = line.lowercased()
         for identifier in forbiddenIdentifiers {
-          if line.contains(identifier) {
-            violations.append("\(relativePath): contains `\(identifier)` — \(trimmed)")
+          if lower.contains(identifier) {
+            violations.append("\(relativePath): contains forbidden identifier `\(identifier)` — \(trimmed)")
           }
         }
       }

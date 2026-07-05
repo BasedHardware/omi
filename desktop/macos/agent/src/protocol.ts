@@ -214,7 +214,7 @@ export interface ResultMessage extends QueryScopedOutbound {
 
 export interface SerializedArtifact {
   artifactId: string;
-  omiSessionId: string;
+  sessionId: string;
   runId: string | null;
   attemptId: string | null;
   kind: string;

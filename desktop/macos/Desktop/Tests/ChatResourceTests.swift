@@ -35,7 +35,7 @@ final class ChatResourceTests: XCTestCase {
         "artifacts": [
           {
             "artifactId": "artifact-1",
-            "omiSessionId": "session-1",
+            "sessionId": "session-1",
             "runId": "run-1",
             "kind": "markdown",
             "role": "result",
@@ -57,7 +57,7 @@ final class ChatResourceTests: XCTestCase {
     XCTAssertEqual(resource.title, "report.md")
     XCTAssertEqual(resource.subtitle, "text/markdown • 2 KB")
     XCTAssertEqual(resource.artifactId, "artifact-1")
-    XCTAssertEqual(resource.omiSessionId, "session-1")
+    XCTAssertEqual(resource.sessionId, "session-1")
     XCTAssertEqual(resource.runId, "run-1")
     XCTAssertEqual(resource.state, .retained)
     XCTAssertEqual(resource.fileURL?.path, "/tmp/report.md")
@@ -89,7 +89,7 @@ final class ChatResourceTests: XCTestCase {
       imageData: nil,
       uri: "omi-artifact://artifact-1",
       artifactId: "artifact-1",
-      omiSessionId: "session-1",
+      sessionId: "session-1",
       runId: "run-1",
       state: .ready
     )

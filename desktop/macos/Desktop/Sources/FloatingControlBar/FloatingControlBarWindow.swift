@@ -2010,7 +2010,6 @@ class FloatingControlBarManager {
     private var storedNotificationMessages: [UUID: StoredNotificationMessage] = [:]
     private var mostRecentNotificationID: UUID?
     private var pendingNotificationContext: PendingNotificationContext?
-    private var floatingSessionKey = "floating"
     private var activeQueryGeneration: Int = 0
     private var deliveredAgentArtifactKeys: Set<String> = []
 
@@ -2627,24 +2626,13 @@ class FloatingControlBarManager {
         chatCancellable = nil
         window.cancelInputHeightObserver()
 
-        // Reset visible state directly (no animation) to avoid contract-then-expand flicker.
-        // Provider session context remains intact; only the floating-bar UI is reset.
-        // Pass cancelInFlightWork: false because we already cancelled our own
-        // subscriptions above (chatCancellable/input height observer) and are about
-        // to route a new typed query through the same provider — killing its session
-        // here would break the incoming query. (Cubic P2 — semantic mismatch.)
+        // Reset visible state without animation; keep provider session (cancelInFlightWork: false).
         window.state.showingAIConversation = false
         window.state.clearVisibleConversation(cancelInFlightWork: false)
         window.state.currentQueryFromVoice = fromVoice
         pendingNotificationContext = nil
-        floatingSessionKey = "floating"
 
-        // Re-wire the onSendQuery to use the isolated floating-bar provider.
-        // Subsequent typed messages also go through the AI router. A message arriving
-        // through onSendQuery was always TYPED (PTT/voice bypass this closure and call
-        // routeQuery directly), so force fromVoice:false — otherwise a typed follow-up
-        // after a voice turn inherits the stale currentQueryFromVoice=true and gets
-        // spoken aloud.
+        // Re-wire onSendQuery for typed follow-ups (force fromVoice:false after voice turns).
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
@@ -3390,7 +3378,6 @@ class FloatingControlBarManager {
             message: notificationMessage,
             context: stored.context
         )
-        floatingSessionKey = "floating"
         Task {
             if let provider = activeFloatingProvider() {
                 await provider.invalidateAgentSurface(surface: provider.mainChatSurfaceReference())
@@ -3909,7 +3896,6 @@ Assistant message:
 
     func clearPendingNotificationContext() {
         pendingNotificationContext = nil
-        floatingSessionKey = "floating"
     }
 }
 

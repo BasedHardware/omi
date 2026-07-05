@@ -442,10 +442,10 @@ describe("agent control tools", () => {
     );
     expect(list.ok).toBe(true);
     expect(list.sessions).toHaveLength(1);
-    expect(list.sessions[0].session.omiSessionId).toBe(result.session.sessionId);
+    expect(list.sessions[0].session.sessionId).toBe(result.session.sessionId);
     expect(list.sessions[0].latestRun.runId).toBe(result.run.runId);
     expect(list.sessions[0].adapterBindings[0]).toMatchObject({
-      omiSessionId: result.session.sessionId,
+      sessionId: result.session.sessionId,
       adapterId: "fake",
       adapterNativeSessionId: "native-1",
     });
@@ -458,7 +458,7 @@ describe("agent control tools", () => {
     );
     expect(inspected.run).toMatchObject({
       runId: result.run.runId,
-      omiSessionId: result.session.sessionId,
+      sessionId: result.session.sessionId,
       status: "succeeded",
     });
     expect(inspected.attempts[0].attemptId).toBe(result.attempt.attemptId);
@@ -926,7 +926,7 @@ describe("agent control tools", () => {
     expect(inspected.artifacts).toEqual([
       expect.objectContaining({
         artifactId: "art_test",
-        omiSessionId: result.session.sessionId,
+        sessionId: result.session.sessionId,
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         uri: "omi-artifact://art_test",
@@ -945,7 +945,7 @@ describe("agent control tools", () => {
     expect(inspectedByArtifact.artifacts).toHaveLength(1);
     expect(inspectedByArtifact.artifacts[0]).toMatchObject({
       artifactId: "art_test",
-      omiSessionId: result.session.sessionId,
+      sessionId: result.session.sessionId,
     });
 
     const events = kernel.getRun({ runId: result.run.runId, includeEvents: true }).events;
@@ -988,7 +988,7 @@ describe("agent control tools", () => {
         attemptId: result.attempt.attemptId,
       },
       event: {
-        omiSessionId: result.session.sessionId,
+        sessionId: result.session.sessionId,
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         type: "artifact.lifecycle_updated",
@@ -1229,7 +1229,7 @@ describe("agent control tools", () => {
 
     expect(inspected.artifacts).toEqual([
       expect.objectContaining({
-        omiSessionId: result.session.sessionId,
+        sessionId: result.session.sessionId,
         runId: result.run.runId,
         attemptId: result.attempt.attemptId,
         uri: "adapter://fake/native-summary",
@@ -1265,13 +1265,13 @@ describe("agent control tools", () => {
     );
 
     expect(sent.ok).toBe(true);
-    expect(sent.session.omiSessionId).toBe(first.session.sessionId);
-    expect(sent.run.omiSessionId).toBe(first.session.sessionId);
+    expect(sent.session.sessionId).toBe(first.session.sessionId);
+    expect(sent.run.sessionId).toBe(first.session.sessionId);
     expect(sent.run.runId).not.toBe(first.run.runId);
     expect(sent.run.status).toBe("succeeded");
     expect(sent.artifacts).toEqual([
       expect.objectContaining({
-        omiSessionId: first.session.sessionId,
+        sessionId: first.session.sessionId,
         runId: sent.run.runId,
         uri: "adapter://fake/follow-up.md",
         displayName: "follow-up.md",
@@ -1307,7 +1307,7 @@ describe("agent control tools", () => {
 
     expect(sent.ok).toBe(true);
     expect(adapter.executed).toHaveLength(2);
-    expect(sent.run.omiSessionId).toBe(first.session.sessionId);
+    expect(sent.run.sessionId).toBe(first.session.sessionId);
     store.close();
   });
 
@@ -1441,7 +1441,7 @@ describe("agent control tools", () => {
     );
 
     expect(sent.ok).toBe(true);
-    expect(sent.run.omiSessionId).toBe(idleSession.session.sessionId);
+    expect(sent.run.sessionId).toBe(idleSession.session.sessionId);
     expect(adapter.executed).toHaveLength(3);
 
     adapter.resolveDeferred({
@@ -1495,7 +1495,7 @@ describe("agent control tools", () => {
       externalRefId: "pill-1",
     });
     expect(spawned.run).toMatchObject({
-      omiSessionId: spawned.session.omiSessionId,
+      sessionId: spawned.session.sessionId,
       parentRunId: null,
       mode: "act",
       status: "queued",
@@ -1522,13 +1522,13 @@ describe("agent control tools", () => {
     expect(delegated.delegation).toMatchObject({
       parentSessionId: parent.session.sessionId,
       parentRunId: parent.run.runId,
-      childSessionId: delegated.session.omiSessionId,
+      childSessionId: delegated.session.sessionId,
       childRunId: delegated.run.runId,
       mode: "call",
       status: "succeeded",
       objective: "summarize the child task",
     });
-    expect(delegated.session.omiSessionId).not.toBe(parent.session.sessionId);
+    expect(delegated.session.sessionId).not.toBe(parent.session.sessionId);
     expect(delegated.run.parentRunId).toBe(parent.run.runId);
     expect(delegated.result).toMatchObject({
       summary: expect.stringContaining("done-"),
@@ -1653,7 +1653,7 @@ describe("agent control tools", () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
     const row = store.getRow("SELECT external_ref_kind, external_ref_id FROM sessions WHERE session_id = ?", [
-      spawned.session.omiSessionId,
+      spawned.session.sessionId,
     ]);
     expect(row.external_ref_kind).toBe("pill");
     expect(row.external_ref_id).toBe(spawned.session.externalRefId);
@@ -1678,7 +1678,7 @@ describe("agent control tools", () => {
 
     expect(spawned.ok).toBe(true);
     expect(spawned.result).toBeUndefined();
-    expect(spawned.session.omiSessionId).not.toBe(parent.session.sessionId);
+    expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
     expect(spawned.run.status).toBe("queued");
     await waitUntil(() => adapter.executed.length === 2);
 
@@ -1750,7 +1750,7 @@ describe("agent control tools", () => {
     );
 
     expect(continued.ok).toBe(true);
-    expect(continued.session.omiSessionId).toBe(firstChild.childSession.sessionId);
+    expect(continued.session.sessionId).toBe(firstChild.childSession.sessionId);
     expect(continued.run.runId).not.toBe(firstChild.childRun.runId);
     expect(continued.run.parentRunId).toBeNull();
     expect(adapter.executed).toHaveLength(3);

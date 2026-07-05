@@ -906,7 +906,7 @@ function serializeAgentSessionsList(
       const run = summary.activeRun as Record<string, unknown> | null;
       const runId = typeof run?.runId === "string" ? run.runId : null;
       if (runId && dismissed.has(`run:${runId}`)) return false;
-      const sessionId = typeof session.omiSessionId === "string" ? session.omiSessionId : null;
+      const sessionId = typeof session.sessionId === "string" ? session.sessionId : null;
       if (sessionId && dismissed.has(`session:${sessionId}`)) return false;
       return true;
     })
@@ -932,7 +932,7 @@ function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record
   return {
     id: pillId,
     runId: run?.runId ?? null,
-    sessionId: session.omiSessionId ?? null,
+    sessionId: session.sessionId ?? null,
     title: session.title ?? "Background agent",
     status: run?.status ?? session.status ?? "unknown",
     latestActivity: run?.finalText ?? input.prompt ?? session.title ?? "",
@@ -948,7 +948,7 @@ function serializeTaskAgentSnapshot(summary: Record<string, unknown>): Record<st
   const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
   return {
     taskId: session.externalRefId ?? null,
-    sessionId: session.omiSessionId ?? null,
+    sessionId: session.sessionId ?? null,
     runId: run?.runId ?? null,
     title: session.title ?? null,
     status: run?.status ?? session.status ?? "unknown",
@@ -1011,7 +1011,7 @@ function serializeAwarenessSnapshot(snapshot: DesktopAwarenessSnapshot): Record<
 
 function serializeSession(session: AgentSession): Record<string, unknown> {
   return {
-    omiSessionId: session.sessionId,
+    sessionId: session.sessionId,
     ownerId: session.ownerId,
     agentDefinitionId: session.agentDefinitionId,
     title: session.title,
@@ -1032,7 +1032,7 @@ function serializeSession(session: AgentSession): Record<string, unknown> {
 function serializeRun(run: AgentRun): Record<string, unknown> {
   return {
     runId: run.runId,
-    omiSessionId: run.sessionId,
+    sessionId: run.sessionId,
     parentRunId: run.parentRunId,
     clientId: run.clientId,
     requestId: run.requestId,
@@ -1090,7 +1090,7 @@ function serializeAttempt(attempt: RunAttempt): Record<string, unknown> {
 function serializeBinding(binding: AdapterBinding): Record<string, unknown> {
   return {
     bindingId: binding.bindingId,
-    omiSessionId: binding.sessionId,
+    sessionId: binding.sessionId,
     adapterId: binding.adapterId,
     bindingGeneration: binding.bindingGeneration,
     adapterNativeSessionId: binding.adapterNativeSessionId,
@@ -1111,7 +1111,7 @@ function serializeEvent(event: AgentEvent): Record<string, unknown> {
   return {
     eventSeq: event.eventSeq,
     eventId: event.eventId,
-    omiSessionId: event.sessionId,
+    sessionId: event.sessionId,
     runId: event.runId,
     attemptId: event.attemptId,
     type: event.type,

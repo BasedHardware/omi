@@ -27,7 +27,7 @@ struct ChatResource: Identifiable, Equatable {
   let imageData: Data?
   let uri: String?
   let artifactId: String?
-  let omiSessionId: String?
+  let sessionId: String?
   let runId: String?
   let state: State
 
@@ -68,7 +68,7 @@ struct ChatResource: Identifiable, Equatable {
       imageData: nil,
       uri: uri,
       artifactId: nil,
-      omiSessionId: nil,
+      sessionId: nil,
       runId: nil,
       state: .ready
     )
@@ -94,7 +94,7 @@ struct ChatResource: Identifiable, Equatable {
       imageData: attachment.data,
       uri: attachment.localFileURL?.absoluteString,
       artifactId: nil,
-      omiSessionId: nil,
+      sessionId: nil,
       runId: nil,
       state: state
     )
@@ -111,7 +111,7 @@ struct ChatResource: Identifiable, Equatable {
       imageData: nil,
       uri: artifact.uri,
       artifactId: artifact.artifactId,
-      omiSessionId: artifact.omiSessionId,
+      sessionId: artifact.sessionId,
       runId: artifact.runId,
       state: State(artifactLifecycleState: artifact.lifecycleState)
     )
@@ -131,7 +131,7 @@ struct ChatResource: Identifiable, Equatable {
       if let thumbnailURL = resource.thumbnailURL { dict["thumbnailURL"] = thumbnailURL }
       if let uri = resource.uri { dict["uri"] = uri }
       if let artifactId = resource.artifactId { dict["artifactId"] = artifactId }
-      if let omiSessionId = resource.omiSessionId { dict["omiSessionId"] = omiSessionId }
+      if let sessionId = resource.sessionId { dict["sessionId"] = sessionId }
       if let runId = resource.runId { dict["runId"] = runId }
       return dict
     }
@@ -160,7 +160,7 @@ struct ChatResource: Identifiable, Equatable {
         imageData: nil,
         uri: dict["uri"] as? String,
         artifactId: dict["artifactId"] as? String,
-        omiSessionId: dict["omiSessionId"] as? String,
+        sessionId: dict["sessionId"] as? String,
         runId: dict["runId"] as? String,
         state: persistenceState(from: dict["state"] as? String)
       )

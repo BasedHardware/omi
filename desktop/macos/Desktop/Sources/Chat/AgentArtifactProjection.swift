@@ -5,7 +5,7 @@ struct AgentArtifactProjection: Codable, Equatable, Identifiable {
   var id: String { artifactId }
 
   let artifactId: String
-  let omiSessionId: String
+  let sessionId: String
   let runId: String?
   let attemptId: String?
   let kind: String
@@ -62,7 +62,7 @@ struct AgentArtifactProjection: Codable, Equatable, Identifiable {
 
   private static func parseArtifact(_ dict: [String: Any]) -> AgentArtifactProjection? {
     guard let artifactId = dict["artifactId"] as? String,
-      let omiSessionId = dict["omiSessionId"] as? String,
+      let sessionId = dict["sessionId"] as? String,
       let kind = dict["kind"] as? String,
       let role = dict["role"] as? String,
       let uri = dict["uri"] as? String
@@ -71,7 +71,7 @@ struct AgentArtifactProjection: Codable, Equatable, Identifiable {
     }
     return AgentArtifactProjection(
       artifactId: artifactId,
-      omiSessionId: omiSessionId,
+      sessionId: sessionId,
       runId: dict["runId"] as? String,
       attemptId: dict["attemptId"] as? String,
       kind: kind,

@@ -642,11 +642,10 @@ final class DesktopCoordinatorService {
       let sessionStatus = stringValue(session["status"]) ?? "unknown"
       let title = stringValue(session["title"])
         ?? stringValue(session["surfaceKind"])
-        ?? stringValue(session["omiSessionId"])
         ?? "Untitled agent"
 
       return DesktopCoordinatorSessionProjection(
-        sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+        sessionId: stringValue(session["sessionId"]),
         title: title,
         surfaceKind: stringValue(session["surfaceKind"]),
         externalRefKind: stringValue(session["externalRefKind"]),
@@ -674,7 +673,7 @@ final class DesktopCoordinatorService {
       let status = stringValue(latestRun["status"]) ?? stringValue(session["status"]) ?? "unknown"
       guard isTerminal(status) else { return nil }
       let runId = stringValue(latestRun["runId"])
-      let sessionId = stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"])
+      let sessionId = stringValue(session["sessionId"])
       let completedAtMs = intValue(latestRun["completedAtMs"])
       // When runId is absent, include completedAtMs so that each distinct
       // terminal run completion carries a unique id even if the same session
@@ -687,7 +686,6 @@ final class DesktopCoordinatorService {
 
       let title = stringValue(session["title"])
         ?? surfaceKind
-        ?? stringValue(session["omiSessionId"])
         ?? "Completed agent"
       let sanitizedTitle = sanitizePromptLine(title, maxLength: 120)
       let finalText = stringValue(latestRun["finalText"])
@@ -840,7 +838,7 @@ final class DesktopCoordinatorService {
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
     let attempt = object["attempt"] as? [String: Any] ?? [:]
-    guard let sessionId = stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+    guard let sessionId = stringValue(session["sessionId"]),
       let runId = stringValue(run["runId"])
     else {
       throw NSError(domain: "DesktopCoordinatorService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Background-agent spawn response did not include canonical handles"])
@@ -864,7 +862,7 @@ final class DesktopCoordinatorService {
     let run = object["run"] as? [String: Any] ?? [:]
     let result = run["result"] as? [String: Any] ?? [:]
     return DesktopCoordinatorAgentRunInspection(
-      sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+      sessionId: stringValue(session["sessionId"]),
       runId: stringValue(run["runId"]),
       status: stringValue(run["status"]) ?? stringValue(object["terminalStatus"]) ?? "unknown",
       finalText: stringValue(run["finalText"]) ?? stringValue(result["text"]) ?? stringValue(object["text"]),
