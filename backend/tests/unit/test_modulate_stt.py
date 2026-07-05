@@ -950,6 +950,88 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertAlmostEqual(segs[0]['start'], 0.0, places=1)
         self.assertAlmostEqual(segs[0]['end'], 1.0, places=1)
 
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    def test_partial_only_not_emitted(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': 'hello', 'final_transcript': '', 'is_final': False},
+                {'stream_id': 's1', 'partial_transcript': 'hello world', 'final_transcript': '', 'is_final': False},
+            ],
+            close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio, audio])
+        self.assertEqual(len(segs), 0, f"Partials should not emit segments, got: {[s['text'] for s in segs]}")
+
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    def test_two_finals_cumulative_timing(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'first', 'is_final': True},
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'second', 'is_final': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': 'first second', 'status': 'closed'},
+        )
+        import struct
+
+        audio_1s = struct.pack('<16000h', *([1000] * 16000))
+        segs = self._run_parakeet_session(ws, [audio_1s, audio_1s])
+        self.assertEqual(len(segs), 2)
+        self.assertEqual(segs[0]['text'], 'first')
+        self.assertEqual(segs[1]['text'], 'second')
+        self.assertAlmostEqual(segs[0]['start'], 0.0, places=1)
+        self.assertGreaterEqual(segs[0]['end'], segs[0]['start'])
+        self.assertGreaterEqual(segs[1]['start'], segs[0]['end'])
+        self.assertGreaterEqual(segs[1]['end'], segs[1]['start'])
+
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    def test_close_suffix_has_full_segment_shape(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'hello', 'is_final': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': 'hello world', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio])
+        suffix_segs = [s for s in segs if s['text'] == 'world']
+        self.assertEqual(len(suffix_segs), 1)
+        s = suffix_segs[0]
+        self.assertEqual(set(s.keys()), {'text', 'start', 'end', 'speaker', 'is_user', 'person_id'})
+        self.assertEqual(s['speaker'], 'SPEAKER_00')
+        self.assertFalse(s['is_user'])
+        self.assertIsNone(s['person_id'])
+        self.assertIsInstance(s['start'], float)
+        self.assertIsInstance(s['end'], float)
+        self.assertGreaterEqual(s['end'], s['start'])
+
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    def test_final_transcript_exact_segment_shape(self):
+        ws = _FakeV4WebSocket(
+            chunk_responses=[
+                {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'exact test', 'is_final': True},
+            ],
+            close_response={'stream_id': 's1', 'final_text': 'exact test', 'status': 'closed'},
+        )
+        import struct
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio])
+        self.assertEqual(len(segs), 1)
+        s = segs[0]
+        self.assertEqual(set(s.keys()), {'text', 'start', 'end', 'speaker', 'is_user', 'person_id'})
+        self.assertEqual(s['text'], 'exact test')
+        self.assertEqual(s['speaker'], 'SPEAKER_00')
+        self.assertFalse(s['is_user'])
+        self.assertIsNone(s['person_id'])
+        self.assertIsInstance(s['start'], float)
+        self.assertIsInstance(s['end'], float)
+        self.assertGreaterEqual(s['end'], s['start'])
+
 
 class TestResamplePcm16(unittest.TestCase):
     def test_8k_to_16k_doubles_samples(self):
