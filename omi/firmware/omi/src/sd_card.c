@@ -955,6 +955,8 @@ void sd_worker_thread(void)
              * before the POWER_ON prio request is seen. Mount first so buffered
              * audio lands on a valid ring, then process the write in order. */
             if (!is_mounted) {
+                /* CS was parked low on power-off; restore physical high before mount. */
+                gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
                 sd_req_t p;
                 while (!is_mounted && k_msgq_get(&sd_prio_msgq, &p, K_NO_WAIT) == 0) {
                     if (p.type == REQ_POWER_ON) {
@@ -1046,7 +1048,14 @@ void sd_worker_thread(void)
             /* Idle (mic asleep): flush, unmount and cut SD power to save current. */
             if (is_mounted) {
                 (void) sd_unmount();
-                LOG_INF("SD powered off (idle)");
+                /* Park the SD chip-select at physical 0 V. The SPI driver otherwise
+                 * idles it HIGH, which forward-biases the unpowered card's input
+                 * clamp and leaks current. Use *_raw so the driver's active-low
+                 * inversion does not flip the level. Keep it an output owned by the
+                 * driver (do NOT disconnect) so the card still re-inits on wake.
+                 * SCK/MOSI/MISO are shared with the OTA flash on spi3, not parked. */
+                gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 0);
+                LOG_INF("SD powered off (idle, CS parked low)");
             }
             break;
 
@@ -1054,6 +1063,9 @@ void sd_worker_thread(void)
             /* Mic woke: power on + remount. Handled via the prio queue so it runs
              * before any buffered write is dequeued from sd_msgq. */
             if (!is_mounted) {
+                /* CS back to inactive (physical high) before powering the card, per
+                 * SD SPI power-up sequencing. */
+                gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
                 int mret = sd_mount();
                 if (mret == 0) {
                     LOG_INF("SD powered on + remounted");
