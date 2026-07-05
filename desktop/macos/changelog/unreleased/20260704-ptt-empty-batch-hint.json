@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk silently dropping a tap too short to capture audio; it now shows a hint to hold longer"
-}
