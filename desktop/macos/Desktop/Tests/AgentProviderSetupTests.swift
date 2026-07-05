@@ -141,6 +141,33 @@ final class AgentProviderSetupTests: XCTestCase {
     XCTAssertEqual(steps.map(\.title), ["Onboard OpenClaw"])
   }
 
+  private func writeFakeHermes(_ body: String) throws -> String {
+    let path = tempHome + "/.local/bin/hermes"
+    try FileManager.default.createDirectory(
+      atPath: (path as NSString).deletingLastPathComponent, withIntermediateDirectories: true)
+    try "#!/bin/sh\n\(body)\n".write(toFile: path, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: path)
+    return path
+  }
+
+  func testHermesAuthProbeParsesLoggedInAndOut() throws {
+    let loggedIn = try writeFakeHermes("echo 'nous: logged in'")
+    XCTAssertTrue(AgentProviderInstaller.hermesNousAuthenticated(hermesPath: loggedIn))
+    let loggedOut = try writeFakeHermes("echo 'nous: logged out'")
+    XCTAssertFalse(AgentProviderInstaller.hermesNousAuthenticated(hermesPath: loggedOut))
+  }
+
+  func testHermesAuthProbeTerminatesHungBinary() throws {
+    let hung = try writeFakeHermes("sleep 60")
+    let start = Date()
+    XCTAssertFalse(AgentProviderInstaller.hermesNousAuthenticated(hermesPath: hung, timeout: 1))
+    XCTAssertLessThan(Date().timeIntervalSince(start), 10)
+  }
+
+  func testHermesAuthProbeMissingBinaryIsFalse() {
+    XCTAssertFalse(AgentProviderInstaller.hermesNousAuthenticated(hermesPath: tempHome + "/nope"))
+  }
+
   func testReadyProviderPlansNoSteps() throws {
     try installFakeExecutable("hermes")
     let steps = plan(.hermes)

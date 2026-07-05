@@ -95,7 +95,16 @@ enum AgentProviderInstaller {
                     launch: openInTerminalScript(command: "hermes setup --portal"),
                     // Binary presence is NOT auth — a fresh install reports
                     // "logged out" and every run fails until portal auth lands.
-                    isComplete: { hermesNousAuthenticated() }),
+                    // Resolve the binary at poll time (it may not exist when
+                    // the plan is built) with the same search dirs the plan
+                    // uses — venv-only installs are on no default PATH.
+                    isComplete: {
+                        guard let hermesPath = LocalAgentProviderDetector.firstExecutable(
+                            named: "hermes", fileManager: fileManager, homeDirectory: homeDirectory,
+                            searchDirectories: searchDirectories)
+                        else { return false }
+                        return hermesNousAuthenticated(hermesPath: hermesPath)
+                    }),
                 timeout: 420))
             return steps
 
@@ -122,18 +131,21 @@ enum AgentProviderInstaller {
     }
 
     /// `hermes auth status nous` prints "logged in" once portal auth lands.
-    static func hermesNousAuthenticated() -> Bool {
+    /// Takes the resolved binary path so the probe uses the same executable
+    /// the plan discovered, and terminates a hung probe so the polling loop's
+    /// own deadline stays in control.
+    static func hermesNousAuthenticated(hermesPath: String, timeout: TimeInterval = 10) -> Bool {
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        process.arguments = ["-lc", "hermes auth status nous 2>/dev/null"]
-        var env = ProcessInfo.processInfo.environment
-        env["PATH"] = "/opt/homebrew/bin:/usr/local/bin:\(NSHomeDirectory())/.local/bin:\(env["PATH"] ?? "/usr/bin:/bin")"
-        process.environment = env
+        process.executableURL = URL(fileURLWithPath: hermesPath)
+        process.arguments = ["auth", "status", "nous"]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
         do { try process.run() } catch { return false }
+        let watchdog = DispatchWorkItem { process.terminate() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + timeout, execute: watchdog)
         process.waitUntilExit()
+        watchdog.cancel()
         let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
         return output.contains("logged in")
     }

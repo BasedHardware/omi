@@ -1475,20 +1475,28 @@ final class AgentPillsManager: ObservableObject {
             // environment only at process start, so a provider installed
             // mid-session is invisible to a running runtime ("Adapter not
             // registered"). Restart it before dispatching the task; if a
-            // request is momentarily active, retry once — the fallback chain
-            // covers the residual case.
+            // request is momentarily active, retry once. Dispatch is gated on
+            // the restart succeeding — dispatching into a stale runtime would
+            // fail and fall back to the default orchestrator, silently
+            // substituting a provider the user explicitly asked for.
+            var runtimeRestarted = false
             if case .success = result, AgentProviderHealth.report(for: provider).readiness == .ready {
                 await MainActor.run {
                     guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == pillID }) else { return }
                     pill.latestActivity = "Restarting agent runtime to pick up \(provider.displayName)…"
                     pill.markContentChanged()
                 }
-                do {
-                    try await AgentRuntimeProcess.shared.restart(harnessMode: provider.harnessMode.rawValue)
-                } catch {
-                    log("AgentPills: runtime restart after \(provider.rawValue) setup failed (\(error)) — retrying once")
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
-                    try? await AgentRuntimeProcess.shared.restart(harnessMode: provider.harnessMode.rawValue)
+                for attempt in 1...2 {
+                    do {
+                        try await AgentRuntimeProcess.shared.restart(harnessMode: provider.harnessMode.rawValue)
+                        runtimeRestarted = true
+                        break
+                    } catch {
+                        log("AgentPills: runtime restart after \(provider.rawValue) setup failed (attempt \(attempt)): \(error)")
+                        if attempt == 1 {
+                            try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        }
+                    }
                 }
             }
             await MainActor.run {
@@ -1496,12 +1504,18 @@ final class AgentPillsManager: ObservableObject {
                 switch result {
                 case .success:
                     let health = AgentProviderHealth.report(for: provider)
-                    if health.readiness == .ready {
+                    if health.readiness == .ready, runtimeRestarted {
                         pill.status = .done
                         pill.completedAt = Date()
                         pill.latestActivity = "\(provider.displayName) is ready."
                         pill.markContentChanged()
                         dispatchBrief()
+                    } else if health.readiness == .ready {
+                        pill.status = .failed("Agent runtime is busy")
+                        pill.completedAt = Date()
+                        pill.latestActivity =
+                            "\(provider.displayName) is installed, but the agent runtime is busy and couldn't restart. Ask for your task again in a moment."
+                        pill.markContentChanged()
                     } else {
                         pill.status = .failed(health.detail)
                         pill.completedAt = Date()
