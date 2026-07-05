@@ -27,6 +27,22 @@ win:
   target:
     - target: nsis
       arch: [x64]
+  # --- CODE SIGNING (unsigned today → Windows SmartScreen warns "unknown publisher") ---
+  # Signing requires a certificate that must be procured separately; until one is
+  # wired in, leave this commented so unsigned builds still succeed. Recommended:
+  # Azure Trusted Signing (no hardware token, CI-friendly). Once you have an
+  # account, uncomment and set the values (store secrets in CI, never here):
+  #
+  # azureSignOptions:
+  #   publisherName: "Based Hardware"
+  #   endpoint: "https://<region>.codesigning.azure.net/"
+  #   certificateProfileName: "<profile>"
+  #   codeSigningAccountName: "<account>"
+  #
+  # Traditional OV/EV cert alternative:
+  # signtoolOptions:
+  #   certificateSubjectName: "Based Hardware"   # EV cert in the machine store
+  #   # or: certificateFile / certificatePassword via CSC_LINK / CSC_KEY_PASSWORD env
 nsis:
   oneClick: false
   perMachine: false
@@ -50,8 +66,22 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: Based Hardware <team@basedhardware.com>
   category: Utility
 appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
+
+# --- AUTO-UPDATE (NOT configured today) ---
+# Finding: the Windows app has no updater — `electron-updater` is not a
+# dependency, there is no `autoUpdater` wiring in src/main, and no `publish`
+# target. Shipped users cannot receive fixes without a manual re-download.
+# To enable (do this deliberately, then test on a real release channel):
+#   1. pnpm add electron-updater
+#   2. wire autoUpdater.checkForUpdatesAndNotify() in src/main (guarded to
+#      packaged builds), with a NSIS differential-update-friendly flow.
+#   3. uncomment and point this at your release host:
+# publish:
+#   - provider: github
+#     owner: BasedHardware
+#     repo: omi
