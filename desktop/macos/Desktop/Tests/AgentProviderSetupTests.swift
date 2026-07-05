@@ -92,6 +92,19 @@ final class AgentProviderSetupTests: XCTestCase {
     XCTAssertEqual(health(.hermes).readiness, .ready)
   }
 
+  func testCodexNotReadyWhenAuthPathIsDirectoryOrEmpty() throws {
+    try installFakeExecutable("codex")
+    try installFakeExecutable("codex-acp")
+    // Directory at the auth path must not count as signed in.
+    try FileManager.default.createDirectory(
+      atPath: tempHome + "/.codex/auth.json", withIntermediateDirectories: true)
+    XCTAssertEqual(health(.codex).readiness, .needsSetup)
+    // Empty placeholder file must not count either.
+    try FileManager.default.removeItem(atPath: tempHome + "/.codex/auth.json")
+    FileManager.default.createFile(atPath: tempHome + "/.codex/auth.json", contents: Data())
+    XCTAssertEqual(health(.codex).readiness, .needsSetup)
+  }
+
   func testEnvOverrideForcesReady() {
     let report = AgentProviderHealth.report(
       for: .hermes,

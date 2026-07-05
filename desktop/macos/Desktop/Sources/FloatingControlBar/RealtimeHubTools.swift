@@ -62,19 +62,28 @@ enum HubTool: String {
   case updateActionItem = "update_action_item"
   /// Create a Google Calendar event through the backend calendar tool.
   case createCalendarEvent = "create_calendar_event"
-  /// Capture the user's screen so the model can see what they're looking at.
   /// Install/repair a local agent provider (consent required), optionally
   /// dispatching the user's original task to it once setup succeeds.
   case setupAgentProvider = "setup_agent_provider"
+  /// Capture the user's screen so the model can see what they're looking at.
   case screenshot = "screenshot"
   /// Click at on-screen coordinates (local).
   case pointClick = "point_click"
 }
 
 enum RealtimeHubTools {
-  private static func localAgentProviderInstruction() -> String {
-    let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
-    let reports = providers.map { AgentProviderHealth.report(for: $0) }
+  /// One health probe per built artifact (instruction text or tool schema) so
+  /// each is internally consistent. Instructions and schema are constructed at
+  /// different moments by design; the authoritative gate is the dispatch-time
+  /// health preflight, so a stale snapshot can only yield a stale offer.
+  static func providerHealthSnapshot() -> [AgentProviderHealthReport] {
+    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
+      .map { AgentProviderHealth.report(for: $0) }
+  }
+
+  private static func localAgentProviderInstruction(
+    reports: [AgentProviderHealthReport] = providerHealthSnapshot()
+  ) -> String {
     let available = reports.filter { $0.readiness == .ready }.map(\.provider)
     let unavailable = reports.filter { $0.readiness != .ready }
 
@@ -104,10 +113,10 @@ enum RealtimeHubTools {
     return parts.joined(separator: " ")
   }
 
-  private static func availableDirectedProviderRawValues() -> [String] {
-    [AgentPillsManager.DirectedProvider.openclaw, .hermes, .codex]
-      .filter { AgentProviderHealth.report(for: $0).readiness == .ready }
-      .map(\.rawValue)
+  private static func availableDirectedProviderRawValues(
+    reports: [AgentProviderHealthReport] = providerHealthSnapshot()
+  ) -> [String] {
+    reports.filter { $0.readiness == .ready }.map(\.provider.rawValue)
   }
 
   private static func currentCalendarContext(now: Date = Date(), timeZone: TimeZone = .current) -> String {

@@ -3003,9 +3003,12 @@ class FloatingControlBarManager {
 
         let resolvedProvider = decision.directedProvider ?? directedProvider
         if let resolvedProvider {
-            let availability = LocalAgentProviderDetector.availability(for: resolvedProvider)
-            guard availability.isAvailable else {
-                let assistantText = availability.setupPrompt
+            // Dispatch gates on full health (installed AND wired AND authed),
+            // matching the voice hub / chat executor — a needs-setup provider
+            // must get the setup prompt, not a doomed spawn.
+            let health = AgentProviderHealth.report(for: resolvedProvider)
+            guard health.readiness == .ready else {
+                let assistantText = "\(health.detail) I can set it up for you."
                 let recordedTurn = provider.recordCompletedTurn(
                     userText: originalRequest,
                     assistantText: assistantText,

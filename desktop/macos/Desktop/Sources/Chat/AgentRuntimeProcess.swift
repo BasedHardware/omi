@@ -595,11 +595,18 @@ actor AgentRuntimeProcess {
       "\(home)/.hermes/node/bin",
       "\(home)/.hermes/hermes-agent",
     ]
+    // Also honor the user's PATH so binaries installed via nvm/asdf/custom npm
+    // prefixes are auto-wired too (PATH is minimal when launched from Finder,
+    // so the hardcoded well-known locations remain the reliable base).
+    let envPathDirs = (env["PATH"] ?? "")
+      .split(separator: ":")
+      .map(String.init)
+      .filter { !$0.isEmpty }
     let adapterSearchDirs = adapterPathDirs + [
       "\(home)/.local/bin",
       "/opt/homebrew/bin",
       "/usr/local/bin",
-    ]
+    ] + envPathDirs
     let trustedPathDirs = [
       "/opt/homebrew/bin",
       "/usr/local/bin",

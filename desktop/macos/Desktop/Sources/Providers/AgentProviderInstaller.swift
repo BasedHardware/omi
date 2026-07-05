@@ -150,7 +150,13 @@ enum AgentProviderInstaller {
                     if Date() > deadline {
                         return .failed(step: step.title, message: "Timed out waiting: \(instructions)")
                     }
-                    try? await Task.sleep(nanoseconds: 2_000_000_000)
+                    do {
+                        try await Task.sleep(nanoseconds: 2_000_000_000)
+                    } catch {
+                        // Cancellation must exit promptly — swallowing it would
+                        // turn this poll into a tight spin until the deadline.
+                        return .failed(step: step.title, message: "Setup cancelled.")
+                    }
                 }
             }
         }

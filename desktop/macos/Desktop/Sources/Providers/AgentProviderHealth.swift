@@ -40,6 +40,18 @@ enum AgentProviderHealth {
                 searchDirectories: searchDirectories)
         }
 
+        // Config/credential probes must reject directories and empty
+        // placeholders — `fileExists` alone would report a provider ready
+        // and hand it a task doomed to fail in the adapter.
+        func nonEmptyRegularFile(_ path: String) -> Bool {
+            var isDirectory: ObjCBool = false
+            guard fileManager.fileExists(atPath: path, isDirectory: &isDirectory),
+                !isDirectory.boolValue
+            else { return false }
+            let size = (try? fileManager.attributesOfItem(atPath: path)[.size] as? Int) ?? 0
+            return (size ?? 0) > 0
+        }
+
         switch provider {
         case .codex:
             guard executable("codex") != nil else {
@@ -53,7 +65,7 @@ enum AgentProviderHealth {
                     detail: "Codex is installed but the codex-acp bridge is missing.")
             }
             let authPath = (homeDirectory as NSString).appendingPathComponent(".codex/auth.json")
-            guard fileManager.fileExists(atPath: authPath) else {
+            guard nonEmptyRegularFile(authPath) else {
                 return AgentProviderHealthReport(
                     provider: provider, readiness: .needsSetup,
                     detail: "Codex is installed but not signed in (codex login).")
@@ -67,7 +79,7 @@ enum AgentProviderHealth {
                     detail: "OpenClaw is not installed.")
             }
             let configPath = (homeDirectory as NSString).appendingPathComponent(".openclaw/openclaw.json")
-            guard fileManager.fileExists(atPath: configPath) else {
+            guard nonEmptyRegularFile(configPath) else {
                 return AgentProviderHealthReport(
                     provider: provider, readiness: .needsSetup,
                     detail: "OpenClaw is installed but not onboarded (openclaw onboard).")
