@@ -9,6 +9,7 @@ import json
 import math
 import os
 import re
+import secrets
 import shutil
 import sqlite3
 import struct
@@ -289,6 +290,18 @@ def flatten_trace_text(trace: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def strip_probe_text(haystack: str, probe_texts: list[str]) -> str:
+    """Remove the probe turn's own text from an assertion haystack (R8).
+
+    Traces include the current user message; searching for a marker that the
+    probe itself contains would make the assertion self-satisfying.
+    """
+    for probe in probe_texts:
+        if probe:
+            haystack = haystack.replace(probe, "")
+    return haystack
+
+
 def latest_assistant_text(snapshot_detail: dict[str, str]) -> str:
     try:
         messages = json.loads(snapshot_detail.get("messages_json", "[]"))
@@ -380,10 +393,13 @@ class GauntletRunner:
         self.run_dir = Path(args.run_dir or (DESKTOP_DIR / ".harness/agent-continuity-gauntlet" / self.run_id))
         self.log_path = Path(args.log_path)
         self.log_offset = self.log_path.stat().st_size if self.log_path.exists() else 0
+        # Each marker carries its own random nonce (R8): the step-3 blind-recall
+        # probe must not be answerable by deriving one marker from another
+        # (e.g. reconstructing the PTT marker from the typed marker's run id).
         self.markers = {
-            "typed": f"GAUNTLET-{self.run_id}-TYPED",
-            "ptt": f"GAUNTLET-{self.run_id}-PTT",
-            "spawn": f"GAUNTLET-{self.run_id}-SPAWN",
+            "typed": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-TYPED",
+            "ptt": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-PTT",
+            "spawn": f"GAUNTLET-{self.run_id}-{secrets.token_hex(4).upper()}-SPAWN",
         }
         self.baseline_identity: dict[str, str] | None = None
         self.failures: list[str] = []
@@ -519,34 +535,51 @@ class GauntletRunner:
         if not any(needle.lower() in lowered for needle in needles):
             self.fail(f"{label}: assistant response did not reference expected markers: {needles}")
 
-    def assert_step3_continuity(
+    def assert_step3_blind_recall(
         self,
         assistant_text: str,
         traces: list[dict[str, Any]],
+        probe_text: str,
         *,
         label: str = "typed follow-up",
     ) -> dict[str, bool]:
-        """Pass when PTT continuity is visible in trace or assistant behavior.
+        """Blind-recall continuity assertion (R8).
 
+        The probe deliberately never contains the PTT marker, so the assistant
+        can only reproduce it if the voice turn was delivered through kernel
+        context (transcript tail, G1 delta, or native history). That behavioral
+        check is the hard gate. Trace visibility is a soft signal only:
         QueryTracer captures Swift request.messages, not the kernel-assembled
-        prompt. Warm native bindings may surface G1 deltas as
-        ``# Recent turns from other surfaces`` rather than
-        ``<conversation_history>``.
+        prompt, so the marker may legitimately be absent from the trace even
+        when delivery works.
         """
-        trace_text = "\n".join(flatten_trace_text(trace) for trace in traces)
         ptt_marker = self.markers["ptt"]
+        if ptt_marker in probe_text:
+            self.fail(
+                f"{label}: probe text contains the PTT marker — the blind-recall "
+                "assertion is meaningless when the answer is in the question"
+            )
+        trace_text = strip_probe_text(
+            "\n".join(flatten_trace_text(trace) for trace in traces),
+            [probe_text],
+        )
         checks = {
-            "ptt_marker_in_trace": ptt_marker in trace_text,
+            "ptt_marker_in_assistant": ptt_marker in assistant_text,
+            "ptt_marker_in_trace_excl_probe": ptt_marker in trace_text,
             "conversation_history_in_trace": (
                 "<conversation_history>" in trace_text
                 or "# Recent turns from other surfaces" in trace_text
             ),
-            "ptt_marker_in_assistant": ptt_marker in assistant_text,
         }
-        if not any(checks.values()):
+        if not checks["ptt_marker_in_assistant"]:
             self.fail(
-                f"{label}: PTT continuity not established "
-                "(need PTT marker in assistant/trace or conversation history injection)"
+                f"{label}: assistant failed blind recall of PTT marker {ptt_marker} "
+                f"(reply={assistant_text[:160]!r}) — voice turn not delivered to typed context"
+            )
+        if not checks["ptt_marker_in_trace_excl_probe"]:
+            self.warn(
+                f"{label}: PTT marker not visible in Swift-side trace "
+                "(expected when kernel assembles context downstream of QueryTracer)"
             )
         return checks
 
@@ -642,14 +675,17 @@ class GauntletRunner:
                 "(expected when force_transcript bypasses local STT fallback)"
             )
 
-        # Step 3 — typed follow-up referencing PTT turn
+        # Step 3 — typed follow-up: blind recall of the PTT marker (R8).
+        # The probe must NOT contain the marker; the assistant can only answer
+        # from delivered kernel context.
         followup_query = (
-            f"In our earlier voice turn I gave you marker {self.markers['ptt']}. "
-            f"What was that exact marker string? Reply with only the marker."
+            "In our earlier push-to-talk voice turn I gave you a continuity marker "
+            "starting with GAUNTLET- and ending in -PTT. "
+            "Reply with only that exact marker string, nothing else."
         )
         send, snapshot, traces = self.send_and_wait(followup_query, self.args.turn_timeout_ms)
         assistant = latest_assistant_text(snapshot)
-        continuity_checks = self.assert_step3_continuity(assistant, traces)
+        continuity_checks = self.assert_step3_blind_recall(assistant, traces, followup_query)
         self.record_step(
             "03-typed-followup",
             "typed follow-up after PTT",
@@ -667,11 +703,16 @@ class GauntletRunner:
             "Do not ask follow-up questions."
         )
         send, snapshot, traces = self.send_and_wait(spawn_query, self.args.turn_timeout_ms)
+        # R8: only a real spawn_agent execution carrying the objective marker
+        # counts. list_agent_sessions and coordinator awareness are evidence,
+        # never a pass path — a verbal refusal must fail this step.
         spawn_tools = [
             tool
             for trace in traces
             for tool in (trace.get("tool_executions") or [])
-            if isinstance(tool, dict) and tool.get("name") in {"spawn_agent", "list_agent_sessions"}
+            if isinstance(tool, dict)
+            and tool.get("name") == "spawn_agent"
+            and self.markers["spawn"] in str(tool.get("input", ""))
         ]
         coordinator = self.bridge_act( "coordinator_awareness_snapshot")
         self.record_step(
@@ -686,14 +727,28 @@ class GauntletRunner:
                 "coordinator_snapshot": coordinator.get("result", {}).get("detail", {}),
             },
         )
-        coordinator_blob = json.dumps(coordinator)
-        if self.markers["spawn"] not in coordinator_blob and not spawn_tools:
-            self.fail("background agent spawn did not produce spawn_agent tool activity or coordinator awareness")
+        if not spawn_tools:
+            assistant = latest_assistant_text(snapshot)
+            self.fail(
+                "no spawn_agent execution with the objective marker — model refused or "
+                f"mis-routed the spawn request (assistant={assistant[:160]!r})"
+            )
+        else:
+            failed_spawns = [
+                tool
+                for tool in spawn_tools
+                if re.search(r"error|failed|denied", str(tool.get("output", "")), re.I)
+            ]
+            if failed_spawns:
+                self.fail(f"spawn_agent execution reported failure: {failed_spawns[0].get('output')!r}")
 
         # Step 5 — status query about spawned agent
+        # R8: marker-free probe — the answer must surface the objective marker
+        # from tool output or delivered context, not from this question.
         status_query = (
-            f"What is the status of the background agent you started for marker {self.markers['spawn']}? "
-            "Use list_agent_sessions if needed and answer in one sentence."
+            "What is the status of the background agent you just started? "
+            "Use list_agent_sessions if needed. Answer in one sentence and "
+            "include the agent's exact objective marker."
         )
         send, snapshot, traces = self.send_and_wait(status_query, self.args.turn_timeout_ms)
         assistant = latest_assistant_text(snapshot)
@@ -712,11 +767,27 @@ class GauntletRunner:
             traces=traces,
             extra={"list_agent_sessions_calls": list_tools},
         )
-        status_blob = assistant + "\n" + "\n".join(flatten_trace_text(trace) for trace in traces)
-        if not list_tools and not re.search(r"running|started|agent|spawn|queued|status", status_blob, re.I):
-            self.fail("status query cannot see spawned agent (no list_agent_sessions and no status language)")
-        if self.markers["spawn"] not in status_blob and not list_tools:
-            self.fail(f"status query missing spawn marker {self.markers['spawn']}")
+        # R8: assertions run against evidence the probe did not supply — tool
+        # outputs and assistant text only, with the probe's own words stripped.
+        list_outputs = "\n".join(str(tool.get("output", "")) for tool in list_tools)
+        evidence_blob = strip_probe_text(assistant + "\n" + list_outputs, [status_query])
+        status_words = re.search(r"running|working|in progress|started|completed|queued|active", evidence_blob, re.I)
+        if list_tools:
+            if self.markers["spawn"] not in list_outputs and self.markers["spawn"] not in assistant:
+                self.fail(
+                    "list_agent_sessions ran but neither its output nor the answer "
+                    f"references spawn marker {self.markers['spawn']}"
+                )
+        else:
+            if self.markers["spawn"] not in evidence_blob or not status_words:
+                self.fail(
+                    "status query cannot see spawned agent "
+                    "(no list_agent_sessions call and answer lacks marker + status language)"
+                )
+            self.warn(
+                "status step passed without list_agent_sessions tool verification "
+                "(answer derived from injected context)"
+            )
 
         # Step 6 — owner-switch isolation (in-process via swap_test_owner)
         if not self.baseline_identity or not self.baseline_identity.get("conversation_id"):
