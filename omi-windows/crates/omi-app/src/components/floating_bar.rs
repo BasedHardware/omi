@@ -37,6 +37,7 @@ pub fn FloatingBar() -> Element {
     let mut is_expanded = use_signal(|| false);
     let mut dragging = use_signal(|| false);
     let mut drag_offset = use_signal(|| (0i32, 0i32));
+    let mut expanded_pill = use_signal(|| Option::<String>::None);
 
     // Sync voice history into chat_history
     use_effect(move || {
@@ -277,39 +278,113 @@ pub fn FloatingBar() -> Element {
                 div { class: "fbar-pills",
                     for sug in suggestions.read().clone() {
                         {
-                            let sug_id_action = sug.id.clone();
+                            let sug_id = sug.id.clone();
+                            let sug_id_expand = sug.id.clone();
                             let sug_id_dismiss = sug.id.clone();
                             let sug_text = sug.text.clone();
-                            let sug_action = sug.action_label.clone();
-                            let sug_prompt = sug.agent_prompt.clone();
-                            let mut sug_sig_action = suggestions.clone();
-                            let mut sug_sig_dismiss = suggestions.clone();
-                            let mut sp = suggestion_prompt.clone();
-                            let nav2 = nav.clone();
-                            rsx! {
-                                div { class: "fbar-pill", key: "{sug_id_action}",
-                                    span { class: "fbar-pill-text", title: "{sug_text}", "{sug_text}" }
-                                    button {
-                                        class: "fbar-pill-action",
-                                        onclick: move |_| {
-                                            if let Some(ref p) = sug_prompt {
-                                                sp.set(Some(p.clone()));
+                            let is_detail_open = *expanded_pill.read() == Some(sug_id.clone());
+
+                            if is_detail_open {
+                                let sug_id_run = sug.id.clone();
+                                let sug_id_close = sug.id.clone();
+                                let sug_id_open = sug.id.clone();
+                                let sug_prompt_run = sug.agent_prompt.clone();
+                                let sug_prompt_open = sug.agent_prompt.clone();
+                                let sug_detail_text = sug.text.clone();
+                                let mut sug_sig_run = suggestions.clone();
+                                let mut sug_sig_open = suggestions.clone();
+                                let mut sp_run = suggestion_prompt.clone();
+                                let mut sp_open = suggestion_prompt.clone();
+                                let nav_run = nav.clone();
+                                rsx! {
+                                    div { class: "fbar-pill-detail", key: "{sug_id}",
+                                        p { class: "fbar-pill-detail-text", "{sug_detail_text}" }
+                                        div { class: "fbar-pill-detail-actions",
+                                            button {
+                                                class: "fbar-pill-action",
+                                                onclick: move |_| {
+                                                    if let Some(ref p) = sug_prompt_run {
+                                                        sp_run.set(Some(p.clone()));
+                                                    }
+                                                    let prompt = sug_prompt_run.clone().unwrap_or_default();
+                                                    if !prompt.is_empty() {
+                                                        let cfg = config.read().clone();
+                                                        let mut history = chat_history.clone();
+                                                        let mut loading = ai_loading.clone();
+                                                        let mut entries = history.read().clone();
+                                                        entries.push(ChatEntry { role: "user".into(), content: prompt.clone() });
+                                                        history.set(entries);
+                                                        spawn(async move {
+                                                            loading.set(true);
+                                                            let (api_key, url, model) = crate::llm::resolve_llm_endpoint(&cfg);
+                                                            let result = crate::llm::complete(
+                                                                &api_key, &url, &model,
+                                                                vec![crate::llm::LlmMessage { role: "user".into(), content: prompt }],
+                                                                Some(300),
+                                                            ).await;
+                                                            loading.set(false);
+                                                            let answer = match result {
+                                                                Ok(a) => a,
+                                                                Err(e) => format!("Error: {e}"),
+                                                            };
+                                                            let mut entries = history.read().clone();
+                                                            entries.push(ChatEntry { role: "assistant".into(), content: answer });
+                                                            if entries.len() > 40 { entries.drain(0..entries.len() - 40); }
+                                                            history.set(entries);
+                                                        });
+                                                    }
+                                                    let mut list = sug_sig_run.read().clone();
+                                                    list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_run);
+                                                    sug_sig_run.set(list);
+                                                    expanded_pill.set(None);
+                                                },
+                                                "Run"
                                             }
-                                            nav2.push(Route::Agent {});
-                                            let mut list = sug_sig_action.read().clone();
-                                            list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_action);
-                                            sug_sig_action.set(list);
-                                        },
-                                        "{sug_action}"
+                                            button {
+                                                class: "fbar-btn fbar-btn-close",
+                                                onclick: move |_| {
+                                                    expanded_pill.set(None);
+                                                },
+                                                "Dismiss"
+                                            }
+                                            button {
+                                                class: "fbar-pill-action",
+                                                onclick: move |_| {
+                                                    if let Some(ref p) = sug_prompt_open {
+                                                        sp_open.set(Some(p.clone()));
+                                                    }
+                                                    nav_run.push(Route::Agent {});
+                                                    let mut list = sug_sig_open.read().clone();
+                                                    list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_open);
+                                                    sug_sig_open.set(list);
+                                                    expanded_pill.set(None);
+                                                },
+                                                "Open in Agent"
+                                            }
+                                        }
                                     }
-                                    button {
-                                        class: "fbar-pill-dismiss",
-                                        onclick: move |_| {
-                                            let mut list = sug_sig_dismiss.read().clone();
-                                            list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_dismiss);
-                                            sug_sig_dismiss.set(list);
-                                        },
-                                        "✕"
+                                }
+                            } else {
+                                let mut sug_sig_dismiss = suggestions.clone();
+                                rsx! {
+                                    div { class: "fbar-pill", key: "{sug_id_expand}",
+                                        span {
+                                            class: "fbar-pill-text",
+                                            title: "{sug_text}",
+                                            onclick: move |_| {
+                                                expanded_pill.set(Some(sug_id_expand.clone()));
+                                            },
+                                            "{sug_text}"
+                                        }
+                                        button {
+                                            class: "fbar-pill-dismiss",
+                                            onclick: move |_| {
+                                                let mut list = sug_sig_dismiss.read().clone();
+                                                list.retain(|x: &crate::proactive::Suggestion| x.id != sug_id_dismiss);
+                                                sug_sig_dismiss.set(list);
+                                            },
+                                            "✕"
+                                        }
                                     }
                                 }
                             }
