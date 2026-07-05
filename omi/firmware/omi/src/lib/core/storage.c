@@ -108,6 +108,12 @@ static uint64_t pending_start_seq;
 static uint32_t pending_packet_count;
 static uint64_t pending_advance_seq;
 
+/* Small settle after the sync becomes serveable (CCC subscribed + SD mounted)
+ * before the first response, so the app's side is ready to receive it. Replaces
+ * the incidental delay that log output used to provide in debug builds. */
+#define STORAGE_SYNC_SETTLE_MS 150
+static int64_t sync_serveable_since;
+
 static bool transfer_active;
 static bool read_begin_sent;
 static bool done_pending;
@@ -561,18 +567,25 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            /* The app triggers sync only once per connect, so we must actually
-             * deliver this one response. Wait until the CCC subscription is
-             * committed AND the SD is mounted, then only clear the request once
-             * the notify was accepted by the stack (>=0). If it fails transiently
-             * (e.g. -ENOMEM when the TX buffers are busy during the conn-param /
-             * MTU update, or -EAGAIN), keep it pending and retry next poll. */
+            /* The app triggers sync only once per connect, so we must deliver this
+             * one response. Require: CCC subscription committed, SD mounted, and a
+             * short settle since it became serveable (so the app is ready to
+             * receive). Only clear once the notify is accepted (>=0); on transient
+             * failure (-ENOMEM during conn-param/MTU update, -EAGAIN) keep it
+             * pending and retry next poll. */
             if (conn && storage_notify_ready(conn) && sd_is_ready()) {
-                if (send_ring_info_response(conn) >= 0) {
+                if (sync_serveable_since == 0) {
+                    sync_serveable_since = k_uptime_get();
+                }
+                if (k_uptime_get() - sync_serveable_since >= STORAGE_SYNC_SETTLE_MS &&
+                    send_ring_info_response(conn) >= 0) {
                     info_requested = 0;
                 }
-            } else if (!conn) {
-                info_requested = 0;
+            } else {
+                sync_serveable_since = 0;
+                if (!conn) {
+                    info_requested = 0;
+                }
             }
         }
 
