@@ -551,3 +551,41 @@ class TestV4StreamEndpoint:
             data = ws.receive_json()
             assert data["partial_transcript"] == "hello"
             ws.send_text("finalize")
+
+    def test_process_chunk_error_does_not_crash(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        mod.stream_engine.open_stream = AsyncMock(return_value={"stream_id": "s1", "status": "opened"})
+        mod.stream_engine.process_chunk = AsyncMock(side_effect=ValueError("bad audio"))
+        mod.stream_engine.close_stream = AsyncMock(
+            return_value={"stream_id": "s1", "final_text": "", "status": "closed"}
+        )
+        client = TestClient(app, raise_server_exceptions=False)
+        pcm = np.zeros(160, dtype=np.int16).tobytes()
+        with client.websocket_connect("/v4/stream") as ws:
+            ws.send_bytes(pcm)
+
+
+class TestStreamMetricsEndpoint:
+
+    def test_stream_metrics_returns_data(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=True)
+        mod.stream_engine.metrics = {
+            "total_streams_opened": 5,
+            "total_streams_closed": 3,
+            "active_streams": 2,
+            "total_chunks_processed": 100,
+            "total_streams_reaped": 0,
+        }
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/stream/metrics")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_streams_opened"] == 5
+        assert data["active_streams"] == 2
+
+    def test_stream_metrics_returns_empty_when_no_engine(self):
+        app, mod, _, _ = _make_app_with_mocks(streaming=False)
+        client = TestClient(app, raise_server_exceptions=False)
+        resp = client.get("/stream/metrics")
+        assert resp.status_code == 200
+        assert resp.json() == {}

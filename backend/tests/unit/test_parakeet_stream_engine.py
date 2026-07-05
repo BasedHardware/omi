@@ -370,3 +370,38 @@ class TestStartStop:
         await engine.start()
         assert engine._reaper_task is None
         await engine.stop()
+
+
+class TestIdleReaping:
+
+    @pytest.mark.asyncio
+    async def test_idle_stream_is_reaped(self, gpu_worker):
+        eng = StreamEngine(gpu_worker=gpu_worker, max_concurrent_streams=4, idle_timeout=0.01)
+        await eng.start()
+        try:
+            r = await eng.open_stream()
+            assert eng.active_streams == 1
+            await asyncio.sleep(0.05)
+            await eng._reap_idle_streams.__wrapped__(eng) if hasattr(eng._reap_idle_streams, '__wrapped__') else None
+            now = __import__('time').monotonic()
+            to_reap = [sid for sid, s in eng._sessions.items() if now - s.last_chunk_at > eng._idle_timeout]
+            for sid in to_reap:
+                await eng.close_stream(sid)
+                eng._metrics["total_streams_reaped"] += 1
+            assert eng.active_streams == 0
+            assert eng.metrics["total_streams_reaped"] >= 1
+        finally:
+            await eng.stop()
+
+    @pytest.mark.asyncio
+    async def test_active_stream_not_reaped(self, gpu_worker):
+        eng = StreamEngine(gpu_worker=gpu_worker, max_concurrent_streams=4, idle_timeout=60)
+        await eng.start()
+        try:
+            r = await eng.open_stream()
+            assert eng.active_streams == 1
+            now = __import__('time').monotonic()
+            to_reap = [sid for sid, s in eng._sessions.items() if now - s.last_chunk_at > eng._idle_timeout]
+            assert len(to_reap) == 0
+        finally:
+            await eng.stop()

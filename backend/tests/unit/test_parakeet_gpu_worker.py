@@ -6,6 +6,7 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
 os.environ.setdefault("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
@@ -1190,3 +1191,149 @@ class TestDrainStreamQueue:
         worker._stream_queue.put_nowait(item)
         worker._drain_stream_queue()
         assert worker._stream_queue.empty()
+
+
+class TestStreamOpenChunkClose:
+
+    def test_stream_open_creates_session(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        result = worker._stream_open({"stream_id": "s1"})
+        assert result == {"stream_id": "s1", "status": "opened"}
+        assert "s1" in worker._stream_sessions
+        assert worker._stream_sessions["s1"]["chunk_index"] == 0
+        assert worker._stream_sessions["s1"]["frames_sent"] == 0
+
+    def test_stream_open_increments_int_id(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_open({"stream_id": "a"})
+        worker._stream_open({"stream_id": "b"})
+        assert worker._stream_sessions["a"]["int_id"] == 1
+        assert worker._stream_sessions["b"]["int_id"] == 2
+
+    def test_stream_open_raises_without_pipeline(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = None
+        with pytest.raises(RuntimeError, match="not available"):
+            worker._stream_open({"stream_id": "s1"})
+
+    def test_stream_chunk_unknown_stream_raises(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        with pytest.raises(ValueError, match="Unknown stream"):
+            worker._stream_chunk({"stream_id": "nope", "audio_chunk": np.zeros(10, dtype=np.float32)})
+
+    def test_stream_chunk_buffers_small_chunks(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_chunk_samples = 1000
+        worker._stream_open({"stream_id": "s1"})
+        small = np.zeros(100, dtype=np.float32)
+        result = worker._stream_chunk({"stream_id": "s1", "audio_chunk": small})
+        assert result["partial_transcript"] == ""
+        assert worker._stream_sessions["s1"]["buffer_samples"] == 100
+        assert worker._stream_sessions["s1"]["frames_sent"] == 0
+
+    def test_stream_close_unknown_returns_not_found(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        result = worker._stream_close({"stream_id": "nope"})
+        assert result == {"stream_id": "nope", "status": "not_found"}
+
+    def test_stream_close_returns_committed_text(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_pipeline.transcribe_step.return_value = []
+        worker._stream_open({"stream_id": "s1"})
+        worker._stream_sessions["s1"]["committed_text"] = " hello world"
+        result = worker._stream_close({"stream_id": "s1"})
+        assert result["status"] == "closed"
+        assert result["final_text"] == "hello world"
+
+    def test_stream_close_falls_back_to_last_partial(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_pipeline.transcribe_step.return_value = []
+        worker._stream_open({"stream_id": "s1"})
+        worker._stream_sessions["s1"]["last_partial"] = "partial text"
+        worker._stream_sessions["s1"]["committed_text"] = ""
+        result = worker._stream_close({"stream_id": "s1"})
+        assert result["final_text"] == "partial text"
+
+    def test_stream_chunk_overflow_trimming(self):
+        worker = GPUWorker()
+        worker._stream_pipeline = MagicMock()
+        worker._stream_chunk_samples = 999999
+        worker._stream_open({"stream_id": "s1"})
+        big = np.zeros(worker._MAX_BUFFER_SAMPLES + 200, dtype=np.float32)
+        worker._stream_chunk({"stream_id": "s1", "audio_chunk": big})
+        assert worker._stream_sessions["s1"]["buffer_samples"] <= worker._MAX_BUFFER_SAMPLES
+
+
+class TestCombinedModeFairness:
+
+    def test_batch_serviced_after_stream_drain(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._max_stream_drain = 2
+        worker._poll_timeout = 0.01
+        processed_types = []
+        orig_process_stream = worker._process_stream_item
+        orig_process_batch = worker._process_batch_item
+
+        def mock_process_stream(item):
+            processed_types.append("stream")
+
+        def mock_process_batch(item):
+            processed_types.append("batch")
+            worker._running = False
+
+        worker._process_stream_item = mock_process_stream
+        worker._process_batch_item = mock_process_batch
+
+        stream_loop = asyncio.new_event_loop()
+        try:
+            s_item = WorkItem(WorkType.STREAM_CHUNK, {}, future=stream_loop.create_future(), loop=stream_loop)
+            b_item = WorkItem(WorkType.BATCH_TRANSCRIBE, {}, future=stream_loop.create_future(), loop=stream_loop)
+            worker._stream_queue.put_nowait(s_item)
+            worker._queue.put_nowait(b_item)
+            worker._run_combined_mode()
+        finally:
+            stream_loop.close()
+
+        assert "stream" in processed_types
+        assert "batch" in processed_types
+        stream_idx = processed_types.index("stream")
+        batch_idx = processed_types.index("batch")
+        assert stream_idx < batch_idx
+
+    def test_stream_drain_capped_at_max(self):
+        worker = GPUWorker()
+        worker._running = True
+        worker._max_stream_drain = 2
+        worker._poll_timeout = 0.01
+        stream_count = 0
+
+        def mock_process_stream(item):
+            nonlocal stream_count
+            stream_count += 1
+
+        def mock_process_batch(item):
+            worker._running = False
+
+        worker._process_stream_item = mock_process_stream
+        worker._process_batch_item = mock_process_batch
+
+        loop = asyncio.new_event_loop()
+        try:
+            for _ in range(5):
+                worker._stream_queue.put_nowait(
+                    WorkItem(WorkType.STREAM_CHUNK, {}, future=loop.create_future(), loop=loop)
+                )
+            worker._queue.put_nowait(WorkItem(WorkType.BATCH_TRANSCRIBE, {}, future=loop.create_future(), loop=loop))
+            worker._run_combined_mode()
+        finally:
+            loop.close()
+
+        assert stream_count == 2
