@@ -68,6 +68,12 @@ final class TranscriptionTransportTests: XCTestCase {
     let src = try source(relativePath: "Sources/FloatingControlBar/PushToTalkManager.swift")
     XCTAssertTrue(src.contains("maxBatchAudioBytes"))
     XCTAssertTrue(src.contains("appendBatchAudioBounded"))
+    XCTAssertTrue(
+      src.contains("appendBatchAudioBounded(_ audioData: Data, turn: UInt64)"),
+      "bounded append should take the audio callback's stable turn id")
+    XCTAssertTrue(
+      src.contains("appendBatchAudioBounded(audioData, turn: generation)"),
+      "audio callbacks should pass their captured generation into the bounded append helper")
     // The raw unbounded appends are gone from the audio callback.
     XCTAssertFalse(
       src.contains("self.batchAudioBuffer.append(audioData)"),

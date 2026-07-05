@@ -935,7 +935,7 @@ class PushToTalkManager: ObservableObject {
   /// `maxBatchAudioBytes`. Called from the audio thread. Once the cap is hit the
   /// buffer stops growing (bounded RSS) and the user is warned once; the buffered
   /// (~4.5 min) audio still transcribes normally when the turn is released.
-  private func appendBatchAudioBounded(_ audioData: Data) {
+  private func appendBatchAudioBounded(_ audioData: Data, turn: UInt64) {
     batchAudioLock.lock()
     // Append while under the cap (the chunk that reaches it is kept, so the warning
     // fires exactly at the crossing). Set the once-flag atomically under the lock so
@@ -949,7 +949,7 @@ class PushToTalkManager: ObservableObject {
       }
     }
     batchAudioLock.unlock()
-    if justHitCap { showBatchAudioOverflowWarning(turn: micCaptureGeneration) }
+    if justHitCap { showBatchAudioOverflowWarning(turn: turn) }
   }
 
   /// Surface the one-time "recording too long" warning when the turn buffer is
@@ -1347,7 +1347,7 @@ class PushToTalkManager: ObservableObject {
               // Realtime hub owns this turn — stream mic PCM straight to it, and
               // retain it so finalize() can silence-gate the turn.
               RealtimeHubController.shared.feedAudio(audioData)
-              self.appendBatchAudioBounded(audioData)
+              self.appendBatchAudioBounded(audioData, turn: generation)
               return
             }
             if self.isOmniSTT {
@@ -1359,10 +1359,10 @@ class PushToTalkManager: ObservableObject {
                 self.omniPreconnectBuffer.append(audioData)
               }
               // Also retain the raw turn for a Deepgram fallback if omni fails.
-              self.appendBatchAudioBounded(audioData)
+              self.appendBatchAudioBounded(audioData, turn: generation)
             } else if batchMode {
               // Batch mode: accumulate audio in buffer
-              self.appendBatchAudioBounded(audioData)
+              self.appendBatchAudioBounded(audioData, turn: generation)
             } else {
               // Live mode: stream to Deepgram
               self.transcriptionService?.sendAudio(audioData)
