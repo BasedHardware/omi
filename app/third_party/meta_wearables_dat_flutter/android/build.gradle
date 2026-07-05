@@ -1,0 +1,86 @@
+// Android Gradle module for the meta_wearables_dat_flutter plugin.
+//
+// Meta's official Android DAT SDK is published to GitHub Packages Maven and
+// requires a GitHub personal access token with the `read:packages` scope. Set
+// the token via the `GITHUB_TOKEN` env var, or place
+// `github_token=<token>` in `local.properties` / `gradle.properties`.
+//
+// Consumers must mirror this Maven repository declaration in their app's
+// `settings.gradle.kts` (see `example/android/settings.gradle.kts`). The
+// duplication is intentional: a Flutter plugin cannot inject a repository
+// into the consumer's `dependencyResolutionManagement` block, but the plugin
+// itself still needs to resolve `mwdat-core`/`mwdat-camera` against the same
+// remote when the plugin's own module is compiled.
+
+group = "com.iseelabs.meta_wearables_dat_flutter"
+version = "0.7.1"
+
+ext.mwdat_version = "0.7.0"
+
+buildscript {
+    ext.kotlin_version = "2.1.0"
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.9.1")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+    }
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven {
+            url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
+            credentials {
+                username = "" // not needed; Meta's package is public-read with any user
+                password = System.getenv("GITHUB_TOKEN")
+                    ?: project.findProperty("github_token")?.toString()
+                    ?: ""
+            }
+        }
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+android {
+    namespace = "com.iseelabs.meta_wearables_dat_flutter"
+
+    compileSdk = 35
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+    }
+
+    defaultConfig {
+        minSdk = 31
+    }
+
+    dependencies {
+        implementation("com.meta.wearable:mwdat-core:$mwdat_version")
+        implementation("com.meta.wearable:mwdat-camera:$mwdat_version")
+        // Display capability (Ray-Ban Display glasses). Added in DAT 0.7.0.
+        implementation("com.meta.wearable:mwdat-display:$mwdat_version")
+        // Mock Device Kit. Meta ships the mock module alongside core/camera;
+        // pulled in unconditionally so host apps can develop without glasses.
+        implementation("com.meta.wearable:mwdat-mockdevice:$mwdat_version")
+        // ActivityResultRegistry / ComponentActivity for runtime permissions
+        // and Meta's RequestPermissionContract.
+        implementation("androidx.activity:activity-ktx:1.9.3")
+    }
+}

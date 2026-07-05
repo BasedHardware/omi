@@ -13,7 +13,6 @@ import 'package:omi/pages/settings/people.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/speech_profile/page.dart';
 
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -246,7 +245,7 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (context, setSheetState) {
             final captureProvider = context.read<CaptureProvider>();
             final enabled = SharedPreferencesUtil().backgroundModeEnabled;
-            final canEnable = captureProvider.hasNativeBackgroundStreamRoute;
+            final canEnable = captureProvider.hasNativeBleAudioRoute;
             void setEnabled(bool value) async {
               if (value && !canEnable) return;
               final accepted = await captureProvider.setBackgroundModeEnabled(value);
@@ -360,16 +359,9 @@ class _ProfilePageState extends State<ProfilePage> {
           builder: (context, setSheetState) {
             final enabled = SharedPreferencesUtil().batchModeEnabled;
             Future<void> setEnabled(bool value) async {
-              final accepted = await captureProvider.setBatchMode(value);
-              if (!accepted) {
-                AppSnackbar.showSnackbarError(context.l10n.transcribeLaterNote);
-              }
-              if (sheetContext.mounted) {
-                setSheetState(() {});
-              }
-              if (mounted) {
-                setState(() {});
-              }
+              await captureProvider.setBatchMode(value);
+              setSheetState(() {});
+              setState(() {});
             }
 
             return SafeArea(

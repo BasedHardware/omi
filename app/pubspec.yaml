@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.542+970
+version: 1.0.538+900
 
 
 environment:
@@ -42,7 +42,7 @@ dependencies:
   firebase_core: 3.13.0
   firebase_auth: 5.5.3
   firebase_messaging: 15.2.5
-  firebase_crashlytics: 4.3.2
+  firebase_crashlytics: 4.3.5
 
   # Auth
   google_sign_in: 6.2.2
@@ -131,8 +131,11 @@ dependencies:
   vector_math: ^2.2.0
   marionette_flutter: ^0.3.0
   quick_actions: ^1.0.0
+  meta_wearables_dat_flutter: ^0.7.1
 
 dependency_overrides:
+  meta_wearables_dat_flutter:
+    path: third_party/meta_wearables_dat_flutter
   js: ^0.7.1
   uuid: ^4.4.0
   opus_flutter_ios:

@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.",
     "transcribeLaterTitle": "나중에 변환하기",
     "transcribeLaterDescription": "실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.",
-    "transcribeLaterNote": "현재는 Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.",
+    "transcribeLaterNote": "현재는 Omi 기기에서만 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.",
     "transcribeLaterStorageFull": "휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.",
     "unmute": "음소거 해제",
     "newRecording": "새 녹음",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "약 1분",
     "jumpToLatestMessage": "최신 메시지로 이동",
     "latest": "최신",
-    "flashFirmware": "펌웨어 플래시",
-    "pendantRecordingTitle": "펜던트에서 녹음 중",
-    "pendantRecordingNote": "펜던트가 자동으로 녹음하고 있습니다. 앱이 열려 있는 동안 녹음이 휴대폰으로 동기화됩니다.",
-    "pendantSyncingRecordings": "펜던트에서 녹음을 동기화하는 중…",
-    "pendantMinutesStored": "~{minutes}분 저장됨",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Meta Glasses 연결하기",
+    "pairingDescMetaGlasses": "Meta AI 앱에서 글래스를 페어링한 다음 Omi에서 연결을 탭하세요. 여러 개를 연결하고 활성 글래스를 선택할 수 있습니다.",
+    "metaGlassesUnavailable": "Meta AI 앱을 찾을 수 없습니다. 글래스를 연결하려면 Meta AI를 설치하고 개발자 모드를 활성화하세요.",
+    "metaGlassesRegistering": "Meta AI 앱에서 연결을 완료한 후 Omi로 돌아오세요.",
+    "metaGlassesCameraPermission": "Meta AI 앱에서 카메라 접근을 허용하세요",
+    "metaGlassesCaptureModeLabel": "캡처 모드",
+    "metaGlassesModeCameraMic": "카메라 + 마이크",
+    "metaGlassesModeMicOnly": "마이크만",
+    "metaGlassesStartCapture": "캡처 시작",
+    "metaGlassesStopCapture": "캡처 중지",
+    "metaGlassesGestureHint": "이 빌드에서는 Meta 글래스의 제스처 제어가 지원되지 않습니다.",
+    "connectAnotherDevice": "다른 기기 연결",
+    "myDevices": "내 기기",
+    "metaGlassesAutoCapture": "연결 시 자동 캡처",
+    "metaGlassesShowPreview": "실시간 미리보기",
+    "metaGlassesPendingPhotos": "{count}장의 사진이 동기화 대기 중",
+    "metaGlassesPairInMetaAI": "Meta AI 앱에서 설정하세요",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "안경이 식는 중입니다 — 캡처가 일시 중지됨",
+    "metaGlassesFolded": "캡처를 계속하려면 안경을 펼치세요",
+    "metaGlassesCaptureFrequency": "캡처 주기",
+    "metaGlassesEvery10s": "10초마다",
+    "metaGlassesEvery30s": "30초마다",
+    "metaGlassesEvery1min": "1분마다",
+    "metaGlassesEvery5min": "5분마다",
+    "metaGlassesGestures": "제스처"
 }

@@ -8,7 +8,7 @@ import 'package:version/version.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/pages/home/page.dart';
-import 'package:omi/services/devices/connectors/omiglass_connection.dart';
+import 'package:omi/services/devices/omiglass_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';

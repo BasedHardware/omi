@@ -1921,7 +1921,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: Text(context.l10n.flashFirmware, style: const TextStyle(color: Colors.white)),
+        title: const Text('Flash Firmware', style: TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
@@ -1991,9 +1991,9 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     backgroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: Text(
-                    context.l10n.flashFirmware,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  child: const Text(
+                    'Flash Firmware',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

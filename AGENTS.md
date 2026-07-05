@@ -43,8 +43,6 @@ These rules apply to every AI agent working in this repository. This file is the
 ### Backend (Python)
 
 - **No in-function imports** — all imports at module top level.
-- **Import purity** — a module's top level must be referentially transparent: importing it must not construct clients/connections (`OpenAI(...)`, `Redis(...)`, `Pinecone(...)`, `DeepgramClient(...)`, `firebase_admin.initialize_app(...)`, `tiktoken.encoding_for_model(...)`, etc.), perform network/IO (`requests.*`, `httpx.*`, `open(...)`), read `os.environ["X"]` (subscript — use `os.getenv`/`.get`), or mutate global state. Defer construction into lazy getters (`_x=None; def get_x(): ...`); tests inject fakes via `monkeypatch.setattr` on the singleton. Scope: correctness side effects, not import duration (`import langchain` is slow-but-pure and fine). Run `python scripts/scan_import_time_side_effects.py` from `backend/`. Full prescription: `backend/docs/test_isolation.md`.
-- **Test isolation** — never mutate `sys.modules` at module scope in test files. Use `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides` for router deps, or (reserve only) `backend/testing/import_isolation.py`. Run `python scripts/check_module_stub_pollution.py`. Do not extend `tests/unit/memory_import_isolation.py` (deprecated). See `backend/docs/test_isolation.md`.
 - **Import hierarchy** (low → high): `database/` → `utils/` → `routers/` → `main.py`. Never import upward.
 - **Memory management** — `del` byte arrays after processing, `.clear()` dicts/lists holding data.
 - **Async I/O** — never `requests.*` in async (use `httpx.AsyncClient` pools from `utils/http_client.py`), never `Thread().start().join()` (use `critical_executor`/`storage_executor`), never `time.sleep()` in async (use `asyncio.sleep()`). Run `python scripts/scan_async_blockers.py` from `backend/` before committing.
@@ -271,16 +269,14 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 ## Testing
 
 - Run `backend/test-preflight.sh` first to verify tools, packages, and env vars.
-- High-risk backend workflows (checkpoint/resume, retry/idempotency, side-effect fanout, rollout/repair jobs) must be listed in `backend/testing/workflow_contracts.json` with local contract tests; source-only changes must run those tests before PR.
 - OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 - Backend changes: run `backend/test.sh`. App changes: run `app/test.sh`. Run before committing.
 - Backend unit tests need `python3`, `pytest`, packages from `requirements.txt`, `ENCRYPTION_SECRET` (set by test.sh). Integration tests optionally need `OPENAI_API_KEY`, `DEEPGRAM_API_KEY`, `ADMIN_KEY`, Redis, `GOOGLE_APPLICATION_CREDENTIALS`.
 
 ## CI/CD & Logs
 
-- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires the agent runbook `desktop/macos/docs/agent-prod-promotion-runbook.md`, then manual `.github/workflows/desktop_promote_prod.yml` dispatch with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable. Desktop Rust backend deploys require environment-scoped `DESKTOP_BACKEND_BASE_API_URL` so OAuth callbacks set runtime `BASE_API_URL`.
+- Desktop release pipeline: merging `desktop/macos/**` to `main` auto-increments the version, tags `v*-macos`, and triggers Codemagic to build/sign/notarize/publish a beta GitHub release. Stable/prod requires manually running `.github/workflows/desktop_promote_prod.yml` with `release_tag` and `confirm=promote-stable`; that workflow is roll-forward only, deploys the Rust backend from the exact tag, verifies `/health`, promotes the Firestore bridge release, then marks the GitHub release stable. Desktop Rust backend deploys require environment-scoped `DESKTOP_BACKEND_BASE_API_URL` so OAuth callbacks set runtime `BASE_API_URL`.
 - Backend deploy: `gh workflow run gcp_backend.yml -f environment=prod -f branch=main`.
-- Firmware release (Omi CV1): manual `.github/workflows/firmware_release.yml`. Bump `CONFIG_BT_DIS_FW_REV_STR` in `omi/firmware/omi/omi.conf` first, then `gh workflow run firmware_release.yml -f publish=publish -f changelog="..." -f minimum_app_version_code=...` (omit `publish` for a build-only QA run). It builds via Docker (NCS 2.9.0 sysbuild + MCUboot), names the OTA asset `Omi_CV1_OTA_v<ver>.zip` (the "ota" substring is required), and publishes a `Omi_CV1_v<ver>` GitHub Release with the `KEY_VALUE` body that `backend/routers/firmware.py` serves. Build logic lives in `omi/firmware/scripts/ci/`.
 
 ## Documentation Maintenance
 

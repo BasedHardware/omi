@@ -9350,8 +9350,7 @@ class AppLocalizationsTr extends AppLocalizations {
       'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
 
   @override
-  String get transcribeLaterNote =>
-      'Şimdilik Omi ve Limitless cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+  String get transcribeLaterNote => 'Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9500,24 +9499,93 @@ class AppLocalizationsTr extends AppLocalizations {
   String get latest => 'En son';
 
   @override
-  String get flashFirmware => 'Donanım Yazılımını Yükle';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Pendant\'ta kayıt yapılıyor';
+  String get pairingTitleMetaGlasses => 'Meta Glasses\'ınızı bağlayın';
 
   @override
-  String get pendantRecordingNote =>
-      'Pendant\'ın kendi kendine kayıt yapıyor. Uygulama açıkken kayıtlar telefonuna eşitlenir.';
+  String get pairingDescMetaGlasses =>
+      'Gözlüğünüzü Meta AI uygulamasında eşleştirin, ardından Omi\'de Bağlan\'a dokunun. Birden fazla gözlük bağlayabilir ve hangisinin etkin olduğunu seçebilirsiniz.';
 
   @override
-  String get pendantSyncingRecordings => 'Pendant\'ından kayıtlar eşitleniyor…';
+  String get metaGlassesUnavailable =>
+      'Meta AI uygulaması bulunamadı. Gözlüğünüzü bağlamak için Meta AI\'ı yükleyin ve Geliştirici Modu\'nu etkinleştirin.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes dk kayıtlı';
+  String get metaGlassesRegistering => 'Meta AI uygulamasında bağlantıyı tamamlayın, ardından Omi\'ye dönün.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Meta AI uygulamasında kamera erişimine izin verin';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Yakalama modu';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Yalnızca mikrofon';
+
+  @override
+  String get metaGlassesStartCapture => 'Yakalamayı başlat';
+
+  @override
+  String get metaGlassesStopCapture => 'Yakalamayı durdur';
+
+  @override
+  String get metaGlassesGestureHint => 'Bu derlemede Meta gözlükleri için hareket kontrolleri desteklenmiyor.';
+
+  @override
+  String get connectAnotherDevice => 'Başka bir cihaz bağla';
+
+  @override
+  String get myDevices => 'Cihazlarım';
+
+  @override
+  String get metaGlassesAutoCapture => 'Bağlanınca otomatik yakalama';
+
+  @override
+  String get metaGlassesShowPreview => 'Canlı önizleme';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count fotoğraf eşitlenmeyi bekliyor';
   }
 
   @override
-  String get pendantStorageAlmostFull =>
-      'Pendant\'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.';
+  String get metaGlassesPairInMetaAI => 'Meta AI uygulamasında kurun';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Gözlük soğuyor — yakalama duraklatıldı';
+
+  @override
+  String get metaGlassesFolded => 'Yakalamaya devam etmek için gözlüğü açın';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Yakalama sıklığı';
+
+  @override
+  String get metaGlassesEvery10s => 'Her 10 sn';
+
+  @override
+  String get metaGlassesEvery30s => 'Her 30 sn';
+
+  @override
+  String get metaGlassesEvery1min => 'Her 1 dk';
+
+  @override
+  String get metaGlassesEvery5min => 'Her 5 dk';
+
+  @override
+  String get metaGlassesGestures => 'Hareketler';
 }

@@ -30,6 +30,12 @@ class _TestEnvFields implements EnvFields {
   bool? get useWebAuth => false;
   @override
   bool? get useAuthCustomToken => false;
+  @override
+  bool? get appleSignInEnabled => true;
+  @override
+  bool? get useAppleWebAuth => false;
+  @override
+  String? get authRedirectScheme => 'omi';
 }
 
 void main() {

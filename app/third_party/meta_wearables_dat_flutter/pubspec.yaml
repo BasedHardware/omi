@@ -1,0 +1,38 @@
+name: meta_wearables_dat_flutter
+description: >-
+  Unofficial Flutter plugin bridging Meta's Wearables Device Access Toolkit
+  (DAT) for Ray-Ban Meta, Oakley Meta, and Ray-Ban Display glasses.
+version: 0.7.1
+homepage: https://github.com/iSee-Labs/meta-wearables-dat-flutter
+repository: https://github.com/iSee-Labs/meta-wearables-dat-flutter
+issue_tracker: https://github.com/iSee-Labs/meta-wearables-dat-flutter/issues
+
+topics:
+  - meta
+  - wearables
+  - glasses
+  - dat
+  - flutter-plugin
+
+environment:
+  sdk: ^3.5.0
+  flutter: ">=3.32.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  plugin_platform_interface: ^2.1.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  very_good_analysis: ^7.0.0
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.iseelabs.meta_wearables_dat_flutter
+        pluginClass: MetaWearablesDatPlugin
+      ios:
+        pluginClass: MetaWearablesDatPlugin

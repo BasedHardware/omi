@@ -30,17 +30,6 @@ class SharedPreferencesUtil {
     _preferences = await SharedPreferences.getInstance();
   }
 
-  /// Picks up values written natively (the Dart cache doesn't see those otherwise).
-  static Future<void> reload() async {
-    await _preferences?.reload();
-  }
-
-  int get pendantPagesStored => getInt('pendantPagesStored');
-
-  bool get pendantDraining => getBool('pendantDraining');
-
-  bool get pendantStorageAlmostFull => getBool('pendantStorageAlmostFull');
-
   set uid(String value) => saveString('uid', value);
 
   String get uid => getString('uid');
@@ -53,12 +42,57 @@ class SharedPreferencesUtil {
 
   Future<void> btDeviceSet(BtDevice value) async {
     await saveString('btDevice', jsonEncode(value.toJson()));
+    await btDeviceAdd(value);
   }
 
   BtDevice get btDevice {
-    final String device = getString('btDevice') ?? '';
+    final String device = getString('btDevice');
     if (device.isEmpty) return BtDevice(id: '', name: '', type: DeviceType.omi, rssi: 0);
     return BtDevice.fromJson(jsonDecode(device));
+  }
+
+  List<BtDevice> get btDevices {
+    final devices = <BtDevice>[];
+    for (final encodedDevice in getStringList('btDevices')) {
+      try {
+        final decoded = jsonDecode(encodedDevice);
+        if (decoded is Map<String, dynamic>) {
+          final device = BtDevice.fromJson(decoded);
+          if (device.id.isNotEmpty && devices.none((saved) => saved.id == device.id)) {
+            devices.add(device);
+          }
+        }
+      } catch (e) {
+        Logger.debug('Error decoding saved device: $e');
+      }
+    }
+
+    final legacyDevice = btDevice;
+    if (devices.isEmpty && legacyDevice.id.isNotEmpty) {
+      devices.add(legacyDevice);
+    }
+    return devices;
+  }
+
+  Future<void> btDeviceAdd(BtDevice value) async {
+    if (value.id.isEmpty) return;
+    final devices = btDevices;
+    final index = devices.indexWhere((device) => device.id == value.id);
+    if (index >= 0) {
+      devices[index] = value;
+    } else {
+      devices.add(value);
+    }
+    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    await saveString('btDevice', jsonEncode(value.toJson()));
+  }
+
+  Future<void> btDeviceRemove(String id) async {
+    final devices = btDevices.where((device) => device.id != id).toList();
+    await saveStringList('btDevices', devices.map((device) => jsonEncode(device.toJson())).toList());
+    if (btDevice.id == id) {
+      await remove('btDevice');
+    }
   }
 
   set deviceName(String value) => saveString('deviceName', value);
@@ -89,14 +123,6 @@ class SharedPreferencesUtil {
   bool get batchMuted => getBool('batchMuted');
 
   set batchMuted(bool value) => saveBool('batchMuted', value);
-
-  // Realtime device mute (double-tap pause). Persisted so the mute survives an
-  // app kill/restart — otherwise the device silently resumes recording on the
-  // next reconnect even though the user muted it. Restored into
-  // CaptureProvider._isPaused at startup and re-applied on reconnect.
-  bool get deviceMuted => getBool('deviceMuted');
-
-  set deviceMuted(bool value) => saveBool('deviceMuted', value);
 
   // Transcribe Later: one-shot flag — when set, the native writer finalizes the
   // current file and starts a fresh one (manual "New recording" cut), then clears it.

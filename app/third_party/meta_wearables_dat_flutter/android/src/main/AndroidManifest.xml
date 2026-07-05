@@ -1,0 +1,29 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <!--
+        Bluetooth / Internet permissions are intentionally NOT declared here.
+        Consumers add them in the host app's manifest because not every
+        consumer needs every permission (e.g. an app shipping mock-only does
+        not need BLUETOOTH). See `doc/getting_started.md` for the required
+        entries.
+
+        The permissions below are added unconditionally because they
+        accompany the `BackgroundStreamingService` declaration: leaving
+        them out would make `enableBackgroundStreaming()` crash with a
+        SecurityException at runtime. Permissions in a plugin's manifest
+        merge into the host app's manifest at build time.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <application>
+        <service
+            android:name=".BackgroundStreamingService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice"
+            tools:ignore="ForegroundServicePermission" />
+    </application>
+</manifest>

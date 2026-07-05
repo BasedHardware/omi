@@ -10632,7 +10632,7 @@
     "syncCustomSttWarningMessage": "ನೀವು ನಿಮ್ಮ ಸ್ವಂತ ಪ್ರತಿಲೇಖನ ಪೂರೈಕೆದಾರರನ್ನು ಬಳಸುತ್ತೀರಿ. ಈ ಧ್ವನಿಮುದ್ರಣಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಿದರೆ ಅವು Omi ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಪ್ರತಿಲೇಖನಗೊಳ್ಳುತ್ತವೆ ಮತ್ತು ನಿಮ್ಮ ಯೋಜನೆಯ ಪ್ರತಿಲೇಖನ ಮಿತಿಗೆ ಎಣಿಸಲಾಗುತ್ತದೆ.",
     "transcribeLaterTitle": "ನಂತರ ಲಿಪ್ಯಂತರಿಸಿ",
     "transcribeLaterDescription": "ನೇರ ಪ್ರಸಾರದ ಬದಲು ಈಗ ಧ್ವನಿಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ, ಬೇಕೆಂದಾಗ ಲಿಪ್ಯಂತರಿಸಿ. ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಯುತ್ತವೆ; ನಂತರ ಅವುಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ ಸಂಭಾಷಣೆಗಳನ್ನು ರಚಿಸಿ.",
-    "transcribeLaterNote": "ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
+    "transcribeLaterNote": "ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.",
     "transcribeLaterStorageFull": "ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಸಂಗ್ರಹ ಸ್ಥಳ ಕಡಿಮೆ ಇರುವುದರಿಂದ ರೆಕಾರ್ಡಿಂಗ್ ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಂತಿದೆ. ಸ್ಥಳ ಖಾಲಿ ಮಾಡಿ ಅಥವಾ ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಿ; ನಂತರ ಅದು ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ.",
     "unmute": "ಮ್ಯೂಟ್ ತೆಗೆ",
     "newRecording": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್",
@@ -10682,17 +10682,33 @@
     "deviceOnboardingIntroDuration": "ಸುಮಾರು 1 ನಿಮಿಷ",
     "jumpToLatestMessage": "ಇತ್ತೀಚಿನ ಸಂದೇಶಕ್ಕೆ ಹೋಗಿ",
     "latest": "ಇತ್ತೀಚಿನ",
-    "flashFirmware": "ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ",
-    "pendantRecordingTitle": "ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್",
-    "pendantRecordingNote": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ತಾನಾಗಿಯೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಆ್ಯಪ್ ತೆರೆದಿರುವಾಗ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.",
-    "pendantSyncingRecordings": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ…",
-    "pendantMinutesStored": "~{minutes} ನಿಮಿಷ ಸಂಗ್ರಹವಾಗಿದೆ",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "ನಿಮ್ಮ Meta Glasses ಸಂಪರ್ಕಿಸಿ",
+    "pairingDescMetaGlasses": "Meta AI ಆ್ಯಪ್‌ನಲ್ಲಿ ನಿಮ್ಮ ಕನ್ನಡಕವನ್ನು ಜೋಡಿಸಿ, ನಂತರ Omi ನಲ್ಲಿ Connect ಟ್ಯಾಪ್ ಮಾಡಿ. ಒಂದಕ್ಕಿಂತ ಹೆಚ್ಚು ಜೋಡಿಗಳನ್ನು ಲಿಂಕ್ ಮಾಡಿ ಸಕ್ರಿಯವಾದದ್ದನ್ನು ಆಯ್ಕೆ ಮಾಡಬಹುದು.",
+    "metaGlassesUnavailable": "Meta AI ಆ್ಯಪ್ ಪತ್ತೆಯಾಗಿಲ್ಲ. ಕನ್ನಡಕ ಸಂಪರ್ಕಿಸಲು Meta AI ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡಿ ಮತ್ತು ಡೆವಲಪರ್ ಮೋಡ್ ಸಕ್ರಿಯಗೊಳಿಸಿ.",
+    "metaGlassesRegistering": "Meta AI ಆ್ಯಪ್‌ನಲ್ಲಿ ಸಂಪರ್ಕವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ನಂತರ Omi ಗೆ ಹಿಂತಿರುಗಿ.",
+    "metaGlassesCameraPermission": "Meta AI ಆ್ಯಪ್‌ನಲ್ಲಿ ಕ್ಯಾಮೆರಾ ಪ್ರವೇಶವನ್ನು ಅನುಮತಿಸಿ",
+    "metaGlassesCaptureModeLabel": "ಕ್ಯಾಪ್ಚರ್ ಮೋಡ್",
+    "metaGlassesModeCameraMic": "ಕ್ಯಾಮೆರಾ + ಮೈಕ್",
+    "metaGlassesModeMicOnly": "ಮೈಕ್ ಮಾತ್ರ",
+    "metaGlassesStartCapture": "ಕ್ಯಾಪ್ಚರ್ ಪ್ರಾರಂಭಿಸಿ",
+    "metaGlassesStopCapture": "ಕ್ಯಾಪ್ಚರ್ ನಿಲ್ಲಿಸಿ",
+    "metaGlassesGestureHint": "ಈ ಬಿಲ್ಡ್‌ನಲ್ಲಿ Meta ಕನ್ನಡಕಗಳಿಗಾಗಿ ಸಂಜ್ಞೆ ನಿಯಂತ್ರಣಗಳಿಗೆ ಬೆಂಬಲವಿಲ್ಲ.",
+    "connectAnotherDevice": "ಇನ್ನೊಂದು ಸಾಧನವನ್ನು ಸಂಪರ್ಕಿಸಿ",
+    "myDevices": "ನನ್ನ ಸಾಧನಗಳು",
+    "metaGlassesAutoCapture": "ಸಂಪರ್ಕಗೊಂಡಾಗ ಸ್ವಯಂ ಕ್ಯಾಪ್ಚರ್",
+    "metaGlassesShowPreview": "ಲೈವ್ ಪೂರ್ವವೀಕ್ಷಣೆ",
+    "metaGlassesPendingPhotos": "{count} ಫೋಟೋಗಳು ಸಿಂಕ್‌ಗಾಗಿ ಕಾಯುತ್ತಿವೆ",
+    "metaGlassesPairInMetaAI": "Meta AI ಆ್ಯಪ್‌ನಲ್ಲಿ ಹೊಂದಿಸಿ",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "ಗ್ಲಾಸ್ ತಂಪಾಗುತ್ತಿದೆ — ಕ್ಯಾಪ್ಚರ್ ವಿರಾಮದಲ್ಲಿದೆ",
+    "metaGlassesFolded": "ಕ್ಯಾಪ್ಚರ್ ಮುಂದುವರಿಸಲು ಗ್ಲಾಸ್ ತೆರೆದು ಹಾಕಿ",
+    "metaGlassesCaptureFrequency": "ಕ್ಯಾಪ್ಚರ್ ಆವರ್ತನ",
+    "metaGlassesEvery10s": "ಪ್ರತಿ 10 ಸೆ",
+    "metaGlassesEvery30s": "ಪ್ರತಿ 30 ಸೆ",
+    "metaGlassesEvery1min": "ಪ್ರತಿ 1 ನಿ",
+    "metaGlassesEvery5min": "ಪ್ರತಿ 5 ನಿ",
+    "metaGlassesGestures": "ಗೆಸ್ಚರ್‌ಗಳು"
 }

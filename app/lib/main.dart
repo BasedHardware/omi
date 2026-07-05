@@ -53,6 +53,7 @@ import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/locale_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/providers/meta_wearables_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
@@ -68,7 +69,6 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
-import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -78,6 +78,32 @@ import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+const Duration _startupPhaseTimeout = Duration(seconds: 12);
+
+Future<T?> _runStartupPhase<T>(String name, Future<T> Function() phase) async {
+  final timer = Stopwatch()..start();
+  debugPrint('[OmiStartup] start $name');
+  try {
+    final result = await phase().timeout(_startupPhaseTimeout);
+    debugPrint('[OmiStartup] ok $name ${timer.elapsedMilliseconds}ms');
+    return result;
+  } on TimeoutException catch (error, stack) {
+    debugPrint('[OmiStartup] timeout $name ${timer.elapsedMilliseconds}ms: $error');
+    _recordStartupError(error, stack);
+  } catch (error, stack) {
+    debugPrint('[OmiStartup] error $name ${timer.elapsedMilliseconds}ms: $error');
+    _recordStartupError(error, stack);
+  }
+  return null;
+}
+
+void _recordStartupError(Object error, StackTrace stack, {bool fatal = false}) {
+  if (Firebase.apps.isEmpty) {
+    return;
+  }
+  unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: fatal));
+}
 
 /// Background message handler for FCM data messages
 @pragma('vm:entry-point')
@@ -127,33 +153,33 @@ Future _init() async {
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
-  await ServiceManager.init();
-  LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
+  await _runStartupPhase('ServiceManager.init', ServiceManager.init);
 
   // Firebase
   if (Firebase.apps.isEmpty) {
     final options = F.env == Environment.prod
         ? prod.DefaultFirebaseOptions.currentPlatform
         : dev.DefaultFirebaseOptions.currentPlatform;
-    await Firebase.initializeApp(options: options);
+    await _runStartupPhase('Firebase.initializeApp', () => Firebase.initializeApp(options: options));
   } else {
     // Firebase may already be initialized by native SDK (macOS)
     debugPrint('Firebase already initialized.');
   }
 
-  await PlatformManager.initializeServices();
-  await NotificationService.instance.initialize();
+  await _runStartupPhase('PlatformManager.initializeServices', PlatformManager.initializeServices);
+  await _runStartupPhase('NotificationService.initialize', NotificationService.instance.initialize);
 
   // Register FCM background message handler
   if (PlatformManager().isFCMSupported) {
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   }
 
-  await SharedPreferencesUtil.init();
+  await _runStartupPhase('SharedPreferencesUtil.init', SharedPreferencesUtil.init);
 
   // TestFlight environment detection — must be after SharedPreferencesUtil.init()
   if (F.env == Environment.prod) {
-    final isTestFlight = await EnvironmentDetector.isTestFlight();
+    final isTestFlight =
+        await _runStartupPhase('EnvironmentDetector.isTestFlight', EnvironmentDetector.isTestFlight) ?? false;
     if (isTestFlight) {
       Env.isTestFlight = true;
       if (SharedPreferencesUtil().testFlightUseStagingApi) {
@@ -170,16 +196,19 @@ Future _init() async {
     }
   }
 
-  bool isAuth = (await AuthService.instance.getIdToken()) != null;
+  bool isAuth = (await _runStartupPhase('AuthService.getIdToken', AuthService.instance.getIdToken)) != null;
   if (isAuth) {
     PlatformManager.instance.analytics.identify();
     // Restore onboarding state from server if not already set locally
     // This handles the case where cached credentials are used on startup
     if (!SharedPreferencesUtil().onboardingCompleted) {
-      await AuthService.instance.restoreOnboardingState();
+      await _runStartupPhase('AuthService.restoreOnboardingState', AuthService.instance.restoreOnboardingState);
     }
   }
-  initOpus(await opus_flutter.load());
+  final opus = await _runStartupPhase('Opus.load', opus_flutter.load);
+  if (opus != null) {
+    initOpus(opus);
+  }
 
   // Register native BLE bridge
   BleFlutterApi.setUp(BleBridge.instance);
@@ -188,7 +217,7 @@ Future _init() async {
     Logger.debug('main: restored ${peripheralUuids.length} BLE peripherals');
   };
 
-  await CrashlyticsManager.init();
+  await _runStartupPhase('CrashlyticsManager.init', CrashlyticsManager.init);
   if (isAuth) {
     PlatformManager.instance.crashReporter.identifyUser(
       FirebaseAuth.instance.currentUser?.email ?? '',
@@ -205,7 +234,7 @@ Future _init() async {
     return true;
   };
 
-  await ServiceManager.instance().start();
+  await _runStartupPhase('ServiceManager.start', ServiceManager.instance().start);
   return;
 }
 
@@ -219,7 +248,10 @@ void main() {
     }
     await _init();
     runApp(const MyApp());
-  }, (error, stack) => FirebaseCrashlytics.instance.recordError(error, stack, fatal: true));
+  }, (error, stack) {
+    debugPrint('[OmiStartup] zone error: $error');
+    _recordStartupError(error, stack, fatal: true);
+  });
 }
 
 class MyApp extends StatefulWidget {
@@ -228,7 +260,7 @@ class MyApp extends StatefulWidget {
   @override
   State<MyApp> createState() => _MyAppState();
 
-  static _MyAppState of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
+  static State<MyApp> of(BuildContext context) => context.findAncestorStateOfType<_MyAppState>()!;
 
   // The navigator key is necessary to navigate using static methods
   // Delegates to the extracted globalNavigatorKey so files don't need to import main.dart
@@ -352,6 +384,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => LocaleProvider()),
         ChangeNotifierProvider(create: (context) => AnnouncementProvider()),
         ChangeNotifierProvider(lazy: true, create: (context) => PhoneCallProvider()),
+        // Eager: home-screen device state (battery pill, devices hub) must know
+        // about registered Meta glasses without any page visit first. The
+        // capture pipeline is attached here so gesture- and auto-started
+        // glasses capture work without opening any page.
+        ChangeNotifierProxyProvider<CaptureProvider, MetaWearablesProvider>(
+          lazy: false,
+          create: (context) => MetaWearablesProvider()..init(),
+          update: (context, captureProvider, metaProvider) => (metaProvider ?? MetaWearablesProvider()
+            ..init())
+            ..attachCaptureController(captureProvider),
+        ),
       ],
       builder: (context, child) {
         return WithForegroundTask(

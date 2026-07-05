@@ -3063,7 +3063,7 @@
     "syncCustomSttWarningMessage": "Du bruger din egen transskriptionsudbyder. Synkronisering af disse optagelser transskriberer dem på Omis servere i stedet, og de tæller med i din plans transskriptionsgrænse.",
     "transcribeLaterTitle": "Transskriber senere",
     "transcribeLaterDescription": "Optag lyd nu, og transskriber den efter behov i stedet for live. Optagelserne gemmes på din telefon, hvorefter du uploader dem for at oprette samtaler.",
-    "transcribeLaterNote": "Fungerer indtil videre med Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.",
+    "transcribeLaterNote": "Fungerer indtil videre med Omi-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.",
     "transcribeLaterStorageFull": "Din telefon er ved at løbe tør for lagerplads, så optagelsen er sat på pause. Frigør plads, eller upload dine optagelser, så fortsætter den automatisk.",
     "unmute": "Slå lyd til",
     "newRecording": "Ny optagelse",
@@ -3113,17 +3113,33 @@
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "jumpToLatestMessage": "Gå til nyeste besked",
     "latest": "Nyeste",
-    "flashFirmware": "Flash firmware",
-    "pendantRecordingTitle": "Optager på vedhænget",
-    "pendantRecordingNote": "Dit vedhæng optager af sig selv. Optagelser synkroniseres til din telefon, mens appen er åben.",
-    "pendantSyncingRecordings": "Synkroniserer optagelser fra dit vedhæng…",
-    "pendantMinutesStored": "~{minutes} min gemt",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Vedhængets lager er næsten fuldt — hold appen åben for at synkronisere."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Forbind dine Meta Glasses",
+    "pairingDescMetaGlasses": "Par dine briller i Meta AI-appen, og tryk derefter på Forbind i Omi. Du kan tilknytte flere par og vælge, hvilket der er aktivt.",
+    "metaGlassesUnavailable": "Meta AI-appen blev ikke fundet. Installer Meta AI, og aktivér udviklertilstand for at forbinde dine briller.",
+    "metaGlassesRegistering": "Fuldfør forbindelsen i Meta AI-appen, og vend tilbage til Omi.",
+    "metaGlassesCameraPermission": "Tillad kameraadgang i Meta AI-appen",
+    "metaGlassesCaptureModeLabel": "Optagetilstand",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Kun mikrofon",
+    "metaGlassesStartCapture": "Start optagelse",
+    "metaGlassesStopCapture": "Stop optagelse",
+    "metaGlassesGestureHint": "Gestusbetjening for Meta-briller understøttes ikke i denne version.",
+    "connectAnotherDevice": "Forbind en anden enhed",
+    "myDevices": "Mine enheder",
+    "metaGlassesAutoCapture": "Automatisk optagelse ved forbindelse",
+    "metaGlassesShowPreview": "Live-forhåndsvisning",
+    "metaGlassesPendingPhotos": "{count} billeder venter på synkronisering",
+    "metaGlassesPairInMetaAI": "Konfigurer i Meta AI-appen",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Brillerne køler ned — optagelse sat på pause",
+    "metaGlassesFolded": "Fold brillerne ud for at fortsætte optagelsen",
+    "metaGlassesCaptureFrequency": "Optagefrekvens",
+    "metaGlassesEvery10s": "Hvert 10. s",
+    "metaGlassesEvery30s": "Hvert 30. s",
+    "metaGlassesEvery1min": "Hvert 1. min",
+    "metaGlassesEvery5min": "Hvert 5. min",
+    "metaGlassesGestures": "Bevægelser"
 }

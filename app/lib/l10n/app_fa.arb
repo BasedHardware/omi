@@ -10632,7 +10632,7 @@
     "syncCustomSttWarningMessage": "شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.",
     "transcribeLaterTitle": "رونویسی در زمان دلخواه",
     "transcribeLaterDescription": "صدا را همین حالا ضبط کنید و به‌جای رونویسی زنده، هر وقت خواستید آن را رونویسی کنید. ضبط‌ها روی گوشی شما ذخیره می‌شوند و سپس با بارگذاری آن‌ها گفت‌وگوها ساخته می‌شوند.",
-    "transcribeLaterNote": "فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
+    "transcribeLaterNote": "فعلاً فقط با دستگاه‌های Omi کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
     "transcribeLaterStorageFull": "فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.",
     "unmute": "باصدا کردن",
     "newRecording": "ضبط جدید",
@@ -10682,17 +10682,33 @@
     "deviceOnboardingIntroDuration": "حدود ۱ دقیقه",
     "jumpToLatestMessage": "پرش به آخرین پیام",
     "latest": "آخرین",
-    "flashFirmware": "فلش کردن میان‌افزار",
-    "pendantRecordingTitle": "در حال ضبط روی آویز",
-    "pendantRecordingNote": "آویز شما به‌صورت مستقل ضبط می‌کند. تا وقتی برنامه باز است، ضبط‌ها با گوشی شما همگام‌سازی می‌شوند.",
-    "pendantSyncingRecordings": "در حال همگام‌سازی ضبط‌ها از آویز شما…",
-    "pendantMinutesStored": "~{minutes} دقیقه ذخیره شده",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "عینک Meta Glasses خود را متصل کنید",
+    "pairingDescMetaGlasses": "عینک خود را در برنامه Meta AI جفت کنید، سپس در Omi روی «اتصال» بزنید. می‌توانید چند عینک را پیوند دهید و عینک فعال را انتخاب کنید.",
+    "metaGlassesUnavailable": "برنامه Meta AI پیدا نشد. برای اتصال عینک، Meta AI را نصب کنید و حالت توسعه‌دهنده را فعال کنید.",
+    "metaGlassesRegistering": "اتصال را در برنامه Meta AI کامل کنید و سپس به Omi برگردید.",
+    "metaGlassesCameraPermission": "دسترسی به دوربین را در برنامه Meta AI مجاز کنید",
+    "metaGlassesCaptureModeLabel": "حالت ضبط",
+    "metaGlassesModeCameraMic": "دوربین + میکروفون",
+    "metaGlassesModeMicOnly": "فقط میکروفون",
+    "metaGlassesStartCapture": "شروع ضبط",
+    "metaGlassesStopCapture": "توقف ضبط",
+    "metaGlassesGestureHint": "کنترل‌های حرکتی برای عینک Meta در این نسخه پشتیبانی نمی‌شوند.",
+    "connectAnotherDevice": "اتصال دستگاه دیگر",
+    "myDevices": "دستگاه‌های من",
+    "metaGlassesAutoCapture": "ضبط خودکار هنگام اتصال",
+    "metaGlassesShowPreview": "پیش‌نمایش زنده",
+    "metaGlassesPendingPhotos": "{count} عکس در انتظار همگام‌سازی",
+    "metaGlassesPairInMetaAI": "در برنامه Meta AI راه‌اندازی کنید",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "عینک در حال خنک شدن است — ضبط موقتاً متوقف شد",
+    "metaGlassesFolded": "برای ادامه ضبط، عینک را باز کنید",
+    "metaGlassesCaptureFrequency": "فرکانس ضبط",
+    "metaGlassesEvery10s": "هر ۱۰ ثانیه",
+    "metaGlassesEvery30s": "هر ۳۰ ثانیه",
+    "metaGlassesEvery1min": "هر ۱ دقیقه",
+    "metaGlassesEvery5min": "هر ۵ دقیقه",
+    "metaGlassesGestures": "حرکات"
 }
