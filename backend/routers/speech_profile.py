@@ -6,7 +6,7 @@ import av
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
 from pydub import AudioSegment
 
-from database.redis_db import set_speech_profile_duration
+from database.redis_db import set_speech_profile_duration, get_speech_profile_duration
 from database.users import set_user_speaker_embedding
 from utils.other import endpoints as auth
 from utils.other.storage import (
@@ -35,6 +35,21 @@ def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 @router.get('/v4/speech-profile', tags=['v3'])
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
+
+
+@router.get('/v3/speech-profile/status', tags=['v3'])
+def get_speech_profile_status(uid: str = Depends(auth.get_current_user_uid)):
+    """Consolidated speech-profile status for the settings UI.
+
+    Surfaces users:{uid}:speech_profile_duration (written on upload but currently read by
+    nothing) and folds together data split across GET /v3/speech-profile (existence) and
+    GET /v4/speech-profile (url).
+    """
+    return {
+        'has_profile': get_user_has_speech_profile(uid),
+        'duration_seconds': get_speech_profile_duration(uid) or 0.0,
+        'url': get_profile_audio_if_exists(uid, download=False),
+    }
 
 
 # ******************************************

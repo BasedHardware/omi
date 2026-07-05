@@ -865,6 +865,15 @@ def set_speech_profile_duration(uid: str, duration: float):
     r.set(f'users:{uid}:speech_profile_duration', str(duration))
 
 
+@try_catch_decorator
+def get_speech_profile_duration(uid: str) -> float:
+    """Read the cached speech profile duration in seconds (0.0 if unset)."""
+    val = r.get(f'users:{uid}:speech_profile_duration')
+    if not val:
+        return 0.0
+    return float(val.decode() if isinstance(val, bytes) else val)
+
+
 # ******************************************************
 # ************ DAILY SUMMARY NOTIFICATIONS *************
 # ******************************************************
