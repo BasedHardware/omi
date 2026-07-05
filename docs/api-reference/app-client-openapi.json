@@ -8809,6 +8809,19 @@
         "title": "IntegrationMutationResponse",
         "type": "object"
       },
+      "IntegrationNotificationResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "IntegrationNotificationResponse",
+        "type": "object"
+      },
       "IntegrationResponse": {
         "description": "Response containing integration status",
         "properties": {
@@ -31113,7 +31126,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationNotificationResponse"
+                }
               }
             },
             "description": "Successful Response"

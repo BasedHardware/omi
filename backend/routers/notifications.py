@@ -14,6 +14,7 @@ from utils.apps import (
 from utils.app_integrations import send_app_notification
 import database.notifications as notification_db
 from models.other import FcmTokenResponse, SaveFcmTokenRequest
+from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
     send_notification,
 )
@@ -100,7 +101,7 @@ def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...
     return {'status': 'Ok'}
 
 
-@router.post('/v1/integrations/notification')
+@router.post('/v1/integrations/notification', response_model=IntegrationNotificationResponse)
 def send_app_notification_to_user(
     request: Request,
     data: Dict[str, Any],
