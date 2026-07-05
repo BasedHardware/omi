@@ -167,7 +167,7 @@ class _FakeEvent:
     def __init__(self):
         self.created = False
 
-    def dict(self):
+    def model_dump(self):
         return {"created": self.created}
 
 
