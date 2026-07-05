@@ -1,3 +1,0 @@
-{
-  "change": "Reported invalid realtime WebSocket URLs instead of leaving the connection stuck"
-}
