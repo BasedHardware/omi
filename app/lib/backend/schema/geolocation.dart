@@ -53,6 +53,16 @@ class Geolocation {
     return geolocation;
   }
 
+  factory Geolocation.fromGenerated(wire.GeneratedGeolocation generated) {
+    return Geolocation(
+      latitude: generated.latitude,
+      longitude: generated.longitude,
+      googlePlaceId: generated.googlePlaceId,
+      address: generated.address,
+      locationType: generated.locationType,
+    );
+  }
+
   wire.GeneratedGeolocation toGenerated() {
     final lat = latitude;
     final lon = longitude;

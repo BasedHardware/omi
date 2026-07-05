@@ -71,6 +71,18 @@ class Structured {
     return structured;
   }
 
+  factory Structured.fromGenerated(wire.GeneratedStructured generated) {
+    var structured = Structured(
+      generated.title,
+      generated.overview,
+      emoji: generated.emoji,
+      category: generated.category,
+    );
+    structured.actionItems = generated.actionItems?.map(ActionItem.fromGenerated).toList() ?? [];
+    structured.events = generated.events?.map(Event.fromGenerated).toList() ?? [];
+    return structured;
+  }
+
   @override
   String toString() {
     var str = '';

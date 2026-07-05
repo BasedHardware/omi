@@ -353,14 +353,14 @@ class ServerConversation {
     return ServerConversation(
       id: generated.id,
       createdAt: generated.createdAt,
-      structured: structured ?? Structured.fromJson(generated.structured.toJson()),
+      structured: structured ?? Structured.fromGenerated(generated.structured),
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
       appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
       suggestedSummarizationApps: generated.suggestedSummarizationApps,
       geolocation:
-          geolocation ?? (generated.geolocation == null ? null : Geolocation.fromJson(generated.geolocation!.toJson())),
+          geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
       photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
       audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
       discarded: generated.discarded,
