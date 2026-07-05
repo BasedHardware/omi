@@ -648,6 +648,9 @@ static void _transport_connected(struct bt_conn *conn, uint8_t err)
     // Notify SD module about BLE connection (flush current file)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(true);
+    /* A phone may sync recordings at any time, so make sure the SD is powered on
+     * (it may have been cut during offline AAD sleep). */
+    sd_request_power(true);
 #endif
 }
 
@@ -678,6 +681,11 @@ static void _transport_disconnected(struct bt_conn *conn, uint8_t err)
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     sd_notify_ble_state(false);
     storage_is_on = false;
+    /* No phone left to sync: if the mic is idle in AAD sleep, drop SD power again
+     * (it was kept on for the connection). */
+    if (mic_in_aad_sleep()) {
+        sd_request_power(false);
+    }
 #endif
 
     LOG_INF("Transport disconnected");

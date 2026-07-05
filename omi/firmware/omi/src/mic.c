@@ -65,6 +65,8 @@ static int16_t mono_buffer[MAX_FRAMES];
  * (PDM off, ~20uA) and its WAKE pin (P1.02, active-HIGH) resumes it on sound.
  * Owned here since it shares the PDM peripheral and CLK pin. See AAD_HARDWARE.md.
  */
+extern bool is_connected; /* from main.c: keep SD up while a phone can sync */
+
 static const struct gpio_dt_spec aad_wake = GPIO_DT_SPEC_GET_OR(DT_NODELABEL(pdm_wake_pin), gpios, {0});
 static struct gpio_callback aad_wake_cb;
 
@@ -355,7 +357,11 @@ static void enter_hw_aad(void)
      * If a phone IS connected, drop the link to low-power params (no audio to
      * stream while asleep) to cut the connection's radio wakeups. */
     transport_conn_set_lowpower(true);
-    sd_request_power(false); /* cut SD NAND power while idle */
+    /* Keep the SD powered while a phone is connected so it can sync recordings at
+     * any time; only cut SD power when offline + idle. */
+    if (!is_connected) {
+        sd_request_power(false);
+    }
 
 #ifdef CONFIG_OMI_AAD_POWER_OFF_MIC
     /* Cut PDM_EN: fully powers off the T5838 + TXS0104 level-shifter (kills the
