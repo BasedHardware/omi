@@ -573,7 +573,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("private func trimForNewPillIfNeeded()"))
     XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done && $0.id != activeChatPillID })"))
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
-    XCTAssertTrue(viewSource.contains("if pill.status == .done"))
+    XCTAssertTrue(viewSource.contains("if pill.status.isFinished"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
   }
 
