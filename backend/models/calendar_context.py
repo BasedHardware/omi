@@ -16,9 +16,7 @@ class CalendarMeetingContext(BaseModel):
 
     calendar_event_id: str = Field(description="System calendar event ID")
     title: str = Field(description="Meeting title from calendar")
-    participants: List[MeetingParticipant] = Field(
-        default_factory=list, description="List of meeting participants"
-    )
+    participants: List[MeetingParticipant] = Field(default_factory=list, description="List of meeting participants")
     platform: Optional[str] = Field(default=None, description="Meeting platform (Zoom, Teams, Google Meet, etc.)")
     meeting_link: Optional[str] = Field(default=None, description="URL to join the meeting")
     start_time: datetime = Field(description="Meeting start time")

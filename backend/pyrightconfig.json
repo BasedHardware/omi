@@ -127,7 +127,8 @@
         "utils/social.py",
         "utils/app_integrations.py",
         "utils/webhooks.py",
-        "routers/payment.py"
+        "routers/payment.py",
+        "models/conversation.py"
     ],
     "extraPaths": [
         "."

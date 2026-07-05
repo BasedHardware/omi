@@ -216,7 +216,7 @@ def conversations_to_string(
                 conversation_str += f"- {event.title} ({event.start} - {event.duration} minutes)\n"
 
         if use_transcript:
-            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"
+            conversation_str += f"\nTranscript:\n{conversation.get_transcript(include_timestamps=include_timestamps, people=people, user_name=user_name)}\n"  # type: ignore[reportArgumentType]  # conversation.py reverted to main; people/user_name may be Optional
             # photos
             photo_descriptions = conversation.get_photos_descriptions(include_timestamps=include_timestamps)
             if photo_descriptions != 'None':

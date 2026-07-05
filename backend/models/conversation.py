@@ -1,5 +1,5 @@
-from datetime import datetime
-from typing import Any, Dict, List, Optional, cast
+from datetime import datetime, timezone
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -68,8 +68,8 @@ class CalendarEventLink(BaseModel):
 
     event_id: str = Field(description="Google Calendar event ID")
     title: str = Field(description="Calendar event title")
-    attendees: List[str] = Field(default_factory=list[str], description="List of attendee display names for UI")
-    attendee_emails: List[str] = Field(default_factory=list[str], description="List of attendee email addresses")
+    attendees: List[str] = Field(default=[], description="List of attendee display names for UI")
+    attendee_emails: List[str] = Field(default=[], description="List of attendee email addresses")
     start_time: datetime = Field(description="Event start time")
     end_time: datetime = Field(description="Event end time")
     html_link: Optional[str] = Field(default=None, description="Direct link to open event in Google Calendar")
@@ -91,20 +91,20 @@ class Conversation(BaseModel):
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
 
     structured: Structured
-    transcript_segments: List[TranscriptSegment] = Field(default_factory=list)
+    transcript_segments: List[TranscriptSegment] = []
     transcript_segments_compressed: Optional[bool] = False
     geolocation: Optional[Geolocation] = None
-    photos: List[ConversationPhoto] = Field(default_factory=list)
-    audio_files: List[AudioFile] = Field(default_factory=list)
+    photos: List[ConversationPhoto] = []
+    audio_files: List[AudioFile] = []
     private_cloud_sync_enabled: bool = False
 
-    apps_results: List[AppResult] = Field(default_factory=list)
-    suggested_summarization_apps: List[str] = Field(default_factory=list)
+    apps_results: List[AppResult] = []
+    suggested_summarization_apps: List[str] = []
 
     # TODO: plugins_results for backward compatibility with the old memories routes and app
-    plugins_results: List[PluginResult] = Field(default_factory=list)
+    plugins_results: List[PluginResult] = []
 
-    external_data: Optional[Dict[str, Any]] = None
+    external_data: Optional[Dict] = None
     app_id: Optional[str] = None
 
     discarded: bool = False
@@ -133,15 +133,13 @@ class Conversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
-    def __init__(self, **data: Any):
+    def __init__(self, **data):
         super().__init__(**data)
         # Update plugins_results based on apps_results
         self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id
 
-    def get_transcript(
-        self, include_timestamps: bool, people: Optional[List[Person]] = None, user_name: Optional[str] = None
-    ) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         # Warn: missing transcript for workflow source, external integration source
         return TranscriptSegment.segments_as_string(
             self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
@@ -155,21 +153,19 @@ class Conversation(BaseModel):
             return []
         return list(set(segment.person_id for segment in self.transcript_segments if segment.person_id))
 
-    def as_dict_cleaned_dates(self) -> dict[str, Any]:
-        def convert_datetime_to_iso(obj: Any) -> Any:
+    def as_dict_cleaned_dates(self):
+        def convert_datetime_to_iso(obj):
             """Recursively convert datetime objects to ISO format strings"""
             if isinstance(obj, datetime):
                 return obj.isoformat()
             elif isinstance(obj, dict):
-                obj_dict = cast(Dict[Any, Any], obj)
-                return {key: convert_datetime_to_iso(value) for key, value in obj_dict.items()}
+                return {key: convert_datetime_to_iso(value) for key, value in obj.items()}
             elif isinstance(obj, list):
-                obj_list = cast(List[Any], obj)
-                return [convert_datetime_to_iso(item) for item in obj_list]
+                return [convert_datetime_to_iso(item) for item in obj]
             else:
                 return obj
 
-        conversation_dict = self.model_dump()
+        conversation_dict = self.dict()
         # Convert all datetime objects recursively
         conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict
@@ -181,7 +177,7 @@ class CreateConversation(BaseModel):
     transcript_segments: List[TranscriptSegment]
     geolocation: Optional[Geolocation] = None
 
-    photos: List[ConversationPhoto] = Field(default_factory=list)
+    photos: List[ConversationPhoto] = []
 
     source: ConversationSource = ConversationSource.omi
     language: Optional[str] = None
@@ -194,9 +190,7 @@ class CreateConversation(BaseModel):
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
-    def get_transcript(
-        self, include_timestamps: bool, people: Optional[List[Person]] = None, user_name: Optional[str] = None
-    ) -> str:
+    def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
             self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
         )
@@ -232,13 +226,13 @@ class ExternalIntegrationCreateConversation(BaseModel):
 
 class CreateConversationResponse(BaseModel):
     conversation: Conversation
-    messages: List[Message] = Field(default_factory=list)
+    messages: List[Message] = []
 
 
 # MIGRATE: For backward compatibility with the old memories routes and app
 class CreateMemoryResponse(BaseModel):
     memory: Conversation
-    messages: List[Message] = Field(default_factory=list)
+    messages: List[Message] = []
 
 
 class SetConversationEventsStateRequest(BaseModel):
