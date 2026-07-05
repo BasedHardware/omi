@@ -1,8 +1,0 @@
-# Local-only dev/build overlays and notes (kept out of the repo)
-AAD_HARDWARE.md
-debug_rtt.conf
-debug_uart.conf
-measure_micoff.conf
-measure_micon.conf
-release.conf
-prj.conf
