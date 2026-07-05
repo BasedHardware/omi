@@ -1200,6 +1200,23 @@ class TestParakeetV4Protocol(unittest.TestCase):
         hello_count = sum(1 for t in texts if 'hello world' in t)
         self.assertEqual(hello_count, 1, f"'hello world' should appear exactly once, got: {texts}")
 
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_endswith_dedup_exercises_suffix_check(self):
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        sock = ParakeetWebSocketSocket.__new__(ParakeetWebSocketSocket)
+        sock._committed_text = "hello world"
+        self.assertTrue(sock._committed_text.endswith("world"))
+        self.assertTrue(sock._committed_text.endswith("hello world"))
+        self.assertFalse(sock._committed_text.endswith("goodbye"))
+
 
 class TestParakeetVersionRouting(unittest.TestCase):
 
