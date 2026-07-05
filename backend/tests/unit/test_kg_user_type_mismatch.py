@@ -129,6 +129,8 @@ def _build_fakes() -> dict[str, ModuleType]:
         setattr(llm_memories, attr, MagicMock())
 
     llm_conv = add("utils.llm.conversation_processing")
+    llm_conv_folder = add("utils.llm.conversation_folder")
+    llm_conv_folder.assign_conversation_to_folder = MagicMock()
     for attr in [
         "get_transcript_structure",
         "get_app_result",

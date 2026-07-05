@@ -136,8 +136,7 @@
         "routers/conversations.py",
         "database/memory_non_active_routes.py",
         "routers/chat.py",
-        "database/dev_api_key.py",
-        "utils/conversations/process_conversation.py"
+        "database/dev_api_key.py"
     ],
     "extraPaths": [
         "."
