@@ -3588,6 +3588,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let currentToolClientScope: String? = isFloatingPillSurface(resolvedSurface)
                 ? AgentClientScope.floatingPill
                 : nil
+            // Kernel control tools (spawn_agent, list_agent_sessions, …) execute in
+            // the Node runtime and only surface via tool_activity + tool_result_display.
+            // Pair started input with completed output for QueryTracer.tool_executions.
+            var pendingToolTraceInputs:
+                [String: (name: String, inputJson: String, started: ContinuousClock.Instant)] = [:]
             let textDeltaHandler: AgentClient.TextDeltaHandler = { [weak self] delta in
                 let nowMs = ChatProvider.monotonicNowMs()
                 if responseMetrics.markFirstOutputIfNeeded() {
@@ -3605,21 +3610,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             let toolCallHandler: AgentClient.ToolCallHandler = { callId, name, input in
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                // QueryTracer: time the actual tool execution (client-side run of the
-                // tool, distinct from the model-visible tool span in toolActivity).
-                let toolStart = ContinuousClock.now
                 let result = await ChatToolExecutor.execute(
                     toolCall,
                     originatingChatMode: currentChatMode,
                     originatingClientScope: currentToolClientScope)
-                if let tracer {
-                    let toolDurMs = (ContinuousClock.now - toolStart).milliseconds
-                    let inputJson =
-                        (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
-                        ?? "\(input)"
-                    tracer.captureToolExecution(
-                        toolUseId: callId, name: name, input: inputJson, output: result, durationMs: toolDurMs)
-                }
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
@@ -3645,6 +3639,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         tracer?.markTTFT()
                     }
                     tracer?.begin(spanKey, metadata: ["tool": name])
+                    if let input {
+                        let inputJson =
+                            (try? String(data: JSONSerialization.data(withJSONObject: input), encoding: .utf8))
+                            ?? "\(input)"
+                        pendingToolTraceInputs[trackedId] = (name, inputJson, ContinuousClock.now)
+                    }
                 } else if toolStatus != .running {
                     tracer?.end(spanKey)
                 }
@@ -3703,6 +3703,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             let toolResultDisplayHandler: AgentClient.ToolResultDisplayHandler = { [weak self] toolUseId, name, output in
                 let nowMs = ChatProvider.monotonicNowMs()
+                if let tracer {
+                    let trackedId = ChatProvider.stallTrackingId(toolUseId: toolUseId, name: name)
+                    let pending = pendingToolTraceInputs.removeValue(forKey: trackedId)
+                    let inputJson = pending?.inputJson ?? ""
+                    let durationMs = pending.map { (ContinuousClock.now - $0.started).milliseconds }
+                    tracer.captureToolExecution(
+                        toolUseId: toolUseId.isEmpty ? nil : toolUseId,
+                        name: name,
+                        input: inputJson,
+                        output: output,
+                        durationMs: durationMs
+                    )
+                }
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)

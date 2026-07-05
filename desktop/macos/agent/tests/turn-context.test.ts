@@ -14,6 +14,8 @@ import {
   assembleTurnContext,
   bindingCarriesNativeHistory,
   getVoiceSeedContext,
+  isExplicitAgentControlToolTurn,
+  shouldInjectCoordinatorRoute,
   shouldInjectCompletedAgentDelta,
   turnSourceAttribution,
   VOICE_SEED_MAX_CHARACTERS,
@@ -310,6 +312,100 @@ describe("turn-context", () => {
   it("matches completion follow-up heuristics", () => {
     expect(shouldInjectCompletedAgentDelta("is the agent done yet?")).toBe(true);
     expect(shouldInjectCompletedAgentDelta("ask an agent to build a file")).toBe(false);
+  });
+
+  it("skips coordinator route when the user explicitly names spawn_agent", () => {
+    expect(isExplicitAgentControlToolTurn("Use spawn_agent now to start a visible background agent.")).toBe(true);
+    expect(shouldInjectCoordinatorRoute("Use spawn_agent now to start a visible background agent.")).toBe(false);
+    expect(shouldInjectCoordinatorRoute("ask an agent to build a file")).toBe(true);
+  });
+
+  it("does not inject coordinator route for explicit spawn_agent turns", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-spawn-route";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+    const spawnQuery =
+      "Use spawn_agent now to start a visible background agent. Objective: track marker GAUNTLET-TEST-SPAWN and wait silently.";
+
+    const assembled = assembleTurnContext({
+      store,
+      services: {
+        persistDesktopContextPacket: (input) => ({
+          packet: {
+            packetId: "ctx_spawn",
+            redactedPreviewJson: { objective: input.objective },
+          },
+        }),
+        routeDesktopIntent: () => ({
+          intent: "delegate",
+          explanation: "The request appears to require long-running or specialist work.",
+        }),
+        listSessions: () => [],
+        inspectArtifacts: () => [],
+      },
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: spawnQuery,
+      imagePresent: false,
+      bindingCarriesNativeHistory: false,
+      nowMs: 1_700_000_000_100,
+    });
+
+    expect(assembled.prompt).not.toContain("[Desktop Coordinator Route Context]");
+    expect(assembled.prompt).not.toContain("# Context Packet");
+    expect(assembled.prompt).toContain("# User Message");
+    expect(assembled.prompt).toContain(spawnQuery);
+  });
+
+  it("still injects coordinator route for delegated work without explicit tool names", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-delegate-route";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+
+    const assembled = assembleTurnContext({
+      store,
+      services: {
+        persistDesktopContextPacket: (input) => ({
+          packet: {
+            packetId: "ctx_delegate",
+            redactedPreviewJson: { objective: input.objective },
+          },
+        }),
+        routeDesktopIntent: () => ({
+          intent: "delegate",
+          explanation: "The request appears to require long-running or specialist work.",
+        }),
+        listSessions: () => [],
+        inspectArtifacts: () => [],
+      },
+      ownerId,
+      sessionId: resolved.agentSessionId,
+      conversationId: resolved.conversationId,
+      surfaceRef,
+      userText: "ask an agent to build me a single page html iphone facts page",
+      imagePresent: false,
+      bindingCarriesNativeHistory: false,
+      nowMs: 1_700_000_000_100,
+    });
+
+    expect(assembled.prompt).toContain("[Desktop Coordinator Route Context]");
+    expect(assembled.prompt).toContain("routeIntent=delegate");
   });
 
   it("projects voice seed context with one sanitizer and cap policy", () => {

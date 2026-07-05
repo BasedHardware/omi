@@ -1029,62 +1029,80 @@ function serializeSession(session: AgentSession): Record<string, unknown> {
   };
 }
 
+function appendErrorFields(
+  payload: Record<string, unknown>,
+  errorCode: string | null | undefined,
+  errorMessage: string | null | undefined,
+): Record<string, unknown> {
+  if (errorCode != null && errorCode !== "") {
+    payload.errorCode = errorCode;
+  }
+  if (errorMessage != null && errorMessage !== "") {
+    payload.errorMessage = errorMessage;
+  }
+  return payload;
+}
+
 function serializeRun(run: AgentRun): Record<string, unknown> {
-  return {
-    runId: run.runId,
-    sessionId: run.sessionId,
-    parentRunId: run.parentRunId,
-    clientId: run.clientId,
-    requestId: run.requestId,
-    idempotencyKey: run.idempotencyKey,
-    status: run.status,
-    mode: run.mode,
-    input: parseJsonObject(run.inputJson),
-    requestedModelId: run.requestedModelId,
-    cwd: run.cwd,
-    finalText: run.finalText,
-    result: parseOptionalJsonObject(run.resultJson),
-    errorCode: run.errorCode,
-    errorMessage: run.errorMessage,
-    usage: {
-      inputTokens: run.inputTokens,
-      outputTokens: run.outputTokens,
-      cacheReadTokens: run.cacheReadTokens,
-      cacheWriteTokens: run.cacheWriteTokens,
-      costUsd: run.costUsd,
+  return appendErrorFields(
+    {
+      runId: run.runId,
+      sessionId: run.sessionId,
+      parentRunId: run.parentRunId,
+      clientId: run.clientId,
+      requestId: run.requestId,
+      idempotencyKey: run.idempotencyKey,
+      status: run.status,
+      mode: run.mode,
+      input: parseJsonObject(run.inputJson),
+      requestedModelId: run.requestedModelId,
+      cwd: run.cwd,
+      finalText: run.finalText,
+      result: parseOptionalJsonObject(run.resultJson),
+      usage: {
+        inputTokens: run.inputTokens,
+        outputTokens: run.outputTokens,
+        cacheReadTokens: run.cacheReadTokens,
+        cacheWriteTokens: run.cacheWriteTokens,
+        costUsd: run.costUsd,
+      },
+      createdAtMs: run.createdAtMs,
+      startedAtMs: run.startedAtMs,
+      completedAtMs: run.completedAtMs,
+      updatedAtMs: run.updatedAtMs,
     },
-    createdAtMs: run.createdAtMs,
-    startedAtMs: run.startedAtMs,
-    completedAtMs: run.completedAtMs,
-    updatedAtMs: run.updatedAtMs,
-  };
+    run.errorCode,
+    run.errorMessage,
+  );
 }
 
 function serializeAttempt(attempt: RunAttempt): Record<string, unknown> {
-  return {
-    attemptId: attempt.attemptId,
-    runId: attempt.runId,
-    attemptNo: attempt.attemptNo,
-    status: attempt.status,
-    adapterId: attempt.adapterId,
-    runtimeNodeId: attempt.runtimeNodeId,
-    bindingId: attempt.bindingId,
-    adapterNativeRunId: attempt.adapterNativeRunId,
-    resumeFromAttemptId: attempt.resumeFromAttemptId,
-    checkpointArtifactId: attempt.checkpointArtifactId,
-    retryReason: attempt.retryReason,
-    retryable: attempt.retryable === 1,
-    cancellationRequestedAtMs: attempt.cancellationRequestedAtMs,
-    cancellationDispatchedAtMs: attempt.cancellationDispatchedAtMs,
-    cancellationAcknowledgedAtMs: attempt.cancellationAcknowledgedAtMs,
-    errorCode: attempt.errorCode,
-    errorMessage: attempt.errorMessage,
-    metadata: parseJsonObject(attempt.metadataJson),
-    createdAtMs: attempt.createdAtMs,
-    startedAtMs: attempt.startedAtMs,
-    completedAtMs: attempt.completedAtMs,
-    updatedAtMs: attempt.updatedAtMs,
-  };
+  return appendErrorFields(
+    {
+      attemptId: attempt.attemptId,
+      runId: attempt.runId,
+      attemptNo: attempt.attemptNo,
+      status: attempt.status,
+      adapterId: attempt.adapterId,
+      runtimeNodeId: attempt.runtimeNodeId,
+      bindingId: attempt.bindingId,
+      adapterNativeRunId: attempt.adapterNativeRunId,
+      resumeFromAttemptId: attempt.resumeFromAttemptId,
+      checkpointArtifactId: attempt.checkpointArtifactId,
+      retryReason: attempt.retryReason,
+      retryable: attempt.retryable === 1,
+      cancellationRequestedAtMs: attempt.cancellationRequestedAtMs,
+      cancellationDispatchedAtMs: attempt.cancellationDispatchedAtMs,
+      cancellationAcknowledgedAtMs: attempt.cancellationAcknowledgedAtMs,
+      metadata: parseJsonObject(attempt.metadataJson),
+      createdAtMs: attempt.createdAtMs,
+      startedAtMs: attempt.startedAtMs,
+      completedAtMs: attempt.completedAtMs,
+      updatedAtMs: attempt.updatedAtMs,
+    },
+    attempt.errorCode,
+    attempt.errorMessage,
+  );
 }
 
 function serializeBinding(binding: AdapterBinding): Record<string, unknown> {

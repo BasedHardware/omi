@@ -1641,17 +1641,17 @@ describe("agent control tools", () => {
   it("spawn_agent generates a pill external ref when visible without externalRefId", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
 
-    const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
-        objective: "summarize inbox",
-        visible: true,
-        requestId: "spawn-visible-pill-1",
-        clientId: "spawn-client",
-        ownerId: "owner",
-      }),
-    );
+    const spawnedRaw = await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+      objective: "summarize inbox",
+      visible: true,
+      requestId: "spawn-visible-pill-1",
+      clientId: "spawn-client",
+      ownerId: "owner",
+    });
+    const spawned = parseToolResult(spawnedRaw);
 
     expect(spawned.ok).toBe(true);
+    expect(spawnedRaw).not.toMatch(/errorCode|errorMessage/);
     expect(spawned.session).toMatchObject({
       ownerId: "owner",
       surfaceKind: "floating_bar",
