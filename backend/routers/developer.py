@@ -1353,7 +1353,7 @@ def get_conversations(
     folder_id: Optional[str] = Query(default=None, min_length=1),
     starred: Optional[bool] = None,
     uid: ApiKeyAuth = Depends(get_auth_with_conversations_read),
-    request: Optional[Request] = None,
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare Request type
 ):
     """
     Get conversations with optional transcript inclusion.
@@ -1534,7 +1534,7 @@ def get_conversation_endpoint(
     conversation_id: str,
     include_transcript: bool = False,
     uid: ApiKeyAuth = Depends(get_auth_with_conversation_detail_read),
-    request: Optional[Request] = None,
+    request: Request = None,  # pyright: ignore[reportArgumentType]  # FastAPI needs bare Request type
 ):
     """
     Get a single conversation by ID.
