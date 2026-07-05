@@ -292,6 +292,7 @@ CREATE TABLE grants (
   operation TEXT NOT NULL,
   resource_pattern TEXT NOT NULL,
   effect TEXT NOT NULL CHECK (effect IN ('allow', 'deny')),
+  -- TODO(desktop-agent-platonic-gap-closure G6): drop legacy_default from CHECK after ship+2 releases post-platonic.
   source TEXT NOT NULL CHECK (source IN ('legacy_default', 'policy', 'user', 'system')),
   constraints_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(constraints_json)),
   created_at_ms INTEGER NOT NULL,

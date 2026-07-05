@@ -35,6 +35,7 @@ export type DelegationStatus = "pending" | "running" | "succeeded" | "failed" | 
 
 export type GrantEffect = "allow" | "deny";
 
+// TODO(desktop-agent-platonic-gap-closure G6): delete legacy_default after ship+2 releases post-platonic.
 export type GrantSource = "legacy_default" | "policy" | "user" | "system";
 
 export interface SurfaceConversation {

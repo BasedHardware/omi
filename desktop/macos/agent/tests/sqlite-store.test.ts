@@ -1160,6 +1160,15 @@ describe("SqliteAgentStore", () => {
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_context_access_log"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_attention_overrides"))).toBe(true);
   });
+
+  it("stores no legacy_default grant rows in a fresh database", () => {
+    const store = newStore({ reconcileOnOpen: false });
+    const count = Number(
+      store.getRow("SELECT COUNT(*) AS count FROM grants WHERE source = 'legacy_default'").count,
+    );
+    expect(count).toBe(0);
+    store.close();
+  });
 });
 
 function newStore(options: { reconcileOnOpen: boolean }): SqliteAgentStore {
