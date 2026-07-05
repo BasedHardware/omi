@@ -1,8 +1,9 @@
 import asyncio
+import json
 import os
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from database.redis_db import (
@@ -10,10 +11,12 @@ from database.redis_db import (
     user_webhook_status_db,
     disable_user_webhook_db,
     enable_user_webhook_db,
+    set_user_webhook_db,
 )
-from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD  # type: ignore[reportPrivateUsage]  # internal threshold, intentional cross-module use
+from database.webhook_health import record_dev_webhook_failure, record_dev_webhook_success, _DEV_FAILURE_THRESHOLD
 from models.conversation import Conversation
 from models.users import WebhookType
+import database.notifications as notification_db
 from utils.conversations.render import populate_speaker_names, populate_folder_names
 from utils.conversations.render import conversation_to_dict
 from utils.executors import db_executor, run_blocking
@@ -37,7 +40,7 @@ def _get_dev_webhook_retry_delays() -> tuple[float, ...]:
         return _DEV_WEBHOOK_RETRY_DELAYS
 
 
-def _append_query_params(url: str, params: Dict[str, Any]) -> str:
+def _append_query_params(url: str, params: dict) -> str:
     parts = urlsplit(url)
     param_keys = {key for key, value in params.items() if value is not None}
     query_items = [
@@ -53,12 +56,12 @@ async def _post_dev_webhook(
     *,
     retry_delays: Optional[tuple[float, ...]] = None,
     idempotency_key: Optional[str] = None,
-    **request_kwargs: Any,
+    **request_kwargs,
 ):
     if retry_delays is None:
         retry_delays = _get_dev_webhook_retry_delays()
 
-    headers: Dict[str, Any] = dict(request_kwargs.pop('headers', {}) or {})
+    headers = dict(request_kwargs.pop('headers', {}) or {})
     headers.setdefault('Idempotency-Key', idempotency_key or str(uuid.uuid4()))
     request_kwargs['headers'] = headers
 
@@ -107,7 +110,7 @@ async def _post_dev_webhook(
     raise last_exception
 
 
-async def _handle_dev_webhook_disable(uid: str, wtype: WebhookType, should_disable: bool) -> None:
+async def _handle_dev_webhook_disable(uid: str, wtype: str, should_disable: bool):
     if should_disable:
         logger.warning(
             f'Dev webhook auto-disabled: uid={uid} type={wtype} after {_DEV_FAILURE_THRESHOLD} consecutive failures'
@@ -124,14 +127,14 @@ async def _handle_dev_webhook_disable(uid: str, wtype: WebhookType, should_disab
         )
 
 
-def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> Dict[str, Any]:
+def _build_conversation_webhook_payload_sync(uid: str, memory: Conversation) -> dict:
     payload = conversation_to_dict(memory)
     populate_speaker_names(uid, [payload])
     populate_folder_names(uid, [payload])
     return payload
 
 
-async def conversation_created_webhook(uid: str, memory: Conversation) -> None:
+async def conversation_created_webhook(uid, memory: Conversation):
     if memory.is_locked:
         return
 
@@ -179,7 +182,7 @@ async def conversation_created_webhook(uid: str, memory: Conversation) -> None:
         return
 
 
-async def day_summary_webhook(uid: str, summary: str, summary_json: Optional[Dict[str, Any]] = None) -> None:
+async def day_summary_webhook(uid, summary: str, summary_json: Optional[dict] = None):
     """Send the daily summary to the developer webhook.
 
     ``summary`` is the legacy ``str(summary_data)`` Python repr field, kept
@@ -234,7 +237,7 @@ async def day_summary_webhook(uid: str, summary: str, summary_json: Optional[Dic
         return
 
 
-async def realtime_transcript_webhook(uid: str, segments: List[Dict[str, Any]]) -> None:
+async def realtime_transcript_webhook(uid, segments: List[dict]):
     logger.info(f"realtime_transcript_webhook {uid}")
     toggled = await run_blocking(db_executor, user_webhook_status_db, uid, WebhookType.realtime_transcript)
 

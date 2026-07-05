@@ -125,7 +125,8 @@
         "utils/llm/providers.py",
         "utils/chat.py",
         "utils/social.py",
-        "utils/app_integrations.py"
+        "utils/app_integrations.py",
+        "utils/webhooks.py"
     ],
     "extraPaths": [
         "."
