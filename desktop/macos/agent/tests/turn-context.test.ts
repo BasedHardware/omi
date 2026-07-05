@@ -481,4 +481,45 @@ describe("turn-context", () => {
     expect(turns.filter((turn) => turn.role === "user")).toHaveLength(1);
     expect(turns.filter((turn) => turn.role === "assistant")).toHaveLength(1);
   });
+
+  it("includes floating spawn handoff in voice seed and dedupes by idempotency key", () => {
+    const { store, stateDir } = newStore();
+    cleanupDir = stateDir;
+    store.migrate();
+    const ownerId = "owner-spawn-handoff";
+    const surfaceRef = {
+      surfaceKind: "main_chat",
+      externalRefKind: "chat",
+      externalRefId: "default",
+    };
+    const resolved = resolveSurfaceSession(store, { ownerId, surfaceRef }, () => 1_700_000_000_000);
+    const userText = "Build me a Penguin Facts HTML page";
+    const assistantText = 'I started a background agent titled "Penguin Facts Page" for that.';
+    const first = recordSurfaceTurn(store, {
+      ownerId,
+      surfaceRef,
+      userText,
+      assistantText,
+      origin: "floating_spawn",
+      idempotencyKey: "floating_spawn:pill-abc",
+      nowMs: 1_700_000_000_000,
+    });
+    const second = recordSurfaceTurn(store, {
+      ownerId,
+      surfaceRef,
+      userText,
+      assistantText,
+      origin: "floating_spawn",
+      idempotencyKey: "floating_spawn:pill-abc",
+      nowMs: 1_700_000_000_100,
+    });
+
+    expect(first.recorded).toBe(true);
+    expect(second.recorded).toBe(false);
+    expect(second.duplicate).toBe(true);
+
+    const seed = getVoiceSeedContext(store, resolved.conversationId);
+    expect(seed).toContain("User: Build me a Penguin Facts HTML page");
+    expect(seed).toContain('Omi: I started a background agent titled "Penguin Facts Page" for that.');
+  });
 });

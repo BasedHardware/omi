@@ -2818,6 +2818,28 @@ class FloatingControlBarManager {
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
     }
 
+    private func recordDelegationExchange(
+        provider: ChatProvider,
+        userText: String,
+        assistantText: String,
+        origin: String,
+        idempotencyKey: String
+    ) async -> (user: ChatMessage?, assistant: ChatMessage?) {
+        let turn = provider.recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: origin
+        )
+        await recordSurfaceTurn(
+            surface: provider.mainChatSurfaceReference(),
+            userText: userText,
+            assistantText: assistantText,
+            origin: origin,
+            idempotencyKey: idempotencyKey
+        )
+        return turn
+    }
+
     private func resolveDelegationAndDispatch(
         originalRequest: String,
         proposedBrief: String,
@@ -2830,6 +2852,7 @@ class FloatingControlBarManager {
         presentation: QueryPresentation,
         logLabel: String
     ) async {
+        let exchangeId = UUID().uuidString
         var topLevelSections: [String] = []
         let kernelSeed = await kernelVoiceSeedContext()
         if !kernelSeed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -2857,10 +2880,12 @@ class FloatingControlBarManager {
               !brief.isEmpty
         else {
             let assistantText = decision.userFacingText
-            let recordedTurn = provider.recordCompletedTurn(
+            let recordedTurn = await recordDelegationExchange(
+                provider: provider,
                 userText: originalRequest,
                 assistantText: assistantText,
-                logLabel: "\(logLabel)-resolver-\(decision.action.rawValue)"
+                origin: "floating_resolver",
+                idempotencyKey: "floating_resolver:\(exchangeId):\(decision.action.rawValue)"
             )
             switch presentation {
             case .visible:
@@ -2882,10 +2907,12 @@ class FloatingControlBarManager {
             let availability = LocalAgentProviderDetector.availability(for: resolvedProvider)
             guard availability.isAvailable else {
                 let assistantText = availability.setupPrompt
-                let recordedTurn = provider.recordCompletedTurn(
+                let recordedTurn = await recordDelegationExchange(
+                    provider: provider,
                     userText: originalRequest,
                     assistantText: assistantText,
-                    logLabel: "\(logLabel)-provider-unavailable"
+                    origin: "floating_provider_unavailable",
+                    idempotencyKey: "floating_resolver:\(exchangeId):provider-unavailable"
                 )
                 switch presentation {
                 case .visible:
@@ -2915,10 +2942,12 @@ class FloatingControlBarManager {
             fromVoice: presentation.fromVoice
         ) else {
             let assistantText = "What should the background agent do?"
-            let recordedTurn = provider.recordCompletedTurn(
+            let recordedTurn = await recordDelegationExchange(
+                provider: provider,
                 userText: originalRequest,
                 assistantText: assistantText,
-                logLabel: "\(logLabel)-invalid-brief"
+                origin: "floating_invalid_brief",
+                idempotencyKey: "floating_resolver:\(exchangeId):invalid-brief"
             )
             switch presentation {
             case .visible:
@@ -2941,10 +2970,12 @@ class FloatingControlBarManager {
         let assistantText = ack?.isEmpty == false
             ? "\(ack!) I started \(providerPrefix)a background agent\(titleSuffix) for that."
             : "I started \(providerPrefix)a background agent\(titleSuffix) for that."
-        let recordedTurn = provider.recordCompletedTurn(
+        let recordedTurn = await recordDelegationExchange(
+            provider: provider,
             userText: originalRequest,
             assistantText: assistantText,
-            logLabel: logLabel
+            origin: "floating_spawn",
+            idempotencyKey: "floating_spawn:\(pill.id)"
         )
         switch presentation {
         case .visible:
