@@ -647,6 +647,36 @@ actor TranscriptionStorage {
         }
     }
 
+    /// Get failed cloud-reconciliation sessions that exhausted normal retries but still have saved
+    /// local transcript segments. These can be recovered by uploading those segments directly.
+    func getExhaustedCloudSessionsWithLocalSegments(
+        maxRetries: Int = 5,
+        maxLocalFallbackRetries: Int = 3
+    ) async throws -> [TranscriptionSessionRecord] {
+        let db = try await ensureInitialized()
+        let retryLimit = maxRetries + maxLocalFallbackRetries
+
+        return try await db.read { database in
+            try TranscriptionSessionRecord
+                .filter(Column("backendSynced") == false)
+                .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
+                .filter(Column("retryCount") >= maxRetries)
+                .filter(Column("retryCount") < retryLimit)
+                .filter(Column("finalizationStrategy") == TranscriptionFinalizationStrategy.cloudReconcile.rawValue)
+                .filter(
+                    sql: """
+                        EXISTS (
+                            SELECT 1
+                            FROM transcription_segments
+                            WHERE transcription_segments.sessionId = transcription_sessions.id
+                        )
+                        """
+                )
+                .order(Column("createdAt").asc)
+                .fetchAll(database)
+        }
+    }
+
     /// Get sessions that were left in "recording" status (crashed)
     func getCrashedSessions() async throws -> [TranscriptionSessionRecord] {
         let db = try await ensureInitialized()

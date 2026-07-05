@@ -4,6 +4,7 @@ actor ConversationFinalizationService {
   static let shared = ConversationFinalizationService()
 
   private let maxRetries = 5
+  private let maxLocalFallbackRetries = 3
 
   private init() {}
 
@@ -25,10 +26,22 @@ actor ConversationFinalizationService {
   func recoverPendingFinalizations() async {
     do {
       let sessions = try await TranscriptionStorage.shared.getSessionsNeedingFinalization(maxRetries: maxRetries)
-      if !sessions.isEmpty {
-      log("ConversationFinalization: Recovering \(sessions.count) pending sessions")
+      let exhaustedLocalFallbackSessions = try await TranscriptionStorage.shared
+        .getExhaustedCloudSessionsWithLocalSegments(
+          maxRetries: maxRetries,
+          maxLocalFallbackRetries: maxLocalFallbackRetries
+        )
+      let sessionsById = Dictionary(
+        grouping: sessions + exhaustedLocalFallbackSessions,
+        by: { $0.id ?? -1 }
+      ).compactMap { $0.value.first }
+
+      if !sessionsById.isEmpty {
+        log(
+          "ConversationFinalization: Recovering \(sessionsById.count) pending sessions (\(exhaustedLocalFallbackSessions.count) exhausted cloud sessions have local fallback data)"
+        )
       }
-      for session in sessions where session.isReadyForRetry() || session.status != .failed {
+      for session in sessionsById where session.isReadyForRetry() || session.status != .failed || session.retryCount >= maxRetries {
         await finalizeSession(
           session,
           reason: .retry,
@@ -396,6 +409,13 @@ actor ConversationFinalizationService {
       let retryCount = (session?.retryCount ?? 0) + 1
       if retryCount >= maxRetries {
         let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+        let diagnostics = ReconciliationFailureDiagnostics(
+          session: session,
+          segmentCount: segmentCount,
+          retryCount: retryCount,
+          maxRetries: maxRetries,
+          maxLocalFallbackRetries: maxLocalFallbackRetries
+        )
         await AnalyticsManager.shared.conversationReconciliationFailed(
           error: "session_reconciliation_failed",
           reason: "cloud_reconcile_exhausted",
@@ -404,7 +424,8 @@ actor ConversationFinalizationService {
           retryCount: retryCount,
           hasBackendId: session?.backendId?.isEmpty == false,
           hasClientConversationId: session?.clientConversationId?.isEmpty == false,
-          segmentCount: segmentCount
+          segmentCount: segmentCount,
+          diagnostics: diagnostics
         )
       }
       try await TranscriptionStorage.shared.incrementRetryCount(id: sessionId)
@@ -417,5 +438,50 @@ actor ConversationFinalizationService {
   static func localClientConversationId(session: TranscriptionSessionRecord, sessionId: Int64) -> String {
     let startedAtMs = Int64((session.startedAt.timeIntervalSince1970 * 1000).rounded())
     return session.clientConversationId ?? "macos-local-\(sessionId)-\(startedAtMs)"
+  }
+}
+
+struct ReconciliationFailureDiagnostics {
+  let sessionStatus: String?
+  let conversationStatus: String?
+  let finalizationReason: String?
+  let hasFinishedAt: Bool
+  let hasFinalizationStartedAt: Bool
+  let hasFinalizationCompletedAt: Bool
+  let hasInputDeviceName: Bool
+  let hasLocalSegments: Bool?
+  let sessionAgeSeconds: Int?
+  let sessionDurationSeconds: Int?
+  let localFallbackAvailable: Bool
+  let localFallbackRetriesRemaining: Int
+
+  init(
+    session: TranscriptionSessionRecord?,
+    segmentCount: Int?,
+    retryCount: Int,
+    maxRetries: Int,
+    maxLocalFallbackRetries: Int
+  ) {
+    let now = Date()
+    sessionStatus = session?.status.rawValue
+    conversationStatus = session?.conversationStatus.rawValue
+    finalizationReason = session?.finalizationReason?.rawValue
+    hasFinishedAt = session?.finishedAt != nil
+    hasFinalizationStartedAt = session?.finalizationStartedAt != nil
+    hasFinalizationCompletedAt = session?.finalizationCompletedAt != nil
+    hasInputDeviceName = session?.inputDeviceName?.isEmpty == false
+    hasLocalSegments = segmentCount.map { $0 > 0 }
+    sessionAgeSeconds = session.map { max(0, Int(now.timeIntervalSince($0.createdAt).rounded())) }
+    if let startedAt = session?.startedAt {
+      let finishedAt = session?.finishedAt ?? now
+      sessionDurationSeconds = max(0, Int(finishedAt.timeIntervalSince(startedAt).rounded()))
+    } else {
+      sessionDurationSeconds = nil
+    }
+    localFallbackAvailable =
+      session?.finalizationStrategy == .cloudReconcile
+      && (segmentCount ?? 0) > 0
+      && retryCount >= maxRetries
+    localFallbackRetriesRemaining = max(0, maxRetries + maxLocalFallbackRetries - retryCount)
   }
 }

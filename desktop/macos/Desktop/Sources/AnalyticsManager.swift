@@ -169,7 +169,8 @@ class AnalyticsManager {
     retryCount: Int,
     hasBackendId: Bool,
     hasClientConversationId: Bool,
-    segmentCount: Int?
+    segmentCount: Int?,
+    diagnostics: ReconciliationFailureDiagnostics? = nil
   ) {
     PostHogManager.shared.conversationReconciliationFailed(
       error: error,
@@ -179,7 +180,8 @@ class AnalyticsManager {
       retryCount: retryCount,
       hasBackendId: hasBackendId,
       hasClientConversationId: hasClientConversationId,
-      segmentCount: segmentCount
+      segmentCount: segmentCount,
+      diagnostics: diagnostics
     )
   }
 
