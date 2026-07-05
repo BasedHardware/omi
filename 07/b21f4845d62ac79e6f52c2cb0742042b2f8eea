@@ -1,0 +1,21 @@
+backend/utils/llm/reply_draft.py
+  s_7568e58f73c9b6::t_c289be97388811 108-112,119-127,182-211,213-214,218-219,388-398,420-445,449-455,461-466,469-504,509-513,546-555,560-569
+backend/utils/llm/style_fingerprint.py
+  s_7568e58f73c9b6::t_2ce686a175d178 84-85,149-150,168-169,196-208
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "07b21f4845d62ac79e6f52c2cb0742042b2f8eea",
+  "prompts": {},
+  "sessions": {
+    "s_7568e58f73c9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "edf3dee6-06ad-4599-bba1-f75570bb3d0c",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
