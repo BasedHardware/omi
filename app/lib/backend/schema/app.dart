@@ -372,18 +372,21 @@ class App {
   }
 
   factory App.fromJson(Map<String, dynamic> json) {
-    return App.fromGenerated(
-      wire.GeneratedAppBaseModel.fromJson(json),
-      legacyJson: json,
+    return App.fromGeneratedDetail(
+      wire.GeneratedApp.fromJson(json),
       approvedFallback: json.containsKey('approved') ? null : true,
       privateFallback: json['private'] as bool? ?? json['id'].toString().contains('private'),
     );
   }
 
-  factory App.fromGeneratedDetail(wire.GeneratedApp generated) {
+  factory App.fromGeneratedDetail(
+    wire.GeneratedApp generated, {
+    bool? approvedFallback,
+    bool? privateFallback,
+  }) {
     return App(
       category: generated.category,
-      approved: generated.approved,
+      approved: approvedFallback ?? generated.approved,
       status: generated.status,
       id: generated.id,
       email: generated.email ?? '',
@@ -405,7 +408,7 @@ class App {
       deleted: false,
       enabled: generated.enabled,
       installs: generated.installs,
-      private: generated.private,
+      private: privateFallback ?? generated.private,
       proactiveNotification: generated.proactiveNotification == null
           ? null
           : ProactiveNotification.fromGenerated(generated.proactiveNotification!),
@@ -431,7 +434,6 @@ class App {
 
   factory App.fromGenerated(
     wire.GeneratedAppBaseModel generated, {
-    Map<String, dynamic> legacyJson = const {},
     bool? approvedFallback,
     bool? privateFallback,
   }) {
@@ -440,33 +442,31 @@ class App {
       approved: approvedFallback ?? generated.approved,
       status: generated.status,
       id: generated.id,
-      email: legacyJson['email'] ?? '',
+      email: '',
       uid: generated.uid ?? '',
       name: generated.name,
       author: generated.author,
       description: generated.description,
       image: generated.image,
-      externalIntegration: legacyJson['external_integration'] is Map<String, dynamic>
-          ? ExternalIntegration.fromJson(legacyJson['external_integration'] as Map<String, dynamic>)
-          : generated.externalIntegration == null
-              ? null
-              : ExternalIntegration.fromGenerated(generated.externalIntegration!),
+      externalIntegration: generated.externalIntegration == null
+          ? null
+          : ExternalIntegration.fromGenerated(generated.externalIntegration!),
       ratingAvg: generated.ratingAvg,
       ratingCount: generated.ratingCount,
       capabilities: generated.capabilities.toSet(),
-      chatPrompt: legacyJson['chat_prompt'],
-      conversationPrompt: legacyJson['memory_prompt'],
-      reviews: AppReview.fromJsonList(legacyJson['reviews'] ?? []),
-      userReview: legacyJson['user_review'] != null ? AppReview.fromJson(legacyJson['user_review']) : null,
-      deleted: legacyJson['deleted'] ?? false,
+      chatPrompt: null,
+      conversationPrompt: null,
+      reviews: [],
+      userReview: null,
+      deleted: false,
       enabled: generated.enabled,
       installs: generated.installs,
       private: privateFallback ?? generated.private,
       proactiveNotification: generated.proactiveNotification == null
           ? null
           : ProactiveNotification.fromGenerated(generated.proactiveNotification!),
-      usageCount: legacyJson['usage_count'] ?? 0,
-      moneyMade: legacyJson['money_made'] ?? 0.0,
+      usageCount: 0,
+      moneyMade: 0.0,
       isPaid: generated.isPaid ?? false,
       paymentPlan: generated.paymentPlan,
       price: generated.price ?? 0.0,
@@ -478,8 +478,7 @@ class App {
       isPopular: generated.isPopular ?? false,
       chatTools: (generated.chatTools ?? const []).map(ChatTool.fromGenerated).toList(),
       createdAt: generated.createdAt,
-      updatedAt:
-          legacyJson['updated_at'] != null ? DateTime.parse(legacyJson['updated_at'].toString()).toLocal() : null,
+      updatedAt: null,
       score: generated.score,
       official: generated.official ?? false,
       sourceCodeUrl: generated.sourceCodeUrl,
