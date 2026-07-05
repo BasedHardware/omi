@@ -63,6 +63,29 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertTrue(state.contains("var pttHintText: String"))
   }
 
+  /// MIC-02b: the notch-island layout bypasses the pill's `voiceListeningView`, so the
+  /// hint must render as its own row below the notch chrome (`notchPttHintRow`), the
+  /// surface must count as expanded so it draws, and the window must grow to fit it —
+  /// otherwise the hint is clipped to zero height and never seen on a notched Mac.
+  func testNotchIslandRendersAndSizesPTTHint() throws {
+    let view = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarView.swift")
+    // Dedicated notch hint row, gated on the notch layout + a non-empty hint.
+    XCTAssertTrue(view.contains("notchPttHintRow"))
+    XCTAssertTrue(view.contains("state.usesNotchIsland && !state.pttHintText.isEmpty"))
+    // The hint keeps the unified surface in its expanded (drawn) state.
+    XCTAssertTrue(view.contains("|| !state.pttHintText.isEmpty"))
+
+    let window = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarWindow.swift")
+    // All three sizing paths grow for the hint...
+    let sizedBranches = window.components(separatedBy: "!state.pttHintText.isEmpty").count - 1
+    XCTAssertGreaterThanOrEqual(sizedBranches, 3)
+    // ...using a dedicated hint-row height...
+    XCTAssertTrue(window.contains("pttHintRowHeight"))
+    // ...and a dedicated observer resizes when the hint appears/clears (no
+    // isVoiceListening transition fires on its own to trigger a resize).
+    XCTAssertTrue(window.contains("state.$pttHintText"))
+  }
+
   private func managerSource() throws -> String {
     try source(relativePath: "Sources/FloatingControlBar/PushToTalkManager.swift")
   }
