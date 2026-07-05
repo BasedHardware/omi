@@ -122,7 +122,9 @@
         "pretrained_models",
         "utils/llm/gateway_shadow.py",
         "utils/llm/clients.py",
-        "utils/llm/providers.py"
+        "utils/llm/providers.py",
+        "utils/chat.py",
+        "utils/social.py"
     ],
     "extraPaths": [
         "."

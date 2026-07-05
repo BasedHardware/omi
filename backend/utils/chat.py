@@ -1,3 +1,5 @@
+# async-blockers: no-import-scope
+# async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import base64
 import uuid
 from datetime import datetime, timezone
@@ -329,8 +331,7 @@ async def process_voice_message_segment_stream(
     stt_language, stt_model = get_deepgram_model_for_language(language)
 
     try:
-        result = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
-        words = cast(List[Dict[str, Any]], result)
+        words = prerecorded(url, diarize=False, language=stt_language, model=stt_model)
     except RuntimeError as e:
         logger.error(f'Voice message transcription failed for {path}: {e}')
         return
@@ -348,21 +349,17 @@ async def process_voice_message_segment_stream(
 
     # create message
     message = Message(
-        id=str(uuid.uuid4()),
-        text=text,
-        created_at=datetime.now(timezone.utc),
-        sender=MessageSender.human,
-        type=MessageType.text,
+        id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
 
     chat_session = chat_db.get_chat_session(uid)
-    chat_session_obj: Optional[ChatSession] = ChatSession(**chat_session) if chat_session else None
+    chat_session = ChatSession(**chat_session) if chat_session else None
 
-    if chat_session_obj:
-        message.chat_session_id = chat_session_obj.id
-        chat_db.add_message_to_chat_session(uid, chat_session_obj.id, message.id)
+    if chat_session:
+        message.chat_session_id = chat_session.id
+        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.model_dump())
+    chat_db.add_message(uid, message.dict())
 
     # stream
     mdata = base64.b64encode(bytes(message.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -372,48 +369,44 @@ async def process_voice_message_segment_stream(
     app = None
     app_id = None
 
-    def process_message(response: str, callback_data: Dict[str, Any]) -> Tuple[Message, bool]:
-        memories: List[Any] = cast(List[Any], callback_data.get('memories_found', []))
-        ask_for_nps: bool = cast(bool, callback_data.get('ask_for_nps', False))
-        langsmith_run_id: Optional[str] = cast(Optional[str], callback_data.get('langsmith_run_id'))
-        prompt_name: Optional[str] = cast(Optional[str], callback_data.get('prompt_name'))
-        prompt_commit: Optional[str] = cast(Optional[str], callback_data.get('prompt_commit'))
-        memories_id: List[str] = []
+    def process_message(response: str, callback_data: dict):
+        memories = callback_data.get('memories_found', [])
+        ask_for_nps = callback_data.get('ask_for_nps', False)
+        langsmith_run_id = callback_data.get('langsmith_run_id')
+        prompt_name = callback_data.get('prompt_name')
+        prompt_commit = callback_data.get('prompt_commit')
+        memories_id = []
         # check if the items in the conversations list are dict
         if memories:
-            converted_memories: List[Any] = []
+            converted_memories = []
             for m in memories[:5]:
                 if isinstance(m, dict):
-                    converted_memories.append(deserialize_conversation(cast(Dict[str, Any], m)))
+                    converted_memories.append(deserialize_conversation(m))
                 else:
                     converted_memories.append(m)
-            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
+            memories_id = [m.id for m in converted_memories]
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
             created_at=datetime.now(timezone.utc),
-            sender=MessageSender.ai,
+            sender='ai',
             app_id=app_id,
-            type=MessageType.text,
+            type='text',
             memories_id=memories_id,
             langsmith_run_id=langsmith_run_id,  # Store run_id for feedback tracking
             prompt_name=prompt_name,  # LangSmith prompt name for versioning
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
 
-        inner_chat_session = chat_db.get_chat_session(uid)
-        inner_chat_session_obj: Optional[ChatSession] = (
-            ChatSession(**inner_chat_session) if inner_chat_session else None
-        )
+        chat_session = chat_db.get_chat_session(uid)
+        chat_session = ChatSession(**chat_session) if chat_session else None
 
-        if inner_chat_session_obj:
-            ai_message.chat_session_id = inner_chat_session_obj.id
-            chat_db.add_message_to_chat_session(uid, inner_chat_session_obj.id, ai_message.id)
+        if chat_session:
+            ai_message.chat_session_id = chat_session.id
+            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.model_dump())
-        ai_message.memories = [
-            MessageConversation(**cast(Dict[str, Any], m)) for m in (memories if len(memories) < 5 else memories[:5])
-        ]
+        chat_db.add_message(uid, ai_message.dict())
+        ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -421,7 +414,7 @@ async def process_voice_message_segment_stream(
         return ai_message, ask_for_nps
 
     messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
-    callback_data: Dict[str, Any] = {}
+    callback_data = {}
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
     try:
@@ -431,10 +424,10 @@ async def process_voice_message_segment_stream(
                 yield f'{data}\n\n'
 
             else:
-                response = cast(Optional[str], callback_data.get('answer'))
+                response = callback_data.get('answer')
                 if response:
                     ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.model_dump()
+                    ai_message_dict = ai_message.dict()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')

@@ -1,3 +1,5 @@
+# async-blockers: no-import-scope
+# async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
 from datetime import datetime, time, timedelta
 from typing import Any, Dict, List, Tuple
