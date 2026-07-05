@@ -13,7 +13,7 @@ from firebase_admin import credentials
 
 from routers import pusher, metrics
 from utils.http_client import close_all_clients
-from utils.executors import drain_background_tasks, log_executor_health
+from utils.executors import drain_background_tasks, log_executor_health, start_background_task
 
 if os.environ.get('SERVICE_ACCOUNT_JSON'):
     service_account_info = json.loads(os.environ["SERVICE_ACCOUNT_JSON"])
@@ -26,7 +26,7 @@ else:
 
 
 async def startup_event() -> None:
-    asyncio.create_task(log_executor_health())
+    start_background_task(log_executor_health(), name='pusher:executor_health')
 
 
 async def shutdown_event() -> None:

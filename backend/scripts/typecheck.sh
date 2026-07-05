@@ -18,10 +18,8 @@ fi
 
 export PYRIGHT_PYTHON_FORCE_VERSION="${PYRIGHT_PYTHON_FORCE_VERSION:-1.1.403}"
 
-# --warnings omitted: CI environments may have different stub availability
-# than local dev (e.g. lc3, pydub). The pre-push hook enforces 0 warnings
-# locally where the full venv is available.
 "$PYRIGHT_PYTHON" -m pyright \
   -p pyrightconfig.json \
   --pythonpath "$PYRIGHT_PYTHON" \
-  --level warning
+  --level warning \
+  --warnings
