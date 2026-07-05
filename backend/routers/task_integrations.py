@@ -236,6 +236,60 @@ def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_us
     return {"status": "ok"}
 
 
+class TaskIntegrationStatusResponse(BaseModel):
+    """Non-secret connection status for a single task integration."""
+
+    app_key: str = Field(description="Task integration app key")
+    connected: bool = Field(default=False, description="Whether the integration is connected")
+    expired: bool = Field(default=False, description="Whether the stored OAuth token has expired")
+    expires_at: Optional[str] = Field(default=None, description="ISO timestamp the token expires, if known")
+    is_default: bool = Field(default=False, description="Whether this is the user's default task integration")
+    workspace_name: Optional[str] = None
+    project_name: Optional[str] = None
+    default_list_title: Optional[str] = None
+    team_name: Optional[str] = None
+    space_name: Optional[str] = None
+    list_name: Optional[str] = None
+
+
+@router.get("/v1/task-integrations/{app_key}", response_model=TaskIntegrationStatusResponse, tags=['task-integrations'])
+def get_task_integration_status(app_key: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Get connection status for one task integration by app key.
+
+    Secrets (access_token / refresh_token) are intentionally omitted; the client only needs
+    connection health to render its UI. Token expiry is derived from the stored expires_at,
+    no OAuth refresh or network call is made.
+    """
+    integration = users_db.get_task_integration(uid, app_key)
+    if not integration:
+        raise HTTPException(status_code=404, detail="Task integration not found")
+
+    expired = False
+    expires_at = integration.get('expires_at')
+    if expires_at:
+        try:
+            exp = datetime.fromisoformat(str(expires_at).replace('Z', '+00:00'))
+            expired = datetime.now(timezone.utc) >= exp
+        except (ValueError, TypeError):
+            expired = False
+
+    default_app = users_db.get_default_task_integration(uid)
+
+    return TaskIntegrationStatusResponse(
+        app_key=app_key,
+        connected=bool(integration.get('connected', False)),
+        expired=expired,
+        expires_at=expires_at if isinstance(expires_at, str) else None,
+        is_default=(default_app == app_key),
+        workspace_name=integration.get('workspace_name'),
+        project_name=integration.get('project_name'),
+        default_list_title=integration.get('default_list_title'),
+        team_name=integration.get('team_name'),
+        space_name=integration.get('space_name'),
+        list_name=integration.get('list_name'),
+    )
+
+
 # *****************************
 # ****** OAuth Initiation *****
 # *****************************
