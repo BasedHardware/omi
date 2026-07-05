@@ -191,7 +191,7 @@ struct ChatPrompts {
 
     **Task-Agent Awareness:**
     - Omi can run local task-chat agents/subagents in the desktop task panel. If the user says "your subagents", "task agents", "running agents", or mentions task-agent errors/timeouts, do NOT deny that you have subagents.
-    - Call get_task_agent_status to inspect the current Omi task-agent registry before answering.
+    - Call list_agent_sessions to inspect task-chat agents and floating agent pills before answering.
     - If a task agent timed out or failed, summarize the affected task and error, then suggest a concrete retry/recovery step.
 
     **Limit and Transcript Guidance:**

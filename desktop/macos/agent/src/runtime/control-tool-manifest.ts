@@ -50,7 +50,9 @@ export interface AgentControlManifestTool {
     | "update_agent_artifact_lifecycle"
     | "send_agent_message"
     | "spawn_background_agent"
-    | "delegate_agent";
+    | "spawn_agent"
+    | "run_agent_and_wait"
+    | "set_desktop_attention_override";
   label: string;
   description: string;
   promptSnippet: string;
@@ -125,18 +127,20 @@ export const agentControlCapabilityManifest = [
     description: `List Omi-managed agent sessions from the local runtime kernel.
 
 Use when the user asks what Omi agents/subagents are active, recent, failed, or attached to a surface.
-Returns canonical Omi session IDs, latest/active run summaries, and adapter binding metadata.`,
+Returns canonical session/run summaries plus task_agents and floating_agent_pills projections.`,
     promptSnippet: "list_agent_sessions - List Omi-managed agent sessions and active runs",
     promptGuidelines: [
-      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
-      "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata.",
+      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "Replaces get_task_agent_status and manage_agent_pills list/status queries.",
     ],
     capabilityDoc: controlDoc(
       "List Agent Sessions",
       "List Omi-managed agent sessions from the local runtime kernel.",
       [
-        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
-        "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata.",
+        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
+        "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+        "Replaces get_task_agent_status and manage_agent_pills list/status queries.",
       ],
     ),
     latency: "fast local",
@@ -149,7 +153,7 @@ Returns canonical Omi session IDs, latest/active run summaries, and adapter bind
       status: { type: "string", enum: ["open", "archived", "closed"] },
       surfaceKind: {
         type: "string",
-        enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"],
+        enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
         description: "Filter to a canonical surface kind.",
       },
       limit: { type: "number", description: "Maximum sessions to return. Default 50, max 200." },
@@ -618,36 +622,30 @@ Creates a new run in that session through the runtime kernel. Use this for multi
   {
     name: "spawn_background_agent",
     label: "Spawn Background Agent",
-    description: `Create a canonical Omi-managed background agent session/run without requiring a parent run.
+    description: `Internal Swift coordinator entrypoint for creating canonical floating-bar runs.
 
-Use this for top-level chat or realtime requests that need visible background work. UI surfaces may project the returned canonical session/run into a floating pill, but the runtime remains the source of truth.`,
-    promptSnippet: "spawn_background_agent - Start a canonical top-level background agent",
+Agent-facing callers should use spawn_agent instead.`,
+    promptSnippet: "spawn_background_agent - Internal coordinator spawn",
     promptGuidelines: [
-      "Use for top-level background work when there is no parent run to pass to delegate_agent.",
-      "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
-      "Do not use this to create UI-owned ChatProvider runtime state.",
+      "Internal coordinator use only; agent-facing callers should use spawn_agent.",
     ],
     capabilityDoc: controlDoc(
       "Spawn Background Agent",
-      "Create a canonical Omi-managed background agent session/run without requiring a parent run.",
-      [
-        "Use for top-level background work when there is no parent run to pass to delegate_agent.",
-        "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
-        "Do not use this to create UI-owned ChatProvider runtime state.",
-      ],
+      "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
+      ["Internal coordinator use only; agent-facing callers should use spawn_agent."],
     ),
     latency: "async background",
     surfaces: ["desktopChat", "realtimeHub"],
     ...agentControlManagePolicy,
     runtimePreconditions: [
       "Defaults ownerId to the active signed-in owner when omitted.",
-      "Creates a canonical background_agent session/run and executes it asynchronously.",
+      "Creates a canonical floating_bar session/run by default.",
     ],
     timeoutClass: "long",
     properties: {
       prompt: { type: "string", description: "Self-contained background-agent task prompt." },
       title: { type: "string", description: "Optional visible session title." },
-      surfaceKind: { type: "string", description: "Optional session surface kind. Default background_agent." },
+      surfaceKind: { type: "string", description: "Optional session surface kind. Default floating_bar." },
       externalRefKind: { type: "string", description: "Optional external reference kind for UI projection." },
       externalRefId: { type: "string", description: "Optional external reference id for UI projection." },
       ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
@@ -663,52 +661,85 @@ Use this for top-level chat or realtime requests that need visible background wo
     required: ["prompt"],
   },
   {
-    name: "delegate_agent",
-    label: "Delegate Agent",
-    description: `Create or continue a distinct delegated child agent session linked to a parent run.
+    name: "spawn_agent",
+    label: "Spawn Agent",
+    description: `Start canonical Omi background work. Visible runs project into floating-bar pills; invisible runs stay kernel-only child work.
 
-Supports call, spawn, and continue modes. Child context is intentionally minimal: objective plus optional concise context. Spawn returns canonical child handles immediately; call and continue return a structured child result without the full transcript. This does not create or manage floating pill UI.`,
-    promptSnippet: "delegate_agent - Create or continue a canonical Omi child agent",
+Pass parentRunId to link the new run to a parent. Use run_agent_and_wait when you need a synchronous structured child result.`,
+    promptSnippet: "spawn_agent - Start canonical Omi background work",
     promptGuidelines: [
-      "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
-      "Pass a concise objective and optional short context; do not pass full transcripts by default.",
+      "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
+      "Use visible=false for parent-linked background work that should not appear as a pill.",
+      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "Inspect progress with list_agent_sessions or get_agent_run.",
     ],
     capabilityDoc: controlDoc(
-      "Delegate Agent",
-      "Create or continue a distinct delegated child agent session linked to a parent run.",
+      "Spawn Agent",
+      "Start canonical Omi background work and optionally project it into floating-bar pills.",
       [
-        "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-        "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
-        "Pass a concise objective and optional short context; do not pass full transcripts by default.",
+        "Calling spawn_agent is the only way to start a visible floating-bar background agent.",
+        "Use visible=false with parentRunId for invisible delegated background work.",
+        "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      ],
+    ),
+    latency: "async background",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
+    runtimePreconditions: [
+      "Defaults ownerId to the active signed-in owner when omitted.",
+      "Creates a canonical floating_bar session/run when visible=true.",
+    ],
+    timeoutClass: "long",
+    properties: {
+      objective: { type: "string", description: "Self-contained background-agent objective." },
+      provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
+      parentRunId: { type: "string", description: "Optional parent run to link via delegation." },
+      visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
+      title: { type: "string", description: "Optional visible session title." },
+      externalRefId: { type: "string", description: "Optional stable pill id for UI projection." },
+      ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
+      adapterId: { type: "string", description: "Optional adapter override." },
+      cwd: { type: "string", description: "Optional working directory." },
+      model: { type: "string", description: "Optional model override." },
+      requestId: { type: "string", description: "Optional caller-provided request correlation id." },
+      clientId: { type: "string", description: "Logical caller id. Defaults to omi-control-tools." },
+      metadata: { type: "object", description: "Small structured metadata for this run.", additionalProperties: true },
+    },
+    required: ["objective"],
+  },
+  {
+    name: "run_agent_and_wait",
+    label: "Run Agent And Wait",
+    description: `Run a parent-linked child agent synchronously and return its structured result.
+
+Use when you need an immediate child result instead of spawning background work. Continue an existing child session with send_agent_message.`,
+    promptSnippet: "run_agent_and_wait - Run a linked child agent and wait for the result",
+    promptGuidelines: [
+      "Use for synchronous structured child results linked to a known parent run.",
+      "For another turn in an existing child session, use send_agent_message instead.",
+    ],
+    capabilityDoc: controlDoc(
+      "Run Agent And Wait",
+      "Run a parent-linked child agent synchronously and return its structured result.",
+      [
+        "Use for synchronous structured child results linked to a known parent run.",
+        "For another turn in an existing child session, use send_agent_message instead.",
       ],
     ),
     latency: "async background",
     surfaces: ["desktopChat"],
-    riskTier: "medium",
-    privacyTier: "local_private",
-    approvalPolicy: "policy_grant",
-    bundles: ["desktop.agent_control.manage"],
-    allowedSurfaces: ["desktopChat"],
+    ...agentControlManagePolicy,
     runtimePreconditions: [
-      "Requires childSessionId when mode is continue.",
-      "Rejects synchronous nested call/continue runs when the selected adapter is already executing for the child session or has no capacity.",
-      "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
+      "Requires parentRunId.",
+      "Rejects synchronous nested runs when the selected adapter is already executing for the child session or has no capacity.",
     ],
     timeoutClass: "long",
     properties: {
-      mode: { type: "string", enum: ["call", "spawn", "continue"] },
-      parentRunId: { type: "string", description: "Canonical parent Omi run_id." },
       objective: { type: "string", description: "Delegated objective for the child agent." },
+      parentRunId: { type: "string", description: "Canonical parent Omi run_id." },
       context: { type: "string", description: "Optional concise context, not a full transcript." },
       ownerId: { type: "string", description: "Optional owner guard for the parent run." },
-      childSessionId: { type: "string", description: "Required for continue mode; optional only to resume a known child." },
-      childSurfaceKind: { type: "string", description: "Child session surface kind. Default delegated_agent." },
-      childExternalRefKind: { type: "string", description: "Optional child external reference kind." },
-      childExternalRefId: { type: "string", description: "Optional child external reference id." },
-      childTitle: { type: "string", description: "Optional title for a newly created child session." },
       adapterId: { type: "string", description: "Optional adapter override." },
-      defaultAdapterId: { type: "string", description: "Optional child session default adapter." },
       cwd: { type: "string", description: "Optional working directory." },
       model: { type: "string", description: "Optional model override." },
       runMode: { type: "string", enum: ["ask", "act"], description: "Child run mode. Default ask." },
@@ -718,15 +749,38 @@ Supports call, spawn, and continue modes. Child context is intentionally minimal
       maxBudgetUsd: { type: "number", description: "Per-delegation budget guard. Default 5, hard max 10." },
       metadata: { type: "object", description: "Small structured metadata for the child run.", additionalProperties: true },
     },
-    required: ["mode", "parentRunId", "objective"],
-    mcpInputSchemaOptions: {
-      allOf: [
-        {
-          if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-          then: { required: ["childSessionId"] },
-        },
-      ],
+    required: ["objective", "parentRunId"],
+  },
+  {
+    name: "set_desktop_attention_override",
+    label: "Set Desktop Attention Override",
+    description: `Dismiss or hide a kernel-derived attention subject such as a floating-bar run.
+
+Pill dismissal writes here; it never deletes canonical run state.`,
+    promptSnippet: "set_desktop_attention_override - Dismiss or hide a derived attention subject",
+    promptGuidelines: [
+      "Use dismissed=true to hide a floating-bar pill without deleting its canonical run.",
+      "Use subjectKind=run and subjectId=<runId> for pill dismissal.",
+    ],
+    capabilityDoc: controlDoc(
+      "Set Desktop Attention Override",
+      "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.",
+      ["Use dismissed=true to hide floating-bar pills without deleting canonical run state."],
+    ),
+    latency: "fast local",
+    surfaces: ["desktopChat", "realtimeHub"],
+    ...agentControlManagePolicy,
+    runtimePreconditions: ["Defaults ownerId to the active signed-in owner when omitted."],
+    timeoutClass: "normal",
+    properties: {
+      ownerId: { type: "string", description: "Owner id. Defaults to the active signed-in owner." },
+      subjectKind: { type: "string", description: "Attention subject kind, e.g. run or session." },
+      subjectId: { type: "string", description: "Attention subject id." },
+      dismissed: { type: "boolean", description: "Whether the subject is dismissed. Default true." },
+      hiddenUntilMs: { type: "number", description: "Optional epoch-ms hide-until timestamp." },
+      reason: { type: "string", description: "Optional short reason." },
     },
+    required: ["subjectKind", "subjectId"],
   },
 ] as const satisfies AgentControlManifestTool[];
 

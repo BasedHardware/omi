@@ -55,7 +55,7 @@ final class AgentPill: ObservableObject, Identifiable {
 
     }
 
-    let id = UUID()
+    let id: UUID
     let query: String
     let createdAt: Date
     let model: String
@@ -80,7 +80,8 @@ final class AgentPill: ObservableObject, Identifiable {
         (completedAt ?? Date()).timeIntervalSince(createdAt)
     }
 
-    init(query: String, model: String, bridgeHarnessOverride: AgentHarnessMode? = nil) {
+    init(id: UUID = UUID(), query: String, model: String, bridgeHarnessOverride: AgentHarnessMode? = nil) {
+        self.id = id
         self.query = query
         self.model = model
         self.bridgeHarnessOverride = bridgeHarnessOverride
@@ -135,7 +136,19 @@ final class AgentPillsManager: ObservableObject {
 
     private let viewedFinishedTTL: TimeInterval = 10 * 60
 
-    private init() {}
+    private var projectionSyncCancellable: AnyCancellable?
+    private var projectionRefreshTask: Task<Void, Never>?
+
+    private init() {
+        projectionSyncCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyRuntimeProjections()
+            }
+        projectionRefreshTask = Task { @MainActor [weak self] in
+            await self?.refreshProjectedPillsFromKernel()
+        }
+    }
 
     /// Routing decision for an Ask Omi message — does it stay inline in the
     /// floating bar, or get hoisted into a background agent pill?
@@ -639,7 +652,8 @@ final class AgentPillsManager: ObservableObject {
         systemPromptSuffix: String? = nil,
         bridgeHarnessOverride: AgentHarnessMode? = nil
     ) -> AgentPill {
-        let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
+        let pillId = UUID()
+        let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)
         if let preFetchedTitle, !preFetchedTitle.isEmpty {
             pill.title = preFetchedTitle
         }
@@ -697,10 +711,13 @@ final class AgentPillsManager: ObservableObject {
             guard !Task.isCancelled else { return }
             guard let self, let pill else { return }
             do {
-                let accepted = try await DesktopCoordinatorService.shared.spawnBackgroundAgent(
-                    prompt: pill.query,
+                let accepted = try await DesktopCoordinatorService.shared.spawnAgent(
+                    objective: pill.query,
                     title: pill.title,
                     pillId: pill.id,
+                    provider: bridgeHarnessOverride?.rawValue,
+                    parentRunId: nil,
+                    visible: true,
                     model: modelForSpawn,
                     harnessMode: bridgeHarnessOverride,
                     cwd: workingDirectory
@@ -996,8 +1013,16 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
+    @discardableResult
     func dismiss(pillIdString: String) -> Bool {
         guard let id = findPillId(from: pillIdString) else { return false }
+        guard let pill = pills.first(where: { $0.id == id }) else { return false }
+        if let runId = pill.canonicalRunId, !runId.isEmpty {
+            Task {
+                try? await DesktopCoordinatorService.shared.dismissFloatingRunAttention(runId: runId)
+                await refreshProjectedPillsFromKernel()
+            }
+        }
         dismiss(pillID: id)
         return true
     }
@@ -1086,6 +1111,107 @@ final class AgentPillsManager: ObservableObject {
             }
     }
 
+    func refreshProjectedPillsFromKernel() async {
+        do {
+            let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+            mergeProjectedPills(from: floating)
+        } catch {
+            logError("AgentPills: failed to refresh projected pills from kernel", error: error)
+            applyRuntimeProjections()
+        }
+    }
+
+    private func mergeProjectedPills(from floating: [[String: Any]]) {
+        var seen = Set<UUID>()
+        for entry in floating {
+            let idString = (entry["id"] as? String) ?? (entry["runId"] as? String) ?? ""
+            guard let pillId = UUID(uuidString: idString) ?? stablePillUUID(from: idString) else { continue }
+            seen.insert(pillId)
+            let query = (entry["query"] as? String) ?? (entry["latestActivity"] as? String) ?? ""
+            let model = ShortcutSettings.shared.selectedModel.isEmpty
+                ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+            let pill: AgentPill
+            if let existing = pills.first(where: { $0.id == pillId }) {
+                pill = existing
+            } else {
+                pill = AgentPill(id: pillId, query: query.isEmpty ? "Background agent" : query, model: model)
+                pills.append(pill)
+            }
+            if let title = entry["title"] as? String, !title.isEmpty {
+                pill.title = title
+            }
+            if let sessionId = entry["sessionId"] as? String {
+                pill.canonicalSessionId = sessionId
+            }
+            if let runId = entry["runId"] as? String {
+                pill.canonicalRunId = runId
+            }
+            applyProjectedStatus((entry["status"] as? String) ?? "running", to: pill)
+            if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
+                pill.latestActivity = activity
+            }
+            pill.markContentChanged()
+        }
+        let removable = pills.filter { pill in
+            guard let runId = pill.canonicalRunId, !runId.isEmpty else { return false }
+            return !seen.contains(pill.id) && pill.status.isFinished
+        }
+        for pill in removable {
+            cleanup(pillID: pill.id)
+        }
+        objectWillChange.send()
+    }
+
+    private func applyRuntimeProjections() {
+        for pill in pills {
+            if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
+                Self.apply(projection: projection, to: pill)
+            } else if let runId = pill.canonicalRunId,
+                let projection = AgentRuntimeStatusStore.shared.projection(for: .floatingBarRun(runId: runId)) {
+                Self.apply(projection: projection, to: pill)
+            }
+        }
+    }
+
+    private func applyProjectedStatus(_ status: String, to pill: AgentPill) {
+        switch status {
+        case "queued":
+            pill.status = .queued
+        case "starting":
+            pill.status = .starting
+        case "running", "waiting_input", "waiting_approval", "cancelling":
+            pill.status = .running
+        case "succeeded", "completed":
+            pill.status = .done
+        case "cancelled":
+            pill.status = .stopped
+        case "failed", "timed_out", "orphaned":
+            pill.status = .failed("Agent failed")
+        default:
+            break
+        }
+    }
+
+    private func stablePillUUID(from value: String) -> UUID? {
+        guard !value.isEmpty else { return nil }
+        var bytes = [UInt8](repeating: 0, count: 16)
+        let hash = value.utf8.reduce(into: UInt64(0)) { partial, byte in
+            partial = partial &* 31 &+ UInt64(byte)
+        }
+        withUnsafeMutableBytes(of: &bytes) { raw in
+            raw.storeBytes(of: hash, as: UInt64.self)
+            raw.storeBytes(of: hash.byteSwapped, toByteOffset: 8, as: UInt64.self)
+        }
+        bytes[6] = (bytes[6] & 0x0F) | 0x40
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
+
     func snapshotJSON(limit: Int = 20) -> String {
         let payload: [String: [Snapshot]] = ["floating_agent_pills": snapshots(limit: limit)]
         let encoder = JSONEncoder()
@@ -1113,7 +1239,7 @@ final class AgentPillsManager: ObservableObject {
             return statusSummary()
         case "dismiss":
             guard let agentId, !agentId.isEmpty else {
-                return "Missing agent_id. Call get_task_agent_status first and pass the floating_agent_pills id."
+                return "Missing agent_id. Call list_agent_sessions first and pass the floating_agent_pills id."
             }
             return dismiss(pillIdString: agentId)
                 ? "Dismissed floating agent pill \(agentId)."
@@ -1123,7 +1249,7 @@ final class AgentPillsManager: ObservableObject {
             clearCompleted()
             return "Cleared \(count) completed floating agent pill(s)."
         default:
-            return "Unknown action. Use list, dismiss, or clear_completed."
+            return "Unknown action. Use list_agent_sessions, cancel_agent_run, or update_agent_artifact_lifecycle instead."
         }
     }
 

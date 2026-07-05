@@ -126,9 +126,8 @@ enum ChatContentBlock: Identifiable {
         switch cleanName {
         case "execute_sql": return "Querying database"
         case "semantic_search": return "Searching conversations"
-        case "get_task_agent_status": return "Checking agents"
         case "spawn_agent": return "Starting agent"
-        case "manage_agent_pills": return "Managing agents"
+        case "run_agent_and_wait": return "Running agent"
         case "search_tasks": return "Searching tasks"
         case "Read": return "Reading file"
         case "Write": return "Writing file"
@@ -159,8 +158,8 @@ enum ChatContentBlock: Identifiable {
         let slowPrefixes = ["bash", "write", "edit", "multiedit", "webfetch", "websearch", "task", "notebookedit"]
         if slowPrefixes.contains(where: { lower.hasPrefix($0) }) { return true }
         let slowExact: Set<String> = [
-            "execute_sql", "semantic_search", "spawn_agent", "manage_agent_pills",
-            "search_tasks", "run_attempt", "delegate_agent", "send_agent_message",
+            "execute_sql", "semantic_search", "spawn_agent",
+            "search_tasks", "run_attempt", "run_agent_and_wait", "send_agent_message",
         ]
         // Strip any embedded summary suffix ("Bash: cmd" style) before matching.
         let head = lower.split(separator: ":").first.map(String.init) ?? lower
@@ -207,17 +206,9 @@ enum ChatContentBlock: Identifiable {
         case "semantic_search":
             summary = input["query"] as? String
         case "spawn_agent":
-            summary = (input["brief"] ?? input["query"]) as? String
-        case "manage_agent_pills":
-            if let action = input["action"] as? String {
-                if let agentId = input["agent_id"] as? String, !agentId.isEmpty {
-                    summary = "\(action) \(agentId)"
-                } else {
-                    summary = action
-                }
-            } else {
-                summary = nil
-            }
+            summary = (input["objective"] ?? input["brief"] ?? input["query"]) as? String
+        case "run_agent_and_wait":
+            summary = input["objective"] as? String
         case "search_tasks":
             summary = input["query"] as? String
         case "request_permission":
@@ -621,9 +612,8 @@ struct MessageMetadata {
         return [
             "execute_sql",
             "semantic_search",
-            "get_task_agent_status",
             "spawn_agent",
-            "manage_agent_pills",
+            "run_agent_and_wait",
             "search_tasks",
             "get_daily_recap",
             "complete_task",
@@ -1346,7 +1336,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let floatingSystemPrompt = buildFloatingBarSystemPrompt(contextString: promptContext)
             let floatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                 contextString: promptContext,
-                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                excludingToolNames: ["spawn_agent", "run_agent_and_wait"]
             )
             let floatingModel = ShortcutSettings.shared.selectedModel.isEmpty
                 ? ModelQoS.Claude.defaultSelection
@@ -1452,7 +1442,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private func isFloatingPillSurface(_ surface: AgentSurfaceReference) -> Bool {
-        surface.surfaceKind == "background_agent" && surface.externalRefKind == "pill"
+        surface.surfaceKind == "floating_bar" && surface.externalRefKind == "pill"
     }
 
     /// Switch between bridge modes (Omi AI via piMono, or user's Claude OAuth)
@@ -3544,7 +3534,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                         if cachedFloatingPillSystemPrompt.isEmpty {
                             cachedFloatingPillSystemPrompt = buildFloatingBarSystemPrompt(
                                 contextString: formatMemoriesSection(),
-                                excludingToolNames: ["spawn_agent", "delegate_agent"]
+                                excludingToolNames: ["spawn_agent", "run_agent_and_wait"]
                             )
                         }
                         systemPrompt = cachedFloatingPillSystemPrompt

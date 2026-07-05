@@ -433,7 +433,7 @@ class GauntletRunner:
             tool
             for trace in traces
             for tool in (trace.get("tool_executions") or [])
-            if isinstance(tool, dict) and tool.get("name") in {"spawn_agent", "manage_agent_pills"}
+            if isinstance(tool, dict) and tool.get("name") in {"spawn_agent", "list_agent_sessions"}
         ]
         coordinator = bridge_action(self.port, "coordinator_awareness_snapshot")
         self.record_step(

@@ -161,6 +161,9 @@ function realtimeTools() {
     "cancel_agent_run",
     "inspect_agent_artifacts",
     "update_agent_artifact_lifecycle",
+    "spawn_agent",
+    "run_agent_and_wait",
+    "set_desktop_attention_override",
   ]);
 
   const hasRealtimeVoiceSurface = (tool) => {
@@ -362,7 +365,7 @@ ${json}
 
   static func baseOpenAITools(providerProperty: [String: Any]?) -> [[String: Any]] {
     var tools = baseOpenAIToolsTemplate
-    guard let index = tools.firstIndex(where: { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }) else {
+    guard let index = tools.firstIndex(where: { ($0["name"] as? String) == "spawn_agent" }) else {
       return tools
     }
     guard var parameters = tools[index]["parameters"] as? [String: Any],

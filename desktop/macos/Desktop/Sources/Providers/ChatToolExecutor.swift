@@ -49,20 +49,15 @@ class ChatToolExecutor {
       return message
     }
 
-    switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
-    case .getTaskAgentStatus:
-      return await executeTaskAgentStatus()
-
-    case .spawnAgent:
+    if toolCall.name == "spawn_agent" {
       return await executeSpawnAgent(
         toolCall.arguments,
         originatingChatMode: originatingChatMode,
         originatingClientScope: originatingClientScope
       )
+    }
 
-    case .manageAgentPills:
-      return await executeManageAgentPills(toolCall.arguments)
-
+    switch GeneratedToolExecutors.chatDispatch(for: toolCall.name) {
     case .executeSql:
       return await executeSQL(toolCall.arguments)
 
@@ -494,12 +489,6 @@ class ChatToolExecutor {
     return "OK: \(changes) row(s) affected"
   }
 
-  // MARK: - Task Agent Status
-
-  private static func executeTaskAgentStatus() async -> String {
-    return TaskAgentStatusRegistry.shared.combinedSnapshotJSON()
-  }
-
   private static func executeSpawnAgent(
     _ args: [String: Any],
     originatingChatMode: ChatMode?,
@@ -511,12 +500,14 @@ class ChatToolExecutor {
     if originatingClientScope == AgentLegacyClientScope.floatingPill {
       return "Error: spawn_agent is unavailable from an existing floating background agent. Complete the assigned task directly in this agent."
     }
-    let brief = ((args["brief"] as? String) ?? (args["query"] as? String) ?? "")
+    let objective = ((args["objective"] as? String) ?? (args["brief"] as? String) ?? (args["query"] as? String) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !brief.isEmpty else {
-      return "Error: Missing brief. Pass a clear, self-contained task brief."
+    guard !objective.isEmpty else {
+      return "Error: Missing objective. Pass a clear, self-contained task objective."
     }
     let title = (args["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let parentRunId = (args["parent_run_id"] as? String) ?? (args["parentRunId"] as? String)
+    let visible = (args["visible"] as? Bool) ?? true
     let providerName = ((args["provider"] as? String) ?? "")
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()
@@ -537,33 +528,30 @@ class ChatToolExecutor {
     }
     let model = ShortcutSettings.shared.selectedModel.isEmpty
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
-    guard let pill = AgentDelegationExecutor.shared.spawnResolvedDelegation(
-      .init(
-        originalUserText: brief,
-        brief: brief,
+    let pillId = UUID()
+    do {
+      let accepted = try await DesktopCoordinatorService.shared.spawnAgent(
+        objective: objective,
         title: (title?.isEmpty == false) ? title : directedProvider?.displayName,
-        spokenAck: nil,
-        directedProvider: directedProvider,
-        validateAgainstOriginalUserText: false
-      ),
-      model: model,
-      fromVoice: false
-    ) else {
-      return "Error: Missing self-contained brief. Pass a clear task with enough context for a background agent to execute independently."
+        pillId: pillId,
+        provider: directedProvider?.rawValue,
+        parentRunId: parentRunId,
+        visible: visible,
+        model: model,
+        harnessMode: directedProvider?.harnessMode,
+        cwd: FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+      )
+      await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+      return """
+      Agent started as a floating agent pill.
+      id: \(pillId.uuidString)
+      runId: \(accepted.runId)
+      title: \(accepted.title)
+      status: running
+      """
+    } catch {
+      return "Error: Failed to spawn agent — \(error.localizedDescription)"
     }
-    return """
-    Agent started as a floating agent pill.
-    id: \(pill.id.uuidString)
-    title: \(pill.title)
-    status: \(pill.status.displayLabel)
-    """
-  }
-
-  private static func executeManageAgentPills(_ args: [String: Any]) async -> String {
-    let action = ((args["action"] as? String) ?? "list")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    let agentId = (args["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-    return AgentPillsManager.shared.manage(action: action, agentId: agentId)
   }
 
   // MARK: - Local Status

@@ -12,7 +12,6 @@ export type DesktopActionQueueItemKind =
   | "artifact_delivery"
   | "stale_run"
   | "candidate_review"
-  | "legacy_pill"
   | "reusable_session";
 
 export interface DesktopActionQueueItem {
@@ -81,15 +80,6 @@ export interface QueueCandidateInput {
   sourceRunId?: string | null;
 }
 
-export interface QueueLegacyPillInput {
-  pillId: string;
-  ownerId: string;
-  title: string;
-  status: "running" | "failed" | "completed" | "waiting";
-  createdAtMs: number;
-  updatedAtMs: number;
-}
-
 export interface QueueOverrideInput {
   ownerId: string;
   subjectKind: string;
@@ -107,7 +97,6 @@ export interface BuildDesktopActionQueueInput {
   runSuppressionContext?: readonly QueueRunInput[];
   artifactDeliveries?: readonly QueueArtifactDeliveryInput[];
   candidates?: readonly QueueCandidateInput[];
-  legacyPills?: readonly QueueLegacyPillInput[];
   overrides?: readonly QueueOverrideInput[];
 }
 
@@ -254,23 +243,6 @@ export function buildDesktopActionQueue(input: BuildDesktopActionQueueInput): De
         sourceSessionId: candidate.sourceSessionId ?? null,
         sourceRunId: candidate.sourceRunId ?? null,
         reason: "Candidate mutation requires explicit review before canonical state changes.",
-      }),
-    );
-  }
-
-  for (const pill of input.legacyPills ?? []) {
-    if (pill.status === "completed") continue;
-    items.push(
-      item({
-        kind: "legacy_pill",
-        subjectKind: "legacy_pill",
-        subjectId: pill.pillId,
-        ownerId: pill.ownerId,
-        title: pill.title,
-        priority: pill.status === "failed" ? 75 : 40,
-        rank: pill.status === "failed" ? 2 : 6,
-        createdAtMs: pill.updatedAtMs,
-        reason: "Legacy floating pill is projected into the derived action queue.",
       }),
     );
   }

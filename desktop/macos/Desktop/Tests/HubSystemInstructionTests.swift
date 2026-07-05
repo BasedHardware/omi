@@ -8,10 +8,10 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains(card))                                   // card injected
         XCTAssertTrue(instr.lowercased().contains("language the user"))        // reply-in-user-language
         XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
-        XCTAssertTrue(instr.contains("spawn_agent"))                          // guardrails preserved
-        XCTAssertTrue(instr.contains("get_task_agent_status"))
-        XCTAssertTrue(instr.contains("manage_agent_pills"))
+        XCTAssertTrue(instr.contains("spawn_agent"))
         XCTAssertTrue(instr.contains("list_agent_sessions"))
+        XCTAssertTrue(instr.contains("run_agent_and_wait"))
+        XCTAssertTrue(instr.contains("set_desktop_attention_override"))
         XCTAssertTrue(instr.contains("get_agent_run"))
         XCTAssertTrue(instr.contains("cancel_agent_run"))
         XCTAssertTrue(instr.contains("floating agent pills"))
@@ -50,22 +50,19 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertNotNil(properties?["brief"])
     }
 
-    func testRealtimeTaskAgentStatusToolIsExposed() {
+    func testRealtimeListAgentSessionsToolIsExposed() {
         let tools = RealtimeHubTools.openAITools
-        let statusTool = tools.first { ($0["name"] as? String) == HubTool.getTaskAgentStatus.rawValue }
-        XCTAssertNotNil(statusTool)
-        XCTAssertTrue((statusTool?["description"] as? String ?? "").contains("subagents"))
-        XCTAssertTrue((statusTool?["description"] as? String ?? "").contains("floating agent pills"))
+        let listTool = tools.first { ($0["name"] as? String) == HubTool.listAgentSessions.rawValue }
+        XCTAssertNotNil(listTool)
+        XCTAssertTrue((listTool?["description"] as? String ?? "").contains("subagents"))
+        XCTAssertTrue((listTool?["description"] as? String ?? "").contains("floating"))
     }
 
-    func testRealtimeAgentPillManagementToolIsExposed() {
+    func testRealtimeAttentionOverrideToolIsExposed() {
         let tools = RealtimeHubTools.openAITools
-        let manageTool = tools.first { ($0["name"] as? String) == HubTool.manageAgentPills.rawValue }
-        XCTAssertNotNil(manageTool)
-        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("dismiss"))
-        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("clear pills"))
-        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("explicitly asks"))
-        XCTAssertTrue((manageTool?["description"] as? String ?? "").contains("Never dismiss completed agents"))
+        let overrideTool = tools.first { ($0["name"] as? String) == HubTool.setDesktopAttentionOverride.rawValue }
+        XCTAssertNotNil(overrideTool)
+        XCTAssertTrue((overrideTool?["description"] as? String ?? "").contains("dismiss"))
     }
 
     func testRealtimeCreateCalendarEventToolIsExposedWithRequiredArguments() {
@@ -104,7 +101,7 @@ final class HubSystemInstructionTests: XCTestCase {
         let listParameters = listTool?["parameters"] as? [String: Any]
         let listProperties = listParameters?["properties"] as? [String: Any]
         let surfaceKind = listProperties?["surfaceKind"] as? [String: Any]
-        XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"])
+        XCTAssertEqual(surfaceKind?["enum"] as? [String], ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"])
 
         let inspectTool = tools.first { ($0["name"] as? String) == HubTool.inspectAgentArtifacts.rawValue }
         let inspectParameters = (inspectTool?["parameters"] as? [String: Any])

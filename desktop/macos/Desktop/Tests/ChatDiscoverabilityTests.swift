@@ -113,28 +113,27 @@ final class ChatDiscoverabilityTests: XCTestCase {
         }
     }
 
-    func testDesktopPromptMentionsTaskAgentStatus() {
+    func testDesktopPromptMentionsListAgentSessionsForSubagents() {
         let prompt = ChatPrompts.desktopChat
-        XCTAssertTrue(prompt.contains("**get_task_agent_status**"))
+        XCTAssertTrue(prompt.contains("**list_agent_sessions**"))
         XCTAssertTrue(prompt.contains("your subagents"))
-        XCTAssertTrue(prompt.contains("Call get_task_agent_status"))
+        XCTAssertTrue(prompt.contains("Call list_agent_sessions"))
         XCTAssertTrue(prompt.contains("floating_agent_pills"))
     }
 
-    func testDesktopPromptCanSpawnAndManageFloatingAgents() {
+    func testDesktopPromptCanSpawnFloatingAgents() {
         let prompt = ChatPrompts.desktopChat
         XCTAssertTrue(prompt.contains("**spawn_agent**"))
-        XCTAssertTrue(prompt.contains("call spawn_agent"))
-        XCTAssertTrue(prompt.contains("**manage_agent_pills**"))
-        XCTAssertTrue(prompt.contains("circular floating agent pills"))
+        XCTAssertTrue(prompt.contains("call spawn_agent") || prompt.contains("Start background work -> spawn_agent"))
+        XCTAssertTrue(prompt.contains("circular floating agent pills") || prompt.contains("floating-bar"))
     }
 
-    func testDesktopPromptDistinguishesDelegationFromFloatingPills() {
+    func testDesktopPromptDistinguishesSpawnFromRunAndWait() {
         let prompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: [])
-        XCTAssertTrue(prompt.contains("**delegate_agent**"))
+        XCTAssertTrue(prompt.contains("**run_agent_and_wait**") || prompt.contains("run_agent_and_wait"))
         XCTAssertTrue(prompt.contains("spawn_agent"))
-        XCTAssertTrue(prompt.contains("delegate_agent"))
-        XCTAssertTrue(prompt.contains("Do not treat one as an alias for the other."))
+        XCTAssertTrue(prompt.contains("Synchronous parent-linked child result"))
+        XCTAssertTrue(prompt.contains("Start background work"))
     }
 
     func testDesktopPromptPreservesLegacyToolBehaviorGuidance() {

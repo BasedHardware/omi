@@ -251,22 +251,6 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Get a recap of what the user actually DID on their Mac — apps used (with minutes), conversations, tasks, focus sessions, and screen activity — for a day. THIS is the tool for 'what did I do yesterday', 'what did I do today', 'which apps did I use the most', 'how did I spend my time'. Do NOT use search_conversations or spawn_agent for these. Fast synchronous read — speak a short summary of what it returns.",
     },
   },
-  get_task_agent_status: {
-    surfaces: ["desktop_chat", "realtime_voice"],
-    capabilityDoc: doc(
-      "Task Agent Status",
-      "Inspect Omi's local task-chat agents/subagents and floating agent pills.",
-      [
-        "Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts.",
-        "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
-        "Returns both task_agents and floating_agent_pills; floating_agent_pills are the circular agent pills below the floating bar.",
-      ],
-    ),
-    voice: {
-      realtimeDescription:
-        "Inspect Omi's local task-chat/background agents and floating agent pills, including recent completed/failed ones. Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts. Fast local read.",
-    },
-  },
   fill_cloud_connector_form: {
     surfaces: ["desktop_chat"],
     capabilityDoc: doc(
@@ -277,38 +261,6 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Do not install browser extensions before trying this tool.",
       ],
     ),
-  },
-  spawn_agent: {
-    surfaces: ["desktop_chat", "realtime_voice"],
-    capabilityDoc: doc(
-      "Spawn Agent",
-      "Start canonical Omi background work and show it in the floating-bar pill UI.",
-      [
-        "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
-        "The only way to start a visible floating-bar background agent is to call spawn_agent; saying you will start one does not start it.",
-        "If the user asks to use OpenClaw or Hermes, call spawn_agent with provider set to openclaw or hermes.",
-        "Use delegate_agent instead when the new work must be linked to a known parent run.",
-      ],
-    ),
-    voice: {
-      realtimeDescription:
-        "Request delegation to a background agent through Omi's resolver. The resolver may start a child agent, continue an existing one, or ask for missing details. Use for work in the user's apps/browser/files or multi-step work that you cannot do directly.",
-    },
-  },
-  manage_agent_pills: {
-    surfaces: ["desktop_chat", "realtime_voice"],
-    capabilityDoc: doc(
-      "Manage Agent Pills",
-      "List, dismiss, or clear completed floating agent pills.",
-      [
-        "Use after get_task_agent_status when the user asks to manage the circular floating agent pills.",
-        "Actions: list, dismiss with agent_id, or clear_completed.",
-      ],
-    ),
-    voice: {
-      realtimeDescription:
-        "Manage the circular floating agent pills shown below the floating bar. Use list freely. Only dismiss or clear pills when the user explicitly asks to dismiss, close, remove, hide, or clear pills. Never dismiss completed agents just because you finished reading their status.",
-    },
   },
   search_tasks: {
     surfaces: ["desktop_chat"],
@@ -709,25 +661,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     },
   },
   {
-    name: "get_task_agent_status",
-    label: "Task Agent Status",
-    description:
-      "Inspect Omi's local task-chat agents/subagents and floating agent pills. Use when the user asks about your subagents, task agents, running agents, finished agents, errors, or timeouts.",
-    promptSnippet: "get_task_agent_status - Inspect Omi task-chat agents and floating agent pills",
-    promptGuidelines: [
-      "If the user says 'your subagents', interpret that as Omi task-chat agents, not Cursor or external IDE agents.",
-      "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
-    ],
-    latency: "fast local",
-    inputSchema: schema({}),
-    annotations: readOnlyLocal,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires the desktop app task-agent stores."],
-    adapters: piAndStdio(),
-  },
-  {
     name: "fill_cloud_connector_form",
     label: "Fill Cloud Connector Form",
     description:
@@ -779,62 +712,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       ...piAndStdio(),
       "local-agent-api": { advertised: true },
     },
-  },
-  {
-    name: "spawn_agent",
-    label: "Spawn Agent",
-    description:
-      "Start canonical Omi background work and show it in the floating-bar pill UI. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
-    promptSnippet: "spawn_agent - Start a canonical background agent with pill UI",
-    promptGuidelines: [
-      "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
-      "Use delegate_agent instead when the new work must be linked to a known parent run.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
-      "Return immediately after spawning; the pill keeps working in the background.",
-    ],
-    latency: "async background",
-    inputSchema: schema(
-      {
-        brief: { type: "string", description: "Clear, self-contained task brief for the background agent." },
-        title: { type: "string", description: "Short Title Case label for the agent pill." },
-        provider: {
-          type: "string",
-          enum: ["openclaw", "hermes"],
-          description: "Optional local agent provider to run this pill through.",
-        },
-      },
-      ["brief"],
-    ),
-    annotations: localWrite,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires Swift AgentBridge/floating pill support."],
-    adapters: piAndStdio(),
-  },
-  {
-    name: "manage_agent_pills",
-    label: "Manage Agent Pills",
-    description: "List, dismiss, or clear completed floating agent pills shown below the floating bar.",
-    promptSnippet: "manage_agent_pills - List, dismiss, or clear completed floating agent pills",
-    promptGuidelines: [
-      "Call get_task_agent_status first when dismissing a specific pill so you have its id.",
-      "Use clear_completed only when the user asks to clear finished/done agents.",
-    ],
-    latency: "fast local",
-    inputSchema: schema(
-      {
-        action: { type: "string", enum: ["list", "dismiss", "clear_completed"], description: "Management action." },
-        agent_id: { type: "string", description: "Floating agent pill id from get_task_agent_status; required for dismiss." },
-      },
-      ["action"],
-    ),
-    annotations: localWrite,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires Swift floating agent pill registry."],
-    adapters: piAndStdio(),
   },
   {
     name: "search_tasks",
@@ -1389,6 +1266,20 @@ export const swiftToolManifest: OmiToolManifestEntry[] = finalizeManifestEntries
 );
 
 const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiToolVoiceConfig>> = {
+  spawn_agent: {
+    realtimeDescription:
+      "Start canonical Omi background work. Visible runs appear as floating-bar pills. Use for multi-step work in the user's apps/browser/files that you cannot do directly.",
+    schemaOverride: schema(
+      {
+        objective: { type: "string", description: "Self-contained background-agent objective." },
+        provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
+        parent_run_id: { type: "string", description: "Optional parent run to link via delegation." },
+        visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
+        title: { type: "string", description: "Optional visible session title." },
+      },
+      ["objective"],
+    ),
+  },
   list_agent_sessions: {
     realtimeDescription:
       "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
@@ -1397,7 +1288,7 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
         status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
         surfaceKind: {
           type: "string",
-          enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"],
+          enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
           description: "Optional canonical surface filter.",
         },
         limit: { type: "number", description: "Maximum sessions to return. Default 50." },

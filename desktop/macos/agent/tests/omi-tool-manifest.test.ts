@@ -19,7 +19,7 @@ describe("omi tool manifest", () => {
       "execute_sql",
       "semantic_search",
       "get_daily_recap",
-      "get_task_agent_status",
+      "fill_cloud_connector_form",
       "list_agent_sessions",
       "get_agent_run",
       "build_desktop_awareness_snapshot",
@@ -34,10 +34,9 @@ describe("omi tool manifest", () => {
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_background_agent",
-      "delegate_agent",
-      "fill_cloud_connector_form",
       "spawn_agent",
-      "manage_agent_pills",
+      "run_agent_and_wait",
+      "set_desktop_attention_override",
       "search_tasks",
       "complete_task",
       "delete_task",
@@ -107,19 +106,12 @@ describe("omi tool manifest", () => {
   it("preserves control-tool schema preconditions in MCP projections", () => {
     const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
     const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
-    const delegateAgent = tools.find((tool) => tool.name === "delegate_agent");
 
     expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
       { required: ["artifactId"] },
       { required: ["sessionId"] },
       { required: ["runId"] },
       { required: ["attemptId"] },
-    ]);
-    expect(delegateAgent?.inputSchema.allOf).toEqual([
-      {
-        if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-        then: { required: ["childSessionId"] },
-      },
     ]);
   });
 

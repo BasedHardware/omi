@@ -8,7 +8,15 @@ import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
-const agentSurfaceKindSchema = z.enum(["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_pill"]);
+const agentSurfaceKindSchema = z.enum([
+  "main_chat",
+  "task_chat",
+  "realtime",
+  "delegated_agent",
+  "background_agent",
+  "floating_bar",
+  "floating_pill",
+]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
 const runModeSchema = z.enum(["ask", "act"]);
@@ -213,7 +221,7 @@ const sendAgentMessageSchema = strictObject({
 const spawnBackgroundAgentSchema = strictObject({
   prompt: z.string().min(1),
   title: z.string().min(1).optional(),
-  surfaceKind: z.literal("background_agent").default("background_agent"),
+  surfaceKind: z.string().min(1).default("floating_bar"),
   externalRefKind: z.string().min(1).optional(),
   externalRefId: z.string().min(1).optional(),
   ownerId: z.string().min(1).optional(),
@@ -227,38 +235,46 @@ const spawnBackgroundAgentSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
-const delegateAgentSchema = z
-  .strictObject({
-    mode: delegationModeSchema,
-    parentRunId: z.string().min(1),
-    objective: z.string().min(1),
-    context: z.string().max(4000).optional(),
-    ownerId: z.string().min(1).optional(),
-    childSessionId: z.string().min(1).optional(),
-    childSurfaceKind: z.string().min(1).default("delegated_agent"),
-    childExternalRefKind: z.string().min(1).optional(),
-    childExternalRefId: z.string().min(1).optional(),
-    childTitle: z.string().min(1).optional(),
-    adapterId: z.string().min(1).optional(),
-    defaultAdapterId: z.string().min(1).optional(),
-    cwd: z.string().min(1).optional(),
-    model: z.string().min(1).optional(),
-    runMode: runModeSchema.default("ask"),
-    requestId: z.string().min(1).optional(),
-    clientId: z.string().min(1).default("omi-control-tools"),
-    maxDepth: z.coerce.number().int().min(1).max(5).default(3),
-    maxBudgetUsd: z.coerce.number().positive().max(10).default(5),
-    metadata: z.record(z.string(), z.unknown()).default({}),
-  })
-  .superRefine((value, ctx) => {
-    if (value.mode === "continue" && !value.childSessionId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["childSessionId"],
-        message: "childSessionId is required for continue mode",
-      });
-    }
-  });
+const spawnAgentSchema = strictObject({
+  objective: z.string().min(1),
+  provider: z.enum(["openclaw", "hermes"]).optional(),
+  parentRunId: z.string().min(1).optional(),
+  visible: z.boolean().default(true),
+  title: z.string().min(1).optional(),
+  externalRefId: z.string().min(1).optional(),
+  ownerId: z.string().min(1).optional(),
+  adapterId: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  requestId: z.string().min(1).optional(),
+  clientId: z.string().min(1).default("omi-control-tools"),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+
+const runAgentAndWaitSchema = strictObject({
+  objective: z.string().min(1),
+  parentRunId: z.string().min(1),
+  context: z.string().max(4000).optional(),
+  ownerId: z.string().min(1).optional(),
+  adapterId: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
+  model: z.string().min(1).optional(),
+  runMode: runModeSchema.default("ask"),
+  requestId: z.string().min(1).optional(),
+  clientId: z.string().min(1).default("omi-control-tools"),
+  maxDepth: z.coerce.number().int().min(1).max(5).default(3),
+  maxBudgetUsd: z.coerce.number().positive().max(10).default(5),
+  metadata: z.record(z.string(), z.unknown()).default({}),
+});
+
+const setDesktopAttentionOverrideSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  subjectKind: z.string().min(1),
+  subjectId: z.string().min(1),
+  dismissed: z.boolean().default(true),
+  hiddenUntilMs: z.coerce.number().int().positive().nullable().optional(),
+  reason: z.string().min(1).optional(),
+});
 
 export const agentControlToolSchemas = {
   list_agent_sessions: listAgentSessionsSchema,
@@ -276,7 +292,9 @@ export const agentControlToolSchemas = {
   update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
   spawn_background_agent: spawnBackgroundAgentSchema,
-  delegate_agent: delegateAgentSchema,
+  spawn_agent: spawnAgentSchema,
+  run_agent_and_wait: runAgentAndWaitSchema,
+  set_desktop_attention_override: setDesktopAttentionOverrideSchema,
 } as const;
 
 export type AgentControlToolName = keyof typeof agentControlToolSchemas;
@@ -444,11 +462,13 @@ export async function handleAgentControlToolCall(
     switch (name) {
       case "list_agent_sessions": {
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const sessions = context.kernel.listSessions({
           ...parsed,
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          ownerId,
         });
-        return stringifyToolResult({ sessions: sessions.map(serializeSessionSummary) });
+        const overrides = context.kernel.listDesktopAttentionOverrides(ownerId);
+        return stringifyToolResult(serializeAgentSessionsList(sessions, overrides));
       }
       case "get_agent_run": {
         const parsed = agentControlToolSchemas.get_agent_run.parse(input);
@@ -621,6 +641,7 @@ export async function handleAgentControlToolCall(
           defaultAdapterId: adapterId,
           ownerId,
           requestId,
+          surfaceKind: parsed.surfaceKind ?? "floating_bar",
           metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.mode,
@@ -637,24 +658,97 @@ export async function handleAgentControlToolCall(
           attempt: result.attempt ? serializeAttempt(result.attempt) : null,
         });
       }
-      case "delegate_agent": {
-        const parsed = agentControlToolSchemas.delegate_agent.parse(input);
-        if (parsed.mode !== "spawn") {
-          rejectSynchronousNestedRun(
-            context,
-            parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId),
-            parsed.mode === "continue" ? parsed.childSessionId : undefined
-          );
-        }
+      case "spawn_agent": {
+        const parsed = agentControlToolSchemas.spawn_agent.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
-        const requestId = parsed.requestId ?? `delegate-${parsed.mode}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
-        const result = await context.kernel.delegateAgent({
-          ...parsed,
-          adapterId,
-          defaultAdapterId: adapterId,
+        const requestId = parsed.requestId ?? `spawn-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId =
+          parsed.adapterId ??
+          (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
+          (parsed.parentRunId ? undefined : "acp");
+        const mcpServers = buildControlRunMcpServers(context, {
+          mode: "act",
+          cwd: parsed.cwd,
           ownerId,
           requestId,
+          clientId: parsed.clientId,
+          adapterId,
+        });
+        if (parsed.parentRunId) {
+          const result = await context.kernel.delegateAgent({
+            mode: "spawn",
+            parentRunId: parsed.parentRunId,
+            objective: parsed.objective,
+            ownerId,
+            requestId,
+            adapterId,
+            defaultAdapterId: adapterId,
+            childSurfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
+            childExternalRefKind: parsed.visible ? "pill" : undefined,
+            childExternalRefId: parsed.externalRefId,
+            childTitle: parsed.title ?? `Delegated: ${parsed.objective.slice(0, 80)}`,
+            cwd: parsed.cwd,
+            model: parsed.model,
+            runMode: "act",
+            clientId: parsed.clientId,
+            metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true, visible: parsed.visible },
+            mcpServers,
+          });
+          return stringifyToolResult({
+            delegation: serializeDelegation(result.delegation),
+            session: serializeSession(result.childSession),
+            run: serializeRun(result.childRun),
+            attempt: result.childAttempt ? serializeAttempt(result.childAttempt) : null,
+          });
+        }
+        const result = await context.kernel.spawnBackgroundAgent({
+          ownerId,
+          clientId: parsed.clientId,
+          requestId,
+          prompt: parsed.objective,
+          title: parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`,
+          surfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
+          externalRefKind: parsed.visible ? "pill" : undefined,
+          externalRefId: parsed.externalRefId,
+          adapterId,
+          defaultAdapterId: adapterId,
+          cwd: parsed.cwd,
+          model: parsed.model,
+          mode: "act",
+          metadata: {
+            ...(parsed.metadata ?? {}),
+            disableSwiftBackedTools: true,
+            visible: parsed.visible,
+            provider: parsed.provider ?? null,
+          },
+          mcpServers,
+        });
+        return stringifyToolResult({
+          session: serializeSession(result.session),
+          run: serializeRun(result.run),
+          attempt: result.attempt ? serializeAttempt(result.attempt) : null,
+        });
+      }
+      case "run_agent_and_wait": {
+        const parsed = agentControlToolSchemas.run_agent_and_wait.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
+        const result = await context.kernel.delegateAgent({
+          mode: "call",
+          parentRunId: parsed.parentRunId,
+          objective: parsed.objective,
+          context: parsed.context,
+          ownerId,
+          requestId,
+          adapterId,
+          defaultAdapterId: adapterId,
+          cwd: parsed.cwd,
+          model: parsed.model,
+          runMode: parsed.runMode,
+          clientId: parsed.clientId,
+          maxDepth: parsed.maxDepth,
+          maxBudgetUsd: parsed.maxBudgetUsd,
           metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.runMode,
@@ -667,9 +761,9 @@ export async function handleAgentControlToolCall(
         });
         return stringifyToolResult({
           delegation: serializeDelegation(result.delegation),
-          childSession: serializeSession(result.childSession),
-          childRun: serializeRun(result.childRun),
-          childAttempt: result.childAttempt ? serializeAttempt(result.childAttempt) : null,
+          session: serializeSession(result.childSession),
+          run: serializeRun(result.childRun),
+          attempt: result.childAttempt ? serializeAttempt(result.childAttempt) : null,
           adapterSessionId: result.adapterSessionId ?? null,
           terminalStatus: result.terminalStatus ?? null,
           result: result.result
@@ -679,6 +773,19 @@ export async function handleAgentControlToolCall(
               }
             : null,
         });
+      }
+      case "set_desktop_attention_override": {
+        const parsed = agentControlToolSchemas.set_desktop_attention_override.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const override = context.kernel.setDesktopAttentionOverride({
+          ownerId,
+          subjectKind: parsed.subjectKind,
+          subjectId: parsed.subjectId,
+          dismissedAtMs: parsed.dismissed ? Date.now() : null,
+          hiddenUntilMs: parsed.hiddenUntilMs ?? null,
+          reason: parsed.reason ?? null,
+        });
+        return stringifyToolResult({ override });
       }
     }
   } catch (error) {
@@ -774,6 +881,78 @@ function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId:
 
 function stringifyToolResult(payload: Record<string, unknown>): string {
   return JSON.stringify({ ok: true, ...payload });
+}
+
+function serializeAgentSessionsList(
+  sessions: Parameters<typeof serializeSessionSummary>[0][],
+  overrides: { subjectKind: string; subjectId: string; dismissedAtMs?: number | null; hiddenUntilMs?: number | null }[],
+): Record<string, unknown> {
+  const dismissed = new Set(
+    overrides
+      .filter((override) => override.dismissedAtMs != null)
+      .map((override) => `${override.subjectKind}:${override.subjectId}`),
+  );
+  const summaries = sessions.map(serializeSessionSummary);
+  const floatingAgentPills = summaries
+    .filter((summary) => {
+      const session = summary.session as Record<string, unknown>;
+      const surfaceKind = session.surfaceKind;
+      if (surfaceKind !== "floating_bar" && surfaceKind !== "background_agent" && surfaceKind !== "floating_pill") {
+        return false;
+      }
+      const run = summary.activeRun as Record<string, unknown> | null;
+      const runId = typeof run?.runId === "string" ? run.runId : null;
+      if (runId && dismissed.has(`run:${runId}`)) return false;
+      const sessionId = typeof session.omiSessionId === "string" ? session.omiSessionId : null;
+      if (sessionId && dismissed.has(`session:${sessionId}`)) return false;
+      return true;
+    })
+    .map((summary) => serializeFloatingPillSnapshot(summary));
+  const taskAgents = summaries
+    .filter((summary) => (summary.session as Record<string, unknown>).surfaceKind === "task_chat")
+    .map((summary) => serializeTaskAgentSnapshot(summary));
+  return {
+    sessions: summaries,
+    task_agents: taskAgents,
+    floating_agent_pills: floatingAgentPills,
+  };
+}
+
+function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record<string, unknown> {
+  const session = summary.session as Record<string, unknown>;
+  const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
+  const input = (run?.input as Record<string, unknown> | undefined) ?? {};
+  const metadata = (session.metadata as Record<string, unknown> | undefined) ?? {};
+  const pillId =
+    (typeof session.externalRefId === "string" && session.externalRefId) ||
+    (typeof run?.runId === "string" ? run.runId : null);
+  return {
+    id: pillId,
+    runId: run?.runId ?? null,
+    sessionId: session.omiSessionId ?? null,
+    title: session.title ?? "Background agent",
+    status: run?.status ?? session.status ?? "unknown",
+    latestActivity: run?.finalText ?? input.prompt ?? session.title ?? "",
+    query: typeof input.prompt === "string" ? input.prompt : "",
+    createdAtMs: session.createdAtMs ?? null,
+    completedAtMs: run?.completedAtMs ?? null,
+    provider: metadata.provider ?? null,
+  };
+}
+
+function serializeTaskAgentSnapshot(summary: Record<string, unknown>): Record<string, unknown> {
+  const session = summary.session as Record<string, unknown>;
+  const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
+  return {
+    taskId: session.externalRefId ?? null,
+    sessionId: session.omiSessionId ?? null,
+    runId: run?.runId ?? null,
+    title: session.title ?? null,
+    status: run?.status ?? session.status ?? "unknown",
+    statusText: run?.finalText ?? null,
+    lastError: run?.errorMessage ?? null,
+    updatedAtMs: run?.updatedAtMs ?? session.updatedAtMs ?? null,
+  };
 }
 
 function serializeSessionSummary(summary: {

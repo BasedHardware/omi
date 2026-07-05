@@ -25,7 +25,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("recordTurnToKernel(userText: heard, assistantText: handoffReply, interrupted: false)"))
     XCTAssertTrue(source.contains("Started background agent"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck"))
-    XCTAssertFalse(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
     XCTAssertFalse(source.contains("speak(ack)"))
   }
 
@@ -33,7 +33,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript)"))
-    XCTAssertTrue(source.contains("blocked manage_agent_pills action="))
+    XCTAssertTrue(source.contains("blocked set_desktop_attention_override"))
     XCTAssertTrue(source.contains("Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks."))
     XCTAssertTrue(source.contains("case \"dismiss\":"))
     XCTAssertTrue(source.contains("case \"clear_completed\":"))

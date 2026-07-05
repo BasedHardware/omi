@@ -29,7 +29,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testFloatingPillSpawnsCanonicalBackgroundAgentRun() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnBackgroundAgent("))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
     XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill)"))
     XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
@@ -81,7 +81,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
     XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
     XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
-    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent"]"#))
+    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "run_agent_and_wait"]"#))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
@@ -125,7 +125,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
     XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
     XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
-    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
+    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {

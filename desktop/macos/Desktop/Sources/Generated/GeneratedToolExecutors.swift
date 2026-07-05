@@ -5,10 +5,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case executeSql = "execute_sql"
   case semanticSearch = "semantic_search"
   case getDailyRecap = "get_daily_recap"
-  case getTaskAgentStatus = "get_task_agent_status"
   case fillCloudConnectorForm = "fill_cloud_connector_form"
-  case spawnAgent = "spawn_agent"
-  case manageAgentPills = "manage_agent_pills"
   case searchTasks = "search_tasks"
   case completeTask = "complete_task"
   case deleteTask = "delete_task"
@@ -51,10 +48,7 @@ enum GeneratedToolExecutors {
     .executeSql: .chatToolExecutor,
     .semanticSearch: .chatToolExecutor,
     .getDailyRecap: .chatToolExecutor,
-    .getTaskAgentStatus: .chatToolExecutor,
     .fillCloudConnectorForm: .chatToolExecutor,
-    .spawnAgent: .chatToolExecutor,
-    .manageAgentPills: .chatToolExecutor,
     .searchTasks: .chatToolExecutor,
     .completeTask: .chatToolExecutor,
     .deleteTask: .chatToolExecutor,
@@ -113,10 +107,7 @@ enum GeneratedToolExecutors {
     case executeSql
     case semanticSearch
     case getDailyRecap
-    case getTaskAgentStatus
     case fillCloudConnectorForm
-    case spawnAgent
-    case manageAgentPills
     case searchTasks
     case completeTask
     case deleteTask
@@ -147,10 +138,7 @@ enum GeneratedToolExecutors {
     case .executeSql: return .executeSql
     case .semanticSearch: return .semanticSearch
     case .getDailyRecap: return .getDailyRecap
-    case .getTaskAgentStatus: return .getTaskAgentStatus
     case .fillCloudConnectorForm: return .fillCloudConnectorForm
-    case .spawnAgent: return .spawnAgent
-    case .manageAgentPills: return .manageAgentPills
     case .searchTasks: return .searchTasks
     case .completeTask: return .completeTask
     case .deleteTask: return .deleteTask

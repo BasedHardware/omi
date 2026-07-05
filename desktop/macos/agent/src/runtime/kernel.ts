@@ -537,7 +537,7 @@ export class AgentRuntimeKernel {
   async spawnBackgroundAgent(input: SpawnBackgroundAgentInput): Promise<SpawnBackgroundAgentResult> {
     const runInput: ExecuteAgentRunInput = {
       ownerId: input.ownerId,
-      surfaceKind: input.surfaceKind ?? "background_agent",
+      surfaceKind: input.surfaceKind ?? "floating_bar",
       externalRefKind: input.externalRefKind,
       externalRefId: input.externalRefId,
       title: input.title ?? `Background: ${input.prompt.slice(0, 80)}`,
@@ -1151,6 +1151,28 @@ export class AgentRuntimeKernel {
       overrides: this.readDesktopAttentionOverrides(ownerId).map(overrideToQueueInput),
     });
     return queue.slice(0, limit);
+  }
+
+  listDesktopAttentionOverrides(ownerId: string): DesktopAttentionOverride[] {
+    return this.readDesktopAttentionOverrides(ownerId);
+  }
+
+  setDesktopAttentionOverride(input: {
+    ownerId: string;
+    subjectKind: string;
+    subjectId: string;
+    dismissedAtMs?: number | null;
+    hiddenUntilMs?: number | null;
+    reason?: string | null;
+  }): DesktopAttentionOverride {
+    return this.store.upsertDesktopAttentionOverride({
+      ownerId: input.ownerId,
+      subjectKind: input.subjectKind,
+      subjectId: input.subjectId,
+      dismissedAtMs: input.dismissedAtMs ?? null,
+      hiddenUntilMs: input.hiddenUntilMs ?? null,
+      reason: input.reason ?? null,
+    });
   }
 
   getDesktopOpenLoops(input: DesktopOpenLoopsInput): DesktopActionQueueItem[] {

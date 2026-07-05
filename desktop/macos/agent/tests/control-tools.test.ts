@@ -59,7 +59,9 @@ describe("agent control tools", () => {
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_background_agent",
-      "delegate_agent",
+      "spawn_agent",
+      "run_agent_and_wait",
+      "set_desktop_attention_override",
     ]);
     for (const tool of agentControlToolDefinitions) {
       expect(isAgentControlToolName(tool.name)).toBe(true);
@@ -101,9 +103,7 @@ describe("agent control tools", () => {
 
     expect(parsed.success).toBe(true);
     expect(agentControlToolSchemas.spawn_background_agent.safeParse({
-      prompt: "Do work",
-      surfaceKind: "floating_pill",
-      externalRefKind: "pill",
+      prompt: "",
     }).success).toBe(false);
   });
 
@@ -166,17 +166,11 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("documents delegate_agent as canonical delegation, not floating pill UI", () => {
-    const delegateAgent = agentControlCapabilityManifest.find((tool) => tool.name === "delegate_agent");
-    expect(delegateAgent?.description).toContain("canonical child handles");
-    expect(delegateAgent?.description).toContain("does not create or manage floating pill UI");
-    expect(delegateAgent?.promptSnippet).toContain("canonical Omi child agent");
-    expect(delegateAgent?.promptGuidelines).toContain(
-      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
-    );
-    expect(delegateAgent?.runtimePreconditions).toContain(
-      "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI.",
-    );
+  it("documents run_agent_and_wait as synchronous parent-linked delegation", () => {
+    const runAndWait = agentControlCapabilityManifest.find((tool) => tool.name === "run_agent_and_wait");
+    expect(runAndWait?.description).toContain("synchronously");
+    expect(runAndWait?.promptGuidelines?.join("\n")).toContain("send_agent_message");
+    expect(runAndWait?.runtimePreconditions).toContain("Requires parentRunId.");
   });
 
   it("resolves desktop approval dispatches with a scoped grant and event evidence", async () => {
@@ -1478,28 +1472,6 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("validates childSessionId before delegate_agent continue mode dispatch", async () => {
-    const { store, kernel } = createKernelHarness(newDatabasePath());
-    const parent = await kernel.executeRun(baseRunInput);
-
-    const invalid = parseToolResult(
-      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
-        mode: "continue",
-        parentRunId: parent.run.runId,
-        objective: "continue without a child id",
-      }),
-    );
-
-    expect(invalid).toMatchObject({
-      ok: false,
-      error: {
-        code: "invalid_tool_input",
-      },
-    });
-    expect(invalid.error.message).toContain("childSessionId");
-    store.close();
-  });
-
   it("spawns a canonical top-level background agent without a parent run", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const spawned = parseToolResult(
@@ -1518,7 +1490,7 @@ describe("agent control tools", () => {
     expect(spawned.session).toMatchObject({
       ownerId: "owner",
       title: "Story Idea",
-      surfaceKind: "background_agent",
+      surfaceKind: "floating_bar",
       externalRefKind: "pill",
       externalRefId: "pill-1",
     });
@@ -1536,8 +1508,7 @@ describe("agent control tools", () => {
     const parent = await kernel.executeRun(baseRunInput);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall(ownerContext(kernel), "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "summarize the child task",
         context: "only concise parent context",
@@ -1551,14 +1522,14 @@ describe("agent control tools", () => {
     expect(delegated.delegation).toMatchObject({
       parentSessionId: parent.session.sessionId,
       parentRunId: parent.run.runId,
-      childSessionId: delegated.childSession.omiSessionId,
-      childRunId: delegated.childRun.runId,
+      childSessionId: delegated.session.omiSessionId,
+      childRunId: delegated.run.runId,
       mode: "call",
       status: "succeeded",
       objective: "summarize the child task",
     });
-    expect(delegated.childSession.omiSessionId).not.toBe(parent.session.sessionId);
-    expect(delegated.childRun.parentRunId).toBe(parent.run.runId);
+    expect(delegated.session.omiSessionId).not.toBe(parent.session.sessionId);
+    expect(delegated.run.parentRunId).toBe(parent.run.runId);
     expect(delegated.result).toMatchObject({
       summary: expect.stringContaining("done-"),
       verifiedEffects: [],
@@ -1568,7 +1539,7 @@ describe("agent control tools", () => {
 
     const row = store.getRow("SELECT * FROM delegations WHERE delegation_id = ?", [delegated.delegation.delegationId]);
     expect(row.parent_run_id).toBe(parent.run.runId);
-    expect(row.child_run_id).toBe(delegated.childRun.runId);
+    expect(row.child_run_id).toBe(delegated.run.runId);
 
     const parentInspect = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", { runId: parent.run.runId, ownerId: "owner" }),
@@ -1576,7 +1547,7 @@ describe("agent control tools", () => {
     expect(parentInspect.parentDelegations[0].delegationId).toBe(delegated.delegation.delegationId);
     const childInspect = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {
-        runId: delegated.childRun.runId,
+        runId: delegated.run.runId,
         ownerId: "owner",
       }),
     );
@@ -1593,8 +1564,7 @@ describe("agent control tools", () => {
     ]);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "use browser tools if needed",
         requestId: "delegate-tools-1",
@@ -1632,11 +1602,10 @@ describe("agent control tools", () => {
     const buildMcpServers = vi.fn(() => []);
 
     const delegated = parseToolResult(
-      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers, getProtocolVersion: () => 2 }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "use OpenClaw for this child",
-        defaultAdapterId: "openclaw",
+        adapterId: "openclaw",
         requestId: "delegate-openclaw-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1644,12 +1613,12 @@ describe("agent control tools", () => {
     );
 
     expect(delegated.ok).toBe(true);
-    expect(delegated.childSession.defaultAdapterId).toBe("openclaw");
-    expect(delegated.childRun).toMatchObject({
+    expect(delegated.session.defaultAdapterId).toBe("openclaw");
+    expect(delegated.run).toMatchObject({
       status: "failed",
       errorCode: "adapter_not_registered",
     });
-    expect(delegated.childRun.errorMessage).toContain("Adapter not registered: openclaw");
+    expect(delegated.run.errorMessage).toContain("Adapter not registered: openclaw");
     expect(buildMcpServers).toHaveBeenCalledWith("ask", undefined, undefined, {
       ownerId: "owner",
       requestId: "delegate-openclaw-1",
@@ -1661,16 +1630,16 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("delegates spawn mode and returns child handles before the child finishes", async () => {
+  it("spawn_agent with parentRunId returns child handles before the child finishes", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     adapter.deferResult();
 
     const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "spawn",
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
         parentRunId: parent.run.runId,
         objective: "run in the background",
+        visible: false,
         requestId: "delegate-spawn-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1678,14 +1647,14 @@ describe("agent control tools", () => {
     );
 
     expect(spawned.ok).toBe(true);
-    expect(spawned.result).toBeNull();
-    expect(spawned.childSession.omiSessionId).not.toBe(parent.session.sessionId);
-    expect(spawned.childRun.status).toBe("queued");
+    expect(spawned.result).toBeUndefined();
+    expect(spawned.session.omiSessionId).not.toBe(parent.session.sessionId);
+    expect(spawned.run.status).toBe("queued");
     await waitUntil(() => adapter.executed.length === 2);
 
     const running = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "get_agent_run", {
-        runId: spawned.childRun.runId,
+        runId: spawned.run.runId,
         ownerId: "owner",
       }),
     );
@@ -1709,10 +1678,10 @@ describe("agent control tools", () => {
     adapter.failNextExecutionError = new Error("spawn failed");
 
     const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "spawn",
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
         parentRunId: parent.run.runId,
         objective: "fail in the background",
+        visible: false,
         requestId: "delegate-spawn-failure",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1724,11 +1693,11 @@ describe("agent control tools", () => {
       const row = store.getRow("SELECT status FROM delegations WHERE delegation_id = ?", [spawned.delegation.delegationId]);
       return row.status === "failed";
     });
-    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.childRun.runId]).status).toBe("failed");
+    expect(store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]).status).toBe("failed");
     store.close();
   });
 
-  it("delegates continue mode as another run in an existing child session", async () => {
+  it("send_agent_message continues an existing child session", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     const firstChild = await kernel.delegateAgent({
@@ -1741,11 +1710,9 @@ describe("agent control tools", () => {
     });
 
     const continued = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "delegate_agent", {
-        mode: "continue",
-        parentRunId: parent.run.runId,
-        childSessionId: firstChild.childSession.sessionId,
-        objective: "continue the child",
+      await handleAgentControlToolCall(ownerContext(kernel), "send_agent_message", {
+        sessionId: firstChild.childSession.sessionId,
+        prompt: "continue the child",
         requestId: "delegate-continue-1",
         clientId: "delegate-client",
         ownerId: "owner",
@@ -1753,17 +1720,11 @@ describe("agent control tools", () => {
     );
 
     expect(continued.ok).toBe(true);
-    expect(continued.childSession.omiSessionId).toBe(firstChild.childSession.sessionId);
-    expect(continued.childRun.runId).not.toBe(firstChild.childRun.runId);
-    expect(continued.childRun.parentRunId).toBe(parent.run.runId);
-    expect(continued.delegation).toMatchObject({
-      parentRunId: parent.run.runId,
-      childSessionId: firstChild.childSession.sessionId,
-      childRunId: continued.childRun.runId,
-      mode: "continue",
-      status: "succeeded",
-    });
-    expect(adapter.resumed.at(-1)?.sessionId).toBe(firstChild.childSession.sessionId);
+    expect(continued.session.omiSessionId).toBe(firstChild.childSession.sessionId);
+    expect(continued.run.runId).not.toBe(firstChild.childRun.runId);
+    expect(continued.run.parentRunId).toBeNull();
+    expect(adapter.executed).toHaveLength(3);
+    expect(adapter.executed[2].sessionId).toBe(firstChild.childSession.sessionId);
     store.close();
   });
 
@@ -1772,8 +1733,7 @@ describe("agent control tools", () => {
     const parent = await kernel.executeRun(baseRunInput);
 
     const invalidBudget = parseToolResult(
-      await handleAgentControlToolCall({ kernel }, "delegate_agent", {
-        mode: "call",
+      await handleAgentControlToolCall({ kernel }, "run_agent_and_wait", {
         parentRunId: parent.run.runId,
         objective: "too expensive",
         maxBudgetUsd: 11,

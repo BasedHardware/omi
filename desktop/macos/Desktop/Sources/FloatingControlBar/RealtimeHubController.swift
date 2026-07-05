@@ -1335,58 +1335,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           limit: 25, completed: completed, dueStartDate: dueStart, dueEndDate: dueEnd
         ).resultText
       }
-    case .getTaskAgentStatus:
-      runToolAndSpeak(
-        source: source,
-        callId: callId, name: name, detail: "coordinator_open_loops_and_completion_delta",
-        emptyText: "No active agent attention items.",
-        errorText: "Could not read the agent coordinator right now.",
-        expectedTurnEpoch: toolTurnEpoch
-      ) {
-        do {
-          let openLoops = try await DesktopCoordinatorService.shared.openLoopsJSON()
-          if let completionDelta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: "ptt") {
-            self.pendingCompletedAgentDeltaAckIds = completionDelta.ids
-            self.pendingCompletedAgentDeltaHighWaterMs = completionDelta.completedAtHighWaterMs
-            return """
-            \(openLoops)
-
-            # Completed Agent Delta
-            \(completionDelta.prompt)
-            """
-          }
-          if self.coordinatorOpenLoopsIsEmpty(openLoops) {
-            let fallback = TaskAgentStatusRegistry.shared.combinedSummary()
-            if !fallback.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-              return """
-              No open coordinator loops or newly completed canonical agent deltas.
-
-              # Legacy/Floating Agent Status
-              \(fallback)
-              """
-            }
-          }
-          return openLoops
-        } catch {
-          logError("RealtimeHub[\(self.providerTag)]: coordinator status fallback failed", error: error)
-          return TaskAgentStatusRegistry.shared.combinedSummary()
-        }
-      }
-    case .manageAgentPills:
-      let action = ((arguments["action"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines))
-        .flatMap { $0.isEmpty ? nil : $0 } ?? "list"
-      let agentId = (arguments["agent_id"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard Self.userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript) else {
-        log("RealtimeHub[\(providerTag)]: blocked manage_agent_pills action=\(action) without explicit user request")
+    case .setDesktopAttentionOverride:
+      let dismissed = (arguments["dismissed"] as? Bool) ?? true
+      let action = dismissed ? "dismiss" : "list"
+      if dismissed && !Self.userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript) {
+        log("RealtimeHub[\(providerTag)]: blocked set_desktop_attention_override subject=\(arguments["subjectId"] as? String ?? "")")
         sendToolResultIfCurrent(
           source: source, callId: callId, name: name,
-          output: "Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks.")
+          output: "Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks.",
+          expectedTurnEpoch: toolTurnEpoch)
         return
       }
-      let result = AgentPillsManager.shared.manage(action: action, agentId: agentId)
-      log("RealtimeHub[\(providerTag)]: tool manage_agent_pills action=\(action)")
-      sendToolResultIfCurrent(source: source, callId: callId, name: name, output: result)
-    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
+        emptyText: "No canonical agent data came back.",
+        errorText: "Could not reach the agent control plane right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
+      }
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle, .runAgentAndWait:
       runToolAndSpeak(
         source: source,
         callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
@@ -1487,22 +1456,37 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         ).resultText
       }
     case .spawnAgent:
-      let brief = arg("brief")
-      let title = (arguments["title"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+      let objective = {
+        let primary = arg("objective")
+        if !primary.isEmpty { return primary }
+        return arg("brief")
+      }()
       let providerName = ((arguments["provider"] as? String) ?? "")
         .trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
         .replacingOccurrences(of: " ", with: "")
-      Task { [weak self] in
-        guard let self else { return }
-        await self.handleRealtimeDelegationRequest(
-          brief: brief,
-          title: title,
-          providerName: providerName,
-          source: source,
-          callId: callId,
-          name: name,
+      if !providerName.isEmpty && providerName != "openclaw" && providerName != "hermes" {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes' or 'openclaw'.",
           expectedTurnEpoch: toolTurnEpoch)
+        return
+      }
+      runToolAndSpeak(
+        source: source,
+        callId: callId, name: name, detail: "\"\(objective.prefix(60))\"",
+        emptyText: "Started a background agent.",
+        errorText: "Could not start the background agent right now.",
+        expectedTurnEpoch: toolTurnEpoch
+      ) {
+        if !objective.isEmpty {
+          FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
+        }
+        var toolArgs = arguments
+        toolArgs["objective"] = objective
+        let result = try await self.agentControlService.executeVoiceTool(name: "spawn_agent", arguments: toolArgs)
+        await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+        return result
       }
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the

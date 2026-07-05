@@ -20,34 +20,15 @@ enum DesktopCapabilityRegistry {
       .filter { !excludedToolNames.contains($0.toolName) }
       .map(toolDoc)
       .joined(separator: "\n\n")
-    let canDelegate = !excludedToolNames.contains("delegate_agent")
-    let canSpawnFloatingPills = !excludedToolNames.contains("spawn_agent")
-    let delegationGuidance: String
-    if canDelegate && canSpawnFloatingPills {
-      delegationGuidance = """
-      - Delegate to a distinct canonical child Omi agent session -> delegate_agent.
-      - Stop a canonical Omi agent run -> cancel_agent_run.
-      - Agent output references/artifacts -> inspect_agent_artifacts.
-      - Start a visible floating-bar subagent/background agent -> spawn_agent.
-      - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
-      - delegate_agent records durable child sessions/runs/delegations under a known parent run; spawn_agent creates top-level canonical background work and projects it into the floating-pill UI. Do not treat one as an alias for the other.
-      """
-    } else {
-      delegationGuidance = """
-      - Stop a canonical Omi agent run -> cancel_agent_run.
-      - Agent output references/artifacts -> inspect_agent_artifacts.
-      - Dismiss/list/clear circular floating agent pills -> manage_agent_pills.
-      """
-    }
     return """
     These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
 
     \(docs)
 
     **Task-Agent Awareness:**
-    - Omi can run local task-chat agents/subagents in the desktop task panel.
+    - Omi can run local task-chat agents/subagents in the desktop task panel and floating-bar background agents.
     - If the user says "your subagents", "task agents", "running agents", "background agents", or mentions task-agent errors/timeouts, do NOT deny that you have subagents.
-    - Call get_task_agent_status before answering those questions.
+    - Call list_agent_sessions before answering those questions.
 
     **CRITICAL -- When to use tools proactively:**
     The <user_facts> section above only contains a SAMPLE of {user_name}'s memories. The full set is available through the memory tools and local database.
@@ -66,10 +47,14 @@ enum DesktopCapabilityRegistry {
     - Find tasks by meaning -> search_tasks.
     - Create/update tasks -> create_action_item/update_action_item when available; use execute_sql only for exact local inspection or legacy local writes.
     - Complete/delete local tasks -> find the backendId, then complete_task/delete_task.
-    - Subagents/task-agent status -> get_task_agent_status.
+    - Subagents/task-agent/floating-pill status -> list_agent_sessions.
     - Canonical Omi-managed agent sessions/runs -> list_agent_sessions, get_agent_run.
     - Continue an existing canonical Omi agent session -> send_agent_message.
-    \(delegationGuidance)
+    - Start background work -> spawn_agent.
+    - Synchronous parent-linked child result -> run_agent_and_wait.
+    - Stop a canonical Omi agent run -> cancel_agent_run.
+    - Agent output references/artifacts -> inspect_agent_artifacts.
+    - Dismiss floating-bar pills -> set_desktop_attention_override or update_agent_artifact_lifecycle.
     - Onboarding knowledge graph -> save_knowledge_graph.
     """
   }
@@ -83,11 +68,10 @@ enum DesktopCapabilityRegistry {
     Omi capability model:
     - You can read Omi data quickly with fast tools: tasks, memories, conversations, daily recaps, and screen history.
     - You can create a straightforward calendar event with create_calendar_event when the user gives the event details.
-    - You can inspect your local task-chat agents/subagents and floating agent pills with get_task_agent_status. If the user asks about your subagents, background agents, running agents, finished agents, or task-agent errors/timeouts, call it before answering.
-    - You can inspect and stop canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run. Use these for agents created in chat, PTT/realtime, task chat, or any other Omi surface when a canonical run id is available.
+    - You can inspect task-chat agents, floating-bar pills, and canonical Omi-managed agent sessions/runs with list_agent_sessions, get_agent_run, and cancel_agent_run.
     - You can inspect canonical agent output references with inspect_agent_artifacts and mark artifact metadata with update_agent_artifact_lifecycle.
-    - You can manage circular floating agent pills with manage_agent_pills after checking status.
-    - You can start a background agent with spawn_agent for multi-step work or acting in the user's other apps. Merely saying you will start an agent does not start one; emitting spawn_agent does.
+    - You can dismiss floating-bar pills with set_desktop_attention_override after checking list_agent_sessions.
+    - You can start background work with spawn_agent for multi-step work or acting in the user's other apps. Merely saying you will start an agent does not start one; emitting spawn_agent does.
     """
   }
 

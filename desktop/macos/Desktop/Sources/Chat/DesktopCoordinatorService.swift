@@ -144,7 +144,9 @@ final class DesktopCoordinatorService {
     static let inspectAgentArtifacts = "inspect_agent_artifacts"
     static let sendAgentMessage = "send_agent_message"
     static let spawnBackgroundAgent = "spawn_background_agent"
-    static let delegateAgent = "delegate_agent"
+    static let spawnAgent = "spawn_agent"
+    static let runAgentAndWait = "run_agent_and_wait"
+    static let setDesktopAttentionOverride = "set_desktop_attention_override"
   }
 
   private let runtime: DesktopCoordinatorRuntimeControlling
@@ -290,13 +292,13 @@ final class DesktopCoordinatorService {
   ) async throws -> DesktopCoordinatorSpawnedAgent {
     var input: [String: Any] = [
       "prompt": prompt,
-      "surfaceKind": "background_agent",
+      "surfaceKind": "floating_bar",
       "externalRefKind": "pill",
       "externalRefId": pillId.uuidString,
       "clientId": "desktop-floating-pill",
       "mode": "act",
       "metadata": [
-        "uiProjection": "floating_pill",
+        "uiProjection": "floating_bar",
         "pillId": pillId.uuidString,
       ],
     ]
@@ -309,13 +311,56 @@ final class DesktopCoordinatorService {
     return try parseSpawnedAgent(from: raw)
   }
 
+  func spawnAgent(
+    objective: String,
+    title: String?,
+    pillId: UUID,
+    provider: String?,
+    parentRunId: String?,
+    visible: Bool,
+    model: String?,
+    harnessMode: AgentHarnessMode?,
+    cwd: String?
+  ) async throws -> DesktopCoordinatorSpawnedAgent {
+    var input: [String: Any] = [
+      "objective": objective,
+      "visible": visible,
+      "externalRefId": pillId.uuidString,
+      "clientId": "desktop-floating-pill",
+      "metadata": [
+        "uiProjection": visible ? "floating_bar" : "delegated_agent",
+        "pillId": pillId.uuidString,
+      ],
+    ]
+    if let title, !title.isEmpty { input["title"] = title }
+    if let provider, !provider.isEmpty { input["provider"] = provider }
+    if let parentRunId, !parentRunId.isEmpty { input["parentRunId"] = parentRunId }
+    if let model, !model.isEmpty { input["model"] = model }
+    if let harnessMode { input["adapterId"] = AgentRuntimeRouting.adapterId(for: harnessMode).rawValue }
+    if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
+    let raw = try await callRuntimeControlTool(ToolName.spawnAgent, input: input)
+    return try parseSpawnedAgent(from: raw)
+  }
+
+  func dismissFloatingRunAttention(runId: String, reason: String = "Dismissed by user") async throws {
+    _ = try await callRuntimeControlTool(
+      ToolName.setDesktopAttentionOverride,
+      input: [
+        "subjectKind": "run",
+        "subjectId": runId,
+        "dismissed": true,
+        "reason": reason,
+      ]
+    )
+  }
+
   func continueAgent(sessionId: String, prompt: String, model: String?, cwd: String?) async throws -> DesktopCoordinatorAgentRunInspection {
     var input: [String: Any] = [
       "sessionId": sessionId,
       "prompt": prompt,
       "mode": "act",
       "clientId": "desktop-floating-pill",
-      "metadata": ["uiProjection": "floating_pill"],
+      "metadata": ["uiProjection": "floating_bar"],
     ]
     if let model, !model.isEmpty { input["model"] = model }
     if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
@@ -477,7 +522,7 @@ final class DesktopCoordinatorService {
     }
 
     let route = normalized.count > 140 || normalized.contains("build") || normalized.contains("implement")
-      ? "delegate_agent"
+      ? "spawn_agent"
       : "answer_or_start_session"
     return DesktopCoordinatorRouteDecision(
       generatedAt: nowString(),
@@ -504,8 +549,24 @@ final class DesktopCoordinatorService {
       ToolName.inspectAgentArtifacts,
       ToolName.sendAgentMessage,
       ToolName.spawnBackgroundAgent,
-      ToolName.delegateAgent,
+      ToolName.spawnAgent,
+      ToolName.runAgentAndWait,
+      ToolName.setDesktopAttentionOverride,
     ]
+  }
+
+  func listFloatingAgentPills(limit: Int = 50) async throws -> [[String: Any]] {
+    let raw = try await callRuntimeControlTool(
+      ToolName.listAgentSessions,
+      input: ["limit": limit, "surfaceKind": "floating_bar"]
+    )
+    guard let data = raw.data(using: .utf8),
+      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      object["ok"] as? Bool == true
+    else {
+      return []
+    }
+    return object["floating_agent_pills"] as? [[String: Any]] ?? []
   }
 
   private func callRuntimeControlTool(_ name: String, input: [String: Any]) async throws -> String {

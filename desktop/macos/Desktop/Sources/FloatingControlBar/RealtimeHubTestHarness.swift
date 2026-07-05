@@ -127,8 +127,6 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchConversations: stub = "On Monday you discussed the launch timeline."
     case .getConversations: stub = "Most recent: today, 'Standup notes'. Before that: yesterday, 'Design review'."
     case .getActionItems: stub = "Open: Buy milk (due tomorrow). Completed: Ship the PR."
-    case .getTaskAgentStatus: stub = #"{"task_agents":[],"floating_agent_pills":[]}"#
-    case .manageAgentPills: stub = "No floating agent pills are running or recently finished."
     case .listAgentSessions:
       stub = "Canonical Omi agent sessions. Use agentRef values internally for follow-up tool calls; do not say them aloud.\n- agent_1: Example agent, running"
     case .getAgentRun: stub = "The selected canonical run is running, mode ask. Attempts: 1. Events returned: 3."
@@ -142,6 +140,8 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .updateActionItem: stub = "Updated the task."
     case .createCalendarEvent: stub = "Created calendar event: Example event."
     case .spawnAgent: stub = "Started a background agent."
+    case .runAgentAndWait: stub = "Child agent finished with a structured result."
+    case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"

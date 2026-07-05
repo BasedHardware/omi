@@ -77,15 +77,14 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
-      toolName: "get_task_agent_status",
-      title: "Task Agent Status",
+      toolName: "fill_cloud_connector_form",
+      title: "Fill Cloud Connector Form",
       latency: .fastLocal,
-      surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Inspect Omi's local task-chat agents/subagents and floating agent pills.",
+      surfaces: Set([.desktopChat]),
+      summary: "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
       bullets: [
-      "Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts.",
-      "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
-      "Returns both task_agents and floating_agent_pills; floating_agent_pills are the circular agent pills below the floating bar."
+      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+      "Do not install browser extensions before trying this tool."
     ]
     ),
     Capability(
@@ -95,8 +94,9 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat, .realtimeHub]),
       summary: "List Omi-managed agent sessions from the local runtime kernel.",
       bullets: [
-      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
-      "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
+      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "Replaces get_task_agent_status and manage_agent_pills list/status queries."
     ]
     ),
     Capability(
@@ -243,34 +243,9 @@ enum GeneratedToolCapabilities {
       title: "Spawn Background Agent",
       latency: .asyncBackground,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Create a canonical Omi-managed background agent session/run without requiring a parent run.",
+      summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
       bullets: [
-      "Use for top-level background work when there is no parent run to pass to delegate_agent.",
-      "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
-      "Do not use this to create UI-owned ChatProvider runtime state."
-    ]
-    ),
-    Capability(
-      toolName: "delegate_agent",
-      title: "Delegate Agent",
-      latency: .asyncBackground,
-      surfaces: Set([.desktopChat]),
-      summary: "Create or continue a distinct delegated child agent session linked to a parent run.",
-      bullets: [
-      "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
-      "Pass a concise objective and optional short context; do not pass full transcripts by default."
-    ]
-    ),
-    Capability(
-      toolName: "fill_cloud_connector_form",
-      title: "Fill Cloud Connector Form",
-      latency: .fastLocal,
-      surfaces: Set([.desktopChat]),
-      summary: "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
-      bullets: [
-      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
-      "Do not install browser extensions before trying this tool."
+      "Internal coordinator use only; agent-facing callers should use spawn_agent."
     ]
     ),
     Capability(
@@ -278,23 +253,32 @@ enum GeneratedToolCapabilities {
       title: "Spawn Agent",
       latency: .asyncBackground,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "Start canonical Omi background work and show it in the floating-bar pill UI.",
+      summary: "Start canonical Omi background work and optionally project it into floating-bar pills.",
       bullets: [
-      "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
-      "The only way to start a visible floating-bar background agent is to call spawn_agent; saying you will start one does not start it.",
-      "If the user asks to use OpenClaw or Hermes, call spawn_agent with provider set to openclaw or hermes.",
-      "Use delegate_agent instead when the new work must be linked to a known parent run."
+      "Calling spawn_agent is the only way to start a visible floating-bar background agent.",
+      "Use visible=false with parentRunId for invisible delegated background work.",
+      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'."
     ]
     ),
     Capability(
-      toolName: "manage_agent_pills",
-      title: "Manage Agent Pills",
+      toolName: "run_agent_and_wait",
+      title: "Run Agent And Wait",
+      latency: .asyncBackground,
+      surfaces: Set([.desktopChat]),
+      summary: "Run a parent-linked child agent synchronously and return its structured result.",
+      bullets: [
+      "Use for synchronous structured child results linked to a known parent run.",
+      "For another turn in an existing child session, use send_agent_message instead."
+    ]
+    ),
+    Capability(
+      toolName: "set_desktop_attention_override",
+      title: "Set Desktop Attention Override",
       latency: .fastLocal,
       surfaces: Set([.desktopChat, .realtimeHub]),
-      summary: "List, dismiss, or clear completed floating agent pills.",
+      summary: "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.",
       bullets: [
-      "Use after get_task_agent_status when the user asks to manage the circular floating agent pills.",
-      "Actions: list, dismiss with agent_id, or clear_completed."
+      "Use dismissed=true to hide floating-bar pills without deleting canonical run state."
     ]
     ),
     Capability(
@@ -601,6 +585,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_task_agent_status","get_tasks","inspect_agent_artifacts","list_agent_sessions","manage_agent_pills","point_click","screenshot","search_conversations","search_memories","search_screen_history","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","cancel_agent_run","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","run_agent_and_wait","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }

@@ -4,14 +4,14 @@ import Foundation
 enum HubTool: String {
   case searchScreenHistory = "search_screen_history"
   case getDailyRecap = "get_daily_recap"
-  case getTaskAgentStatus = "get_task_agent_status"
   case listAgentSessions = "list_agent_sessions"
   case getAgentRun = "get_agent_run"
   case cancelAgentRun = "cancel_agent_run"
   case inspectAgentArtifacts = "inspect_agent_artifacts"
   case updateAgentArtifactLifecycle = "update_agent_artifact_lifecycle"
   case spawnAgent = "spawn_agent"
-  case manageAgentPills = "manage_agent_pills"
+  case runAgentAndWait = "run_agent_and_wait"
+  case setDesktopAttentionOverride = "set_desktop_attention_override"
   case getConversations = "get_conversations"
   case searchConversations = "search_conversations"
   case getMemories = "get_memories"
@@ -73,17 +73,6 @@ enum GeneratedRealtimeTools {
   },
   {
     "type": "function",
-    "name": "get_task_agent_status",
-    "description": "Inspect Omi's local task-chat/background agents and floating agent pills, including recent completed/failed ones. Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts. Fast local read.",
-    "parameters": {
-      "type": "object",
-      "properties": {},
-      "required": [],
-      "additionalProperties": false
-    }
-  },
-  {
-    "type": "function",
     "name": "list_agent_sessions",
     "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
     "parameters": {
@@ -106,6 +95,7 @@ enum GeneratedRealtimeTools {
             "realtime",
             "delegated_agent",
             "background_agent",
+            "floating_bar",
             "floating_pill"
           ],
           "description": "Optional canonical surface filter."
@@ -269,17 +259,13 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "spawn_agent",
-    "description": "Request delegation to a background agent through Omi's resolver. The resolver may start a child agent, continue an existing one, or ask for missing details. Use for work in the user's apps/browser/files or multi-step work that you cannot do directly.",
+    "description": "Start canonical Omi background work. Visible runs appear as floating-bar pills. Use for multi-step work in the user's apps/browser/files that you cannot do directly.",
     "parameters": {
       "type": "object",
       "properties": {
-        "brief": {
+        "objective": {
           "type": "string",
-          "description": "Clear, self-contained task brief for the background agent."
-        },
-        "title": {
-          "type": "string",
-          "description": "Short Title Case label for the agent pill."
+          "description": "Self-contained background-agent objective."
         },
         "provider": {
           "type": "string",
@@ -287,38 +273,134 @@ enum GeneratedRealtimeTools {
             "openclaw",
             "hermes"
           ],
-          "description": "Optional local agent provider to run this pill through."
+          "description": "Optional local provider override."
+        },
+        "parent_run_id": {
+          "type": "string",
+          "description": "Optional parent run to link via delegation."
+        },
+        "visible": {
+          "type": "boolean",
+          "description": "Whether to project into floating-bar pill UI. Default true."
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional visible session title."
         }
       },
       "required": [
-        "brief"
+        "objective"
       ],
       "additionalProperties": false
     }
   },
   {
     "type": "function",
-    "name": "manage_agent_pills",
-    "description": "Manage the circular floating agent pills shown below the floating bar. Use list freely. Only dismiss or clear pills when the user explicitly asks to dismiss, close, remove, hide, or clear pills. Never dismiss completed agents just because you finished reading their status.",
+    "name": "run_agent_and_wait",
+    "description": "Run a parent-linked child agent synchronously and return its structured result.\n\nUse when you need an immediate child result instead of spawning background work. Continue an existing child session with send_agent_message.",
     "parameters": {
       "type": "object",
       "properties": {
-        "action": {
+        "objective": {
           "type": "string",
-          "enum": [
-            "list",
-            "dismiss",
-            "clear_completed"
-          ],
-          "description": "Management action."
+          "description": "Delegated objective for the child agent."
         },
-        "agent_id": {
+        "parentRunId": {
           "type": "string",
-          "description": "Floating agent pill id from get_task_agent_status; required for dismiss."
+          "description": "Canonical parent Omi run_id."
+        },
+        "context": {
+          "type": "string",
+          "description": "Optional concise context, not a full transcript."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Optional owner guard for the parent run."
+        },
+        "adapterId": {
+          "type": "string",
+          "description": "Optional adapter override."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Optional working directory."
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional model override."
+        },
+        "runMode": {
+          "type": "string",
+          "description": "Child run mode. Default ask.",
+          "enum": [
+            "ask",
+            "act"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "description": "Optional caller-provided request correlation id."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Logical caller id. Defaults to omi-control-tools."
+        },
+        "maxDepth": {
+          "type": "number",
+          "description": "Maximum delegation depth for this call. Default 3, hard max 5."
+        },
+        "maxBudgetUsd": {
+          "type": "number",
+          "description": "Per-delegation budget guard. Default 5, hard max 10."
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Small structured metadata for the child run.",
+          "additionalProperties": true
         }
       },
       "required": [
-        "action"
+        "objective",
+        "parentRunId"
+      ],
+      "additionalProperties": false
+    }
+  },
+  {
+    "type": "function",
+    "name": "set_desktop_attention_override",
+    "description": "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.\n\nPill dismissal writes here; it never deletes canonical run state.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "ownerId": {
+          "type": "string",
+          "description": "Owner id. Defaults to the active signed-in owner."
+        },
+        "subjectKind": {
+          "type": "string",
+          "description": "Attention subject kind, e.g. run or session."
+        },
+        "subjectId": {
+          "type": "string",
+          "description": "Attention subject id."
+        },
+        "dismissed": {
+          "type": "boolean",
+          "description": "Whether the subject is dismissed. Default true."
+        },
+        "hiddenUntilMs": {
+          "type": "number",
+          "description": "Optional epoch-ms hide-until timestamp."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional short reason."
+        }
+      },
+      "required": [
+        "subjectKind",
+        "subjectId"
       ],
       "additionalProperties": false
     }
@@ -642,7 +724,7 @@ enum GeneratedRealtimeTools {
 
   static func baseOpenAITools(providerProperty: [String: Any]?) -> [[String: Any]] {
     var tools = baseOpenAIToolsTemplate
-    guard let index = tools.firstIndex(where: { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }) else {
+    guard let index = tools.firstIndex(where: { ($0["name"] as? String) == "spawn_agent" }) else {
       return tools
     }
     guard var parameters = tools[index]["parameters"] as? [String: Any],

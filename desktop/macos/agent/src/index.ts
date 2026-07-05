@@ -675,7 +675,7 @@ function withControlRunCorrelation(
   input: Record<string, unknown>,
   fallbackClientId: string | undefined
 ): { input: Record<string, unknown>; requestId?: string; clientId?: string } {
-  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "spawn_agent" && name !== "run_agent_and_wait") {
     return { input };
   }
   const requestId = randomUUID();
@@ -692,7 +692,7 @@ function withControlRunCorrelation(
 }
 
 function controlRunAdapterId(name: string, input: Record<string, unknown>, defaultAdapterId: string): string | undefined {
-  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "delegate_agent") {
+  if (name !== "send_agent_message" && name !== "spawn_background_agent" && name !== "spawn_agent" && name !== "run_agent_and_wait") {
     return undefined;
   }
   const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
@@ -702,7 +702,7 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
-  return name === "spawn_background_agent" || (name === "delegate_agent" && input.mode === "spawn");
+  return name === "spawn_background_agent" || name === "spawn_agent";
 }
 
 function controlToolResultOk(result: string): boolean {

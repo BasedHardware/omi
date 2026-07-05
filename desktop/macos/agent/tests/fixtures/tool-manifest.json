@@ -211,25 +211,74 @@
     }
   },
   {
-    "name": "get_task_agent_status",
-    "label": "Task Agent Status",
-    "description": "Inspect Omi's local task-chat agents/subagents and floating agent pills. Use when the user asks about your subagents, task agents, running agents, finished agents, errors, or timeouts.",
-    "promptSnippet": "get_task_agent_status - Inspect Omi task-chat agents and floating agent pills",
+    "name": "fill_cloud_connector_form",
+    "label": "Fill Cloud Connector Form",
+    "description": "Fill the currently visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation. Use first for one-click cloud connector setup after opening the signed-in browser to the connector page.",
+    "promptSnippet": "fill_cloud_connector_form - Fill and optionally submit the visible ChatGPT/Claude MCP connector form",
     "promptGuidelines": [
-      "If the user says 'your subagents', interpret that as Omi task-chat agents, not Cursor or external IDE agents.",
-      "Call this before claiming there are no subagents or before diagnosing a task-agent timeout."
+      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+      "Do not install browser extensions before trying this tool.",
+      "If it reports missing Accessibility permission, missing form, or missing required fields, wait for the missing condition or use guarded screenshots before any keyboard automation."
     ],
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
-      "properties": {},
-      "required": [],
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": [
+            "claude",
+            "chatgpt"
+          ],
+          "description": "Cloud platform whose connector form is visible."
+        },
+        "name": {
+          "type": "string",
+          "description": "Connector name, usually 'Omi Memory'."
+        },
+        "server_url": {
+          "type": "string",
+          "description": "Remote MCP server URL to paste into the connector form."
+        },
+        "oauth_client_id": {
+          "type": "string",
+          "description": "OAuth Client ID. Defaults to Omi's public ChatGPT/Claude connector client."
+        },
+        "oauth_client_secret": {
+          "type": "string",
+          "description": "OAuth Client Secret, only for confidential clients."
+        },
+        "authentication": {
+          "type": "string",
+          "description": "Authentication mode, usually 'OAuth'."
+        },
+        "token_auth_method": {
+          "type": "string",
+          "description": "OAuth token auth method. Use 'none' for Omi's public ChatGPT connector client."
+        },
+        "auth_url": {
+          "type": "string",
+          "description": "OAuth authorization URL when the form asks for it."
+        },
+        "token_url": {
+          "type": "string",
+          "description": "OAuth token URL when the form asks for it."
+        },
+        "submit": {
+          "type": "boolean",
+          "description": "Whether to press the visible Add/Connect/Create button after filling required fields."
+        }
+      },
+      "required": [
+        "provider",
+        "server_url"
+      ],
       "additionalProperties": false
     },
     "annotations": {
-      "readOnlyHint": true,
+      "readOnlyHint": false,
       "destructiveHint": false,
-      "openWorldHint": false
+      "openWorldHint": true
     },
     "timeoutClass": "normal",
     "executor": {
@@ -238,7 +287,8 @@
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires the desktop app task-agent stores."
+      "Requires a signed-in supported browser on the connector page.",
+      "Requires macOS Accessibility permission for Omi and the target browser."
     ],
     "adapters": {
       "pi-mono": {
@@ -246,33 +296,32 @@
       },
       "omi-tools-stdio": {
         "advertised": true
+      },
+      "local-agent-api": {
+        "advertised": true
       }
     },
     "surfaces": [
-      "desktop_chat",
-      "realtime_voice"
+      "desktop_chat"
     ],
     "capabilityDoc": {
-      "title": "Task Agent Status",
-      "summary": "Inspect Omi's local task-chat agents/subagents and floating agent pills.",
+      "title": "Fill Cloud Connector Form",
+      "summary": "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
       "bullets": [
-        "Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts.",
-        "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
-        "Returns both task_agents and floating_agent_pills; floating_agent_pills are the circular agent pills below the floating bar."
+        "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+        "Do not install browser extensions before trying this tool."
       ]
-    },
-    "voice": {
-      "realtimeDescription": "Inspect Omi's local task-chat/background agents and floating agent pills, including recent completed/failed ones. Use when the user asks about your subagents, task agents, background agents, running agents, finished agents, errors, or timeouts. Fast local read."
     }
   },
   {
     "name": "list_agent_sessions",
     "label": "List Agent Sessions",
-    "description": "List Omi-managed agent sessions from the local runtime kernel.\n\nUse when the user asks what Omi agents/subagents are active, recent, failed, or attached to a surface.\nReturns canonical Omi session IDs, latest/active run summaries, and adapter binding metadata.",
+    "description": "List Omi-managed agent sessions from the local runtime kernel.\n\nUse when the user asks what Omi agents/subagents are active, recent, failed, or attached to a surface.\nReturns canonical session/run summaries plus task_agents and floating_agent_pills projections.",
     "promptSnippet": "list_agent_sessions - List Omi-managed agent sessions and active runs",
     "promptGuidelines": [
-      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
-      "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
+      "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
+      "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+      "Replaces get_task_agent_status and manage_agent_pills list/status queries."
     ],
     "latency": "fast local",
     "inputSchema": {
@@ -299,6 +348,7 @@
             "realtime",
             "delegated_agent",
             "background_agent",
+            "floating_bar",
             "floating_pill"
           ]
         },
@@ -338,6 +388,7 @@
             "realtime",
             "delegated_agent",
             "background_agent",
+            "floating_bar",
             "floating_pill"
           ]
         },
@@ -370,8 +421,9 @@
       "title": "List Agent Sessions",
       "summary": "List Omi-managed agent sessions from the local runtime kernel.",
       "bullets": [
-        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and any future migrated floating-pill sessions.",
-        "Returns durable Omi session IDs, latest/active run summaries, and adapter binding metadata."
+        "Use for current or recent kernel-backed Omi agents/subagents across chat, PTT/realtime, task chat, and floating-bar pills.",
+        "Returns task_agents and floating_agent_pills alongside canonical session summaries.",
+        "Replaces get_task_agent_status and manage_agent_pills list/status queries."
       ]
     },
     "voice": {
@@ -396,6 +448,7 @@
               "realtime",
               "delegated_agent",
               "background_agent",
+              "floating_bar",
               "floating_pill"
             ],
             "description": "Optional canonical surface filter."
@@ -2072,12 +2125,10 @@
   {
     "name": "spawn_background_agent",
     "label": "Spawn Background Agent",
-    "description": "Create a canonical Omi-managed background agent session/run without requiring a parent run.\n\nUse this for top-level chat or realtime requests that need visible background work. UI surfaces may project the returned canonical session/run into a floating pill, but the runtime remains the source of truth.",
-    "promptSnippet": "spawn_background_agent - Start a canonical top-level background agent",
+    "description": "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.\n\nAgent-facing callers should use spawn_agent instead.",
+    "promptSnippet": "spawn_background_agent - Internal coordinator spawn",
     "promptGuidelines": [
-      "Use for top-level background work when there is no parent run to pass to delegate_agent.",
-      "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
-      "Do not use this to create UI-owned ChatProvider runtime state."
+      "Internal coordinator use only; agent-facing callers should use spawn_agent."
     ],
     "latency": "async background",
     "inputSchema": {
@@ -2093,7 +2144,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Optional session surface kind. Default background_agent."
+          "description": "Optional session surface kind. Default floating_bar."
         },
         "externalRefKind": {
           "type": "string",
@@ -2163,7 +2214,7 @@
         },
         "surfaceKind": {
           "type": "string",
-          "description": "Optional session surface kind. Default background_agent."
+          "description": "Optional session surface kind. Default floating_bar."
         },
         "externalRefKind": {
           "type": "string",
@@ -2235,17 +2286,15 @@
     ],
     "capabilityDoc": {
       "title": "Spawn Background Agent",
-      "summary": "Create a canonical Omi-managed background agent session/run without requiring a parent run.",
+      "summary": "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
       "bullets": [
-        "Use for top-level background work when there is no parent run to pass to delegate_agent.",
-        "Returns canonical session and run handles immediately; inspect progress with list_agent_sessions or get_agent_run.",
-        "Do not use this to create UI-owned ChatProvider runtime state."
+        "Internal coordinator use only; agent-facing callers should use spawn_agent."
       ]
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
       "Defaults ownerId to the active signed-in owner when omitted.",
-      "Creates a canonical background_agent session/run and executes it asynchronously."
+      "Creates a canonical floating_bar session/run by default."
     ],
     "adapters": {
       "pi-mono": {
@@ -2257,70 +2306,55 @@
     }
   },
   {
-    "name": "delegate_agent",
-    "label": "Delegate Agent",
-    "description": "Create or continue a distinct delegated child agent session linked to a parent run.\n\nSupports call, spawn, and continue modes. Child context is intentionally minimal: objective plus optional concise context. Spawn returns canonical child handles immediately; call and continue return a structured child result without the full transcript. This does not create or manage floating pill UI.",
-    "promptSnippet": "delegate_agent - Create or continue a canonical Omi child agent",
+    "name": "spawn_agent",
+    "label": "Spawn Agent",
+    "description": "Start canonical Omi background work. Visible runs project into floating-bar pills; invisible runs stay kernel-only child work.\n\nPass parentRunId to link the new run to a parent. Use run_agent_and_wait when you need a synchronous structured child result.",
+    "promptSnippet": "spawn_agent - Start canonical Omi background work",
     "promptGuidelines": [
-      "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-      "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
-      "Pass a concise objective and optional short context; do not pass full transcripts by default."
+      "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
+      "Use visible=false for parent-linked background work that should not appear as a pill.",
+      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "Inspect progress with list_agent_sessions or get_agent_run."
     ],
     "latency": "async background",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "mode": {
+        "objective": {
           "type": "string",
+          "description": "Self-contained background-agent objective."
+        },
+        "provider": {
+          "type": "string",
+          "description": "Optional local provider override.",
           "enum": [
-            "call",
-            "spawn",
-            "continue"
+            "openclaw",
+            "hermes"
           ]
         },
         "parentRunId": {
           "type": "string",
-          "description": "Canonical parent Omi run_id."
+          "description": "Optional parent run to link via delegation."
         },
-        "objective": {
-          "type": "string",
-          "description": "Delegated objective for the child agent."
+        "visible": {
+          "type": "boolean",
+          "description": "Whether to project into floating-bar pill UI. Default true."
         },
-        "context": {
+        "title": {
           "type": "string",
-          "description": "Optional concise context, not a full transcript."
+          "description": "Optional visible session title."
+        },
+        "externalRefId": {
+          "type": "string",
+          "description": "Optional stable pill id for UI projection."
         },
         "ownerId": {
           "type": "string",
-          "description": "Optional owner guard for the parent run."
-        },
-        "childSessionId": {
-          "type": "string",
-          "description": "Required for continue mode; optional only to resume a known child."
-        },
-        "childSurfaceKind": {
-          "type": "string",
-          "description": "Child session surface kind. Default delegated_agent."
-        },
-        "childExternalRefKind": {
-          "type": "string",
-          "description": "Optional child external reference kind."
-        },
-        "childExternalRefId": {
-          "type": "string",
-          "description": "Optional child external reference id."
-        },
-        "childTitle": {
-          "type": "string",
-          "description": "Optional title for a newly created child session."
+          "description": "Owner id. Defaults to the active signed-in owner."
         },
         "adapterId": {
           "type": "string",
           "description": "Optional adapter override."
-        },
-        "defaultAdapterId": {
-          "type": "string",
-          "description": "Optional child session default adapter."
         },
         "cwd": {
           "type": "string",
@@ -2330,14 +2364,6 @@
           "type": "string",
           "description": "Optional model override."
         },
-        "runMode": {
-          "type": "string",
-          "description": "Child run mode. Default ask.",
-          "enum": [
-            "ask",
-            "act"
-          ]
-        },
         "requestId": {
           "type": "string",
           "description": "Optional caller-provided request correlation id."
@@ -2346,23 +2372,13 @@
           "type": "string",
           "description": "Logical caller id. Defaults to omi-control-tools."
         },
-        "maxDepth": {
-          "type": "number",
-          "description": "Maximum delegation depth for this call. Default 3, hard max 5."
-        },
-        "maxBudgetUsd": {
-          "type": "number",
-          "description": "Per-delegation budget guard. Default 5, hard max 10."
-        },
         "metadata": {
           "type": "object",
-          "description": "Small structured metadata for the child run.",
+          "description": "Small structured metadata for this run.",
           "additionalProperties": true
         }
       },
       "required": [
-        "mode",
-        "parentRunId",
         "objective"
       ],
       "additionalProperties": false
@@ -2370,21 +2386,161 @@
     "mcpInputSchema": {
       "type": "object",
       "properties": {
-        "mode": {
+        "objective": {
           "type": "string",
+          "description": "Self-contained background-agent objective."
+        },
+        "provider": {
+          "type": "string",
+          "description": "Optional local provider override.",
           "enum": [
-            "call",
-            "spawn",
-            "continue"
+            "openclaw",
+            "hermes"
           ]
         },
         "parentRunId": {
           "type": "string",
-          "description": "Canonical parent Omi run_id."
+          "description": "Optional parent run to link via delegation."
         },
+        "visible": {
+          "type": "boolean",
+          "description": "Whether to project into floating-bar pill UI. Default true."
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional visible session title."
+        },
+        "externalRefId": {
+          "type": "string",
+          "description": "Optional stable pill id for UI projection."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Owner id. Defaults to the active signed-in owner."
+        },
+        "adapterId": {
+          "type": "string",
+          "description": "Optional adapter override."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Optional working directory."
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional model override."
+        },
+        "requestId": {
+          "type": "string",
+          "description": "Optional caller-provided request correlation id."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Logical caller id. Defaults to omi-control-tools."
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Small structured metadata for this run.",
+          "additionalProperties": true
+        }
+      },
+      "required": [
+        "objective"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "long",
+    "executor": {
+      "kind": "runtimeControl"
+    },
+    "surfaces": [
+      "desktop_chat",
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Spawn Agent",
+      "summary": "Start canonical Omi background work and optionally project it into floating-bar pills.",
+      "bullets": [
+        "Calling spawn_agent is the only way to start a visible floating-bar background agent.",
+        "Use visible=false with parentRunId for invisible delegated background work.",
+        "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "Start canonical Omi background work. Visible runs appear as floating-bar pills. Use for multi-step work in the user's apps/browser/files that you cannot do directly.",
+      "schemaOverride": {
+        "type": "object",
+        "properties": {
+          "objective": {
+            "type": "string",
+            "description": "Self-contained background-agent objective."
+          },
+          "provider": {
+            "type": "string",
+            "enum": [
+              "openclaw",
+              "hermes"
+            ],
+            "description": "Optional local provider override."
+          },
+          "parent_run_id": {
+            "type": "string",
+            "description": "Optional parent run to link via delegation."
+          },
+          "visible": {
+            "type": "boolean",
+            "description": "Whether to project into floating-bar pill UI. Default true."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional visible session title."
+          }
+        },
+        "required": [
+          "objective"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Defaults ownerId to the active signed-in owner when omitted.",
+      "Creates a canonical floating_bar session/run when visible=true."
+    ],
+    "adapters": {
+      "pi-mono": {
+        "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true
+      }
+    }
+  },
+  {
+    "name": "run_agent_and_wait",
+    "label": "Run Agent And Wait",
+    "description": "Run a parent-linked child agent synchronously and return its structured result.\n\nUse when you need an immediate child result instead of spawning background work. Continue an existing child session with send_agent_message.",
+    "promptSnippet": "run_agent_and_wait - Run a linked child agent and wait for the result",
+    "promptGuidelines": [
+      "Use for synchronous structured child results linked to a known parent run.",
+      "For another turn in an existing child session, use send_agent_message instead."
+    ],
+    "latency": "async background",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
         "objective": {
           "type": "string",
           "description": "Delegated objective for the child agent."
+        },
+        "parentRunId": {
+          "type": "string",
+          "description": "Canonical parent Omi run_id."
         },
         "context": {
           "type": "string",
@@ -2394,33 +2550,9 @@
           "type": "string",
           "description": "Optional owner guard for the parent run."
         },
-        "childSessionId": {
-          "type": "string",
-          "description": "Required for continue mode; optional only to resume a known child."
-        },
-        "childSurfaceKind": {
-          "type": "string",
-          "description": "Child session surface kind. Default delegated_agent."
-        },
-        "childExternalRefKind": {
-          "type": "string",
-          "description": "Optional child external reference kind."
-        },
-        "childExternalRefId": {
-          "type": "string",
-          "description": "Optional child external reference id."
-        },
-        "childTitle": {
-          "type": "string",
-          "description": "Optional title for a newly created child session."
-        },
         "adapterId": {
           "type": "string",
           "description": "Optional adapter override."
-        },
-        "defaultAdapterId": {
-          "type": "string",
-          "description": "Optional child session default adapter."
         },
         "cwd": {
           "type": "string",
@@ -2461,28 +2593,75 @@
         }
       },
       "required": [
-        "mode",
-        "parentRunId",
-        "objective"
+        "objective",
+        "parentRunId"
       ],
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "mode": {
-                "const": "continue"
-              }
-            },
-            "required": [
-              "mode"
-            ]
-          },
-          "then": {
-            "required": [
-              "childSessionId"
-            ]
-          }
+      "additionalProperties": false
+    },
+    "mcpInputSchema": {
+      "type": "object",
+      "properties": {
+        "objective": {
+          "type": "string",
+          "description": "Delegated objective for the child agent."
+        },
+        "parentRunId": {
+          "type": "string",
+          "description": "Canonical parent Omi run_id."
+        },
+        "context": {
+          "type": "string",
+          "description": "Optional concise context, not a full transcript."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "Optional owner guard for the parent run."
+        },
+        "adapterId": {
+          "type": "string",
+          "description": "Optional adapter override."
+        },
+        "cwd": {
+          "type": "string",
+          "description": "Optional working directory."
+        },
+        "model": {
+          "type": "string",
+          "description": "Optional model override."
+        },
+        "runMode": {
+          "type": "string",
+          "description": "Child run mode. Default ask.",
+          "enum": [
+            "ask",
+            "act"
+          ]
+        },
+        "requestId": {
+          "type": "string",
+          "description": "Optional caller-provided request correlation id."
+        },
+        "clientId": {
+          "type": "string",
+          "description": "Logical caller id. Defaults to omi-control-tools."
+        },
+        "maxDepth": {
+          "type": "number",
+          "description": "Maximum delegation depth for this call. Default 3, hard max 5."
+        },
+        "maxBudgetUsd": {
+          "type": "number",
+          "description": "Per-delegation budget guard. Default 5, hard max 10."
+        },
+        "metadata": {
+          "type": "object",
+          "description": "Small structured metadata for the child run.",
+          "additionalProperties": true
         }
+      },
+      "required": [
+        "objective",
+        "parentRunId"
       ],
       "additionalProperties": false
     },
@@ -2499,19 +2678,17 @@
       "desktop_chat"
     ],
     "capabilityDoc": {
-      "title": "Delegate Agent",
-      "summary": "Create or continue a distinct delegated child agent session linked to a parent run.",
+      "title": "Run Agent And Wait",
+      "summary": "Run a parent-linked child agent synchronously and return its structured result.",
       "bullets": [
-        "Use call for a structured child result, spawn for immediate canonical child handles, and continue for another run in an existing child session.",
-        "Use spawn_agent instead when top-level work should also be shown in the floating-bar pill UI.",
-        "Pass a concise objective and optional short context; do not pass full transcripts by default."
+        "Use for synchronous structured child results linked to a known parent run.",
+        "For another turn in an existing child session, use send_agent_message instead."
       ]
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires childSessionId when mode is continue.",
-      "Rejects synchronous nested call/continue runs when the selected adapter is already executing for the child session or has no capacity.",
-      "Spawn mode returns canonical child handles immediately and does not wait for completion; it does not create floating pill UI."
+      "Requires parentRunId.",
+      "Rejects synchronous nested runs when the selected adapter is already executing for the child session or has no capacity."
     ],
     "adapters": {
       "pi-mono": {
@@ -2523,230 +2700,106 @@
     }
   },
   {
-    "name": "fill_cloud_connector_form",
-    "label": "Fill Cloud Connector Form",
-    "description": "Fill the currently visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation. Use first for one-click cloud connector setup after opening the signed-in browser to the connector page.",
-    "promptSnippet": "fill_cloud_connector_form - Fill and optionally submit the visible ChatGPT/Claude MCP connector form",
+    "name": "set_desktop_attention_override",
+    "label": "Set Desktop Attention Override",
+    "description": "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.\n\nPill dismissal writes here; it never deletes canonical run state.",
+    "promptSnippet": "set_desktop_attention_override - Dismiss or hide a derived attention subject",
     "promptGuidelines": [
-      "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
-      "Do not install browser extensions before trying this tool.",
-      "If it reports missing Accessibility permission, missing form, or missing required fields, wait for the missing condition or use guarded screenshots before any keyboard automation."
+      "Use dismissed=true to hide a floating-bar pill without deleting its canonical run.",
+      "Use subjectKind=run and subjectId=<runId> for pill dismissal."
     ],
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "provider": {
+        "ownerId": {
           "type": "string",
-          "enum": [
-            "claude",
-            "chatgpt"
-          ],
-          "description": "Cloud platform whose connector form is visible."
+          "description": "Owner id. Defaults to the active signed-in owner."
         },
-        "name": {
+        "subjectKind": {
           "type": "string",
-          "description": "Connector name, usually 'Omi Memory'."
+          "description": "Attention subject kind, e.g. run or session."
         },
-        "server_url": {
+        "subjectId": {
           "type": "string",
-          "description": "Remote MCP server URL to paste into the connector form."
+          "description": "Attention subject id."
         },
-        "oauth_client_id": {
-          "type": "string",
-          "description": "OAuth Client ID. Defaults to Omi's public ChatGPT/Claude connector client."
-        },
-        "oauth_client_secret": {
-          "type": "string",
-          "description": "OAuth Client Secret, only for confidential clients."
-        },
-        "authentication": {
-          "type": "string",
-          "description": "Authentication mode, usually 'OAuth'."
-        },
-        "token_auth_method": {
-          "type": "string",
-          "description": "OAuth token auth method. Use 'none' for Omi's public ChatGPT connector client."
-        },
-        "auth_url": {
-          "type": "string",
-          "description": "OAuth authorization URL when the form asks for it."
-        },
-        "token_url": {
-          "type": "string",
-          "description": "OAuth token URL when the form asks for it."
-        },
-        "submit": {
+        "dismissed": {
           "type": "boolean",
-          "description": "Whether to press the visible Add/Connect/Create button after filling required fields."
+          "description": "Whether the subject is dismissed. Default true."
+        },
+        "hiddenUntilMs": {
+          "type": "number",
+          "description": "Optional epoch-ms hide-until timestamp."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional short reason."
         }
       },
       "required": [
-        "provider",
-        "server_url"
+        "subjectKind",
+        "subjectId"
       ],
       "additionalProperties": false
     },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "openWorldHint": true
-    },
-    "timeoutClass": "normal",
-    "executor": {
-      "kind": "swiftTool",
-      "executorName": "chatToolExecutor"
-    },
-    "intendedForAgents": true,
-    "runtimePreconditions": [
-      "Requires a signed-in supported browser on the connector page.",
-      "Requires macOS Accessibility permission for Omi and the target browser."
-    ],
-    "adapters": {
-      "pi-mono": {
-        "advertised": true
-      },
-      "omi-tools-stdio": {
-        "advertised": true
-      },
-      "local-agent-api": {
-        "advertised": true
-      }
-    },
-    "surfaces": [
-      "desktop_chat"
-    ],
-    "capabilityDoc": {
-      "title": "Fill Cloud Connector Form",
-      "summary": "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
-      "bullets": [
-        "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
-        "Do not install browser extensions before trying this tool."
-      ]
-    }
-  },
-  {
-    "name": "spawn_agent",
-    "label": "Spawn Agent",
-    "description": "Start canonical Omi background work and show it in the floating-bar pill UI. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
-    "promptSnippet": "spawn_agent - Start a canonical background agent with pill UI",
-    "promptGuidelines": [
-      "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
-      "Use delegate_agent instead when the new work must be linked to a known parent run.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
-      "Return immediately after spawning; the pill keeps working in the background."
-    ],
-    "latency": "async background",
-    "inputSchema": {
+    "mcpInputSchema": {
       "type": "object",
       "properties": {
-        "brief": {
+        "ownerId": {
           "type": "string",
-          "description": "Clear, self-contained task brief for the background agent."
+          "description": "Owner id. Defaults to the active signed-in owner."
         },
-        "title": {
+        "subjectKind": {
           "type": "string",
-          "description": "Short Title Case label for the agent pill."
+          "description": "Attention subject kind, e.g. run or session."
         },
-        "provider": {
+        "subjectId": {
           "type": "string",
-          "enum": [
-            "openclaw",
-            "hermes"
-          ],
-          "description": "Optional local agent provider to run this pill through."
+          "description": "Attention subject id."
+        },
+        "dismissed": {
+          "type": "boolean",
+          "description": "Whether the subject is dismissed. Default true."
+        },
+        "hiddenUntilMs": {
+          "type": "number",
+          "description": "Optional epoch-ms hide-until timestamp."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Optional short reason."
         }
       },
       "required": [
-        "brief"
+        "subjectKind",
+        "subjectId"
       ],
       "additionalProperties": false
     },
     "annotations": {
-      "readOnlyHint": false,
+      "readOnlyHint": true,
       "destructiveHint": false,
       "openWorldHint": false
     },
     "timeoutClass": "normal",
     "executor": {
-      "kind": "swiftTool",
-      "executorName": "chatToolExecutor"
-    },
-    "intendedForAgents": true,
-    "runtimePreconditions": [
-      "Requires Swift AgentBridge/floating pill support."
-    ],
-    "adapters": {
-      "pi-mono": {
-        "advertised": true
-      },
-      "omi-tools-stdio": {
-        "advertised": true
-      }
+      "kind": "runtimeControl"
     },
     "surfaces": [
       "desktop_chat",
       "realtime_voice"
     ],
     "capabilityDoc": {
-      "title": "Spawn Agent",
-      "summary": "Start canonical Omi background work and show it in the floating-bar pill UI.",
+      "title": "Set Desktop Attention Override",
+      "summary": "Dismiss or hide a kernel-derived attention subject such as a floating-bar run.",
       "bullets": [
-        "Use when the user explicitly asks you to run, start, spawn, or launch a subagent/background agent, or for acting in other apps or multi-step work.",
-        "The only way to start a visible floating-bar background agent is to call spawn_agent; saying you will start one does not start it.",
-        "If the user asks to use OpenClaw or Hermes, call spawn_agent with provider set to openclaw or hermes.",
-        "Use delegate_agent instead when the new work must be linked to a known parent run."
+        "Use dismissed=true to hide floating-bar pills without deleting canonical run state."
       ]
-    },
-    "voice": {
-      "realtimeDescription": "Request delegation to a background agent through Omi's resolver. The resolver may start a child agent, continue an existing one, or ask for missing details. Use for work in the user's apps/browser/files or multi-step work that you cannot do directly."
-    }
-  },
-  {
-    "name": "manage_agent_pills",
-    "label": "Manage Agent Pills",
-    "description": "List, dismiss, or clear completed floating agent pills shown below the floating bar.",
-    "promptSnippet": "manage_agent_pills - List, dismiss, or clear completed floating agent pills",
-    "promptGuidelines": [
-      "Call get_task_agent_status first when dismissing a specific pill so you have its id.",
-      "Use clear_completed only when the user asks to clear finished/done agents."
-    ],
-    "latency": "fast local",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "action": {
-          "type": "string",
-          "enum": [
-            "list",
-            "dismiss",
-            "clear_completed"
-          ],
-          "description": "Management action."
-        },
-        "agent_id": {
-          "type": "string",
-          "description": "Floating agent pill id from get_task_agent_status; required for dismiss."
-        }
-      },
-      "required": [
-        "action"
-      ],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "openWorldHint": false
-    },
-    "timeoutClass": "normal",
-    "executor": {
-      "kind": "swiftTool",
-      "executorName": "chatToolExecutor"
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
-      "Requires Swift floating agent pill registry."
+      "Defaults ownerId to the active signed-in owner when omitted."
     ],
     "adapters": {
       "pi-mono": {
@@ -2755,21 +2808,6 @@
       "omi-tools-stdio": {
         "advertised": true
       }
-    },
-    "surfaces": [
-      "desktop_chat",
-      "realtime_voice"
-    ],
-    "capabilityDoc": {
-      "title": "Manage Agent Pills",
-      "summary": "List, dismiss, or clear completed floating agent pills.",
-      "bullets": [
-        "Use after get_task_agent_status when the user asks to manage the circular floating agent pills.",
-        "Actions: list, dismiss with agent_id, or clear_completed."
-      ]
-    },
-    "voice": {
-      "realtimeDescription": "Manage the circular floating agent pills shown below the floating bar. Use list freely. Only dismiss or clear pills when the user explicitly asks to dismiss, close, remove, hide, or clear pills. Never dismiss completed agents just because you finished reading their status."
     }
   },
   {

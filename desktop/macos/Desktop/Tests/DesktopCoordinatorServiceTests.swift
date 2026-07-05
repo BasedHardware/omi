@@ -69,7 +69,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertEqual(call.name, "spawn_background_agent")
     XCTAssertEqual(call.input["prompt"] as? String, "Search my recent memories and write a short story.")
     XCTAssertEqual(call.input["title"] as? String, "Create Memory Story")
-    XCTAssertEqual(call.input["surfaceKind"] as? String, "background_agent")
+    XCTAssertEqual(call.input["surfaceKind"] as? String, "floating_bar")
     XCTAssertEqual(call.input["externalRefKind"] as? String, "pill")
     XCTAssertEqual(call.input["externalRefId"] as? String, pillId.uuidString)
     XCTAssertEqual(call.input["clientId"] as? String, "desktop-floating-pill")
@@ -79,7 +79,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertEqual(call.input["cwd"] as? String, "/tmp/omi-test")
 
     let metadata = try XCTUnwrap(call.input["metadata"] as? [String: String])
-    XCTAssertEqual(metadata["uiProjection"], "floating_pill")
+    XCTAssertEqual(metadata["uiProjection"], "floating_bar")
     XCTAssertEqual(metadata["pillId"], pillId.uuidString)
   }
 

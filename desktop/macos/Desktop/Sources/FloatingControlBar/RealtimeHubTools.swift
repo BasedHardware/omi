@@ -208,8 +208,7 @@ enum RealtimeHubTools {
     - For canonical Omi agent/subagent management, call list_agent_sessions first, then use \
     its agentRef values internally for get_agent_run, cancel_agent_run, or artifact inspection. \
     For follow-ups about work you spawned, current subagent status, or what a subagent finished, \
-    call get_task_agent_status first; it includes newly completed-agent deltas for this voice \
-    surface. Never read agentRef, artifactRef, canonical IDs, or tool JSON aloud.
+    call list_agent_sessions first; it includes task agents and floating-bar pill projections. \
 
     Keep latency low: prefer answering directly when you can.
     """

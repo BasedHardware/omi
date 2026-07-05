@@ -300,34 +300,6 @@ async function handleJsonRpc(
             result: { content: [{ type: "text", text: result }] },
           });
         }
-      } else if (toolName === "get_task_agent_status") {
-        const result = await requestSwiftTool("get_task_agent_status", {});
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "spawn_agent") {
-        const result = await requestSwiftTool("spawn_agent", args);
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "manage_agent_pills") {
-        const result = await requestSwiftTool("manage_agent_pills", args);
-        if (!isNotification) {
-          send({
-            jsonrpc: "2.0",
-            id,
-            result: { content: [{ type: "text", text: result }] },
-          });
-        }
-      } else if (toolName === "search_tasks") {
         const input: Record<string, unknown> = { query: args.query };
         if (args.include_completed) input.include_completed = args.include_completed;
         const result = await requestSwiftTool("search_tasks", input);

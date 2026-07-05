@@ -33,7 +33,11 @@ struct AgentSurfaceReference: Hashable, Sendable {
   }
 
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
-    AgentSurfaceReference(surfaceKind: "background_agent", externalRefKind: "pill", externalRefId: pillId.uuidString)
+    AgentSurfaceReference(surfaceKind: "floating_bar", externalRefKind: "pill", externalRefId: pillId.uuidString)
+  }
+
+  static func floatingBarRun(runId: String) -> AgentSurfaceReference {
+    AgentSurfaceReference(surfaceKind: "floating_bar", externalRefKind: "run", externalRefId: runId)
   }
 
   static func onboarding() -> AgentSurfaceReference {
@@ -258,6 +262,14 @@ final class AgentRuntimeStatusStore: ObservableObject {
   func taskProjections(limit: Int = 20) -> [AgentRunProjection] {
     projectionsBySurface.values
       .filter { $0.surface.surfaceKind == "task_chat" }
+      .sorted { $0.updatedAt > $1.updatedAt }
+      .prefix(limit)
+      .map { $0 }
+  }
+
+  func floatingPillProjections(limit: Int = 20) -> [AgentRunProjection] {
+    projectionsBySurface.values
+      .filter { $0.surface.surfaceKind == "floating_bar" || $0.surface.externalRefKind == "pill" }
       .sorted { $0.updatedAt > $1.updatedAt }
       .prefix(limit)
       .map { $0 }
