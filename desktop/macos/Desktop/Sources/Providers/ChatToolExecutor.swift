@@ -31,6 +31,37 @@ class ChatToolExecutor {
   private static var fileScanFileCount = 0
   private static var followupContinuation: CheckedContinuation<String, Never>?
 
+  nonisolated static let onboardingPermissionTypes = [
+    "screen_recording",
+    "microphone",
+    "notifications",
+    "accessibility",
+    "automation",
+    "full_disk_access",
+  ]
+
+  nonisolated static var onboardingPermissionTypesDescription: String {
+    onboardingPermissionTypes.joined(separator: ", ")
+  }
+
+  nonisolated static func onboardingPermissionStatusPayload(
+    screenRecording: Bool,
+    microphone: Bool,
+    notifications: Bool,
+    accessibility: Bool,
+    automation: Bool,
+    fullDiskAccess: Bool
+  ) -> [String: String] {
+    [
+      "screen_recording": screenRecording ? "granted" : "not_granted",
+      "microphone": microphone ? "granted" : "not_granted",
+      "notifications": notifications ? "granted" : "not_granted",
+      "accessibility": accessibility ? "granted" : "not_granted",
+      "automation": automation ? "granted" : "not_granted",
+      "full_disk_access": fullDiskAccess ? "granted" : "not_granted",
+    ]
+  }
+
   static func resumeFollowup(with reply: String) {
     followupContinuation?.resume(returning: reply)
     followupContinuation = nil
@@ -1095,7 +1126,7 @@ class ChatToolExecutor {
   private static func executeRequestPermission(_ args: [String: Any]) async -> String {
     guard let type = args["type"] as? String else {
       return
-        "Error: 'type' parameter is required (screen_recording, microphone, accessibility, automation)"
+        "Error: 'type' parameter is required (\(onboardingPermissionTypesDescription))"
     }
 
     guard let appState = onboardingAppState else {
@@ -1130,6 +1161,17 @@ class ChatToolExecutor {
         return "granted"
       } else {
         return "pending - user needs to allow microphone access in the system dialog"
+      }
+
+    case "notifications":
+      appState.requestNotificationPermission()
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      appState.checkNotificationPermission()
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      if appState.hasNotificationPermission {
+        return "granted"
+      } else {
+        return "pending - user needs to allow notifications in the system dialog or enable omi in System Settings > Notifications"
       }
 
     case "accessibility":
@@ -1173,7 +1215,7 @@ class ChatToolExecutor {
 
     default:
       return
-        "Error: unknown permission type '\(type)'. Valid types: screen_recording, microphone, accessibility, automation, full_disk_access"
+        "Error: unknown permission type '\(type)'. Valid types: \(onboardingPermissionTypesDescription)"
     }
   }
 
@@ -1186,13 +1228,14 @@ class ChatToolExecutor {
     appState.checkAllPermissions()
     try? await Task.sleep(nanoseconds: 500_000_000)
 
-    let statuses: [String: String] = [
-      "screen_recording": appState.hasScreenRecordingPermission ? "granted" : "not_granted",
-      "microphone": appState.hasMicrophonePermission ? "granted" : "not_granted",
-      "accessibility": appState.hasAccessibilityPermission ? "granted" : "not_granted",
-      "automation": appState.hasAutomationPermission ? "granted" : "not_granted",
-      "full_disk_access": appState.hasFullDiskAccess ? "granted" : "not_granted",
-    ]
+    let statuses = onboardingPermissionStatusPayload(
+      screenRecording: appState.hasScreenRecordingPermission,
+      microphone: appState.hasMicrophonePermission,
+      notifications: appState.hasNotificationPermission,
+      accessibility: appState.hasAccessibilityPermission,
+      automation: appState.hasAutomationPermission,
+      fullDiskAccess: appState.hasFullDiskAccess
+    )
 
     if let data = try? JSONSerialization.data(withJSONObject: statuses, options: .prettyPrinted),
       let json = String(data: data, encoding: .utf8)

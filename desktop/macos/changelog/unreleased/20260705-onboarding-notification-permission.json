@@ -1,0 +1,3 @@
+{
+  "change": "Fixed onboarding permission checks so notification permission is reported and can be requested correctly"
+}
