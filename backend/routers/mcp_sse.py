@@ -16,6 +16,8 @@ from datetime import datetime
 from typing import Optional, Any, Dict, List, Tuple, NoReturn, cast
 from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 
+from pydantic import BaseModel
+
 import firebase_admin.auth
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
