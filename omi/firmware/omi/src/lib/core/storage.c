@@ -104,6 +104,13 @@ static uint8_t read_request_pending;
 static uint8_t advance_request_pending;
 static uint8_t stop_requested;
 
+/* On connect the SD may still be remounting. Hold a sync request and wait up to
+ * this long for the card to become ready, then read -- instead of replying
+ * "not ready" (the app only triggers sync once, so it would give up). */
+#define STORAGE_SD_READY_TIMEOUT_MS 5000
+static int64_t info_deadline;
+static int64_t read_deadline;
+
 static uint64_t pending_start_seq;
 static uint32_t pending_packet_count;
 static uint64_t pending_advance_seq;
@@ -561,9 +568,22 @@ static void storage_write(void)
         }
 
         if (info_requested) {
-            info_requested = 0;
-            if (conn) {
+            if (!conn) {
+                info_requested = 0;
+                info_deadline = 0;
+            } else if (sd_is_ready()) {
                 (void) send_ring_info_response(conn);
+                info_requested = 0;
+                info_deadline = 0;
+            } else {
+                /* SD still remounting after connect: wait for it, up to timeout. */
+                if (info_deadline == 0) {
+                    info_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (k_uptime_get() >= info_deadline) {
+                    (void) send_ack(conn, STORAGE_NOT_READY);
+                    info_requested = 0;
+                    info_deadline = 0;
+                }
             }
         }
 
@@ -590,11 +610,23 @@ static void storage_write(void)
         }
 
         if (read_request_pending) {
-            read_request_pending = 0;
-            if (conn) {
+            if (!conn) {
+                read_request_pending = 0;
+                read_deadline = 0;
+            } else if (sd_is_ready()) {
                 int ret = start_pending_read(conn);
                 if (ret < 0) {
                     (void) send_ack(conn, storage_status_from_error(ret, STORAGE_NOT_READY));
+                }
+                read_request_pending = 0;
+                read_deadline = 0;
+            } else {
+                if (read_deadline == 0) {
+                    read_deadline = k_uptime_get() + STORAGE_SD_READY_TIMEOUT_MS;
+                } else if (k_uptime_get() >= read_deadline) {
+                    (void) send_ack(conn, STORAGE_NOT_READY);
+                    read_request_pending = 0;
+                    read_deadline = 0;
                 }
             }
         }
