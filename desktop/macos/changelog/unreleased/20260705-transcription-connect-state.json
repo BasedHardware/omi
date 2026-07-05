@@ -1,3 +1,0 @@
-{
-  "change": "Fixed transcription connection status to wait for the WebSocket to actually open"
-}
