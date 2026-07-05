@@ -67,6 +67,7 @@ from routers import (
     advice,
     chat_sessions,
     scores,
+    identity,
     tts,
     memory_admin,
     memory_product,
@@ -169,6 +170,7 @@ app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
+app.include_router(identity.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)

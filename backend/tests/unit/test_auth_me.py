@@ -1,0 +1,67 @@
+"""Unit tests for GET /v1/auth/me.
+
+routers.identity imports cleanly, so the handler is tested directly (patch.object on the
+get_user_from_uid seam), plus a TestClient case that verifies the response_model pins the
+returned fields. No sys.modules mutation.
+"""
+
+import os
+
+os.environ.setdefault(
+    "ENCRYPTION_SECRET",
+    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+)
+os.environ.setdefault("OPENAI_API_KEY", "test-openai-key-not-real")
+
+from unittest.mock import patch
+
+import pytest
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
+
+from routers import identity as identity_router
+from utils.other import endpoints as auth
+
+
+def _user(**overrides):
+    base = {
+        "uid": "u1",
+        "email": "a@b.com",
+        "email_verified": True,
+        "phone_number": None,
+        "display_name": "Zed",
+        "photo_url": None,
+        "disabled": False,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_returns_identity():
+    user = _user()
+    with patch.object(identity_router, "get_user_from_uid", return_value=user):
+        resp = identity_router.get_my_identity(uid="u1")
+    assert resp == user
+
+
+def test_404_when_no_firebase_user():
+    with patch.object(identity_router, "get_user_from_uid", return_value=None):
+        with pytest.raises(HTTPException) as exc:
+            identity_router.get_my_identity(uid="nope")
+    assert exc.value.status_code == 404
+
+
+def test_response_model_filters_extra_fields():
+    app = FastAPI()
+    app.include_router(identity_router.router)
+    app.dependency_overrides[auth.get_current_user_uid] = lambda: "u1"
+    client = TestClient(app)
+    # The helper returns an extra field; response_model must strip it from the API response.
+    with patch.object(identity_router, "get_user_from_uid", return_value=_user(secret_field="LEAK")):
+        r = client.get("/v1/auth/me")
+    assert r.status_code == 200
+    body = r.json()
+    assert "secret_field" not in body
+    assert body["uid"] == "u1"
+    assert body["email"] == "a@b.com"
+    assert body["email_verified"] is True
