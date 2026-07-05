@@ -134,7 +134,8 @@
         "routers/agent_tools.py",
         "routers/tools.py",
         "routers/conversations.py",
-        "database/memory_non_active_routes.py"
+        "database/memory_non_active_routes.py",
+        "routers/chat.py"
     ],
     "extraPaths": [
         "."
