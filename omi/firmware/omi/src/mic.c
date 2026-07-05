@@ -363,19 +363,7 @@ static void enter_hw_aad(void)
         sd_request_power(false);
     }
 
-#ifdef CONFIG_OMI_AAD_POWER_OFF_MIC
-    /* Cut PDM_EN: fully powers off the T5838 + TXS0104 level-shifter (kills the
-     * ~1.5 mA shifter pull-up leak). NOTE: disables wake-on-sound. */
-    t5838_aad_power(false);
-#endif
-
     atomic_set(&aad_in_sleep, 1);
-
-#if CONFIG_OMI_AAD_TEST_MODE == 1
-    /* Test: stay in AAD sleep forever (WAKE not armed) to measure the mic-off floor. */
-    LOG_INF("AAD TEST: staying in hardware sleep (WAKE not armed)");
-    return;
-#endif
 
     atomic_clear(&aad_wake_pending);
     aad_wake_irq(true); /* arm: only real acoustic activity wakes now */
@@ -393,10 +381,6 @@ static void enter_hw_aad(void)
 static void exit_hw_aad(void)
 {
     aad_wake_irq(false);
-#ifdef CONFIG_OMI_AAD_POWER_OFF_MIC
-    t5838_aad_power(true); /* re-power the mic + level-shifter */
-    k_msleep(AAD_PDM_SETTLE_MS);
-#endif
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
     atomic_set(&aad_woke, 1);           /* reset silence timer in mic ctx */
@@ -430,12 +414,6 @@ static void aad_thread_fn(void *p1, void *p2, void *p3)
 /* Called per mic frame: track silence and request AAD sleep after a hold. */
 static void aad_track_silence(const int16_t *buf, size_t n)
 {
-#if CONFIG_OMI_AAD_TEST_MODE == 2
-    /* Test: mic always on (never enter AAD) — measure the mic-on power floor. */
-    ARG_UNUSED(buf);
-    ARG_UNUSED(n);
-    return;
-#endif
     int64_t now = k_uptime_get();
 
     if (atomic_cas(&aad_woke, 1, 0)) {
