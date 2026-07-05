@@ -10,7 +10,7 @@ import logging
 import os
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple, cast
+from typing import Any, Dict, Optional
 
 from langchain_core.language_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -23,15 +23,6 @@ from utils.llm.usage_tracker import get_usage_callback
 logger = logging.getLogger(__name__)
 
 _usage_callback = get_usage_callback()
-ProviderOptions = Dict[str, Any]
-ProviderHeaders = Dict[str, str]
-CacheOptionItems = Tuple[Tuple[str, str], ...]
-CacheKey = Tuple[str, str, bool, CacheOptionItems]
-
-
-def _empty_provider_headers() -> ProviderHeaders:
-    return {}
-
 
 # Google's OpenAI-compatible endpoint — used only for BYOK users who bring their
 # own AI Studio API key. Platform Gemini calls use ChatGoogleGenerativeAI.
@@ -45,7 +36,7 @@ class OpenAICompatibleProviderConfig:
     name: str
     api_key_env: str
     base_url: Optional[str] = None
-    default_headers: ProviderHeaders = field(default_factory=_empty_provider_headers)
+    default_headers: Dict[str, str] = field(default_factory=dict)
     prefix_google_models: bool = False
 
 
@@ -60,12 +51,11 @@ OPENAI_COMPATIBLE_PROVIDERS: Dict[str, OpenAICompatibleProviderConfig] = {
     ),
 }
 
-_llm_cache: Dict[CacheKey, BaseChatModel] = {}
-LLM_CACHE = _llm_cache
+_llm_cache: Dict[tuple, Any] = {}
 
 
-def _cache_key(provider: str, model_name: str, streaming: bool, options: ProviderOptions) -> CacheKey:
-    option_items: CacheOptionItems = tuple(sorted((key, repr(value)) for key, value in options.items()))
+def _cache_key(provider: str, model_name: str, streaming: bool, options: Dict[str, Any]) -> tuple:
+    option_items = tuple(sorted((key, repr(value)) for key, value in options.items()))
     return provider, model_name, streaming, option_items
 
 
@@ -79,7 +69,7 @@ def get_or_create_openai_compatible_llm(
     provider: str,
     model_name: str,
     streaming: bool = False,
-    options: Optional[ProviderOptions] = None,
+    options: Optional[Dict[str, Any]] = None,
 ) -> ChatOpenAI:
     """Get or create a cached ChatOpenAI-compatible chat model."""
 
@@ -123,14 +113,14 @@ def get_or_create_openai_compatible_llm(
             kwargs['stream_options'] = {"include_usage": True}
 
         _llm_cache[key] = ChatOpenAI(model=_api_model_name(provider_config, model_name), **kwargs)
-    return cast(ChatOpenAI, _llm_cache[key])
+    return _llm_cache[key]
 
 
 def get_or_create_omi_gateway_llm(
     lane_id: str,
     streaming: bool = False,
     options: Optional[Dict[str, Any]] = None,
-) -> BaseChatModel:
+) -> ChatOpenAI:
     """Get or create a cached LangChain chat model backed by the Omi LLM gateway."""
 
     options = options or {}
@@ -188,17 +178,12 @@ def get_or_create_gemini_llm(
         os.environ.get('USE_VERTEX_AI', '').lower() == 'true' and os.environ.get('GOOGLE_CLOUD_PROJECT', '')
     ) or bool(os.environ.get('GEMINI_API_KEY', ''))
     cache_budget = thinking_budget if _has_gemini_creds else None
-    key = _cache_key(
-        'gemini',
-        model_name,
-        streaming,
-        {'thinking_budget': cache_budget} if cache_budget is not None else {},
-    )
+    key = (model_name, streaming, 'gemini', cache_budget)
     if key not in _llm_cache:
         use_vertex = os.environ.get('USE_VERTEX_AI', '').lower() == 'true'
         gcp_project = os.environ.get('GOOGLE_CLOUD_PROJECT', '') if use_vertex else ''
         gemini_key = os.environ.get('GEMINI_API_KEY', '')
-        kwargs: ProviderOptions = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
+        kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'timeout': 120, 'max_retries': 1}
         if streaming:
             kwargs['streaming'] = True
         if thinking_budget is not None and model_name.startswith('gemini-2.5'):
@@ -230,7 +215,7 @@ def get_default_client(
     model: str,
     provider: str,
     streaming: bool,
-    options: Optional[ProviderOptions] = None,
+    options: Optional[Dict[str, Any]] = None,
 ) -> BaseChatModel:
     """Get the cached default client for a model/provider combo."""
 

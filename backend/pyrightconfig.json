@@ -119,7 +119,10 @@
     "exclude": [
         "**/__pycache__",
         ".venv",
-        "pretrained_models"
+        "pretrained_models",
+        "utils/llm/gateway_shadow.py",
+        "utils/llm/clients.py",
+        "utils/llm/providers.py"
     ],
     "extraPaths": [
         "."

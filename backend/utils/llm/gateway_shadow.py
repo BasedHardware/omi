@@ -2,12 +2,33 @@ from __future__ import annotations
 
 import os
 import random
-from typing import Any, Callable, cast
+from typing import Any
 
-from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+try:
+    from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, CallbackManagerForLLMRun
+except ImportError:
+    try:
+        from langchain_core.callbacks import BaseCallbackHandler as CallbackManagerForLLMRun
+    except ImportError:
+        CallbackManagerForLLMRun = Any
+
+    AsyncCallbackManagerForLLMRun = CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
-from langchain_core.outputs import ChatResult
+
+try:
+    from langchain_core.messages import BaseMessage
+except ImportError:
+    BaseMessage = None
+try:
+    from langchain_core.outputs import ChatResult
+except ImportError:
+    ChatResult = Any
+try:
+    from langchain_core.runnables import Runnable
+except ImportError:
+
+    class Runnable:
+        pass
 
 
 from pydantic import ConfigDict
@@ -133,26 +154,26 @@ class GatewayShadowChatModel(BaseChatModel):
         )
         return result
 
-    def with_structured_output(self, schema: dict[str, Any] | type, *, include_raw: bool = False, **kwargs: Any) -> Any:
+    def with_structured_output(self, schema: dict[str, Any] | type, *, include_raw: bool = False, **kwargs: Any):
         legacy = self.legacy_model.with_structured_output(schema, include_raw=include_raw, **kwargs)
         gateway = self.gateway_model.with_structured_output(schema, include_raw=include_raw, **kwargs)
         return GatewayShadowRunnable(feature=_shadow_feature(self.feature), legacy=legacy, gateway=gateway)
 
 
-class GatewayShadowRunnable:
-    def __init__(self, *, feature: str, legacy: Any, gateway: Any):
+class GatewayShadowRunnable(Runnable):
+    def __init__(self, *, feature: str, legacy: Runnable, gateway: Runnable):
         self._feature = feature
         self._legacy = legacy
         self._gateway = gateway
 
-    def invoke(self, input: Any, config: Any | None = None, **kwargs: Any) -> Any:
+    def invoke(self, input: Any, config=None, **kwargs: Any) -> Any:
         result = self._legacy.invoke(input, config=config, **kwargs)
         _submit_sync_shadow(
             self._gateway.invoke, input, config=config, feature=self._feature, legacy_result=result, **kwargs
         )
         return result
 
-    async def ainvoke(self, input: Any, config: Any | None = None, **kwargs: Any) -> Any:
+    async def ainvoke(self, input: Any, config=None, **kwargs: Any) -> Any:
         result = await self._legacy.ainvoke(input, config=config, **kwargs)
         start_background_task(
             _run_async_shadow(
@@ -168,18 +189,14 @@ class GatewayShadowRunnable:
         return result
 
 
-def _submit_sync_shadow(
-    fn: Callable[..., Any], *args: Any, feature: str, legacy_result: Any = None, **kwargs: Any
-) -> None:
+def _submit_sync_shadow(fn, *args, feature: str, legacy_result: Any = None, **kwargs: Any) -> None:
     try:
         submit_with_context(llm_executor, _run_sync_shadow, fn, args, kwargs, feature, legacy_result)
     except Exception:
         record_gateway_request_result(feature=feature, outcome='fallback', reason='submit_failed')
 
 
-def _run_sync_shadow(
-    fn: Callable[..., Any], args: tuple[Any, ...], kwargs: dict[str, Any], feature: str, legacy_result: Any
-) -> None:
+def _run_sync_shadow(fn, args: tuple[Any, ...], kwargs: dict[str, Any], feature: str, legacy_result: Any) -> None:
     try:
         gateway_result = fn(*args, **kwargs)
     except Exception:
@@ -189,9 +206,7 @@ def _run_sync_shadow(
     _record_shadow_result_comparison(feature=feature, legacy_result=legacy_result, gateway_result=gateway_result)
 
 
-async def _run_async_shadow(
-    fn: Callable[..., Any], *args: Any, feature: str, legacy_result: Any = None, **kwargs: Any
-) -> None:
+async def _run_async_shadow(fn, *args, feature: str, legacy_result: Any = None, **kwargs: Any) -> None:
     try:
         gateway_result = await fn(*args, **kwargs)
     except Exception:
@@ -212,17 +227,13 @@ def _record_shadow_result_comparison(*, feature: str, legacy_result: Any, gatewa
 
 
 def _comparison_value(value: Any) -> Any:
-    candidate: Any = value
-    if isinstance(value, dict):
-        value_map = cast('dict[str, Any]', value)
-        if {'raw', 'parsed', 'parsing_error'} <= set(value_map):
-            candidate = value_map.get('parsed')
-    if hasattr(candidate, 'model_dump'):
-        return candidate.model_dump(mode='json')
-    if isinstance(candidate, BaseMessage):
-        message = cast(Any, candidate)
-        return {'type': message.type, 'content': message.content}
-    return candidate
+    if isinstance(value, dict) and {'raw', 'parsed', 'parsing_error'} <= set(value):
+        value = value.get('parsed')
+    if hasattr(value, 'model_dump'):
+        return value.model_dump(mode='json')
+    if BaseMessage is not None and isinstance(value, BaseMessage):
+        return {'type': value.type, 'content': value.content}
+    return value
 
 
 def _shadow_feature(feature: str) -> str:
