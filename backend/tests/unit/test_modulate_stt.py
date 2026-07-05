@@ -739,7 +739,14 @@ class _FakeParakeetWebSocket:
 
 
 class TestProcessAudioParakeet(unittest.TestCase):
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     @patch('utils.stt.streaming.websockets')
     def test_process_audio_parakeet_waits_for_websocket_connection(self, mock_ws_module):
         from utils.stt.streaming import process_audio_parakeet
@@ -829,24 +836,27 @@ class _FakeV4Connect:
 class TestParakeetV4Protocol(unittest.TestCase):
     """Tests for ParakeetWebSocketSocket v4 protocol handling."""
 
-    def _run_parakeet_session(self, ws, audio_chunks, sample_rate=16000):
-        from utils.stt.streaming import process_audio_parakeet
+    def _run_parakeet_session(self, ws, audio_chunks, sample_rate=16000, clock=None):
+        from utils.stt.streaming import ParakeetWebSocketSocket
 
         loop = asyncio.new_event_loop()
         try:
             segments = []
 
             async def run():
-                mock_ws = MagicMock()
-                mock_ws.__version__ = '12.0'
-                mock_ws.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+                mock_ws_mod = MagicMock()
+                mock_ws_mod.__version__ = '12.0'
+                mock_ws_mod.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
 
-                with patch('utils.stt.streaming.websockets', mock_ws), patch(
+                with patch('utils.stt.streaming.websockets', mock_ws_mod), patch(
                     'utils.stt.streaming.asyncio.sleep', AsyncMock()
                 ):
-                    sock = await process_audio_parakeet(segments.extend, 'en', sample_rate, 1)
+                    ws_url = 'ws://parakeet.local/v4/stream'
+                    sock = ParakeetWebSocketSocket(segments.extend, ws_url, sample_rate, clock=clock)
+                    await sock.start()
                     for chunk in audio_chunks:
                         sock.send(chunk)
+                    await asyncio.sleep(0)
                     await sock.drain_and_close()
                 return segments
 
@@ -855,7 +865,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
         finally:
             loop.close()
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_final_transcript_emits_segment(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
@@ -875,7 +892,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
             self.assertFalse(s['is_user'])
             self.assertIsNone(s['person_id'])
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_close_deduplicates_committed_text(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
@@ -890,7 +914,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
         texts = [s['text'] for s in segs]
         self.assertEqual(texts.count('hello'), 1)
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_close_emits_suffix_not_in_committed(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
@@ -906,7 +937,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertIn('hello', texts)
         self.assertIn('world', texts)
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_empty_transcript_no_segments(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
@@ -920,7 +958,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
         segs = self._run_parakeet_session(ws, [audio])
         self.assertEqual(len(segs), 0)
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_8khz_resampled_to_16khz(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[],
@@ -934,8 +979,15 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertTrue(len(sent_audio) > 0)
         self.assertEqual(len(sent_audio[0]), 80 * 2 * 2)
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
-    def test_segment_timing_tracks_audio_seconds(self):
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_segment_timing_uses_wall_clock(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
                 {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'first', 'is_final': True},
@@ -944,29 +996,51 @@ class TestParakeetV4Protocol(unittest.TestCase):
         )
         import struct
 
-        audio = struct.pack('<16000h', *([1000] * 16000))
-        segs = self._run_parakeet_session(ws, [audio])
+        call_count = [0]
+        times = [100.0, 100.5]
+
+        def fake_clock():
+            idx = min(call_count[0], len(times) - 1)
+            call_count[0] += 1
+            return times[idx]
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio], clock=fake_clock)
         self.assertEqual(len(segs), 1)
         self.assertAlmostEqual(segs[0]['start'], 0.0, places=1)
-        self.assertAlmostEqual(segs[0]['end'], 1.0, places=1)
+        self.assertAlmostEqual(segs[0]['end'], 0.5, places=1)
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
-    def test_partial_only_not_emitted(self):
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_stable_partial_emits_segment(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
-                {'stream_id': 's1', 'partial_transcript': 'hello', 'final_transcript': '', 'is_final': False},
                 {'stream_id': 's1', 'partial_transcript': 'hello world', 'final_transcript': '', 'is_final': False},
             ],
-            close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'},
+            close_response={'stream_id': 's1', 'final_text': 'hello world', 'status': 'closed'},
         )
         import struct
 
         audio = struct.pack('<160h', *([1000] * 160))
-        segs = self._run_parakeet_session(ws, [audio, audio])
-        self.assertEqual(len(segs), 0, f"Partials should not emit segments, got: {[s['text'] for s in segs]}")
+        segs = self._run_parakeet_session(ws, [audio])
+        partial_segs = [s for s in segs if s['text'] == 'hello world']
+        self.assertGreaterEqual(len(partial_segs), 1, "Stable partial should emit a segment after stability timer")
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
-    def test_two_finals_cumulative_timing(self):
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_two_finals_monotonic_timing(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
                 {'stream_id': 's1', 'partial_transcript': '', 'final_transcript': 'first', 'is_final': True},
@@ -976,8 +1050,16 @@ class TestParakeetV4Protocol(unittest.TestCase):
         )
         import struct
 
-        audio_1s = struct.pack('<16000h', *([1000] * 16000))
-        segs = self._run_parakeet_session(ws, [audio_1s, audio_1s])
+        call_count = [0]
+        times = [100.0, 100.5, 101.0]
+
+        def fake_clock():
+            idx = min(call_count[0], len(times) - 1)
+            call_count[0] += 1
+            return times[idx]
+
+        audio = struct.pack('<160h', *([1000] * 160))
+        segs = self._run_parakeet_session(ws, [audio, audio], clock=fake_clock)
         self.assertEqual(len(segs), 2)
         self.assertEqual(segs[0]['text'], 'first')
         self.assertEqual(segs[1]['text'], 'second')
@@ -986,7 +1068,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertGreaterEqual(segs[1]['start'], segs[0]['end'])
         self.assertGreaterEqual(segs[1]['end'], segs[1]['start'])
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_close_suffix_has_full_segment_shape(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
@@ -1009,7 +1098,14 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertIsInstance(s['end'], float)
         self.assertGreaterEqual(s['end'], s['start'])
 
-    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_final_transcript_exact_segment_shape(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
@@ -1031,6 +1127,68 @@ class TestParakeetV4Protocol(unittest.TestCase):
         self.assertIsInstance(s['start'], float)
         self.assertIsInstance(s['end'], float)
         self.assertGreaterEqual(s['end'], s['start'])
+
+
+class TestParakeetVersionRouting(unittest.TestCase):
+
+    @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
+    def test_default_version_is_v3(self):
+        from utils.stt.streaming import process_audio_parakeet
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                mock_ws = MagicMock()
+                mock_ws.__version__ = '12.0'
+                ws = _FakeV4WebSocket(
+                    chunk_responses=[], close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'}
+                )
+                mock_ws.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+                with patch('utils.stt.streaming.websockets', mock_ws), patch(
+                    'utils.stt.streaming.asyncio.sleep', AsyncMock()
+                ):
+                    sock = await process_audio_parakeet(lambda s: None, 'en', 16000, 1)
+                    await sock.drain_and_close()
+                return mock_ws.connect.call_args[0][0]
+
+            uri = loop.run_until_complete(run())
+            self.assertIn('/v3/stream', uri)
+        finally:
+            loop.close()
+
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
+    def test_v4_version_routes_to_v4(self):
+        from utils.stt.streaming import process_audio_parakeet
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                mock_ws = MagicMock()
+                mock_ws.__version__ = '12.0'
+                ws = _FakeV4WebSocket(
+                    chunk_responses=[], close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'}
+                )
+                mock_ws.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+                with patch('utils.stt.streaming.websockets', mock_ws), patch(
+                    'utils.stt.streaming.asyncio.sleep', AsyncMock()
+                ):
+                    sock = await process_audio_parakeet(lambda s: None, 'en', 16000, 1)
+                    await sock.drain_and_close()
+                return mock_ws.connect.call_args[0][0]
+
+            uri = loop.run_until_complete(run())
+            self.assertIn('/v4/stream', uri)
+        finally:
+            loop.close()
 
 
 class TestResamplePcm16(unittest.TestCase):

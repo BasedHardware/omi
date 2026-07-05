@@ -107,6 +107,14 @@ def _load_nemo_model(model_name: str):
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
+def _init_stream_model():
+    global _stream_model
+    if not STREAM_MODEL_NAME:
+        logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
+        return
+    _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
+
+
 def _init_nim():
     global _nim_url
     _nim_url = os.getenv("NIM_INFERENCE_URL", "http://localhost:9000")
@@ -115,6 +123,8 @@ def _init_nim():
 
 if INFERENCE_MODE == "nim":
     _init_nim()
+else:
+    _init_stream_model()
 
 
 def _transcribe_from_gpu_result(result: dict) -> dict:

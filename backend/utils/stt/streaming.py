@@ -5,6 +5,7 @@ import os
 import random
 import struct
 import threading
+import time
 import urllib.parse
 import wave as _wave
 from enum import Enum
@@ -1058,10 +1059,13 @@ PARAKEET_TARGET_SAMPLE_RATE = 16000
 class ParakeetWebSocketSocket(STTSocket):
     """Streaming via Parakeet /v4/stream WebSocket with NeMo CacheAwareRNNT pipeline."""
 
-    def __init__(self, stream_transcript, ws_url: str, sample_rate: int):
+    PARTIAL_STABILITY_MS = 300
+
+    def __init__(self, stream_transcript, ws_url: str, sample_rate: int, clock=None):
         self._stream_transcript = stream_transcript
         self._ws_url = ws_url
         self._input_sample_rate = sample_rate
+        self._clock = clock or time.monotonic
         self._send_queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=1000)
         self._closed = False
         self._dead = False
@@ -1071,9 +1075,11 @@ class ParakeetWebSocketSocket(STTSocket):
         self._receiver_task: Optional[asyncio.Task] = None
         self._connected_event = asyncio.Event()
         self._startup_event = asyncio.Event()
-        self._audio_seconds_sent = 0.0
+        self._stream_start: Optional[float] = None
         self._last_emit_time = 0.0
         self._committed_text = ""
+        self._last_partial = ""
+        self._partial_stable_task: Optional[asyncio.Task] = None
 
     async def start(self):
         self._sender_task = create_named_task(self._run(), name="parakeet_ws_stream")
@@ -1093,7 +1099,8 @@ class ParakeetWebSocketSocket(STTSocket):
     def send(self, data: bytes) -> None:
         if self._closed or not data:
             return
-        self._audio_seconds_sent += len(data) / (self._input_sample_rate * 2)
+        if self._stream_start is None:
+            self._stream_start = self._clock()
         if self._input_sample_rate != PARAKEET_TARGET_SAMPLE_RATE:
             data = _resample_pcm16(data, self._input_sample_rate, PARAKEET_TARGET_SAMPLE_RATE)
         try:
@@ -1194,7 +1201,8 @@ class ParakeetWebSocketSocket(STTSocket):
 
     def _emit_segment(self, text: str):
         start = self._last_emit_time
-        end = self._audio_seconds_sent
+        elapsed = self._clock() - self._stream_start if self._stream_start else 0.0
+        end = max(elapsed, start)
         self._last_emit_time = end
         self._stream_transcript(
             [
@@ -1209,6 +1217,19 @@ class ParakeetWebSocketSocket(STTSocket):
             ]
         )
 
+    def _emit_stable_partial(self, text: str):
+        new_text = text
+        if self._committed_text and text.startswith(self._committed_text):
+            new_text = text[len(self._committed_text) :].strip()
+        if not new_text:
+            return
+        self._committed_text = text
+        self._emit_segment(new_text)
+
+    async def _partial_stability_timer(self, text: str):
+        await asyncio.sleep(self.PARTIAL_STABILITY_MS / 1000.0)
+        self._emit_stable_partial(text)
+
     async def _receive_loop(self, ws):
         try:
             async for msg in ws:
@@ -1220,10 +1241,27 @@ class ParakeetWebSocketSocket(STTSocket):
                     if not isinstance(data, dict):
                         continue
                     final = (data.get("final_transcript") or "").strip()
+                    partial = (data.get("partial_transcript") or "").strip()
                     if final:
-                        self._committed_text = (self._committed_text + " " + final).strip()
+                        if self._partial_stable_task and not self._partial_stable_task.done():
+                            self._partial_stable_task.cancel()
+                            self._partial_stable_task = None
+                        full = (self._committed_text + " " + final).strip()
+                        self._committed_text = full
+                        self._last_partial = ""
                         self._emit_segment(final)
+                    elif partial and partial != self._last_partial:
+                        self._last_partial = partial
+                        if self._partial_stable_task and not self._partial_stable_task.done():
+                            self._partial_stable_task.cancel()
+                        full_partial = (
+                            (self._committed_text + " " + partial).strip() if self._committed_text else partial
+                        )
+                        self._partial_stable_task = asyncio.ensure_future(self._partial_stability_timer(full_partial))
                     elif data.get("status") == "closed":
+                        if self._partial_stable_task and not self._partial_stable_task.done():
+                            self._partial_stable_task.cancel()
+                            self._partial_stable_task = None
                         close_text = (data.get("final_text") or "").strip()
                         if close_text and close_text != self._committed_text:
                             suffix = close_text
@@ -1235,6 +1273,9 @@ class ParakeetWebSocketSocket(STTSocket):
             if not self._closed:
                 logger.error(f"Parakeet WS recv error: {e}")
                 self._mark_dead(f"parakeet ws recv: {e}")
+        finally:
+            if self._partial_stable_task and not self._partial_stable_task.done():
+                self._partial_stable_task.cancel()
 
 
 async def process_audio_parakeet(
@@ -1246,17 +1287,18 @@ async def process_audio_parakeet(
     keywords: List[str] = [],
     is_active: Optional[Callable[[], bool]] = None,
 ):
-    """STT path backed by the self-hosted Parakeet /v4/stream WebSocket.
+    """STT path backed by self-hosted Parakeet streaming WebSocket.
 
-    Uses NeMo CacheAwareRNNT pipeline for streaming ASR. Audio is
-    resampled to 16kHz if needed; timing is tracked client-side.
+    Defaults to v3; set PARAKEET_STREAM_VERSION=v4 for NeMo CacheAwareRNNT.
+    v4 resamples to 16kHz and emits partial-stability segments.
     """
     api_url = os.getenv('HOSTED_PARAKEET_API_URL')
     if not api_url:
         logger.error('process_audio_parakeet: HOSTED_PARAKEET_API_URL not set')
         return None
 
-    ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + '/v4/stream'
+    stream_version = os.getenv('PARAKEET_STREAM_VERSION', 'v3')
+    ws_url = api_url.replace('http://', 'ws://').replace('https://', 'wss://').rstrip('/') + f'/{stream_version}/stream'
     logger.info(f'process_audio_parakeet {language} {sample_rate} -> {ws_url}')
     socket = ParakeetWebSocketSocket(stream_transcript, ws_url, sample_rate)
     await socket.start()
