@@ -759,7 +759,8 @@ final class AgentPillsManager: ObservableObject {
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
-                legacyClientScope: AgentLegacyClientScope.floatingPill
+                legacyClientScope: AgentLegacyClientScope.floatingPill,
+                allowAdapterAutoSelection: bridgeHarnessOverride == nil
             )
             guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider, finalText: finalText)
@@ -826,7 +827,8 @@ final class AgentPillsManager: ObservableObject {
                 systemPromptStyle: .floating,
                 sessionKey: "agent-\(pill.id.uuidString)",
                 surfaceRef: surfaceRef,
-                legacyClientScope: AgentLegacyClientScope.floatingPill)
+                legacyClientScope: AgentLegacyClientScope.floatingPill,
+                allowAdapterAutoSelection: pill.bridgeHarnessOverride == nil)
             guard !Task.isCancelled else { return }
             self.complete(pill: pill, provider: provider, finalText: finalText)
         }

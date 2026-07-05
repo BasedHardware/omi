@@ -37,7 +37,10 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     // (ACP/pi-mono), preventing cross-adapter resume ID pollution.
     XCTAssertTrue(source.contains("private var currentHarness: String?"))
     XCTAssertTrue(source.contains("currentHarness = harness"))
-    XCTAssertTrue(source.contains("let supportsLegacyResume = (currentHarness == \"acp\" || currentHarness == \"piMono\")"))
+    XCTAssertTrue(source.contains("let supportsLegacyResume = (harness == \"acp\" || harness == \"piMono\")"))
+    XCTAssertTrue(source.contains("let actualAdapterId ="))
+    XCTAssertTrue(source.contains("queryResult.adapterId"))
+    XCTAssertTrue(source.contains("let supportsLegacyResume = (actualAdapterId == \"acp\" || actualAdapterId == \"pi-mono\")"))
   }
 
   func testTaskChatFailureKeepsVisibleAssistantMessage() throws {

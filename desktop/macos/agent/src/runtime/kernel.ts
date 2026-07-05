@@ -154,6 +154,7 @@ export interface ExecuteAgentRunInput extends KernelSessionResolutionInput {
   mcpServers?: Record<string, unknown>[];
   legacyAdapterSessionId?: string;
   maxAttempts?: number;
+  fallbackAdapterIds?: string[];
   tools?: ToolDef[];
   metadata?: Record<string, unknown>;
   parentRunId?: string;
@@ -487,14 +488,64 @@ export class AgentRuntimeKernel {
     input: ExecuteAgentRunInput,
     accepted: { session: AgentSession; run: AgentRun }
   ): Promise<KernelRunResult> {
-
-    const adapterId = input.adapterId ?? accepted.session.defaultAdapterId;
+    const initialAdapterId = input.adapterId ?? accepted.session.defaultAdapterId;
+    const fallbackAdapterIds = (input.fallbackAdapterIds ?? [])
+      .map((adapterId) => adapterId.trim())
+      .filter((adapterId, index, all) =>
+        adapterId.length > 0 &&
+        adapterId !== initialAdapterId &&
+        all.indexOf(adapterId) === index
+      );
     const maxAttempts = Math.max(1, input.maxAttempts ?? 2);
+    let currentAdapterId = initialAdapterId;
+    let primaryAttemptsUsed = 0;
+    let fallbackAttemptsUsed = 0;
+    let attemptNo = 0;
     let retryReason: string | null = null;
     let resumeFromAttemptId: string | null = null;
     let lastAttempt: RunAttempt | undefined;
 
-    for (let attemptNo = 1; attemptNo <= maxAttempts; attemptNo += 1) {
+    while (primaryAttemptsUsed < maxAttempts || (currentAdapterId !== initialAdapterId && fallbackAttemptsUsed < 1)) {
+      const isFallbackAttempt = currentAdapterId !== initialAdapterId;
+      if (isFallbackAttempt) {
+        fallbackAttemptsUsed += 1;
+      } else {
+        primaryAttemptsUsed += 1;
+      }
+      attemptNo += 1;
+      const adapterId = currentAdapterId;
+      const canRetryCurrentAdapter = !isFallbackAttempt && primaryAttemptsUsed < maxAttempts;
+      const fallbackAdapterId = () =>
+        !isFallbackAttempt && fallbackAttemptsUsed === 0
+          ? fallbackAdapterIds.find((candidate) => candidate !== adapterId && this.registry.has(candidate))
+          : undefined;
+      const prepareFallback = (attempt: RunAttempt, reason: string, errorMessage?: string | null): boolean => {
+        const nextAdapterId = fallbackAdapterId();
+        if (!nextAdapterId) return false;
+        if (this.attemptDispatchedOmiToolUse(attempt.attemptId)) {
+          this.appendAdapterFallbackSkipped({
+            sessionId: accepted.session.sessionId,
+            runId: accepted.run.runId,
+            attemptId: attempt.attemptId,
+            adapterId,
+            reason: "side_effectful_tool_use",
+          });
+          return false;
+        }
+        this.appendAdapterFallbackEvent({
+          sessionId: accepted.session.sessionId,
+          runId: accepted.run.runId,
+          attemptId: attempt.attemptId,
+          fromAdapterId: adapterId,
+          toAdapterId: nextAdapterId,
+          reason,
+          errorMessage,
+        });
+        currentAdapterId = nextAdapterId;
+        retryReason = `adapter_fallback:${reason}`;
+        resumeFromAttemptId = attempt.attemptId;
+        return true;
+      };
       const attempt = this.createAttempt({
         runId: accepted.run.runId,
         attemptNo,
@@ -517,9 +568,12 @@ export class AgentRuntimeKernel {
           attempt,
           "adapter_not_registered",
           failure.userMessage,
-          false,
+          Boolean(fallbackAdapterId()),
           failure
         );
+        if (prepareFallback(attempt, "adapter_not_registered", failure.userMessage)) {
+          continue;
+        }
         break;
       }
       const pool = this.registry.get(adapterId);
@@ -573,14 +627,20 @@ export class AgentRuntimeKernel {
             code: "stale_binding",
             source: "adapter_process",
             adapterId: attempt.adapterId,
-            retryable: attemptNo < maxAttempts,
+            retryable: canRetryCurrentAdapter || Boolean(fallbackAdapterId()),
           });
-          this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, attemptNo < maxAttempts, failure);
+          this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, failure.retryable === true, failure);
+          if (!canRetryCurrentAdapter && prepareFallback(attempt, "stale_binding", failure.userMessage)) {
+            continue;
+          }
           retryReason = "stale_binding";
           resumeFromAttemptId = attempt.attemptId;
-          continue;
+          if (canRetryCurrentAdapter) {
+            continue;
+          }
+          break;
         }
-        if (await this.tryRecoverAttempt(input, attempt, error, "binding_failed", attemptNo < maxAttempts)) {
+        if (await this.tryRecoverAttempt(input, attempt, error, "binding_failed", canRetryCurrentAdapter)) {
           retryReason = "recoverable_error";
           resumeFromAttemptId = attempt.attemptId;
           continue;
@@ -589,9 +649,12 @@ export class AgentRuntimeKernel {
           code: "binding_failed",
           source: "adapter_process",
           adapterId: attempt.adapterId,
-          retryable: false,
+          retryable: Boolean(fallbackAdapterId()),
         });
-        this.failAttemptBeforeExecution(attempt, "binding_failed", failure.userMessage, false, failure);
+        this.failAttemptBeforeExecution(attempt, "binding_failed", failure.userMessage, failure.retryable === true, failure);
+        if (prepareFallback(attempt, "binding_failed", failure.userMessage)) {
+          continue;
+        }
         break;
       }
 
@@ -643,6 +706,17 @@ export class AgentRuntimeKernel {
           );
         });
         this.activeExecutions.delete(accepted.run.runId);
+        if (result.terminalStatus === "failed" && prepareFallback(attempt, result.failure?.code ?? "adapter_execution_failed", result.failure?.userMessage ?? result.text)) {
+          this.finishAttemptForRetry({
+            attempt,
+            status: "failed",
+            errorCode: result.failure?.code ?? "adapter_execution_failed",
+            errorMessage: result.failure?.userMessage ?? result.text,
+            failure: result.failure,
+            result,
+          });
+          continue;
+        }
         return this.completeAttemptAndRun(accepted.session, accepted.run.runId, attempt, binding, result);
       } catch (error) {
         this.activeExecutions.delete(accepted.run.runId);
@@ -652,14 +726,20 @@ export class AgentRuntimeKernel {
             code: "stale_binding",
             source: "adapter_execution",
             adapterId: attempt.adapterId,
-            retryable: attemptNo < maxAttempts,
+            retryable: canRetryCurrentAdapter || Boolean(fallbackAdapterId()),
           });
-          this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, attemptNo < maxAttempts, failure);
+          this.failAttemptBeforeExecution(attempt, "stale_binding", failure.userMessage, failure.retryable === true, failure);
+          if (!canRetryCurrentAdapter && prepareFallback(attempt, "stale_binding", failure.userMessage)) {
+            continue;
+          }
           retryReason = "stale_binding";
           resumeFromAttemptId = attempt.attemptId;
-          continue;
+          if (canRetryCurrentAdapter) {
+            continue;
+          }
+          break;
         }
-        if (await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", attemptNo < maxAttempts)) {
+        if (await this.tryRecoverAttempt(input, attempt, error, "adapter_execution_failed", canRetryCurrentAdapter)) {
           retryReason = "recoverable_error";
           resumeFromAttemptId = attempt.attemptId;
           continue;
@@ -670,8 +750,18 @@ export class AgentRuntimeKernel {
           code: "adapter_execution_failed",
           source: "adapter_execution",
           adapterId: attempt.adapterId,
-          retryable: false,
+          retryable: !wasCancelling && Boolean(fallbackAdapterId()),
         });
+        if (!wasCancelling && failure && prepareFallback(attempt, "adapter_execution_failed", failure.userMessage)) {
+          this.finishAttemptForRetry({
+            attempt,
+            status: "failed",
+            errorCode: "adapter_execution_failed",
+            errorMessage: failure.userMessage,
+            failure,
+          });
+          continue;
+        }
         this.finishAttemptAndRun({
           sessionId: accepted.session.sessionId,
           runId: accepted.run.runId,
@@ -1276,6 +1366,7 @@ export class AgentRuntimeKernel {
         payload: {
           attemptId: attempt.attemptId,
           attemptNo: attempt.attemptNo,
+          adapterId: input.adapterId,
           retryReason: input.retryReason,
           resumeFromAttemptId: input.resumeFromAttemptId,
         },
@@ -1528,14 +1619,14 @@ export class AgentRuntimeKernel {
         runId: attempt.runId,
         attemptId: attempt.attemptId,
         type: "attempt.started",
-        payload: { attemptId: attempt.attemptId, bindingId: binding.bindingId },
+        payload: { attemptId: attempt.attemptId, bindingId: binding.bindingId, adapterId: attempt.adapterId },
       });
       this.appendEvent({
         sessionId: run.sessionId,
         runId: attempt.runId,
         attemptId: attempt.attemptId,
         type: "run.running",
-        payload: { runId: attempt.runId, attemptId: attempt.attemptId },
+        payload: { runId: attempt.runId, attemptId: attempt.attemptId, adapterId: attempt.adapterId },
       });
     });
   }
@@ -1589,6 +1680,39 @@ export class AgentRuntimeKernel {
       terminalStatus: status,
       text: result.text,
     };
+  }
+
+  private finishAttemptForRetry(input: {
+    attempt: RunAttempt;
+    status: AttemptStatus;
+    errorCode: string | null;
+    errorMessage: string | null;
+    failure?: RuntimeFailure | null;
+    result?: AdapterAttemptResult;
+  }): void {
+    const run = this.readRun(input.attempt.runId);
+    this.withTransaction(() => {
+      this.updateAttempt(input.attempt.attemptId, {
+        status: input.status,
+        retryable: 1,
+        completedAtMs: Date.now(),
+        errorCode: input.errorCode,
+        errorMessage: input.errorMessage,
+        updatedAtMs: Date.now(),
+      });
+      this.appendEvent({
+        sessionId: run.sessionId,
+        runId: input.attempt.runId,
+        attemptId: input.attempt.attemptId,
+        type: input.status === "cancelled" ? "attempt.cancelled" : "attempt.failed",
+        payload: {
+          attemptId: input.attempt.attemptId,
+          status: input.status,
+          retryable: true,
+          failure: input.failure ?? input.result?.failure,
+        },
+      });
+    });
   }
 
   private finishAttemptAndRun(input: {
@@ -1736,6 +1860,67 @@ export class AgentRuntimeKernel {
     });
     this.failAttemptBeforeExecution(attempt, errorCode, failure.userMessage, true, failure);
     return true;
+  }
+
+  private appendAdapterFallbackEvent(input: {
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    fromAdapterId: string;
+    toAdapterId: string;
+    reason: string;
+    errorMessage?: string | null;
+  }): void {
+    this.appendEvent({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      attemptId: input.attemptId,
+      type: "run.adapter_fallback",
+      payload: {
+        runId: input.runId,
+        failedAttemptId: input.attemptId,
+        fromAdapterId: input.fromAdapterId,
+        toAdapterId: input.toAdapterId,
+        reason: input.reason,
+        errorMessage: input.errorMessage ?? null,
+      },
+    });
+  }
+
+  private appendAdapterFallbackSkipped(input: {
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    adapterId: string;
+    reason: string;
+  }): void {
+    this.appendEvent({
+      sessionId: input.sessionId,
+      runId: input.runId,
+      attemptId: input.attemptId,
+      type: "run.adapter_fallback_skipped",
+      payload: {
+        runId: input.runId,
+        failedAttemptId: input.attemptId,
+        adapterId: input.adapterId,
+        reason: input.reason,
+      },
+    });
+  }
+
+  private attemptDispatchedOmiToolUse(attemptId: string): boolean {
+    const rows = this.store.allRows(
+      "SELECT payload_json FROM events WHERE attempt_id = ? AND type IN (?, ?, ?)",
+      [attemptId, "tool.started", "tool.completed", "tool.failed"],
+    );
+    return rows.some((row) => {
+      try {
+        const payload = JSON.parse(String(row.payload_json)) as { type?: unknown };
+        return payload.type === "tool_use";
+      } catch {
+        return false;
+      }
+    });
   }
 
   private persistAdapterEvent(sessionId: string, runId: string, attemptId: string, event: OutboundMessage): void {
@@ -2520,7 +2705,15 @@ function mcpServersForBinding(
     }
     const normalized: Record<string, unknown> = { ...server };
     const env = Array.isArray(normalized.env) ? normalized.env : [];
-    normalized.env = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    const nextEnv = upsertEnv(env, "OMI_CONTEXT_FILE", contextFileForBinding(sessionId, adapterId, runtimeNodeId));
+    normalized.env = env.some((entry) =>
+      entry &&
+      typeof entry === "object" &&
+      !Array.isArray(entry) &&
+      (entry as Record<string, unknown>).name === "OMI_BRIDGE_PIPE"
+    )
+      ? upsertEnv(nextEnv, "OMI_ADAPTER_ID", adapterId)
+      : nextEnv;
     return normalized;
   });
 }

@@ -2,7 +2,9 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
+import { baseRunInput, createKernelHarness, FakeRuntimeAdapter, waitUntil } from "./kernel-fakes.js";
+import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
+import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
 
 const createdDirs: string[] = [];
@@ -33,6 +35,124 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       expect.objectContaining({ run_id: second.run.runId, attempt_no: 1, status: "succeeded" }),
     ]);
     expect(store.allRows("SELECT * FROM run_attempts WHERE status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval', 'cancelling')")).toHaveLength(0);
+    store.close();
+  });
+
+  it("falls back once to the next connected adapter after selected adapter execution fails", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    const hermes = new FakeRuntimeAdapter("hermes");
+    const openclaw = new FakeRuntimeAdapter("openclaw");
+    hermes.failNextExecutionError = new Error("hermes crashed");
+    registry.register("hermes", () => hermes, 1);
+    registry.register("openclaw", () => openclaw, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+      fallbackAdapterIds: ["openclaw"],
+      maxAttempts: 1,
+    });
+
+    expect(result.run.status).toBe("succeeded");
+    expect(result.attempt.adapterId).toBe("openclaw");
+    expect(hermes.executed).toHaveLength(1);
+    expect(openclaw.executed).toHaveLength(1);
+    expect(store.allRows("SELECT adapter_id, status, retry_reason FROM run_attempts ORDER BY attempt_no")).toEqual([
+      expect.objectContaining({ adapter_id: "hermes", status: "failed" }),
+      expect.objectContaining({ adapter_id: "openclaw", status: "succeeded", retry_reason: "adapter_fallback:adapter_execution_failed" }),
+    ]);
+    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'run.adapter_fallback'").payload_json)).toMatchObject({
+      fromAdapterId: "hermes",
+      toAdapterId: "openclaw",
+      reason: "adapter_execution_failed",
+    });
+    store.close();
+  });
+
+  it("falls back once when the selected adapter returns a failed terminal result", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    const codex = new FakeRuntimeAdapter("codex");
+    const hermes = new FakeRuntimeAdapter("hermes");
+    codex.nextExecutionResult = {
+      text: "Codex failed",
+      adapterSessionId: "codex-native",
+      terminalStatus: "failed",
+      failure: {
+        code: "adapter_execution_failed",
+        source: "adapter_execution",
+        adapterId: "codex",
+        retryable: true,
+        userMessage: "Codex failed",
+        technicalMessage: "Codex failed",
+      },
+    };
+    registry.register("codex", () => codex, 1);
+    registry.register("hermes", () => hermes, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "codex",
+      defaultAdapterId: "codex",
+      fallbackAdapterIds: ["hermes"],
+      maxAttempts: 1,
+    });
+
+    expect(result.run.status).toBe("succeeded");
+    expect(result.attempt.adapterId).toBe("hermes");
+    expect(codex.executed).toHaveLength(1);
+    expect(hermes.executed).toHaveLength(1);
+    store.close();
+  });
+
+  it("does not fall back when no fallback adapter ids are supplied", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "codex", 1);
+    adapter.failNextExecutionError = new Error("codex failed explicitly");
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "codex",
+      defaultAdapterId: "codex",
+      maxAttempts: 1,
+    });
+
+    expect(result.run.status).toBe("failed");
+    expect(adapter.executed).toHaveLength(1);
+    expect(store.allRows("SELECT adapter_id FROM run_attempts")).toEqual([
+      expect.objectContaining({ adapter_id: "codex" }),
+    ]);
+    store.close();
+  });
+
+  it("skips fallback after a Swift-backed Omi tool call was dispatched", async () => {
+    const store = new SqliteAgentStore({ databasePath: newDatabasePath(), reconcileOnOpen: false });
+    const registry = new AdapterRegistry();
+    const hermes = new FakeRuntimeAdapter("hermes");
+    const openclaw = new FakeRuntimeAdapter("openclaw");
+    hermes.failAfterToolUseError = new Error("failed after tool use");
+    registry.register("hermes", () => hermes, 1);
+    registry.register("openclaw", () => openclaw, 1);
+    const kernel = new AgentRuntimeKernel({ store, registry });
+
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      adapterId: "hermes",
+      defaultAdapterId: "hermes",
+      fallbackAdapterIds: ["openclaw"],
+      maxAttempts: 1,
+    });
+
+    expect(result.run.status).toBe("failed");
+    expect(hermes.executed).toHaveLength(1);
+    expect(openclaw.executed).toHaveLength(0);
+    expect(JSON.parse(store.getRow("SELECT payload_json FROM events WHERE type = 'run.adapter_fallback_skipped'").payload_json)).toMatchObject({
+      adapterId: "hermes",
+      reason: "side_effectful_tool_use",
+    });
     store.close();
   });
 

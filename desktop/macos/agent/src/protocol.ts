@@ -29,6 +29,9 @@ export interface QueryMessage extends ProtocolEnvelope, CanonicalCorrelation {
   prompt: string;
   systemPrompt: string;
   adapterId?: string;
+  fallbackAdapterIds?: string[];
+  adapterAutoSelected?: boolean;
+  adapterSelectionReason?: string;
   surfaceKind?: string;
   externalRefKind?: string;
   externalRefId?: string;
@@ -126,6 +129,7 @@ export interface OutboundEnvelope {
 }
 
 export interface QueryScopedOutbound extends OutboundEnvelope, CanonicalCorrelation {
+  adapterId?: string;
   adapterSessionId?: string;
   legacyAdapterSessionId?: string;
 }

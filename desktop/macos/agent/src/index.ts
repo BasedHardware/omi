@@ -59,6 +59,8 @@ import {
   adapterActivationError,
   adapterIdForHarnessMode,
   ensureRegisteredAdapter,
+  selectBestAdapterForTask,
+  type TaskExecutionAdapterId,
 } from "./runtime/adapter-selection.js";
 import {
   activeControlToolOwnerId,
@@ -695,10 +697,13 @@ function controlRunAdapterId(name: string, input: Record<string, unknown>, defau
   if (name !== "send_agent_message" && name !== "delegate_agent") {
     return undefined;
   }
-  const adapterId = typeof input.adapterId === "string" && input.adapterId.trim() ? input.adapterId.trim() : undefined;
-  const defaultFromInput =
-    typeof input.defaultAdapterId === "string" && input.defaultAdapterId.trim() ? input.defaultAdapterId.trim() : undefined;
+  const adapterId = normalizeOptionalString(input.adapterId);
+  const defaultFromInput = normalizeOptionalString(input.defaultAdapterId);
   return adapterId ?? defaultFromInput ?? defaultAdapterId;
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function isLongLivedControlRun(name: string, input: Record<string, unknown>): boolean {
@@ -932,6 +937,33 @@ async function main(): Promise<void> {
       onCreate: (adapter) => localAcpAdapters.add(adapter),
     });
   };
+  const ensureAdapterForQuery = async (adapterId: string): Promise<boolean> => {
+    if (adapterId === "acp") {
+      await startAcpProcess();
+      await initializeAcp();
+      return true;
+    }
+    if (adapterId === "pi-mono") {
+      return ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+    }
+    if (adapterId === "hermes") {
+      return ensureHermesAdapter();
+    }
+    if (adapterId === "openclaw") {
+      return ensureOpenClawAdapter();
+    }
+    if (adapterId === "codex") {
+      return ensureCodexAdapter();
+    }
+    return registry.has(adapterId);
+  };
+  const connectedTaskAdapterIds = async (): Promise<TaskExecutionAdapterId[]> => {
+    const connected: TaskExecutionAdapterId[] = [];
+    if (await ensureHermesAdapter()) connected.push("hermes");
+    if (await ensureOpenClawAdapter()) connected.push("openclaw");
+    if (await ensureCodexAdapter()) connected.push("codex");
+    return connected;
+  };
   const hermesAvailable = await ensureHermesAdapter();
   const openClawAvailable = await ensureOpenClawAdapter();
   const codexAvailable = await ensureCodexAdapter();
@@ -1011,7 +1043,24 @@ async function main(): Promise<void> {
       case "query":
         (async () => {
           const query = msg as QueryMessage;
-          const adapterId = query.adapterId ?? defaultAdapterId;
+          const explicitAdapterId = normalizeOptionalString(query.adapterId);
+          const selection = explicitAdapterId
+            ? undefined
+            : selectBestAdapterForTask({
+                prompt: query.prompt,
+                defaultAdapterId,
+                connectedAdapterIds: await connectedTaskAdapterIds(),
+              });
+          const adapterId = explicitAdapterId ?? selection!.adapterId;
+          query.adapterId = adapterId;
+          query.fallbackAdapterIds = explicitAdapterId ? [] : selection!.fallbackAdapterIds;
+          query.adapterAutoSelected = !explicitAdapterId;
+          query.adapterSelectionReason = selection?.reason;
+          if (selection) {
+            logErr(
+              `Adapter auto-selection selected=${selection.adapterId} reason=${selection.reason} codeLike=${selection.codeLike} connected=${selection.connectedAdapterIds.join(",") || "none"} fallback=${selection.fallbackAdapterIds.join(",") || "none"}`
+            );
+          }
           if (query.protocolVersion === 2 && !query.clientId?.trim()) {
             throw new Error("protocol v2 query requires clientId");
           }
@@ -1028,22 +1077,20 @@ async function main(): Promise<void> {
           const insertedOwner = queryOwnerKey ? registerActiveControlOwner(queryOwnerKey, queryOwnerId) : false;
           currentOwnerId = queryOwnerId;
           try {
-            if (adapterId === "acp") {
-              await startAcpProcess();
-              await initializeAcp();
-            } else if (adapterId === "pi-mono") {
-              await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
-            } else if (adapterId === "hermes") {
-              if (!(await ensureHermesAdapter())) {
-                throw new Error(adapterActivationError("hermes"));
-              }
-            } else if (adapterId === "openclaw") {
-              if (!(await ensureOpenClawAdapter())) {
-                throw new Error(adapterActivationError("openclaw"));
-              }
-            } else if (adapterId === "codex") {
-              if (!(await ensureCodexAdapter())) {
-                throw new Error(adapterActivationError("codex"));
+            if (!(await ensureAdapterForQuery(adapterId))) {
+              const activationMessage =
+                adapterId === "acp" ||
+                adapterId === "pi-mono" ||
+                adapterId === "hermes" ||
+                adapterId === "openclaw" ||
+                adapterId === "codex"
+                  ? adapterActivationError(adapterId)
+                  : undefined;
+              throw new Error(activationMessage ?? `Adapter is not available: ${adapterId}`);
+            }
+            for (const fallbackAdapterId of query.fallbackAdapterIds ?? []) {
+              if (!(await ensureAdapterForQuery(fallbackAdapterId))) {
+                query.fallbackAdapterIds = (query.fallbackAdapterIds ?? []).filter((candidate) => candidate !== fallbackAdapterId);
               }
             }
             await facade.handleQuery(query);

@@ -14,6 +14,27 @@ export const ADAPTER_ACTIVATION_ENV = {
 } as const;
 
 export type SelectableAdapterId = keyof typeof ADAPTER_ACTIVATION_ENV;
+export const TASK_EXECUTION_ADAPTER_IDS = ["hermes", "openclaw", "codex"] as const;
+export type TaskExecutionAdapterId = typeof TASK_EXECUTION_ADAPTER_IDS[number];
+
+const CODE_TASK_ADAPTER_PRIORITY = ["codex", "hermes", "openclaw"] as const satisfies readonly TaskExecutionAdapterId[];
+const GENERAL_TASK_ADAPTER_PRIORITY = ["hermes", "openclaw", "codex"] as const satisfies readonly TaskExecutionAdapterId[];
+
+const CODE_RELATED_KEYWORD_PATTERN =
+  /\b(bug|debug|fix|implement|implementation|function|method|class|struct|interface|test|tests|refactor|compile|build|lint|typescript|javascript|swift|python|rust|code|repo|stack trace|exception|regression|endpoint)\b/i;
+const FILE_NAME_PATTERN =
+  /\b[\w.-]+\.(ts|tsx|js|jsx|mjs|cjs|swift|py|rs|go|java|kt|kts|m|mm|h|hpp|cpp|c|cs|dart|rb|php|json|ya?ml|toml|sql|sh|mdx?)\b/i;
+const FILE_PATH_PATTERN = /(^|[\s"'(])(?:\.{1,2}\/|~\/|\/|[A-Za-z0-9_.-]+\/)[^\s"'`]+\.[A-Za-z0-9]{1,8}(?=$|[\s"'),.:;])/;
+const INLINE_CODE_PATTERN = /```|`[^`]*(?:=>|function|class|def|import|const|let|var|return|\{|\})[^`]*`/i;
+const CODE_SYMBOL_PATTERN = /\b(function|func|class|struct|enum|interface|def|async|await|import|export|return|throws?)\b|[{};]\s*$/im;
+
+export interface AdapterAutoSelectionResult {
+  adapterId: string;
+  fallbackAdapterIds: TaskExecutionAdapterId[];
+  reason: string;
+  codeLike: boolean;
+  connectedAdapterIds: TaskExecutionAdapterId[];
+}
 
 export interface AdapterProfile {
   adapterId: ProductionAdapterId;
@@ -97,6 +118,46 @@ export function adapterIsActivated(
 
 export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
   return ADAPTER_PROFILES[adapterId];
+}
+
+export function taskTextLooksCodeRelated(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return (
+    CODE_RELATED_KEYWORD_PATTERN.test(trimmed) ||
+    FILE_NAME_PATTERN.test(trimmed) ||
+    FILE_PATH_PATTERN.test(trimmed) ||
+    INLINE_CODE_PATTERN.test(trimmed) ||
+    CODE_SYMBOL_PATTERN.test(trimmed)
+  );
+}
+
+export function selectBestAdapterForTask(input: {
+  prompt: string;
+  defaultAdapterId: string;
+  connectedAdapterIds: readonly TaskExecutionAdapterId[];
+}): AdapterAutoSelectionResult {
+  const codeLike = taskTextLooksCodeRelated(input.prompt);
+  const priority = codeLike ? CODE_TASK_ADAPTER_PRIORITY : GENERAL_TASK_ADAPTER_PRIORITY;
+  const connected = new Set(input.connectedAdapterIds);
+  const connectedAdapterIds = TASK_EXECUTION_ADAPTER_IDS.filter((adapterId) => connected.has(adapterId));
+  const selectedAdapterId = priority.find((adapterId) => connected.has(adapterId));
+  if (!selectedAdapterId) {
+    return {
+      adapterId: input.defaultAdapterId,
+      fallbackAdapterIds: [],
+      reason: "default_no_connected_task_adapters",
+      codeLike,
+      connectedAdapterIds,
+    };
+  }
+  return {
+    adapterId: selectedAdapterId,
+    fallbackAdapterIds: priority.filter((adapterId) => adapterId !== selectedAdapterId && connected.has(adapterId)),
+    reason: `${codeLike ? "code" : "general"}_task_${selectedAdapterId}`,
+    codeLike,
+    connectedAdapterIds,
+  };
 }
 
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {

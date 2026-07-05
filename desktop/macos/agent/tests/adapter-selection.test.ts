@@ -6,6 +6,8 @@ import {
   adapterIdForHarnessMode,
   adapterIsActivated,
   adapterProfile,
+  selectBestAdapterForTask,
+  taskTextLooksCodeRelated,
 } from "../src/runtime/adapter-selection.js";
 
 describe("adapter selection and activation", () => {
@@ -69,6 +71,55 @@ describe("adapter selection and activation", () => {
       "Codex is not available. Install the Codex CLI, sign in, then try again."
     );
     expect(adapterActivationError("codex")).not.toContain("OMI_CODEX_ADAPTER_COMMAND");
+  });
+
+  it("detects code-like task text with simple keywords and path patterns", () => {
+    expect(taskTextLooksCodeRelated("Fix the failing test in agent/src/runtime/kernel.ts")).toBe(true);
+    expect(taskTextLooksCodeRelated("Can you implement a function for parsing dates?")).toBe(true);
+    expect(taskTextLooksCodeRelated("Please refactor this class")).toBe(true);
+    expect(taskTextLooksCodeRelated("Draft a concise meeting agenda for tomorrow")).toBe(false);
+  });
+
+  it("auto-selects Codex for code tasks and Hermes first for general tasks", () => {
+    expect(
+      selectBestAdapterForTask({
+        prompt: "Fix the bug in Desktop/Sources/Chat/AgentBridge.swift",
+        defaultAdapterId: "pi-mono",
+        connectedAdapterIds: ["hermes", "openclaw", "codex"],
+      }),
+    ).toMatchObject({
+      adapterId: "codex",
+      fallbackAdapterIds: ["hermes", "openclaw"],
+      reason: "code_task_codex",
+      codeLike: true,
+    });
+
+    expect(
+      selectBestAdapterForTask({
+        prompt: "Summarize my notes and draft a follow-up",
+        defaultAdapterId: "pi-mono",
+        connectedAdapterIds: ["hermes", "openclaw", "codex"],
+      }),
+    ).toMatchObject({
+      adapterId: "hermes",
+      fallbackAdapterIds: ["openclaw", "codex"],
+      reason: "general_task_hermes",
+      codeLike: false,
+    });
+  });
+
+  it("falls through to the default adapter when no task-execution adapters are connected", () => {
+    expect(
+      selectBestAdapterForTask({
+        prompt: "Fix the bug in kernel.ts",
+        defaultAdapterId: "pi-mono",
+        connectedAdapterIds: [],
+      }),
+    ).toMatchObject({
+      adapterId: "pi-mono",
+      fallbackAdapterIds: [],
+      reason: "default_no_connected_task_adapters",
+    });
   });
 
   it("source: daemon registers Hermes/OpenClaw/Codex explicitly and does not stamp MCP env as ACP", () => {

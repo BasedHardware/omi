@@ -2888,7 +2888,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         surfaceRef: AgentSurfaceReference? = nil,
         legacyClientScope: String? = nil,
         resume: String? = nil,
-        imageData: Data? = nil
+        imageData: Data? = nil,
+        allowAdapterAutoSelection: Bool = false
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -3163,7 +3164,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Query the active bridge with streaming. Hermes, OpenClaw, and Codex do not
             // accept Omi's Claude model aliases, so leave model choice to the
             // harness default when a native adapter is active.
-            let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
+            let allowsRuntimeAdapterSelection = allowAdapterAutoSelection && bridgeHarnessOverride == nil
+            let usesNativeModelChoice =
+                allowsRuntimeAdapterSelection || activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw" || activeBridgeHarness == "codex"
             let effectiveRequestModel = usesNativeModelChoice ? nil : (model ?? modelOverride)
 
             // Callbacks for agent bridge
@@ -3366,6 +3369,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 model: effectiveRequestModel,
                 resume: resume,
                 imageData: effectiveImageData,
+                allowAdapterAutoSelection: allowsRuntimeAdapterSelection,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -3385,6 +3389,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             )
+            if let adapterId = queryResult.adapterId {
+                log("ChatProvider: agent query used adapter \(adapterId)")
+            }
 
             // Flush any remaining buffered streaming text before finalizing
             streamingFlushWorkItem?.cancel()
@@ -3543,9 +3550,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // providers, so skip the POST here too. Use the actual harness, not
             // @AppStorage bridgeMode, because directed Hermes/OpenClaw pills can
             // override the harness without changing the user's global preference.
-            let effectiveHarness = activeBridgeHarness
-            let isPiMonoHarness = effectiveHarness == Self.harnessMode(for: .piMono)
-            let isUserClaudeHarness = effectiveHarness == Self.harnessMode(for: .userClaude)
+            let effectiveAdapterId =
+                queryResult.adapterId
+                ?? AgentRuntimeProcess.adapterId(forHarnessMode: activeBridgeHarness)
+            let isPiMonoHarness = effectiveAdapterId == AgentAdapterId.piMono.rawValue
+            let isUserClaudeHarness = effectiveAdapterId == AgentAdapterId.acp.rawValue
             if isUserClaudeHarness {
                 let r = queryResult
                 Task.detached(priority: .background) {

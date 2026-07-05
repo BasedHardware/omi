@@ -45,6 +45,8 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   sinks = new Map<string, AdapterEventSink>();
   failNextOpenError: unknown;
   failNextExecutionError: unknown;
+  failAfterToolUseError: unknown;
+  nextExecutionResult: AdapterAttemptResult | undefined;
   failNextResume = false;
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
@@ -126,12 +128,32 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
       this.failNextExecutionError = undefined;
       throw error;
     }
+    if (this.failAfterToolUseError) {
+      sink({
+        type: "tool_use",
+        callId: `tool-${context.attemptId}`,
+        name: "execute_sql",
+        input: { query: "select 1" },
+        adapterSessionId: context.binding.adapterNativeSessionId,
+      });
+      const error = this.failAfterToolUseError;
+      this.failAfterToolUseError = undefined;
+      throw error;
+    }
     const promptText = context.prompt
       .filter((block): block is Extract<(typeof context.prompt)[number], { type: "text" }> => block.type === "text")
       .map((block) => block.text)
       .join("\n");
     if (this.pendingResult && (!this.deferOnlyPromptIncludes || promptText.includes(this.deferOnlyPromptIncludes))) {
       return this.pendingResult.promise;
+    }
+    if (this.nextExecutionResult) {
+      const result = this.nextExecutionResult;
+      this.nextExecutionResult = undefined;
+      return {
+        ...result,
+        adapterSessionId: result.adapterSessionId ?? context.binding.adapterNativeSessionId,
+      };
     }
     const artifacts = this.nextArtifacts;
     this.nextArtifacts = undefined;

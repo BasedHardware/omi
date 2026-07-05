@@ -1,0 +1,3 @@
+{
+  "change": "Improved background agents to pick the best connected local agent automatically and fall back once when the first choice fails"
+}

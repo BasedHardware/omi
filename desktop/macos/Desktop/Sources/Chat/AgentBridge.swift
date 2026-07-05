@@ -9,12 +9,41 @@ actor AgentBridge {
     let omiSessionId: String
     let runId: String
     let attemptId: String
+    let adapterId: String?
     let adapterSessionId: String?
     let terminalStatus: String
     let inputTokens: Int
     let outputTokens: Int
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
+
+    init(
+      text: String,
+      costUsd: Double,
+      omiSessionId: String,
+      runId: String,
+      attemptId: String,
+      adapterSessionId: String?,
+      terminalStatus: String,
+      inputTokens: Int,
+      outputTokens: Int,
+      cacheReadTokens: Int,
+      cacheWriteTokens: Int,
+      adapterId: String? = nil
+    ) {
+      self.text = text
+      self.costUsd = costUsd
+      self.omiSessionId = omiSessionId
+      self.runId = runId
+      self.attemptId = attemptId
+      self.adapterSessionId = adapterSessionId
+      self.terminalStatus = terminalStatus
+      self.inputTokens = inputTokens
+      self.outputTokens = outputTokens
+      self.cacheReadTokens = cacheReadTokens
+      self.cacheWriteTokens = cacheWriteTokens
+      self.adapterId = adapterId
+    }
 
     @available(*, deprecated, message: "Use omiSessionId or adapterSessionId explicitly")
     var sessionId: String { adapterSessionId ?? omiSessionId }
@@ -167,6 +196,7 @@ actor AgentBridge {
     model: String? = nil,
     resume: String? = nil,
     imageData: Data? = nil,
+    allowAdapterAutoSelection: Bool = false,
     onTextDelta: @escaping TextDeltaHandler,
     onToolCall: @escaping ToolCallHandler,
     onToolActivity: @escaping ToolActivityHandler,
@@ -183,21 +213,11 @@ actor AgentBridge {
     }
 
     if isPiMonoHarness {
-      // Local dev/test builds on a developer's own machine never enforce the client-side
-      // usage limit, so development isn't interrupted by the free-tier quota. The shipped
-      // production build that real users run (bundle com.omi.computer-macos) still enforces
-      // it — this only affects non-production builds, so billing behavior for users is
-      // unchanged.
-      if !AppBuild.isNonProduction, let cached = lastKnownQuota, !cached.allowed {
-        QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
-        throw BridgeError.quotaExceeded(
-          plan: cached.plan,
-          unit: cached.unit,
-          used: cached.used,
-          limit: cached.limit,
-          resetAtUnix: cached.resetAt
-        )
-      }
+      // Client-side usage limit disabled — the backend (which we own) is the single
+      // source of truth for quota. We never block a piMono request optimistically on
+      // the client; the server returns a quota error at request time if it truly wants
+      // to gate. This keeps every piMono surface (Ask Omi chat, AI Clone) unlimited
+      // from the client's perspective. Still refresh the cached quota for display.
       QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
       Task { [weak self] in
         if let quota = await APIClient.shared.fetchChatUsageQuota() {
@@ -227,6 +247,7 @@ actor AgentBridge {
       model: model,
       resume: resume,
       imageData: imageData,
+      allowAdapterAutoSelection: allowAdapterAutoSelection,
       onTextDelta: onTextDelta,
       onToolCall: onToolCall,
       onToolActivity: onToolActivity,

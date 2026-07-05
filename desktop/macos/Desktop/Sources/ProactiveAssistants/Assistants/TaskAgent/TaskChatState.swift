@@ -285,6 +285,7 @@ class TaskChatState: ObservableObject {
                 cwd: workspacePath.isEmpty ? nil : workspacePath,
                 mode: chatMode.rawValue,
                 resume: legacyAcpSessionId,
+                allowAdapterAutoSelection: true,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -303,11 +304,14 @@ class TaskChatState: ObservableObject {
                 // are not interchangeable — storing them would pollute the resume
                 // field and cause a different backend to attempt resuming the
                 // wrong session after an adapter switch.
-                let supportsLegacyResume = (currentHarness == "acp" || currentHarness == "piMono")
+                let actualAdapterId =
+                    queryResult.adapterId
+                    ?? currentHarness.flatMap { AgentRuntimeProcess.adapterId(forHarnessMode: $0) }
+                let supportsLegacyResume = (actualAdapterId == "acp" || actualAdapterId == "pi-mono")
                 if supportsLegacyResume {
                     legacyAcpSessionId = adapterSessionId
                 } else if legacyAcpSessionId != nil {
-                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for non-legacy harness \(currentHarness ?? "?")")
+                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for adapter \(actualAdapterId ?? "?")")
                     legacyAcpSessionId = nil
                 }
             }

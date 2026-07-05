@@ -320,6 +320,7 @@ actor AgentRuntimeProcess {
     model: String?,
     resume: String?,
     imageData: Data?,
+    allowAdapterAutoSelection: Bool,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolCall: @escaping AgentBridge.ToolCallHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -372,8 +373,12 @@ actor AgentRuntimeProcess {
         "clientId": clientId,
         "prompt": prompt,
         "systemPrompt": systemPrompt,
-        "adapterId": adapterId,
       ]
+      if allowAdapterAutoSelection {
+        log("AgentRuntimeProcess: query allows adapter auto-selection")
+      } else {
+        queryDict["adapterId"] = adapterId
+      }
       if let sessionKey {
         queryDict["sessionKey"] = sessionKey
         queryDict["legacySessionKey"] = sessionKey
@@ -921,6 +926,9 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
+    if let adapterId = message.payload["adapterId"] as? String {
+      log("AgentRuntimeProcess: agent result adapter=\(adapterId)")
+    }
     request.continuation.resume(returning: queryResult(from: message))
   }
 
@@ -969,7 +977,8 @@ actor AgentRuntimeProcess {
       inputTokens: payload["inputTokens"] as? Int ?? 0,
       outputTokens: payload["outputTokens"] as? Int ?? 0,
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0
+      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
+      adapterId: payload["adapterId"] as? String
     )
   }
 

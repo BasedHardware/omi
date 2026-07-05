@@ -443,6 +443,11 @@ export class JsonlCompatibilityFacade {
     const mode = message.mode ?? "act";
     const requestedAdapterId = message.adapterId ?? this.defaultAdapterId;
     const requestedModel = message.model ?? this.defaultModel(requestedAdapterId);
+    const fallbackAdapterIds = Array.isArray(message.fallbackAdapterIds)
+      ? message.fallbackAdapterIds
+          .filter((adapterId): adapterId is string => typeof adapterId === "string" && adapterId.trim().length > 0)
+          .map((adapterId) => adapterId.trim())
+      : [];
     const legacySessionKey = message.legacySessionKey ?? message.sessionKey ?? requestedModel;
     const hint = legacySessionKey ? this.warmupHints.get(legacySessionKey) : undefined;
     const cwd = message.cwd ?? hint?.cwd ?? this.defaultCwd();
@@ -478,10 +483,14 @@ export class JsonlCompatibilityFacade {
       }),
       legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
       maxAttempts: this.maxRecoverableRetries > 0 ? this.maxRecoverableRetries + 1 : undefined,
+      fallbackAdapterIds,
       recoverAfterError: this.recoverAfterError(),
       metadata: {
         protocolVersion: message.protocolVersion ?? 1,
         legacyAdapterSessionId: message.legacyAdapterSessionId ?? message.resume,
+        adapterAutoSelected: message.adapterAutoSelected === true,
+        adapterSelectionReason: message.adapterSelectionReason,
+        fallbackAdapterIds,
         source: "jsonl_compatibility_facade",
       },
     };
@@ -558,6 +567,18 @@ export class JsonlCompatibilityFacade {
     if (!context) return;
     if (event.attemptId) {
       context.attemptId = event.attemptId;
+    }
+    if (typeof payload.adapterId === "string") {
+      context.adapterId = payload.adapterId;
+    }
+    if (event.type === "run.adapter_fallback") {
+      this.log(
+        `Adapter fallback run=${event.runId} from=${payload.fromAdapterId ?? "?"} to=${payload.toAdapterId ?? "?"} reason=${payload.reason ?? "unknown"}`
+      );
+    } else if (event.type === "run.adapter_fallback_skipped") {
+      this.log(
+        `Adapter fallback skipped run=${event.runId} adapter=${payload.adapterId ?? "?"} reason=${payload.reason ?? "unknown"}`
+      );
     }
     if (event.type === "attempt.started" || event.type === "run.running") {
       context.isRunning = true;
@@ -636,6 +657,7 @@ export class JsonlCompatibilityFacade {
       runId: context.runId,
       attemptId: context.attemptId,
       eventId: context.eventId,
+      adapterId: context.adapterId,
       adapterSessionId: context.adapterSessionId ?? message.adapterSessionId,
       legacyAdapterSessionId: context.legacyAdapterSessionId,
     };
