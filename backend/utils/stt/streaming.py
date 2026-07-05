@@ -1049,23 +1049,57 @@ def _resample_pcm16(data: bytes, source_rate: int, target_rate: int) -> bytes:
     samples = struct.unpack(f'<{num_samples}h', data)
     ratio = target_rate / source_rate
     new_length = int(num_samples * ratio)
-    resampled = [samples[min(int(i / ratio), num_samples - 1)] for i in range(new_length)]
+    resampled = []
+    for i in range(new_length):
+        src_pos = i / ratio
+        idx = int(src_pos)
+        frac = src_pos - idx
+        if idx + 1 < num_samples:
+            val = samples[idx] * (1.0 - frac) + samples[idx + 1] * frac
+        else:
+            val = samples[min(idx, num_samples - 1)]
+        resampled.append(max(-32768, min(32767, int(round(val)))))
     return struct.pack(f'<{new_length}h', *resampled)
 
 
 PARAKEET_TARGET_SAMPLE_RATE = 16000
+PARAKEET_PARTIAL_STABILITY_MS_DEFAULT = 300.0
+
+
+def _get_parakeet_partial_stability_ms() -> float:
+    raw = os.getenv('PARAKEET_PARTIAL_STABILITY_MS')
+    if raw is None:
+        return PARAKEET_PARTIAL_STABILITY_MS_DEFAULT
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        logger.warning("Invalid PARAKEET_PARTIAL_STABILITY_MS=%r; using default", raw)
+        return PARAKEET_PARTIAL_STABILITY_MS_DEFAULT
+
+
+def _extract_new_text(committed: str, incoming: str) -> str:
+    if not committed:
+        return incoming
+    committed_words = committed.split()
+    incoming_words = incoming.split()
+    if not incoming_words:
+        return ""
+    for overlap_len in range(min(len(committed_words), len(incoming_words)), 0, -1):
+        if committed_words[-overlap_len:] == incoming_words[:overlap_len]:
+            remainder = incoming_words[overlap_len:]
+            return " ".join(remainder) if remainder else ""
+    return incoming
 
 
 class ParakeetWebSocketSocket(STTSocket):
     """Streaming via Parakeet /v4/stream WebSocket with NeMo CacheAwareRNNT pipeline."""
-
-    PARTIAL_STABILITY_MS = 300
 
     def __init__(self, stream_transcript, ws_url: str, sample_rate: int, clock=None):
         self._stream_transcript = stream_transcript
         self._ws_url = ws_url
         self._input_sample_rate = sample_rate
         self._clock = clock or time.monotonic
+        self._partial_stability_ms = _get_parakeet_partial_stability_ms()
         self._send_queue: asyncio.Queue[Optional[bytes]] = asyncio.Queue(maxsize=1000)
         self._closed = False
         self._dead = False
@@ -1227,7 +1261,7 @@ class ParakeetWebSocketSocket(STTSocket):
         self._emit_segment(new_text)
 
     async def _partial_stability_timer(self, text: str):
-        await asyncio.sleep(self.PARTIAL_STABILITY_MS / 1000.0)
+        await asyncio.sleep(self._partial_stability_ms / 1000.0)
         self._emit_stable_partial(text)
 
     async def _receive_loop(self, ws):
@@ -1252,11 +1286,13 @@ class ParakeetWebSocketSocket(STTSocket):
                         self._last_partial = ""
                         if self._committed_text and self._committed_text.endswith(final):
                             continue
-                        new_text = final
+                        new_text = _extract_new_text(self._committed_text, final)
+                        if not new_text:
+                            continue
                         if self._committed_text:
-                            self._committed_text = (self._committed_text + " " + final).strip()
+                            self._committed_text = (self._committed_text + " " + new_text).strip()
                         else:
-                            self._committed_text = final
+                            self._committed_text = new_text
                         self._emit_segment(new_text)
                     elif partial and partial != self._last_partial:
                         self._last_partial = partial

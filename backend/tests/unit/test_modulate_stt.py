@@ -1324,6 +1324,18 @@ class TestResamplePcm16(unittest.TestCase):
         samples = struct.unpack(f'<{len(result)//2}h', result)
         self.assertEqual(len(samples), 8)
 
+    def test_linear_interpolation_produces_intermediate_values(self):
+        from utils.stt.streaming import _resample_pcm16
+
+        import struct
+
+        data = struct.pack('<3h', 0, 1000, 2000)
+        result = _resample_pcm16(data, 8000, 16000)
+        samples = struct.unpack(f'<{len(result)//2}h', result)
+        self.assertEqual(samples[0], 0)
+        self.assertEqual(samples[2], 1000)
+        self.assertTrue(0 < samples[1] < 1000, f"Expected interpolated value, got {samples[1]}")
+
     def test_same_rate_noop(self):
         from utils.stt.streaming import _resample_pcm16
 
@@ -1334,6 +1346,67 @@ class TestResamplePcm16(unittest.TestCase):
         from utils.stt.streaming import _resample_pcm16
 
         self.assertEqual(_resample_pcm16(b'', 8000, 16000), b'')
+
+
+class TestPartialStabilityConfig(unittest.TestCase):
+    @patch.dict('os.environ', {'PARAKEET_PARTIAL_STABILITY_MS': '150'})
+    def test_custom_stability_ms(self):
+        from utils.stt.streaming import _get_parakeet_partial_stability_ms
+
+        self.assertAlmostEqual(_get_parakeet_partial_stability_ms(), 150.0)
+
+    @patch.dict('os.environ', {'PARAKEET_PARTIAL_STABILITY_MS': '0'})
+    def test_zero_stability_ms(self):
+        from utils.stt.streaming import _get_parakeet_partial_stability_ms
+
+        self.assertAlmostEqual(_get_parakeet_partial_stability_ms(), 0.0)
+
+    @patch.dict('os.environ', {'PARAKEET_PARTIAL_STABILITY_MS': 'invalid'})
+    def test_invalid_stability_ms_uses_default(self):
+        from utils.stt.streaming import _get_parakeet_partial_stability_ms
+
+        self.assertAlmostEqual(_get_parakeet_partial_stability_ms(), 300.0)
+
+    def test_unset_stability_ms_uses_default(self):
+        import os as _os
+
+        from utils.stt.streaming import _get_parakeet_partial_stability_ms
+
+        with patch.dict('os.environ', {}, clear=False):
+            _os.environ.pop('PARAKEET_PARTIAL_STABILITY_MS', None)
+            self.assertAlmostEqual(_get_parakeet_partial_stability_ms(), 300.0)
+
+
+class TestExtractNewText(unittest.TestCase):
+    def test_no_committed(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("", "hello world"), "hello world")
+
+    def test_exact_match_returns_empty(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello world", "hello world"), "")
+
+    def test_partial_overlap_extracts_new(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello world", "world again"), "again")
+
+    def test_no_overlap_returns_full(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello world", "goodbye"), "goodbye")
+
+    def test_multi_word_overlap(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("a b c d", "c d e f"), "e f")
+
+    def test_empty_incoming(self):
+        from utils.stt.streaming import _extract_new_text
+
+        self.assertEqual(_extract_new_text("hello", ""), "")
 
 
 class TestPrerecordedRequestShape(unittest.TestCase):
