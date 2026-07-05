@@ -5,6 +5,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { AdapterArtifactReference } from "../adapters/interface.js";
+import { isDeniedManagedRunArtifactBasename } from "./artifact-filters.js";
 
 export interface ArtifactStorageScope {
   ownerId: string;
@@ -120,7 +121,11 @@ export class OmiArtifactStorage {
     const existingUris = new Set(existingArtifacts.map((artifact) => artifact.uri));
     const discovered: AdapterArtifactReference[] = [];
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      if (entry.name === "manifest.json" || (!entry.isFile() && !entry.isDirectory())) {
+      if (
+        entry.name === "manifest.json"
+        || isDeniedManagedRunArtifactBasename(entry.name)
+        || (!entry.isFile() && !entry.isDirectory())
+      ) {
         continue;
       }
       const path = join(directory, entry.name);

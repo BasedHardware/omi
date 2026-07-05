@@ -44,6 +44,26 @@ describe("OmiArtifactStorage", () => {
     expect(readFileSync(manifest, "utf8")).toContain("originalUri");
   });
 
+  it("skips provider tooling side-effect directories when discovering run artifacts", () => {
+    const temp = mkdtempSync(join(tmpdir(), "omi-artifacts-"));
+    const root = join(temp, "Artifacts");
+    const storage = new OmiArtifactStorage({ rootDir: root });
+    const scope = {
+      ownerId: "owner-1",
+      sessionId: "session-1",
+      runId: "run-1",
+      attemptId: "attempt-1",
+    };
+    const directory = storage.prepareRunDirectory(scope);
+    mkdirSync(join(directory, ".claude"));
+    writeFileSync(join(directory, ".claude", "settings.json"), "{}");
+    writeFileSync(join(directory, "answer.md"), "# hi");
+
+    const discovered = storage.discoverRunArtifacts(scope);
+
+    expect(discovered.map((artifact) => artifact.displayName)).toEqual(["answer.md"]);
+  });
+
   it("discovers files and directories from the isolated run artifact directory", () => {
     const temp = mkdtempSync(join(tmpdir(), "omi-artifacts-"));
     const root = join(temp, "Artifacts");
