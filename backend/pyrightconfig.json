@@ -124,7 +124,8 @@
         "utils/llm/clients.py",
         "utils/llm/providers.py",
         "utils/chat.py",
-        "utils/social.py"
+        "utils/social.py",
+        "utils/app_integrations.py"
     ],
     "extraPaths": [
         "."

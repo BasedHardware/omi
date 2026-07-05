@@ -1,8 +1,8 @@
-import threading  # pyright: ignore[reportUnusedImport]  # patched by test_no_threading_used
+import asyncio
+import threading
+from typing import List
 import os
 import time
-from datetime import datetime
-from typing import Any, Dict, List, cast
 
 import httpx
 
@@ -17,6 +17,7 @@ from utils.executors import db_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
+import database.notifications as notification_db
 import database.dev_api_key as dev_api_key_db
 from database import mem_db
 from database import redis_db
@@ -39,7 +40,7 @@ from database.redis_db import (
     incr_daily_notification_count,
     get_daily_notification_count,
 )
-from models.app import App, UsageHistoryType
+from models.app import App, ProactiveNotification, UsageHistoryType
 from models.chat import Message
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource
@@ -48,12 +49,11 @@ from utils.conversations.render import conversations_to_string
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
 from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding, get_llm
+from utils.llm.clients import generate_embedding
 from utils.llm.proactive_notification import (
     evaluate_relevance,
     generate_notification,
     validate_notification,
-    Record,
     FREQUENCY_TO_BASE_THRESHOLD,
     MAX_DAILY_NOTIFICATIONS,
 )
@@ -69,7 +69,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def _notify_app_owner(app_id: str, title: str, body: str) -> None:
+def _notify_app_owner(app_id: str, title: str, body: str):
     """Send a push notification to the app owner about webhook health."""
     try:
         app_data = get_app_by_id_db(app_id)
@@ -79,7 +79,7 @@ def _notify_app_owner(app_id: str, title: str, body: str) -> None:
         logger.warning(f'Failed to notify app owner for {app_id}: {e}')
 
 
-def _handle_webhook_health_action(app_id: str, action: int, error: str) -> None:
+def _handle_webhook_health_action(app_id: str, action: int, error: str):
     """Handle graduated response from webhook health tracking.
     action: 0=nothing, 1=day1 warn, 2=day2 warn, 3=auto-disable
     """
@@ -114,7 +114,7 @@ def _handle_webhook_health_action(app_id: str, action: int, error: str) -> None:
 PROACTIVE_NOTI_LIMIT_SECONDS = 30  # 1 noti / 30s
 
 
-def get_github_docs_content(repo: str = "BasedHardware/omi", path: str = "docs/doc") -> Dict[str, Any]:
+def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
     """
     Recursively retrieves content from GitHub docs folder and subfolders using GitHub API.
     Returns a dict mapping file paths to their raw content.
@@ -123,11 +123,11 @@ def get_github_docs_content(repo: str = "BasedHardware/omi", path: str = "docs/d
     So any changes to the docs will take 24 hours to be reflected.
     """
     if cached := get_generic_cache(f'get_github_docs_content_{repo}_{path}'):
-        return cast(Dict[str, Any], cached)
-    docs_content: Dict[str, str] = {}
+        return cached
+    docs_content = {}
     headers = {"Authorization": f"token {os.getenv('GITHUB_TOKEN')}"}
 
-    def get_contents(path: str) -> None:
+    def get_contents(path):
         url = f"https://api.github.com/repos/{repo}/contents/{path}"
         response = httpx.get(url, headers=headers)
 
@@ -135,12 +135,11 @@ def get_github_docs_content(repo: str = "BasedHardware/omi", path: str = "docs/d
             logger.error(f"Failed to fetch contents for {path}: {response.status_code}")
             return
 
-        contents_raw: object = response.json()
+        contents = response.json()
 
-        if not isinstance(contents_raw, list):
+        if not isinstance(contents, list):
             return
 
-        contents = cast(List[Dict[str, Any]], contents_raw)
         for item in contents:
             if item["type"] == "file" and (item["name"].endswith(".md") or item["name"].endswith(".mdx")):
                 # Get raw content for documentation files
@@ -162,7 +161,7 @@ def get_github_docs_content(repo: str = "BasedHardware/omi", path: str = "docs/d
 # **************************************************
 
 
-async def trigger_external_integrations(uid: str, conversation: Conversation) -> List[Message]:
+async def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
     """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1)."""
     if not conversation or conversation.discarded:
         return []
@@ -174,11 +173,10 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     if not filtered_apps:
         return []
 
-    results: Dict[str, str] = {}
+    results = {}
 
-    async def _single(app: App) -> None:
-        ext = app.external_integration
-        if not ext or not ext.webhook_url:
+    async def _single(app: App):
+        if not app.external_integration.webhook_url:
             return
 
         if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
@@ -190,7 +188,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         if conversation.source == ConversationSource.workflow and 'external_data' in conversation_dict:
             conversation_dict['external_data'] = None
 
-        url = ext.webhook_url
+        url = app.external_integration.webhook_url
         if '?' in url:
             url += '&uid=' + uid
         else:
@@ -259,7 +257,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
 
-    messages: List[Message] = []
+    messages = []
     for key, message in results.items():
         if not message:
             continue
@@ -269,35 +267,32 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
 async def trigger_realtime_integrations(
     uid: str,
-    segments: List[Dict[str, Any]],
+    segments: list[dict],
     conversation_id: str | None,
     source: str | None = None,
-) -> Dict[str, Any] | List[Message]:
+):
     logger.info(f"trigger_realtime_integrations {uid}")
     """REALTIME STREAMING"""
     return await _async_trigger_realtime_integrations(uid, segments, conversation_id, source=source)
 
 
-async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray) -> Dict[str, Any]:
+async def trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     logger.info(f"trigger_realtime_audio_bytes {uid}")
     """REALTIME AUDIO STREAMING"""
     return await _async_trigger_realtime_audio_bytes(uid, sample_rate, data)
 
 
 # proactive notification
-def _retrieve_contextual_memories(uid: str, user_context: Dict[str, Any]) -> List[Dict[str, Any]]:
-    vector = cast(
-        List[float],
-        generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072,
-    )
+def _retrieve_contextual_memories(uid: str, user_context):
+    vector = generate_embedding(user_context.get('question', '')) if user_context.get('question') else [0] * 3072
     logger.info(f"query_vectors vector: {vector[:5]}")
 
-    date_filters: Dict[str, Any] = {}  # not support yet
-    filters: Dict[str, Any] = user_context.get('filters', {}) or {}
+    date_filters = {}  # not support yet
+    filters = user_context.get('filters', {})
     memories_id = query_vectors_by_metadata(
         uid,
         vector,
-        dates_filter=cast(List[datetime], [date_filters.get("start"), date_filters.get("end")]),
+        dates_filter=[date_filters.get("start"), date_filters.get("end")],
         people=filters.get("people", []),
         topics=filters.get("topics", []),
         entities=filters.get("entities", []),
@@ -307,7 +302,7 @@ def _retrieve_contextual_memories(uid: str, user_context: Dict[str, Any]) -> Lis
     return [c for c in convos if not c.get('is_locked')]
 
 
-def _hit_proactive_notification_rate_limits(uid: str, app: App) -> bool:
+def _hit_proactive_notification_rate_limits(uid: str, app: App):
     sent_at = mem_db.get_proactive_noti_sent_at(uid, app.id)
     if sent_at and time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS:
         return True
@@ -323,7 +318,7 @@ def _hit_proactive_notification_rate_limits(uid: str, app: App) -> bool:
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
 
 
-def _set_proactive_noti_sent_at(uid: str, app: App) -> None:
+def _set_proactive_noti_sent_at(uid: str, app: App):
     ts = time.time()
     mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
     redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
@@ -360,7 +355,7 @@ def _proactive_daily_cap_reached(uid: str) -> bool:
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
 
 
-def _process_mentor_proactive_notification(uid: str, conversation_messages: List[Dict[str, Any]]) -> str | None:
+def _process_mentor_proactive_notification(uid: str, conversation_messages: list[dict]) -> str | None:
     """
     Three-step proactive notification pipeline:
       1. Gate  — is this conversation worth evaluating? (cheap, rejects most)
@@ -420,9 +415,9 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: List
             relevance = evaluate_relevance(
                 user_name=user_name,
                 user_facts=user_facts,
-                goals=cast(List[Record], goals),
-                current_messages=cast(List[Record], conversation_messages),
-                recent_notifications=cast(List[Record], recent_notifications),
+                goals=goals,
+                current_messages=conversation_messages,
+                recent_notifications=recent_notifications,
             )
     except Exception as e:
         logger.error(f"mentor_proactive gate_failed uid={uid} error={e}")
@@ -444,20 +439,13 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: List
     past_conversations_str = ''
     try:
         conversation_text = ' '.join(msg.get('text', '') for msg in conversation_messages)
-        all_past: List[Dict[str, Any]] = []
+        all_past = []
 
         # Vector search for semantically relevant conversations
         if conversation_text.strip():
             vector = generate_embedding(conversation_text[:2000])
             memory_ids = query_vectors_by_metadata(
-                uid,
-                vector,
-                dates_filter=cast(List[datetime], [None, None]),
-                people=[],
-                topics=[],
-                entities=[],
-                dates=[],
-                limit=3,
+                uid, vector, dates_filter=[None, None], people=[], topics=[], entities=[], dates=[], limit=3
             )
             if memory_ids:
                 vector_convos = conversations_db.get_conversations_by_id(uid, memory_ids)
@@ -491,10 +479,10 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: List
             draft = generate_notification(
                 user_name=user_name,
                 user_facts=user_facts,
-                goals=cast(List[Record], goals),
+                goals=goals,
                 past_conversations_str=past_conversations_str,
-                current_messages=cast(List[Record], conversation_messages),
-                recent_notifications=cast(List[Record], recent_notifications),
+                current_messages=conversation_messages,
+                recent_notifications=recent_notifications,
                 frequency=frequency,
                 gate_reasoning=relevance.reasoning,
                 output_language=output_language,
@@ -522,8 +510,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: List
                 user_name=user_name,
                 notification_text=notification_text,
                 draft_reasoning=draft.reasoning,
-                current_messages=cast(List[Record], conversation_messages),
-                goals=cast(List[Record], goals),
+                current_messages=conversation_messages,
+                goals=goals,
                 output_language=output_language,
             )
     except Exception as e:
@@ -556,7 +544,7 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: List
     return notification_text
 
 
-def _process_proactive_notification(uid: str, app: App, data: Dict[str, Any]) -> str | None:
+def _process_proactive_notification(uid: str, app: App, data):
     """Process proactive notifications for external/third-party apps."""
     if not app.has_capability("proactive_notification") or not data:
         logger.error(f"App {app.id} is not proactive_notification or data invalid {uid}")
@@ -602,6 +590,8 @@ def _process_proactive_notification(uid: str, app: App, data: Dict[str, Any]) ->
     if 'user_chat' in filter_scopes:
         chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
 
+    from utils.llm.clients import get_llm
+
     # Build prompt with substitutions
     for param in filter_scopes:
         if param == "user_name":
@@ -616,7 +606,7 @@ def _process_proactive_notification(uid: str, app: App, data: Dict[str, Any]) ->
             )
     prompt = prompt.replace('    ', '').strip()
 
-    message = cast(str, cast(Any, get_llm('app_integration').invoke(prompt)).content)
+    message = get_llm('app_integration').invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
         logger.info(f"Plugins {app.id}, message too short {uid}")
         return None
@@ -630,7 +620,7 @@ def _process_proactive_notification(uid: str, app: App, data: Dict[str, Any]) ->
     return message
 
 
-async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray) -> Dict[str, Any]:
+async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
     apps: List[App] = get_available_apps(uid)
     filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
     if not filtered_apps:
@@ -638,18 +628,17 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
 
     version = latest_wins_start(uid)
 
-    async def _single(app: App) -> None:
+    async def _single(app: App):
         if not latest_wins_check(uid, version):
             return  # Newer call superseded this one
 
-        ext = app.external_integration
-        if not ext or not ext.webhook_url:
+        if not app.external_integration.webhook_url:
             return
 
         if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
-        url = ext.webhook_url
+        url = app.external_integration.webhook_url
         # The configured webhook_url may already carry a query string (auth token,
         # routing param), so pick the right separator instead of always using '?'.
         separator = '&' if '?' in url else '?'
@@ -696,10 +685,10 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
 
 async def _async_trigger_realtime_integrations(
     uid: str,
-    segments: List[Dict[str, Any]],
+    segments: List[dict],
     conversation_id: str | None,
     source: str | None = None,
-) -> Dict[str, Any] | List[Message]:
+) -> dict:
     # Paywall: skip mentor + third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
     # Reactivates automatically when the user upgrades or activates BYOK.
@@ -707,7 +696,7 @@ async def _async_trigger_realtime_integrations(
         return {}
 
     # Process mentor notification first (built-in feature) — sync, runs in thread
-    mentor_results: Dict[str, str] = {}
+    mentor_results = {}
     conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
@@ -721,23 +710,22 @@ async def _async_trigger_realtime_integrations(
     if not filtered_apps:
         # Return mentor results if any, even if no external apps
         if mentor_results:
-            messages: List[Message] = []
+            messages = []
             for key, message in mentor_results.items():
                 messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
             return messages
         return {}
 
-    results: Dict[str, str] = {}
+    results = {}
 
-    async def _single(app: App) -> None:
-        ext = app.external_integration
-        if not ext or not ext.webhook_url:
+    async def _single(app: App):
+        if not app.external_integration.webhook_url:
             return
 
         if await run_blocking(db_executor, is_app_webhook_disabled, app.id):
             return
 
-        url = ext.webhook_url
+        url = app.external_integration.webhook_url
         if '?' in url:
             url += '&uid=' + uid
         else:
@@ -809,9 +797,9 @@ async def _async_trigger_realtime_integrations(
     await gather_safe(*[_single(app) for app in filtered_apps], label="realtime_integrations", max_concurrency=10)
 
     # Merge mentor results with app results
-    all_results: Dict[str, str] = {**mentor_results, **results}
+    all_results = {**mentor_results, **results}
 
-    messages: List[Message] = []
+    messages = []
     for key, message in all_results.items():
         if not message:
             continue
@@ -820,7 +808,7 @@ async def _async_trigger_realtime_integrations(
     return messages
 
 
-def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app') -> None:
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
