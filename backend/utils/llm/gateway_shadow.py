@@ -8,7 +8,11 @@ from langchain_core.callbacks.manager import AsyncCallbackManagerForLLMRun, Call
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
-from langchain_core.runnables import Runnable
+
+try:
+    from langchain_core.runnables import Runnable
+except ImportError:
+    Runnable = object  # type: ignore[assignment, misc]  # fallback for environments where langchain_core.runnables is unavailable
 
 from pydantic import ConfigDict
 
