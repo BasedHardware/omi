@@ -10,6 +10,7 @@ class ImportJobStatus(str, Enum):
     processing = 'processing'
     completed = 'completed'
     failed = 'failed'
+    cancelled = 'cancelled'
 
 
 class ImportSourceType(str, Enum):
