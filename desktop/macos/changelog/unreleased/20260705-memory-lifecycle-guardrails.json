@@ -1,3 +1,0 @@
-{
-  "change": "Fixed memory lifecycle controls so Short-term and Long-term UI only appears for accounts explicitly enabled by the backend"
-}
