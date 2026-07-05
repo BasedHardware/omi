@@ -74,24 +74,30 @@ process.on('uncaughtException', (err) => logFatal('uncaughtException', err))
 process.on('unhandledRejection', (reason) => logFatal('unhandledRejection', reason))
 // Reload a crashed renderer instead of leaving a white window — but cap rapid
 // retries: a persistent startup failure would otherwise loop crash → reload →
-// crash forever, flashing the window and flooding crash.log.
+// crash forever, flashing the window and flooding crash.log. The budget is
+// tracked PER WebContents (WeakMap, so destroyed windows drop out): a
+// crash-looping toast/overlay must not exhaust the main window's retries.
 const RENDERER_RELOAD_WINDOW_MS = 60_000
 const RENDERER_RELOAD_MAX = 3
-let rendererReloadTimes: number[] = []
+const rendererReloadTimes = new WeakMap<Electron.WebContents, number[]>()
 app.on('render-process-gone', (_e, wc, details) => {
   logFatal('render-process-gone', `reason=${details.reason} exitCode=${details.exitCode}`)
   // Skip clean exits (intentional teardown) and destroyed windows.
   if (details.reason === 'clean-exit' || wc.isDestroyed()) return
   const now = Date.now()
-  rendererReloadTimes = rendererReloadTimes.filter((t) => now - t < RENDERER_RELOAD_WINDOW_MS)
-  if (rendererReloadTimes.length >= RENDERER_RELOAD_MAX) {
+  const recent = (rendererReloadTimes.get(wc) ?? []).filter(
+    (t) => now - t < RENDERER_RELOAD_WINDOW_MS
+  )
+  if (recent.length >= RENDERER_RELOAD_MAX) {
+    rendererReloadTimes.set(wc, recent)
     logFatal(
       'render-process-gone',
-      `reload suppressed — renderer crashed ${RENDERER_RELOAD_MAX}+ times in ${RENDERER_RELOAD_WINDOW_MS / 1000}s; leaving window for manual reload`
+      `reload suppressed — renderer (webContents ${wc.id}) crashed ${RENDERER_RELOAD_MAX}+ times in ${RENDERER_RELOAD_WINDOW_MS / 1000}s; leaving window for manual reload`
     )
     return
   }
-  rendererReloadTimes.push(now)
+  recent.push(now)
+  rendererReloadTimes.set(wc, recent)
   try {
     wc.reload()
   } catch {
