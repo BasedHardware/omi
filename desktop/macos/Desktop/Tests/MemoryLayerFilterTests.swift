@@ -103,6 +103,14 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertFalse(hidden.tierIsExplicit)
     }
 
+    func testNonCanonicalDisplayExcludesLifecycleExplicitRows() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(source.contains("includeExplicitLifecycleRows(for: token)"))
+        XCTAssertTrue(source.contains("lifecycleExposed ? values : values.filter { !$0.tierIsExplicit }"))
+        XCTAssertFalse(source.contains("lifecycleExposed ? values : values.map { $0.hidingLifecycleExposure() }"))
+    }
+
     func testMemoriesPageCommitsPageCapabilitiesThroughSingleFreshnessHelper() throws {
         let source = try memoriesPageSource()
 
