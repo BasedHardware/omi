@@ -57,7 +57,7 @@ git push origin add-omi-recall-app
 # 3. Abre el PR desde GitHub hacia BasedHardware/omi
 ```
 
-En la descripción del PR incluye: el pitch, un GIF/video de la demo, y la salida de `pytest test_main.py -v` (12 passed).
+pytest plugins/omi-recall-app/test_main.py -v
 
 ## Respuestas a preguntas probables de Nik
 
