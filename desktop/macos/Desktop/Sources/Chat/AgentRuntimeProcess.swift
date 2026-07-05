@@ -136,6 +136,7 @@ actor AgentRuntimeProcess {
   private var receivedInit = false
   private var advertisedAgentControlTools: Set<String> = []
   private var isRestarting = false
+  private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
 
   var isAlive: Bool { isRunning }
 
@@ -313,7 +314,14 @@ actor AgentRuntimeProcess {
     if let ownerId = currentOwnerId() {
       dict["ownerId"] = ownerId
     }
-    sendJson(dict)
+    guard sendJson(dict) else {
+      activeRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+      return
+    }
+    activeRequests.removeValue(forKey: requestKey)
+    expectedCancelledRequests.insert(requestKey)
+    request.continuation.resume(throwing: BridgeError.stopped)
   }
 
   func query(
@@ -907,11 +915,18 @@ actor AgentRuntimeProcess {
   }
 
   private func completeRequest(_ message: RuntimeMessage) {
-    guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
+    let terminalStatus = message.payload["terminalStatus"] as? String
+    guard let requestKey = message.requestKey else {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
-    let terminalStatus = message.payload["terminalStatus"] as? String
+    guard let request = activeRequests.removeValue(forKey: requestKey) else {
+      if terminalStatus == "cancelled", expectedCancelledRequests.remove(requestKey) != nil {
+        return
+      }
+      log("AgentRuntimeProcess: dropping unroutable result")
+      return
+    }
     if terminalStatus == "cancelled" {
       request.continuation.resume(throwing: BridgeError.stopped)
       return
