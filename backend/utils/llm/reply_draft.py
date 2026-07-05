@@ -23,7 +23,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import database.vector_db as vector_db
 from database import conversations as conversations_db
 from database import memories as memories_db
-from database import users as users_db
 from database._client import db as firestore_db
 from database.entities import person_entity_id
 from models.conversation_enums import ConversationSource
@@ -41,15 +40,6 @@ from utils.retrieval.tool_services.person_service import resolve_person, is_ambi
 logger = logging.getLogger(__name__)
 
 MAX_STYLE_SAMPLES = 30
-# Cap on durable/profile-fallback memory facts fed into the draft prompt, so a user
-# with hundreds of memories doesn't blow up the prompt (MemoryService.read ignores
-# its limit on the legacy path).
-DURABLE_FACTS_CAP = 15
-# Cap on the cached AI-profile fallback text fed into the draft prompt. The API allows
-# profile_text up to 50k chars; unbounded it would bloat the prompt and crowd out
-# higher-priority context (the recent thread + the user's voice samples), so bound it
-# like every other context source.
-PROFILE_TEXT_CHAR_CAP = 4000
 NUM_CANDIDATES = 5
 # In a group, when the latest message isn't directed at the user we don't invent a
 # reply — the model emits this sentinel and we surface an empty, abstained draft.
@@ -115,27 +105,26 @@ def _thread_query(thread: List[dict]) -> str:
 
 
 def _relevant_context(uid: str, thread: List[dict]) -> str:
-    """Context Omi has that grounds the draft in who the user actually is and what
-    they've been doing. Facts are grounded through a three-tier chain so no user
-    ever gets an ungrounded draft:
-      1. RELEVANT (semantic): memories keyed off what's being discussed.
-      2. DURABLE: the user's most important memories, read straight from Firestore
-         (no search index needed) — used when semantic search misses or is down.
-      3. AI PROFILE: the cached high-level profile synthesized from all their data —
-         used when the user has few or no discrete memory atoms.
-    Plus recent + relevant conversations Omi captured.
+    """Context Omi has that grounds the draft in what's being discussed: relevance-
+    ranked semantic memory hits keyed off the recent thread, plus recent + relevant
+    conversations Omi captured. When semantic search finds nothing relevant, no facts
+    are injected — an ungrounded-but-clean reply beats one polluted with memories that
+    don't relate to the conversation.
 
     Degrades gracefully: any lookup that fails or returns nothing is skipped."""
     query = _thread_query(thread)
 
     bits: List[str] = []
 
-    # Facts Omi knows about the user. Prefer topic-relevant matches (semantic
-    # search); if that returns nothing — a short/off-topic thread, or a cold or
-    # unavailable vector+keyword index — fall back to the user's most important
-    # durable memories. MemoryService.read resolves the user's memory system
-    # (canonical/legacy) and needs no search index, so every user stays grounded in
-    # their real memories regardless of environment.
+    # Facts Omi knows about the user, keyed off what's being discussed. Only
+    # RELEVANCE-RANKED semantic hits ground the draft. The former durable-read and
+    # AI-profile fallbacks fired whenever semantic search returned nothing (any short
+    # or off-topic thread, or a cold/unavailable index) and injected the user's top-N
+    # memories UNRANKED — which measured out as dumping raw inbox/newsletter ingest
+    # (and sensitive items like dating-app or financial notifications) into the prompt,
+    # labeled "relevant to this chat", with zero real relevance. That let the model
+    # confirm private facts the conversation never raised. No relevant hit ⇒ no facts
+    # block: a clean, ungrounded reply beats a junk-polluted one.
     facts: List[str] = []
     if query:
         try:
@@ -143,32 +132,8 @@ def _relevant_context(uid: str, thread: List[dict]) -> str:
             facts = [m.memory.content for m in matches if getattr(m.memory, 'content', None)]
         except Exception as e:
             logger.warning(f"reply_draft: relevant memory search failed uid={uid}: {e}")
-    if not facts:
-        try:
-            # Cap defensively: MemoryService.read ignores its limit on the legacy
-            # path (returns the full memory set), which would bloat the prompt for
-            # users with many memories. Slice to the top N ourselves. read returns
-            # highest-scored first, so this keeps the most important facts.
-            durable = MemoryService(db_client=firestore_db).read(uid, limit=DURABLE_FACTS_CAP)
-            facts = [c for c in (getattr(m, 'content', None) for m in durable) if c][:DURABLE_FACTS_CAP]
-        except Exception as e:
-            logger.warning(f"reply_draft: durable memory fallback failed uid={uid}: {e}")
     if facts:
         bits.append("WHAT OMI KNOWS ABOUT YOU (relevant to this chat):\n" + "\n".join(f"- {f}" for f in facts))
-    else:
-        # Final fallback: some users have few or no discrete memory atoms, but Omi
-        # keeps a cached high-level AI profile synthesized from ALL their data. Read
-        # it straight from Firestore so the draft is grounded in who the user is even
-        # when both memory paths come back empty — no user gets an ungrounded draft.
-        try:
-            profile = users_db.get_ai_user_profile(uid)
-            profile_text = profile.get('profile_text') if isinstance(profile, dict) else None
-            if isinstance(profile_text, str) and profile_text.strip():
-                # Bound like every other context source so a large profile can't bloat
-                # the prompt or crowd out the thread / voice samples.
-                bits.append("WHAT OMI KNOWS ABOUT YOU:\n" + profile_text.strip()[:PROFILE_TEXT_CHAR_CAP])
-        except Exception as e:
-            logger.warning(f"reply_draft: user profile fallback failed uid={uid}: {e}")
 
     # Conversations Omi captured — BOTH the topic-relevant ones (semantic) AND the
     # most recent ones. Something referenced in the chat could be an audio
@@ -214,12 +179,44 @@ def _relevant_context(uid: str, thread: List[dict]) -> str:
     return "\n\n".join(bits)
 
 
+# Config/code identifiers require an underscore or fence — so all-caps SHOUTING
+# ("BRUHHHHHG", "ASAP"), which IS voice, is kept; only real code/config is dropped.
+_URL_RE = re.compile(r'https?://|www\.\S', re.IGNORECASE)
+_CODEY_RE = re.compile(r'[A-Za-z0-9]+_[A-Za-z0-9_]+|```')
+
+
+def _is_voice_sample(text: str) -> bool:
+    """True if a sample reflects how the user actually TEXTS, so the fingerprint and
+    voice-matching aren't polluted by non-conversational content the same threads carry:
+    pasted links, long structured blocks (deal memos, meeting notes, shared docs), code/
+    config snippets, and Omi's own past auto-drafts. These drag the measured style toward
+    a neutral, formal, generic register and wash out the user's real voice."""
+    t = (text or '').strip()
+    if not t:
+        return False
+    if _URL_RE.search(t):
+        return False
+    # Texting is short; a long or multi-line block is a memo/note/doc, not a text.
+    if len(t) > 200 or t.count('\n') >= 2:
+        return False
+    # Code/config lines (API keys, SCREAMING_SNAKE identifiers, fenced code).
+    if _CODEY_RE.search(t):
+        return False
+    # Omi's own past auto-drafts — training voice on our own output is circular.
+    low = t.lower()
+    if low.startswith('🤖') or 'omi drafted reply' in low or 'omi live send test' in low:
+        return False
+    return True
+
+
 def _dedupe_recent(samples: List[str]) -> List[str]:
-    """Dedupe case-insensitively (keeping first occurrence order), then keep the
-    most recent up to MAX_STYLE_SAMPLES."""
+    """Keep only genuine texting samples, dedupe case-insensitively (first-occurrence
+    order), then keep the most recent up to MAX_STYLE_SAMPLES."""
     seen = set()
     unique: List[str] = []
     for s in samples:
+        if not _is_voice_sample(s):
+            continue
         key = s.lower()
         if key in seen:
             continue
@@ -388,11 +385,17 @@ def build_reply_prompt(
     group_rules = (
         (
             f"THIS IS A GROUP CHAT. Default to DRAFTING a reply the user might send — people chime into "
-            f"group chats freely. ONLY abstain in the clear case where the latest message is explicitly "
-            f"directed at a DIFFERENT named person (not the user), or is pure logistics/noise the user "
-            f"plainly wouldn't answer. When it's ambiguous, general, or the user could reasonably reply, "
-            f"DRAFT — do not abstain. To abstain (only in that clear case), output every candidate as "
-            f"exactly {ABSTAIN_SENTINEL} and nothing else.\n\n"
+            f"group chats freely. But NEVER answer a question that was addressed to a specific OTHER "
+            f"participant by name ('Sara, did you finish the slides?', 'Mike you driving?', 'Leo u bringing "
+            f"the car?') as if the user were that person — that puts you in someone else's shoes and answers "
+            f"for them. That question is theirs, not the user's; do not take it on, do not echo the answer "
+            f"they gave. Only answer what was asked of the user, of everyone, or of no one in particular. If "
+            f"the only thing on the table is a question aimed at another named person (or just an "
+            f"acknowledgment of one) and nothing is actually open for the user to add, ABSTAIN. ONLY abstain "
+            f"in that clear case (latest message directed at a different named person, someone else's "
+            f"question, or pure logistics/noise the user plainly wouldn't answer). When it's ambiguous, "
+            f"general, or the user could reasonably reply, DRAFT — do not abstain. To abstain, output every "
+            f"candidate as exactly {ABSTAIN_SENTINEL} and nothing else.\n\n"
         )
         if is_group
         else ""
@@ -414,29 +417,100 @@ def build_reply_prompt(
         f"in their real messages. Do NOT be more polished, formal, or grammatical than their samples, and do "
         f"NOT introduce words, slang, abbreviations, punctuation, or emoji their own messages don't already "
         f"show.\n"
-        f"WRITE LIKE A HUMAN TEXTING, NOT AN AI. Keep it short, plain, and conversational — say one clear "
-        f"thing, no filler, no hedging, no throat-clearing, no restating the question, no wrap-up. Optimize "
-        f"for clarity: the fewest, plainest words that get the point across. If a candidate reads polished, "
-        f"formal, or 'assistant-like', it is WRONG. Never use em dashes or fancy punctuation unless the "
-        f"user's own samples clearly do.\n"
+        f"WRITE LIKE A HUMAN TEXTING, NOT AN AI. Say one clear thing, no filler, no throat-clearing, no "
+        f"restating the question, no wrap-up. If a candidate reads polished, formal, or 'assistant-like', it "
+        f"is WRONG. Never use em dashes or fancy punctuation unless the user's own samples clearly do.\n"
+        f"MATCH THEIR LENGTH — this is critical; most drafts fail by being too long. Match the length the USER "
+        f"actually replies with (see their <user_style> samples and measured length), NOT the length of the "
+        f"incoming message. People very often reply in a single word, one to three words, a bare "
+        f"'yes'/'yeah'/'ok', a short interjection, or just an emoji — when the user's own replies look like "
+        f"that, your draft MUST be that short too. Do NOT expand a one-word reaction into a full sentence. A "
+        f"single word or an emoji-only reply is a valid and often the best draft. A longer reply is right ONLY "
+        f"when the user's own style and the moment genuinely call for it.\n"
+        f"BURST LIKE THEY DO — real people often reply as a BURST of several short back-to-back messages "
+        f"rather than one. Look at how the USER chunks their OWN messages in the conversation above: if they "
+        f"tend to fire off multiple short messages in a row (consecutive lines from them), write your reply "
+        f"the same way — as 2+ SHORT separate messages, EACH ON ITS OWN LINE (separated by a newline), "
+        f"matching their rhythm and how many they usually send. Each line stays short (per the length rule "
+        f"above) — a burst is several short messages, NOT one long message chopped up. If the user usually "
+        f"sends a single message, send one. Only burst when the user's own style clearly shows it.\n"
+        f"MIRROR THE MOVE — if {name}'s message is a reaction, greeting, interjection, or low-content filler "
+        f"(not a real question or request), reply with an equally light reaction or greeting in the user's "
+        f"voice. Do NOT introduce a new topic, tack on commentary, or ask a question the user wouldn't. Default "
+        f"to NOT asking a question; a short plain acknowledgement is usually the faithful move. Prefer the "
+        f"minimal thing the user would actually send over a complete, informative answer.\n"
+        f"MATCH THEIR ORTHOGRAPHY — mirror the user's own casing, punctuation density, and expressive spelling "
+        f"exactly as their samples show: lowercase vs capitalized, elongated letters ('yooo', 'sureee'), "
+        f"repeated punctuation, and their real interjections. Do NOT normalize toward clean standard spelling, "
+        f"and do NOT add slang, enthusiasm, or intensifiers they don't themselves use.\n"
         f"VARY YOUR OPENER — do NOT begin with the same word or filler you used in your recent messages in "
         f"the conversation above. Opening message after message the same way, or leaning on one filler word, "
         f"is a dead AI giveaway; real people start each message differently.\n"
+        f"MATCH THE MOMENT — read the emotional weight of {name}'s most recent message and respond the way the "
+        f"user themselves genuinely would with THIS person, at the same level of seriousness. Let the register "
+        f"come from how the user actually relates to {name} (the person context and history above) and from what "
+        f"was just said — not from a fixed style. Don't flatten a heavy, vulnerable, or serious message into a "
+        f"flippant one-liner, a joke, or an 'lol', and don't inflate a light or casual one. The 'keep it short and "
+        f"plain' guidance is about avoiding AI filler — it is NOT a license to be dismissive when the moment isn't "
+        f"light; give the moment the weight the user would give it.\n"
         f"HOW THIS USER TEXTS (measured from their real messages — match it):\n{fingerprint_lines}\n\n"
         f"GROUNDING — when the context/memory in the user message or the user's own messages establish the "
         f"answer, ANSWER what {name} asks: directly, specifically, in the user's voice. Using what Omi knows "
         f"about the user to answer questions is the whole point — never withhold, hedge, or sit on an answer "
         f"you actually have, and never answer a question with a question or ask {name} why they're asking. "
+        f"USE THE FACT: if the context above contains the specific the question asks for — a place ('San "
+        f"Francisco'), a day ('Friday'), a time ('early August'), a name, a number, a dish, a plan, an event "
+        f"— you MUST state THAT specific in the reply. Hedging ('not sure', 'somewhere around', 'the usual', "
+        f"'we'll see', 'nothing crazy') when the exact answer is sitting in the context is a FAILURE, just as "
+        f"bad as inventing one — it wastes what Omi knows. Prefer the concrete retrieved detail over a vague "
+        f"reply every time the detail is actually there. "
         f"What you must NOT do is CONFIRM or DENY things with no basis: facts about the user's life; their "
         f"opinions, feelings, preferences and stances; actions they took; and REASONS for their own behavior. "
-        f"A made-up \"no\" is as wrong as a made-up \"yes\", and a made-up reason is a fabrication. When "
-        f"NOTHING above establishes it, give a short, natural reply in the user's voice and move on — but "
-        f"still NEVER interrogate them back, and NEVER say the user forgot or doesn't remember. Answer what "
-        f"you know; just don't put words, opinions, actions, or reasons in their mouth for what you don't.\n\n"
+        f"A made-up \"no\" is as wrong as a made-up \"yes\", and a made-up reason is a fabrication. A "
+        f"DENIAL IS A FACTUAL CLAIM TOO — it is NOT a safe, humble default. Never deny, negate, or downplay "
+        f"something the context/memory or the user's own messages actually show. If what's above shows the "
+        f"user WAS doing, involved in, or planning the very thing {name} is asking about, you must AFFIRM it "
+        f"truthfully in their voice; if the context shows the involvement but not the exact outcome {name} "
+        f"asks about, affirm what it DOES show or briefly ask about the rest — do NOT flip to a \"no\" "
+        f"(\"didn't\", \"nope\", \"skipped it\", \"couldn't make it\", \"not anymore\"). A denial that "
+        f"contradicts the context is the single worst reply here, worse than an over-eager yes. When "
+        f"NOTHING above establishes the answer, do NOT invent one: never state a concrete specific the "
+        f"context didn't give you — a number, score, price, brand or model, place, date, or a specific "
+        f"outcome like how something 'went' — and never assume a person, thing, or event exists that wasn't "
+        f"mentioned. Instead give a brief, natural reply that asserts none of that. A short, vague, "
+        f"non-committal reply is CORRECT here and is NOT deflecting — deflecting is dodging with a question "
+        f"or 'why do you ask', which you must still never do, and never say the user forgot or doesn't "
+        f"remember. Answer what you actually know; for everything else stay vague rather than making "
+        f"something up.\n\n"
+        f"ASSUMED FACTS — the single most common way these drafts go wrong. {name} will often ask as if "
+        f"something about the user's life is ALREADY TRUE: 'how's your girlfriend?', 'how'd the wedding go?', "
+        f"'how's your mom's recovery?', 'still at that job?', 'you still smoking?', 'did you sell the car?', "
+        f"'you still living downtown?'. The question ASSUMING a fact is NOT the same as that fact being "
+        f"established — {name} could be wrong, teasing, or asking about someone else. Unless the context or "
+        f"the user's own messages actually confirm it, you do NOT know it, so you cannot answer it. Do NOT "
+        f"play along and confirm it ('she's good', 'it went well', 'she's recovering'), do NOT invent a denial "
+        f"or a life-change ('nope', 'not anymore', 'we broke up', 'moved out', 'quit that job'), and do NOT "
+        f"tack on a backstory or a plan ('been meaning to', 'still thinking about it'). A made-up yes, a "
+        f"made-up no, and a made-up story are ALL fabrications that put false claims about the user's life in "
+        f"their mouth — the worst thing you can do here. But do NOT swing the other way and CHALLENGE the "
+        f"premise either ('what girlfriend?', 'do I even have a car?', 'who said I moved?') — questioning "
+        f"whether the thing exists is rude and treats {name} as wrong. Instead reply with a short, warm, "
+        f"genuinely non-committal line that neither confirms, denies, nor questions the premise and doesn't "
+        f"ask why — e.g. 'haha you know how it is', 'same old same old', 'man it's a whole story', 'all good "
+        f"over here' — then stop. Weight it by how well the user knows {name}: with a close friend or family "
+        f"member (per the person context / a clear shared history), lean warm and easy and let a relaxed, "
+        f"non-specific reply stand — you needn't spell out or verify the exact detail; with someone they "
+        f"barely know, stay a touch more guarded. Only give a real yes/no or status when the context or the "
+        f"user's own messages truly establish it.\n\n"
         f"COMMITMENTS — don't agree to plans, invites, times, or obligations on the user's behalf unless the "
         f"user's own recent messages or the stated intent clearly support it. When it's a yes/no or an invite "
         f"and you're not sure what the user wants, keep the reply non-committal — in the user's own voice — "
         f"rather than committing them.\n\n"
+        f"PRIVATE INFO — if {name} asks for the user's own sensitive identifiers or credentials — SSN, date "
+        f"of birth, a full card/bank/account number, a CVV, a password, a one-time/2FA code, or a photo of an "
+        f"ID/license — never reveal one, never make one up, and never agree or promise to send it (no 'sure', "
+        f"'gimme a sec', 'sending it now'). Deflect or push back in the user's own voice (e.g. 'why?', 'can't "
+        f"send that over text', 'call me'), even when the asker is a friend.\n\n"
         f"{intent_line}"
         f"SHARED MEDIA: links and photos/videos in the chat are resolved for you in the SHARED LINKS & "
         f"IMAGES block of the user message (when available) — use that to understand what's being discussed. "
@@ -469,14 +543,30 @@ def _build_selection_prompt(name: str, style_block: str, thread_text: str, candi
         f"Pick the ONE candidate that best (a) sounds like it was written by THIS user — their exact "
         f"capitalization, length, punctuation (no em dashes or fancy punctuation unless their samples use "
         f"them), vocabulary and register, learned ONLY from their own messages and NOT from the other "
-        f"person in the conversation; (b) reads like a real human text, not an AI — short, plain, "
-        f"conversational, one clear point, no filler or hedging or wrap-up; (c) fits what was just said; and "
+        f"person in the conversation. When the user's own replies are short (a word or two, a bare "
+        f"'yes'/'ok', a short interjection, or an emoji), STRONGLY prefer the shortest candidate that fits — "
+        f"a draft noticeably longer than the user's own typical reply length is a failure, as is normalizing "
+        f"their casing/spelling or adding slang or enthusiasm they don't use; (b) reads like a real human "
+        f"text, not an AI — short, plain, "
+        f"conversational, one clear point, no filler or hedging or wrap-up; (c) fits what was just said; "
+        f"(c2) MATCHES the emotional weight of {name}'s latest message and how the user relates to them — pick the "
+        f"candidate whose register fits the moment: don't pick a flippant, jokey, 'lol', or dismissive one for a "
+        f"heavy or vulnerable message, nor an over-heavy one for a casual message; this fit overrides a bare "
+        f"'shorter is better' preference; and "
         f"(d) doesn't CONFIRM or DENY anything not established — facts, the user's opinions/feelings/stances, "
         f"actions they took, or reasons for their behavior (picking yes/no on whether they like someone, or "
         f"inventing why they did something, when nothing shows it) — and doesn't commit the user to anything "
         f"they haven't clearly agreed to. Reject anything polished or assistant-like, and reject any "
-        f"candidate that fabricates a stance, action, or reason the user never expressed. Return the index "
-        f"of the best candidate."
+        f"candidate that fabricates a stance, action, or reason the user never expressed, or that invents a "
+        f"concrete specific the conversation never provided (a number, score, price, brand or model, place, "
+        f"date, named outcome, or the existence of a person/thing/event). REJECT any candidate that DENIES, "
+        f"negates, or downplays something the context or the user's own messages actually show (a "
+        f"\"no\"/\"didn't\"/\"not anymore\" that contradicts the context is a fabrication, not a safe "
+        f"default); when the context shows the user was involved in what's being asked, prefer the candidate "
+        f"that affirms it or asks over any that denies it. When the context DOES contain the specific asked "
+        f"for (a place, day, time, name, number, dish, plan), PREFER the candidate that states that real "
+        f"retrieved specific over any vaguer/hedging one — using a fact you have beats hedging. Only between "
+        f"a vague reply and one that states an UNESTABLISHED specific, pick the vague one. Return the index of the best candidate."
     )
     user_prompt = (
         f"Here are the user's own real messages, showing exactly how they text:\n"

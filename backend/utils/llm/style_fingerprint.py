@@ -81,6 +81,8 @@ class StyleFingerprint:
     word_band: Tuple[int, int]  # (p10, p90) words per message, clamped >= 1
     terminal_punct_rate: float  # fraction of samples ending in . ! or ?
     ends_with_period_rate: float  # fraction ending specifically in '.'
+    median_words: int = 1  # typical (p50) words per message — the length target
+    short_reply_rate: float = 0.0  # fraction of the user's messages that are <= 2 words
     uses_em_dash: bool = False  # the user actually uses em/en dashes or --
     vocabulary: FrozenSet[str] = field(default_factory=frozenset)  # user's own words (informational only)
     cold_start: bool = False
@@ -144,6 +146,8 @@ def compute_fingerprint(samples: List[str]) -> StyleFingerprint:
     word_counts = sorted(len(_tokenize_words(s)) or 1 for s in cleaned)
     avg_words = sum(word_counts) / n
     word_band = (max(1, _percentile(word_counts, 10)), max(1, _percentile(word_counts, 90)))
+    median_words = max(1, _percentile(word_counts, 50))
+    short_reply_rate = sum(1 for w in word_counts if w <= 2) / n
 
     terminal = sum(1 for s in cleaned if s[-1] in ".!?")
     periods = sum(1 for s in cleaned if s[-1] == ".")
@@ -161,6 +165,8 @@ def compute_fingerprint(samples: List[str]) -> StyleFingerprint:
         uses_emoji=emoji_rate >= 0.05,
         avg_words=avg_words,
         word_band=word_band,
+        median_words=median_words,
+        short_reply_rate=short_reply_rate,
         terminal_punct_rate=terminal / n,
         ends_with_period_rate=periods / n,
         uses_em_dash=any(has_em_dash(s) for s in cleaned),
@@ -187,7 +193,19 @@ def render_fingerprint_lines(fp: StyleFingerprint) -> str:
     else:
         emoji = "never uses emoji — do NOT add any emoji"
     lo, hi = fp.word_band
-    length = f"messages are usually {lo}-{hi} words — keep it that short; do NOT pad or add extra sentences"
+    # Lead with the TYPICAL (median) length, not the p90 max, so drafts target the user's habit and
+    # don't drift toward the long end. Surface the short-reply tendency generically (from their data).
+    if fp.short_reply_rate >= 0.4:
+        length = (
+            f"usually replies VERY SHORT — about {fp.median_words} word(s) typical, and {round(fp.short_reply_rate * 100)}% "
+            f"of their messages are 1-2 words (often a single word or emoji). Match that: keep drafts this short, a "
+            f"one-word or emoji reply is fine; do NOT expand into a sentence (range {lo}-{hi} words)"
+        )
+    else:
+        length = (
+            f"typically about {fp.median_words} words (range {lo}-{hi}) — match that length; do NOT pad or add "
+            f"extra sentences, and a short one-word reply is fine when it fits"
+        )
     end_punct = (
         "usually ends sentences with punctuation" if fp.terminal_punct_rate > 0.5 else "usually skips end punctuation"
     )
