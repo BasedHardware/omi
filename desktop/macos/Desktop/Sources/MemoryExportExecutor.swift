@@ -33,14 +33,14 @@ enum MemoryExportExecutor {
       throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
     }
 
-    let key =
-      destination.requiresHostedMCPKeyForSetup
-      ? try await MemoryExportService.shared.ensureMCPKey()
-      : ""
+    let key = try await hostedMCPKey(for: destination)
 
-    // OpenClaw / Hermes have no setup CLI; the agent doesn't reliably perform the
-    // file write. Do it deterministically ourselves (idempotent local write).
     if MemoryBankConnector.handles(destination) {
+      if canSkipLocalSetupWhenConfigMatches(destination),
+        MemoryExportConnectionDetector.hasExistingConnection(for: destination, matchingKey: key)
+      {
+        return Outcome(taskTitle: "\(destination.title) is already connected.", mode: .completed)
+      }
       let message = try MemoryBankConnector.connect(destination, key: key)
       await MemoryExportService.shared.markConnected(destination)
       return Outcome(taskTitle: message, mode: .completed)
@@ -63,6 +63,25 @@ enum MemoryExportExecutor {
       }
       return await runAssisted(destination, key: key)
     }
+  }
+
+  private static func canSkipLocalSetupWhenConfigMatches(_ destination: MemoryExportDestination) -> Bool {
+    switch destination {
+    case .claudeCode, .codex:
+      return true
+    case .openclaw, .hermes:
+      return false
+    case .notion, .obsidian, .chatgpt, .claude, .gemini, .agents:
+      return false
+    }
+  }
+
+  private static func hostedMCPKey(for destination: MemoryExportDestination) async throws -> String {
+    guard destination.requiresHostedMCPKeyForSetup else { return "" }
+    if MemoryBankConnector.handles(destination) {
+      return try await MemoryExportService.shared.mcpKeyForLocalConnectorSetup()
+    }
+    return try await MemoryExportService.shared.ensureMCPKey()
   }
 
   static func requiresAccessibilityPreflight(_ destination: MemoryExportDestination) -> Bool {
@@ -318,10 +337,10 @@ enum MemoryExportExecutor {
     }
 
     if let hint = destination.assistedOverlayHint,
-      let fields = destination.assistedSetupFields(key: key)
+      let sections = destination.assistedSetupSections(key: key)
     {
       CloudConnectorGuidanceOverlay.shared.presentFieldCopyCard(
-        title: hint.title, subtitle: hint.subtitle, fields: fields, near: nil)
+        title: hint.title, subtitle: hint.subtitle, sections: sections, near: nil)
       return Outcome(
         taskTitle:
           "Opened \(destination.title) — copy each value from the on-screen card into the form.",

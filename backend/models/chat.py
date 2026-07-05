@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Literal, Optional, Union, cast
+from typing import Any, Callable, List, Literal, Optional, Union, cast
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -100,6 +100,24 @@ class Message(BaseModel):
                 data_dict['app_id'] = plugin_id_val
             return data_dict
         return data
+
+    @classmethod
+    def deserialize_many_safe(
+        cls,
+        records: List[dict[str, Any]],
+        on_error: Optional[Callable[[dict[str, Any], Exception], None]] = None,
+    ) -> List['Message']:
+        """Build Message objects from raw stored records, skipping any that fail
+        validation so one malformed or legacy chat message cannot 500 a whole history
+        load. on_error(record, exception), when provided, is called for each skip."""
+        parsed: List['Message'] = []
+        for record in records:
+            try:
+                parsed.append(cls(**record))
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break the history
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
 
     @staticmethod
     def get_messages_as_string(

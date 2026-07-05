@@ -7,9 +7,9 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import List, Tuple, Dict, Any, Optional, Set, cast
 
-
 import httpx
 from fastapi import HTTPException
+from pydantic import ValidationError
 from database.cache import get_memory_cache, get_pubsub_manager
 from database.redis_db import delete_generic_cache
 from database.apps import (
@@ -87,6 +87,24 @@ logger = logging.getLogger(__name__)
 
 _reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
 MarketplaceAppReviewUIDs: List[str] = _reviewers_env.split(',') if _reviewers_env else []
+
+
+def _safe_build_app(app_dict: dict[str, Any]) -> Optional[App]:
+    """Build an App from a raw marketplace record, skipping (not raising on) a malformed one.
+
+    The marketplace list builders are shared and Redis/process-cached across all users, so one
+    legacy or malformed app document must not 500 the whole listing for everyone. Returns None
+    for a record that fails validation, logging the app id and the offending field names only.
+    """
+    try:
+        return App(**app_dict)
+    except ValidationError as e:
+        logger.warning(
+            "Skipping malformed marketplace app %s: %s",
+            app_dict.get('id'),
+            [err['loc'][0] for err in e.errors()],
+        )
+        return None
 
 
 def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: Dict[str, Any], app_id: str) -> None:
@@ -274,8 +292,10 @@ def get_popular_apps() -> List[App]:
             rating_avg = sum([x['score'] for x in sorted_reviews]) / len(sorted_reviews) if reviews else None
             app_dict['rating_avg'] = rating_avg
             app_dict['rating_count'] = len(sorted_reviews)
-            apps.append(App(**app_dict))
-        apps.sort(key=lambda x: x.installs, reverse=True)
+            built_app = _safe_build_app(app_dict)
+            if built_app is not None:
+                apps.append(built_app)
+        apps = sorted(apps, key=lambda x: x.installs, reverse=True)
         return apps
 
     # Singleflight: only ONE request fetches, others wait
@@ -346,7 +366,9 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
             app_dict['user_review'] = reviews.get(uid)
             app_dict['rating_avg'] = rating_avg
             app_dict['rating_count'] = len(sorted_reviews)
-        apps.append(App(**app_dict))
+        built_app = _safe_build_app(app_dict)
+        if built_app is not None:
+            apps.append(built_app)
     if include_reviews:
         apps.sort(key=weighted_rating, reverse=True)
     return apps
@@ -471,7 +493,9 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
                 app_dict['reviews'] = []
                 app_dict['rating_avg'] = rating_avg
                 app_dict['rating_count'] = len(sorted_reviews)
-            apps.append(App(**app_dict))
+            built_app = _safe_build_app(app_dict)
+            if built_app is not None:
+                apps.append(built_app)
         if include_reviews:
             apps.sort(key=weighted_rating, reverse=True)
         return apps

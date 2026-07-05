@@ -9,7 +9,7 @@ import 'package:omi/pages/conversations/private_cloud_sync_page.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/sync_confirmation.dart';
@@ -59,8 +59,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             centerTitle: true,
-            title: Text(context.l10n.sync,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            title: Text(
+              context.l10n.sync,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             leading: IconButton(
               icon: const FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
               onPressed: () => Navigator.of(context).pop(),
@@ -89,10 +91,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                       const SizedBox(height: 16),
                       _buildConversationsCard(syncProvider),
                     ],
-                    if (syncState.hasError) ...[
-                      const SizedBox(height: 16),
-                      _buildErrorCard(syncState, syncProvider),
-                    ],
+                    if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
                     const SizedBox(height: 32),
                     _buildStorageSettings(userProvider),
                     if (hasAnyRecording) ...[
@@ -123,8 +122,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final attention = p.needsAttentionWalsCount;
     final uploaded = p.uploadedWals.length;
     final readyToBackUp = p.displaySortedWals
-        .where((w) =>
-            w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying)
+        .where(
+          (w) =>
+              w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
+        )
         .length;
     final hasAnyRecording = p.allWals.isNotEmpty;
 
@@ -189,10 +190,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -239,11 +237,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(100),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
         ),
-        child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500)),
       ),
     );
   }
@@ -298,18 +296,24 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(syncState.errorMessage ?? context.l10n.syncFailed,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+            child: Text(
+              syncState.errorMessage ?? context.l10n.syncFailed,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+            ),
           ),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => syncProvider.retrySync(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration:
-                  BoxDecoration(color: Colors.red.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
-              child: Text(context.l10n.retry,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(100),
+              ),
+              child: Text(
+                context.l10n.retry,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
             ),
           ),
         ],
@@ -330,8 +334,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(context.l10n.storageSection,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            context.l10n.storageSection,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
         Container(
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
@@ -342,9 +348,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 label: context.l10n.storeAudioOnPhone,
                 isOn: isPhoneOn,
                 onTap: () {
-                  Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const LocalStoragePage()))
-                      .then((_) => setState(() {}));
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const LocalStoragePage())).then((_) => setState(() {}));
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
@@ -362,12 +368,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     );
   }
 
-  Widget _settingRow({
-    required IconData icon,
-    required String label,
-    required bool isOn,
-    required VoidCallback onTap,
-  }) {
+  Widget _settingRow({required IconData icon, required String label, required bool isOn, required VoidCallback onTap}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -378,8 +379,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
-              child:
-                  Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400)),
+              child: Text(
+                label,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+              ),
             ),
             Text(
               isOn ? context.l10n.on : context.l10n.off,
@@ -448,10 +451,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           chip(WalDisplayFilter.all, context.l10n.all),
@@ -571,9 +571,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () {
         final syncProvider = context.read<SyncProvider>();
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)));
           return;
         }
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: wal)));
@@ -629,8 +629,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: Text(context.l10n.retry,
-              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            context.l10n.retry,
+            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
       );
     }
@@ -686,13 +688,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   ),
                 ),
                 const SizedBox(height: 22),
-                Text(l.howSyncingWorks,
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 10),
                 Text(
-                  l.syncFlowIntro,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45),
+                  l.howSyncingWorks,
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                 ),
+                const SizedBox(height: 10),
+                Text(l.syncFlowIntro, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45)),
                 const SizedBox(height: 22),
                 _syncFlowStep(1, l.syncStepUpload, l.syncStepUploadDesc),
                 const SizedBox(height: 16),
@@ -700,10 +701,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 const SizedBox(height: 16),
                 _syncFlowStep(3, l.syncStepBackedUp, l.syncStepBackedUpDesc),
                 const SizedBox(height: 22),
-                Text(
-                  l.syncFailureFootnote,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45),
-                ),
+                Text(l.syncFailureFootnote, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45)),
               ],
             ),
           ),
@@ -728,7 +726,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 3),
               Text(desc, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.45)),
             ],
@@ -760,8 +761,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           if (confirmed == true && context.mounted) {
             await provider.deleteAllSyncedWals();
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.syncedFilesDeleted), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.syncedFilesDeleted), backgroundColor: Colors.green));
             }
           }
         },
@@ -777,8 +779,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           if (confirmed == true && context.mounted) {
             await provider.deleteAllPendingWals();
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.pendingFilesDeleted), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.pendingFilesDeleted), backgroundColor: Colors.green));
             }
           }
         },
@@ -795,8 +798,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             await provider.deleteAllSyncedWals();
             await provider.deleteAllPendingWals();
             if (context.mounted) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text(context.l10n.allFilesDeleted), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.allFilesDeleted), backgroundColor: Colors.green));
             }
           }
         },
@@ -971,7 +975,10 @@ class _StorageRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+                    Text(
+                      title,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                    ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

@@ -1,0 +1,10 @@
+{
+  "version": "0.12.11",
+  "date": "2026-07-04",
+  "changes": [
+    "Added shared chat resource cards and an Omi-managed artifacts folder so attachments and generated files can be opened, revealed, or copied from chat.",
+    "Refined chat file cards — the whole card now opens the file with a one-tap copy-path button, added file attachments to the floating agent chat, and stopped the \"taking longer than usual\" warning from showing during long-by-design work like file writes, commands, and agent runs",
+    "Voice and push-to-talk questions now appear in the chat instantly, as soon as they're transcribed, instead of only after the assistant finishes replying",
+    "Files created by a background agent now show up as cards in the main chat and the notch chat; when you ask about a finished agent, its generated file rides along in the reply, always below the message text, with multiple files stacked cleanly instead of squeezed side-by-side, no stray loading dots left under a delivered file, and a clearer open affordance"
+  ]
+}

@@ -501,6 +501,52 @@ def print_report(results: Dict[str, Any]) -> None:
         print()
 
 
+def _finding_calls(finding: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if "calls" in finding:
+        return finding["calls"]
+    return (
+        finding.get("network_io", [])
+        + finding.get("file_io", [])
+        + finding.get("sleeps", [])
+        + finding.get("db_calls", [])
+        + finding.get("all_blocking", [])
+    )
+
+
+def print_selected_report(
+    results: Dict[str, Any],
+    failures: List[Tuple[str, Dict[str, Any]]],
+    fail_on: Sequence[str],
+    diff_base: str,
+    full_report: bool,
+) -> None:
+    s: Dict[str, Any] = results["summary"]
+    scope_label = (
+        f"changed function/decorator ranges and import-changed files since {diff_base}"
+        if diff_base
+        else "all scanned functions"
+    )
+
+    print("=== FastAPI Async Blocker Gate ===")
+    print(f"Endpoints scanned: {s['total_def_endpoints']} def + {s['total_async_endpoints']} async def")
+    print(f"Fail-on policy: {', '.join(fail_on) if fail_on else '(none)'}")
+    print(f"Fail-on scope: {scope_label}")
+    print(f"Selected blocking findings: {len(failures)}")
+
+    if failures:
+        print()
+        print("--- Blocking findings selected for this push ---")
+        for category, finding in failures:
+            label = finding.get("endpoint") or finding.get("function") or "async def"
+            calls = ", ".join(f"{c['call']}:{c['line']}" for c in _finding_calls(finding))
+            detail = f" | {calls}" if calls else ""
+            print(f"  {category}: {finding['file']}:{finding['line']} | {label}{detail}")
+    elif not full_report:
+        total_known = sum(s[category] for category in FAIL_ON_CATEGORIES if category in s)
+        print(f"Known findings outside this push's fail scope: {total_known}")
+        print("Full audit suppressed; rerun with --full-report or PRE_PUSH_VERBOSE=1 for legacy findings.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Scan FastAPI routers for async blocking patterns")
     parser.add_argument(
@@ -525,8 +571,13 @@ def main() -> None:
         "--diff-base",
         help=(
             "Only fail findings whose function/decorator line range intersects lines changed since this git ref, "
-            "or findings in files with changed imports. The full report is still printed."
+            "or findings in files with changed imports."
         ),
+    )
+    parser.add_argument(
+        "--full-report",
+        action="store_true",
+        help="Print every finding from the full async audit, including legacy findings outside the fail scope.",
     )
     args = parser.parse_args()
     if args.dirs == ["backend/routers", "backend/utils"] and not os.path.isdir("backend/routers"):
@@ -546,18 +597,10 @@ def main() -> None:
         json.dump(results, sys.stdout, indent=2)
         print()
     else:
-        print_report(results)
-        scope_label = (
-            f"changed function/decorator ranges and import-changed files since {args.diff_base}"
-            if args.diff_base
-            else "all scanned functions"
-        )
-        print(f"Fail-on policy: {', '.join(fail_on) if fail_on else '(none)'}")
-        print(f"Fail-on scope: {scope_label}")
-        print(f"Selected blocking findings: {len(failures)}")
-        for category, finding in failures:
-            label = finding.get("endpoint") or finding.get("function") or "async def"
-            print(f"  {category}: {finding['file']}:{finding['line']} | {label}")
+        print_selected_report(results, failures, fail_on, args.diff_base, args.full_report)
+        if args.full_report:
+            print()
+            print_report(results)
 
     sys.exit(1 if failures else 0)
 

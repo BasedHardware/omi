@@ -325,19 +325,26 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Initialize NotificationService early to set up UNUserNotificationCenterDelegate
     // This ensures notifications display properly when app is in foreground
     _ = NotificationService.shared
+    NotificationRegistrationRepair.repairOnceForCurrentVersion(reason: "startup_version_registration")
 
     // Initialize Sparkle auto-updater early so the 10-minute check timer starts at launch
     // Without this, the updater only starts when the user opens Settings or clicks "Check for Updates"
     _ = UpdaterViewModel.shared
     UpdaterViewModel.shared.checkForUpdatesImmediatelyAfterLaunchIfNeeded()
 
-    // Initialize Sentry for crash reporting and error tracking (including dev builds)
+    // Initialize Sentry for crash reporting and error tracking.
+    // Non-production bundles keep explicit feedback/error APIs available, but must
+    // not install native crash/app-hang handlers: those handlers run in signal
+    // context and have caused named dogfood bundles to crash while reporting.
     let isDev = AnalyticsManager.isDevBuild
     SentrySDK.start { options in
       options.dsn =
         "https://bbffa02d948c81ea4dccd36246c7bd20@o4511085999816704.ingest.us.sentry.io/4511086024851456"
       options.debug = false
-      options.enableAutoSessionTracking = true
+      options.enableAutoSessionTracking = !isDev
+      options.enableCrashHandler = !isDev
+      options.enableAppHangTracking = !isDev
+      options.enableWatchdogTerminationTracking = !isDev
       options.environment = isDev ? "development" : "production"
       // Disable automatic HTTP client error capture — the SDK creates noisy events
       // for every 4xx/5xx response (e.g. Cloud Run 503 cold starts on /v1/crisp/unread).
@@ -348,7 +355,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       // flags transient jank (disk/IPC stalls, GC-like dealloc storms) that dominates
       // event volume without being individually actionable. Raise to 3s so only
       // sustained freezes — the ones users actually feel — are reported.
-      options.appHangTimeoutInterval = 3.0
+      options.appHangTimeoutInterval = isDev ? 0 : 3.0
       options.beforeSend = { event in
         // Allow user feedback through from all builds (dev + prod)
         if event.message?.formatted.hasPrefix("User Report") == true { return event }
@@ -422,7 +429,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return event
       }
     }
-    log("Sentry initialized (environment: \(isDev ? "development" : "production"))")
+    log(
+      "Sentry initialized (environment: \(isDev ? "development" : "production"), nativeHandlers=\(!isDev))"
+    )
 
     // Initialize Firebase (skipped for local harness — Firebase SDK configure can hang;
     // local dev uses Auth emulator REST + stored tokens instead).
@@ -570,7 +579,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       }
     }
 
-    // Start Sentry heartbeat timer (every 5 minutes) to capture breadcrumbs periodically
     startSentryHeartbeat()
     startForegroundTracking()
 
@@ -609,7 +617,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   /// Start a timer that sends Sentry session snapshots every 5 minutes
   /// This ensures we have breadcrumbs captured even without errors
   private func startSentryHeartbeat() {
-    // Now runs in dev builds too since Sentry is always initialized
+    guard !AnalyticsManager.isDevBuild else { return }
     sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
       // Capture a session heartbeat event with current breadcrumbs
       SentrySDK.capture(message: "Session Heartbeat") { scope in
@@ -1330,10 +1338,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ResourceMonitor.shared.reportResourcesNow(context: "app_terminating")
     ResourceMonitor.shared.stop()
 
-    // Capture final session snapshot before termination (now enabled for dev builds too)
-    SentrySDK.capture(message: "App Terminating") { scope in
-      scope.setLevel(.info)
-      scope.setTag(value: "lifecycle", key: "event_type")
+    if !AnalyticsManager.isDevBuild {
+      SentrySDK.capture(message: "App Terminating") { scope in
+        scope.setLevel(.info)
+        scope.setTag(value: "lifecycle", key: "event_type")
+      }
     }
   }
 

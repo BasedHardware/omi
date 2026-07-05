@@ -322,9 +322,11 @@ class AuthService {
     private var appleSignInDelegate: AppleSignInDelegate?
 
     // API Configuration
-    // Auth uses the Python backend (OMI_PYTHON_API_URL) — same service that hosts Redis-backed OAuth
+    // Auth uses the production Python backend by default because web OAuth
+    // provider callbacks are host allowlisted. Override with OMI_AUTH_API_URL
+    // for local auth backend testing.
     private var apiBaseURL: String {
-        DesktopBackendEnvironment.pythonBaseURL()
+        DesktopBackendEnvironment.authBaseURL()
     }
     private var redirectURI: String {
         return "\(urlScheme)://auth/callback"

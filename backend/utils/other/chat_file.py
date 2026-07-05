@@ -16,11 +16,23 @@ from PIL import Image
 import database.chat as chat_db
 from models.chat import ChatSession, FileChat
 from utils.executors import db_executor, run_blocking
+from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 import logging
 
 logger = logging.getLogger(__name__)
 
-_async_openai = AsyncOpenAI()
+_async_openai: AsyncOpenAI | None = None
+
+
+def _get_async_openai() -> AsyncOpenAI:
+    global _async_openai
+    if _async_openai is None:
+        _async_openai = AsyncOpenAI()
+    return _async_openai
+
+
+def _assert_direct_file_chat_allowed() -> None:
+    raise_if_gateway_feature_mode_blocks_direct_model_surface('file_chat.openai_files_assistants_vision')
 
 
 class _StreamingCallbackProtocol:
@@ -92,6 +104,7 @@ class FileChatTool:
 
     @staticmethod
     def upload(file_path: Union[str, Path]) -> Dict[str, Any]:
+        _assert_direct_file_chat_allowed()
         result: Dict[str, Any] = {}
         file = File(file_path)
         file.get_mime_type()
@@ -117,6 +130,7 @@ class FileChatTool:
 
     def process_chat_with_file(self, question: str, file_ids: List[str]) -> str:
         """Process chat with file attachments"""
+        _assert_direct_file_chat_allowed()
         self._ensure_thread_and_assistant()
         answer = self.ask(self.uid, question, file_ids, self.thread_id, self.assistant_id)
         return answer
@@ -128,6 +142,7 @@ class FileChatTool:
         callback: Optional[_StreamingCallbackProtocol] = None,
     ) -> str:
         """Process chat with file attachments (streaming)"""
+        _assert_direct_file_chat_allowed()
         # Offloaded: the Firestore read is sync and blocks the event loop in this async path.
         # If this pre-stream setup fails, signal the streaming callback's end before propagating
         # (mirrors the _ensure_thread_and_assistant failure path below) so it is not left dangling.
@@ -169,8 +184,9 @@ class FileChatTool:
         output_list: List[str] = []
         try:
             contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
+            openai_client = _get_async_openai()
             for file in files:
-                file_content = await _async_openai.files.content(file.openai_file_id)
+                file_content = await openai_client.files.content(file.openai_file_id)
                 b64 = base64.b64encode(file_content.read()).decode('utf-8')
                 mime = file.mime_type or 'image/png'
                 contents.append(
@@ -186,7 +202,7 @@ class FileChatTool:
             messages: List[ChatCompletionMessageParam] = [
                 cast(ChatCompletionMessageParam, {"role": "user", "content": contents})
             ]
-            stream = await _async_openai.chat.completions.create(
+            stream = await openai_client.chat.completions.create(
                 model="gpt-4.1",
                 messages=messages,
                 stream=True,

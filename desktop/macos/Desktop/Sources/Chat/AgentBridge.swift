@@ -15,6 +15,35 @@ actor AgentBridge {
     let outputTokens: Int
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
+    let artifacts: [AgentArtifactProjection]
+
+    init(
+      text: String,
+      costUsd: Double,
+      omiSessionId: String,
+      runId: String,
+      attemptId: String,
+      adapterSessionId: String?,
+      terminalStatus: String,
+      inputTokens: Int,
+      outputTokens: Int,
+      cacheReadTokens: Int,
+      cacheWriteTokens: Int,
+      artifacts: [AgentArtifactProjection] = []
+    ) {
+      self.text = text
+      self.costUsd = costUsd
+      self.omiSessionId = omiSessionId
+      self.runId = runId
+      self.attemptId = attemptId
+      self.adapterSessionId = adapterSessionId
+      self.terminalStatus = terminalStatus
+      self.inputTokens = inputTokens
+      self.outputTokens = outputTokens
+      self.cacheReadTokens = cacheReadTokens
+      self.cacheWriteTokens = cacheWriteTokens
+      self.artifacts = artifacts
+    }
 
     @available(*, deprecated, message: "Use omiSessionId or adapterSessionId explicitly")
     var sessionId: String { adapterSessionId ?? omiSessionId }

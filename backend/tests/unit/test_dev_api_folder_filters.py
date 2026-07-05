@@ -99,6 +99,7 @@ _mock_populate_speaker_names = MagicMock()
 
 import database.conversations as conversations_db
 import database.folders as folders_db
+from dependencies import ApiKeyAuth, get_api_key_auth, get_auth_with_conversations_read, get_uid_with_conversations_read
 
 _mock_get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations = _mock_get_conversations
@@ -110,6 +111,15 @@ folders_db.initialize_system_folders = _mock_initialize_system_folders
 
 
 # ---- Helper factories ----
+
+
+def _read_auth():
+    return ApiKeyAuth(
+        uid='uid1',
+        scopes=['conversations:read'],
+        app_id='test-app',
+        key_id='test-key',
+    )
 
 
 def _make_folder(folder_id='f1', name='Work'):
@@ -230,7 +240,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id='f1',
             starred=None,
         )
@@ -244,7 +254,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id=None,
             starred=True,
         )
@@ -258,7 +268,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id=None,
             starred=False,
         )
@@ -272,7 +282,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id='f1',
             starred=True,
         )
@@ -303,7 +313,7 @@ class TestDevGetConversationsFolderFilters:
         end = datetime(2025, 1, 31, tzinfo=timezone.utc)
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             start_date=start,
             end_date=end,
             categories='work,personal',
@@ -340,7 +350,7 @@ class TestDevGetConversationsFolderFilters:
 
         from routers.developer import get_conversations
 
-        result = get_conversations(uid='uid1', folder_id='nonexistent-folder')
+        result = get_conversations(uid=_read_auth(), folder_id='nonexistent-folder')
 
         assert result == []
 
@@ -355,11 +365,11 @@ def _build_test_app():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers.developer import router as developer_router
-    from dependencies import get_uid_with_conversations_read
 
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_uid_with_conversations_read] = lambda: 'uid1'
+    app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
     return app, TestClient(app)
 
 
@@ -451,7 +461,6 @@ class TestDevApiHttpLayer:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routers.developer import router as developer_router
-        from dependencies import get_api_key_auth, ApiKeyAuth
 
         app = FastAPI()
         app.include_router(developer_router)
@@ -472,7 +481,6 @@ class TestDevApiHttpLayer:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routers.developer import router as developer_router
-        from dependencies import get_api_key_auth, ApiKeyAuth
 
         app = FastAPI()
         app.include_router(developer_router)

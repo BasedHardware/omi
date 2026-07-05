@@ -1,0 +1,1002 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Omi Desktop Agent Coordinator Control Plane</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --ink: #16181d;
+      --muted: #5f6673;
+      --line: #d7dce3;
+      --strong: #222936;
+      --accent: #0d766e;
+      --accent-2: #aa4d00;
+      --accent-3: #2d66a8;
+      --danger: #a83232;
+      --ok: #23734a;
+      --chip: #eef3f5;
+      --code: #101820;
+      --code-ink: #dce7ef;
+      --shadow: 0 18px 50px rgba(26, 34, 45, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+      line-height: 1.55;
+    }
+
+    a {
+      color: var(--accent-3);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    .shell {
+      max-width: 1220px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    .hero {
+      min-height: 78vh;
+      display: grid;
+      grid-template-columns: minmax(0, 1.06fr) minmax(340px, 0.94fr);
+      gap: 34px;
+      align-items: center;
+      padding: 34px 0 52px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 5px 10px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.76);
+      border-radius: 999px;
+      font-size: 13px;
+      color: var(--muted);
+      width: fit-content;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      display: inline-block;
+    }
+
+    h1 {
+      margin: 20px 0 16px;
+      font-size: clamp(40px, 6.5vw, 84px);
+      line-height: 0.96;
+      letter-spacing: 0;
+      color: var(--strong);
+    }
+
+    .lead {
+      font-size: 19px;
+      max-width: 780px;
+      color: #3c4350;
+      margin: 0 0 24px;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 28px;
+    }
+
+    .button {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--strong);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-weight: 650;
+      font-size: 14px;
+      box-shadow: 0 8px 22px rgba(24, 31, 42, 0.06);
+    }
+
+    .button.primary {
+      background: var(--strong);
+      color: #fff;
+      border-color: var(--strong);
+    }
+
+    .control-board {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .control-board h2 {
+      margin: 0 0 14px;
+      font-size: 17px;
+      color: var(--strong);
+    }
+
+    .mini-flow {
+      display: grid;
+      gap: 10px;
+    }
+
+    .mini-node {
+      border: 1px solid var(--line);
+      background: #fbfcfd;
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 70px;
+    }
+
+    .mini-node strong {
+      display: block;
+      font-size: 14px;
+      color: var(--strong);
+      margin-bottom: 4px;
+    }
+
+    .mini-node span {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .mini-arrow {
+      text-align: center;
+      color: var(--muted);
+      font-weight: 750;
+      line-height: 1;
+    }
+
+    .band {
+      padding: 34px 0;
+      border-top: 1px solid rgba(215, 220, 227, 0.75);
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 24px;
+      margin-bottom: 18px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(25px, 3.2vw, 42px);
+      letter-spacing: 0;
+      line-height: 1.05;
+      color: var(--strong);
+    }
+
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      max-width: 520px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .panel h3 {
+      margin: 0 0 10px;
+      font-size: 18px;
+      color: var(--strong);
+    }
+
+    .panel p {
+      margin: 0 0 12px;
+      color: var(--muted);
+    }
+
+    .tag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      background: var(--chip);
+      border: 1px solid #dfe6ea;
+      color: #3e4854;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+    }
+
+    .old, .new {
+      min-height: 420px;
+    }
+
+    .old {
+      border-top: 5px solid var(--danger);
+    }
+
+    .new {
+      border-top: 5px solid var(--accent);
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .stack-row {
+      display: grid;
+      grid-template-columns: 130px minmax(0, 1fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .label {
+      border-radius: 8px;
+      padding: 10px;
+      background: #eef1f3;
+      font-weight: 750;
+      font-size: 13px;
+      color: #343b46;
+      display: flex;
+      align-items: center;
+    }
+
+    .box {
+      border: 1px solid var(--line);
+      background: #fbfcfd;
+      border-radius: 8px;
+      padding: 10px 12px;
+      min-height: 46px;
+      color: #3d4550;
+    }
+
+    .box strong {
+      color: var(--strong);
+    }
+
+    .flow-wide {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .flow-card {
+      position: relative;
+      min-height: 160px;
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .flow-card:not(:last-child)::after {
+      content: ">";
+      position: absolute;
+      right: -10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: var(--strong);
+      color: white;
+      font-size: 12px;
+      display: grid;
+      place-items: center;
+      z-index: 2;
+    }
+
+    .flow-card .num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--accent);
+      color: white;
+      font-size: 13px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .flow-card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+      line-height: 1.15;
+    }
+
+    .flow-card p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .db-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .table-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .table-card header {
+      padding: 10px 12px;
+      background: #eef3f5;
+      border-bottom: 1px solid var(--line);
+      font-weight: 800;
+      color: var(--strong);
+      font-size: 14px;
+    }
+
+    .table-card ul {
+      margin: 0;
+      padding: 10px 14px 12px 28px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .policy-lanes {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 14px;
+    }
+
+    .lane {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+    }
+
+    .lane h3 {
+      margin: 0 0 8px;
+      color: var(--strong);
+      font-size: 17px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+      margin-bottom: 10px;
+    }
+
+    .status.green {
+      background: #e9f5ee;
+      color: var(--ok);
+    }
+
+    .status.orange {
+      background: #fff0df;
+      color: var(--accent-2);
+    }
+
+    .status.red {
+      background: #fae9e9;
+      color: var(--danger);
+    }
+
+    .code-map {
+      display: grid;
+      gap: 10px;
+    }
+
+    .code-row {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr) 180px;
+      gap: 12px;
+      align-items: start;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    .code-row code {
+      color: var(--accent-3);
+      word-break: break-word;
+    }
+
+    .code-row p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .line-ref {
+      color: #44505e;
+      font-size: 13px;
+      font-weight: 700;
+      text-align: right;
+    }
+
+    pre {
+      margin: 0;
+      background: var(--code);
+      color: var(--code-ink);
+      border-radius: 8px;
+      padding: 16px;
+      overflow-x: auto;
+      font-size: 13px;
+      line-height: 1.45;
+      border: 1px solid #26313d;
+    }
+
+    .callout {
+      border-left: 5px solid var(--accent);
+      background: #f0f8f6;
+      padding: 14px 16px;
+      border-radius: 8px;
+      color: #214942;
+    }
+
+    .callout strong {
+      color: #123a34;
+    }
+
+    .toc {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .toc a {
+      display: block;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.8);
+      color: var(--strong);
+      font-weight: 750;
+    }
+
+    .foot {
+      color: var(--muted);
+      font-size: 13px;
+      padding: 28px 0 50px;
+    }
+
+    @media (max-width: 980px) {
+      .hero,
+      .grid-2,
+      .grid-3,
+      .compare,
+      .flow-wide,
+      .db-grid,
+      .policy-lanes,
+      .toc {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-card:not(:last-child)::after {
+        content: "v";
+        right: 50%;
+        top: auto;
+        bottom: -10px;
+        transform: translateX(50%);
+      }
+
+      .code-row {
+        grid-template-columns: 1fr;
+      }
+
+      .line-ref {
+        text-align: left;
+      }
+
+      .section-head {
+        align-items: start;
+        flex-direction: column;
+      }
+    }
+
+    @media print {
+      .hero { min-height: auto; }
+      .button { box-shadow: none; }
+      .control-board, .panel { box-shadow: none; }
+      body { background: #fff; }
+      .band { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="hero" id="top">
+      <div>
+        <div class="eyebrow"><span class="dot"></span> Omi macOS desktop agent coordinator - code-grounded ramp doc</div>
+        <h1>What the new control plane does</h1>
+        <p class="lead">
+          This PR turns scattered desktop agent surfaces into a local coordinator control plane.
+          The TypeScript runtime and <code>omi-agentd.sqlite3</code> are now the durable authority;
+          Swift, voice, task chat, Ask Omi, and automation read from and call into that authority.
+        </p>
+        <div class="hero-actions">
+          <a class="button primary" href="#old-new">Old vs new</a>
+          <a class="button" href="#flow">Request flow</a>
+          <a class="button" href="#code-map">Code map</a>
+          <a class="button" href="#ramp">Ramp checklist</a>
+        </div>
+        <nav class="toc" aria-label="Document sections">
+          <a href="#authority">Authority model</a>
+          <a href="#data">Durable state</a>
+          <a href="#policy">Approval boundary</a>
+          <a href="#validation">Validation</a>
+        </nav>
+      </div>
+
+      <aside class="control-board" aria-label="Control plane overview">
+        <h2>New mental model</h2>
+        <div class="mini-flow">
+          <div class="mini-node">
+            <strong>Surfaces ask</strong>
+            <span>Ask Omi, task chat, voice, automation, and future Agents & Attention send requests.</span>
+          </div>
+          <div class="mini-arrow">v</div>
+          <div class="mini-node">
+            <strong>Coordinator decides</strong>
+            <span>Route intent, scope context, derive open loops, and create dispatches.</span>
+          </div>
+          <div class="mini-arrow">v</div>
+          <div class="mini-node">
+            <strong>Runtime persists</strong>
+            <span>SQLite records packets, dispatches, deliveries, candidates, grants, and audit rows.</span>
+          </div>
+          <div class="mini-arrow">v</div>
+          <div class="mini-node">
+            <strong>UI projects</strong>
+            <span>Swift displays state; it no longer owns success, approval, or grant truth.</span>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="band" id="authority">
+      <div class="section-head">
+        <h2>Authority Model</h2>
+        <p>The coordinator doc states the key invariant: TypeScript runtime plus SQLite own lifecycle truth; Swift is a projection/control client.</p>
+      </div>
+      <div class="grid-3">
+        <article class="panel">
+          <h3>TypeScript runtime kernel</h3>
+          <p>Owns sessions, runs, attempts, events, artifacts, delegations, grants, terminal state, and the new coordinator tables.</p>
+          <div class="tag-row">
+            <span class="tag">AgentRuntimeKernel</span>
+            <span class="tag">SqliteAgentStore</span>
+            <span class="tag">omi-agentd.sqlite3</span>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>Desktop Coordinator</h3>
+          <p>Derives routing, scoped context packets, dispatches, action queue items, open loops, and candidate projections.</p>
+          <div class="tag-row">
+            <span class="tag">context packets</span>
+            <span class="tag">dispatches</span>
+            <span class="tag">action queue</span>
+          </div>
+        </article>
+        <article class="panel">
+          <h3>Swift app</h3>
+          <p>Renders Ask Omi, task chat, voice, floating pill, and automation surfaces. It calls runtime tools and displays projections.</p>
+          <div class="tag-row">
+            <span class="tag">DesktopCoordinatorService</span>
+            <span class="tag">AgentBridge</span>
+            <span class="tag">projection only</span>
+          </div>
+        </article>
+      </div>
+      <p class="callout" style="margin-top: 18px;">
+        <strong>Most important shift:</strong> UI state, adapter-native ids, voice refs, and pill dismissal no longer imply success.
+        Completion and approval must be reflected by runtime/kernel state.
+      </p>
+    </section>
+
+    <section class="band" id="old-new">
+      <div class="section-head">
+        <h2>Old Setup vs New Setup</h2>
+        <p>The old path was surface-led. The new path is coordinator-led and auditable.</p>
+      </div>
+
+      <div class="compare">
+        <article class="panel old">
+          <h3>Before: surface-led agent behavior</h3>
+          <p>Each surface knew just enough to start or display agent work, but there was no single local coordinator view.</p>
+          <div class="stack">
+            <div class="stack-row">
+              <div class="label">Ask Omi</div>
+              <div class="box">Prompt text could carry recent chat context directly into worker requests.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">Task chat</div>
+              <div class="box">Task-specific context was prepended locally instead of persisted as an explicit context packet.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">Voice</div>
+              <div class="box">Status summaries were tied to legacy task-agent/floating-pill projections.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">Approvals</div>
+              <div class="box">Sensitive requests had policy metadata, but approval/grant resolution was not a complete coordinator loop.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">UI state</div>
+              <div class="box">Swift presentation paths could drift toward product truth unless carefully constrained.</div>
+            </div>
+          </div>
+        </article>
+
+        <article class="panel new">
+          <h3>After: coordinator-led control plane</h3>
+          <p>Surfaces call control tools; the runtime persists the durable facts and derives the UI-facing views.</p>
+          <div class="stack">
+            <div class="stack-row">
+              <div class="label">Ask Omi</div>
+              <div class="box">Builds a <strong>DesktopContextPacket</strong> before calling the worker path.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">Task chat</div>
+              <div class="box">Uses task-scoped context packets with provenance, TTL, retention class, and redacted previews.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">Voice</div>
+              <div class="box">Reads coordinator open loops through <strong>get_desktop_open_loops</strong>.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">Approvals</div>
+              <div class="box">Creates durable dispatches; trusted user control resolves dispatches and may mint scoped grants.</div>
+            </div>
+            <div class="stack-row">
+              <div class="label">UI state</div>
+              <div class="box">Swift calls the runtime and displays projections; SQLite remains source of truth.</div>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" id="flow">
+      <div class="section-head">
+        <h2>Request Flow</h2>
+        <p>A user request now passes through explicit routing, context scoping, policy, execution, and review loops.</p>
+      </div>
+
+      <div class="flow-wide" aria-label="Coordinator request flow">
+        <div class="flow-card">
+          <div class="num">1</div>
+          <h3>Surface receives intent</h3>
+          <p>Main chat, task chat, voice, or automation starts with user intent plus a surface kind.</p>
+        </div>
+        <div class="flow-card">
+          <div class="num">2</div>
+          <h3>Coordinator routes</h3>
+          <p><code>route_desktop_intent</code> checks open loops and reusable session candidates before starting new work.</p>
+        </div>
+        <div class="flow-card">
+          <div class="num">3</div>
+          <h3>Context packet is persisted</h3>
+          <p><code>build_desktop_context_packet</code> stores selected snippets, provenance, preview, TTL, and access rows.</p>
+        </div>
+        <div class="flow-card">
+          <div class="num">4</div>
+          <h3>Policy gates sensitive work</h3>
+          <p>Screenshots, writes, task mutation, and broad context require explicit approval dispatches.</p>
+        </div>
+        <div class="flow-card">
+          <div class="num">5</div>
+          <h3>Surfaces project state</h3>
+          <p>Swift displays action queues and open loops derived from runtime state, not local UI guesses.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="data">
+      <div class="section-head">
+        <h2>Durable State Added</h2>
+        <p>The coordinator extends the existing agent SQLite store. These are not separate databases or UI caches.</p>
+      </div>
+
+      <div class="db-grid">
+        <div class="table-card">
+          <header>desktop_context_packets</header>
+          <ul>
+            <li>Scoped context for worker prompts.</li>
+            <li>Stores redacted preview, hash, retention class, TTL.</li>
+            <li>Expired packets are removed during startup reconciliation.</li>
+          </ul>
+        </div>
+        <div class="table-card">
+          <header>desktop_dispatches</header>
+          <ul>
+            <li>Durable user attention and approval items.</li>
+            <li>Kinds include approval, routing choice, failure recovery, artifact review, candidate review, and screen context.</li>
+            <li>Pending expired dispatches become expired with reconciliation metadata.</li>
+          </ul>
+        </div>
+        <div class="table-card">
+          <header>desktop_artifact_deliveries</header>
+          <ul>
+            <li>Tracks whether an agent artifact reached the intended surface.</li>
+            <li>Review status and delivery status are separated.</li>
+            <li>Retrying deliveries are failed on daemon startup reconciliation.</li>
+          </ul>
+        </div>
+        <div class="table-card">
+          <header>desktop_memory_candidates</header>
+          <ul>
+            <li>Agents propose memory facts instead of silently writing them.</li>
+            <li>Includes evidence refs, confidence, sensitivity, and review status.</li>
+          </ul>
+        </div>
+        <div class="table-card">
+          <header>desktop_task_candidates</header>
+          <ul>
+            <li>Agents propose task creates, updates, completes, and deletes.</li>
+            <li>Can require approval before state mutation.</li>
+          </ul>
+        </div>
+        <div class="table-card">
+          <header>desktop_context_access_log</header>
+          <ul>
+            <li>Audits context packet sources and operations.</li>
+            <li>Links sensitive context access to dispatch ids when required.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="policy">
+      <div class="section-head">
+        <h2>Approval Boundary</h2>
+        <p>The coordinator now distinguishes model-visible inspection from trusted user-control resolution.</p>
+      </div>
+
+      <div class="policy-lanes">
+        <article class="lane">
+          <div class="status green">Allowed read path</div>
+          <h3>Inspect and summarize</h3>
+          <p>Agents can ask for awareness snapshots, action queues, open loops, intent routing, and policy evaluation. These do not directly mutate approval state.</p>
+          <div class="tag-row">
+            <span class="tag">build_desktop_awareness_snapshot</span>
+            <span class="tag">list_desktop_action_queue</span>
+            <span class="tag">get_desktop_open_loops</span>
+          </div>
+        </article>
+
+        <article class="lane">
+          <div class="status orange">Dispatch required</div>
+          <h3>Sensitive context</h3>
+          <p>Screen images, screen history, and sensitive snippets require a verified approved dispatch id before they can enter a context packet.</p>
+          <div class="tag-row">
+            <span class="tag">screen_context</span>
+            <span class="tag">approval</span>
+            <span class="tag">dispatch_id</span>
+          </div>
+        </article>
+
+        <article class="lane">
+          <div class="status red">Not model-visible</div>
+          <h3>Resolve approvals</h3>
+          <p><code>resolve_desktop_dispatch</code> is restricted to trusted direct control. The pi-mono projection explicitly excludes it from model-advertised tools.</p>
+          <div class="tag-row">
+            <span class="tag">trustedUserControl</span>
+            <span class="tag">scoped grants</span>
+            <span class="tag">finite expiry</span>
+          </div>
+        </article>
+      </div>
+
+      <div class="grid-2" style="margin-top: 18px;">
+        <div class="panel">
+          <h3>Swift local policy denies risky tools first</h3>
+          <p><code>ChatToolExecutor.localPolicyDecision</code> denies SQL writes, task mutation tools, and screenshot image access with structured policy-denied messages.</p>
+        </div>
+        <div class="panel">
+          <h3>Runtime validates grants before mutation</h3>
+          <p><code>resolveDesktopDispatch</code> only mints grants for approval dispatches where capability, operation, resource, owner, session, and expiry match.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="surfaces">
+      <div class="section-head">
+        <h2>Surface Integration</h2>
+        <p>Each user-facing surface got a concrete coordinator touchpoint.</p>
+      </div>
+
+      <div class="grid-2">
+        <article class="panel">
+          <h3>Main chat</h3>
+          <p>Builds a main-chat context packet from recent messages and the current user message, with a 15-minute TTL and boundary policy for task/memory/screenshot access.</p>
+          <pre><code>bridge.controlTool(
+  name: "build_desktop_context_packet",
+  input: mainChatPacketInput
+)</code></pre>
+        </article>
+        <article class="panel">
+          <h3>Task chat</h3>
+          <p>Builds task-scoped packets instead of stuffing raw task context into prompt text. The worker sees a packet id and redacted preview.</p>
+          <pre><code>Use persisted DesktopContextPacket
+as the scoped task context.</code></pre>
+        </article>
+        <article class="panel">
+          <h3>Voice / realtime hub</h3>
+          <p>Task-agent status can now come from coordinator open loops, with legacy task-agent status only as a fallback path.</p>
+          <pre><code>DesktopCoordinatorService.shared.openLoopsJSON()</code></pre>
+        </article>
+        <article class="panel">
+          <h3>Automation / dogfood</h3>
+          <p><code>DesktopAutomationBridge</code> exposes coordinator snapshot, action queue, open loops, routing, create dispatch, and resolve dispatch actions for local verification.</p>
+          <pre><code>coordinator_awareness_snapshot
+coordinator_action_queue
+coordinator_open_loops
+coordinator_route_intent</code></pre>
+        </article>
+      </div>
+    </section>
+
+    <section class="band" id="code-map">
+      <div class="section-head">
+        <h2>Code Map</h2>
+        <p>Use this as the reading path when reviewing or extending the control plane.</p>
+      </div>
+
+      <div class="code-map">
+        <div class="code-row">
+          <code>desktop/macos/docs/agent-coordinator.md</code>
+          <p>Design boundary and invariants: SQLite authority, Swift as projection, context packets, policy-owned approvals, desktop-only scope.</p>
+          <div class="line-ref">lines 7-29</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/agent/src/runtime/sqlite-store.ts</code>
+          <p>Coordinator migrations for packets, dispatches, deliveries, candidates, access logs, and attention overrides.</p>
+          <div class="line-ref">lines 1341-1545</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/agent/src/runtime/control-tools.ts</code>
+          <p>Runtime control-tool dispatcher for snapshots, queues, open loops, context packets, routing, policy evaluation, dispatch create/resolve.</p>
+          <div class="line-ref">lines 393-520</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/agent/src/runtime/kernel.ts</code>
+          <p>Context packet persistence, sensitive dispatch validation, deterministic routing input, dispatch resolution, and scoped grant minting.</p>
+          <div class="line-ref">lines 947-1045</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/agent/src/runtime/omi-tool-manifest.ts</code>
+          <p>Prevents <code>resolve_desktop_dispatch</code> from being advertised to normal pi-mono/stdio agents.</p>
+          <div class="line-ref">lines 779-790</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift</code>
+          <p>Swift facade over runtime control tools for snapshots, queues, open loops, routing, dispatch creation, and dispatch resolution.</p>
+          <div class="line-ref">lines 90-180</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/Desktop/Sources/Providers/ChatProvider.swift</code>
+          <p>Main chat context packet creation before worker prompting.</p>
+          <div class="line-ref">lines 2105-2185</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift</code>
+          <p>Swift-side policy deny for SQL writes, task mutations, and screenshot image access.</p>
+          <div class="line-ref">lines 195-233</div>
+        </div>
+        <div class="code-row">
+          <code>desktop/macos/agent/tests/*desktop* and *control*</code>
+          <p>Focused coverage for policy classification, action queues, intent routing, context minimization, control tools, and store reconciliation.</p>
+          <div class="line-ref">test suite</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="validation">
+      <div class="section-head">
+        <h2>Validation Snapshot</h2>
+        <p>The PR was verified with runtime tests, pi-mono exact package tests, Swift build, harness, and pre-push checks.</p>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>What passed</h3>
+          <div class="tag-row">
+            <span class="tag">agent npm test: 315</span>
+            <span class="tag">pi-mono node test: 102</span>
+            <span class="tag">Swift debug build</span>
+            <span class="tag">agent-logic-harness</span>
+            <span class="tag">pre-push checks</span>
+          </div>
+        </div>
+        <div class="panel">
+          <h3>Known build noise</h3>
+          <p>Swift still emits existing unrelated warnings in pre-existing files, including actor-isolation/deprecation warnings and a WebP link-version warning.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="ramp">
+      <div class="section-head">
+        <h2>Ramp Checklist</h2>
+        <p>Read these in order when you want to reload the full change quickly.</p>
+      </div>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>30-minute path</h3>
+          <ol>
+            <li>Read <code>desktop/macos/docs/agent-coordinator.md</code> lines 7-29.</li>
+            <li>Skim the SQLite migrations in <code>sqlite-store.ts</code>.</li>
+            <li>Read <code>control-tools.ts</code> cases for the new coordinator tools.</li>
+            <li>Read <code>kernel.ts</code> packet persistence and dispatch resolution.</li>
+            <li>Read <code>DesktopCoordinatorService.swift</code> and the main/task chat packet call sites.</li>
+          </ol>
+        </div>
+        <div class="panel">
+          <h3>Questions this answers</h3>
+          <ul>
+            <li>Where is local agent truth stored?</li>
+            <li>How does a worker get scoped context?</li>
+            <li>How do open loops appear in voice and UI?</li>
+            <li>Why can a model create a dispatch but not resolve one?</li>
+            <li>How do sensitive context and grants get tied to explicit approval?</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <footer class="foot">
+      Generated from the code in this worktree. No external assets or dependencies. Last updated for PR #8655 on 2026-06-30.
+      <a href="#top">Back to top</a>
+    </footer>
+  </main>
+</body>
+</html>

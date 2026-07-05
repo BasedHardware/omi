@@ -2,9 +2,9 @@ import Combine
 import Foundation
 import SwiftUI
 
-/// A running or finished background "agent" launched from the Ask Omi floating
-/// bar. Each pill owns its own `ChatProvider` so multiple agents can execute in
-/// parallel without sharing message state.
+/// A visible background-agent projection launched from the Ask Omi floating
+/// bar. Execution is owned by the canonical Omi agent runtime; this model only
+/// drives the floating/notch-less pill UI.
 @MainActor
 final class AgentPill: ObservableObject, Identifiable {
     enum Status: Equatable {
@@ -60,6 +60,9 @@ final class AgentPill: ObservableObject, Identifiable {
     let createdAt: Date
     let model: String
     let bridgeHarnessOverride: AgentHarnessMode?
+    var canonicalSessionId: String?
+    var canonicalRunId: String?
+    var canonicalAttemptId: String?
 
     @Published var title: String
     @Published var status: Status = .queued
@@ -105,8 +108,8 @@ final class AgentPill: ObservableObject, Identifiable {
     }
 }
 
-/// Singleton that owns the running `AgentPill`s. Spawning a pill creates a new
-/// `ChatProvider` and observes its message stream until the agent finishes.
+/// Singleton that owns visible `AgentPill` projections. It never owns agent
+/// execution; spawn/continue/stop delegate to the canonical runtime.
 @MainActor
 final class AgentPillsManager: ObservableObject {
     static let shared = AgentPillsManager()
@@ -116,25 +119,9 @@ final class AgentPillsManager: ObservableObject {
     /// Configurable soft cap so the row never grows past a reasonable width.
     private let maxPills: Int = 8
 
-    /// One ChatProvider (and therefore one ACP node subprocess) per pill so
-    /// pills can truly run in parallel — each provider has its own bridge,
-    /// `isSending` flag, and interrupt scope. Bridges are heavy to boot, so we
-    /// stagger their startup via `bootChain` to avoid the race we saw the first
-    /// time around. After boot completes, every pill's `sendMessage` runs in
-    /// parallel with the others.
-    private var providersByPill: [UUID: ChatProvider] = [:]
-    private var streamsByPill: [UUID: AnyCancellable] = [:]
-    private var projectionStreamsByPill: [UUID: AnyCancellable] = [:]
-    private var messageCountByPill: [UUID: Int] = [:]
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
-    private var bootChain: Task<Void, Never> = Task {}
-
-    private static let backgroundAgentSystemPromptSuffix = """
-    You are running inside a visible floating background agent pill. Do the requested work now; do not merely acknowledge, promise, or say that you are working on it. Use the available tools when the task requires local data, browser/app/file actions, or multi-step investigation. Finish only after you have either completed the task or hit a concrete blocker, then give a concise final summary of the outcome.
-
-    This is already the spawned background agent. Do not call spawn_agent or delegate_agent just to hand off this same task.
-    """
+    private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
 
     /// Shared agent-noun pattern used by negation guard, intent detection, and
     /// task extraction. Kept word-boundary-free so callers can embed it inside
@@ -161,6 +148,11 @@ final class AgentPillsManager: ObservableObject {
     struct FloatingAgentHandoff: Equatable {
         let originalRequest: String
         let agentTask: String
+    }
+
+    private struct PendingAgentFollowUp {
+        let text: String
+        let attachments: [ChatAttachment]
     }
 
     /// Combined router result. Title/ack are pre-computed alongside the route
@@ -635,10 +627,8 @@ final class AgentPillsManager: ObservableObject {
         )
     }
 
-    /// Spawn a new agent pill. Each pill gets its own ChatProvider so the
-    /// pills truly run in parallel. Bridge boots are staggered through
-    /// `bootChain` so we never race ACP startup; once a pill's bridge is
-    /// warmed it sends concurrently with everything else.
+    /// Spawn a visible pill projection backed by a canonical background-agent
+    /// session/run in the Omi runtime.
     @discardableResult
     func spawn(
         query: String,
@@ -665,62 +655,22 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        pills.append(pill)
-
-        let provider = ChatProvider(bridgeHarnessOverride: bridgeHarnessOverride)
-        let hasBridgeHarnessOverride = bridgeHarnessOverride != nil
-        if let floating = FloatingControlBarManager.shared.sharedFloatingProvider {
-            provider.workingDirectory = floating.workingDirectory
-            // Directed Hermes/OpenClaw pills must not inherit the floating bar's
-            // Claude model override. Those harnesses can reject Omi's Claude
-            // aliases during session/set_model, so leave model selection to the
-            // provider-native default when a harness override is present.
-            if !hasBridgeHarnessOverride {
-                provider.modelOverride = floating.modelOverride
-            }
-        }
-        providersByPill[pill.id] = provider
-
-        let messageCountBefore = provider.messages.count
-        messageCountByPill[pill.id] = messageCountBefore
-        streamsByPill[pill.id] = provider.$messages
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self, weak pill] messages in
-                guard let self, let pill else { return }
-                self.handle(messages: messages, since: messageCountBefore, for: pill)
-            }
         let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-        projectionStreamsByPill[pill.id] = AgentRuntimeStatusStore.shared.$projectionsBySurface
-            .receive(on: DispatchQueue.main)
-            .sink { [weak pill] projections in
-                guard let pill, let projection = projections[surfaceRef.key] else { return }
-                guard !pill.status.isFinished || projection.status.isTerminal else { return }
-                AgentPillsManager.apply(projection: projection, to: pill)
-            }
-
-        // Stagger bridge boots: chain this pill's warmup after the previous
-        // pill's. Once warmed, the actual sendMessage runs in parallel with
-        // every other warmed pill.
-        let previousBoot = bootChain
-        let myBoot = Task { [weak provider] in
-            await previousBoot.value
-            await provider?.warmupBridge()
-        }
-        bootChain = myBoot
+        pills.append(pill)
 
         pill.status = .starting
         if let preFetchedAck, !preFetchedAck.isEmpty {
             pill.latestActivity = preFetchedAck
         } else {
-            pill.latestActivity = "Warming up…"
+            pill.latestActivity = "Starting…"
         }
+        AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef, statusText: pill.latestActivity)
 
-        // For voice queries, speak the pre-fetched ack from the router (or a
-        // random instant ack) BEFORE waiting for the bridge so the user
-        // always hears confirmation that we heard them.
+        // For voice queries, play a cached deterministic kickoff sample before
+        // the runtime accepts the run so the user always hears confirmation
+        // without falling back to a different system voice.
         if fromVoice {
-            let phrase = (preFetchedAck?.isEmpty == false) ? preFetchedAck! : AgentPillsManager.randomAck()
-            FloatingBarVoicePlaybackService.shared.speakOneShot(phrase)
+            FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
         }
 
         // If the router already returned a title we don't need a second
@@ -739,26 +689,63 @@ final class AgentPillsManager: ObservableObject {
             }
         }
 
-        let runTask = Task { [weak self, weak pill, weak provider] in
-            await myBoot.value
+        let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+        let modelForSpawn = bridgeHarnessOverride == nil
+            ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
+            : nil
+        let runTask = Task { @MainActor [weak self, weak pill] in
             guard !Task.isCancelled else { return }
-            guard let self, let pill, let provider else { return }
-            // Bridge is up; flip to running and fire the prompt. Concurrent
-            // with any other pill that's already past this point.
-            pill.status = .running
-            pill.completedAt = nil
-            pill.suggestedFollowUps = []
-            let finalText = await provider.sendMessage(
-                pill.query,
-                model: Self.modelForSend(pill: pill, provider: provider),
-                systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix,
-                systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)",
-                surfaceRef: surfaceRef,
-                legacyClientScope: AgentLegacyClientScope.floatingPill
-            )
-            guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider, finalText: finalText)
+            guard let self, let pill else { return }
+            do {
+                let accepted = try await DesktopCoordinatorService.shared.spawnBackgroundAgent(
+                    prompt: pill.query,
+                    title: pill.title,
+                    pillId: pill.id,
+                    model: modelForSpawn,
+                    harnessMode: bridgeHarnessOverride,
+                    cwd: workingDirectory
+                )
+                pill.canonicalSessionId = accepted.sessionId
+                pill.canonicalRunId = accepted.runId
+                pill.canonicalAttemptId = accepted.attemptId
+                if Task.isCancelled || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
+                    Task {
+                        _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
+                    }
+                    return
+                }
+                pill.title = accepted.title
+                pill.status = .running
+                pill.completedAt = nil
+                pill.suggestedFollowUps = []
+                pill.latestActivity = "Working…"
+                Self.ensureStreamingAssistantMessage(for: pill)
+                pill.markContentChanged()
+                AgentRuntimeStatusStore.shared.recordAcceptedRun(
+                    surface: surfaceRef,
+                    sessionId: accepted.sessionId,
+                    runId: accepted.runId,
+                    attemptId: accepted.attemptId,
+                    statusText: "Working…"
+                )
+                let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+                if !queuedFollowUps.isEmpty {
+                    self.continueAgent(
+                        from: pill,
+                        text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                        attachments: queuedFollowUps.flatMap(\.attachments)
+                    )
+                    return
+                }
+                await self.pollCanonicalRun(for: pill)
+            } catch {
+                guard !Task.isCancelled else { return }
+                AgentRuntimeStatusStore.shared.recordLocalFailure(
+                    surface: surfaceRef,
+                    error: error.localizedDescription
+                )
+                self.fail(pill: pill, errorText: error.localizedDescription)
+            }
         }
         runTasksByPill[pill.id] = runTask
 
@@ -783,50 +770,115 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    /// Send a follow-up to the SAME agent session — reuses the pill's ChatProvider +
-    /// sessionKey so it keeps full context. Falls back to a fresh agent only if the
-    /// session was already torn down (pill dismissed/trimmed).
-    func continueAgent(from pill: AgentPill, text: String) {
-        guard let provider = providersByPill[pill.id] else {
-            spawnFromUserQuery(text, model: pill.model)
+    /// Send a follow-up to the same canonical background-agent session.
+    func continueAgent(from pill: AgentPill, text: String, attachments: [ChatAttachment] = []) {
+        // The floating agent runs locally with disk access, so attachments are
+        // handed off by local_path in the prompt (see attachmentContextPrompt) —
+        // no upload round-trip needed. The visible bubble still renders the files
+        // through the shared ChatResource card UI.
+        let prompt: String
+        if let context = ChatProvider.attachmentContextPrompt(for: attachments) {
+            prompt = text.isEmpty ? context : "\(text)\n\n\(context)"
+        } else {
+            prompt = text
+        }
+        guard let sessionId = pill.canonicalSessionId else {
+            pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
+            pill.latestActivity = "Queued follow-up until the agent starts…"
+            pill.markContentChanged()
             return
         }
         pill.status = .running
         pill.completedAt = nil
         pill.suggestedFollowUps = []
-        pill.latestActivity = "Working on your follow-up…"
+        pill.latestActivity = "Interrupting current run…"
+        pill.conversationMessages.append(
+            ChatMessage(text: text, sender: .user, resources: attachments.map(ChatResource.attachment))
+        )
+        Self.ensureStreamingAssistantMessage(for: pill)
+        pill.markContentChanged()
+        let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+        let activeRunId = pill.canonicalRunId
         runTasksByPill[pill.id]?.cancel()
-        let runTask = Task { @MainActor [weak self, weak pill, weak provider] in
-            guard let self, let pill, let provider else { return }
-            // If the provider is still streaming the previous turn, interrupt
-            // it first and wait for the guard to clear before starting the next
-            // agent turn. Otherwise the isSending guard returns nil and
-            // complete() marks the pill as failed. (Codex P2.)
-            if provider.isSending {
-                provider.stopAgent()
-                // stopAgent() has a 3s watchdog that force-releases isSending;
-                // poll until the guard clears (bounded to ~4s total). Check
-                // Task.isCancelled on every iteration so a cancelled follow-up
-                // does not proceed to sendMessage. (Cubic P1.)
-                for _ in 0..<80 {
-                    if Task.isCancelled { return }
-                    if !provider.isSending { break }
-                    try? await Task.sleep(nanoseconds: 50_000_000)
+        let runTask = Task { @MainActor [weak self, weak pill] in
+            guard let self, let pill else { return }
+            guard !Task.isCancelled else { return }
+            do {
+                if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
+                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) {
+                    case .stopped:
+                        break
+                    case .cancelled:
+                        return
+                    case .failed:
+                        pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
+                        pill.latestActivity = "Queued follow-up until the current run stops…"
+                        pill.markContentChanged()
+                        await self.pollCanonicalRun(for: pill)
+                        guard self.pills.contains(where: { $0.id == pill.id }) else { return }
+                        let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
+                        if !queuedFollowUps.isEmpty {
+                            self.continueAgent(
+                                from: pill,
+                                text: queuedFollowUps.map(\.text).joined(separator: "\n\n"),
+                                attachments: queuedFollowUps.flatMap(\.attachments)
+                            )
+                        }
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
+                    guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                 }
+                pill.latestActivity = "Working on your follow-up…"
+                Self.ensureStreamingAssistantMessage(for: pill)
+                pill.markContentChanged()
+                let result = try await DesktopCoordinatorService.shared.continueAgent(
+                    sessionId: sessionId,
+                    prompt: prompt,
+                    model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
+                    cwd: workingDirectory
+                )
+                guard !Task.isCancelled else { return }
+                pill.canonicalRunId = result.runId ?? pill.canonicalRunId
+                self.apply(inspection: result, to: pill)
+            } catch {
+                guard !Task.isCancelled else { return }
+                self.fail(pill: pill, errorText: error.localizedDescription)
             }
-            guard !Task.isCancelled else { return }
-            let surfaceRef = AgentSurfaceReference.floatingPill(pillId: pill.id)
-            let finalText = await provider.sendMessage(
-                text, model: Self.modelForSend(pill: pill, provider: provider),
-                systemPromptSuffix: Self.backgroundAgentSystemPromptSuffix,
-                systemPromptStyle: .floating,
-                sessionKey: "agent-\(pill.id.uuidString)",
-                surfaceRef: surfaceRef,
-                legacyClientScope: AgentLegacyClientScope.floatingPill)
-            guard !Task.isCancelled else { return }
-            self.complete(pill: pill, provider: provider, finalText: finalText)
         }
         runTasksByPill[pill.id] = runTask
+    }
+
+    private enum ActiveRunCancellationResult {
+        case stopped
+        case cancelled
+        case failed
+    }
+
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult {
+        do {
+            _ = try await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
+        } catch {
+            logError("AgentPills: failed to cancel active run before follow-up", error: error)
+            return .failed
+        }
+        for _ in 0..<20 {
+            if Task.isCancelled { return .cancelled }
+            do {
+                let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
+                let status = inspection.status
+                if ["succeeded", "completed", "failed", "timed_out", "orphaned", "cancelled"].contains(status) {
+                    return .stopped
+                }
+                pill.latestActivity = status == "cancelling" ? "Stopping current run…" : "Waiting for current run to stop…"
+                pill.markContentChanged()
+            } catch {
+                logError("AgentPills: failed to inspect active run before follow-up", error: error)
+                return .failed
+            }
+            try? await Task.sleep(nanoseconds: 250_000_000)
+        }
+        return .failed
     }
 
     /// Force-dismiss a pill.
@@ -848,12 +900,13 @@ final class AgentPillsManager: ObservableObject {
             recordingPillID = nil
             PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
         }
-        providersByPill[pillID]?.stopAgent()
+        let runId = pill.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         pill.status = .stopped
         pill.latestActivity = "Stopped by user"
         pill.completedAt = Date()
+        Self.clearStreamingAssistantMessage(for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
         if pill.viewedAt != nil {
@@ -863,6 +916,11 @@ final class AgentPillsManager: ObservableObject {
             surface: .floatingPill(pillId: pillID),
             message: "Stopped by user"
         )
+        if let runId, !runId.isEmpty {
+            Task {
+                _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
+            }
+        }
     }
 
     func markViewed(pillID: UUID) {
@@ -967,7 +1025,7 @@ final class AgentPillsManager: ObservableObject {
             } else {
                 pill.status = .running
                 pill.latestActivity = "Working…"
-                pill.aiMessage = nil
+                Self.ensureStreamingAssistantMessage(for: pill)
                 pill.completedAt = nil
             }
             pill.markContentChanged()
@@ -982,22 +1040,20 @@ final class AgentPillsManager: ObservableObject {
             recordingPillID = nil
             PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
         }
+        let pill = pills.first(where: { $0.id == pillID })
+        let shouldCancelRun = pill?.status.isFinished == false
+        let runId = pill?.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
-        providersByPill[pillID]?.stopAgent()
-        streamsByPill[pillID]?.cancel()
-        streamsByPill[pillID] = nil
-        projectionStreamsByPill[pillID]?.cancel()
-        projectionStreamsByPill[pillID] = nil
-        providersByPill[pillID] = nil
-        messageCountByPill[pillID] = nil
+        pendingFollowUpsByPill[pillID] = nil
         pills.removeAll { $0.id == pillID }
-    }
-
-    private static func modelForSend(pill: AgentPill, provider: ChatProvider) -> String? {
-        provider.hasBridgeHarnessOverride ? nil : pill.model
+        if shouldCancelRun, let runId, !runId.isEmpty {
+            Task {
+                _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
+            }
+        }
     }
 
     /// Remove all completed (done or failed) pills.
@@ -1083,12 +1139,159 @@ final class AgentPillsManager: ObservableObject {
         }?.id
     }
 
+    private func pollCanonicalRun(for pill: AgentPill) async {
+        while !Task.isCancelled {
+            guard pills.contains(where: { $0.id == pill.id }) else { return }
+            guard let runId = pill.canonicalRunId else { return }
+            do {
+                let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(
+                    runId: runId
+                )
+                apply(inspection: inspection, to: pill)
+                if pill.status.isFinished { return }
+            } catch {
+                logError("AgentPills: failed to inspect canonical run \(runId)", error: error)
+            }
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+        }
+    }
+
+    private func apply(inspection: DesktopCoordinatorAgentRunInspection, to pill: AgentPill) {
+        pill.canonicalSessionId = inspection.sessionId ?? pill.canonicalSessionId
+        pill.canonicalRunId = inspection.runId ?? pill.canonicalRunId
+        switch inspection.status {
+        case "queued", "starting":
+            pill.status = .starting
+            pill.latestActivity = "Starting…"
+            Self.ensureStreamingAssistantMessage(for: pill)
+        case "running", "waiting_input", "waiting_approval", "cancelling":
+            pill.status = .running
+            pill.latestActivity = inspection.status == "cancelling" ? "Stopping…" : "Working…"
+            Self.ensureStreamingAssistantMessage(for: pill)
+        case "succeeded", "completed":
+            finish(
+                pill: pill,
+                finalText: inspection.finalText,
+                resources: inspection.artifacts.map(ChatResource.artifact)
+            )
+        case "cancelled":
+            pill.status = .stopped
+            pill.latestActivity = "Stopped by user"
+            pill.completedAt = Date()
+            Self.clearStreamingAssistantMessage(for: pill)
+            pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        case "failed", "timed_out", "orphaned":
+            fail(pill: pill, errorText: inspection.errorMessage ?? "Agent failed")
+        default:
+            if let finalText = inspection.finalText, !finalText.isEmpty {
+                finish(pill: pill, finalText: finalText)
+            }
+        }
+        pill.markContentChanged()
+        if pill.status.isFinished, pill.viewedAt != nil {
+            scheduleViewedExpiration(for: pill)
+        }
+    }
+
+    private func finish(pill: AgentPill, finalText: String?, resources: [ChatResource] = []) {
+        let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmed.isEmpty || !resources.isEmpty {
+            let messageText = trimmed.isEmpty ? "Done." : trimmed
+            var finalMessage = pill.aiMessage ?? ChatMessage(text: messageText, sender: .ai)
+            finalMessage.text = messageText
+            finalMessage.resources = resources
+            finalMessage.isStreaming = false
+            pill.aiMessage = finalMessage
+            if pill.conversationMessages.isEmpty {
+                pill.conversationMessages = [
+                    ChatMessage(text: pill.query, sender: .user),
+                    finalMessage,
+                ]
+            } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
+                pill.conversationMessages[index] = finalMessage
+            } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
+                pill.conversationMessages.append(finalMessage)
+            }
+            pill.latestActivity = String(messageText.prefix(140))
+            FloatingControlBarManager.shared.recordAgentArtifactCompletion(
+                pillID: pill.id,
+                runId: pill.canonicalRunId,
+                title: pill.title,
+                finalText: trimmed,
+                resources: resources
+            )
+        } else {
+            Self.clearStreamingAssistantMessage(for: pill)
+            pill.latestActivity = "Done"
+        }
+        pill.status = .done
+        pill.completedAt = Date()
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        pill.markContentChanged()
+    }
+
+    private func fail(pill: AgentPill, errorText: String) {
+        pill.status = .failed(errorText)
+        pill.latestActivity = errorText
+        pill.completedAt = Date()
+        Self.clearStreamingAssistantMessage(for: pill)
+        Self.ensureFailureMessage(errorText, for: pill)
+        pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+        pill.markContentChanged()
+    }
+
+    private static func ensureStreamingAssistantMessage(for pill: AgentPill) {
+        if let aiMessage = pill.aiMessage, aiMessage.isStreaming {
+            if !pill.conversationMessages.contains(where: { $0.id == aiMessage.id }) {
+                pill.conversationMessages.append(aiMessage)
+            }
+            return
+        }
+
+        if let index = pill.conversationMessages.lastIndex(where: { $0.sender == .ai && $0.isStreaming }) {
+            pill.aiMessage = pill.conversationMessages[index]
+            return
+        }
+
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [ChatMessage(text: pill.query, sender: .user)]
+        }
+
+        var streamingMessage = ChatMessage(text: "", sender: .ai)
+        streamingMessage.isStreaming = true
+        pill.aiMessage = streamingMessage
+        pill.conversationMessages.append(streamingMessage)
+    }
+
+    private static func clearStreamingAssistantMessage(for pill: AgentPill) {
+        guard let aiMessage = pill.aiMessage, aiMessage.isStreaming else { return }
+        let hasVisibleContent =
+            !aiMessage.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !aiMessage.contentBlocks.isEmpty
+
+        if hasVisibleContent {
+            var completedMessage = aiMessage
+            completedMessage.isStreaming = false
+            pill.aiMessage = completedMessage
+            if let index = pill.conversationMessages.firstIndex(where: { $0.id == completedMessage.id }) {
+                pill.conversationMessages[index] = completedMessage
+            }
+        } else {
+            pill.aiMessage = nil
+            pill.conversationMessages.removeAll { $0.id == aiMessage.id }
+        }
+    }
+
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
         guard messages.count > since else { return }
         let recent = Array(messages.suffix(from: since))
         let displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty
+            return message.sender == .user
+                || !trimmed.isEmpty
+                || message.isStreaming
+                || !message.contentBlocks.isEmpty
+                || !message.displayResources.isEmpty
         }
         if !displayMessages.isEmpty {
             pill.conversationMessages = displayMessages
@@ -1186,10 +1389,6 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .done
             pill.completedAt = Date()
             pill.markContentChanged()
-            AgentRuntimeStatusStore.shared.recordLocalSuccess(
-                surface: .floatingPill(pillId: pill.id),
-                statusText: trimmedFinalText
-            )
         } else {
             pill.status = .failed("Agent ended before reporting a final result")
             pill.completedAt = Date()
@@ -1231,12 +1430,15 @@ final class AgentPillsManager: ObservableObject {
         switch projection.status {
         case .queued:
             pill.status = .queued
+            ensureStreamingAssistantMessage(for: pill)
         case .starting, .running, .waitingInput, .waitingApproval, .cancelling:
             pill.status = .running
             pill.completedAt = nil
+            ensureStreamingAssistantMessage(for: pill)
         case .succeeded:
             pill.status = .done
             pill.completedAt = projection.completedAt ?? Date()
+            clearStreamingAssistantMessage(for: pill)
             if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
                !statusText.isEmpty {
                 pill.latestActivity = String(statusText.prefix(140))
@@ -1253,12 +1455,14 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed(message)
             pill.latestActivity = message
             pill.completedAt = projection.completedAt ?? Date()
+            clearStreamingAssistantMessage(for: pill)
             ensureFailureMessage(message, for: pill)
             pill.markContentChanged()
         case .cancelled:
             pill.status = .stopped
             pill.latestActivity = "Stopped by user"
             pill.completedAt = projection.completedAt ?? Date()
+            clearStreamingAssistantMessage(for: pill)
             pill.markContentChanged()
         case .idle:
             break

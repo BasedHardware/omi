@@ -80,6 +80,13 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     /// has already run for this install, so we never re-disable a user who opted back in.
     static let offByDefaultMigrationKey = "notificationsOffByDefaultMigrationDone"
 
+    /// UserDefaults key mirroring the master `notifications_enabled` toggle from the backend.
+    /// The Settings page writes it on load and on toggle change; `sendNotification` reads it
+    /// synchronously so proactive notifications are suppressed the moment the user turns the
+    /// master Notifications switch off — without waiting for a backend round-trip. Defaults to
+    /// `true` when the key is absent (first run before the Settings page hydrates).
+    static let masterEnabledDefaultsKey = "notifications_enabled"
+
     /// Default level used when the key has never been written (e.g. first run before
     /// the Settings page has hydrated from the backend). Mirrors the backend default.
     /// Proactive notifications are OFF by default — users opt in via the Settings slider.
@@ -268,6 +275,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
             return
         }
 
+        // Proactive notifications honor the master Notifications toggle. When the user
+        // turns Notifications off in Settings, suppress the floating-bar popup and the
+        // native banner entirely (#6778). Functional notifications (Crisp support replies,
+        // screen-recording permission prompts, onboarding test) pass `respectFrequency: false`
+        // to bypass this, matching the frequency gate below.
+        if respectFrequency && !Self.areNotificationsEnabled() {
+            log("NotificationService: suppressing \(assistantId) notification because notifications are disabled")
+            return
+        }
+
         // Proactive notifications honor the user's frequency setting. Functional
         // notifications (Crisp support replies, screen-recording permission prompts,
         // onboarding test) pass `respectFrequency: false` to bypass the gate.
@@ -390,6 +407,16 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     "NotificationService: off-by-default migration backend push failed", error: error)
             }
         }
+    }
+
+    /// Whether the master Notifications toggle is on. Reads the mirrored UserDefaults key,
+    /// defaulting to `true` when absent so notifications are not accidentally suppressed
+    /// before the Settings page has hydrated from the backend.
+    static func areNotificationsEnabled() -> Bool {
+        guard UserDefaults.standard.object(forKey: Self.masterEnabledDefaultsKey) != nil else {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: Self.masterEnabledDefaultsKey)
     }
 
     /// Current frequency level from UserDefaults, clamped to [0, 5]. Falls back to

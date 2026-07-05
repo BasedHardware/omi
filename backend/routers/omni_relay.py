@@ -15,6 +15,7 @@ from utils.byok import (
     validate_byok_websocket,
 )
 from utils.executors import critical_executor, run_blocking
+from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
 from utils.subscription import is_trial_paywalled
 
@@ -65,6 +66,12 @@ def _upstream(provider: str, model: str | None) -> tuple[tuple[str, dict[str, st
 
 @router.websocket("/v1/omni/relay")
 async def omni_relay(websocket: WebSocket):
+    try:
+        raise_if_gateway_feature_mode_blocks_direct_model_surface('omni_realtime.provider_websocket')
+    except RuntimeError as exc:
+        await websocket.close(code=1013, reason=str(exc)[:120])
+        return
+
     # Manual auth (read the header directly so we control logging and avoid any
     # WS header-DI surprises). Token first, then BYOK validate, then the gate.
     authz = websocket.headers.get("authorization")

@@ -71,10 +71,7 @@ class RingProtocol {
   static DoneNotification? parseDoneNotification(List<int> value) {
     if (value.isEmpty || value[0] != notifyDone || value.length < 10) return null;
     final bd = ByteData.sublistView(Uint8List.fromList(value));
-    return DoneNotification(
-      status: bd.getUint8(1),
-      nextSeq: bd.getUint64(2, Endian.big),
-    );
+    return DoneNotification(status: bd.getUint8(1), nextSeq: bd.getUint64(2, Endian.big));
   }
 
   /// Parse a NOTIFY_READ_BEGIN (0x05) notification.

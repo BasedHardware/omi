@@ -121,9 +121,11 @@ func logSync(_ message: String) {
   print(line)
   fflush(stdout)
 
-  let breadcrumb = Breadcrumb(level: .info, category: "app")
-  breadcrumb.message = message
-  SentrySDK.addBreadcrumb(breadcrumb)
+  if !isDevBuild {
+    let breadcrumb = Breadcrumb(level: .info, category: "app")
+    breadcrumb.message = message
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
 
   appendToLogFileSync(line)
 }
@@ -135,10 +137,11 @@ func log(_ message: String) {
   print(line)
   fflush(stdout)
 
-  // Add breadcrumb to Sentry for context in crash reports (now enabled for dev builds too)
-  let breadcrumb = Breadcrumb(level: .info, category: "app")
-  breadcrumb.message = message
-  SentrySDK.addBreadcrumb(breadcrumb)
+  if !isDevBuild {
+    let breadcrumb = Breadcrumb(level: .info, category: "app")
+    breadcrumb.message = message
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
 
   appendToLogFile(line)
 }
@@ -228,10 +231,11 @@ func logError(_ message: String, error: Error? = nil) {
   print(line)
   fflush(stdout)
 
-  // Add error breadcrumb and capture in Sentry (now enabled for dev builds too)
-  let breadcrumb = Breadcrumb(level: .error, category: "error")
-  breadcrumb.message = fullMessage
-  SentrySDK.addBreadcrumb(breadcrumb)
+  if !isDevBuild {
+    let breadcrumb = Breadcrumb(level: .error, category: "error")
+    breadcrumb.message = fullMessage
+    SentrySDK.addBreadcrumb(breadcrumb)
+  }
 
   // Always persist locally; only the Sentry capture is filtered/rate-limited below.
   appendToLogFile(line)
@@ -239,6 +243,8 @@ func logError(_ message: String, error: Error? = nil) {
   // Transient network/IO errors (offline, timeouts, cancellations, socket resets)
   // are not actionable bugs — keep them as local logs + breadcrumbs only.
   if isNonActionableTransient(error) { return }
+
+  guard !isDevBuild else { return }
 
   // Collapse repeated identical errors so a single root cause doesn't flood Sentry.
   guard shouldCaptureToSentry(fullMessage) else { return }

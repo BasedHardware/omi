@@ -14,6 +14,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -212,15 +213,21 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          // How to Use Your Omi (interactive tutorial) — Omi devices only, while connected
-          if (provider.connectedDevice?.type == DeviceType.omi) ...[
+          // How to Use Your Omi (interactive tutorial) — consumer CV1 pendant only.
+          // Other omi-enumerated variants (DevKit, Glass, Neo) share DeviceType.omi
+          // but the tutorial teaches CV1 button behaviour, so gate on the GATT model.
+          if (provider.connectedDevice?.type == DeviceType.omi &&
+              DeviceUtils.isOmiCv1(
+                modelNumber: provider.pairedDevice?.modelNumber,
+                deviceName: provider.connectedDevice?.name,
+              )) ...[
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.graduationCap,
               title: context.l10n.deviceTutorial,
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)));
               },
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -232,13 +239,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             chipValue: provider.connectedDevice == null
                 ? context.l10n.offline
                 : provider.havingNewFirmware
-                    ? context.l10n.available
-                    : null,
+                ? context.l10n.available
+                : null,
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
                     final deviceName = provider.connectedDevice!.name.toLowerCase();
-                    final isOpenGlass = provider.connectedDevice!.type == DeviceType.openglass ||
+                    final isOpenGlass =
+                        provider.connectedDevice!.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||
                         deviceName.contains('glass');
@@ -306,8 +314,9 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               chipColor: pendingSeconds > 0 ? const Color(0xFF3D3520) : null,
               chipTextColor: pendingSeconds > 0 ? const Color(0xFFFFD060) : null,
               onTap: () {
-                final page =
-                    context.read<DeviceProvider>().supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                final page = context.read<DeviceProvider>().supportsMultiFileSync
+                    ? const AutoSyncPage()
+                    : const SyncPage();
                 Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
               },
             ),

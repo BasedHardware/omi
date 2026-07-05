@@ -1,0 +1,18 @@
+{
+  "version": "0.12.8",
+  "date": "2026-07-04",
+  "changes": [
+    "Improved ChatGPT and Claude connector setup by grouping main fields separately from advanced settings",
+    "Made Claude Code and Codex connections faster and more reliable.",
+    "Made Home source and agent buttons open their connection popups directly with compact setup action buttons.",
+    "Changed Home More to open the Apps catalog without leaving Home, focus memory destinations from the right column, and present setup details inside the Home card",
+    "Clarified that imports continue in the background after starting from the Home connection popup.",
+    "Made manual installation rows easier to expand in connection popups.",
+    "Omi can search the web again in chat and the floating bar — live answers for things like weather, news, and product details",
+    "Throttle Home status refreshes during repeated app activations",
+    "Let Home connection popups stop intercepting clicks as soon as they start dismissing",
+    "Fixed the Home More popup opening on a leftover category filter instead of the import and export sections",
+    "Fixed connector popups and sheets so Escape closes them and they behave as proper modals for VoiceOver and keyboard users",
+    "Kept the Apps category filter chip neutral instead of inheriting the macOS accent color"
+  ]
+}

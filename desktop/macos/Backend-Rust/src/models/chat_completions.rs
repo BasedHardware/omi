@@ -182,9 +182,20 @@ pub struct AnthropicRequest {
     pub temperature: Option<f64>,
     pub stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub tools: Option<Vec<AnthropicTool>>,
+    pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
+}
+
+/// A tool definition in an Anthropic request: either a client-executed custom
+/// tool (translated from the OpenAI request) or an Anthropic server-side tool
+/// (e.g. web_search) that Anthropic executes during generation without any
+/// client round-trip.
+#[derive(Debug, Clone, Serialize)]
+#[serde(untagged)]
+pub enum AnthropicToolDef {
+    Custom(AnthropicTool),
+    Server(serde_json::Value),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -252,6 +263,14 @@ pub enum AnthropicContentBlock {
         name: String,
         input: serde_json::Value,
     },
+    /// Server-side tool invocation (e.g. web_search) — executed by Anthropic
+    /// during generation. Never surfaced to the OpenAI client.
+    #[serde(rename = "server_tool_use")]
+    ServerToolUse { id: String, name: String },
+    /// Result of a server-side web search — consumed by the model upstream.
+    /// Never surfaced to the OpenAI client.
+    #[serde(rename = "web_search_tool_result")]
+    WebSearchToolResult {},
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -264,6 +283,16 @@ pub struct AnthropicUsage {
     pub cache_creation_input_tokens: i64,
     #[serde(default)]
     pub cache_read_input_tokens: i64,
+    /// Server-side tool usage (web search request count) — billed per request,
+    /// so it must survive into cost computation.
+    #[serde(default)]
+    pub server_tool_use: Option<AnthropicServerToolUsage>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct AnthropicServerToolUsage {
+    #[serde(default)]
+    pub web_search_requests: i64,
 }
 
 // ── Anthropic streaming event types ─────────────────────────────────────────
@@ -310,6 +339,10 @@ pub enum AnthropicDelta {
     TextDelta { text: String },
     #[serde(rename = "input_json_delta")]
     InputJsonDelta { partial_json: String },
+    /// Citation metadata attached to text generated from web search results.
+    /// Dropped in translation — the OpenAI chunk format has no citation slot.
+    #[serde(rename = "citations_delta")]
+    CitationsDelta {},
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -399,8 +432,40 @@ pub fn map_stop_reason(anthropic_reason: Option<&str>) -> Option<String> {
         "max_tokens" => "length".to_string(),
         "tool_use" => "tool_calls".to_string(),
         "stop_sequence" => "stop".to_string(),
+        // Long-running server tools (web search) can pause the turn. The proxy
+        // cannot resume it — the OpenAI client never saw the server tool blocks
+        // — so terminate cleanly instead of leaking an unknown finish_reason.
+        "pause_turn" => "stop".to_string(),
         other => other.to_string(),
     })
+}
+
+/// Merge stream usage: message_start carries the input/cache token counts,
+/// but on server-tool turns (web search) the final message_delta usage is
+/// cumulative across search iterations — prefer its nonzero fields so cost
+/// doesn't undercount searched turns. output and server_tool_use are only
+/// authoritative in the final usage.
+pub fn merge_stream_usage(
+    initial: Option<&AnthropicUsage>,
+    final_usage: &AnthropicUsage,
+) -> AnthropicUsage {
+    let pick = |final_v: i64, initial_v: i64| if final_v > 0 { final_v } else { initial_v };
+    AnthropicUsage {
+        input_tokens: pick(
+            final_usage.input_tokens,
+            initial.map_or(0, |u| u.input_tokens),
+        ),
+        output_tokens: final_usage.output_tokens,
+        cache_creation_input_tokens: pick(
+            final_usage.cache_creation_input_tokens,
+            initial.map_or(0, |u| u.cache_creation_input_tokens),
+        ),
+        cache_read_input_tokens: pick(
+            final_usage.cache_read_input_tokens,
+            initial.map_or(0, |u| u.cache_read_input_tokens),
+        ),
+        server_tool_use: final_usage.server_tool_use.clone(),
+    }
 }
 
 pub fn anthropic_usage_to_openai(usage: &AnthropicUsage) -> Usage {

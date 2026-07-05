@@ -43,9 +43,20 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   @Published var preferredName: String
   @Published var draftName: String
-  @Published var selectedLanguageCode: String
-  @Published var selectedLanguageLabel: String
+  /// Languages the user speaks, ordered — first is the primary. Multi-select in the
+  /// language step; drives the voice assistant's per-turn language identification.
+  @Published var selectedLanguageCodes: [String]
   @Published var customLanguage: String = ""
+
+  var primaryLanguageCode: String { selectedLanguageCodes.first ?? "en" }
+
+  /// Chip set offered in the language step (the languages Deepgram's multi mode covers,
+  /// i.e. the ones the whole pipeline handles well). Anything else via the custom field.
+  static let commonLanguages: [(code: String, name: String)] = [
+    ("en", "English"), ("es", "Spanish"), ("fr", "French"), ("de", "German"),
+    ("pt", "Portuguese"), ("ru", "Russian"), ("hi", "Hindi"), ("ja", "Japanese"),
+    ("it", "Italian"), ("nl", "Dutch"),
+  ]
   @Published var scanState: ScanState = .idle
   @Published var scanStatusText: String = "Ready to scan your files."
   @Published var scanSnapshot: ScanSnapshot?
@@ -98,9 +109,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     preferredName = initialName
     draftName = initialName
 
-    let languageCode = AssistantSettings.shared.transcriptionLanguage
-    selectedLanguageCode = languageCode
-    selectedLanguageLabel = Self.displayName(forLanguageCode: languageCode)
+    // Fresh installs start EMPTY so the user's first pick genuinely defines the
+    // primary — pre-selecting the "en" fallback would make English primary for everyone.
+    selectedLanguageCodes =
+      AssistantSettings.shared.hasExplicitVoiceLanguages
+      ? AssistantSettings.shared.voiceLanguages : []
 
     let defaults = UserDefaults.standard
     chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)
@@ -334,53 +347,73 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     )
   }
 
-  func selectEnglish() async {
-    await setLanguage(code: "en", label: "English")
+  /// Toggle a language chip. Order is selection order; the first selected is the primary.
+  func toggleLanguage(code: String) {
+    lastActionError = nil
+    if let idx = selectedLanguageCodes.firstIndex(of: code) {
+      selectedLanguageCodes.remove(at: idx)
+    } else {
+      selectedLanguageCodes.append(code)
+    }
   }
 
-  func setCustomLanguage() async {
+  /// Resolve the typed language name to a supported ISO code and add it to the selection.
+  /// (The old locale-scan here returned the literal typed word when it missed — that's
+  /// how `language="russian"` ended up saved to the account.)
+  func addCustomLanguage() {
     let trimmed = customLanguage.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else {
       lastActionError = "Add a language first."
       return
     }
-
-    let normalizedCode =
-      Locale.availableIdentifiers
-      .compactMap { Locale(identifier: $0) }
-      .first(where: { locale in
-        locale.localizedString(forIdentifier: locale.identifier)?
-          .localizedCaseInsensitiveContains(trimmed) == true
-          || locale.localizedString(
-            forLanguageCode: locale.language.languageCode?.identifier ?? "")?
-            .localizedCaseInsensitiveContains(trimmed) == true
-      })?
-      .language
-      .languageCode?
-      .identifier ?? trimmed.lowercased()
-
-    await setLanguage(code: normalizedCode, label: trimmed.capitalized)
+    let code = AssistantSettings.normalizeTranscriptionLanguageCode(trimmed)
+    guard AssistantSettings.supportedLanguages.contains(where: { $0.code == code }) else {
+      lastActionError = "Couldn't recognize \"\(trimmed)\" — try its English name (Spanish, Japanese…)."
+      return
+    }
+    lastActionError = nil
+    customLanguage = ""
+    if !selectedLanguageCodes.contains(code) {
+      selectedLanguageCodes.append(code)
+    }
   }
 
-  private func setLanguage(code: String, label: String) async {
+  /// Persist the multi-select: the full ordered list drives the voice assistant's
+  /// language identification; the primary also updates the backend `language` (the
+  /// LLM output language for summaries/notifications). Deliberately does NOT touch the
+  /// ambient transcription settings — picking Russian here must not pin the always-on
+  /// transcriber to a single language (that regression is exactly what this step used
+  /// to cause via set_user_preferences).
+  func confirmLanguages() async {
+    guard !selectedLanguageCodes.isEmpty else {
+      lastActionError = "Pick at least one language."
+      return
+    }
     lastActionError = nil
-    let result = await executeTool(name: "set_user_preferences", arguments: ["language": code])
-    if result.lowercased().contains("error") {
-      lastActionError = result
+    AssistantSettings.shared.voiceLanguages = selectedLanguageCodes
+    let primary = primaryLanguageCode
+    // Await the backend primary-language write and surface failure BEFORE the step
+    // advances — fire-and-forget here silently lost the account language (the LLM
+    // output language) on network failure, regressing the old save-before-continue
+    // contract. The local selection stays saved either way; retrying is safe.
+    do {
+      _ = try await APIClient.shared.updateUserLanguage(primary)
+    } catch {
+      logError("Onboarding: saving primary language '\(primary)' to backend failed", error: error)
+      lastActionError = "Couldn't save your language to your account — check your connection and tap Continue again."
       return
     }
 
-    selectedLanguageCode = code
-    selectedLanguageLabel = label
-
-    await saveGraph(
-      nodes: [
-        ["id": "language_\(code)", "label": label, "node_type": "concept", "aliases": [code]]
-      ],
-      edges: [
-        ["source_id": "user", "target_id": "language_\(code)", "label": "prefers"]
+    let nodes: [[String: Any]] = selectedLanguageCodes.map { code in
+      [
+        "id": "language_\(code)", "label": Self.displayName(forLanguageCode: code),
+        "node_type": "concept", "aliases": [code],
       ]
-    )
+    }
+    let edges: [[String: Any]] = selectedLanguageCodes.map { code in
+      ["source_id": "user", "target_id": "language_\(code)", "label": "prefers"]
+    }
+    await saveGraph(nodes: nodes, edges: edges)
   }
 
   private func openURLInDefaultBrowser(_ url: URL) {
@@ -1394,70 +1427,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       )
     }
 
-    for fileName in snapshot.recentFiles.prefix(8) {
-      drafts.append(
-        MemoryDraft(
-          content: "A recently modified local file is named \(fileName).",
-          tags: ["local_files", "onboarding", "recent_file"],
-          source: "local_files",
-          headline: fileName
-        )
-      )
-    }
-
-    if let dbQueue = await RewindDatabase.shared.getDatabaseQueue() {
-      do {
-        let projectDrafts = try await dbQueue.read { db -> [MemoryDraft] in
-          let sql = """
-            SELECT path, filename, fileExtension, folder
-            FROM indexed_files
-            WHERE folder IN ('Projects', 'Documents', 'Downloads')
-              AND filename NOT LIKE 'CleanShot %'
-              AND filename NOT LIKE '.DS_Store'
-              AND path NOT LIKE '%/node_modules/%'
-              AND path NOT LIKE '%/.git/%'
-              AND path NOT LIKE '%/.build/%'
-              AND path NOT LIKE '%/build/%'
-              AND path NOT LIKE '%/DerivedData/%'
-              AND path NOT LIKE '%/Pods/%'
-              AND (
-                fileExtension IN ('swift','dart','py','ts','tsx','js','jsx','md','mdx','json',
-                                  'yaml','yml','toml','sh','txt','html','css','scss','sql',
-                                  'go','rs','kt','java','cpp','c','h','hpp','ipynb','pdf')
-                OR fileExtension IS NULL
-              )
-            ORDER BY modifiedAt DESC
-            LIMIT 2800
-            """
-
-          let rows = try Row.fetchAll(db, sql: sql)
-          return rows.compactMap { row in
-            guard let path: String = row["path"], let filename: String = row["filename"] else {
-              return nil
-            }
-
-            let folder: String = row["folder"] ?? "Files"
-            let fileExtension: String = row["fileExtension"] ?? ""
-            let normalizedPath = Self.normalizedLocalFilePath(path)
-            let extensionSuffix = fileExtension.isEmpty ? "" : " (\(fileExtension))"
-
-            return MemoryDraft(
-              content:
-                "The user's local \(folder.lowercased()) include \(normalizedPath)\(extensionSuffix).",
-              tags: [
-                "local_files", "onboarding", folder.lowercased(), Self.sanitizedTag(fileExtension),
-              ],
-              source: "local_files",
-              headline: filename
-            )
-          }
-        }
-        drafts.append(contentsOf: projectDrafts)
-      } catch {
-        log(
-          "OnboardingPagedIntroCoordinator: Failed to build detailed local file memories: \(error)")
-      }
-    }
+    // Deliberately no per-file drafts here. An earlier version emitted one
+    // memory per indexed file (up to 2800 "The user's local projects include
+    // <path>" entries, plus per-file "recently modified" facts); those
+    // drowned out real memories for every user who ran the scan and were
+    // bulk-purged server-side. Only aggregate facts (count, project names,
+    // technologies) carry durable signal.
 
     var seen = Set<MemoryDraft>()
     return drafts.filter { seen.insert($0).inserted }
@@ -1471,11 +1446,6 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       return "~/" + path.dropFirst(home.count + 1)
     }
     return path
-  }
-
-  nonisolated private static func sanitizedTag(_ tag: String) -> String {
-    let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    return trimmed.isEmpty ? "unknown" : trimmed.replacingOccurrences(of: " ", with: "_")
   }
 
   private func heuristicGoalTitle(_ text: String) -> String {
