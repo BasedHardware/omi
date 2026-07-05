@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use dioxus::prelude::*;
 
 use crate::app::{Db, Route};
+use crate::config::AppConfig;
 use omi_db::unified_search::{SearchResultKind, UnifiedSearchResult};
 
 #[component]
@@ -17,11 +18,13 @@ pub fn SearchPage() -> Element {
 
     // Debounced search: fires 300ms after last keystroke
     let db_search = db.clone();
+    let cfg_search = use_context::<Signal<AppConfig>>();
     use_effect(move || {
         let gen = *debounce_gen.read();
         let q = query.read().clone();
         let sources = enabled_sources.read().clone();
         let db_ref = db_search.clone();
+        let cfg = cfg_search.read().clone();
 
         spawn(async move {
             tokio::time::sleep(tokio::time::Duration::from_millis(300)).await;
@@ -32,16 +35,38 @@ pub fn SearchPage() -> Element {
                 results.set(Vec::new());
                 return;
             }
+            let mut all_results = Vec::new();
             let db_snap = db_ref.read().clone();
             if let Some(Db(d)) = db_snap {
                 match d.search_filtered(&q, 30, &sources) {
-                    Ok(r) => results.set(r),
+                    Ok(r) => all_results = r,
                     Err(e) => {
                         tracing::warn!("[SEARCH] Error: {e:#}");
-                        results.set(Vec::new());
                     }
                 }
             }
+            if sources.contains(&SearchResultKind::KnowledgeBase) && cfg.mcp_enabled {
+                if let Ok(kb_results) = crate::knowledge::search_knowledge(&q, &cfg).await {
+                    for r in kb_results {
+                        let score = r.score.unwrap_or(0.0) * 10.0 + 2.5;
+                        all_results.push(UnifiedSearchResult {
+                            kind: SearchResultKind::KnowledgeBase,
+                            id: r.source.clone().unwrap_or_default(),
+                            title: r.source.unwrap_or_else(|| "Knowledge".into()),
+                            snippet: if r.content.len() > 150 {
+                                format!("{}…", &r.content[..150])
+                            } else {
+                                r.content
+                            },
+                            timestamp: chrono::Utc::now(),
+                            score,
+                        });
+                    }
+                }
+            }
+            all_results.sort_by(|a, b| b.score.partial_cmp(&a.score).unwrap_or(std::cmp::Ordering::Equal));
+            all_results.truncate(30);
+            results.set(all_results);
         });
     });
 
@@ -61,13 +86,17 @@ pub fn SearchPage() -> Element {
         groups
     };
 
-    let all_sources = vec![
+    let mcp_enabled = use_context::<Signal<AppConfig>>().read().mcp_enabled;
+    let mut all_sources = vec![
         SearchResultKind::Memory,
         SearchResultKind::Screenshot,
         SearchResultKind::Clipboard,
         SearchResultKind::File,
         SearchResultKind::Conversation,
     ];
+    if mcp_enabled {
+        all_sources.push(SearchResultKind::KnowledgeBase);
+    }
 
     rsx! {
         div {
@@ -216,7 +245,8 @@ fn navigate_to_result(nav: &Navigator, result: &UnifiedSearchResult) {
                     .spawn();
             }
         }
-        SearchResultKind::Clipboard | SearchResultKind::KnowledgeBase => {}
+        SearchResultKind::Clipboard => {}
+        SearchResultKind::KnowledgeBase => { nav.push(Route::Apps {}); }
     }
 }
 
