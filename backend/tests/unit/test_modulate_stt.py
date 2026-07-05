@@ -1257,6 +1257,46 @@ class TestParakeetV4Protocol(unittest.TestCase):
             'ENCRYPTION_SECRET': 'secret',
         },
     )
+    def test_stable_partial_uses_overlap_dedup_with_committed(self):
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+            segments = []
+
+            async def run():
+                mock_ws_mod = MagicMock()
+                mock_ws_mod.__version__ = '12.0'
+                ws = _FakeV4WebSocket(
+                    chunk_responses=[],
+                    close_response={'stream_id': 's1', 'final_text': '', 'status': 'closed'},
+                )
+                mock_ws_mod.connect.side_effect = lambda *a, **kw: _FakeV4Connect(ws)
+
+                with patch('utils.stt.streaming.websockets', mock_ws_mod), patch(
+                    'utils.stt.streaming.asyncio.sleep', AsyncMock()
+                ):
+                    sock = ParakeetWebSocketSocket(segments.extend, 'ws://parakeet.local/v4/stream', 16000)
+                    await sock.start()
+                    sock._stream_start = 100.0
+                    sock._committed_text = "hello world"
+                    sock._emit_stable_partial("hello world again")
+                return segments
+
+            result = loop.run_until_complete(run())
+            texts = [s['text'] for s in result]
+            self.assertEqual(texts, ['again'], f"Should only emit 'again' via overlap dedup, got: {texts}")
+        finally:
+            loop.close()
+
+    @patch.dict(
+        'os.environ',
+        {
+            'HOSTED_PARAKEET_API_URL': 'http://parakeet.local',
+            'PARAKEET_STREAM_VERSION': 'v4',
+            'ENCRYPTION_SECRET': 'secret',
+        },
+    )
     def test_close_path_uses_overlap_dedup(self):
         ws = _FakeV4WebSocket(
             chunk_responses=[
