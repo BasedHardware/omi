@@ -791,6 +791,37 @@ static void update_conn_params(struct bt_conn *conn)
     LOG_WRN("bt_conn_le_param_update() still failed after retries (last err %d)", err);
 }
 
+void transport_conn_set_lowpower(bool low)
+{
+    struct bt_conn *conn = current_connection;
+    if (conn == NULL) {
+        return; /* advertising-only: no link to slow down */
+    }
+    /* While the mic is in AAD sleep there is no audio to stream, so drop the
+     * connection to a slow interval + slave latency -> the net core services the
+     * radio a few times/sec instead of ~100x/sec. Fast params are restored on
+     * wake for low-latency streaming. */
+    const struct bt_le_conn_param slow = {
+        .interval_min = 120, /* 150 ms */
+        .interval_max = 160, /* 200 ms */
+        .latency = 4,
+        .timeout = 600, /* 6 s */
+    };
+    const struct bt_le_conn_param fast = {
+        .interval_min = 6,  /* 7.5 ms */
+        .interval_max = 12, /* 15 ms */
+        .latency = 0,
+        .timeout = 400,
+    };
+    const struct bt_le_conn_param *p = low ? &slow : &fast;
+    int err = bt_conn_le_param_update(conn, p);
+    if (err) {
+        LOG_WRN("conn param %s update failed (err %d)", low ? "slow" : "fast", err);
+    } else {
+        LOG_INF("conn params -> %s", low ? "low-power (200ms, latency 4)" : "fast (7.5-15ms)");
+    }
+}
+
 static void update_phy(struct bt_conn *conn)
 {
     int err = 0;

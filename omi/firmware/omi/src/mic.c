@@ -21,6 +21,7 @@
 
 #include "sd_card.h"
 #include "t5838_aad.h"
+#include "transport.h"
 #endif
 
 LOG_MODULE_REGISTER(mic, CONFIG_LOG_DEFAULT_LEVEL);
@@ -350,7 +351,10 @@ static void enter_hw_aad(void)
     t5838_aad_enter();                  /* program AAD mode-A + clock into sleep */
     k_msleep(CONFIG_OMI_AAD_SETTLE_MS); /* settle noise floor; swallow entry transient */
 
-    /* BLE keeps advertising during sleep so a phone can connect at any time. */
+    /* BLE keeps advertising during sleep so a phone can connect at any time.
+     * If a phone IS connected, drop the link to low-power params (no audio to
+     * stream while asleep) to cut the connection's radio wakeups. */
+    transport_conn_set_lowpower(true);
     sd_request_power(false); /* cut SD NAND power while idle */
 
 #ifdef CONFIG_OMI_AAD_POWER_OFF_MIC
@@ -389,9 +393,10 @@ static void exit_hw_aad(void)
 #endif
     t5838_aad_release_clk(); /* hand CLK back to the PDM peripheral */
     atomic_set(&aad_in_sleep, 0);
-    atomic_set(&aad_woke, 1); /* reset silence timer in mic ctx */
-    sd_request_power(true);   /* power on + remount SD before audio starts flowing */
-    mic_resume();             /* dmic START reclaims CLK via pinctrl */
+    atomic_set(&aad_woke, 1);           /* reset silence timer in mic ctx */
+    transport_conn_set_lowpower(false); /* fast params for streaming (if connected) */
+    sd_request_power(true);             /* power on + remount SD before audio starts flowing */
+    mic_resume();                       /* dmic START reclaims CLK via pinctrl */
     LOG_INF("AAD: WAKE -> mic resumed");
 }
 
