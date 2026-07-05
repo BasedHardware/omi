@@ -5,3 +5,4 @@ debug_uart.conf
 measure_micoff.conf
 measure_micon.conf
 release.conf
+prj.conf
