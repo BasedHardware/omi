@@ -159,6 +159,13 @@ final class UpdateFailureDiagnosticsTests: XCTestCase {
     XCTAssertEqual(properties["source_app_version"] as? String, "0.12.0")
     XCTAssertEqual(properties["source_app_build"] as? String, "12000")
     XCTAssertEqual(properties["appcast_url_host"] as? String, "api.omi.me")
+    // Regression: Update Check Failed must carry a non-empty error message so the
+    // daily report's error_or_message column is populated (was blank on 0.12.0).
+    XCTAssertEqual(
+      properties["error"] as? String, "An error occurred in retrieving update information.")
+    XCTAssertEqual(
+      properties["update_failure_message"] as? String,
+      "An error occurred in retrieving update information.")
   }
 
   func testAnalyticsPropertiesOmitRawPath() {

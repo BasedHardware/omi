@@ -111,6 +111,10 @@ struct UpdateFailureDiagnostics: Equatable {
 
   var analyticsProperties: [String: Any] {
     var properties: [String: Any] = [
+      // Emit the human-readable message under "error" so the daily report's
+      // error_or_message column is populated (previously blank on Update Check Failed).
+      "error": message.isEmpty ? "\(domain) \(code)" : message,
+      "update_failure_message": message,
       "update_failure_reason": reason.rawValue,
       "update_failure_domain": domain,
       "update_failure_code": code,
