@@ -329,6 +329,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
         lastConversationActivityAt = nil
+        pttHintText = ""  // stay self-consistent; don't rely on PTTManager's cancel side effect
         clearVoiceResponseState()
     }
 

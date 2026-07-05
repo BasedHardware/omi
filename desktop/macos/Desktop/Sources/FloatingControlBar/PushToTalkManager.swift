@@ -95,6 +95,9 @@ class PushToTalkManager: ObservableObject {
   private var transcriptSegments: [String] = []
   private var lastInterimText: String = ""
   private var finalizeWorkItem: DispatchWorkItem?
+  /// Monotonic tag for the transient too-short "hold longer" hint, so an older
+  /// hint's 2s reset timer can't clear a newer hint from a rapid follow-up tap.
+  private var pttHintGeneration = 0
   private var hasMicPermission: Bool = false
   private var isCurrentSessionFollowUp = false
   private var currentContextSnapshot: PTTContextSnapshot?
@@ -893,12 +896,21 @@ class PushToTalkManager: ObservableObject {
   private func finishTooShortPTTTurnWithHint(reason: String) {
     log("PushToTalkManager: too-short PTT turn (\(reason)) — showing hold-longer hint")
     activeTracer = nil
+    // Return to idle immediately. The hub path already reset state, but the
+    // omni/batch discard path leaves it in `.finalizing`; without this a new PTT
+    // press within the 2s hint window is dropped (handleShortcutDown ignores
+    // `.finalizing`). The bar stays voice-sized via pttHintText, not `state`.
+    state = .idle
     barState?.pttHintText = "Hold longer to record"
     updateBarState()  // keeps/expands the bar to its voice size so the hint shows
 
+    // Tag this hint so a newer too-short tap's hint isn't cleared early by this
+    // timer (rapid taps would otherwise share the identical hint string).
+    pttHintGeneration &+= 1
+    let generation = pttHintGeneration
     Task { @MainActor [weak self] in
       try? await Task.sleep(nanoseconds: 2_000_000_000)
-      guard let self else { return }
+      guard let self, self.pttHintGeneration == generation else { return }
       // Only reset if the hint is still on screen — a newer turn may have replaced it.
       if self.barState?.pttHintText == "Hold longer to record" {
         self.barState?.pttHintText = ""

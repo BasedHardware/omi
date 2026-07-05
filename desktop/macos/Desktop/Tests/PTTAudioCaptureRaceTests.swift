@@ -40,6 +40,21 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertTrue(source.contains("barState?.pttHintText = \"\""))
   }
 
+  /// Review fixes for the hint path (cubic P1/P2): the omni/batch discard path
+  /// leaves the manager in `.finalizing`, so the hint must reset `state` to idle
+  /// (or a new press inside the 2s window is dropped — `handleShortcutDown` ignores
+  /// `.finalizing`), and the reset timer must be tagged so a rapid follow-up tap's
+  /// hint isn't cleared early.
+  func testHintPathResetsStateAndTagsHint() throws {
+    let source = try managerSource()
+    guard let start = source.range(of: "func finishTooShortPTTTurnWithHint(reason: String)") else {
+      return XCTFail("finishTooShortPTTTurnWithHint not found")
+    }
+    let body = String(source[start.lowerBound...].prefix(900))
+    XCTAssertTrue(body.contains("state = .idle"), "hint path must return the manager to .idle")
+    XCTAssertTrue(body.contains("pttHintGeneration"), "hint reset must be guarded by a per-hint token")
+  }
+
   func testFloatingBarRendersPTTHintText() throws {
     let view = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarView.swift")
     XCTAssertTrue(view.contains("state.pttHintText"))
