@@ -71,6 +71,31 @@ final class TasksSortOrderBandingTests: XCTestCase {
             newValue, band, "new scheme must keep the 101st item inside its band (BL-016)")
     }
 
+    /// Copilot boundary review: once `itemCount >= bandWidth` the derived integer
+    /// spacing floors to 0, so a naive `(itemIndex+1)*max(1,spacing)` would land the
+    /// last item on the next band's base. The degenerate branch must keep every item
+    /// strictly inside its band (ordering non-decreasing) even at that unreachable scale.
+    func testDegenerateOversizedCategoryStaysInsideBand() {
+        let band = TasksViewModel.sortOrderBandWidth
+        let categoryIndex = 2
+        let base = categoryIndex * band
+        for count in [band, band + 1, band + 5000] {
+            var previous = Int.min
+            for itemIndex in [0, 1, count / 2, count - 2, count - 1] {
+                let value = TasksViewModel.sortOrder(
+                    categoryIndex: categoryIndex, itemIndex: itemIndex, itemCount: count)
+                XCTAssertGreaterThanOrEqual(
+                    value, base, "count \(count) item \(itemIndex) underflowed its band")
+                XCTAssertLessThan(
+                    value, base + band,
+                    "count \(count) item \(itemIndex) overflowed its band (degenerate boundary)")
+                XCTAssertGreaterThanOrEqual(
+                    value, previous, "degenerate ordering must stay non-decreasing")
+                previous = value
+            }
+        }
+    }
+
     /// Backward compatibility: small categories keep the historical sparse 1000
     /// spacing, so orders already persisted under the old scheme are unchanged.
     func testSmallCategoryKeepsHistoricalSparseSpacing() {

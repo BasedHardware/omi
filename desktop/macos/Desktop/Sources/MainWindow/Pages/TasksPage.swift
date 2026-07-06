@@ -877,17 +877,29 @@ class TasksViewModel: ObservableObject {
     /// base. Here the spacing is derived from the item count as
     /// `bandWidth / (count + 1)`, capped at the historical 1000 so small
     /// categories keep the familiar sparse spacing (room for future in-place
-    /// inserts). Because the largest value is
-    /// `count * spacing <= count/(count+1) * bandWidth < bandWidth`, the last
-    /// item never reaches the next band's base for any realistic category size
-    /// (up to ~99,999 items, past which the integer spacing floors to 1 — far
-    /// beyond any real task list). Both reorder sites (`moveTask`,
+    /// inserts). While `count < bandWidth` the integer spacing is >= 1 and the
+    /// largest value is `count * spacing <= count/(count+1) * bandWidth < bandWidth`,
+    /// so the last item never reaches the next band's base — true for any realistic
+    /// category size (values are byte-identical to the old scheme for count <= 99).
+    /// Only when `count >= bandWidth` (~100k+ items in one section, not reachable
+    /// in practice) does the integer spacing floor to 0; that degenerate case is
+    /// handled separately by distributing items evenly so the result still stays
+    /// strictly inside the band. Both reorder sites (`moveTask`,
     /// `collectSortOrderUpdates`) call this single helper so their optimistic and
     /// persisted orders agree.
     nonisolated static func sortOrder(categoryIndex: Int, itemIndex: Int, itemCount: Int) -> Int {
         let band = sortOrderBandWidth
-        let spacing = max(1, min(1000, band / (itemCount + 1)))
-        return categoryIndex * band + (itemIndex + 1) * spacing
+        let base = categoryIndex * band
+        let rawSpacing = band / (itemCount + 1)
+        guard rawSpacing >= 1 else {
+            // Degenerate: itemCount >= bandWidth leaves no integer room for unique
+            // spacing. Spread items evenly across [base, base+band) so the result
+            // never leaves the band; ordering is preserved even if exact spacing
+            // is not. Unreachable for any real task section.
+            return base + min(band - 1, (itemIndex * (band - 1)) / max(1, itemCount - 1))
+        }
+        let spacing = min(1000, rawSpacing)
+        return base + (itemIndex + 1) * spacing
     }
 
     /// Move a task within a category
