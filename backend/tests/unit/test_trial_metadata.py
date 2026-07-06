@@ -149,6 +149,7 @@ def _get_trial_metadata_fn():
     # _get_user wraps firebase_auth.get_user — subscription.py extracts it
     # into a module-level helper for type safety. cast is used for type narrowing.
     from typing import cast as _cast
+
     namespace['_get_user'] = lambda uid: namespace['firebase_auth'].get_user(uid)
     namespace['cast'] = _cast
     # Execute TRIAL_LENGTH_SECONDS
