@@ -83,19 +83,27 @@ final class PiMonoWiringTests: XCTestCase {
     try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
 
+    // Hermetic: inject empty system dirs so the arbitrary PATH entry is the only
+    // possible discovery source — proving PATH is ignored regardless of whether the
+    // agent happens to be installed in a system dir on the runner (issue #9033).
     let availability = LocalAgentProviderDetector.availability(
       for: .hermes,
       environment: ["PATH": root.path],
-      homeDirectory: "/tmp/missing-home")
+      homeDirectory: "/tmp/missing-home",
+      systemSearchDirectories: [])
 
     XCTAssertFalse(availability.isAvailable)
   }
 
   func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
+    // Hermetic: every discovery input is injected (no configured command, a
+    // missing home, and no system dirs), so the result can't depend on whether
+    // OpenClaw happens to be installed on the runner (issue #9033).
     let availability = LocalAgentProviderDetector.availability(
       for: .openclaw,
       environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
-      homeDirectory: "/tmp/missing-home")
+      homeDirectory: "/tmp/missing-home",
+      systemSearchDirectories: [])
 
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
