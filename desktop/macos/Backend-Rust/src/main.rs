@@ -1,7 +1,6 @@
 // OMI Desktop Backend - Rust
 // Port from Python backend (main.py)
 
-#![allow(dead_code)]
 #![allow(clippy::derivable_impls)]
 #![allow(clippy::doc_overindented_list_items)]
 #![allow(clippy::doc_lazy_continuation)]
