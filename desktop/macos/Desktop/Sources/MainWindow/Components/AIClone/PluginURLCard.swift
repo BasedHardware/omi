@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Card showing the configured AI Clone plugin service URL + credentials.
 ///

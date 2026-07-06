@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// AI Clone settings page.
 ///

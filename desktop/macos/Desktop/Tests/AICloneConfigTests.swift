@@ -97,7 +97,7 @@ final class AICloneConfigTests: XCTestCase {
         // to Keychain (encrypted at rest, locked-screen gated).
         let config = AICloneConfig(defaults: customDefaults)
         let session = "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
-        config.setTelegramUserSession(session)
+        try? config.setTelegramUserSession(session)
         XCTAssertEqual(
             try? AICloneKeychain.get(.telegramUserSession),
             session
@@ -120,7 +120,7 @@ final class AICloneConfigTests: XCTestCase {
             "1AgAOMT946OxqWq3" + String(repeating: "A", count: 200)
         )
         config.telegramAccountEnabled = true
-        config.setTelegramUserSession("")
+        try? config.setTelegramUserSession("")
         XCTAssertNil(try? AICloneKeychain.get(.telegramUserSession))
         XCTAssertFalse(config.telegramAccountEnabled)
     }
@@ -385,7 +385,6 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertEqual(config.pluginURL, "")
         XCTAssertEqual(config.bearerToken, "")
     }
-}
 
     // MARK: - Telegram user-account ToS acknowledgement (plan §8)
 
@@ -543,11 +542,8 @@ final class AICloneConfigTests: XCTestCase {
         config.startTelegramUserAccountStatusPoll()
         let secondTask = config.telegramStatusPollTask
         XCTAssertNotNil(secondTask)
-        XCTAssertFalse(firstTask === secondTask, (
-            "Second startTelegramUserAccountStatusPoll must "
-            "cancel the first; the underlying Task should be "
-            "a new instance."
-        ))
+        XCTAssertFalse(firstTask == secondTask,
+            "Second startTelegramUserAccountStatusPoll must cancel the first; the underlying Task should be a new instance.")
         // Cleanup so the test doesn't leave a poll running.
         config.stopTelegramUserAccountStatusPoll()
         XCTAssertNil(config.telegramStatusPollTask)
@@ -580,15 +576,10 @@ final class AICloneConfigTests: XCTestCase {
         let oldTask = config.telegramStatusPollTask
         XCTAssertNotNil(oldTask)
         try? config.clearTelegramUserSession()
-        XCTAssertNil(config.telegramStatusPollTask, (
-            "Sign-out must cancel the status poll"
-        ))
-        XCTAssertTrue(oldTask?.isCancelled ?? false, (
-            "Sign-out must CANCEL the old task (not just drop "
-            "the reference). Without explicit cancel(), the "
-            "task continues to make /status requests every 30s "
-            "after the user has signed out."
-        ))
+        XCTAssertNil(config.telegramStatusPollTask,
+            "Sign-out must cancel the status poll")
+        XCTAssertTrue(oldTask?.isCancelled ?? false,
+            "Sign-out must CANCEL the old task (not just drop the reference). Without explicit cancel(), the task continues to make /status requests every 30s after the user has signed out.")
     }
 
     func testEmptyStringSignOutAlsoCancelsStatusPoll() {
@@ -636,3 +627,4 @@ final class AICloneConfigTests: XCTestCase {
         XCTAssertFalse(config.telegramAutoReplyEnabled)
         XCTAssertFalse(config.telegramAutoReplyInFlight)
     }
+}

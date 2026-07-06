@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 import os.log
 
 // Allowlist of URL schemes the plugin's deep link is permitted to use.

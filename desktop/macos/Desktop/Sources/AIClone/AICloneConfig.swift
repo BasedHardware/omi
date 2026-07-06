@@ -71,7 +71,8 @@ final class AICloneConfig: ObservableObject {
     /// counters. Started by applyUserAccountDiscovery() when
     /// the user is signed in; cancelled by
     /// stopTelegramUserAccountStatusPoll() on sign-out.
-    private var telegramStatusPollTask: Task<Void, Never>?
+    /// Accessible from tests to verify the poll lifecycle.
+    internal var telegramStatusPollTask: Task<Void, Never>?
     /// Poll interval for the user-account plugin's /status
     /// endpoint. 30s is a reasonable balance between
     /// freshness and chatter (the badge changes are not

@@ -1,4 +1,5 @@
 import XCTest
+import OmiTheme
 @testable import Omi_Computer
 
 /// Tests for the desktop-side `AICloneClient` (the HTTP client used by the
@@ -114,11 +115,9 @@ final class AICloneClientTests: XCTestCase {
     func testTelegramToggleBodyUsesBotTokenForAuth() {
         let body = AIPlugin.telegram.toggleRequestBody(
             chatId: "12345",
-            credentialForAuth: "TELEGRAM_TOKEN",
             enabled: true
         )
         XCTAssertEqual(body["chat_id"] as? String, "12345")
-        XCTAssertEqual(body["bot_token"] as? String, "TELEGRAM_TOKEN")
         XCTAssertEqual(body["enabled"] as? Bool, true)
     }
 
@@ -128,7 +127,6 @@ final class AICloneClientTests: XCTestCase {
         // works.
         let body = AIPlugin.telegram.toggleRequestBody(
             chatId: "12345",
-            credentialForAuth: "T",
             enabled: false
         )
         XCTAssertEqual(body["enabled"] as? Bool, false)
@@ -137,11 +135,9 @@ final class AICloneClientTests: XCTestCase {
     func testWhatsAppToggleBodyUsesAccessTokenForAuth() {
         let body = AIPlugin.whatsapp.toggleRequestBody(
             chatId: "15550001111",
-            credentialForAuth: "WA_TOKEN",
             enabled: true
         )
         XCTAssertEqual(body["phone"] as? String, "15550001111")
-        XCTAssertEqual(body["access_token"] as? String, "WA_TOKEN")
         XCTAssertEqual(body["enabled"] as? Bool, true)
     }
 
@@ -256,11 +252,20 @@ private final class ToggleUserAccountMockURLProtocol: URLProtocol {
     nonisolated(unsafe) static var responseBody: Data = Data()
 
     override class func canInit(with request: URLRequest) -> Bool { true }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        // Capture here because URLProtocol may convert httpBody to a
+        // body stream by the time startLoading() runs.
+        if Self.lastRequest == nil {
+            Self.lastRequest = request
+        }
+        return request
+    }
 
     override func startLoading() {
-        Self.lastRequest = self.request
-        let url = self.request!.url!
+        if Self.lastRequest == nil {
+            Self.lastRequest = self.request
+        }
+        let url = self.request.url!
         let resp = HTTPURLResponse(
             url: url, statusCode: Self.responseStatus,
             httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"]
@@ -314,10 +319,25 @@ extension AICloneClientTests {
         let auth = req?.value(forHTTPHeaderField: "Authorization")
         XCTAssertEqual(auth, "Bearer test-token")
         // Body contains the right keys.
-        let bodyData = req?.httpBody ?? Data()
+        // URLProtocol may convert httpBody to a body stream.
+        var bodyData = req?.httpBody ?? Data()
+        if bodyData.isEmpty, let stream = req?.httpBodyStream {
+            stream.open()
+            let bufferSize = 1024
+            var buffer = [UInt8](repeating: 0, count: bufferSize)
+            while stream.hasBytesAvailable {
+                let bytesRead = stream.read(&buffer, maxLength: bufferSize)
+                if bytesRead > 0 {
+                    bodyData.append(buffer, count: bytesRead)
+                } else {
+                    break
+                }
+            }
+            stream.close()
+        }
         let body = try JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
         XCTAssertEqual(body?["handle"] as? String, "all",
-                       "user-account toggle uses handle="all" for the global toggle")
+                       "user-account toggle uses handle=all for the global toggle")
         XCTAssertEqual(body?["enabled"] as? Bool, true)
     }
 

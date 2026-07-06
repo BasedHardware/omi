@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Per-plugin connection card for the AI Clone page.
 struct PluginCard: View {
