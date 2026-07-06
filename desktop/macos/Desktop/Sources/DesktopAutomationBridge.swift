@@ -400,6 +400,25 @@ final class DesktopAutomationActionRegistry {
       return ["enabled": enabled ? "true" : "false"]
     }
 
+    // Drive the real push-to-talk state machine headlessly (MIC-01). ptt_start begins
+    // capture like the shortcut key-down; ptt_stop finalizes like a long-hold release.
+    // Releasing with no mic audio exercises the empty-batch release path — it must end
+    // the turn with a hint, not hang. Both hit the exact private startListening/finalize
+    // the shortcut handler calls, so no synthetic key events or cursor are involved.
+    register(
+      name: "ptt_start",
+      summary: "Begin a push-to-talk capture (mirrors the PTT shortcut key-down)"
+    ) { _ in
+      PushToTalkManager.shared.beginPushToTalkForAutomation()
+    }
+
+    register(
+      name: "ptt_stop",
+      summary: "Finalize the in-progress push-to-talk capture (mirrors a long-hold release)"
+    ) { _ in
+      PushToTalkManager.shared.endPushToTalkForAutomation()
+    }
+
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
     // real realtime omni STT path and return the transcript. No mic, no human.
     register(

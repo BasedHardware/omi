@@ -2115,6 +2115,221 @@ class TasksViewModel: ObservableObject {
         showingCreateTask = false
     }
 
+    // MARK: - Automation (headless task CRUD + reorder for the desktop bridge)
+
+    private var didRegisterAutomationActions = false
+
+    /// Register task actions on the desktop automation registry so omi-ctl can drive
+    /// TASK-01/02/03 headlessly against this genuine, long-lived view model (the one
+    /// `ViewModelContainer` owns). Each action routes through the same store / view-model
+    /// path the UI uses — create/toggle/delete via the store, reorder via `moveTask` plus
+    /// the debounced sortOrder sync (flushed here for a deterministic persistence check) —
+    /// and `dump_tasks` reads back from SQLite so callers can prove the write landed.
+    /// The caller gates this on `DesktopAutomationLaunchOptions.isEnabled` (never on prod).
+    func registerAutomationActions() {
+        guard !didRegisterAutomationActions else { return }
+        didRegisterAutomationActions = true
+        let registry = DesktopAutomationActionRegistry.shared
+
+        registry.register(
+            name: "create_task",
+            summary: "Create a task through the genuine store path; waits for the backend id (see 'synced') and returns it",
+            params: ["description", "priority"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            let trimmed = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let desc = (trimmed?.isEmpty == false ? trimmed! : "Automation task")
+            guard let created = await self.store.createTask(
+                description: desc, dueAt: nil, priority: params["priority"], tags: nil)
+            else { return ["error": "create failed"] }
+            self.recomputeAllCaches()
+            // store.createTask is local-first: it returns a transient "local_<rowid>" id and
+            // syncs in the background. Hand back the stable backend id once the sync lands so
+            // follow-up-by-id and reorder persistence (which skips "local_" ids) both work.
+            let stableId = await self.resolveStableTaskIdsForAutomation([created.id], timeoutSeconds: 6).first ?? created.id
+            return [
+                "id": stableId,
+                "synced": stableId.hasPrefix("local_") ? "false" : "true",
+                "description": created.description,
+            ]
+        }
+
+        registry.register(
+            name: "seed_tasks",
+            summary: "Create N tasks for reorder/stress testing; waits for backend ids so they are reorder-persistable; returns synced count + ids",
+            params: ["count", "prefix"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            let count = max(0, min(Int(params["count"] ?? "") ?? 5, 300))
+            let prefix = params["prefix"] ?? "Automation task"
+            var localIds: [String] = []
+            for i in 0..<count {
+                if let created = await self.store.createTask(
+                    description: "\(prefix) \(i + 1)", dueAt: nil, priority: nil, tags: nil) {
+                    localIds.append(created.id)
+                }
+            }
+            self.recomputeAllCaches()
+            // Wait (bounded) for the background syncs so seeded tasks carry backend ids —
+            // reorder persistence skips "local_" ids, so unsynced seeds would not persist.
+            let ids = await self.resolveStableTaskIdsForAutomation(
+                localIds, timeoutSeconds: min(10 + Double(count) * 0.1, 30))
+            let syncedCount = ids.filter { !$0.hasPrefix("local_") }.count
+            return [
+                "created": String(ids.count),
+                "synced": String(syncedCount),
+                "ids": ids.joined(separator: ","),
+            ]
+        }
+
+        registry.register(
+            name: "toggle_task",
+            summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
+            params: ["id"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            // Load from SQLite first so a headless caller (Tasks page never opened) resolves
+            // the task instead of getting a spurious "not found".
+            await self.ensureTasksLoadedForAutomation()
+            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
+            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            await self.toggleTask(task)
+            // Report the real post-toggle state read back from the store rather than the
+            // assumed negation — TasksStore leaves the prior state if the local write fails.
+            let completed = self.store.tasks.first(where: { $0.id == id })?.completed ?? !task.completed
+            return ["id": id, "completed": completed ? "true" : "false"]
+        }
+
+        registry.register(
+            name: "delete_task",
+            summary: "Delete a task by id (mirrors swipe / menu delete)",
+            params: ["id"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            // Load from SQLite first so a headless caller resolves the task instead of a
+            // spurious "not found" when the Tasks page was never opened.
+            await self.ensureTasksLoadedForAutomation()
+            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
+            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            await self.deleteTask(task)
+            return ["id": id, "deleted": "true"]
+        }
+
+        registry.register(
+            name: "reorder_task",
+            summary: "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path, flush the sortOrder sync to SQLite + backend, and return the resulting order",
+            params: ["id", "index", "category"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            await self.ensureTasksLoadedForAutomation()
+            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
+            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            // moveTask only clamps the upper bound before Array.insert(at:), so a negative
+            // index would crash the bridge; clamp to >= 0 for deterministic behavior.
+            let index = max(0, Int(params["index"] ?? "") ?? 0)
+            let category = Self.automationCategory(params["category"]) ?? .today
+            self.moveTask(task, toIndex: index, inCategory: category)
+            await self.flushSortOrderSyncForAutomation()
+            let order = self.getOrderedTasks(for: category).map(\.id).joined(separator: ",")
+            return ["id": id, "category": category.rawValue, "order": order]
+        }
+
+        registry.register(
+            name: "dump_tasks",
+            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field",
+            params: ["includeCompleted", "limit"]
+        ) { params in
+            let includeCompleted = ["true", "1", "yes"].contains(params["includeCompleted"]?.lowercased() ?? "")
+            let limit = Int(params["limit"] ?? "") ?? 500
+            let items: [TaskActionItem]
+            do {
+                // No category filter here: `category` means the due-date display bucket in
+                // reorder_task, but the stored classification/tags here — overloading one
+                // param name for two concepts is a footgun. Return all rows (each carries
+                // its own `category`) and let the caller filter.
+                items = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: limit, completed: includeCompleted ? nil : false)
+            } catch {
+                return ["error": "sqlite read failed: \(error.localizedDescription)"]
+            }
+            let sorted = items.sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
+            let rows: [[String: Any]] = sorted.map { t in
+                [
+                    "id": t.id,
+                    "description": t.description,
+                    "completed": t.completed,
+                    "sortOrder": t.sortOrder ?? -1,
+                    "category": t.category ?? "",
+                ]
+            }
+            let json = (try? JSONSerialization.data(withJSONObject: rows))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            return ["count": String(sorted.count), "tasks": json]
+        }
+    }
+
+    /// Ensure the store + category caches are populated before a headless reorder, so
+    /// `moveTask` operates on real ordering rather than an empty category. Cheap once
+    /// tasks are already loaded.
+    private func ensureTasksLoadedForAutomation() async {
+        if store.tasks.isEmpty {
+            await store.loadTasks()
+        }
+        recomputeAllCaches()
+    }
+
+    /// Cancel the debounced sortOrder sync and run it now, so an automation caller can
+    /// deterministically observe the SQLite + backend write instead of racing the 500ms
+    /// debounce window.
+    private func flushSortOrderSyncForAutomation() async {
+        sortOrderSyncTask?.cancel()
+        await syncSortOrders()
+    }
+
+    /// Resolve automation-created tasks to their stable backend ids. `store.createTask`
+    /// is local-first: it returns a `"local_<rowid>"` id and syncs to the backend in the
+    /// background, which sets `backendId` on the same SQLite row (`markSynced`), so the
+    /// task's string id flips from `"local_<rowid>"` to the backend id. This polls each
+    /// stable rowid until its `backendId` lands (or a shared deadline elapses), returning
+    /// the backend id where synced and the original `"local_"` id otherwise. Ids that are
+    /// already backend ids pass through untouched.
+    private func resolveStableTaskIdsForAutomation(
+        _ ids: [String], timeoutSeconds: Double
+    ) async -> [String] {
+        let rowIds: [Int64?] = ids.map { id in
+            guard id.hasPrefix("local_") else { return nil }
+            return Int64(id.dropFirst("local_".count))
+        }
+        var resolved = ids
+        var pending = Set(rowIds.indices.filter { rowIds[$0] != nil })
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while !pending.isEmpty, Date() < deadline {
+            for i in Array(pending) {
+                guard let rowId = rowIds[i] else { continue }
+                if let record = try? await ActionItemStorage.shared.getActionItem(id: rowId),
+                    let backendId = record.backendId, !backendId.isEmpty {
+                    resolved[i] = backendId
+                    pending.remove(i)
+                }
+            }
+            if pending.isEmpty { break }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return resolved
+    }
+
+    /// Map a friendly automation category key (today|tomorrow|later|nodeadline) to a
+    /// `TaskCategory`. Case-insensitive; nil for unknown input.
+    private static func automationCategory(_ raw: String?) -> TaskCategory? {
+        switch raw?.lowercased() {
+        case "today": return .today
+        case "tomorrow": return .tomorrow
+        case "later": return .later
+        case "nodeadline", "no_deadline", "none": return .noDeadline
+        default: return nil
+        }
+    }
+
     func updateTaskDetails(
         _ task: TaskActionItem,
         description: String? = nil,
