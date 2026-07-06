@@ -71,6 +71,41 @@ final class FailLoudConfigTests: XCTestCase {
       "it must query the real TCC preflight the rest of the app relies on")
   }
 
+  func testProductionAuthTokensUseKeychainStorage() throws {
+    let src = try source(relativePath: "Sources/AuthService.swift")
+
+    XCTAssertTrue(src.contains("private var usesKeychainTokenStorage: Bool"))
+    XCTAssertTrue(src.contains("!AppBuild.isNonProduction"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.setString("))
+    XCTAssertTrue(src.contains("migrated production auth tokens from UserDefaults to Keychain"))
+    XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
+    XCTAssertTrue(src.contains("throw AuthError.keychainTokenStorageUnavailable"))
+  }
+
+  func testLocalAgentTokenUsesKeychainStorage() throws {
+    let src = try source(relativePath: "Sources/LocalAgentAPIServer.swift")
+
+    XCTAssertTrue(src.contains("tokenKeychainService"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.string(service: tokenKeychainService"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.setString(token, service: tokenKeychainService"))
+    XCTAssertFalse(src.contains("UserDefaults.standard.set(token, forKey: tokenKey)"))
+  }
+
+  func testDesktopAutomationBridgeIsNonProductionAndAuthenticated() throws {
+    let src = try source(relativePath: "Sources/DesktopAutomationBridge.swift")
+
+    XCTAssertTrue(src.contains("guard AppBuild.isNonProduction else"))
+    XCTAssertTrue(src.contains("OMI_AUTOMATION_TOKEN"))
+    XCTAssertTrue(src.contains("writeTokenFileIfNeeded()"))
+    XCTAssertTrue(src.contains("acceptsLoopbackHostAndOrigin"))
+    XCTAssertTrue(src.contains("invalid_host_or_origin"))
+    XCTAssertTrue(src.contains("authenticate(request.headers[\"authorization\"])"))
+    XCTAssertTrue(src.contains("invalid_or_missing_automation_token"))
+    XCTAssertTrue(src.contains("constantTimeEquals"))
+    XCTAssertTrue(src.contains("DesktopAutomationHealth"))
+    XCTAssertTrue(src.contains("requiresAuth: true"))
+  }
+
   // MARK: Helper
 
   private func source(relativePath: String) throws -> String {

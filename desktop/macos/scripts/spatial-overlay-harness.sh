@@ -163,12 +163,22 @@ run_swift_focus() {
 ensure_bridge_ready() {
   python3 - "$PORT" <<'PY'
 import json
+import os
+from pathlib import Path
 import sys
 import urllib.request
 
 port = sys.argv[1]
+token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
+if not token:
+    token_file = Path(os.environ.get("OMI_AUTOMATION_TOKEN_FILE") or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token"))
+    if token_file.exists():
+        token = token_file.read_text(encoding="utf-8").strip()
 try:
-    with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
+    request = urllib.request.Request(f"http://127.0.0.1:{port}/health")
+    if token:
+        request.add_header("Authorization", f"Bearer {token}")
+    with urllib.request.urlopen(request, timeout=5) as response:
         payload = json.loads(response.read().decode("utf-8"))
 except Exception as exc:
     raise SystemExit(f"automation bridge unavailable on port {port}: {exc}")

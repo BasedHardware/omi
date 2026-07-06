@@ -5,11 +5,9 @@ enum LocalAgentAPISettings {
   static let defaultPort: UInt16 = 47778
 
   private static let enabledKey = "localAgentAPIEnabled"
-  // Local-agent tokens currently live in app preferences so setup prompts can
-  // be generated without a Keychain prompt. The API is loopback-only, but the
-  // token is still readable by same-user processes; use Keychain if this scope
-  // expands beyond local desktop automation.
   private static let tokenKey = "localAgentAPIToken"
+  private static let tokenKeychainService = "com.omi.desktop.local-agent-api"
+  private static let tokenKeychainAccount = "local-agent-api-token"
   private static let portKey = "localAgentAPIPort"
 
   static var isEnabled: Bool {
@@ -34,8 +32,18 @@ enum LocalAgentAPISettings {
   }
 
   static func storedToken() -> String? {
+    if let token = DesktopKeychainStore.string(service: tokenKeychainService, account: tokenKeychainAccount) {
+      return token
+    }
     let token = UserDefaults.standard.string(forKey: tokenKey) ?? ""
-    return token.isEmpty ? nil : token
+    guard !token.isEmpty else { return nil }
+    if DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) {
+      UserDefaults.standard.removeObject(forKey: tokenKey)
+      log("LocalAgentAPISettings: migrated token from UserDefaults to Keychain")
+      return token
+    }
+    log("LocalAgentAPISettings: failed to migrate token to Keychain")
+    return nil
   }
 
   static func ensureToken() -> String {
@@ -43,13 +51,22 @@ enum LocalAgentAPISettings {
       return token
     }
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
-    UserDefaults.standard.set(token, forKey: tokenKey)
+    guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
+      log("LocalAgentAPISettings: failed to save token to Keychain")
+      return ""
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
     return token
   }
 
   static func createNewToken() -> String {
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
-    UserDefaults.standard.set(token, forKey: tokenKey)
+    guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
+      isEnabled = false
+      log("LocalAgentAPISettings: failed to save replacement token to Keychain")
+      return ""
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token
@@ -57,6 +74,10 @@ enum LocalAgentAPISettings {
 
   static func enable() -> String {
     let token = ensureToken()
+    guard !token.isEmpty else {
+      isEnabled = false
+      return ""
+    }
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token
