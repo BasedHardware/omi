@@ -828,6 +828,19 @@ export function toolNamesForAdapter(
   return toolsForAdapter(adapterId, context).map((tool) => tool.adapters[adapterId]?.adapterName ?? tool.name);
 }
 
+/**
+ * The Anthropic API rejects custom tool input_schema with top-level
+ * oneOf/allOf/anyOf (and if/then), and the stdio MCP tools are forwarded
+ * verbatim to it by the Claude Code SDK on the acp adapter path. Strip those
+ * combinators at this projection boundary; the same constraints remain stated
+ * in each tool's description/prompt guidelines and are enforced by the tool
+ * executor at call time.
+ */
+function anthropicSafeInputSchema(schema: OmiMcpToolInputSchema): OmiMcpToolInputSchema {
+  const { anyOf: _anyOf, allOf: _allOf, oneOf: _oneOf, if: _if, then: _then, ...rest } = schema;
+  return rest;
+}
+
 export function mcpToolDefinitionsForAdapter(
   adapterId: "omi-tools-stdio",
   context: OmiToolProjectionContext = {},
@@ -835,7 +848,7 @@ export function mcpToolDefinitionsForAdapter(
   return toolsForAdapter(adapterId, context).map((tool) => ({
     name: tool.adapters[adapterId]?.adapterName ?? tool.name,
     description: tool.description,
-    inputSchema: tool.mcpInputSchema ?? tool.inputSchema,
+    inputSchema: anthropicSafeInputSchema(tool.mcpInputSchema ?? tool.inputSchema),
   }));
 }
 

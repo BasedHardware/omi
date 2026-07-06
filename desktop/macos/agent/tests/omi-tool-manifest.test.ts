@@ -96,23 +96,19 @@ describe("omi tool manifest", () => {
     });
   });
 
-  it("preserves control-tool schema preconditions in MCP projections", () => {
-    const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
-    const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
-    const delegateAgent = tools.find((tool) => tool.name === "delegate_agent");
-
-    expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
-      { required: ["artifactId"] },
-      { required: ["sessionId"] },
-      { required: ["runId"] },
-      { required: ["attemptId"] },
-    ]);
-    expect(delegateAgent?.inputSchema.allOf).toEqual([
-      {
-        if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-        then: { required: ["childSessionId"] },
-      },
-    ]);
+  it("strips top-level schema combinators the Anthropic API rejects from MCP projections", () => {
+    // The Claude Code SDK forwards these schemas verbatim to the Anthropic
+    // API, which 400s on top-level oneOf/allOf/anyOf (observed live:
+    // "input_schema does not support oneOf, allOf, or anyOf at the top
+    // level"). The preconditions stay in prompt guidelines and are enforced
+    // by the executor at call time.
+    for (const tool of mcpToolDefinitionsForAdapter("omi-tools-stdio")) {
+      expect(tool.inputSchema.anyOf, `${tool.name} anyOf`).toBeUndefined();
+      expect(tool.inputSchema.allOf, `${tool.name} allOf`).toBeUndefined();
+      expect(tool.inputSchema.oneOf, `${tool.name} oneOf`).toBeUndefined();
+      expect(tool.inputSchema.if, `${tool.name} if`).toBeUndefined();
+      expect(tool.inputSchema.then, `${tool.name} then`).toBeUndefined();
+    }
   });
 
   it("keeps MCP-only schema options from overriding base tool schema fields", () => {
