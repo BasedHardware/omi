@@ -104,14 +104,23 @@ struct PluginDiscovery {
 
         // public_url is optional. Same validation when present, but
         // empty-string is treated as "not provided" rather than invalid.
+        // public_url is optional. When present but invalid, we
+        // ignore it (set to nil) rather than failing the entire
+        // discovery — the plugin_url is the authoritative local
+        // URL and is always required. A malformed optional tunnel
+        // URL should not block local discovery.
+        // cubic review 4630319623: previously returned nil on
+        // invalid public_url, which disabled otherwise-valid
+        // local discovery.
         let rawPublic = json["public_url"] as? String
         let publicURL: String?
         if let raw = rawPublic, !raw.isEmpty {
-            guard Self.isLikelyValidPluginURL(raw) else {
-                NSLog("PluginDiscovery: public_url '\(raw)' is not a valid http(s) URL — ignoring")
-                return nil
+            if Self.isLikelyValidPluginURL(raw) {
+                publicURL = raw
+            } else {
+                NSLog("PluginDiscovery: public_url '\(raw)' is not a valid http(s) URL — ignoring (falling back to plugin_url)")
+                publicURL = nil
             }
-            publicURL = raw
         } else {
             publicURL = nil
         }
@@ -155,7 +164,12 @@ struct PluginDiscovery {
     /// from a dead plugin.
     static func isFresh(maxAgeSeconds: TimeInterval = 3600) -> Bool {
         guard let info = read() else { return false }
-        guard info.startedAt > 0 else { return true }  // no timestamp = assume fresh
+        // cubic review 4630319623: a missing/zero timestamp is
+        // treated as NOT fresh (fail conservative). The previous
+        // code assumed fresh, which meant a stale discovery file
+        // without a timestamp would be trusted indefinitely —
+        // dangerous for an auto-applied credential/discovery path.
+        guard info.startedAt > 0 else { return false }
         let age = Date().timeIntervalSince1970 - info.startedAt
         return age < maxAgeSeconds
     }
