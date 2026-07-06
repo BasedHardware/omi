@@ -94,18 +94,29 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testNamedBundleStateDirectoriesAreIsolated() {
     let home = URL(fileURLWithPath: "/tmp/test-home")
 
-    let first = AgentRuntimeProcess.defaultStateDirectory(
+    let firstState = AgentRuntimeProcess.defaultStateDirectory(
       bundleIdentifier: "com.omi.omi-ticket-five-a",
       homeDirectory: home
     )
-    let second = AgentRuntimeProcess.defaultStateDirectory(
+    let secondState = AgentRuntimeProcess.defaultStateDirectory(
+      bundleIdentifier: "com.omi.omi-ticket-five-b",
+      homeDirectory: home
+    )
+    let firstArtifacts = AgentRuntimeProcess.defaultArtifactsDirectory(
+      bundleIdentifier: "com.omi.omi-ticket-five-a",
+      homeDirectory: home
+    )
+    let secondArtifacts = AgentRuntimeProcess.defaultArtifactsDirectory(
       bundleIdentifier: "com.omi.omi-ticket-five-b",
       homeDirectory: home
     )
 
-    XCTAssertNotEqual(first, second)
-    XCTAssertTrue(first.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-a"))
-    XCTAssertTrue(second.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-b"))
+    XCTAssertNotEqual(firstState, secondState)
+    XCTAssertNotEqual(firstArtifacts, secondArtifacts)
+    XCTAssertTrue(firstState.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-a"))
+    XCTAssertTrue(secondState.hasSuffix("AgentRuntime/com.omi.omi-ticket-five-b"))
+    XCTAssertTrue(firstArtifacts.hasSuffix("Artifacts/com.omi.omi-ticket-five-a"))
+    XCTAssertTrue(secondArtifacts.hasSuffix("Artifacts/com.omi.omi-ticket-five-b"))
   }
 
   func testCompatibilitySessionIdPrefersAdapterSession() {
@@ -136,8 +147,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       cacheWriteTokens: 0
     )
 
-    XCTAssertEqual(withAdapter.sessionId, "adapter-session")
-    XCTAssertEqual(withoutAdapter.sessionId, "omi-session")
+    XCTAssertEqual(withAdapter.adapterSessionId, "adapter-session")
+    XCTAssertEqual(withoutAdapter.omiSessionId, "omi-session")
+    XCTAssertNil(withoutAdapter.adapterSessionId)
   }
 
   func testSharedRuntimeDoesNotTrackCurrentHarnessMode() throws {
@@ -171,6 +183,101 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+  }
+
+  @MainActor
+  func testUsableByokEnvironmentSuppressesAllKeysWhenOneProviderIsKnownBad() {
+    let savedKeys = Dictionary(
+      uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
+        (provider, UserDefaults.standard.string(forKey: provider.storageKey))
+      })
+    defer {
+      for provider in BYOKProvider.allCases {
+        if let saved = savedKeys[provider] ?? nil {
+          UserDefaults.standard.set(saved, forKey: provider.storageKey)
+        } else {
+          UserDefaults.standard.removeObject(forKey: provider.storageKey)
+        }
+      }
+      CredentialHealthManager.shared.reset()
+    }
+
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
+    }
+    let openAIKey = APIKeyService.byokKey(.openai)!
+    CredentialHealthManager.shared.recordProviderFailure(
+      .providerAuthFailed(provider: .openai, mode: .byok),
+      provider: .openai,
+      authMode: .byok,
+      fingerprint: APIKeyService.byokFingerprint(openAIKey),
+      context: "test")
+
+    let result = AgentRuntimeProcess.usableBYOKEnvironment()
+
+    XCTAssertTrue(result.values.isEmpty)
+    XCTAssertEqual(result.suppressedProviders, [.openai])
+  }
+
+  @MainActor
+  func testUsableByokEnvironmentIncludesAllKeysWhenAllProvidersAreUsable() {
+    let savedKeys = Dictionary(
+      uniqueKeysWithValues: BYOKProvider.allCases.map { provider in
+        (provider, UserDefaults.standard.string(forKey: provider.storageKey))
+      })
+    defer {
+      for provider in BYOKProvider.allCases {
+        if let saved = savedKeys[provider] ?? nil {
+          UserDefaults.standard.set(saved, forKey: provider.storageKey)
+        } else {
+          UserDefaults.standard.removeObject(forKey: provider.storageKey)
+        }
+      }
+      CredentialHealthManager.shared.reset()
+    }
+
+    for provider in BYOKProvider.allCases {
+      UserDefaults.standard.set("sk-agent-\(provider.rawValue)", forKey: provider.storageKey)
+    }
+
+    let result = AgentRuntimeProcess.usableBYOKEnvironment()
+
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .openai)], "sk-agent-openai")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .anthropic)], "sk-agent-anthropic")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .gemini)], "sk-agent-gemini")
+    XCTAssertEqual(result.values[AgentRuntimeProcess.byokEnvironmentKey(for: .deepgram)], "sk-agent-deepgram")
+    XCTAssertTrue(result.suppressedProviders.isEmpty)
+  }
+
+  func testRemoveInheritedByokEnvironmentScrubsPrefixCaseInsensitively() {
+    var env = [
+      "OMI_BYOK_OPENAI": "stale-openai",
+      "omi_byok_experimental": "stale-experimental",
+      "OmI_bYoK_LEGACY": "stale-legacy",
+      "OMI_AUTH_TOKEN": "token",
+      "PATH": "/usr/bin",
+    ]
+
+    AgentRuntimeProcess.removeInheritedBYOKEnvironment(from: &env)
+
+    XCTAssertNil(env["OMI_BYOK_OPENAI"])
+    XCTAssertNil(env["omi_byok_experimental"])
+    XCTAssertNil(env["OmI_bYoK_LEGACY"])
+    XCTAssertEqual(env["OMI_AUTH_TOKEN"], "token")
+    XCTAssertEqual(env["PATH"], "/usr/bin")
+  }
+
+  func testPiMonoStartupRefreshesAuthTokenAndFiltersByokEnvironment() throws {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+    XCTAssertTrue(source.contains("Self.removeInheritedBYOKEnvironment(from: &env)"))
+    XCTAssertTrue(source.contains("let byok = await Self.usableBYOKEnvironment()"))
+    XCTAssertTrue(source.contains("getIdToken(forceRefresh: preferredAdapterId == .piMono)"))
+    XCTAssertFalse(source.contains("log(\"AgentRuntimeProcess: pi-mono BYOK active, forwarding \\(BYOKProvider.allCases.count) user keys\")"))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {

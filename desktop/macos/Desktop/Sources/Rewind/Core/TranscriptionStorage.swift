@@ -183,7 +183,8 @@ actor TranscriptionStorage {
     func markSessionCompleted(
         id: Int64,
         backendId: String,
-        conversationStatus: LocalConversationStatus = .completed
+        conversationStatus: LocalConversationStatus = .completed,
+        allowBackendIdOverride: Bool = false
     ) async throws -> Bool {
         let db = try await ensureInitialized()
 
@@ -192,7 +193,7 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
-            guard record.canAcceptCompletion(backendId: backendId) else {
+            guard allowBackendIdOverride || record.canAcceptCompletion(backendId: backendId) else {
                 log("TranscriptionStorage: Skipping conflicting completion for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))")
                 return false
             }
@@ -641,6 +642,48 @@ actor TranscriptionStorage {
                     Column("status") == TranscriptionSessionStatus.pendingUpload.rawValue ||
                     (Column("status") == TranscriptionSessionStatus.uploading.rawValue && Column("updatedAt") < uploadingCutoff) ||
                     (Column("status") == TranscriptionSessionStatus.failed.rawValue && Column("retryCount") < maxRetries)
+                )
+                .order(Column("createdAt").asc)
+                .fetchAll(database)
+        }
+    }
+
+    /// Get failed cloud-reconciliation sessions that exhausted normal retries but still have saved
+    /// local transcript segments. These can be recovered by uploading those segments directly.
+    func getExhaustedCloudSessionsWithLocalSegments(
+        maxRetries: Int = 5,
+        maxLocalFallbackRetries: Int = 3
+    ) async throws -> [TranscriptionSessionRecord] {
+        let db = try await ensureInitialized()
+        let retryLimit = maxRetries + maxLocalFallbackRetries
+
+        return try await db.read { database in
+            try TranscriptionSessionRecord
+                .filter(Column("backendSynced") == false)
+                .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
+                .filter(Column("retryCount") >= maxRetries)
+                .filter(Column("retryCount") < retryLimit)
+                .filter(
+                    sql: """
+                        finalizationStrategy = ?
+                        OR (
+                            finalizationStrategy IS NULL
+                            AND ((backendId IS NOT NULL AND backendId != '') OR source != ?)
+                        )
+                        """,
+                    arguments: [
+                        TranscriptionFinalizationStrategy.cloudReconcile.rawValue,
+                        ConversationSource.desktop.rawValue,
+                    ]
+                )
+                .filter(
+                    sql: """
+                        EXISTS (
+                            SELECT 1
+                            FROM transcription_segments
+                            WHERE transcription_segments.sessionId = transcription_sessions.id
+                        )
+                        """
                 )
                 .order(Column("createdAt").asc)
                 .fetchAll(database)

@@ -3096,7 +3096,7 @@
     "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda.",
     "transcribeLaterTitle": "Transkripsi Nanti",
     "transcribeLaterDescription": "Rekam audio sekarang dan transkripsikan saat dibutuhkan, bukan secara langsung. Rekaman disimpan di ponsel Anda, lalu Anda mengunggahnya untuk membuat percakapan.",
-    "transcribeLaterNote": "Untuk saat ini hanya berfungsi dengan perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
+    "transcribeLaterNote": "Untuk saat ini berfungsi dengan perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
     "transcribeLaterStorageFull": "Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.",
     "unmute": "Bunyikan",
     "newRecording": "Rekaman baru",
@@ -3146,5 +3146,17 @@
     "deviceOnboardingIntroDuration": "Sekitar 1 menit",
     "jumpToLatestMessage": "Lompat ke pesan terbaru",
     "latest": "Terbaru",
-    "flashFirmware": "Flash Firmware"
+    "flashFirmware": "Flash Firmware",
+    "pendantRecordingTitle": "Merekam di liontin",
+    "pendantRecordingNote": "Liontin Anda merekam secara mandiri. Rekaman disinkronkan ke ponsel Anda selama aplikasi terbuka.",
+    "pendantSyncingRecordings": "Menyinkronkan rekaman dari liontin Anda…",
+    "pendantMinutesStored": "~{minutes} mnt tersimpan",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Penyimpanan liontin hampir penuh — biarkan aplikasi tetap terbuka untuk menyinkronkan."
 }

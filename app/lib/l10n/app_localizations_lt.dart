@@ -1712,12 +1712,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ĮRENGINIAI',
-      one: 'ĮRENGINYS',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ĮRENGINIAI', one: 'ĮRENGINYS');
     return 'RASTA $count $_temp0 NETOLIESE';
   }
 
@@ -9354,7 +9349,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+      'Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9506,4 +9501,23 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Įrašyti programinę aparatinę įrangą';
+
+  @override
+  String get pendantRecordingTitle => 'Įrašoma pakabuke';
+
+  @override
+  String get pendantRecordingNote =>
+      'Jūsų pakabukas įrašinėja savarankiškai. Įrašai sinchronizuojami su telefonu, kol programa atidaryta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sinchronizuojami įrašai iš jūsų pakabuko…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min išsaugota';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas.';
 }

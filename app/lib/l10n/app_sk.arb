@@ -3059,7 +3059,7 @@
     "syncCustomSttWarningMessage": "Používate vlastného poskytovateľa prepisu. Synchronizácia týchto nahrávok ich prepíše na serveroch Omi a započítajú sa do limitu prepisu vášho plánu.",
     "transcribeLaterTitle": "Prepísať neskôr",
     "transcribeLaterDescription": "Nahrávajte zvuk teraz a prepíšte ho neskôr podľa potreby, namiesto naživo. Nahrávky sa uložia v telefóne a potom ich odošlete na vytvorenie konverzácií.",
-    "transcribeLaterNote": "Zatiaľ funguje so zariadeniami Omi. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.",
+    "transcribeLaterNote": "Zatiaľ funguje so zariadeniami Omi a Limitless. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.",
     "transcribeLaterStorageFull": "V telefóne máte málo miesta, preto je nahrávanie pozastavené. Uvoľnite miesto alebo odošlite svoje nahrávky a potom bude automaticky pokračovať.",
     "unmute": "Zrušiť stlmenie",
     "newRecording": "Nová nahrávka",
@@ -3109,5 +3109,17 @@
     "deviceOnboardingIntroDuration": "Približne 1 minúta",
     "jumpToLatestMessage": "Prejsť na najnovšiu správu",
     "latest": "Najnovšia",
-    "flashFirmware": "Nahrať firmvér"
+    "flashFirmware": "Nahrať firmvér",
+    "pendantRecordingTitle": "Nahrávanie na prívesku",
+    "pendantRecordingNote": "Váš prívesok nahráva samostatne. Nahrávky sa synchronizujú s telefónom, kým je aplikácia otvorená.",
+    "pendantSyncingRecordings": "Synchronizácia nahrávok z prívesku…",
+    "pendantMinutesStored": "~{minutes} min uložené",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Úložisko prívesku je takmer plné — nechajte aplikáciu otvorenú, aby prebehla synchronizácia."
 }

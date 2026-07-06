@@ -13,6 +13,9 @@ router = APIRouter()
 
 @router.post('/v1/agents/hume/callback', response_model=shared.EmptyResponse, tags=['agent', 'hume', 'callback'])
 def hume_expression_measurement_callback(request: Request, data: Dict[str, Any]) -> Dict[str, Any]:
+    # body untyped: external Hume AI webhook payload, forwarded wholesale to HumeJobCallbackModel.from_dict
+    # which defensively parses an arbitrarily-nested prosody predictions structure. Modeling it would
+    # duplicate Hume's API schema with no validation benefit since from_dict is the real parser.
     job_callback = cast(
         Optional[hume.HumeJobCallbackModel],
         hume.HumeJobCallbackModel.from_dict("prosody", data),  # type: ignore[reportUnknownMemberType]  # utils.other.hume.from_dict takes an untyped dict

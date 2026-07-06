@@ -97,6 +97,10 @@ from utils.other.storage import precache_conversation_audio
 logger = logging.getLogger(__name__)
 
 
+def _calendar_auto_link_enabled() -> bool:
+    return os.getenv('GOOGLE_CALENDAR_AUTO_LINK_ENABLED', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 def _fetch_dedup_candidates(uid: str, structured: Structured) -> List[dict]:
     """
     Fetch open action items semantically related to this conversation, active
@@ -275,7 +279,7 @@ def _get_conversation_obj(
 ):
     discarded = structured.title == ''
     if isinstance(conversation, CreateConversation):
-        conversation_dict = conversation.dict()
+        conversation_dict = conversation.model_dump()
         # Store calendar context in external_data if available
         calendar_context = conversation_dict.pop('calendar_meeting_context', None)
 
@@ -304,12 +308,12 @@ def _get_conversation_obj(
         created_at = conversation.started_at if conversation.started_at else datetime.now(timezone.utc)
         conversation = Conversation(
             id=str(uuid.uuid4()),
-            **conversation.dict(),
+            **conversation.model_dump(),
             created_at=created_at,
             structured=structured,
             discarded=discarded,
         )
-        conversation.external_data = create_conversation.dict()
+        conversation.external_data = create_conversation.model_dump()
         conversation.app_id = create_conversation.app_id
     else:
         conversation.structured = structured
@@ -776,7 +780,7 @@ TRANSCRIPT_CHUNK_INDEXING_ENABLED = os.getenv('TRANSCRIPT_CHUNK_INDEXING_ENABLED
 
 
 def save_transcript_chunk_vectors(uid: str, conversation: Conversation):
-    segments = [s.dict() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
+    segments = [s.model_dump() if hasattr(s, 'dict') else s for s in (conversation.transcript_segments or [])]
     chunks = build_transcript_chunks(segments, conversation.started_at or conversation.created_at)
     if chunks:
         upsert_transcript_chunk_vectors(uid, conversation.id, chunks)
@@ -802,7 +806,7 @@ def save_structured_vector(uid: str, conversation: Conversation, update_only: bo
                 metadata = retrieve_metadata_from_text(uid, conversation.created_at, text_content, tz, text_source_spec)
     else:
         # For regular conversations with transcript segments
-        segments = [t.dict() for t in conversation.transcript_segments]
+        segments = [t.model_dump() for t in conversation.transcript_segments]
         metadata = retrieve_metadata_fields_from_transcript(
             uid, conversation.created_at, segments, tz, photos=conversation.photos
         )
@@ -863,7 +867,7 @@ def _store_deferred_conversation(uid: str, conversation):
     # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
     # back to `completed`.
     conversation.status = ConversationStatus.processing
-    conversations_db.upsert_conversation(uid, conversation.dict())
+    conversations_db.upsert_conversation(uid, conversation.model_dump())
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -946,8 +950,16 @@ def process_conversation(
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
-    # Check for overlapping calendar events and auto-write conversation link to the event description
-    if not discarded and conversation.started_at and conversation.finished_at and conversation.calendar_event is None:
+    # Calendar auto-linking calls and mutates a user's Google Calendar during generic
+    # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
+    # fan out provider traffic for every connected user.
+    if (
+        _calendar_auto_link_enabled()
+        and not discarded
+        and conversation.started_at
+        and conversation.finished_at
+        and conversation.calendar_event is None
+    ):
         try:
             calendar_event = asyncio.run(
                 get_overlapping_calendar_event(
@@ -1036,15 +1048,15 @@ def process_conversation(
             if audio_files:
                 conversation.audio_files = audio_files
                 conversations_db.update_conversation(
-                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
+                    uid, conversation.id, {'audio_files': [af.model_dump() for af in audio_files]}
                 )
                 # Pre-cache audio files in background
-                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
+                precache_conversation_audio(uid, conversation.id, [af.model_dump() for af in audio_files])
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
 
     conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.dict())
+    conversations_db.upsert_conversation(uid, conversation.model_dump())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:
@@ -1120,7 +1132,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
         created_at=now,
         status=TaskStatus.PROCESSING,
     )
-    tasks_db.create(task.dict())
+    tasks_db.create(task.model_dump())
 
     # emotion
     ok = get_hume().request_user_expression_mersurement(urls)
@@ -1137,7 +1149,7 @@ def process_user_emotion(uid: str, language_code: str, conversation: Conversatio
     # update task
     task.request_id = request_id
     task.updated_at = datetime.now()
-    tasks_db.update(task.id, task.dict())
+    tasks_db.update(task.id, task.model_dump())
 
     return
 
@@ -1180,7 +1192,7 @@ def process_user_expression_measurement_callback(provider: str, request_id: str,
 
     task.status = task_status
     task.updated_at = datetime.now()
-    tasks_db.update(task.id, task.dict())
+    tasks_db.update(task.id, task.model_dump())
 
     # done or not
     if task.status != TaskStatus.DONE:

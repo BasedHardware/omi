@@ -1726,12 +1726,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'GERÄTE',
-      one: 'GERÄT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'GERÄTE', one: 'GERÄT');
     return '$count $_temp0 IN DER NÄHE GEFUNDEN';
   }
 
@@ -9417,7 +9412,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Funktioniert vorerst mit Omi-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.';
+      'Funktioniert vorerst mit Omi- und Limitless-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9568,4 +9563,23 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Firmware flashen';
+
+  @override
+  String get pendantRecordingTitle => 'Aufnahme auf dem Pendant';
+
+  @override
+  String get pendantRecordingNote =>
+      'Dein Pendant nimmt selbstständig auf. Aufnahmen werden mit deinem Smartphone synchronisiert, solange die App geöffnet ist.';
+
+  @override
+  String get pendantSyncingRecordings => 'Aufnahmen vom Pendant werden synchronisiert…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes Min. gespeichert';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Der Speicher des Pendants ist fast voll — lass die App geöffnet, um zu synchronisieren.';
 }

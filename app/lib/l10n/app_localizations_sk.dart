@@ -1717,12 +1717,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZARIADENIA',
-      one: 'ZARIADENIE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZARIADENIA', one: 'ZARIADENIE');
     return '$count $_temp0 NÁJDENÉ V BLÍZKOSTI';
   }
 
@@ -9332,7 +9327,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Zatiaľ funguje so zariadeniami Omi. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.';
+      'Zatiaľ funguje so zariadeniami Omi a Limitless. Zvuk zostáva v telefóne, kým sa ho nerozhodnete odoslať.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9481,4 +9476,23 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Nahrať firmvér';
+
+  @override
+  String get pendantRecordingTitle => 'Nahrávanie na prívesku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Váš prívesok nahráva samostatne. Nahrávky sa synchronizujú s telefónom, kým je aplikácia otvorená.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synchronizácia nahrávok z prívesku…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min uložené';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Úložisko prívesku je takmer plné — nechajte aplikáciu otvorenú, aby prebehla synchronizácia.';
 }

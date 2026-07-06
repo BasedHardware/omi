@@ -98,20 +98,21 @@ extension SettingsContentView {
                       .scaledFont(size: 12)
                       .foregroundColor(OmiColors.textTertiary)
 
-                    Picker("", selection: $transcriptionLanguage) {
-                      ForEach(languageOptions, id: \.0) { option in
-                        Text(option.1).tag(option.0)
-                      }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 180)
-                    .onChange(of: transcriptionLanguage) { _, newValue in
-                      AssistantSettings.shared.transcriptionLanguage = newValue
-                      let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
+                    SearchableDropdown(
+                      title: "Language",
+                      options: languageOptions.map { option in
+                        SearchableDropdownOption(id: option.0, title: option.1)
+                      },
+                      selectedId: transcriptionLanguage,
+                      minWidth: 180
+                    ) { option in
+                      transcriptionLanguage = option.id
+                      AssistantSettings.shared.transcriptionLanguage = option.id
+                      let supportsMulti = AssistantSettings.supportsAutoDetect(option.id)
                       transcriptionAutoDetect = supportsMulti
                       AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
                       updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
-                      updateLanguage(newValue)
+                      updateLanguage(option.id)
                       restartTranscriptionIfNeeded()
                     }
                   }
@@ -382,24 +383,17 @@ private struct VoiceAssistantLanguagesCard: View {
           languageChip(option)
         }
         if !addableLanguages.isEmpty {
-          Menu {
-            ForEach(addableLanguages, id: \.code) { option in
-              Button(option.name) {
-                selection.append(option.code)
-                persist()
-              }
-            }
-          } label: {
-            Text("More…")
-              .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.textTertiary)
-              .padding(.horizontal, 10)
-              .padding(.vertical, 6)
-              .background(
-                Capsule().stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
-              )
+          SearchableDropdown(
+            title: "Add language",
+            label: "More…",
+            options: addableLanguages.map { option in
+              SearchableDropdownOption(id: option.code, title: option.name)
+            },
+            selectedId: nil
+          ) { option in
+            selection.append(option.id)
+            persist()
           }
-          .menuStyle(.borderlessButton)
           .fixedSize()
         }
       }

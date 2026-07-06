@@ -82,6 +82,7 @@ fn parse_ai_studio_path(path: &str) -> Option<(&str, &str)> {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

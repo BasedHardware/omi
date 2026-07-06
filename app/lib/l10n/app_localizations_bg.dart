@@ -1717,12 +1717,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'УСТРОЙСТВА',
-      one: 'УСТРОЙСТВО',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'УСТРОЙСТВА', one: 'УСТРОЙСТВО');
     return '$count $_temp0 НАМЕРЕНИ НАБЛИЗО';
   }
 
@@ -9375,7 +9370,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Засега работи с устройства Omi. Аудиото остава на телефона ви, докато не решите да го качите.';
+      'Засега работи с устройства Omi и Limitless. Аудиото остава на телефона ви, докато не решите да го качите.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9525,4 +9520,23 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Инсталирай фърмуера';
+
+  @override
+  String get pendantRecordingTitle => 'Запис на висулката';
+
+  @override
+  String get pendantRecordingNote =>
+      'Висулката ви записва самостоятелно. Записите се синхронизират с телефона ви, докато приложението е отворено.';
+
+  @override
+  String get pendantSyncingRecordings => 'Синхронизиране на записите от висулката ви…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes мин съхранени';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Паметта на висулката е почти пълна — дръжте приложението отворено, за да се синхронизира.';
 }

@@ -1,10 +1,8 @@
 import SwiftUI
 import Combine
 
-/// Per-task chat state with its own bridge process and message history.
-/// Each task chat is fully independent — no shared state with the sidebar chat.
-/// Uses canonical Omi sessions for continuity and preserves legacy ACP IDs only
-/// for transitional adapter-native resume compatibility.
+/// Per-task chat UI state. Execution uses the shared `TaskChatRuntime` bridge and
+/// kernel-owned `task_chat` sessions — no per-task bridge or session identity.
 @MainActor
 class TaskChatState: ObservableObject {
     let taskId: String
@@ -19,23 +17,8 @@ class TaskChatState: ObservableObject {
     /// in this task chat. ChatMessagesView observes this for turn anchoring.
     @Published var localSendToken: LocalSendToken = LocalSendToken(generation: 0)
 
-    /// Own bridge process — completely independent from sidebar chat
-    private var agentBridge: AgentBridge?
-    private var bridgeStarted = false
-
-    /// Harness mode of the currently active bridge, set when the bridge starts.
-    /// Used to decide whether adapter-native IDs are valid for legacy resume.
-    private var currentHarness: String?
-
     /// Workspace path for file-system tools
     let workspacePath: String
-
-    /// Adapter-native ACP session used only for legacy resume/adoption.
-    /// Canonical Omi runtime sessions are tracked separately in currentOmiSessionId.
-    @Published var legacyAcpSessionId: String?
-    @Published var currentOmiSessionId: String?
-
-    /// Closure to build system prompt from ChatProvider's cached data
     var systemPromptBuilder: (() -> String)?
 
     /// Auth callbacks for ACP mode
@@ -82,10 +65,6 @@ class TaskChatState: ObservableObject {
 
             messages = records.map { $0.toChatMessage() }
 
-            if let legacyAcpSessionId = try? await TaskChatMessageStorage.shared.getACPSessionId(forTaskId: taskId) {
-                self.legacyAcpSessionId = legacyAcpSessionId
-            }
-
             surfaceCurrentRuntimeFailureIfNeeded()
             log("TaskChatState[\(taskId)]: Loaded \(records.count) persisted messages")
         } catch {
@@ -96,10 +75,9 @@ class TaskChatState: ObservableObject {
     /// Persist a message to GRDB (fire-and-forget)
     private func persistMessage(_ message: ChatMessage) {
         let taskId = self.taskId
-        let legacyAcpSessionId = self.legacyAcpSessionId
         Task.detached {
             do {
-                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId, acpSessionId: legacyAcpSessionId)
+                try await TaskChatMessageStorage.shared.saveMessage(message, taskId: taskId)
             } catch {
                 logError("TaskChatState[\(taskId)]: Failed to persist message \(message.id)", error: error)
             }
@@ -130,52 +108,6 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    deinit {
-        if let bridge = agentBridge {
-            Task { await bridge.stop() }
-        }
-    }
-
-    // MARK: - Bridge Lifecycle
-
-    private func ensureBridgeStarted() async -> Bool {
-        if bridgeStarted {
-            let alive = await agentBridge?.isAlive ?? false
-            if !alive {
-                log("TaskChatState[\(taskId)]: Bridge process died, will restart")
-                bridgeStarted = false
-            }
-        }
-        guard !bridgeStarted else { return true }
-        do {
-            let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
-            let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
-            let bridge = AgentBridge(harnessMode: harness)
-            try await bridge.start()
-            agentBridge = bridge
-            bridgeStarted = true
-            currentHarness = harness
-
-            // Legacy resume IDs are only valid for the ACP/pi-mono adapters that
-            // created them. Hermes and OpenClaw advertise native resume but would
-            // adopt a foreign session ID, causing session/resume on the wrong
-            // backend before falling back or failing. Clear it on adapter switch.
-            let supportsLegacyResume = (harness == "acp" || harness == "piMono")
-            if !supportsLegacyResume, legacyAcpSessionId != nil {
-                log("TaskChatState[\(taskId)]: clearing legacy resume ID for harness \(harness)")
-                legacyAcpSessionId = nil
-            }
-
-            log("TaskChatState[\(taskId)]: agent bridge started")
-            return true
-        } catch {
-            logError("TaskChatState[\(taskId)]: Failed to start bridge", error: error)
-            errorMessage = "AI not available: \(error.localizedDescription)"
-            TaskAgentStatusRegistry.shared.markFailed(taskId: taskId, error: errorMessage ?? error.localizedDescription)
-            return false
-        }
-    }
-
     // MARK: - Send Message
 
     func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
@@ -183,15 +115,6 @@ class TaskChatState: ObservableObject {
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
             log("TaskChatState[\(taskId)]: sendMessage called while already sending, ignoring")
-            return
-        }
-
-        guard await ensureBridgeStarted() else { return }
-
-        // Re-check isSending after the async bridge start — another sendMessage call
-        // could have slipped through the initial guard while the bridge was starting.
-        guard !isSending else {
-            log("TaskChatState[\(taskId)]: sendMessage racing after bridge start, ignoring")
             return
         }
 
@@ -261,38 +184,13 @@ class TaskChatState: ObservableObject {
                 }
             }
 
-            guard let bridge = agentBridge else {
-                throw BridgeError.notRunning
-            }
-            let contextPacketSummary = await buildContextPacketSummary(
-                bridge: bridge,
-                taskContext: taskContext,
-                userMessage: trimmedText
-            )
-
-            let fullPrompt: String
-            if let contextPacketSummary {
-                if let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    fullPrompt = "\(contextPacketSummary)\n\n# Task Context\n\n\(taskContext)\n\n---\n\n# User Message\n\n\(trimmedText)"
-                } else {
-                    fullPrompt = "\(contextPacketSummary)\n\n# User Message\n\n\(trimmedText)"
-                }
-            } else {
-                fullPrompt = trimmedText
-            }
-
-            let queryResult = try await bridge.query(
-                prompt: fullPrompt,
+            let queryResult = try await TaskChatRuntime.query(
+                prompt: trimmedText,
                 systemPrompt: systemPrompt,
-                sessionKey: taskId,
-                omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId)),
-                surfaceKind: "task_chat",
-                externalRefKind: "task",
-                externalRefId: taskId,
-                legacyClientScope: "task-chat",
-                cwd: workspacePath.isEmpty ? nil : workspacePath,
+                taskId: taskId,
+                workspacePath: workspacePath,
                 mode: chatMode.rawValue,
-                resume: legacyAcpSessionId,
+                surfaceContextJson: taskContext,
                 onTextDelta: textDeltaHandler,
                 onToolCall: toolCallHandler,
                 onToolActivity: toolActivityHandler,
@@ -301,24 +199,6 @@ class TaskChatState: ObservableObject {
                 onAuthRequired: onAuthRequired ?? { _, _ in },
                 onAuthSuccess: onAuthSuccess ?? { }
             )
-
-            // Store canonical and adapter-native IDs separately. The persisted
-            // acpSessionId column remains a legacy adapter binding only.
-            currentOmiSessionId = queryResult.omiSessionId
-            if let adapterSessionId = queryResult.adapterSessionId {
-                // Only persist adapter-native IDs for adapters that support the
-                // legacy resume protocol (ACP/pi-mono). Hermes/OpenClaw native IDs
-                // are not interchangeable — storing them would pollute the resume
-                // field and cause a different backend to attempt resuming the
-                // wrong session after an adapter switch.
-                let supportsLegacyResume = (currentHarness == "acp" || currentHarness == "piMono")
-                if supportsLegacyResume {
-                    legacyAcpSessionId = adapterSessionId
-                } else if legacyAcpSessionId != nil {
-                    log("TaskChatState[\(taskId)]: not persisting adapter ID \(adapterSessionId) for non-legacy harness \(currentHarness ?? "?")")
-                    legacyAcpSessionId = nil
-                }
-            }
 
             // Flush remaining streaming buffers
             streamingFlushWorkItem?.cancel()
@@ -336,8 +216,10 @@ class TaskChatState: ObservableObject {
                             && (
                                 !messages[currentIndex].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 || !messages[currentIndex].contentBlocks.isEmpty
+                                || !queryResult.artifacts.isEmpty
                             )
                         messages[currentIndex].isStreaming = false
+                        messages[currentIndex].resources = queryResult.artifacts.map(ChatResource.artifact)
                         completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
                         if shouldPersistPartial {
                             persistMessage(messages[currentIndex])
@@ -347,6 +229,7 @@ class TaskChatState: ObservableObject {
                     let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                     messages[index].text = messageText
                     messages[index].isStreaming = false
+                    messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
                     completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }
@@ -407,73 +290,6 @@ class TaskChatState: ObservableObject {
         if let followUp = pendingFollowUpText {
             pendingFollowUpText = nil
             await sendMessage(followUp, isFollowUp: true)
-        }
-    }
-
-    private func buildContextPacketSummary(
-        bridge: AgentBridge,
-        taskContext: String?,
-        userMessage: String
-    ) async -> String? {
-        guard let taskContext, !taskContext.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        let redactedPreview = String(taskContext.prefix(1_200))
-        let input: [String: Any] = [
-            "surfaceKind": "task_chat",
-            "objective": userMessage,
-            "retentionClass": "ephemeral",
-            "ttlMs": 15 * 60 * 1_000,
-            "packetJson": [
-                "snippets": [
-                    [
-                        "snippetId": "task_context",
-                        "sourceKind": "task_chat",
-                        "operation": "selected_task_context",
-                        "provenance": ["taskId": taskId],
-                        "content": taskContext,
-                        "redactedContent": redactedPreview,
-                        "sensitivityTier": "local_private",
-                    ],
-                    [
-                        "snippetId": "current_user_message",
-                        "sourceKind": "task_chat",
-                        "operation": "current_user_message",
-                        "provenance": ["taskId": taskId],
-                        "content": userMessage,
-                        "redactedContent": userMessage,
-                        "sensitivityTier": "low",
-                    ],
-                ],
-                "selectedToolBundles": ["desktop.context.local_read", "desktop.tasks.readwrite"],
-                "constraints": ["Use the persisted context packet and the model-visible task context; cite task evidence before claiming completion."],
-                "evidenceRequired": ["Cite task state or artifact evidence before claiming completion."],
-                "boundaryPolicy": ["taskMutations": "candidate_or_dispatch"],
-            ],
-        ]
-
-        do {
-            let raw = try await bridge.controlTool(name: "build_desktop_context_packet", input: input)
-            guard let data = raw.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  object["ok"] as? Bool == true,
-                  let packet = object["packet"] as? [String: Any],
-                  let packetId = packet["packetId"] as? String,
-                  let preview = packet["redactedPreviewJson"] as? [String: Any] else {
-                return "# Context Packet\n\nA scoped task-chat context packet was requested but could not be parsed."
-            }
-            let previewData = try? JSONSerialization.data(withJSONObject: preview, options: [.sortedKeys])
-            let previewText = previewData.flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
-            return """
-            # Context Packet
-
-            Persisted DesktopContextPacket `\(packetId)` audits the scoped task context. The full task context is included below in the prompt. Redacted preview:
-
-            \(previewText)
-            """
-        } catch {
-            logError("TaskChatState[\(taskId)]: failed to build context packet", error: error)
-            return nil
         }
     }
 
@@ -580,7 +396,7 @@ class TaskChatState: ObservableObject {
 
         // Queue follow-up and interrupt current query
         pendingFollowUpText = trimmedText
-        await agentBridge?.interrupt()
+        await TaskChatRuntime.interrupt(taskId: taskId)
         log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
     }
 
@@ -590,7 +406,7 @@ class TaskChatState: ObservableObject {
         guard isSending else { return }
         isStopping = true
         Task {
-            await agentBridge?.interrupt()
+            await TaskChatRuntime.interrupt(taskId: taskId)
         }
     }
 

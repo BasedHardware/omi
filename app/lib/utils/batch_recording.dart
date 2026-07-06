@@ -5,6 +5,11 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 /// SD-card/flash sync WALs or realtime offline buffers (which live on the Sync page).
 const String batchRecordingDevice = 'omibatch';
 
+/// Marker for recordings drained from the Limitless pendant's flash. Starts with
+/// [batchRecordingDevice] so the recordings scanner matches it; contains
+/// `limitless` so the backend tags the conversation `source=limitless`.
+const String limitlessBatchRecordingDevice = 'omibatchlimitless';
+
 /// Metadata parsed from a batch recording filename written by the native layer:
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin
@@ -71,8 +76,8 @@ class BatchRecordingInfo {
     final bytesPerSec = codec == BleAudioCodec.pcm16
         ? 32200
         : codec == BleAudioCodec.pcm8
-            ? 16100
-            : 2400;
+        ? 16100
+        : 2400;
     return (sizeBytes / bytesPerSec).round().clamp(1, 24 * 3600);
   }
 }

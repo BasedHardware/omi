@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -425,6 +425,8 @@ def test_conversation_discard_byok_uses_same_legacy_llm_provider(monkeypatch):
 def test_action_items_gateway_shadow_keeps_legacy_result_and_records_comparison(monkeypatch, caplog):
     counter = FakeCounter()
     call_order = []
+    due_at_utc = datetime.now(timezone.utc) + timedelta(days=30)
+    due_at_local = due_at_utc.replace(tzinfo=None)
 
     class FakeParser:
         def __init__(self, pydantic_object):
@@ -449,12 +451,10 @@ def test_action_items_gateway_shadow_keeps_legacy_result_and_records_comparison(
             call_order.append(self.llm)
             if self.llm == 'gateway':
                 return conversation_processing.ActionItemsExtraction(
-                    action_items=[{'description': 'Submit the report', 'due_at': datetime(2026, 7, 3, 17, 0)}]
+                    action_items=[{'description': 'Submit the report', 'due_at': due_at_local}]
                 )
             return conversation_processing.ActionItemsExtraction(
-                action_items=[
-                    {'description': 'Submit report', 'due_at': datetime(2026, 7, 3, 17, 0, tzinfo=timezone.utc)}
-                ]
+                action_items=[{'description': 'Submit report', 'due_at': due_at_utc}]
             )
 
     class ImmediateFuture:

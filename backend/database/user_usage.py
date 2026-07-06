@@ -351,16 +351,16 @@ def get_current_user_usage(uid: str, period: str) -> dict:
     response = {}
 
     if period == 'today':
-        response['today'] = UsageStats(**get_today_usage_stats(uid, now)).dict()
+        response['today'] = UsageStats(**get_today_usage_stats(uid, now)).model_dump()
         response['history'] = get_hourly_history_for_today(uid, now)
     elif period == 'monthly':
-        response['monthly'] = UsageStats(**get_monthly_usage_stats(uid, now)).dict()
+        response['monthly'] = UsageStats(**get_monthly_usage_stats(uid, now)).model_dump()
         response['history'] = get_daily_history_for_month(uid, now)
     elif period == 'yearly':
-        response['yearly'] = UsageStats(**get_yearly_usage_stats(uid, now)).dict()
+        response['yearly'] = UsageStats(**get_yearly_usage_stats(uid, now)).model_dump()
         response['history'] = get_monthly_history_for_year(uid, now)
     elif period == 'all_time':
-        response['all_time'] = UsageStats(**get_all_time_usage_stats(uid)).dict()
+        response['all_time'] = UsageStats(**get_all_time_usage_stats(uid)).model_dump()
         response['history'] = get_yearly_history(uid)
 
     return response

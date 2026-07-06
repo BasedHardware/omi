@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Set, cast
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 import firebase_admin.auth
 import httpx
 
@@ -16,6 +17,17 @@ from models.app import App as AppModel, ActionType
 router = APIRouter(
     tags=["oauth"],
 )
+
+
+class OAuthTokenResponse(BaseModel):
+    """OAuth token-exchange response for app integrations."""
+
+    uid: str = Field(description='Authenticated user UID.')
+    redirect_url: str = Field(description='URL to redirect the user back to the app.')
+    state: Optional[str] = Field(
+        default=None, description='Opaque state value passed through from the authorize request.'
+    )
+
 
 # Ensure the templates directory exists
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -115,13 +127,12 @@ def oauth_authorize(
     )
 
 
-@router.post("/v1/oauth/token")
-async def oauth_token(
-    firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)
-) -> Dict[str, Any]:
+@router.post("/v1/oauth/token", response_model=OAuthTokenResponse)
+async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)):
     try:
         decoded_token: Dict[str, Any] = _verify_id_token(firebase_id_token)
         uid: str = decoded_token['uid']
+    except firebase_admin.auth.InvalidIdTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Error verifying Firebase ID token: {e}")

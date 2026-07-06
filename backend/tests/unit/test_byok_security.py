@@ -59,6 +59,7 @@ def _make_db_fakes() -> dict:
 
     twilio_service = ModuleType("utils.twilio_service")
     twilio_service.delete_user_caller_ids = MagicMock()
+    twilio_service.delete_user_caller_ids_strict = MagicMock()
     fakes["utils.twilio_service"] = twilio_service
 
     external_integrations = ModuleType("utils.llm.external_integrations")
@@ -320,7 +321,7 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
     def test_enforce_chat_quota_bypasses_for_byok_with_openai_key(self, mock_users_db, mock_get_key):
         mock_users_db.is_byok_active.return_value = True
@@ -705,7 +706,7 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
-    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
     def test_chat_quota_bypasses_with_anthropic_key_only(self, mock_users_db, mock_get_key):
         """Anthropic-only BYOK should also bypass chat quota."""

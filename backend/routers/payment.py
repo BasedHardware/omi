@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from fastapi import Request, Header, HTTPException, APIRouter, Depends, Query
 from google.api_core.exceptions import NotFound as FirestoreNotFound
 import stripe
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from typing import List, Optional
 import uuid
 import time
@@ -73,6 +73,115 @@ class CreateCheckoutRequest(BaseModel):
 class UpgradeSubscriptionRequest(BaseModel):
     price_id: str
     promotion_code: Optional[str] = None
+
+
+class PaymentMutationResponse(BaseModel):
+    status: str
+
+
+class PaymentStatusMessageResponse(BaseModel):
+    status: str
+    message: str
+
+
+class PaymentCheckoutSessionResponse(BaseModel):
+    url: Optional[str] = None
+    session_id: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    next_billing_date: Optional[int] = None
+
+    @model_validator(mode='after')
+    def validate_success_shape(self):
+        if self.status == 'reactivated':
+            if not self.message or self.next_billing_date is None:
+                raise ValueError('reactivated checkout responses require message and next_billing_date')
+            return self
+        if not self.url or not self.session_id:
+            raise ValueError('checkout session responses require url and session_id')
+        return self
+
+
+class PaymentSubscriptionResponse(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    plan: str = 'basic'
+    status: str = 'active'
+    stripe_subscription_id: Optional[str] = None
+    current_period_start: Optional[int] = None
+    current_period_end: Optional[int] = None
+    cancel_at_period_end: bool = False
+    current_price_id: Optional[str] = None
+    features: List[str] = Field(default_factory=list)
+    limits: PlanLimits = Field(default_factory=get_basic_plan_limits)
+    deprecated: bool = False
+    deprecation_message: Optional[str] = None
+
+
+class AppSubscriptionDetails(BaseModel):
+    id: Optional[str] = None
+    status: Optional[str] = None
+    current_period_end: Optional[int] = None
+    cancel_at_period_end: Optional[bool] = None
+    price_id: Optional[str] = None
+    customer_id: Optional[str] = None
+
+
+class AppSubscriptionResponse(BaseModel):
+    subscription: Optional[AppSubscriptionDetails] = None
+
+
+class AppSubscriptionCancelResponse(BaseModel):
+    status: str
+    message: str
+    cancel_at_period_end: Optional[bool] = None
+    current_period_end: Optional[int] = None
+
+
+class PaymentUpgradeSubscriptionResponse(BaseModel):
+    status: str
+    message: str
+    subscription: PaymentSubscriptionResponse
+    days_remaining: int
+    schedule_id: Optional[str] = None
+
+
+class CustomerPortalSessionResponse(BaseModel):
+    url: str
+
+
+class StripeConnectAccountResponse(BaseModel):
+    account_id: str
+    url: str
+
+
+class StripeOnboardingStatusResponse(BaseModel):
+    onboarding_complete: bool
+
+
+class StripeSupportedCountryResponse(BaseModel):
+    id: str
+    name: str
+
+
+class PayPalPaymentDetailsResponse(BaseModel):
+    email: str
+    paypalme_url: str
+
+
+class SavePayPalPaymentDetailsRequest(BaseModel):
+    email: str
+    paypalme_url: str
+
+
+class PaymentMethodStatusResponse(BaseModel):
+    stripe: str
+    paypal: str
+    default: Optional[str] = None
+
+
+class SetDefaultPaymentMethodRequest(BaseModel):
+    method: str
 
 
 class PricingOption(BaseModel):
@@ -408,7 +517,11 @@ def get_overage_info_endpoint(uid: str = Depends(auth.get_current_user_uid_no_by
     )
 
 
-@router.post('/v1/payments/checkout-session')
+@router.post(
+    '/v1/payments/checkout-session',
+    response_model=PaymentCheckoutSessionResponse,
+    response_model_exclude_none=True,
+)
 def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
@@ -476,7 +589,7 @@ def _release_attached_schedules(stripe_sub: dict) -> None:
                 logger.error(f"Error releasing subscription schedule {schedule.id}: {sanitize(str(e))}")
 
 
-@router.post('/v1/payments/upgrade-subscription')
+@router.post('/v1/payments/upgrade-subscription', response_model=PaymentUpgradeSubscriptionResponse)
 def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Upgrade or change a user's subscription plan.
 
@@ -626,7 +739,7 @@ class CancelSubscriptionRequest(BaseModel):
     reason_details: Optional[str] = None
 
 
-@router.delete('/v1/payments/subscription')
+@router.delete('/v1/payments/subscription', response_model=PaymentStatusMessageResponse)
 def cancel_subscription_endpoint(
     request: CancelSubscriptionRequest = CancelSubscriptionRequest(),
     uid: str = Depends(auth.get_current_user_uid),
@@ -693,7 +806,7 @@ def cancel_subscription_endpoint(
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
-@router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'])
+@router.post('/v1/stripe/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
@@ -993,7 +1106,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
     return {"status": "success"}
 
 
-@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'])
+@router.post('/v1/stripe/connect/webhook', tags=['v1', 'stripe', 'webhook'], response_model=PaymentMutationResponse)
 async def stripe_connect_webhook(request: Request, stripe_signature: str = Header(None)):
     payload = await request.body()
 
@@ -1020,7 +1133,7 @@ async def stripe_connect_webhook(request: Request, stripe_signature: str = Heade
     return {"status": "success"}
 
 
-@router.post("/v1/stripe/connect-accounts")
+@router.post("/v1/stripe/connect-accounts", response_model=StripeConnectAccountResponse)
 def create_connect_account_endpoint(
     country: str | None = Query(default=None), uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -1048,12 +1161,12 @@ def create_connect_account_endpoint(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get('/v1/stripe/supported-countries')
+@router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
 def get_supported_countries():
     return stripe_utils.get_supported_countries()
 
 
-@router.get("/v1/stripe/onboarded", tags=['v1', 'stripe'])
+@router.get("/v1/stripe/onboarded", response_model=StripeOnboardingStatusResponse, tags=['v1', 'stripe'])
 def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
     """
     Check the onboarding status of a Connect account
@@ -1067,7 +1180,7 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/v1/stripe/refresh/{account_id}")
+@router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
 def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Generate a fresh account link if the previous one expired
@@ -1147,20 +1260,17 @@ def stripe_return(account_id: str):
     return HTMLResponse(content=html_content)
 
 
-@router.post("/v1/paypal/payment-details")
-def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@router.post("/v1/paypal/payment-details", response_model=PaymentMutationResponse)
+def save_paypal_payment_details(data: SavePayPalPaymentDetailsRequest, uid: str = Depends(auth.get_current_user_uid)):
     """
     Save PayPal payment details (email and paypal.me link)
     """
     try:
-        if 'email' not in data or 'paypalme_url' not in data:
-            raise HTTPException(status_code=400, detail="Email and PayPal.me URL are required")
-        paypalme_url = data.get('paypalme_url').lower()
-        data['email'] = data.get('email').lower()
+        email = data.email.lower()
+        paypalme_url = data.paypalme_url.lower()
         if paypalme_url and not paypalme_url.startswith('http'):
             paypalme_url = 'https://' + paypalme_url
-        data['paypalme_url'] = paypalme_url
-        set_paypal_payment_details(uid, data)
+        set_paypal_payment_details(uid, {'email': email, 'paypalme_url': paypalme_url})
         if get_default_payment_method(uid) is None:
             set_default_payment_method(uid, 'paypal')
         return {"status": "success"}
@@ -1168,7 +1278,7 @@ def save_paypal_payment_details(data: dict, uid: str = Depends(auth.get_current_
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/v1/paypal/payment-details")
+@router.get("/v1/paypal/payment-details", response_model=Optional[PayPalPaymentDetailsResponse])
 def get_paypal_payment_details_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """
     Get the PayPal payment details for the user
@@ -1207,7 +1317,7 @@ def stripe_cancel():
     """)
 
 
-@router.post('/v1/payments/customer-portal')
+@router.post('/v1/payments/customer-portal', response_model=CustomerPortalSessionResponse)
 def create_customer_portal_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     """Create a Stripe Customer Portal session for managing payment methods and subscriptions."""
 
@@ -1248,7 +1358,7 @@ def portal_return():
     """)
 
 
-@router.get("/v1/payment-methods/status")
+@router.get("/v1/payment-methods/status", response_model=PaymentMethodStatusResponse)
 def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     """Get the statuses of the payment methods for the user"""
     default_payment_method = get_default_payment_method(uid)
@@ -1265,17 +1375,19 @@ def get_payment_method_status(uid: str = Depends(auth.get_current_user_uid)):
     return {"stripe": stripe_status, "paypal": paypal_status, "default": default_payment_method}
 
 
-@router.post("/v1/payment-methods/default")
-def set_default_payment_method_endpoint(data: dict, uid: str = Depends(auth.get_current_user_uid)):
+@router.post("/v1/payment-methods/default", response_model=PaymentMutationResponse)
+def set_default_payment_method_endpoint(
+    data: SetDefaultPaymentMethodRequest, uid: str = Depends(auth.get_current_user_uid)
+):
     """Set the default payment method for the user"""
-    method = data.get('method')
+    method = data.method
     if method not in ['stripe', 'paypal']:
         raise HTTPException(status_code=400, detail="Invalid method")
     set_default_payment_method(uid, method)
     return {"status": "success"}
 
 
-@router.get("/v1/apps/{app_id}/subscription")
+@router.get("/v1/apps/{app_id}/subscription", response_model=AppSubscriptionResponse)
 def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get user's subscription for a specific app"""
     try:
@@ -1308,7 +1420,7 @@ def get_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_u
         raise HTTPException(status_code=500, detail="Could not retrieve subscription information")
 
 
-@router.delete("/v1/apps/{app_id}/subscription")
+@router.delete("/v1/apps/{app_id}/subscription", response_model=AppSubscriptionCancelResponse)
 def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Cancel user's subscription for a specific app"""
     try:

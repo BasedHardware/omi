@@ -1722,12 +1722,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -9385,7 +9380,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
+      'Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9535,4 +9530,23 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Instalați firmware-ul';
+
+  @override
+  String get pendantRecordingTitle => 'Înregistrare pe pandantiv';
+
+  @override
+  String get pendantRecordingNote =>
+      'Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.';
+
+  @override
+  String get pendantSyncingRecordings => 'Se sincronizează înregistrările de pe pandantivul tău…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stocat(e)';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare.';
 }

@@ -59,7 +59,8 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   final appProvider = Provider.of<AppProvider>(context, listen: false);
   final messageProvider = Provider.of<MessageProvider>(context, listen: false);
   // Check both public apps and user's installed chat apps (includes private MCP apps)
-  final app = appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
+  final app =
+      appProvider.apps.firstWhereOrNull((a) => a.id == appId) ??
       messageProvider.chatApps.firstWhereOrNull((a) => a.id == appId);
 
   if (app != null) {
@@ -131,7 +132,7 @@ String? _getIntegrationLogoPath(String thinkingText) {
 }
 
 /// Get the fallback icon for thinking text (used when no integration logo)
-IconData _getThinkingIcon(String thinkingText) {
+FaIconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
     return FontAwesomeIcons.brain;
@@ -762,28 +763,28 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                 ),
               )
             : widget.showTypingIndicator
-                ? const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.start,
-                    children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
-                  )
-                : Builder(
-                    builder: (context) {
-                      String? selectedText;
-                      return SelectionArea(
-                        onSelectionChanged: (SelectedContent? selectedContent) {
-                          selectedText = selectedContent?.plainText;
-                        },
-                        contextMenuBuilder: (context, selectableRegionState) {
-                          return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
-                            widget.onAskOmi?.call(text);
-                          }, selectedText: selectedText);
-                        },
-                        child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
-                      );
+            ? const Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.start,
+                children: [SizedBox(width: 4), TypingIndicator(), Spacer()],
+              )
+            : Builder(
+                builder: (context) {
+                  String? selectedText;
+                  return SelectionArea(
+                    onSelectionChanged: (SelectedContent? selectedContent) {
+                      selectedText = selectedContent?.plainText;
                     },
-                  ),
+                    contextMenuBuilder: (context, selectableRegionState) {
+                      return omiSelectionMenuBuilder(context, selectableRegionState, (text) {
+                        widget.onAskOmi?.call(text);
+                      }, selectedText: selectedText);
+                    },
+                    child: getMarkdownWidget(context, widget.messageText, onAskOmi: widget.onAskOmi),
+                  );
+                },
+              ),
         if (widget.messageText.isNotEmpty && widget.messageText != '...' && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -880,7 +881,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               strokeWidth: 2,
                             ),
                           )
-                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                        : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
                   ],
                 ),
               ),
@@ -1240,7 +1241,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required VoidCallback onTap, bool isSelected = false}) {
+  Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,

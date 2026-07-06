@@ -1705,12 +1705,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'อุปกรณ์',
-      one: 'อุปกรณ์',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'อุปกรณ์', one: 'อุปกรณ์');
     return 'พบ $count $_temp0 ในบริเวณใกล้เคียง';
   }
 
@@ -9147,11 +9142,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'การบันทึก $count รายการพร้อมซิงค์',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'การบันทึก $count รายการพร้อมซิงค์');
     return '$_temp0';
   }
 
@@ -9163,11 +9154,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'การบันทึก $count รายการต้องการความสนใจ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'การบันทึก $count รายการต้องการความสนใจ');
     return '$_temp0';
   }
 
@@ -9289,7 +9276,8 @@ class AppLocalizationsTh extends AppLocalizations {
       'บันทึกเสียงไว้ก่อนแล้วค่อยถอดเสียงเมื่อต้องการ แทนที่จะถอดแบบเรียลไทม์ ไฟล์บันทึกจะถูกเก็บไว้ในเครื่องของคุณ จากนั้นคุณค่อยอัปโหลดเพื่อสร้างบทสนทนา';
 
   @override
-  String get transcribeLaterNote => 'ขณะนี้รองรับเฉพาะอุปกรณ์ Omi เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
+  String get transcribeLaterNote =>
+      'ขณะนี้รองรับอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9438,4 +9426,22 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get flashFirmware => 'แฟลชเฟิร์มแวร์';
+
+  @override
+  String get pendantRecordingTitle => 'กำลังบันทึกบนจี้';
+
+  @override
+  String get pendantRecordingNote =>
+      'จี้ของคุณกำลังบันทึกด้วยตัวเอง การบันทึกจะซิงค์ไปยังโทรศัพท์ของคุณขณะที่เปิดแอปอยู่';
+
+  @override
+  String get pendantSyncingRecordings => 'กำลังซิงค์การบันทึกจากจี้ของคุณ…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes นาทีที่จัดเก็บไว้';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'พื้นที่จัดเก็บของจี้ใกล้เต็มแล้ว — เปิดแอปค้างไว้เพื่อซิงค์';
 }

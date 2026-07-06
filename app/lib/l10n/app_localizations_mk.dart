@@ -1718,12 +1718,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8502,12 +8497,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9389,7 +9379,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Засега работи со Omi уреди. Аудиото останува на твојот телефон сè додека сам не одлучиш да го прикачиш.';
+      'Засега работи со Omi и Limitless уреди. Аудиото останува на твојот телефон сè додека сам не одлучиш да го прикачиш.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9540,4 +9530,23 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Инсталирај фирмвер';
+
+  @override
+  String get pendantRecordingTitle => 'Снимање на приврзокот';
+
+  @override
+  String get pendantRecordingNote =>
+      'Твојот приврзок снима самостојно. Снимките се синхронизираат со телефонот додека апликацијата е отворена.';
+
+  @override
+  String get pendantSyncingRecordings => 'Синхронизирање снимки од твојот приврзок…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes мин зачувано';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Меморијата на приврзокот е речиси полна — држи ја апликацијата отворена за синхронизација.';
 }

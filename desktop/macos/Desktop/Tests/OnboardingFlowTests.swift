@@ -3,16 +3,16 @@ import XCTest
 @testable import Omi_Computer
 
 final class OnboardingFlowTests: XCTestCase {
-  func testMergedFlowUsesEighteenSteps() {
+  func testMergedFlowUsesNineteenSteps() {
     XCTAssertEqual(
       OnboardingFlow.steps,
       [
         "Name", "Language", "HowDidYouHear", "Trust", "ScreenRecording",
         "FullDiskAccess", "FileScan", "Microphone", "Accessibility", "Automation",
         "FloatingBarShortcut", "FloatingBar", "VoiceShortcut", "VoiceDemo", "DataSources",
-        "Exports", "Goal", "Tasks",
+        "Exports", "Goal", "BringYourOwnKeys", "Tasks",
       ])
-    XCTAssertEqual(OnboardingFlow.lastStepIndex, 17)
+    XCTAssertEqual(OnboardingFlow.lastStepIndex, 18)
   }
 
   func testMigrationMovesLegacyVoiceInputToMergedVoiceShortcutStep() {
@@ -121,7 +121,9 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(migratedResearch, 15)
     XCTAssertEqual(migratedLegacyGoalAfterExportInsert, 17)
     XCTAssertEqual(migratedGoal, 17)
-    XCTAssertEqual(migratedTasks, 17)
+    // Tasks moved from index 17 to 18 when BringYourOwnKeys was inserted at 17;
+    // a legacy user on the old Tasks step still lands on Tasks.
+    XCTAssertEqual(migratedTasks, 18)
   }
 
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {

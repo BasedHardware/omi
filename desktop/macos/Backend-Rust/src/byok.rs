@@ -298,6 +298,7 @@ pub struct ByokCacheExt(pub Arc<ByokStateCache>);
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

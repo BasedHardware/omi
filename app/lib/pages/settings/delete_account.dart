@@ -45,7 +45,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     super.dispose();
   }
 
-  static const _reasons = [
+  static final _reasons = [
     _Reason('privacy_concerns', FontAwesomeIcons.shield),
     _Reason('not_using_enough', FontAwesomeIcons.clock),
     _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
@@ -56,15 +56,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
   ];
 
   String _label(String key) => switch (key) {
-        'privacy_concerns' => context.l10n.deleteReasonPrivacy,
-        'not_using_enough' => context.l10n.deleteReasonNotUsing,
-        'missing_features' => context.l10n.deleteReasonMissingFeatures,
-        'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
-        'found_alternative' => context.l10n.deleteReasonFoundAlternative,
-        'taking_break' => context.l10n.deleteReasonTakingBreak,
-        'other' => context.l10n.deleteReasonOther,
-        _ => key,
-      };
+    'privacy_concerns' => context.l10n.deleteReasonPrivacy,
+    'not_using_enough' => context.l10n.deleteReasonNotUsing,
+    'missing_features' => context.l10n.deleteReasonMissingFeatures,
+    'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
+    'found_alternative' => context.l10n.deleteReasonFoundAlternative,
+    'taking_break' => context.l10n.deleteReasonTakingBreak,
+    'other' => context.l10n.deleteReasonOther,
+    _ => key,
+  };
 
   void _next() {
     if (_page < 2) {
@@ -530,7 +530,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     );
   }
 
-  Widget _featureRow(IconData icon, String text) {
+  Widget _featureRow(FaIconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -564,6 +564,6 @@ class _DeleteAccountState extends State<DeleteAccount> {
 
 class _Reason {
   final String key;
-  final IconData icon;
+  final FaIconData icon;
   const _Reason(this.key, this.icon);
 }

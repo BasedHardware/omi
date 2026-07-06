@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Network
 
@@ -382,6 +383,22 @@ final class DesktopAutomationActionRegistry {
       return await harness.run(timeoutSeconds: timeout)
     }
 
+    // Run the post-scan local-file memory import exactly as onboarding does
+    // (indexed-files snapshot → aggregate drafts → import evidence service
+    // with legacy batch fallback). Lets agents verify the import pipeline
+    // without driving the onboarding UI or the cursor.
+    register(
+      name: "onboarding_local_file_import",
+      summary: "Run the post-scan local-file memory import from the indexed snapshot; returns saved count"
+    ) { _ in
+      let coordinator = OnboardingPagedIntroCoordinator()
+      await coordinator.refreshSnapshotIfAvailable()
+      return [
+        "saved": String(coordinator.localFileMemoriesSaved),
+        "file_count": String(coordinator.scanSnapshot?.fileCount ?? 0),
+      ]
+    }
+
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
@@ -417,6 +434,163 @@ final class DesktopAutomationActionRegistry {
       }
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
       return ["sent": query]
+    }
+
+    // Force the floating-bar active state so the pill↔notch-island morph and the
+    // "thinking" animation can be exercised without a mic. Same flags a real PTT
+    // turn sets; non-prod bridge only. state = idle|listening|thinking|answering.
+    register(
+      name: "debug_bar_state",
+      summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
+      params: ["state"]
+    ) { params in
+      let s = (params["state"] ?? "thinking").lowercased()
+      let mgr = FloatingControlBarManager.shared
+      guard let bar = mgr.barState else { return ["error": "no bar state"] }
+      if s != "idle", !mgr.isVisible { mgr.show() }
+      bar.isVoiceResponseActive = (s == "answering")
+      bar.isVoiceListening = (s == "listening")
+      bar.isThinking = (s == "thinking")
+      return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
+    }
+
+    // Send a message through the real main-window chat pipeline (ChatPage),
+    // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
+    // or keyboard input, so it never touches the user's actual cursor.
+    register(
+      name: "ask_main_chat",
+      summary: "Send a query to the main-window chat (typed path); exercises the full chat pipeline",
+      params: ["query"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let tracer = QueryTracer(query: query, inputMode: .text)
+      await QueryTracerContext.$current.withValue(tracer) {
+        _ = await provider.sendMessage(query)
+      }
+      return ["sent": query]
+    }
+
+    // Gauntlet step 06: clear owner A kernel bindings, re-register synthetic owner B,
+    // and run one assembled-context probe turn. Non-production bundles only.
+    register(
+      name: "swap_test_owner",
+      summary: "Clear owner A kernel state, swap to synthetic owner B, and run one probe turn",
+      params: ["owner_b", "query"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "swap_test_owner is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      return await provider.automationSwapTestOwner(
+        ownerBId: params["owner_b"] ?? "",
+        probeQuery: params["query"] ?? ""
+      )
+    }
+
+    register(
+      name: "restore_test_owner",
+      summary: "Restore the real owner after swap_test_owner (harness cleanup; no-op if no swap active)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "restore_test_owner is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      return await provider.automationRestoreTestOwner()
+    }
+
+    register(
+      name: "main_chat_snapshot",
+      summary: "Export main-chat transcript, session ids, and stream state for continuity harnesses",
+      params: ["limit"]
+    ) { params in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let limit = max(1, intParam(params["limit"], default: 50))
+      return provider.automationMainChatSnapshot(limit: limit)
+    }
+
+    register(
+      name: "clear_owner_surface_state",
+      summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
+      params: ["chatId"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "clear_owner_surface_state is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let chatId = params["chatId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      return await provider.automationClearOwnerSurfaceState(chatId: chatId?.isEmpty == false ? chatId! : "default")
+    }
+
+    register(
+      name: "kernel_turn_tail",
+      summary: "Return the last N kernel main_chat turns for continuity harness evidence",
+      params: ["limit"]
+    ) { params in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let limit = max(1, intParam(params["limit"], default: 8))
+      return await provider.automationKernelTurnTail(limit: limit)
+    }
+
+    register(
+      name: "wait_main_chat_idle",
+      summary: "Block until main chat is not sending or streaming (continuity harness)",
+      params: ["timeoutMs", "pollMs"]
+    ) { params in
+      let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
+      let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      while Date() < deadline {
+        if !provider.isSending && !provider.messages.contains(where: { $0.isStreaming }) {
+          var detail = provider.automationMainChatSnapshot(limit: 8)
+          detail["idle"] = "true"
+          return detail
+        }
+        try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+      }
+      var detail = provider.automationMainChatSnapshot(limit: 8)
+      detail["error"] = "timeout"
+      detail["timeout_ms"] = "\(timeoutMs)"
+      return detail
+    }
+
+    register(
+      name: "agent_runtime_evidence",
+      summary: "Return omi-agentd.sqlite3 path and SHA-256 for continuity harness evidence bundles"
+    ) { _ in
+      let stateDir = AgentRuntimeProcess.defaultStateDirectory()
+      let dbPath = (stateDir as NSString).appendingPathComponent("omi-agentd.sqlite3")
+      var detail: [String: String] = [
+        "state_dir": stateDir,
+        "database_path": dbPath,
+        "database_exists": FileManager.default.fileExists(atPath: dbPath) ? "true" : "false",
+        "bundle_id": Bundle.main.bundleIdentifier ?? "",
+      ]
+      if FileManager.default.fileExists(atPath: dbPath),
+        let data = try? Data(contentsOf: URL(fileURLWithPath: dbPath))
+      {
+        let digest = SHA256.hash(data: data)
+        detail["database_sha256"] = digest.map { String(format: "%02x", $0) }.joined()
+        detail["database_bytes"] = "\(data.count)"
+      }
+      return detail
     }
 
     register(

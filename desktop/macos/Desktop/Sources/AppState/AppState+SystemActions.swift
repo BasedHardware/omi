@@ -363,11 +363,23 @@ extension AppState {
     }
   }
 
-  /// Check system audio permission status
-  /// This checks if the test capture was successful (set by triggerSystemAudioPermission)
+  /// Check system audio permission status and update `hasSystemAudioPermission`.
+  ///
+  /// Core Audio process taps (macOS 14.4+) have no dedicated preflight API, but a
+  /// *global* tap that captures other apps' output is gated behind the same Screen
+  /// Recording TCC grant the rest of the app already checks — which is why a failed
+  /// test capture in `triggerSystemAudioPermission()` deep-links the user to
+  /// Privacy → Screen Recording. Previously this was a no-op (BL-020) that left the
+  /// flag reflecting only a prior successful test capture, so a revoked grant (or a
+  /// user who never ran onboarding's test) was never reflected. Mirror
+  /// `checkScreenRecordingPermission()` so the reported state tracks real TCC state.
   func checkSystemAudioPermission() {
-    // Permission is set by triggerSystemAudioPermission after successful test
-    // No-op here - we rely on the test result
+    guard #available(macOS 14.4, *) else {
+      hasSystemAudioPermission = false
+      return
+    }
+    hasSystemAudioPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
+      tccGranted: ScreenCaptureService.checkPermission())
   }
 
   /// Trigger system audio permission by actually testing capture

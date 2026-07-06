@@ -1726,12 +1726,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'APPAREILS',
-      one: 'APPAREIL',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'APPAREILS', one: 'APPAREIL');
     return '$count $_temp0 TROUVÉ(S) À PROXIMITÉ';
   }
 
@@ -9424,7 +9419,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Compatible avec les appareils Omi pour le moment. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
+      'Compatible avec les appareils Omi et Limitless pour le moment. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9575,4 +9570,23 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flasher le firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Enregistrement sur le pendentif';
+
+  @override
+  String get pendantRecordingNote =>
+      'Votre pendentif enregistre de manière autonome. Les enregistrements se synchronisent avec votre téléphone lorsque l\'application est ouverte.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synchronisation des enregistrements depuis votre pendentif…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stockées';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Le stockage du pendentif est presque plein — gardez l\'application ouverte pour synchroniser.';
 }

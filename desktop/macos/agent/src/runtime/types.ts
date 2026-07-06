@@ -35,10 +35,62 @@ export type DelegationStatus = "pending" | "running" | "succeeded" | "failed" | 
 
 export type GrantEffect = "allow" | "deny";
 
+// TODO(desktop-agent-platonic-gap-closure G6): delete legacy_default after ship+2 releases post-platonic.
 export type GrantSource = "legacy_default" | "policy" | "user" | "system";
+
+export interface SurfaceConversation {
+  ownerId: string;
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  conversationId: string;
+  agentSessionId: string;
+  createdAtMs: number;
+  lastActiveAtMs: number;
+}
+
+export type NewSurfaceConversation = Pick<
+  SurfaceConversation,
+  | "ownerId"
+  | "surfaceKind"
+  | "externalRefKind"
+  | "externalRefId"
+  | "conversationId"
+  | "agentSessionId"
+  | "createdAtMs"
+  | "lastActiveAtMs"
+>;
+
+export type ConversationTurnRole = "user" | "assistant";
+
+export interface ConversationTurn {
+  conversationId: string;
+  turnId: string;
+  role: ConversationTurnRole;
+  surfaceKind: string;
+  content: string;
+  createdAtMs: number;
+  metadataJson: string;
+}
+
+export type NewConversationTurn = Pick<
+  ConversationTurn,
+  "conversationId" | "role" | "surfaceKind" | "content" | "createdAtMs"
+> &
+  Partial<Pick<ConversationTurn, "turnId" | "metadataJson">>;
+
+export interface CompletionDeltaCheckpoint {
+  ownerId: string;
+  surfaceKey: string;
+  seenIdsJson: string;
+  highWaterMs: number;
+  updatedAtMs: number;
+}
 
 export type AgentIdKind =
   | "session"
+  | "conversation"
+  | "turn"
   | "run"
   | "attempt"
   | "event"
@@ -89,8 +141,6 @@ export interface AgentSession {
   surfaceKind: string;
   externalRefKind: string | null;
   externalRefId: string | null;
-  legacyClientScope: string | null;
-  legacySessionKey: string | null;
   defaultAdapterId: string;
   defaultCwd: string | null;
   modelProfile: string | null;
@@ -172,6 +222,7 @@ export interface AdapterBinding {
   updatedAtMs: number;
   lastUsedAtMs: number | null;
   invalidatedAtMs: number | null;
+  lastDeliveredTurnCreatedAtMs: number;
 }
 
 export interface AgentEvent {
@@ -424,6 +475,8 @@ export interface AgentStore {
   migrate(): void;
   reconcileStartup(): StartupReconciliationResult;
   insertSession(input: NewAgentSession): AgentSession;
+  insertSurfaceConversation(input: NewSurfaceConversation): SurfaceConversation;
+  insertConversationTurn(input: NewConversationTurn): ConversationTurn;
   insertRun(input: NewAgentRun): AgentRun;
   insertAttempt(input: NewRunAttempt): RunAttempt;
   insertAdapterBinding(input: NewAdapterBinding): AdapterBinding;

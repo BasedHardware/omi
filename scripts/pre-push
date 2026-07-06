@@ -22,6 +22,7 @@ CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD || true)
 ZERO_SHA="0000000000000000000000000000000000000000"
 
 declare -a PUSH_UPDATES=()
+declare -a DIFF_SUMMARIES=()
 while read -r local_ref local_oid remote_ref remote_oid; do
   [ -n "${local_ref:-}" ] || continue
   [ "${local_oid:-$ZERO_SHA}" != "$ZERO_SHA" ] || continue
@@ -29,7 +30,7 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 done
 
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
-  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s)."
+  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else
   echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
 fi
@@ -47,11 +48,15 @@ if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
     else
       DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
     fi
+    changed_count=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE" "$local_oid" | wc -l | tr -d ' ')
+    DIFF_SUMMARIES+=("${remote_ref:-$local_oid}: ${changed_count} changed file(s) since ${DIFF_BASE:0:12}")
     while IFS= read -r file; do
       [ -n "$file" ] && CHANGED_FILES+=("$file")
     done < <(git diff --name-only --diff-filter=ACM "$DIFF_BASE" "$local_oid")
   done
 else
+  changed_count=$(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD | wc -l | tr -d ' ')
+  DIFF_SUMMARIES+=("HEAD: ${changed_count} changed file(s) since ${BASE_REF:0:12}")
   while IFS= read -r file; do
     [ -n "$file" ] && CHANGED_FILES+=("$file")
   done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
@@ -65,12 +70,31 @@ if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
   CHANGED_FILES=("${UNIQUE_CHANGED_FILES[@]}")
 fi
 
+echo "Pre-push diff summary:"
+for summary in "${DIFF_SUMMARIES[@]}"; do
+  echo "  ${summary}"
+done
+echo "Unique changed files considered by hooks: ${#CHANGED_FILES[@]}"
+if [ "${PRE_PUSH_DEBUG:-}" = "1" ] && [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
+  printf '  %s\n' "${CHANGED_FILES[@]}"
+fi
+
 CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
 SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
 SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
 trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
+# Require backend/.venv/bin/python for all backend Python scripts. The system
+# python3 does not have backend deps (fastapi, pydantic, etc.) and using it
+# silently produces misleading failures. If the venv is missing, tell the
+# developer exactly how to create it.
+BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+if [[ ! -x "$BACKEND_PYTHON" ]]; then
+  echo "FAIL: backend/.venv/bin/python not found." >&2
+  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  exit 1
+fi
 
 run_step() {
   echo "==> $*"
@@ -220,24 +244,32 @@ check_backend_runtime_env_if_needed() {
     return
   fi
 
-  python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
-  python3 backend/scripts/validate-backend-runtime-env.py --env prod
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env prod
 }
 
 check_backend_async_blockers_if_needed() {
+  local -a scanner_args=()
+
   if [ "${PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS:-}" = "1" ]; then
     echo "Skipping backend async blocker scan because PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS=1."
     return
   fi
 
   if ! changed_matches 'backend/*.py' 'backend/**/*.py' '.github/workflows/lint.yml'; then
+    echo "Skipping backend async blocker scan; no backend Python files changed."
     return
   fi
 
-  python3 backend/scripts/scan_async_blockers.py \
+  if [ "${PRE_PUSH_VERBOSE:-}" = "1" ]; then
+    scanner_args+=(--full-report)
+  fi
+
+  "$BACKEND_PYTHON" backend/scripts/scan_async_blockers.py \
     --dirs backend/routers backend/utils \
     --diff-base "$BASE_REF" \
-    --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
+    --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def \
+    "${scanner_args[@]}"
 }
 
 check_module_stub_pollution_if_needed() {
@@ -265,14 +297,14 @@ check_module_stub_pollution_if_needed() {
   done
 
   if [ -s "$filter_file" ]; then
-    python3 backend/scripts/check_module_stub_pollution.py --files "$filter_file"
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --files "$filter_file"
   else
-    python3 backend/scripts/check_module_stub_pollution.py --quiet
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --quiet
   fi
   rm -f "$filter_file"
 
   # Enforce monotone-shrinking allowlist regardless of which files changed.
-  python3 backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
+  "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
 }
 
 check_import_time_side_effects_if_needed() {
@@ -302,13 +334,13 @@ check_import_time_side_effects_if_needed() {
   done
 
   if [ -s "$filter_file" ]; then
-    python3 backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
   else
-    python3 backend/scripts/scan_import_time_side_effects.py --quiet
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --quiet
   fi
   rm -f "$filter_file"
 
-  python3 backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
+  "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
 }
 
 check_backend_unit_tests_if_needed() {
@@ -327,7 +359,7 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
-  python3 backend/scripts/select_backend_unit_tests.py \
+  "$BACKEND_PYTHON" backend/scripts/select_backend_unit_tests.py \
     --changed-files "$CHANGED_FILES_LIST" \
     --output "$SELECTED_BACKEND_TESTS" \
     --reason-output "$SELECTED_BACKEND_TESTS_REASON"
@@ -365,8 +397,8 @@ check_backend_unit_tests_if_needed() {
   echo "Selected $selected_count backend unit test file(s): $reason"
   (
     cd backend
-    bash test-preflight.sh
-    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
+    PYTHON="$BACKEND_PYTHON" bash test-preflight.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
   )
 }
 
@@ -388,7 +420,7 @@ check_openapi_contract_if_needed() {
 
   (
     cd backend
-    python3 scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+    scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
   )
 }
 
@@ -452,6 +484,26 @@ check_desktop_swift_if_needed() {
     cd desktop/macos
     xcrun swift build -c debug --package-path Desktop
   )
+}
+
+check_desktop_userdefaults_ratchet_if_needed() {
+  # BL-004 / S-13: fail if new raw inline UserDefaults string keys are added to
+  # the desktop Swift sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop UserDefaults key ratchet because PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/*.swift' \
+    'desktop/macos/Desktop/Sources/**/*.swift' \
+    'desktop/macos/scripts/check-userdefaults-key-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
 }
 
 check_desktop_rust_if_needed() {
@@ -521,6 +573,15 @@ check_desktop_tool_surfaces_if_needed() {
   done
 }
 
+check_gauntlet_evidence_if_needed() {
+  if [ "${PRE_PUSH_SKIP_GAUNTLET_EVIDENCE:-}" = "1" ]; then
+    echo "Skipping gauntlet evidence check because PRE_PUSH_SKIP_GAUNTLET_EVIDENCE=1."
+    return
+  fi
+
+  desktop/macos/scripts/check-gauntlet-evidence-at-head.sh warn
+}
+
 run_step check_merge_conflicts
 run_step check_arch_guardrails
 run_step python3 .github/scripts/desktop-changelog.py validate
@@ -542,9 +603,11 @@ run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
 run_step check_desktop_swift_if_needed
+run_step check_desktop_userdefaults_ratchet_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
+run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
 echo "Fast pre-push checks passed."

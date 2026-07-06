@@ -169,6 +169,7 @@ def _is_skipped_path(rel: str) -> bool:
             'testing/',
             'pusher/',
             '.venv/',
+            'venv/',
             '.openapi-venv/',
         )
     )

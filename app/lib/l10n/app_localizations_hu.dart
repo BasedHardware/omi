@@ -1724,12 +1724,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ESZKÖZ',
-      one: 'ESZKÖZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ESZKÖZ', one: 'ESZKÖZ');
     return '$count $_temp0 TALÁLHATÓ A KÖZELBEN';
   }
 
@@ -9380,7 +9375,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Egyelőre Omi eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+      'Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9530,4 +9525,23 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Firmware flashelése';
+
+  @override
+  String get pendantRecordingTitle => 'Felvétel a medálon';
+
+  @override
+  String get pendantRecordingNote =>
+      'A medálod önállóan rögzít. A felvételek a telefonodra szinkronizálódnak, amíg az alkalmazás nyitva van.';
+
+  @override
+  String get pendantSyncingRecordings => 'Felvételek szinkronizálása a medálodról…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes perc tárolva';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'A medál tárhelye majdnem megtelt — tartsd nyitva az alkalmazást a szinkronizáláshoz.';
 }
