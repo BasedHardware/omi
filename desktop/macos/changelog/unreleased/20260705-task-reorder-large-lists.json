@@ -1,0 +1,3 @@
+{
+  "change": "Reordering tasks now stays correct in large lists (100+ items in a section no longer scramble order), and rapid re-drags no longer leave a row stuck dimmed"
+}
