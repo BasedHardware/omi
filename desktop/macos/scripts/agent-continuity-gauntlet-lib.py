@@ -898,7 +898,11 @@ class GauntletRunner:
         # outputs and assistant text only, with the probe's own words stripped.
         list_outputs = "\n".join(str(tool.get("output", "")) for tool in list_tools)
         evidence_blob = strip_probe_text(assistant + "\n" + list_outputs, [status_query])
-        status_words = re.search(r"running|working|in progress|started|completed|queued|active", evidence_blob, re.I)
+        status_words = re.search(
+            r"running|working|in progress|started|completed|queued|active|failed|succeeded",
+            evidence_blob,
+            re.I,
+        )
         if list_tools:
             if self.markers["spawn"] not in list_outputs and self.markers["spawn"] not in assistant:
                 self.fail(
