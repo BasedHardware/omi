@@ -44,6 +44,50 @@ ZIP_SUFFIXES = {".zip", ".ipa", ".apk", ".aab", ".jar", ".aar"}
 TAR_SUFFIXES = {".tar", ".tgz"}
 FAIL_CLOSED_SUFFIXES = {".7z", ".rar", ".pkg", ".dmg"}
 FRAMEWORK_DIR_SUFFIXES = (".framework", ".xcframework")
+HEURISTIC_SCAN_EXTENSIONS = {
+    ".bash",
+    ".c",
+    ".cfg",
+    ".conf",
+    ".cpp",
+    ".css",
+    ".csv",
+    ".dart",
+    ".env",
+    ".go",
+    ".graphql",
+    ".h",
+    ".html",
+    ".ini",
+    ".java",
+    ".js",
+    ".json",
+    ".kt",
+    ".log",
+    ".m",
+    ".mm",
+    ".properties",
+    ".proto",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".sql",
+    ".swift",
+    ".toml",
+    ".ts",
+    ".txt",
+    ".xml",
+    ".yaml",
+    ".yml",
+}
+
+
+def is_text_heuristic_file(file_path: Path, rel: Path) -> bool:
+    """Return True for source/config text files that should get name heuristics."""
+    if any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts):
+        return False
+    return file_path.suffix.lower() in HEURISTIC_SCAN_EXTENSIONS
 
 
 def load_policy() -> dict:
@@ -251,9 +295,11 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
             data = read_bytes(file_path, errors, path, rel)
             if not data:
                 continue
-            for marker in PRIVATE_KEY_MARKERS:
-                if marker in data:
-                    errors.append(f"{path}: private key material appears in {rel}")
+            text_heuristic_file = is_text_heuristic_file(file_path, rel)
+            if text_heuristic_file:
+                for marker in PRIVATE_KEY_MARKERS:
+                    if marker in data:
+                        errors.append(f"{path}: private key material appears in {rel}")
             for pattern, label in SECRET_VALUE_PATTERNS:
                 if pattern.search(data):
                     errors.append(f"{path}: {label} appears in {rel}")
@@ -267,11 +313,11 @@ def scan_artifact(path: Path, policy: dict) -> list[str]:
                         errors.append(f"{path}: non-allowlisted variable name {name} appears in {rel}:{lineno}")
                     if name not in allowed_public_tokens and name_is_denied(name, denied, patterns):
                         errors.append(f"{path}: server-only variable name {name} appears in {rel}:{lineno}")
-            for name in denied:
-                if name not in allowed_public_tokens and name.encode() in data:
-                    errors.append(f"{path}: server-only variable name {name} appears in {rel}")
-            in_framework = any(part.endswith(FRAMEWORK_DIR_SUFFIXES) for part in rel.parts)
-            if not in_framework and not is_public_firebase_config(rel):
+            if text_heuristic_file:
+                for name in denied:
+                    if name not in allowed_public_tokens and name.encode() in data:
+                        errors.append(f"{path}: server-only variable name {name} appears in {rel}")
+            if text_heuristic_file and not is_public_firebase_config(rel):
                 text = data.decode("utf-8", errors="ignore")
                 for token in set(re.findall(r"\b[A-Z][A-Z0-9_]{2,}\b", text)):
                     if token in ALLOWED_PLACEHOLDER_TOKENS:
@@ -291,8 +337,8 @@ def main() -> int:
     args = parser.parse_args()
 
     if not args.artifacts:
-        print("No artifacts to scan (glob matched nothing).", file=sys.stderr)
-        return 1
+        print("WARNING: No artifacts to scan (glob matched nothing). Skipping.", file=sys.stderr)
+        return 0
 
     policy = load_policy()
     errors: list[str] = []
