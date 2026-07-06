@@ -5133,7 +5133,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatErrorCard: .signIn recovery — starting desktop OAuth")
             do {
                 try await AuthService.shared.signInWithGoogle()
-                await FloatingBarUsageLimiter.shared.fetchPlan()
             } catch let signInError {
                 logError("ChatErrorCard: sign-in recovery failed", error: signInError)
                 currentError = error

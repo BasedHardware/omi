@@ -297,7 +297,11 @@ actor AgentBridge {
       )
     } catch let error as BridgeError where isPiMonoHarness && !bridgeOutputTracker.hasOutput && error.isSessionAuthenticationFailure {
       log("AgentBridge: session token rejected before output; refreshing token and retrying once")
-      guard try await refreshAuthToken() else {
+      // A thrown refresh failure (e.g. AuthError.notSignedIn from an expired refresh
+      // token) must surface as BridgeError.authMissing so ChatProvider maps it to the
+      // sign-in recovery CTA. (try?) collapses both the throw and a `false` return into
+      // a single failed guard, avoiding propagation of the underlying AuthError.
+      guard (try? await refreshAuthToken()) == true else {
         throw BridgeError.authMissing
       }
       let retryRequestId = UUID().uuidString

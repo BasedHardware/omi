@@ -607,6 +607,7 @@ class AuthService {
                 Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
             } catch AuthError.notSignedIn {
                 NSLog("OMI AUTH: Restored UserDefaults session failed validation - signed out")
+                self.clearTokens()
                 self.isSignedIn = false
                 AuthState.shared.userEmail = nil
                 AuthState.shared.isRestoringAuth = false
