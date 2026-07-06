@@ -350,9 +350,16 @@ def mark_user_deletion_wipe_failed(uid: str):
     )
 
 
-def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str):
-    """Record that account deletion is blocked on Stripe cancellation."""
-    db.collection('account_deletions').document(uid).set(
+@transactional
+def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        status = (snapshot.to_dict() or {}).get('wipe_status')
+        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+            return False
+
+    transaction.set(
+        doc_ref,
         {
             'wipe_status': 'billing_failed',
             'billing_failed_at': datetime.now(timezone.utc),
@@ -361,6 +368,18 @@ def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, err
         },
         merge=True,
     )
+    return True
+
+
+def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str) -> bool:
+    """Record that account deletion is blocked on Stripe cancellation.
+
+    Never clobbers an actionable or terminal wipe state. A billing failure can
+    only block deletion before a destructive wipe has been queued or started.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
 
 
 def cancel_user_deletion_wipe(uid: str):
