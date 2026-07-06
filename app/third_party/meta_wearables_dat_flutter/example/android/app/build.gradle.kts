@@ -1,0 +1,50 @@
+plugins {
+    id("com.android.application")
+    id("kotlin-android")
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id("dev.flutter.flutter-gradle-plugin")
+}
+
+android {
+    namespace = "com.example.meta_wearables_dat_flutter_example"
+    compileSdk = flutter.compileSdkVersion
+    // Meta's `mwdat-core` AAR is built with NDK r27, but other Flutter
+    // plugins commonly bring in transitive deps that require a newer NDK
+    // (e.g. `jni` requires r28.2). Use the higher version — NDK is
+    // backward compatible per AGP's "use highest" rule, and Meta's AAR
+    // works fine on it.
+    ndkVersion = "28.2.13676358"
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_17.toString()
+    }
+
+    defaultConfig {
+        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        applicationId = "com.example.meta_wearables_dat_flutter_example"
+        // You can update the following values to match your application needs.
+        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // meta_wearables_dat_flutter requires API 31 (matches Meta's reference samples).
+        minSdk = 31
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

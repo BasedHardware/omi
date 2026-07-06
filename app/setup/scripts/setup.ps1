@@ -66,7 +66,7 @@ function SetupFirebaseWithServiceAccount {
     flutterfire config `
         --platforms="android,ios,web" `
         --out="lib/firebase_options_dev.dart" `
-        --ios-bundle-id="com.friend-app-with-wearable.ios12.development" `
+        --ios-bundle-id="dev.moni11811.omi" `
         --android-app-id="com.friend.ios.dev" `
         --android-out="android/app/src/dev/" `
         --ios-out="ios/Config/Dev/" `
@@ -98,7 +98,7 @@ function SetupProvisioningProfile {
     
     $env:MATCH_PASSWORD = "omi"
     fastlane match development --readonly `
-        --app_identifier "com.friend-app-with-wearable.ios12.development" `
+        --app_identifier "dev.moni11811.omi" `
         --git_url "git@github.com:BasedHardware/omi-community-certs.git"
 }
 

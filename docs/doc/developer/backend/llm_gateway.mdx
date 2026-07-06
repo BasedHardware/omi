@@ -42,12 +42,6 @@ BYOK requests skip gateway routing until BYOK forwarding is implemented for the 
 
 The backend exposes the Prometheus counter `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for structured gateway callers. Outcomes are bounded classes such as `success`, `fallback`, and `skipped`; reasons are bounded classes such as `ok`, `timeout`, `request_error`, `http_503`, `invalid_json`, `schema_validation`, `unexpected_error`, and `byok`.
 
-## Deployment
-
-Development LLM Gateway deploys are intentionally allowed before production deploys. The dedicated manual workflow and the automatic workflow deploy only to development until the production rollout checklist is explicitly completed and the workflow guard is removed.
-
-Gateway deploys must go through `backend/scripts/deploy-llm-gateway.sh`. The helper validates backend/gateway env wiring, deploys backend secrets through `backend/scripts/deploy-backend-secrets.sh`, adopts the known development ingress if it was bootstrapped before Helm owned it, and then runs the Helm upgrade. Do not copy raw `helm upgrade` commands into workflows; that bypasses the dev-only guardrail and required secret/env preflight.
-
 Primary user chat should follow later as a separate lane, likely:
 
 ```text
@@ -603,11 +597,6 @@ llm_gateway_request_latency_seconds
 Labels are bounded and low-cardinality: `lane_id`, `route_artifact_id`, `provider`, `model`, `used_lkg`, `fallback_used`, `fallback_reason`, `outcome`, and `error_class`.
 
 The backend caller also exposes `llm_gateway_chat_extraction_requests_total{feature,outcome,reason}` for app-level success/fallback/skipped behavior.
-The same backend observability helper emits a privacy-safe Cloud Logging line
-containing `llm_gateway_backend_event` with the same low-cardinality dimensions
-plus `kind`, `field`, `route`, and `service`. This gives rollout owners a stable
-query surface even when backend caller metrics are hard to inspect per runtime
-surface.
 
 Shadow-only features can also emit privacy-safe comparison buckets through
 `llm_gateway_chat_extraction_comparisons_total{feature,field,outcome}`. These
@@ -615,9 +604,7 @@ metrics compare derived properties such as category match, empty/non-empty
 status, length ratio, and normalized similarity bands. They must not store raw
 transcripts, prompts, titles, overviews, memories, or provider responses.
 
-Do not log raw prompts, transcripts, screenshots, memory contents, provider
-response bodies, conversation IDs, UIDs, or BYOK keys. Use existing sanitizer
-patterns for error bodies and user text.
+Do not log raw prompts, transcripts, screenshots, memory contents, provider response bodies, or BYOK keys. Use existing sanitizer patterns for error bodies and user text.
 
 ## Shadow Safety
 

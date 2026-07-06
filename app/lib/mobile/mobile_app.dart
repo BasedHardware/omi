@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/debug/meta_wearables_ui_proof.dart';
 import 'package:omi/pages/home/page.dart';
 import 'package:omi/pages/onboarding/device_selection.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
@@ -15,6 +16,9 @@ class MobileApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MetaWearablesUiProof.enabled) {
+      return const MetaWearablesUiProof();
+    }
     return Consumer<AuthenticationProvider>(
       builder: (context, authProvider, child) {
         if (authProvider.isSignedIn()) {

@@ -1,24 +1,18 @@
 package com.friend.ios
 
 import android.content.Intent
-import com.friend.ios.ble.BleHostApiImpl
-import com.friend.ios.phonecalls.PhoneCallsPlugin
-import com.friend.ios.ble.OmiBleForegroundService
-import com.friend.ios.ble.OmiBleManager
-import com.friend.ios.ble.OmiCompanionManager
-import com.friend.ios.batch.OmiBackgroundAudioStreamer
 import android.os.Bundle
 import androidx.annotation.NonNull
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity: FlutterActivity() {
+class MainActivity: FlutterFragmentActivity() {
     private val CHANNEL = "com.friend.ios/notifyOnKill"
     private val NATIVE_BLE_TRANSCRIPT_CHANNEL = "com.friend.ios/native_ble_transcript"
     private var bleHostApiImpl: BleHostApiImpl? = null
@@ -96,9 +90,9 @@ class MainActivity: FlutterActivity() {
     override fun onDestroy() {
         if (isFinishing) {
             OmiBleManager.isFlutterAlive = false
-            // Background Mode and Transcribe Later both need the foreground service to keep
-            // the device connected/capturing after a task close. With both off (default),
-            // tear it down so the device disconnects when the app is closed.
+            // With Background Mode on, the foreground service keeps the pendant connected and
+            // transcribing after a task close. With it off (default), tear it down so the device
+            // disconnects when the app is closed.
             if (!OmiBleForegroundService.isPersistentModeEnabled(this)) {
                 OmiBleForegroundService.stopService(this)
             }

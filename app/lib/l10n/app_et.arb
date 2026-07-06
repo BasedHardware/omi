@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.",
     "transcribeLaterTitle": "Transkribeeri hiljem",
     "transcribeLaterDescription": "Salvesta heli kohe ja transkribeeri see vajaduse korral hiljem, mitte reaalajas. Salvestised hoitakse sinu telefonis ning vestluste loomiseks laadid need üles.",
-    "transcribeLaterNote": "Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.",
+    "transcribeLaterNote": "Praegu töötab Omi seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.",
     "transcribeLaterStorageFull": "Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.",
     "unmute": "Tühista vaigistus",
     "newRecording": "Uus salvestus",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "Umbes 1 minut",
     "jumpToLatestMessage": "Hüppa uusima sõnumi juurde",
     "latest": "Uusim",
-    "flashFirmware": "Installi püsivara",
-    "pendantRecordingTitle": "Salvestamine ripatsil",
-    "pendantRecordingNote": "Sinu ripats salvestab iseseisvalt. Salvestised sünkroonitakse telefoniga, kui rakendus on avatud.",
-    "pendantSyncingRecordings": "Ripatsi salvestiste sünkroonimine…",
-    "pendantMinutesStored": "~{minutes} min salvestatud",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Ripatsi mälu on peaaegu täis — hoia rakendus avatud, et sünkroonida."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Ühenda oma Meta Glasses",
+    "pairingDescMetaGlasses": "Seo prillid Meta AI rakenduses ja seejärel puuduta Omi-s nuppu Ühenda. Saad siduda mitu paari ja valida, milline on aktiivne.",
+    "metaGlassesUnavailable": "Meta AI rakendust ei leitud. Prillide ühendamiseks installi Meta AI ja lülita sisse arendajarežiim.",
+    "metaGlassesRegistering": "Vii ühendamine Meta AI rakenduses lõpule ja naase Omi-sse.",
+    "metaGlassesCameraPermission": "Luba kaamera juurdepääs Meta AI rakenduses",
+    "metaGlassesCaptureModeLabel": "Salvestusrežiim",
+    "metaGlassesModeCameraMic": "Kaamera + mikrofon",
+    "metaGlassesModeMicOnly": "Ainult mikrofon",
+    "metaGlassesStartCapture": "Alusta salvestamist",
+    "metaGlassesStopCapture": "Peata salvestamine",
+    "metaGlassesGestureHint": "Meta prillide žestjuhtimine pole selles järgus toetatud.",
+    "connectAnotherDevice": "Ühenda teine seade",
+    "myDevices": "Minu seadmed",
+    "metaGlassesAutoCapture": "Automaatne salvestus ühendamisel",
+    "metaGlassesShowPreview": "Reaalajas eelvaade",
+    "metaGlassesPendingPhotos": "{count} fotot ootab sünkroonimist",
+    "metaGlassesPairInMetaAI": "Seadista Meta AI rakenduses",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Prillid jahtuvad — jäädvustamine on peatatud",
+    "metaGlassesFolded": "Jäädvustamise jätkamiseks ava prillid",
+    "metaGlassesCaptureFrequency": "Jäädvustuse sagedus",
+    "metaGlassesEvery10s": "Iga 10 s",
+    "metaGlassesEvery30s": "Iga 30 s",
+    "metaGlassesEvery1min": "Iga 1 min",
+    "metaGlassesEvery5min": "Iga 5 min",
+    "metaGlassesGestures": "Žestid"
 }

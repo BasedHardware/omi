@@ -9187,7 +9187,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
 
   @override
-  String get transcribeLaterNote => '現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+  String get transcribeLaterNote => '現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
@@ -9334,22 +9334,91 @@ class AppLocalizationsJa extends AppLocalizations {
   String get latest => '最新';
 
   @override
-  String get flashFirmware => 'ファームウェアを書き込む';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'ペンダントで録音中';
+  String get pairingTitleMetaGlasses => 'Meta Glassesを接続';
 
   @override
-  String get pendantRecordingNote => 'ペンダントが自動的に録音しています。アプリを開いている間に録音がスマートフォンに同期されます。';
+  String get pairingDescMetaGlasses => 'Meta AIアプリでグラスをペアリングしてから、Omiで「接続」をタップしてください。複数のグラスをリンクして、アクティブなものを選択できます。';
 
   @override
-  String get pendantSyncingRecordings => 'ペンダントから録音を同期しています…';
+  String get metaGlassesUnavailable => 'Meta AIアプリが見つかりません。グラスを接続するには、Meta AIをインストールして開発者モードを有効にしてください。';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes 分保存済み';
+  String get metaGlassesRegistering => 'Meta AIアプリで接続を完了してから、Omiに戻ってください。';
+
+  @override
+  String get metaGlassesCameraPermission => 'Meta AIアプリでカメラへのアクセスを許可してください';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'キャプチャモード';
+
+  @override
+  String get metaGlassesModeCameraMic => 'カメラ + マイク';
+
+  @override
+  String get metaGlassesModeMicOnly => 'マイクのみ';
+
+  @override
+  String get metaGlassesStartCapture => 'キャプチャ開始';
+
+  @override
+  String get metaGlassesStopCapture => 'キャプチャ停止';
+
+  @override
+  String get metaGlassesGestureHint => 'このビルドではMetaグラスのジェスチャー操作はサポートされていません。';
+
+  @override
+  String get connectAnotherDevice => '別のデバイスを接続';
+
+  @override
+  String get myDevices => 'マイデバイス';
+
+  @override
+  String get metaGlassesAutoCapture => '接続時に自動キャプチャ';
+
+  @override
+  String get metaGlassesShowPreview => 'ライブプレビュー';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count枚の写真が同期待ちです';
   }
 
   @override
-  String get pendantStorageAlmostFull => 'ペンダントのストレージがまもなくいっぱいになります。同期するにはアプリを開いたままにしてください。';
+  String get metaGlassesPairInMetaAI => 'Meta AIアプリで設定してください';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'メガネを冷却中です — キャプチャを一時停止しました';
+
+  @override
+  String get metaGlassesFolded => 'キャプチャを続けるにはメガネを開いてください';
+
+  @override
+  String get metaGlassesCaptureFrequency => '撮影間隔';
+
+  @override
+  String get metaGlassesEvery10s => '10秒ごと';
+
+  @override
+  String get metaGlassesEvery30s => '30秒ごと';
+
+  @override
+  String get metaGlassesEvery1min => '1分ごと';
+
+  @override
+  String get metaGlassesEvery5min => '5分ごと';
+
+  @override
+  String get metaGlassesGestures => 'ジェスチャー';
 }

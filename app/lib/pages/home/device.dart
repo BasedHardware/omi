@@ -14,7 +14,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
-import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -213,14 +212,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          // How to Use Your Omi (interactive tutorial) — consumer CV1 pendant only.
-          // Other omi-enumerated variants (DevKit, Glass, Neo) share DeviceType.omi
-          // but the tutorial teaches CV1 button behaviour, so gate on the GATT model.
-          if (provider.connectedDevice?.type == DeviceType.omi &&
-              DeviceUtils.isOmiCv1(
-                modelNumber: provider.pairedDevice?.modelNumber,
-                deviceName: provider.connectedDevice?.name,
-              )) ...[
+          // How to Use Your Omi (interactive tutorial) — Omi devices only, while connected
+          if (provider.connectedDevice?.type == DeviceType.omi) ...[
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.graduationCap,
               title: context.l10n.deviceTutorial,
@@ -244,8 +237,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             onTap: provider.connectedDevice != null
                 ? () {
                     // Route to OmiGlass OTA page for openglass devices
-                    final deviceName = provider.connectedDevice!.name.toLowerCase();
-                    final isOpenGlass = provider.connectedDevice!.type == DeviceType.openglass ||
+                    final deviceName = provider.connectedDevice?.name?.toLowerCase() ?? '';
+                    final isOpenGlass = provider.connectedDevice?.type == DeviceType.openglass ||
                         deviceName.contains('openglass') ||
                         deviceName.contains('omiglass') ||
                         deviceName.contains('glass');

@@ -33,9 +33,68 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String deviceId = '';
   String? connectingToDeviceId;
   List<BtDevice> deviceList = [];
+  List<BtDevice> savedDeviceList = [];
   late Timer _didNotMakeItTimer;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
+  bool _autoConnectSavedDeviceInFlight = false;
+  bool _autoConnectFromOnboarding = false;
+  VoidCallback? _autoConnectGoNext;
+
+  OnboardingProvider() {
+    _syncSavedDevices();
+  }
+
+  List<BtDevice> get visibleDeviceList {
+    final visibleDevices = <BtDevice>[];
+    for (final savedDevice in savedDeviceList) {
+      final onlineDevice = foundDevicesMap[savedDevice.id];
+      visibleDevices.add(onlineDevice ?? savedDevice);
+    }
+    for (final device in deviceList) {
+      if (!visibleDevices.any((visibleDevice) => visibleDevice.id == device.id)) {
+        visibleDevices.add(device);
+      }
+    }
+    return visibleDevices;
+  }
+
+  bool isSavedDevice(BtDevice device) => savedDeviceList.any((savedDevice) => savedDevice.id == device.id);
+
+  void configureSavedDeviceAutoConnect({required bool isFromOnboarding, VoidCallback? goNext}) {
+    _autoConnectFromOnboarding = isFromOnboarding;
+    _autoConnectGoNext = goNext;
+    unawaited(_autoConnectSavedDeviceIfVisible());
+  }
+
+  void _syncSavedDevices() {
+    savedDeviceList = SharedPreferencesUtil().btDevices.where((device) => device.id.isNotEmpty).toList();
+  }
+
+  Future<void> _autoConnectSavedDeviceIfVisible() async {
+    if (_autoConnectSavedDeviceInFlight || isClicked || isConnected) return;
+
+    BtDevice? onlineSavedDevice;
+    for (final savedDevice in savedDeviceList) {
+      final foundDevice = foundDevicesMap[savedDevice.id];
+      if (foundDevice != null) {
+        onlineSavedDevice = foundDevice;
+        break;
+      }
+    }
+    if (onlineSavedDevice == null) return;
+
+    _autoConnectSavedDeviceInFlight = true;
+    try {
+      await handleTap(
+        device: onlineSavedDevice,
+        isFromOnboarding: _autoConnectFromOnboarding,
+        goNext: _autoConnectGoNext,
+      );
+    } finally {
+      _autoConnectSavedDeviceInFlight = false;
+    }
+  }
 
   //----------------- Onboarding Permissions -----------------
   bool hasBluetoothPermission = false;
@@ -193,28 +252,35 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
         }
       }
 
-      await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      final connection = await ServiceManager.instance().device.ensureConnection(device.id, force: true);
+      if (connection == null) {
+        throw Exception('Connection not established');
+      }
       Logger.debug('Connected to device: ${device.name}');
       deviceId = device.id;
-      await SharedPreferencesUtil().btDeviceSet(device);
+      await SharedPreferencesUtil().btDeviceAdd(device);
+      _syncSavedDevices();
       deviceName = device.name;
       deviceType = device.type;
-      var cDevice = await _getConnectedDevice(deviceId);
-      if (cDevice != null) {
-        deviceProvider!.setConnectedDevice(cDevice);
-        SharedPreferencesUtil().deviceName = cDevice.name;
-        deviceProvider!.setIsConnected(true);
+      final provider = deviceProvider;
+      if (provider == null) {
+        throw Exception('Device provider not ready');
       }
-      await deviceProvider?.scanAndConnectToDevice();
-      var connectedDevice = deviceProvider!.connectedDevice;
-      batteryPercentage = deviceProvider!.batteryLevel;
+      final cDevice = await _getConnectedDevice(deviceId) ?? connection.device;
+      await provider.setConnectedDevice(cDevice);
+      SharedPreferencesUtil().deviceName = cDevice.name;
+      provider.setIsConnected(true);
+      await provider.scanAndConnectToDevice();
+      final connectedDevice = provider.connectedDevice ?? cDevice;
+      batteryPercentage = provider.batteryLevel;
       isConnected = true;
       isClicked = false;
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
       await Future.delayed(const Duration(seconds: 2));
-      SharedPreferencesUtil().btDevice = connectedDevice!;
+      await SharedPreferencesUtil().btDeviceAdd(connectedDevice);
       SharedPreferencesUtil().deviceName = connectedDevice.name;
+      _syncSavedDevices();
 
       foundDevicesMap.clear();
       deviceList.clear();
@@ -225,11 +291,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       }
     } catch (e) {
       Logger.debug('Error connecting to device: $e');
-      foundDevicesMap.remove(device.id);
-      deviceList.removeWhere((element) => element.id == device.id);
+      if (!isSavedDevice(device)) {
+        foundDevicesMap.remove(device.id);
+        deviceList.removeWhere((element) => element.id == device.id);
+      }
       isClicked = false; // Allow clicks again after finishing the operation
       connectingToDeviceId = null; // Reset the connecting device
-      deviceProvider!.setIsConnected(false);
+      deviceProvider?.setIsConnected(false);
       notifyListeners();
     }
 
@@ -305,6 +373,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   @override
   void onDevices(List<BtDevice> devices) {
+    _syncSavedDevices();
     List<BtDevice> foundDevices = devices;
 
     // Update foundDevicesMap with new devices and remove the ones not found anymore
@@ -322,10 +391,13 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
     // Convert the values of the map back to a list
     List<BtDevice> orderedDevices = foundDevicesMap.values.toList();
-    if (orderedDevices.isNotEmpty) {
-      deviceList = orderedDevices;
+    deviceList = orderedDevices;
+    if (orderedDevices.isNotEmpty || savedDeviceList.isNotEmpty) {
       notifyListeners();
-      _didNotMakeItTimer.cancel();
+      if (orderedDevices.isNotEmpty) {
+        _didNotMakeItTimer.cancel();
+      }
+      unawaited(_autoConnectSavedDeviceIfVisible());
     }
   }
 

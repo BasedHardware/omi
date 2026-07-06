@@ -9345,7 +9345,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.';
+      'Por enquanto, funciona com dispositivos Omi. O áudio permanece no seu telefone até você decidir enviá-lo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9494,24 +9494,93 @@ class AppLocalizationsPt extends AppLocalizations {
   String get latest => 'Mais recente';
 
   @override
-  String get flashFirmware => 'Gravar firmware';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Gravando no pingente';
+  String get pairingTitleMetaGlasses => 'Conecte seus Meta Glasses';
 
   @override
-  String get pendantRecordingNote =>
-      'Seu pingente grava sozinho. As gravações são sincronizadas com o telefone enquanto o app está aberto.';
+  String get pairingDescMetaGlasses =>
+      'Emparelhe seus óculos no app Meta AI e depois toque em Conectar no Omi. Você pode vincular mais de um par e escolher qual está ativo.';
 
   @override
-  String get pendantSyncingRecordings => 'Sincronizando gravações do seu pingente…';
+  String get metaGlassesUnavailable =>
+      'App Meta AI não encontrado. Instale o Meta AI e ative o modo de desenvolvedor para conectar seus óculos.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes min armazenados';
+  String get metaGlassesRegistering => 'Conclua a conexão no app Meta AI e volte ao Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Permita o acesso à câmera no app Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Modo de captura';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Câmera + microfone';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Apenas microfone';
+
+  @override
+  String get metaGlassesStartCapture => 'Iniciar captura';
+
+  @override
+  String get metaGlassesStopCapture => 'Parar captura';
+
+  @override
+  String get metaGlassesGestureHint => 'Os controles por gestos dos óculos Meta não são compatíveis nesta versão.';
+
+  @override
+  String get connectAnotherDevice => 'Conectar outro dispositivo';
+
+  @override
+  String get myDevices => 'Meus dispositivos';
+
+  @override
+  String get metaGlassesAutoCapture => 'Captura automática ao conectar';
+
+  @override
+  String get metaGlassesShowPreview => 'Prévia ao vivo';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count fotos aguardando sincronização';
   }
 
   @override
-  String get pendantStorageAlmostFull =>
-      'O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar.';
+  String get metaGlassesPairInMetaAI => 'Configure no app Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Os óculos estão esfriando — captura pausada';
+
+  @override
+  String get metaGlassesFolded => 'Abra os óculos para continuar capturando';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Frequência de captura';
+
+  @override
+  String get metaGlassesEvery10s => 'A cada 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'A cada 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'A cada 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'A cada 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Gestos';
 }

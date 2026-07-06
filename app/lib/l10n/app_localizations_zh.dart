@@ -9171,7 +9171,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
 
   @override
-  String get transcribeLaterNote => '目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
+  String get transcribeLaterNote => '目前仅支持 Omi 设备。在你主动上传之前，音频会一直保留在手机上。';
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
@@ -9318,22 +9318,91 @@ class AppLocalizationsZh extends AppLocalizations {
   String get latest => '最新';
 
   @override
-  String get flashFirmware => '刷写固件';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => '吊坠录音中';
+  String get pairingTitleMetaGlasses => '连接您的 Meta Glasses';
 
   @override
-  String get pendantRecordingNote => '你的吊坠会自行录音。应用打开时，录音会同步到手机。';
+  String get pairingDescMetaGlasses => '在 Meta AI 应用中配对眼镜，然后在 Omi 中点击“连接”。您可以关联多副眼镜并选择当前使用的一副。';
 
   @override
-  String get pendantSyncingRecordings => '正在从吊坠同步录音…';
+  String get metaGlassesUnavailable => '未检测到 Meta AI 应用。请安装 Meta AI 并启用开发者模式以连接您的眼镜。';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes 分钟已存储';
+  String get metaGlassesRegistering => '在 Meta AI 应用中完成连接，然后返回 Omi。';
+
+  @override
+  String get metaGlassesCameraPermission => '在 Meta AI 应用中允许访问相机';
+
+  @override
+  String get metaGlassesCaptureModeLabel => '采集模式';
+
+  @override
+  String get metaGlassesModeCameraMic => '相机 + 麦克风';
+
+  @override
+  String get metaGlassesModeMicOnly => '仅麦克风';
+
+  @override
+  String get metaGlassesStartCapture => '开始采集';
+
+  @override
+  String get metaGlassesStopCapture => '停止采集';
+
+  @override
+  String get metaGlassesGestureHint => '此版本不支持 Meta 眼镜的手势控制。';
+
+  @override
+  String get connectAnotherDevice => '连接其他设备';
+
+  @override
+  String get myDevices => '我的设备';
+
+  @override
+  String get metaGlassesAutoCapture => '连接时自动采集';
+
+  @override
+  String get metaGlassesShowPreview => '实时预览';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count 张照片等待同步';
   }
 
   @override
-  String get pendantStorageAlmostFull => '吊坠存储空间即将用尽——请保持应用打开以同步。';
+  String get metaGlassesPairInMetaAI => '请在 Meta AI 应用中完成设置';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => '眼镜正在冷却 — 已暂停捕捉';
+
+  @override
+  String get metaGlassesFolded => '展开眼镜以继续捕捉';
+
+  @override
+  String get metaGlassesCaptureFrequency => '采集频率';
+
+  @override
+  String get metaGlassesEvery10s => '每 10 秒';
+
+  @override
+  String get metaGlassesEvery30s => '每 30 秒';
+
+  @override
+  String get metaGlassesEvery1min => '每 1 分钟';
+
+  @override
+  String get metaGlassesEvery5min => '每 5 分钟';
+
+  @override
+  String get metaGlassesGestures => '手势';
 }

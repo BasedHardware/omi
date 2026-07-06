@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.",
     "transcribeLaterTitle": "Transcrie mai târziu",
     "transcribeLaterDescription": "Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.",
-    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
+    "transcribeLaterNote": "Deocamdată funcționează cu dispozitivele Omi. Conținutul audio rămâne pe telefon până când alegi să îl încarci.",
     "transcribeLaterStorageFull": "Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.",
     "unmute": "Reactivează sunetul",
     "newRecording": "Înregistrare nouă",
@@ -3104,17 +3104,33 @@
     "deviceOnboardingIntroDuration": "Aproximativ 1 minut",
     "jumpToLatestMessage": "Sari la cel mai recent mesaj",
     "latest": "Recent",
-    "flashFirmware": "Instalați firmware-ul",
-    "pendantRecordingTitle": "Înregistrare pe pandantiv",
-    "pendantRecordingNote": "Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.",
-    "pendantSyncingRecordings": "Se sincronizează înregistrările de pe pandantivul tău…",
-    "pendantMinutesStored": "~{minutes} min stocat(e)",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Conectează-ți Meta Glasses",
+    "pairingDescMetaGlasses": "Asociază ochelarii în aplicația Meta AI, apoi atinge Conectare în Omi. Poți lega mai multe perechi și alege care este activă.",
+    "metaGlassesUnavailable": "Aplicația Meta AI nu a fost găsită. Instalează Meta AI și activează modul pentru dezvoltatori pentru a conecta ochelarii.",
+    "metaGlassesRegistering": "Finalizează conectarea în aplicația Meta AI, apoi revino în Omi.",
+    "metaGlassesCameraPermission": "Permite accesul la cameră în aplicația Meta AI",
+    "metaGlassesCaptureModeLabel": "Mod de captură",
+    "metaGlassesModeCameraMic": "Cameră + microfon",
+    "metaGlassesModeMicOnly": "Doar microfon",
+    "metaGlassesStartCapture": "Pornește captura",
+    "metaGlassesStopCapture": "Oprește captura",
+    "metaGlassesGestureHint": "Comenzile prin gesturi pentru ochelarii Meta nu sunt acceptate în această versiune.",
+    "connectAnotherDevice": "Conectează alt dispozitiv",
+    "myDevices": "Dispozitivele mele",
+    "metaGlassesAutoCapture": "Captură automată la conectare",
+    "metaGlassesShowPreview": "Previzualizare live",
+    "metaGlassesPendingPhotos": "{count} fotografii așteaptă sincronizarea",
+    "metaGlassesPairInMetaAI": "Configurează în aplicația Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Ochelarii se răcesc — capturarea este întreruptă",
+    "metaGlassesFolded": "Deschide ochelarii pentru a continua capturarea",
+    "metaGlassesCaptureFrequency": "Frecvența capturii",
+    "metaGlassesEvery10s": "La fiecare 10 s",
+    "metaGlassesEvery30s": "La fiecare 30 s",
+    "metaGlassesEvery1min": "La fiecare 1 min",
+    "metaGlassesEvery5min": "La fiecare 5 min",
+    "metaGlassesGestures": "Gesturi"
 }

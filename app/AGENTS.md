@@ -2,6 +2,30 @@
 
 Inherits all rules from the root [`../AGENTS.md`](../AGENTS.md). This file adds app-specific operational guidance.
 
+## iOS Launch Safety — MANDATORY for every agent (Codex included)
+
+Every launch-crash regression in this repo shipped with green tests and a successful build+install. **Build success, install success, and unit tests are NOT launch proof.** Before ending any session that touched app code, run the launch gate and paste its verdict:
+
+```bash
+cd app && ./scripts/verify_ios_launch.sh   # local contributor tooling (not in repo); must print: LAUNCH GATE: PASS
+```
+
+If the device is locked, ask the user to unlock it — do NOT claim the app works without the gate passing. `SKIP_DEVICE=1` runs static checks only and never counts as proof.
+
+Hard rules (each one is a past real incident, not theory):
+
+- **Never build with Xcode-beta / never export `DEVELOPER_DIR`.** Binaries linked against the iOS 27 SDK require UIScene; `flutter_contacts` (and other plugins) force-unwrap `delegate.window` at registration and SIGTRAP before Dart starts. Build with the default stable Xcode: `env -u DEVELOPER_DIR flutter build ios --profile --flavor dev --no-codesign`. Verify: `vtool -show-build build/ios/iphoneos/Runner.app/Runner | grep sdk` → must be < 27.
+- **Never add `UIApplicationSceneManifest` to `ios/Runner/Info.plist`** until every registered plugin is scene-safe (pinned by test "Runner keeps the legacy UIKit lifecycle").
+- **Never point `.dev.env` at a tunnel/local URL and leave it.** Envied bakes the URL into `dev_env.g.dart` at build time and does NOT track `.dev.env` changes — restoring the file requires `dart run build_runner clean` + delete `lib/env/dev_env.g.dart` + full rebuild. Ship builds only with `API_BASE_URL=https://api.omi.me/`.
+- **Never invent backend endpoints.** api.omi.me is production and cannot be patched from this repo — a route added under `backend/` does not exist for the installed app. Verify with `curl -o /dev/null -w '%{http_code}' -X POST https://api.omi.me/<route>`: 401/405 = exists, 404 = does not. Glasses photos ingest ONLY via the transcription-socket `image_chunk` path (`ingestCapturedImage`).
+- **Keep SwiftProtobuf statically linked** (`use_frameworks! :linkage => :static` in `ios/Podfile`); the dynamic-framework hack = dyld crash at launch. The duplicate-class objc warning is harmless.
+- **After any `pub get`/clean, restore `ios/Flutter/Flutter.podspec` to `17.0`** (it silently resets to 13.0).
+- **After `build_runner clean`, run a FULL `dart run build_runner build --delete-conflicting-outputs`** — a filtered build leaves `assets.gen.dart`/`*.g.dart` missing and nothing compiles.
+- **Do not delete working subsystems to satisfy a constraint you inferred.** Removing the audio session also silently killed gestures (media-remote events need an active audio session) and photo history (socket carries the uploads). If a constraint seems to demand deleting a working path, stop and ask.
+- **Do not rewrite tests to bless a regression.** If a contract test blocks your change, the test is evidence — investigate why it exists before touching it.
+- **Never leave a `--terminate-existing` launch retry loop running** after your verification finishes — it kills the user's live session.
+- Debugging on-device: `xcrun devicectl device process launch --console` captures real app output; `idevicecrashreport -u 00008130-000C04D81891401C -k <dir>` pulls `.ips` crash reports (parse `faultingThread`). Console.app and `devicectl device console` show nothing for this device.
+
 ## Build Bootstrap
 
 ### Flavors
@@ -43,6 +67,23 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS: `ios/Runner/PhoneCallsPlugin.swift`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
+### Meta Wearables (DAT) — vendored & locally patched
+- Plugin lives at `third_party/meta_wearables_dat_flutter` (path dep) and IS locally modified; don't `pub upgrade` it away.
+- Only expose real DAT SDK APIs. Verify a method exists before wrapping it: `grep 'func <name>' <SDK>.xcframework/**/*.swiftinterface` (checkout under `SourcePackages/checkouts/meta-wearables-dat-ios`). No invented methods.
+- Adding a plugin method = all 4 layers in sync: facade (`lib/meta_wearables_dat_flutter.dart`) → platform interface → method channel → native Swift handler. A Dart-only add throws `MissingPluginException` at runtime.
+- App layering: `MetaWearablesService` (SDK wrapper) → `MetaWearablesProvider` (state, registered in `main.dart` via ProxyProvider on `CaptureProvider`) → pages. Keep session calls targeting only link-connected uuids (see `_sessionTargetUuid`).
+- DAT needs iOS 17. `ios/Flutter/Flutter.podspec` `deployment_target` resets to 13.0 on `pub get`/clean — restore to `17.0`. Guarded by contract test "declares iOS DAT runtime requirements".
+- Android DAT Maven needs GitHub Packages auth: set `GITHUB_TOKEN` or `android/local.properties` `github_token=...` with `read:packages`; never commit tokens.
+- Mock Device Kit test harness: `flutter test integration_test/meta_glasses_mock_test.dart --flavor dev --dart-define=OMI_META_MOCK=true` (add `-d <ios-simulator-id>` when multiple devices are attached).
+
+### Meta Wearables — addon backlog
+- Nine ready-to-execute plans live in `docs/meta-glasses-plans/` (start at `README.md` for shared constraints + order). One plan per branch/PR.
+
+### Coding Practices
+- Debug-only/proof screens must gate on `kDebugMode`, never `!kReleaseMode` (that includes Profile installs and boots the app into the debug screen). Example: `lib/debug/meta_wearables_ui_proof.dart`.
+- After a `--dart-define`-flagged verification build, always reinstall a normal build — never leave a flagged build on a device.
+- Meta/DAT changes must keep `test/unit/omi4meta_reconstruction_contract_test.dart` green and `flutter gen-l10n` at zero untranslated.
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |
@@ -73,14 +114,10 @@ flutter test           # same thing
 flutter test test/unit/  # specific directory
 ```
 
-`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL`.
-Set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/` for local backend tests, or
-`OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default.
-
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
-- No integration tests currently (integration_test dependency exists but unused)
+- Meta glasses mock coverage lives in `integration_test/meta_glasses_mock_test.dart` and is gated by `kDebugMode && OMI_META_MOCK`.
 
 ## Localization (l10n)
 

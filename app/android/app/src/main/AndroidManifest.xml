@@ -80,6 +80,19 @@
         android:requestLegacyExternalStorage="true"
         android:usesCleartextTraffic="true"
         tools:replace="android:label">
+        <meta-data
+            android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+            android:value="2020435062214461" />
+        <meta-data
+            android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
+            android:value="${metaWearablesClientToken}" />
+        <meta-data
+            android:name="com.meta.wearable.mwdat.DAM_ENABLED"
+            android:value="true" />
+        <meta-data
+            android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT"
+            android:value="true" />
+
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
@@ -107,7 +120,7 @@
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:exported="true"
             android:hardwareAccelerated="true"
-            android:launchMode="singleTask"
+            android:launchMode="singleTop"
             android:theme="@style/LaunchTheme"
             android:windowSoftInputMode="adjustResize">
             <!-- Specifies an Android theme to apply to this Activity as soon as
@@ -175,6 +188,12 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="omi" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="omimeta" />
+            </intent-filter>
         </activity>
 
         <!-- Don't delete the meta-data below.
@@ -187,7 +206,7 @@
 
         <!-- Native BLE Companion Service — receives OS-level device presence events -->
         <service
-            android:name="com.friend.ios.ble.BleCompanionService"
+            android:name="com.friend.ios.BleCompanionService"
             android:exported="true"
             android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
             <intent-filter>
@@ -197,7 +216,7 @@
 
         <!-- Native BLE Foreground Service — persistent BLE connection -->
         <service
-            android:name="com.friend.ios.ble.OmiBleForegroundService"
+            android:name="com.friend.ios.OmiBleForegroundService"
             android:foregroundServiceType="connectedDevice"
             android:stopWithTask="false"
             android:exported="false" />

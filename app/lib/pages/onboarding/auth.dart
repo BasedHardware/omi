@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/env/env.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -70,7 +71,7 @@ class _AuthComponentState extends State<AuthComponent> {
                     const SizedBox(height: 32),
 
                     // Sign in buttons
-                    if (Platform.isIOS || Platform.isAndroid) ...[
+                    if (Env.appleSignInEnabled && (Platform.isIOS || Platform.isAndroid)) ...[
                       SizedBox(
                         width: double.infinity,
                         height: 56,

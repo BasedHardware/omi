@@ -384,7 +384,6 @@ class MemoriesPageState extends State<MemoriesPage> with AutomaticKeepAliveClien
                                         PlatformManager.instance.analytics.memoryListItemClicked(tappedMemory);
                                         _showQuickEditSheet(context, tappedMemory, tappedProvider);
                                       },
-                                      onDeleteNotification: showDeleteNotification,
                                     );
                                   }, childCount: provider.filteredMemories.length),
                                 ),

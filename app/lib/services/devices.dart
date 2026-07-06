@@ -4,7 +4,7 @@ import 'package:collection/collection.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/device_connection.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
@@ -251,10 +251,7 @@ class DeviceService implements IDeviceService {
   // Helper method to get stored device from SharedPreferences
   BtDevice? _getStoredDevice(String id) {
     try {
-      final storedDevice = SharedPreferencesUtil().btDevice;
-      if (storedDevice.id == id && storedDevice.id.isNotEmpty) {
-        return storedDevice;
-      }
+      return SharedPreferencesUtil().btDevices.firstWhereOrNull((device) => device.id == id && device.id.isNotEmpty);
     } catch (e) {
       Logger.debug('Error getting stored device: $e');
     }
@@ -291,5 +288,6 @@ class DeviceService implements IDeviceService {
     }
 
     _devices.removeWhere((d) => d.id == deviceId);
+    await SharedPreferencesUtil().btDeviceRemove(deviceId);
   }
 }

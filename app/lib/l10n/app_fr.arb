@@ -3089,7 +3089,7 @@
     "syncCustomSttWarningMessage": "Vous utilisez votre propre fournisseur de transcription. Synchroniser ces enregistrements les transcrit sur les serveurs d'Omi et ils comptent dans la limite de transcription de votre forfait.",
     "transcribeLaterTitle": "Transcrire plus tard",
     "transcribeLaterDescription": "Enregistrez l'audio maintenant et transcrivez-le à la demande plutôt qu'en direct. Les enregistrements sont conservés sur votre téléphone ; il vous suffit ensuite de les importer pour créer des conversations.",
-    "transcribeLaterNote": "Compatible avec les appareils Omi et Limitless pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
+    "transcribeLaterNote": "Compatible avec les appareils Omi pour le moment. L'audio reste sur votre téléphone tant que vous ne décidez pas de l'importer.",
     "transcribeLaterStorageFull": "L'espace de stockage de votre téléphone est presque plein : l'enregistrement est donc en pause. Libérez de l'espace ou importez vos enregistrements pour qu'il reprenne automatiquement.",
     "unmute": "Réactiver le son",
     "newRecording": "Nouvel enregistrement",
@@ -3139,17 +3139,33 @@
     "deviceOnboardingIntroDuration": "Environ 1 minute",
     "jumpToLatestMessage": "Aller au dernier message",
     "latest": "Récent",
-    "flashFirmware": "Flasher le firmware",
-    "pendantRecordingTitle": "Enregistrement sur le pendentif",
-    "pendantRecordingNote": "Votre pendentif enregistre de manière autonome. Les enregistrements se synchronisent avec votre téléphone lorsque l'application est ouverte.",
-    "pendantSyncingRecordings": "Synchronisation des enregistrements depuis votre pendentif…",
-    "pendantMinutesStored": "~{minutes} min stockées",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Le stockage du pendentif est presque plein — gardez l'application ouverte pour synchroniser."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Connectez vos Meta Glasses",
+    "pairingDescMetaGlasses": "Associez vos lunettes dans l'application Meta AI, puis touchez Connecter dans Omi. Vous pouvez lier plusieurs paires et choisir celle qui est active.",
+    "metaGlassesUnavailable": "Application Meta AI introuvable. Installez Meta AI et activez le mode développeur pour connecter vos lunettes.",
+    "metaGlassesRegistering": "Terminez la connexion dans l'application Meta AI, puis revenez dans Omi.",
+    "metaGlassesCameraPermission": "Autorisez l'accès à la caméra dans l'application Meta AI",
+    "metaGlassesCaptureModeLabel": "Mode de capture",
+    "metaGlassesModeCameraMic": "Caméra + micro",
+    "metaGlassesModeMicOnly": "Micro uniquement",
+    "metaGlassesStartCapture": "Démarrer la capture",
+    "metaGlassesStopCapture": "Arrêter la capture",
+    "metaGlassesGestureHint": "Les commandes gestuelles des lunettes Meta ne sont pas prises en charge dans cette version.",
+    "connectAnotherDevice": "Connecter un autre appareil",
+    "myDevices": "Mes appareils",
+    "metaGlassesAutoCapture": "Capture automatique à la connexion",
+    "metaGlassesShowPreview": "Aperçu en direct",
+    "metaGlassesPendingPhotos": "{count} photos en attente de synchronisation",
+    "metaGlassesPairInMetaAI": "Configurez dans l'application Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Les lunettes refroidissent — capture en pause",
+    "metaGlassesFolded": "Dépliez vos lunettes pour continuer la capture",
+    "metaGlassesCaptureFrequency": "Fréquence de capture",
+    "metaGlassesEvery10s": "Toutes les 10 s",
+    "metaGlassesEvery30s": "Toutes les 30 s",
+    "metaGlassesEvery1min": "Toutes les 1 min",
+    "metaGlassesEvery5min": "Toutes les 5 min",
+    "metaGlassesGestures": "Gestes"
 }

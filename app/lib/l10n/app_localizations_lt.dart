@@ -9354,7 +9354,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+      'Kol kas veikia su Omi įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9505,24 +9505,93 @@ class AppLocalizationsLt extends AppLocalizations {
   String get latest => 'Naujausias';
 
   @override
-  String get flashFirmware => 'Įrašyti programinę aparatinę įrangą';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Įrašoma pakabuke';
+  String get pairingTitleMetaGlasses => 'Prijunkite savo Meta Glasses';
 
   @override
-  String get pendantRecordingNote =>
-      'Jūsų pakabukas įrašinėja savarankiškai. Įrašai sinchronizuojami su telefonu, kol programa atidaryta.';
+  String get pairingDescMetaGlasses =>
+      'Susiekite akinius programoje „Meta AI“, tada Omi palieskite „Prijungti“. Galite susieti kelias poras ir pasirinkti, kuri aktyvi.';
 
   @override
-  String get pendantSyncingRecordings => 'Sinchronizuojami įrašai iš jūsų pakabuko…';
+  String get metaGlassesUnavailable =>
+      'Programa „Meta AI“ nerasta. Norėdami prijungti akinius, įdiekite „Meta AI“ ir įjunkite kūrėjo režimą.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes min išsaugota';
+  String get metaGlassesRegistering => 'Užbaikite prijungimą programoje „Meta AI“ ir grįžkite į Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Leiskite prieigą prie kameros programoje „Meta AI“';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Fiksavimo režimas';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofonas';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Tik mikrofonas';
+
+  @override
+  String get metaGlassesStartCapture => 'Pradėti fiksavimą';
+
+  @override
+  String get metaGlassesStopCapture => 'Sustabdyti fiksavimą';
+
+  @override
+  String get metaGlassesGestureHint => 'Gestų valdikliai Meta akiniams šiame leidime nepalaikomi.';
+
+  @override
+  String get connectAnotherDevice => 'Prijungti kitą įrenginį';
+
+  @override
+  String get myDevices => 'Mano įrenginiai';
+
+  @override
+  String get metaGlassesAutoCapture => 'Automatinis fiksavimas prisijungus';
+
+  @override
+  String get metaGlassesShowPreview => 'Tiesioginė peržiūra';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count nuotraukos laukia sinchronizavimo';
   }
 
   @override
-  String get pendantStorageAlmostFull =>
-      'Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas.';
+  String get metaGlassesPairInMetaAI => 'Nustatykite programoje „Meta AI“';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Akiniai vėsta — fiksavimas pristabdytas';
+
+  @override
+  String get metaGlassesFolded => 'Išskleiskite akinius, kad fiksavimas tęstųsi';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Fiksavimo dažnis';
+
+  @override
+  String get metaGlassesEvery10s => 'Kas 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Kas 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Kas 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Kas 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Gestai';
 }

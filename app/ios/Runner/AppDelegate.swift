@@ -1,13 +1,19 @@
 import UIKit
 import Flutter
 import UserNotifications
-import app_links
 import WatchConnectivity
 import AVFoundation
+import MediaPlayer
 import Speech
 import WidgetKit
+import AuthenticationServices
 
 extension FlutterError: Error {}
+
+private func appGroupIdentifier() -> String? {
+    guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return nil }
+    return "group.\(bundleIdentifier)"
+}
 
 // MARK: - Quick Actions Icon Patcher
 
@@ -80,8 +86,14 @@ final class QuickActionsIconPatcher: NSObject {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, ASWebAuthenticationPresentationContextProviding {
   private var methodChannel: FlutterMethodChannel?
+  private var deepLinkChannel: FlutterMethodChannel?
+  private var authLogChannel: FlutterMethodChannel?
+  private var metaGesturesChannel: FlutterMethodChannel?
+  private var metaGesturesListening = false
+  private var webAuthChannel: FlutterMethodChannel?
+  private var webAuthSession: ASWebAuthenticationSession?
   private var appleRemindersChannel: FlutterMethodChannel?
   private var appleHealthChannel: FlutterMethodChannel?
   private let appleRemindersService = AppleRemindersService()
@@ -102,67 +114,118 @@ final class QuickActionsIconPatcher: NSObject {
   ) -> Bool {
     GeneratedPluginRegistrant.register(with: self)
     QuickActionsIconPatcher.shared.startObserving()
-      
-      
+
+    guard let controller = window?.rootViewController as? FlutterViewController else {
+      NSLog("[OmiLaunch] ERROR: Missing FlutterViewController during launch; native channels skipped")
+      return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+
       if WCSession.isSupported() {
           session = WCSession.default
-          session?.delegate = self
-          session?.activate();
+          if let session = session {
+              session.delegate = self
+              session.activate();
 
-          let controller = window?.rootViewController as? FlutterViewController
-            flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: controller!.binaryMessenger)
-            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session!, flutterWatchAPI: flutterWatchAPI)
+              flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: controller.binaryMessenger)
+              let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session, flutterWatchAPI: flutterWatchAPI)
 
-            WatchRecorderHostAPISetup.setUp(binaryMessenger: controller!.binaryMessenger, api: api)
+              WatchRecorderHostAPISetup.setUp(binaryMessenger: controller.binaryMessenger, api: api)
+          }
       }
 
       // Native BLE module — register Pigeon APIs
       NSLog("[OmiBle] Registering BLE Pigeon APIs")
-      let bleController = window?.rootViewController as? FlutterViewController
-      if let messenger = bleController?.binaryMessenger {
-          let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
-          OmiBleManager.shared.setFlutterApi(bleFlutterApi)
-          let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
-          BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
-          NSLog("[OmiBle] BLE Pigeon APIs registered successfully")
-      } else {
-          NSLog("[OmiBle] ERROR: Could not get FlutterBinaryMessenger")
-      }
+      let messenger = controller.binaryMessenger
+      let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+      OmiBleManager.shared.setFlutterApi(bleFlutterApi)
+      let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
+      BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
+      NSLog("[OmiBle] BLE Pigeon APIs registered successfully")
 
-      // Retrieve the link from parameters
-    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
-      // We have a link, propagate it to your Flutter app or not
-      AppLinks.shared.handleLink(url: url)
-      return true // Returning true will stop the propagation to other packages
-    }
     //Creates a method channel to handle notifications on kill
-    let controller = window?.rootViewController as? FlutterViewController
-    methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller!.binaryMessenger)
+    methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller.binaryMessenger)
     methodChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleMethodCall(call, result: result)
     }
+
+    deepLinkChannel = FlutterMethodChannel(name: "com.omi/deep_links", binaryMessenger: controller.binaryMessenger)
+
+    authLogChannel = FlutterMethodChannel(name: "com.omi/auth_log", binaryMessenger: controller.binaryMessenger)
+    authLogChannel?.setMethodCallHandler { (call, result) in
+        if call.method == "log" {
+            let message = call.arguments as? String ?? String(describing: call.arguments)
+            NSLog("[OmiAuth] %@", message)
+            result(nil)
+        } else {
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
+    webAuthChannel = FlutterMethodChannel(name: "com.omi/web_auth", binaryMessenger: controller.binaryMessenger)
+    webAuthChannel?.setMethodCallHandler { [weak self] (call, result) in
+        guard call.method == "authenticate" else {
+            result(FlutterMethodNotImplemented)
+            return
+        }
+        guard
+            let args = call.arguments as? [String: Any],
+            let urlString = args["url"] as? String,
+            let url = URL(string: urlString),
+            let callbackScheme = args["callbackScheme"] as? String
+        else {
+            result(FlutterError(code: "WEB_AUTH_ARGS", message: "Invalid web auth arguments", details: nil))
+            return
+        }
+
+        NSLog("[OmiAuth] ASWebAuthenticationSession start callbackURLScheme=%@", callbackScheme)
+        self?.webAuthSession?.cancel()
+        let session = ASWebAuthenticationSession(url: url, callbackURLScheme: callbackScheme) { callbackURL, error in
+            if let error = error {
+                NSLog("[OmiAuth] ASWebAuthenticationSession error %@", error.localizedDescription)
+                result(FlutterError(code: "WEB_AUTH_ERROR", message: error.localizedDescription, details: nil))
+                return
+            }
+            guard let callbackURL = callbackURL else {
+                NSLog("[OmiAuth] ASWebAuthenticationSession missing callback")
+                result(FlutterError(code: "WEB_AUTH_NO_CALLBACK", message: "Missing callback URL", details: nil))
+                return
+            }
+            NSLog("[OmiAuth] ASWebAuthenticationSession callback %@", callbackURL.absoluteString)
+            result(callbackURL.absoluteString)
+        }
+        session.presentationContextProvider = self
+        if #available(iOS 13.0, *) {
+            session.prefersEphemeralWebBrowserSession = false
+        }
+        self?.webAuthSession = session
+        let started = session.start()
+        NSLog("[OmiAuth] ASWebAuthenticationSession started=%@", started ? "true" : "false")
+        if !started {
+            result(FlutterError(code: "WEB_AUTH_START_FAILED", message: "Failed to start web auth session", details: nil))
+        }
+    }
     
     // Create Apple Reminders method channel
-    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller!.binaryMessenger)
+    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller.binaryMessenger)
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleRemindersCall(call, result: result)
     }
 
     // Create Apple Health method channel
-    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller!.binaryMessenger)
+    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller.binaryMessenger)
     appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleHealthCall(call, result: result)
     }
 
     // Create Speech Recognition method channel
-    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller!.binaryMessenger)
+    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller.binaryMessenger)
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in
         speechHandler.handle(call, result: result)
     }
 
     // TestFlight environment detection
-    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller!.binaryMessenger)
+    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller.binaryMessenger)
     envChannel.setMethodCallHandler { (call, result) in
         if call.method == "isTestFlight" {
             let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
@@ -176,10 +239,10 @@ final class QuickActionsIconPatcher: NSObject {
     // events to Dart so phone-mic recording can reflect the interruption in
     // UI state and restart capture once iOS signals the interruption has
     // ended — flutter_sound does not auto-resume on its own.
-    audioInterruptionManager.register(with: controller!.binaryMessenger)
+    audioInterruptionManager.register(with: controller.binaryMessenger)
 
     // Audio session configuration for Bluetooth microphone support
-    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller!.binaryMessenger)
+    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller.binaryMessenger)
     audioSessionChannel.setMethodCallHandler { (call, result) in
         if call.method == "configureForBluetooth" {
             let audioSession = AVAudioSession.sharedInstance()
@@ -210,14 +273,34 @@ final class QuickActionsIconPatcher: NSObject {
         }
     }
 
+    // Meta glasses gesture bridge. The DAT SDK has no gesture API; glasses
+    // stalk taps arrive as Bluetooth media-remote (AVRCP) commands, which iOS
+    // only delivers to the current Now Playing app with an active audio
+    // session. Capture already activates the session (configureForBluetooth
+    // + recording); startListening claims Now Playing and registers
+    // target-safe remote-command handlers, stopListening releases them.
+    metaGesturesChannel = FlutterMethodChannel(name: "com.omi/meta_gestures", binaryMessenger: controller.binaryMessenger)
+    metaGesturesChannel?.setMethodCallHandler { [weak self] (call, result) in
+        switch call.method {
+        case "startListening":
+            self?.startMetaGestureListening()
+            result(true)
+        case "stopListening":
+            self?.stopMetaGestureListening()
+            result(true)
+        default:
+            result(FlutterMethodNotImplemented)
+        }
+    }
+
     // Create WiFi Network plugin for device AP connection
-    _ = WifiNetworkPlugin(messenger: controller!.binaryMessenger)
+    _ = WifiNetworkPlugin(messenger: controller.binaryMessenger)
 
     // Battery widget channel — writes Omi device battery to the shared App Group
     // so the WidgetKit extension can read it.
-    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller!.binaryMessenger)
+    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller.binaryMessenger)
     batteryWidgetChannel.setMethodCallHandler { (call, result) in
-      let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")
+      let defaults = appGroupIdentifier().flatMap { UserDefaults(suiteName: $0) }
       guard let args = call.arguments as? [String: Any] else {
         result(FlutterMethodNotImplemented)
         return
@@ -247,7 +330,11 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Register Phone Calls plugin
-    OmiPhoneCallsPlugin.register(with: self.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
+    if let registrar = self.registrar(forPlugin: "OmiPhoneCallsPlugin") {
+      OmiPhoneCallsPlugin.register(with: registrar)
+    } else {
+      NSLog("[OmiLaunch] ERROR: Missing OmiPhoneCallsPlugin registrar; plugin skipped")
+    }
 
     // here, Without this code the task will not work.
     SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
@@ -258,6 +345,18 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  override func application(
+    _ application: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    NSLog("[OmiAuth] AppDelegate openURL \(url.absoluteString)")
+    NotificationCenter.default.post(name: Notification.Name("MetaWearablesDatHandleURL"), object: url)
+    deepLinkChannel?.invokeMethod("onDeepLink", arguments: url.absoluteString)
+    let handledByPlugins = super.application(application, open: url, options: options)
+    return handledByPlugins || url.host == "auth"
   }
 
   private func handleMethodCall(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -422,6 +521,63 @@ final class QuickActionsIconPatcher: NSObject {
 
         audioChunks.removeAll()
         nextExpectedChunkIndex = 0
+    }
+
+    func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        return window ?? ASPresentationAnchor()
+    }
+
+    // MARK: - Meta glasses gestures (media-remote bridge)
+
+    /// Claims Now Playing and registers remote-command targets so glasses
+    /// stalk taps (Bluetooth AVRCP play/pause/next/previous) reach Dart.
+    /// removeTarget(nil) before every addTarget keeps re-entry target-safe.
+    private func startMetaGestureListening() {
+        let center = MPRemoteCommandCenter.shared()
+        let commands: [(String, MPRemoteCommand)] = [
+            ("togglePlayPause", center.togglePlayPauseCommand),
+            ("play", center.playCommand),
+            ("pause", center.pauseCommand),
+            ("nextTrack", center.nextTrackCommand),
+            ("previousTrack", center.previousTrackCommand),
+        ]
+        for (name, command) in commands {
+            command.removeTarget(nil)
+            command.isEnabled = true
+            command.addTarget { [weak self] _ in
+                NSLog("[OmiMetaGestures] command=%@ -> onGesture(tap)", name)
+                DispatchQueue.main.async {
+                    self?.metaGesturesChannel?.invokeMethod("onGesture", arguments: ["type": "tap", "command": name])
+                }
+                return .success
+            }
+        }
+
+        // Remote commands are only delivered to the Now Playing app.
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+            MPMediaItemPropertyTitle: "Omi capture",
+            MPMediaItemPropertyArtist: "Meta glasses",
+            MPNowPlayingInfoPropertyPlaybackRate: 1.0,
+        ]
+        MPNowPlayingInfoCenter.default().playbackState = .playing
+        metaGesturesListening = true
+        NSLog("[OmiMetaGestures] listening-started (Now Playing claimed)")
+    }
+
+    private func stopMetaGestureListening() {
+        guard metaGesturesListening else { return }
+        let center = MPRemoteCommandCenter.shared()
+        for command in [
+            center.togglePlayPauseCommand, center.playCommand, center.pauseCommand,
+            center.nextTrackCommand, center.previousTrackCommand,
+        ] {
+            command.removeTarget(nil)
+            command.isEnabled = false
+        }
+        MPNowPlayingInfoCenter.default().playbackState = .stopped
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        metaGesturesListening = false
+        NSLog("[OmiMetaGestures] listening-stopped")
     }
 }
 
@@ -644,11 +800,60 @@ class SpeechRecognitionHandler: NSObject {
                 result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
                 return
             }
-            
+
             let fileUrl = URL(fileURLWithPath: filePath)
             let localeIdentifier = language.isEmpty ? "en-US" : language
             let locale = Locale(identifier: localeIdentifier)
-            
+
+            if #available(iOS 26.0, *) {
+                Task {
+                    do {
+                        let text = try await self.transcribeWithSpeechAnalyzer(fileUrl: fileUrl, locale: locale)
+                        DispatchQueue.main.async {
+                            result(text)
+                        }
+                    } catch {
+                        DispatchQueue.main.async {
+                            self.transcribeLegacy(fileUrl: fileUrl, locale: locale, localeIdentifier: localeIdentifier, result: result)
+                        }
+                    }
+                }
+                return
+            }
+
+            self.transcribeLegacy(fileUrl: fileUrl, locale: locale, localeIdentifier: localeIdentifier, result: result)
+        }
+    }
+
+    @available(iOS 26.0, *)
+    private func transcribeWithSpeechAnalyzer(fileUrl: URL, locale: Locale) async throws -> String {
+        let transcriber = SpeechTranscriber(locale: locale, preset: .transcription)
+        let modules: [any SpeechModule] = [transcriber]
+
+        if await AssetInventory.status(forModules: modules) != .installed,
+           let request = try await AssetInventory.assetInstallationRequest(supporting: modules) {
+            try await request.downloadAndInstall()
+        }
+
+        let audioFile = try AVAudioFile(forReading: fileUrl)
+        let analyzer = SpeechAnalyzer(modules: modules)
+        let resultsTask = Task<String, Error> {
+            var finalText = ""
+            for try await item in transcriber.results {
+                let text = String(item.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    finalText = text
+                }
+            }
+            return finalText
+        }
+
+        try await analyzer.start(inputAudioFile: audioFile, finishAfterFile: true)
+        try await analyzer.finalizeAndFinishThroughEndOfInput()
+        return try await resultsTask.value
+    }
+
+    private func transcribeLegacy(fileUrl: URL, locale: Locale, localeIdentifier: String, result: @escaping FlutterResult) {
             guard let recognizer = SFSpeechRecognizer(locale: locale) else {
                 result(FlutterError(code: "UNAVAILABLE", message: "Speech recognizer not available for locale \(localeIdentifier)", details: nil))
                 return
@@ -662,7 +867,7 @@ class SpeechRecognitionHandler: NSObject {
             let request = SFSpeechURLRecognitionRequest(url: fileUrl)
             request.shouldReportPartialResults = false
             request.requiresOnDeviceRecognition = true // Force on-device
-            
+
             let task = recognizer.recognitionTask(with: request) { (recognitionResult, error) in
                 if let error = error {
                     // Check if it's just "No speech identified" which might happen with silence
@@ -680,6 +885,5 @@ class SpeechRecognitionHandler: NSObject {
                     result(text)
                 }
             }
-        }
     }
 }

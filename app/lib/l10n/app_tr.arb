@@ -3089,7 +3089,7 @@
     "syncCustomSttWarningMessage": "Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.",
     "transcribeLaterTitle": "Sonradan Transkribe Et",
     "transcribeLaterDescription": "Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.",
-    "transcribeLaterNote": "Şimdilik Omi ve Limitless cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.",
+    "transcribeLaterNote": "Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.",
     "transcribeLaterStorageFull": "Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.",
     "unmute": "Sesi aç",
     "newRecording": "Yeni kayıt",
@@ -3139,17 +3139,33 @@
     "deviceOnboardingIntroDuration": "Yaklaşık 1 dakika",
     "jumpToLatestMessage": "En son mesaja git",
     "latest": "En son",
-    "flashFirmware": "Donanım Yazılımını Yükle",
-    "pendantRecordingTitle": "Pendant'ta kayıt yapılıyor",
-    "pendantRecordingNote": "Pendant'ın kendi kendine kayıt yapıyor. Uygulama açıkken kayıtlar telefonuna eşitlenir.",
-    "pendantSyncingRecordings": "Pendant'ından kayıtlar eşitleniyor…",
-    "pendantMinutesStored": "~{minutes} dk kayıtlı",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Pendant'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Meta Glasses'ınızı bağlayın",
+    "pairingDescMetaGlasses": "Gözlüğünüzü Meta AI uygulamasında eşleştirin, ardından Omi'de Bağlan'a dokunun. Birden fazla gözlük bağlayabilir ve hangisinin etkin olduğunu seçebilirsiniz.",
+    "metaGlassesUnavailable": "Meta AI uygulaması bulunamadı. Gözlüğünüzü bağlamak için Meta AI'ı yükleyin ve Geliştirici Modu'nu etkinleştirin.",
+    "metaGlassesRegistering": "Meta AI uygulamasında bağlantıyı tamamlayın, ardından Omi'ye dönün.",
+    "metaGlassesCameraPermission": "Meta AI uygulamasında kamera erişimine izin verin",
+    "metaGlassesCaptureModeLabel": "Yakalama modu",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Yalnızca mikrofon",
+    "metaGlassesStartCapture": "Yakalamayı başlat",
+    "metaGlassesStopCapture": "Yakalamayı durdur",
+    "metaGlassesGestureHint": "Bu derlemede Meta gözlükleri için hareket kontrolleri desteklenmiyor.",
+    "connectAnotherDevice": "Başka bir cihaz bağla",
+    "myDevices": "Cihazlarım",
+    "metaGlassesAutoCapture": "Bağlanınca otomatik yakalama",
+    "metaGlassesShowPreview": "Canlı önizleme",
+    "metaGlassesPendingPhotos": "{count} fotoğraf eşitlenmeyi bekliyor",
+    "metaGlassesPairInMetaAI": "Meta AI uygulamasında kurun",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Gözlük soğuyor — yakalama duraklatıldı",
+    "metaGlassesFolded": "Yakalamaya devam etmek için gözlüğü açın",
+    "metaGlassesCaptureFrequency": "Yakalama sıklığı",
+    "metaGlassesEvery10s": "Her 10 sn",
+    "metaGlassesEvery30s": "Her 30 sn",
+    "metaGlassesEvery1min": "Her 1 dk",
+    "metaGlassesEvery5min": "Her 5 dk",
+    "metaGlassesGestures": "Hareketler"
 }

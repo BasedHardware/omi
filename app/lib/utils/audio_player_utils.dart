@@ -77,8 +77,6 @@ class AudioPlayerUtils extends ChangeNotifier {
 
     if (_audioPlayer != null && !_audioPlayer!.isOpen()) {
       await _audioPlayer!.openPlayer();
-      // onProgress emits nothing unless a subscription interval is set (default 0ms).
-      await _audioPlayer!.setSubscriptionDuration(const Duration(milliseconds: 100));
     }
   }
 

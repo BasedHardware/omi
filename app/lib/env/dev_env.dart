@@ -45,12 +45,24 @@ final class DevEnv implements EnvFields {
   final String? googleClientSecret = _DevEnv.googleClientSecret;
 
   @override
-  @EnviedField(varName: 'USE_WEB_AUTH', obfuscate: false, defaultValue: false)
+  @EnviedField(varName: 'USE_WEB_AUTH', obfuscate: false, defaultValue: true)
   final bool? useWebAuth = _DevEnv.useWebAuth;
+
+  @override
+  @EnviedField(varName: 'USE_APPLE_WEB_AUTH', obfuscate: false, defaultValue: false)
+  final bool? useAppleWebAuth = _DevEnv.useAppleWebAuth;
+
+  @override
+  @EnviedField(varName: 'APPLE_SIGN_IN_ENABLED', obfuscate: false, defaultValue: false)
+  final bool? appleSignInEnabled = _DevEnv.appleSignInEnabled;
 
   @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _DevEnv.useAuthCustomToken;
+
+  @override
+  @EnviedField(varName: 'AUTH_REDIRECT_SCHEME', obfuscate: false, defaultValue: 'omi')
+  final String? authRedirectScheme = _DevEnv.authRedirectScheme;
 
   @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)

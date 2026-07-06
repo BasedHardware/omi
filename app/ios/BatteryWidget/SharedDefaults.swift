@@ -1,7 +1,16 @@
 import Foundation
 
 /// App Group identifier shared between the main app and the widget extension.
-let appGroupIdentifier = "group.com.friend-app-with-wearable.ios12"
+let appGroupIdentifier: String = {
+    let bundleIdentifier = Bundle.main.bundleIdentifier ?? "com.friend-app-with-wearable.ios12.widget"
+    let appBundleIdentifier: String
+    if bundleIdentifier.hasSuffix(".widget") {
+        appBundleIdentifier = String(bundleIdentifier.dropLast(".widget".count))
+    } else {
+        appBundleIdentifier = bundleIdentifier
+    }
+    return "group.\(appBundleIdentifier)"
+}()
 
 /// Keys used to store device battery data in the shared UserDefaults.
 enum BatteryWidgetKeys {

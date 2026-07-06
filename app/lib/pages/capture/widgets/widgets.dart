@@ -160,14 +160,15 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
 
 class PhotosPreviewWidget extends StatelessWidget {
   final List<ConversationPhoto> photos;
-  const PhotosPreviewWidget({super.key, required this.photos});
+  final double height;
+  const PhotosPreviewWidget({super.key, required this.photos, this.height = 80});
 
   @override
   Widget build(BuildContext context) {
     // Show the last 3 photos, newest first.
     final displayPhotos = photos.length > 3 ? photos.sublist(photos.length - 3) : photos;
     return SizedBox(
-      height: 80,
+      height: height,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: displayPhotos.reversed.map((photo) {
@@ -248,10 +249,16 @@ getTranscriptWidget(
   }
 
   if (showPhotos && showTranscript) {
+    // Transcript is the primary content; photos collapse into a compact strip
+    // so periodic camera captures (Meta glasses / OmiGlass) don't crowd out
+    // the live transcription.
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(height: 250, child: buildPhotos()),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: PhotosPreviewWidget(photos: photos),
+        ),
         Expanded(child: buildTranscriptSegments()),
       ],
     );
@@ -268,11 +275,13 @@ getTranscriptWidget(
 }
 
 getLiteTranscriptWidget(List<TranscriptSegment> segments, List<ConversationPhoto> photos, BtDevice? btDevice) {
+  // Transcription owns the card; photos ride along as a compact strip below
+  // so an incoming photo never displaces the live transcript line.
   return Column(
     children: [
-      if (photos.isNotEmpty) PhotosPreviewWidget(photos: photos),
-      if (photos.isNotEmpty && segments.isNotEmpty) const SizedBox(height: 8),
       if (segments.isNotEmpty) LiteTranscriptWidget(segments: segments),
+      if (photos.isNotEmpty && segments.isNotEmpty) const SizedBox(height: 8),
+      if (photos.isNotEmpty) PhotosPreviewWidget(photos: photos, height: segments.isNotEmpty ? 44 : 80),
     ],
   );
 }

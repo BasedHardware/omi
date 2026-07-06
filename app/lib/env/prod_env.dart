@@ -49,8 +49,20 @@ final class ProdEnv implements EnvFields {
   final bool? useWebAuth = _ProdEnv.useWebAuth;
 
   @override
+  @EnviedField(varName: 'USE_APPLE_WEB_AUTH', obfuscate: false, defaultValue: false)
+  final bool? useAppleWebAuth = _ProdEnv.useAppleWebAuth;
+
+  @override
+  @EnviedField(varName: 'APPLE_SIGN_IN_ENABLED', obfuscate: false, defaultValue: true)
+  final bool? appleSignInEnabled = _ProdEnv.appleSignInEnabled;
+
+  @override
   @EnviedField(varName: 'USE_AUTH_CUSTOM_TOKEN', obfuscate: false, defaultValue: false)
   final bool? useAuthCustomToken = _ProdEnv.useAuthCustomToken;
+
+  @override
+  @EnviedField(varName: 'AUTH_REDIRECT_SCHEME', obfuscate: false, defaultValue: 'omi')
+  final String? authRedirectScheme = _ProdEnv.authRedirectScheme;
 
   @override
   @EnviedField(varName: 'STAGING_API_URL', obfuscate: true)

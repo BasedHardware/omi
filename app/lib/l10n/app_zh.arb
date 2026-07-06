@@ -3076,7 +3076,7 @@
     "syncCustomSttWarningMessage": "您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。",
     "transcribeLaterTitle": "稍后转写",
     "transcribeLaterDescription": "先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。",
-    "transcribeLaterNote": "目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。",
+    "transcribeLaterNote": "目前仅支持 Omi 设备。在你主动上传之前，音频会一直保留在手机上。",
     "transcribeLaterStorageFull": "手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。",
     "unmute": "取消静音",
     "newRecording": "新建录音",
@@ -3126,17 +3126,33 @@
     "deviceOnboardingIntroDuration": "大约 1 分钟",
     "jumpToLatestMessage": "跳转到最新消息",
     "latest": "最新",
-    "flashFirmware": "刷写固件",
-    "pendantRecordingTitle": "吊坠录音中",
-    "pendantRecordingNote": "你的吊坠会自行录音。应用打开时，录音会同步到手机。",
-    "pendantSyncingRecordings": "正在从吊坠同步录音…",
-    "pendantMinutesStored": "~{minutes} 分钟已存储",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "吊坠存储空间即将用尽——请保持应用打开以同步。"
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "连接您的 Meta Glasses",
+    "pairingDescMetaGlasses": "在 Meta AI 应用中配对眼镜，然后在 Omi 中点击“连接”。您可以关联多副眼镜并选择当前使用的一副。",
+    "metaGlassesUnavailable": "未检测到 Meta AI 应用。请安装 Meta AI 并启用开发者模式以连接您的眼镜。",
+    "metaGlassesRegistering": "在 Meta AI 应用中完成连接，然后返回 Omi。",
+    "metaGlassesCameraPermission": "在 Meta AI 应用中允许访问相机",
+    "metaGlassesCaptureModeLabel": "采集模式",
+    "metaGlassesModeCameraMic": "相机 + 麦克风",
+    "metaGlassesModeMicOnly": "仅麦克风",
+    "metaGlassesStartCapture": "开始采集",
+    "metaGlassesStopCapture": "停止采集",
+    "metaGlassesGestureHint": "此版本不支持 Meta 眼镜的手势控制。",
+    "connectAnotherDevice": "连接其他设备",
+    "myDevices": "我的设备",
+    "metaGlassesAutoCapture": "连接时自动采集",
+    "metaGlassesShowPreview": "实时预览",
+    "metaGlassesPendingPhotos": "{count} 张照片等待同步",
+    "metaGlassesPairInMetaAI": "请在 Meta AI 应用中完成设置",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "眼镜正在冷却 — 已暂停捕捉",
+    "metaGlassesFolded": "展开眼镜以继续捕捉",
+    "metaGlassesCaptureFrequency": "采集频率",
+    "metaGlassesEvery10s": "每 10 秒",
+    "metaGlassesEvery30s": "每 30 秒",
+    "metaGlassesEvery1min": "每 1 分钟",
+    "metaGlassesEvery5min": "每 5 分钟",
+    "metaGlassesGestures": "手势"
 }

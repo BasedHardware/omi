@@ -1,0 +1,21 @@
+name: meta_wearables_dat_flutter_example
+description: Minimal example app for the meta_wearables_dat_flutter plugin.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  meta_wearables_dat_flutter:
+    path: ../
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

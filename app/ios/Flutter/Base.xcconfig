@@ -1,1 +1,3 @@
 APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12
+META_WEARABLES_CLIENT_TOKEN=0
+#include? "MetaSecrets.local.xcconfig"

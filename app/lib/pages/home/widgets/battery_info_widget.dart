@@ -10,11 +10,13 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/devices/devices_page.dart';
 import 'package:omi/pages/home/device.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/meta_wearables_provider.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -28,6 +30,18 @@ class BatteryInfoWidget extends StatefulWidget {
 }
 
 class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
+  /// Multi-device: when Meta glasses are linked alongside (or instead of) the
+  /// BLE wearable, device taps land on the devices hub rather than the
+  /// single-device page.
+  bool get _hasMetaGlasses {
+    final meta = context.read<MetaWearablesProvider>();
+    return meta.isRegistered && meta.hasDevices;
+  }
+
+  void _openDevicePage() {
+    routeToPage(context, _hasMetaGlasses ? const DevicesPage() : const ConnectedDevice());
+  }
+
   void _showRecordOptions(BuildContext context) {
     HapticFeedback.lightImpact();
     showModalBottomSheet(
@@ -90,7 +104,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
             if (connectedDevice != null) {
               final batteryPill = GestureDetector(
                 onTap: () {
-                  routeToPage(context, const ConnectedDevice());
+                  _openDevicePage();
                   PlatformManager.instance.analytics.batteryIndicatorClicked();
                 },
                 child: Container(
@@ -168,8 +182,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
             } else if (pairedDevice != null && pairedDevice.id.isNotEmpty) {
               // Device is paired but disconnected
               return GestureDetector(
-                onTap: () async {
-                  await routeToPage(context, const ConnectedDevice());
+                onTap: () {
+                  _openDevicePage();
                 },
                 child: Container(
                   height: 36,
@@ -204,42 +218,71 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(
-                    onTap: () async {
-                      if (SharedPreferencesUtil().btDevice.id.isEmpty) {
-                        routeToPage(context, const ConnectDevicePage());
-                        PlatformManager.instance.analytics.connectFriendClicked();
-                      } else {
-                        await routeToPage(context, const ConnectedDevice());
-                      }
-                    },
-                    child: Container(
-                      height: 36,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1F1F25),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
-                          isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
-                          isConnecting && isMemoriesPage
-                              ? Text(
-                                  context.l10n.searching,
-                                  style: Theme.of(
-                                    context,
-                                  ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
-                                )
-                              : isMemoriesPage
-                                  ? Text(context.l10n.connect,
+                  Consumer<MetaWearablesProvider>(
+                    builder: (context, metaProvider, _) {
+                      // Green glasses pill only when a pair is actually linked;
+                      // the hub route stays available for paired-but-offline pairs.
+                      final glassesConnected = metaProvider.isRegistered && metaProvider.hasLinkedDevices;
+                      return GestureDetector(
+                        onTap: () async {
+                          if (metaProvider.isRegistered && metaProvider.hasDevices) {
+                            routeToPage(context, const DevicesPage());
+                          } else if (SharedPreferencesUtil().btDevice.id.isEmpty) {
+                            routeToPage(context, const ConnectDevicePage());
+                            PlatformManager.instance.analytics.connectFriendClicked();
+                          } else {
+                            await routeToPage(context, const ConnectedDevice());
+                          }
+                        },
+                        child: Container(
+                          height: 36,
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1F1F25),
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              glassesConnected
+                                  ? SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: Image.asset(Assets.images.omiGlass.path, fit: BoxFit.contain),
+                                    )
+                                  : Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16),
+                              if (glassesConnected) ...[
+                                const SizedBox(width: 6.0),
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: const BoxDecoration(
+                                    color: Color.fromARGB(255, 0, 255, 8),
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                              ],
+                              isMemoriesPage ? const SizedBox(width: 6) : const SizedBox.shrink(),
+                              glassesConnected && isMemoriesPage
+                                  ? Text(context.l10n.connected,
                                       style: const TextStyle(color: Colors.white, fontSize: 12))
-                                  : const SizedBox.shrink(),
-                        ],
-                      ),
-                    ),
+                                  : isConnecting && isMemoriesPage
+                                      ? Text(
+                                          context.l10n.searching,
+                                          style: Theme.of(
+                                            context,
+                                          ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
+                                        )
+                                      : isMemoriesPage
+                                          ? Text(context.l10n.connect,
+                                              style: const TextStyle(color: Colors.white, fontSize: 12))
+                                          : const SizedBox.shrink(),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                   if (isMemoriesPage)
                     Consumer<CaptureProvider>(

@@ -6,5 +6,7 @@
 ASSET_PREFIX=dev
 BUNDLE_NAME=Omi Dev
 BUNDLE_DISPLAY_NAME=Omi Dev
-APP_BUNDLE_IDENTIFIER=com.friend-app-with-wearable.ios12.development
+APP_BUNDLE_IDENTIFIER=dev.moni11811.omi
 GOOGLE_REVERSE_CLIENT_ID=com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde
+GOOGLE_CLIENT_ID=1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com
+AUTH_REDIRECT_SCHEME=omi

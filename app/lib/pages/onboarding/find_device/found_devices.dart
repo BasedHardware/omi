@@ -10,7 +10,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
+import 'package:omi/services/devices/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -34,6 +34,10 @@ class _FoundDevicesState extends State<FoundDevices> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (mounted) {
+        context.read<OnboardingProvider>().configureSavedDeviceAutoConnect(
+              isFromOnboarding: widget.isFromOnboarding,
+              goNext: widget.goNext,
+            );
         context.read<DeviceProvider>().initiateConnection('FoundDevices');
       }
     });
@@ -161,7 +165,7 @@ class _FoundDevicesState extends State<FoundDevices> {
 
     if (!isCritical) {
       final prefKey = 'firmware_warning_acknowledged_${device.type.toString()}';
-      final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey) ?? false;
+      final alreadyAcknowledged = SharedPreferencesUtil().getBool(prefKey);
       if (alreadyAcknowledged) {
         return; // User already acknowledged this warning
       }
@@ -203,6 +207,7 @@ class _FoundDevicesState extends State<FoundDevices> {
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
+        final visibleDevices = provider.visibleDeviceList;
         return MessageListener<OnboardingProvider>(
           showError: (error) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error), backgroundColor: Colors.red));
@@ -226,21 +231,21 @@ class _FoundDevicesState extends State<FoundDevices> {
             children: [
               !provider.isConnected
                   ? Text(
-                      provider.deviceList.isEmpty
+                      visibleDevices.isEmpty
                           ? context.l10n.searchingForDevices
-                          : context.l10n.devicesFoundNearby(provider.deviceList.length),
+                          : context.l10n.devicesFoundNearby(visibleDevices.length),
                       style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 14, color: Color(0x66FFFFFF)),
                     )
                   : Text(
                       context.l10n.pairingSuccessful,
                       style: const TextStyle(fontWeight: FontWeight.w400, fontSize: 12, color: Color(0x66FFFFFF)),
                     ),
-              if (provider.deviceList.isNotEmpty) const SizedBox(height: 16),
+              if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
               if (!provider.isConnected) ..._devicesList(provider),
               if (provider.isConnected)
                 Text(
                   () {
-                    final sameNameCount = provider.deviceList.where((d) => d.name == provider.deviceName).length;
+                    final sameNameCount = provider.visibleDeviceList.where((d) => d.name == provider.deviceName).length;
                     return sameNameCount > 1
                         ? '${provider.deviceName} (${BtDevice.shortId(provider.deviceId)})'
                         : provider.deviceName;
@@ -273,7 +278,7 @@ class _FoundDevicesState extends State<FoundDevices> {
   }
 
   _devicesList(OnboardingProvider provider) {
-    return (provider.deviceList.mapIndexed((index, device) {
+    return (provider.visibleDeviceList.mapIndexed((index, device) {
       bool isConnecting = provider.connectingToDeviceId == device.id;
 
       return GestureDetector(
@@ -321,34 +326,44 @@ class _FoundDevicesState extends State<FoundDevices> {
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 16.0),
-                  child: Stack(
+                  child: Row(
                     children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
+                      Expanded(
                         child: Text(
                           () {
-                            final sameNameCount = provider.deviceList.where((d) => d.name == device.name).length;
+                            final sameNameCount = provider.visibleDeviceList.where((d) => d.name == device.name).length;
                             return sameNameCount > 1 ? '${device.name} (${device.getShortId()})' : device.name;
                           }(),
                           textAlign: TextAlign.left,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 18, color: Colors.black),
                         ),
                       ),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 16.0),
-                          child: isConnecting
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                                  ),
-                                )
-                              : const SizedBox.shrink(),
+                      if (provider.isSavedDevice(device))
+                        Container(
+                          margin: const EdgeInsets.only(left: 8, right: 12),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFEFEF),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            context.l10n.saved,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.black54),
+                          ),
                         ),
+                      Padding(
+                        padding: const EdgeInsets.only(right: 16.0),
+                        child: isConnecting
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
+                                ),
+                              )
+                            : const SizedBox.shrink(),
                       ),
                     ],
                   ),

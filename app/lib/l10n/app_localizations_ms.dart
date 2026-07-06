@@ -9363,7 +9363,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Buat masa ini berfungsi dengan peranti Omi dan Limitless. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
+      'Buat masa ini berfungsi dengan peranti Omi. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9514,23 +9514,93 @@ class AppLocalizationsMs extends AppLocalizations {
   String get latest => 'Terkini';
 
   @override
-  String get flashFirmware => 'Flash Perisian Tegar';
+  String get metaGlasses => 'Meta Glasses';
 
   @override
-  String get pendantRecordingTitle => 'Merakam pada loket';
+  String get pairingTitleMetaGlasses => 'Sambungkan Meta Glasses anda';
 
   @override
-  String get pendantRecordingNote =>
-      'Loket anda merakam dengan sendirinya. Rakaman disegerakkan ke telefon anda semasa aplikasi dibuka.';
+  String get pairingDescMetaGlasses =>
+      'Gandingkan cermin mata anda dalam aplikasi Meta AI, kemudian ketik Sambung dalam Omi. Anda boleh memautkan lebih daripada satu pasang dan memilih yang aktif.';
 
   @override
-  String get pendantSyncingRecordings => 'Menyegerakkan rakaman daripada loket anda…';
+  String get metaGlassesUnavailable =>
+      'Aplikasi Meta AI tidak ditemui. Pasang Meta AI dan aktifkan Mod Pembangun untuk menyambungkan cermin mata anda.';
 
   @override
-  String pendantMinutesStored(int minutes) {
-    return '~$minutes min disimpan';
+  String get metaGlassesRegistering => 'Selesaikan sambungan dalam aplikasi Meta AI, kemudian kembali ke Omi.';
+
+  @override
+  String get metaGlassesCameraPermission => 'Benarkan akses kamera dalam aplikasi Meta AI';
+
+  @override
+  String get metaGlassesCaptureModeLabel => 'Mod rakaman';
+
+  @override
+  String get metaGlassesModeCameraMic => 'Kamera + mikrofon';
+
+  @override
+  String get metaGlassesModeMicOnly => 'Mikrofon sahaja';
+
+  @override
+  String get metaGlassesStartCapture => 'Mula merakam';
+
+  @override
+  String get metaGlassesStopCapture => 'Henti merakam';
+
+  @override
+  String get metaGlassesGestureHint => 'Kawalan gerak isyarat untuk cermin mata Meta tidak disokong dalam binaan ini.';
+
+  @override
+  String get connectAnotherDevice => 'Sambungkan peranti lain';
+
+  @override
+  String get myDevices => 'Peranti Saya';
+
+  @override
+  String get metaGlassesAutoCapture => 'Rakaman automatik apabila disambungkan';
+
+  @override
+  String get metaGlassesShowPreview => 'Pratonton langsung';
+
+  @override
+  String metaGlassesPendingPhotos(int count) {
+    return '$count foto menunggu penyegerakan';
   }
 
   @override
-  String get pendantStorageAlmostFull => 'Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan.';
+  String get metaGlassesPairInMetaAI => 'Sediakan dalam aplikasi Meta AI';
+
+  @override
+  String get metaGlassesTypeRayBanMeta => 'Ray-Ban Meta';
+
+  @override
+  String get metaGlassesTypeRayBanDisplay => 'Meta Ray-Ban Display';
+
+  @override
+  String get metaGlassesTypeOakleyMeta => 'Oakley Meta';
+
+  @override
+  String get metaGlassesOverheating => 'Cermin mata sedang menyejuk — tangkapan dijeda';
+
+  @override
+  String get metaGlassesFolded => 'Buka cermin mata untuk terus menangkap';
+
+  @override
+  String get metaGlassesCaptureFrequency => 'Kekerapan tangkapan';
+
+  @override
+  String get metaGlassesEvery10s => 'Setiap 10 s';
+
+  @override
+  String get metaGlassesEvery30s => 'Setiap 30 s';
+
+  @override
+  String get metaGlassesEvery1min => 'Setiap 1 min';
+
+  @override
+  String get metaGlassesEvery5min => 'Setiap 5 min';
+
+  @override
+  String get metaGlassesGestures => 'Gerak isyarat';
 }

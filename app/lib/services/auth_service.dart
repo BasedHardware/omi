@@ -16,6 +16,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/omi_auth_log.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/logger.dart';
 
 class AuthService {
@@ -35,25 +37,36 @@ class AuthService {
 
   /// Google Sign In using the standard google_sign_in package (iOS, Android)
   Future<UserCredential?> signInWithGoogleMobile() async {
-    // Trigger the authentication flow
-    final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
+    try {
+      await OmiAuthLog.info('Google mobile sign-in start');
+      // Trigger the authentication flow
+      final GoogleSignInAccount? googleUser = await GoogleSignIn(scopes: ['profile', 'email']).signIn();
+      await OmiAuthLog.info('Google mobile account=${googleUser?.email ?? 'null'}');
 
-    // Obtain the auth details from the request
-    final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
-    if (googleAuth == null) {
-      return null;
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication? googleAuth = await googleUser?.authentication;
+      if (googleAuth == null) {
+        await OmiAuthLog.info('Google mobile auth=null');
+        return null;
+      }
+
+      // Create a new credential
+      if (googleAuth.accessToken == null && googleAuth.idToken == null) {
+        await OmiAuthLog.info('Google mobile tokens=null');
+        return null;
+      }
+      final credential =
+          GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
+
+      // Once signed in, return the UserCredential
+      final result = await FirebaseAuth.instance.signInWithCredential(credential);
+      await _updateUserPreferences(result, 'google');
+      await OmiAuthLog.info('Google mobile sign-in success uid=${result.user?.uid}');
+      return result;
+    } catch (e) {
+      await OmiAuthLog.info('Google mobile sign-in error: $e');
+      rethrow;
     }
-
-    // Create a new credential
-    if (googleAuth.accessToken == null && googleAuth.idToken == null) {
-      return null;
-    }
-    final credential = GoogleAuthProvider.credential(accessToken: googleAuth.accessToken, idToken: googleAuth.idToken);
-
-    // Once signed in, return the UserCredential
-    final result = await FirebaseAuth.instance.signInWithCredential(credential);
-    await _updateUserPreferences(result, 'google');
-    return result;
   }
 
   /// Generates a cryptographically secure random nonce, to be included in a
@@ -192,14 +205,99 @@ class AuthService {
 
   // Method channel for direct deep link delivery (fallback for app_links)
   static const _deepLinkChannel = MethodChannel('com.omi/deep_links');
+  static const _webAuthChannel = MethodChannel('com.omi/web_auth');
+
+  String get _authRedirectUri => '${Env.authRedirectScheme}://auth/callback';
+
+  bool _isAuthCallback(Uri uri) {
+    return uri.scheme == Env.authRedirectScheme && uri.host == 'auth' && uri.path == '/callback';
+  }
+
+  Future<String> _authenticateWithNativeWebAuth(String authUrl) async {
+    await OmiAuthLog.info('ASWebAuthenticationSession start callbackScheme=${Env.authRedirectScheme}');
+    final result = await _webAuthChannel.invokeMethod<String>('authenticate', {
+      'url': authUrl,
+      'callbackScheme': Env.authRedirectScheme,
+    });
+    if (result == null || result.isEmpty) {
+      throw Exception('No callback URL received from native web auth');
+    }
+    await OmiAuthLog.info('ASWebAuthenticationSession callback received');
+    return result;
+  }
+
+  Future<String> _authenticateWithExternalApplication(String authUrl, String provider) async {
+    // Set up listeners before launching URL
+    final appLinks = AppLinks();
+    late StreamSubscription linkSubscription;
+    final completer = Completer<String>();
+
+    // Listen via app_links
+    linkSubscription = appLinks.uriLinkStream.listen(
+      (Uri uri) {
+        unawaited(OmiAuthLog.info('Web auth app_links callback=$uri'));
+        Logger.debug('Received callback URI via app_links: $uri');
+        if (_isAuthCallback(uri)) {
+          if (!completer.isCompleted) {
+            linkSubscription.cancel();
+            completer.complete(uri.toString());
+          }
+        }
+      },
+      onError: (error) {
+        Logger.debug('App link error: $error');
+        if (!completer.isCompleted) {
+          linkSubscription.cancel();
+          completer.completeError(error);
+        }
+      },
+    );
+
+    // Also listen via direct method channel (fallback)
+    _deepLinkChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onDeepLink') {
+        final urlString = call.arguments as String;
+        unawaited(OmiAuthLog.info('Web auth channel callback=$urlString'));
+        Logger.debug('Received callback URI via method channel: $urlString');
+        final uri = Uri.parse(urlString);
+        if (_isAuthCallback(uri)) {
+          if (!completer.isCompleted) {
+            linkSubscription.cancel();
+            _deepLinkChannel.setMethodCallHandler(null);
+            completer.complete(urlString);
+          }
+        }
+      }
+    });
+
+    // Now launch the URL
+    final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.externalApplication);
+    await OmiAuthLog.info('Web auth launched=$launched provider=$provider');
+
+    if (!launched) {
+      linkSubscription.cancel();
+      _deepLinkChannel.setMethodCallHandler(null);
+      throw Exception('Failed to launch authentication URL');
+    }
+
+    return completer.future.timeout(
+      const Duration(minutes: 5),
+      onTimeout: () {
+        linkSubscription.cancel();
+        _deepLinkChannel.setMethodCallHandler(null);
+        throw Exception('Authentication timeout');
+      },
+    );
+  }
 
   Future<UserCredential?> authenticateWithProvider(String provider) async {
     try {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = _authRedirectUri;
 
+      await OmiAuthLog.info('Web auth start provider=$provider base=${Env.apiBaseUrl}');
       Logger.debug('Starting OAuth flow for provider: $provider');
 
       final authUrl = Uri.parse('${Env.apiBaseUrl}v1/auth/authorize').replace(
@@ -212,66 +310,12 @@ class AuthService {
         },
       ).toString();
 
+      await OmiAuthLog.info('Web auth launch provider=$provider');
       Logger.debug('Authorization URL: $authUrl');
 
-      // Set up listeners before launching URL
-      final appLinks = AppLinks();
-      late StreamSubscription linkSubscription;
-      final completer = Completer<String>();
-
-      // Listen via app_links
-      linkSubscription = appLinks.uriLinkStream.listen(
-        (Uri uri) {
-          Logger.debug('Received callback URI via app_links: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
-            if (!completer.isCompleted) {
-              linkSubscription.cancel();
-              completer.complete(uri.toString());
-            }
-          }
-        },
-        onError: (error) {
-          Logger.debug('App link error: $error');
-          if (!completer.isCompleted) {
-            linkSubscription.cancel();
-            completer.completeError(error);
-          }
-        },
-      );
-
-      // Also listen via direct method channel (fallback)
-      _deepLinkChannel.setMethodCallHandler((call) async {
-        if (call.method == 'onDeepLink') {
-          final urlString = call.arguments as String;
-          Logger.debug('Received callback URI via method channel: $urlString');
-          final uri = Uri.parse(urlString);
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
-            if (!completer.isCompleted) {
-              linkSubscription.cancel();
-              _deepLinkChannel.setMethodCallHandler(null);
-              completer.complete(urlString);
-            }
-          }
-        }
-      });
-
-      // Now launch the URL
-      final launched = await launchUrl(Uri.parse(authUrl), mode: LaunchMode.inAppBrowserView);
-
-      if (!launched) {
-        linkSubscription.cancel();
-        _deepLinkChannel.setMethodCallHandler(null);
-        throw Exception('Failed to launch authentication URL');
-      }
-
-      final result = await completer.future.timeout(
-        const Duration(minutes: 5),
-        onTimeout: () {
-          linkSubscription.cancel();
-          _deepLinkChannel.setMethodCallHandler(null);
-          throw Exception('Authentication timeout');
-        },
-      );
+      final result = PlatformService.isIOS
+          ? await _authenticateWithNativeWebAuth(authUrl)
+          : await _authenticateWithExternalApplication(authUrl, provider);
 
       final uri = Uri.parse(result);
       final code = uri.queryParameters['code'];
@@ -280,6 +324,7 @@ class AuthService {
       if (code == null) {
         throw Exception('No authorization code received');
       }
+      await OmiAuthLog.info('Web auth code received provider=$provider');
 
       if (returnedState != state) {
         throw Exception('Invalid state parameter');
@@ -301,6 +346,7 @@ class AuthService {
       Logger.debug('Firebase authentication successful');
       return credential;
     } catch (e) {
+      await OmiAuthLog.info('Web auth error provider=$provider: $e');
       Logger.debug('OAuth authentication error: $e');
       Logger.handle(e, StackTrace.current, message: 'Authentication failed');
       return null;
@@ -314,6 +360,7 @@ class AuthService {
   ) async {
     try {
       final useCustomToken = Env.useAuthCustomToken;
+      await OmiAuthLog.info('Web token exchange start useCustomToken=$useCustomToken');
 
       final response = await http.post(
         Uri.parse('${Env.apiBaseUrl}v1/auth/token'),
@@ -327,6 +374,7 @@ class AuthService {
         },
       );
 
+      await OmiAuthLog.info('Web token exchange status=${response.statusCode}');
       Logger.debug('Token exchange response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
@@ -337,6 +385,7 @@ class AuthService {
         return null;
       }
     } catch (e) {
+      await OmiAuthLog.info('Web token exchange error: $e');
       Logger.debug('Token exchange error: $e');
       return null;
     }
@@ -350,10 +399,22 @@ class AuthService {
     // Use custom token if enabled and available
     if (useCustomToken && customToken != null) {
       Logger.debug('Signing in with Firebase custom token from $provider');
-      return await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      try {
+        return await FirebaseAuth.instance.signInWithCustomToken(customToken);
+      } on FirebaseAuthException catch (e) {
+        await OmiAuthLog.info(
+            'custom token sign-in failed provider=$provider code=${e.code}; falling back to OAuth credentials');
+        Logger.debug('Firebase custom token sign-in failed: ${e.code}; falling back to OAuth credentials');
+        return await _signInWithProviderOAuthCredentials(oauthCredentials);
+      }
     }
 
     // Fallback to OAuth credentials
+    return await _signInWithProviderOAuthCredentials(oauthCredentials);
+  }
+
+  Future<UserCredential> _signInWithProviderOAuthCredentials(Map<String, dynamic> oauthCredentials) async {
+    final provider = oauthCredentials['provider'];
     final idToken = oauthCredentials['id_token'];
     final accessToken = oauthCredentials['access_token'];
 
@@ -552,7 +613,7 @@ class AuthService {
       final state = _generateState();
       final codeVerifier = _generateCodeVerifier();
       final codeChallenge = _codeChallengeForVerifier(codeVerifier);
-      const redirectUri = 'omi://auth/callback';
+      final redirectUri = _authRedirectUri;
 
       Logger.debug('Starting OAuth linking flow for provider: $provider');
 
@@ -582,7 +643,7 @@ class AuthService {
       linkSubscription = appLinks.uriLinkStream.listen(
         (Uri uri) {
           Logger.debug('Received callback URI: $uri');
-          if (uri.scheme == 'omi' && uri.host == 'auth' && uri.path == '/callback') {
+          if (_isAuthCallback(uri)) {
             linkSubscription.cancel();
             completer.complete(uri.toString());
           }

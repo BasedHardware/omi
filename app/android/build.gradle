@@ -1,7 +1,20 @@
+def localProperties = new Properties()
+def localPropertiesFile = rootProject.file("local.properties")
+if (localPropertiesFile.exists()) {
+    localPropertiesFile.withInputStream { localProperties.load(it) }
+}
+
 allprojects {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://maven.pkg.github.com/facebook/meta-wearables-dat-android")
+            credentials {
+                username = ""
+                password = System.getenv("GITHUB_TOKEN") ?: localProperties.getProperty("github_token") ?: ""
+            }
+        }
     }
     subprojects {
         afterEvaluate { project ->

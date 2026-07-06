@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。",
     "transcribeLaterTitle": "後で文字起こし",
     "transcribeLaterDescription": "リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。",
-    "transcribeLaterNote": "現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。",
+    "transcribeLaterNote": "現在はOmiデバイスでのみご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。",
     "transcribeLaterStorageFull": "スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。",
     "unmute": "ミュート解除",
     "newRecording": "新規録音",
@@ -3105,17 +3105,33 @@
     "deviceOnboardingIntroDuration": "約1分",
     "jumpToLatestMessage": "最新のメッセージにジャンプ",
     "latest": "最新",
-    "flashFirmware": "ファームウェアを書き込む",
-    "pendantRecordingTitle": "ペンダントで録音中",
-    "pendantRecordingNote": "ペンダントが自動的に録音しています。アプリを開いている間に録音がスマートフォンに同期されます。",
-    "pendantSyncingRecordings": "ペンダントから録音を同期しています…",
-    "pendantMinutesStored": "~{minutes} 分保存済み",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "ペンダントのストレージがまもなくいっぱいになります。同期するにはアプリを開いたままにしてください。"
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Meta Glassesを接続",
+    "pairingDescMetaGlasses": "Meta AIアプリでグラスをペアリングしてから、Omiで「接続」をタップしてください。複数のグラスをリンクして、アクティブなものを選択できます。",
+    "metaGlassesUnavailable": "Meta AIアプリが見つかりません。グラスを接続するには、Meta AIをインストールして開発者モードを有効にしてください。",
+    "metaGlassesRegistering": "Meta AIアプリで接続を完了してから、Omiに戻ってください。",
+    "metaGlassesCameraPermission": "Meta AIアプリでカメラへのアクセスを許可してください",
+    "metaGlassesCaptureModeLabel": "キャプチャモード",
+    "metaGlassesModeCameraMic": "カメラ + マイク",
+    "metaGlassesModeMicOnly": "マイクのみ",
+    "metaGlassesStartCapture": "キャプチャ開始",
+    "metaGlassesStopCapture": "キャプチャ停止",
+    "metaGlassesGestureHint": "このビルドではMetaグラスのジェスチャー操作はサポートされていません。",
+    "connectAnotherDevice": "別のデバイスを接続",
+    "myDevices": "マイデバイス",
+    "metaGlassesAutoCapture": "接続時に自動キャプチャ",
+    "metaGlassesShowPreview": "ライブプレビュー",
+    "metaGlassesPendingPhotos": "{count}枚の写真が同期待ちです",
+    "metaGlassesPairInMetaAI": "Meta AIアプリで設定してください",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "メガネを冷却中です — キャプチャを一時停止しました",
+    "metaGlassesFolded": "キャプチャを続けるにはメガネを開いてください",
+    "metaGlassesCaptureFrequency": "撮影間隔",
+    "metaGlassesEvery10s": "10秒ごと",
+    "metaGlassesEvery30s": "30秒ごと",
+    "metaGlassesEvery1min": "1分ごと",
+    "metaGlassesEvery5min": "5分ごと",
+    "metaGlassesGestures": "ジェスチャー"
 }

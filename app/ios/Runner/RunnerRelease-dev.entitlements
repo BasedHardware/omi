@@ -23,7 +23,7 @@
 	<array/>
 	<key>com.apple.security.application-groups</key>
 	<array>
-		<string>group.com.friend-app-with-wearable.ios12</string>
+		<string>group.$(APP_BUNDLE_IDENTIFIER)</string>
 	</array>
 </dict>
 </plist>

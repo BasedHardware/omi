@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
@@ -28,7 +27,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
-import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
@@ -39,7 +37,6 @@ import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/audio_sources/ble_device_source.dart';
-import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/audio_sources/phone_mic_source.dart';
 import 'package:omi/services/wals.dart';
@@ -82,6 +79,10 @@ class CaptureController extends ChangeNotifier
   Timer? _keepAliveTimer;
   DateTime? _keepAliveLastExecutedAt;
   Timer? _inProgressConversationRefreshTimer;
+  static const Duration _photoUploadAckTimeout = Duration(seconds: 10);
+  final Map<String, Completer<void>> _pendingPhotoUploadAcks = {};
+  final Map<String, String> _pendingPhotoUploadIdsByPermanent = {};
+  String? _metaWearablesCaptureConversationId;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
 
@@ -146,10 +147,6 @@ class CaptureController extends ChangeNotifier
 
   CaptureController({CaptureExternalActions? externalActions})
       : externalActions = externalActions ?? const NoopCaptureExternalActions() {
-    // Restore a persisted device mute so it survives an app kill/restart. When
-    // the device reconnects, streamDeviceRecording() reads _isPaused as
-    // `wasPaused` and re-applies the mute instead of silently resuming.
-    _isPaused = SharedPreferencesUtil().deviceMuted;
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
@@ -305,6 +302,8 @@ class CaptureController extends ChangeNotifier
         return 'apple_watch';
       case DeviceType.limitless:
         return 'limitless';
+      case DeviceType.metaWearables:
+        return 'meta_wearables';
     }
   }
 
@@ -518,51 +517,25 @@ class CaptureController extends ChangeNotifier
     await _resetState();
   }
 
-  static bool supportsTranscribeLater(DeviceType? type) {
-    return type == DeviceType.omi ||
-        type == DeviceType.openglass ||
-        type == DeviceType.friendPendant ||
-        type == DeviceType.limitless;
+  bool get deviceSupportsTranscribeLater {
+    final t = _recordingDevice?.type;
+    return t == DeviceType.omi || t == DeviceType.openglass || t == DeviceType.friendPendant;
   }
 
-  bool get deviceSupportsTranscribeLater => supportsTranscribeLater(_recordingDevice?.type);
-
-  Future<bool> setBatchMode(bool enabled) async {
-    if (SharedPreferencesUtil().batchModeEnabled == enabled) return true;
-    // With batch on the realtime socket is suppressed for every device type, so a
-    // device without a batch capture path would record nothing at all.
-    if (enabled && _recordingDevice != null && !deviceSupportsTranscribeLater) {
-      Logger.debug('[setBatchMode] refused: ${_recordingDevice?.type} has no Transcribe Later support');
-      return false;
-    }
+  Future<void> setBatchMode(bool enabled) async {
+    if (SharedPreferencesUtil().batchModeEnabled == enabled) return;
     SharedPreferencesUtil().batchModeEnabled = enabled;
     PlatformManager.instance.analytics.transcribeLaterToggled(enabled: enabled);
     final docs = await getApplicationDocumentsDirectory();
     await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
     // Only re-enable native streaming when turning batch OFF, a device with a
     // native BLE route is connected, and background mode is opted in.
-    final enableNativeStreaming =
-        !enabled && hasNativeBackgroundStreamRoute && SharedPreferencesUtil().backgroundModeEnabled;
+    final enableNativeStreaming = !enabled && hasNativeBleAudioRoute && SharedPreferencesUtil().backgroundModeEnabled;
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
-    await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
     try {
       await onRecordProfileSettingChanged();
     } catch (_) {}
-    return true;
-  }
-
-  Future<void> _applyLimitlessRealtimeSuppression(bool suppressed) async {
-    final device = _recordingDevice;
-    if (device == null || device.type != DeviceType.limitless) return;
-    try {
-      final connection = await ServiceManager.instance().device.ensureConnection(device.id);
-      if (connection is LimitlessDeviceConnection) {
-        await connection.setRealtimeAudioSuppressed(suppressed);
-      }
-    } catch (e) {
-      Logger.debug('[batch] limitless realtime suppression toggle failed: $e');
-    }
   }
 
   // Interactive device onboarding needs the realtime transcript + voice paths, which Transcribe
@@ -574,7 +547,6 @@ class CaptureController extends ChangeNotifier
     if (!SharedPreferencesUtil().batchModeEnabled) return;
     SharedPreferencesUtil().batchModeSuspendedForOnboarding = true;
     SharedPreferencesUtil().batchModeEnabled = false;
-    await _applyLimitlessRealtimeSuppression(false);
     notifyListeners();
     try {
       await onRecordProfileSettingChanged();
@@ -585,7 +557,6 @@ class CaptureController extends ChangeNotifier
     if (!SharedPreferencesUtil().batchModeSuspendedForOnboarding) return;
     SharedPreferencesUtil().batchModeSuspendedForOnboarding = false;
     SharedPreferencesUtil().batchModeEnabled = true;
-    await _applyLimitlessRealtimeSuppression(true);
     notifyListeners();
     try {
       await onRecordProfileSettingChanged();
@@ -1056,11 +1027,8 @@ class CaptureController extends ChangeNotifier
       await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', true);
     }
 
-    // Update state (limitless is excluded: the pendant records on-device, so the
-    // capture card is driven by its stored-page count, not a live phone timer)
-    if (SharedPreferencesUtil().batchModeEnabled &&
-        _recordingDevice?.type != DeviceType.limitless &&
-        _offlineSessionStartSeconds == 0) {
+    // Update state
+    if (SharedPreferencesUtil().batchModeEnabled && _offlineSessionStartSeconds == 0) {
       _offlineSessionStartSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
       _offlineMuteStartedAt = null;
       if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
@@ -1106,7 +1074,7 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool(
       'nativeBleStreamingEnabled',
-      !batchMode && SharedPreferencesUtil().backgroundModeEnabled && device.type != DeviceType.limitless,
+      !batchMode && SharedPreferencesUtil().backgroundModeEnabled,
     );
     Logger.debug(
       '[batch] config saved: batchMode=$batchMode dir=${docsDir.path} '
@@ -1121,12 +1089,12 @@ class CaptureController extends ChangeNotifier
         return const MapEntry(omiServiceUuid, audioDataStreamCharacteristicUuid);
       case DeviceType.friendPendant:
         return const MapEntry(friendPendantServiceUuid, friendPendantAudioCharacteristicUuid);
-      case DeviceType.limitless:
-        return const MapEntry(limitlessServiceUuid, limitlessRxCharUuid);
       case DeviceType.appleWatch:
       case DeviceType.bee:
       case DeviceType.fieldy:
+      case DeviceType.limitless:
       case DeviceType.plaud:
+      case DeviceType.metaWearables:
         return null;
     }
   }
@@ -1143,11 +1111,6 @@ class CaptureController extends ChangeNotifier
     if (device.id.isEmpty) return false;
     return _nativeBleAudioTarget(device) != null;
   }
-
-  /// Background Mode's native realtime streamer supports a subset of the routed
-  /// devices: limitless has a route for batch capture (flash drain), but its
-  /// background streaming lands with the native drain engine follow-up.
-  bool get hasNativeBackgroundStreamRoute => hasNativeBleAudioRoute && _recordingDevice?.type != DeviceType.limitless;
 
   /// Enable or disable Background Mode through CaptureProvider so the provider
   /// can validate against the actual native BLE route before committing prefs.
@@ -1183,8 +1146,8 @@ class CaptureController extends ChangeNotifier
       return true;
     }
 
-    // Enable: must have a concrete device the native streamer supports.
-    if (!hasNativeBackgroundStreamRoute) {
+    // Enable: must have a concrete device with a native BLE audio route.
+    if (!hasNativeBleAudioRoute) {
       Logger.debug(
         '[BackgroundMode] enable rejected — no device with native BLE route '
         '(device=${_recordingDevice?.id}, type=${_recordingDevice?.type})',
@@ -1228,40 +1191,118 @@ class CaptureController extends ChangeNotifier
     await connection.performCameraStartPhotoController();
     _blePhotoStream = await connection.performGetImageListener(
       onImageReceived: (orientedImage) async {
-        final rotatedImageBytes = rotateImage(orientedImage);
-        final String tempId = 'temp_img_${DateTime.now().millisecondsSinceEpoch}';
-        final String base64Image = base64Encode(rotatedImageBytes);
-
-        // Add placeholder to UI for immediate feedback
-        photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: DateTime.now()));
-        photos = List.from(photos);
-        notifyListeners();
-
-        // Chunking Logic
-        const int chunkSize = 8192; // 8KB chunks
-        final totalChunks = (base64Image.length / chunkSize).ceil();
-
-        for (int i = 0; i < totalChunks; i++) {
-          final start = i * chunkSize;
-          final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
-          final chunk = base64Image.substring(start, end);
-
-          final payload = jsonEncode({
-            'type': 'image_chunk',
-            'id': tempId,
-            'index': i,
-            'total': totalChunks,
-            'data': chunk,
-          });
-
-          if (_socket?.state == SocketServiceState.connected) {
-            _socket?.send(payload); // Send the JSON string
-          }
-          await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
-        }
+        await ingestCapturedImage(rotateImage(orientedImage));
       },
     );
     notifyListeners();
+  }
+
+  /// Adds an encoded image (JPEG/PNG bytes) to the in-progress conversation and
+  /// streams it to the backend over the transcription socket as image_chunk
+  /// messages. Used by BLE camera devices (OmiGlass) and non-BLE sources such
+  /// as Meta glasses photo capture.
+  ///
+  /// Returns `true` only when every chunk went out over a connected socket —
+  /// callers with their own storage (e.g. the Meta glasses photo queue) keep
+  /// the image buffered and retry when this returns `false`.
+  ///
+  /// [capturedAt] is when the photo was actually taken. Buffered photos are
+  /// often sent long after capture; stamping send time would place them at
+  /// the wrong point in the conversation timeline.
+  Future<bool> ingestCapturedImage(Uint8List imageBytes, {bool addToUi = true, DateTime? capturedAt}) async {
+    final DateTime takenAt = capturedAt ?? DateTime.now();
+    final String tempId = 'temp_img_${takenAt.millisecondsSinceEpoch}';
+    final String base64Image = base64Encode(imageBytes);
+    final ack = _pendingPhotoUploadAcks[tempId] = Completer<void>();
+
+    if (addToUi) {
+      // Add placeholder to UI for immediate feedback, ordered by capture time.
+      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: takenAt));
+      photos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      photos = List.from(photos);
+      notifyListeners();
+    }
+
+    try {
+      if (_socket?.state != SocketServiceState.connected) return false;
+
+      // Chunking Logic
+      const int chunkSize = 8192; // 8KB chunks
+      final totalChunks = (base64Image.length / chunkSize).ceil();
+
+      for (int i = 0; i < totalChunks; i++) {
+        final start = i * chunkSize;
+        final end = (start + chunkSize > base64Image.length) ? base64Image.length : start + chunkSize;
+        final chunk = base64Image.substring(start, end);
+
+        final payload = jsonEncode({
+          'type': 'image_chunk',
+          'id': tempId,
+          'index': i,
+          'total': totalChunks,
+          'data': chunk,
+        });
+
+        if (_socket?.state != SocketServiceState.connected) return false;
+        _socket?.send(payload); // Send the JSON string
+        await Future.delayed(const Duration(milliseconds: 20)); // Small delay to prevent flooding
+      }
+
+      return await _waitForPhotoUploadAck(tempId, ack);
+    } finally {
+      _pendingPhotoUploadAcks.remove(tempId);
+      _pendingPhotoUploadIdsByPermanent.removeWhere((_, pendingTempId) => pendingTempId == tempId);
+    }
+  }
+
+  /// Caches a glasses frame through REST. No phone mic and no listen socket.
+  Future<bool> cacheCapturedImage(
+    Uint8List imageBytes, {
+    bool addToUi = true,
+    DateTime? capturedAt,
+    String? deviceUuid,
+    String? deviceName,
+    String? frameSha256,
+  }) async {
+    final takenAt = capturedAt ?? DateTime.now();
+    final tempId = 'temp_meta_${takenAt.millisecondsSinceEpoch}';
+    final base64Image = base64Encode(imageBytes);
+
+    if (addToUi) {
+      photos.add(ConversationPhoto(id: tempId, base64: base64Image, createdAt: takenAt));
+      photos.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      photos = List.from(photos);
+      notifyListeners();
+    }
+
+    final cached = await cacheMetaWearablesPhoto(
+      imageBytes,
+      capturedAt: takenAt,
+      conversationId: _metaWearablesCaptureConversationId,
+      deviceUuid: deviceUuid,
+      deviceName: deviceName,
+      frameSha256: frameSha256,
+    );
+    if (cached == null || cached.conversationId.isEmpty || cached.photoId.isEmpty) return false;
+
+    _metaWearablesCaptureConversationId = cached.conversationId;
+    final photoIndex = photos.indexWhere((p) => p.id == tempId);
+    if (photoIndex != -1) {
+      photos[photoIndex].id = cached.photoId;
+      _segmentsPhotosVersion++;
+      notifyListeners();
+    }
+    return true;
+  }
+
+  Future<bool> _waitForPhotoUploadAck(String tempId, Completer<void> ack) async {
+    try {
+      await ack.future.timeout(_photoUploadAckTimeout);
+      return true;
+    } on TimeoutException {
+      Logger.debug('CaptureController: photo upload ack timed out for $tempId');
+      return false;
+    }
   }
 
   void clearTranscripts() {
@@ -1767,6 +1808,8 @@ class CaptureController extends ChangeNotifier
     if (event is PhotoProcessingEvent) {
       final tempId = event.tempId;
       final permanentId = event.photoId;
+      _pendingPhotoUploadIdsByPermanent[permanentId] = tempId;
+      _completePhotoUploadAck(tempId);
       final photoIndex = photos.indexWhere((p) => p.id == tempId);
       if (photoIndex != -1) {
         photos[photoIndex].id = permanentId;
@@ -1780,6 +1823,10 @@ class CaptureController extends ChangeNotifier
       final photoId = event.photoId;
       final description = event.description;
       final discarded = event.discarded;
+      final pendingTempId = _pendingPhotoUploadIdsByPermanent.remove(photoId);
+      if (pendingTempId != null) {
+        _completePhotoUploadAck(pendingTempId);
+      }
       final photoIndex = photos.indexWhere((p) => p.id == photoId);
       if (photoIndex != -1) {
         photos[photoIndex].description = description;
@@ -1788,6 +1835,13 @@ class CaptureController extends ChangeNotifier
         notifyListeners();
       }
       return;
+    }
+  }
+
+  void _completePhotoUploadAck(String tempId) {
+    final ack = _pendingPhotoUploadAcks[tempId];
+    if (ack != null && !ack.isCompleted) {
+      ack.complete();
     }
   }
 
@@ -2236,8 +2290,6 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleForegroundReady', false);
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', false);
     _isPaused = true;
-    // Persist so the mute survives an app kill/restart, not just a reconnect.
-    SharedPreferencesUtil().deviceMuted = true;
     updateRecordingState(RecordingState.pause);
     notifyListeners();
   }
@@ -2245,8 +2297,6 @@ class CaptureController extends ChangeNotifier
   Future<void> resumeDeviceRecording() async {
     if (_recordingDevice == null) return;
     _isPaused = false;
-    // Clear the persisted mute so we don't re-mute on the next restart.
-    SharedPreferencesUtil().deviceMuted = false;
     // Update widget immediately — don't wait for streaming setup
     BatteryWidgetService().updateMuteState(false);
     // Resume streaming from the device

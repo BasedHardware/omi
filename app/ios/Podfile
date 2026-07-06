@@ -1,5 +1,5 @@
 # Uncomment this line to define a global platform for your project
-platform :ios, '15.0'
+platform :ios, '17.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
@@ -30,6 +30,13 @@ require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelpe
 
 flutter_ios_podfile_setup
 
+# NOTE: Do NOT force SwiftProtobuf to a dynamic framework and strip it from the
+# Runner embed step. That produced a Runner binary loading
+# @rpath/SwiftProtobuf.framework that was never embedded/signed into the app
+# bundle -> dyld "Library not loaded" crash at launch on device (stuck on
+# splash, no logs). The static-linkage duplicate-class objc warning from
+# MWDATCore is harmless; keep static linkage.
+
 target 'Runner' do
   use_frameworks! :linkage => :static
   use_modular_headers!
@@ -37,6 +44,53 @@ target 'Runner' do
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
 
   pod 'TwilioVoice', '~> 6.13'
+end
+
+def patch_firebase_crashlytics_status_bar_orientation(installer)
+  notification_manager = File.join(
+    installer.sandbox.root.to_s,
+    'FirebaseCrashlytics/Crashlytics/Crashlytics/Controllers/FIRCLSNotificationManager.m'
+  )
+  return unless File.exist?(notification_manager)
+
+  File.chmod(0o644, notification_manager) rescue nil
+  source = File.read(notification_manager)
+  return if source.include?('FIRCLSSafeStatusBarOrientation')
+
+  helper = <<~'OBJC'
+    #if TARGET_OS_IOS && (!CLS_TARGET_OS_VISION)
+    static UIInterfaceOrientation FIRCLSSafeStatusBarOrientation(void) {
+      if (@available(iOS 13.0, *)) {
+        UIApplication *application = (UIApplication *)FIRCLSApplicationSharedInstance();
+        UIWindowScene *fallbackWindowScene = nil;
+        for (UIScene *scene in application.connectedScenes) {
+          if (![scene isKindOfClass:[UIWindowScene class]]) {
+            continue;
+          }
+          UIWindowScene *windowScene = (UIWindowScene *)scene;
+          if (scene.activationState == UISceneActivationStateForegroundActive ||
+              scene.activationState == UISceneActivationStateForegroundInactive) {
+            return windowScene.interfaceOrientation;
+          }
+          if (fallbackWindowScene == nil) {
+            fallbackWindowScene = windowScene;
+          }
+        }
+        return fallbackWindowScene == nil ? UIInterfaceOrientationUnknown
+                                          : fallbackWindowScene.interfaceOrientation;
+      }
+      return UIInterfaceOrientationUnknown;
+    }
+    #endif  // TARGET_OS_IOS && (!CLS_TARGET_OS_VISION)
+
+  OBJC
+
+  source.sub!("#endif\n\n@implementation FIRCLSNotificationManager", "#endif\n\n#{helper}@implementation FIRCLSNotificationManager")
+  source.gsub!(
+    "UIInterfaceOrientation statusBarOrientation =\n      [FIRCLSApplicationSharedInstance() statusBarOrientation];",
+    'UIInterfaceOrientation statusBarOrientation = FIRCLSSafeStatusBarOrientation();'
+  )
+  File.write(notification_manager, source)
 end
 
 post_install do |installer|
@@ -74,6 +128,7 @@ post_install do |installer|
 
     end
   end
+  patch_firebase_crashlytics_status_bar_orientation(installer)
 #   ################  Awesome Notifications pod modification 1 ###################
 #   awesome_pod_file = File.expand_path(File.join('plugins', 'awesome_notifications', 'ios', 'Scripts', 'AwesomePodFile'), '.symlinks')
 #   require awesome_pod_file

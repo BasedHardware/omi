@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "आप अपना स्वयं का ट्रांसक्रिप्शन प्रदाता उपयोग करते हैं। इन रिकॉर्डिंग को सिंक करने पर ये Omi के सर्वर पर ट्रांसक्राइब होंगी और आपकी योजना की ट्रांसक्रिप्शन सीमा में गिनी जाएंगी।",
     "transcribeLaterTitle": "बाद में ट्रांसक्राइब करें",
     "transcribeLaterDescription": "अभी ऑडियो रिकॉर्ड करें और लाइव के बजाय बाद में अपनी ज़रूरत के अनुसार उसे ट्रांसक्राइब करें। रिकॉर्डिंग आपके फ़ोन में सेव होती हैं, फिर आप उन्हें अपलोड करके बातचीत बना सकते हैं।",
-    "transcribeLaterNote": "फ़िलहाल यह Omi और Limitless डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।",
+    "transcribeLaterNote": "फ़िलहाल यह Omi डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।",
     "transcribeLaterStorageFull": "आपके फ़ोन में स्टोरेज कम है, इसलिए रिकॉर्डिंग रोक दी गई है। कुछ जगह खाली करें या अपनी रिकॉर्डिंग अपलोड करें, फिर यह अपने आप दोबारा शुरू हो जाएगी।",
     "unmute": "अनम्यूट",
     "newRecording": "नई रिकॉर्डिंग",
@@ -3105,17 +3105,33 @@
     "deviceOnboardingIntroDuration": "लगभग 1 मिनट",
     "jumpToLatestMessage": "नवीनतम संदेश पर जाएं",
     "latest": "नवीनतम",
-    "flashFirmware": "फ़र्मवेयर फ़्लैश करें",
-    "pendantRecordingTitle": "पेंडेंट पर रिकॉर्डिंग",
-    "pendantRecordingNote": "आपका पेंडेंट अपने आप रिकॉर्ड कर रहा है। ऐप खुला रहने पर रिकॉर्डिंग आपके फ़ोन में सिंक होती हैं।",
-    "pendantSyncingRecordings": "आपके पेंडेंट से रिकॉर्डिंग सिंक हो रही हैं…",
-    "pendantMinutesStored": "~{minutes} मिनट संग्रहीत",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "पेंडेंट का स्टोरेज लगभग भर गया है — सिंक करने के लिए ऐप खुला रखें।"
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "अपने Meta Glasses कनेक्ट करें",
+    "pairingDescMetaGlasses": "Meta AI ऐप में अपना चश्मा पेयर करें, फिर Omi में Connect पर टैप करें। आप एक से अधिक जोड़ी लिंक कर सकते हैं और सक्रिय जोड़ी चुन सकते हैं।",
+    "metaGlassesUnavailable": "Meta AI ऐप नहीं मिला। चश्मा कनेक्ट करने के लिए Meta AI इंस्टॉल करें और डेवलपर मोड चालू करें।",
+    "metaGlassesRegistering": "Meta AI ऐप में कनेक्शन पूरा करें, फिर Omi में वापस आएं।",
+    "metaGlassesCameraPermission": "Meta AI ऐप में कैमरा एक्सेस की अनुमति दें",
+    "metaGlassesCaptureModeLabel": "कैप्चर मोड",
+    "metaGlassesModeCameraMic": "कैमरा + माइक",
+    "metaGlassesModeMicOnly": "केवल माइक",
+    "metaGlassesStartCapture": "कैप्चर शुरू करें",
+    "metaGlassesStopCapture": "कैप्चर बंद करें",
+    "metaGlassesGestureHint": "इस बिल्ड में Meta चश्मे के लिए जेस्चर नियंत्रण समर्थित नहीं हैं।",
+    "connectAnotherDevice": "दूसरा डिवाइस कनेक्ट करें",
+    "myDevices": "मेरे डिवाइस",
+    "metaGlassesAutoCapture": "कनेक्ट होने पर ऑटो-कैप्चर",
+    "metaGlassesShowPreview": "लाइव प्रीव्यू",
+    "metaGlassesPendingPhotos": "{count} फ़ोटो सिंक की प्रतीक्षा में",
+    "metaGlassesPairInMetaAI": "Meta AI ऐप में सेट अप करें",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "चश्मा ठंडा हो रहा है — कैप्चर रुका हुआ है",
+    "metaGlassesFolded": "कैप्चर जारी रखने के लिए चश्मा खोलें",
+    "metaGlassesCaptureFrequency": "कैप्चर आवृत्ति",
+    "metaGlassesEvery10s": "हर 10 सेकंड",
+    "metaGlassesEvery30s": "हर 30 सेकंड",
+    "metaGlassesEvery1min": "हर 1 मिनट",
+    "metaGlassesEvery5min": "हर 5 मिनट",
+    "metaGlassesGestures": "जेस्चर"
 }

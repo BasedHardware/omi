@@ -3089,7 +3089,7 @@
     "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.",
     "transcribeLaterTitle": "Transkrypcja później",
     "transcribeLaterDescription": "Nagrywaj dźwięk teraz, a transkrypcję uruchamiaj na żądanie zamiast na żywo. Nagrania są zapisywane w telefonie, a następnie przesyłasz je, aby utworzyć rozmowy.",
-    "transcribeLaterNote": "Na razie działa z urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
+    "transcribeLaterNote": "Na razie działa z urządzeniami Omi. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
     "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.",
     "unmute": "Wyłącz wyciszenie",
     "newRecording": "Nowe nagranie",
@@ -3139,17 +3139,33 @@
     "deviceOnboardingIntroDuration": "Około 1 minuty",
     "jumpToLatestMessage": "Przejdź do najnowszej wiadomości",
     "latest": "Najnowsza",
-    "flashFirmware": "Wgraj oprogramowanie układowe",
-    "pendantRecordingTitle": "Nagrywanie na zawieszce",
-    "pendantRecordingNote": "Twoja zawieszka nagrywa samodzielnie. Nagrania synchronizują się z telefonem, gdy aplikacja jest otwarta.",
-    "pendantSyncingRecordings": "Synchronizowanie nagrań z zawieszki…",
-    "pendantMinutesStored": "~{minutes} min zapisane",
-    "@pendantMinutesStored": {
-        "placeholders": {
-            "minutes": {
-                "type": "int"
-            }
-        }
-    },
-    "pendantStorageAlmostFull": "Pamięć zawieszki jest prawie pełna — pozostaw aplikację otwartą, aby zsynchronizować."
+    "metaGlasses": "Meta Glasses",
+    "pairingTitleMetaGlasses": "Połącz swoje Meta Glasses",
+    "pairingDescMetaGlasses": "Sparuj okulary w aplikacji Meta AI, a następnie stuknij Połącz w Omi. Możesz połączyć więcej niż jedną parę i wybrać aktywną.",
+    "metaGlassesUnavailable": "Nie znaleziono aplikacji Meta AI. Zainstaluj Meta AI i włącz tryb programisty, aby połączyć okulary.",
+    "metaGlassesRegistering": "Dokończ łączenie w aplikacji Meta AI, a następnie wróć do Omi.",
+    "metaGlassesCameraPermission": "Zezwól na dostęp do kamery w aplikacji Meta AI",
+    "metaGlassesCaptureModeLabel": "Tryb nagrywania",
+    "metaGlassesModeCameraMic": "Kamera + mikrofon",
+    "metaGlassesModeMicOnly": "Tylko mikrofon",
+    "metaGlassesStartCapture": "Rozpocznij nagrywanie",
+    "metaGlassesStopCapture": "Zatrzymaj nagrywanie",
+    "metaGlassesGestureHint": "Sterowanie gestami dla okularów Meta nie jest obsługiwane w tej kompilacji.",
+    "connectAnotherDevice": "Połącz kolejne urządzenie",
+    "myDevices": "Moje urządzenia",
+    "metaGlassesAutoCapture": "Automatyczne nagrywanie po połączeniu",
+    "metaGlassesShowPreview": "Podgląd na żywo",
+    "metaGlassesPendingPhotos": "{count} zdjęć czeka na synchronizację",
+    "metaGlassesPairInMetaAI": "Skonfiguruj w aplikacji Meta AI",
+    "metaGlassesTypeRayBanMeta": "Ray-Ban Meta",
+    "metaGlassesTypeRayBanDisplay": "Meta Ray-Ban Display",
+    "metaGlassesTypeOakleyMeta": "Oakley Meta",
+    "metaGlassesOverheating": "Okulary się chłodzą — przechwytywanie wstrzymane",
+    "metaGlassesFolded": "Rozłóż okulary, aby kontynuować przechwytywanie",
+    "metaGlassesCaptureFrequency": "Częstotliwość zdjęć",
+    "metaGlassesEvery10s": "Co 10 s",
+    "metaGlassesEvery30s": "Co 30 s",
+    "metaGlassesEvery1min": "Co 1 min",
+    "metaGlassesEvery5min": "Co 5 min",
+    "metaGlassesGestures": "Gesty"
 }

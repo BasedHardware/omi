@@ -12,6 +12,7 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/providers/base_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/utils/omi_auth_log.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -89,7 +90,11 @@ class AuthenticationProvider extends BaseProvider {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth) {
+        final useNativeGoogle = PlatformService.isMobile && !useWebAuth;
+        await OmiAuthLog.info(
+          'Google branch=${useNativeGoogle ? 'native' : 'web'} mobile=${PlatformService.isMobile} useWebAuth=$useWebAuth',
+        );
+        if (useNativeGoogle) {
           credential = await AuthService.instance.signInWithGoogleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('google');
@@ -103,6 +108,7 @@ class AuthenticationProvider extends BaseProvider {
           );
         }
       } catch (e) {
+        await OmiAuthLog.info('Google provider error: $e');
         Logger.debug('OAuth Google sign in error: $e');
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
@@ -113,12 +119,16 @@ class AuthenticationProvider extends BaseProvider {
   }
 
   Future<void> onAppleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
+    final useWebAuth = Env.useWebAuth || Env.useAppleWebAuth;
     if (!loading) {
       setLoadingState(true);
       try {
         UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
+        final useNativeApple = PlatformService.isMobile && !useWebAuth && !Platform.isAndroid;
+        await OmiAuthLog.info(
+          'Apple branch=${useNativeApple ? 'native' : 'web'} mobile=${PlatformService.isMobile} useWebAuth=$useWebAuth android=${Platform.isAndroid}',
+        );
+        if (useNativeApple) {
           credential = await AuthService.instance.signInWithAppleMobile();
         } else {
           credential = await AuthService.instance.authenticateWithProvider('apple');
@@ -132,6 +142,7 @@ class AuthenticationProvider extends BaseProvider {
           );
         }
       } catch (e) {
+        await OmiAuthLog.info('Apple provider error: $e');
         Logger.debug('OAuth Apple sign in error: $e');
         AppSnackbar.showSnackbarError(
           globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',

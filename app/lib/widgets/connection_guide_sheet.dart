@@ -35,6 +35,13 @@ class ConnectionGuideSheet extends StatelessWidget {
         localImagePath: Assets.images.omiGlass.path,
       ),
       DeviceGuideProduct(
+        id: 'meta_glasses',
+        name: l10n.metaGlasses,
+        pairingTitle: l10n.pairingTitleMetaGlasses,
+        pairingDescription: l10n.pairingDescMetaGlasses,
+        localImagePath: Assets.images.omiGlass.path,
+      ),
+      DeviceGuideProduct(
         id: 'plaud_note',
         name: 'Plaud Note',
         pairingTitle: l10n.pairingTitlePlaudNote,
