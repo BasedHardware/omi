@@ -20,29 +20,33 @@ pub fn llm_stub_enabled() -> bool {
         .unwrap_or(false)
 }
 
-fn extract_user_text(req: &ChatCompletionRequest) -> String {
+fn message_text(content: &Option<Value>) -> Option<String> {
+    content.as_ref().and_then(|value| {
+        if let Some(text) = value.as_str() {
+            Some(text.to_string())
+        } else if let Some(parts) = value.as_array() {
+            Some(
+                parts
+                    .iter()
+                    .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            )
+        } else {
+            None
+        }
+    })
+}
+
+/// Marker tokens from the latest user turn only — avoids echoing markers that
+/// appear in prior user messages or assistant echoes included in history.
+fn extract_latest_user_text(req: &ChatCompletionRequest) -> String {
     req.messages
         .iter()
-        .filter(|message| message.role == "user")
-        .filter_map(|message| {
-            message.content.as_ref().and_then(|value| {
-                if let Some(text) = value.as_str() {
-                    Some(text.to_string())
-                } else if let Some(parts) = value.as_array() {
-                    Some(
-                        parts
-                            .iter()
-                            .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
-                            .collect::<Vec<_>>()
-                            .join("\n"),
-                    )
-                } else {
-                    None
-                }
-            })
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+        .rev()
+        .find(|message| message.role == "user")
+        .and_then(|message| message_text(&message.content))
+        .unwrap_or_default()
 }
 
 fn extract_markers(text: &str) -> Vec<String> {
@@ -51,7 +55,10 @@ fn extract_markers(text: &str) -> Vec<String> {
     while let Some(start) = rest.find("[[MARKER:") {
         let after = &rest[start + 9..];
         if let Some(end) = after.find("]]") {
-            markers.push(after[..end].to_string());
+            let marker = after[..end].to_string();
+            if !markers.iter().any(|existing| existing == &marker) {
+                markers.push(marker);
+            }
             rest = &after[end + 2..];
         } else {
             break;
@@ -85,7 +92,7 @@ fn fixture_lines(body: &str, default_fixture: &str) -> Vec<String> {
 }
 
 pub fn stub_chat_completions_response(req: &ChatCompletionRequest) -> Response {
-    let user_text = extract_user_text(req);
+    let user_text = extract_latest_user_text(req);
     let lines = fixture_lines(&user_text, DEFAULT_FIXTURE);
     let stream = stream::iter(
         lines
@@ -170,7 +177,50 @@ mod tests {
             tools: None,
             tool_choice: None,
         };
-        let lines = fixture_lines(&extract_user_text(&req), DEFAULT_FIXTURE);
+        let lines = fixture_lines(&extract_latest_user_text(&req), DEFAULT_FIXTURE);
         assert!(lines.iter().any(|line| line.contains("desk-core-e2e")));
+    }
+
+    #[test]
+    fn fixture_echoes_marker_from_latest_user_message_only() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Old turn [[MARKER:stale-marker]]")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "assistant".to_string(),
+                    content: Some(json!("Stub saw marker: stale-marker")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!(
+                        "Latest [[MARKER:chat-hermetic]] and again [[MARKER:chat-hermetic]]"
+                    )),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: true,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+        let lines = fixture_lines(&extract_latest_user_text(&req), DEFAULT_FIXTURE);
+        let payload = lines.join("\n");
+        assert!(!payload.contains("stale-marker"));
+        assert_eq!(payload.matches("chat-hermetic").count(), 1);
+        assert!(payload.contains("Stub saw marker: chat-hermetic"));
     }
 }
