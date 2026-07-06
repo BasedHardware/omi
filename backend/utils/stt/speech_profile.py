@@ -27,6 +27,32 @@ def _get_speech_profile_api_url() -> str:
     return url
 
 
+def _validate_segment_matches(result: object, segments: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+    """Validate an external speech-profile JSON response before returning it.
+
+    Returns a normalized list (one entry per segment) on success, or None if the
+    response shape is malformed. Callers index the result by segment position, so
+    we must guarantee len(matches) == len(segments) and that every item is a dict
+    with the 'is_user' key that the consumer reads.
+    """
+    if not isinstance(result, list):
+        return None
+
+    # Boolean-list response: normalize to the dict shape the caller expects.
+    if result and isinstance(result[0], bool):
+        if len(result) != len(segments):
+            return None
+        return [{'is_user': bool(r), 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
+
+    # Already-dict response: validate length and per-item schema.
+    if len(result) != len(segments):
+        return None
+    for item in result:
+        if not isinstance(item, dict) or 'is_user' not in item:
+            return None
+    return result  # type: ignore[reportUnknownVariableType]  # validated external JSON response
+
+
 def get_speech_profile_matching_predictions(
     uid: str, audio_file_path: str, segments: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
@@ -48,11 +74,9 @@ def get_speech_profile_matching_predictions(
     try:
         result = response.json()
         logger.info(f'get_speech_profile_matching_predictions {sanitize(result)}')
-        if isinstance(result, list) and result and isinstance(result[0], bool):
-            return [{'is_user': r, 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
-
-        if isinstance(result, list) and len(result) == len(segments):
-            return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response, validated against segments length
+        validated = _validate_segment_matches(result, segments)
+        if validated is not None:
+            return validated
 
         # Malformed/empty response shape: fall back to per-segment default so
         # callers that index matches[i] do not crash conversation post-processing.
@@ -95,11 +119,9 @@ async def async_get_speech_profile_matching_predictions(
     try:
         result = response.json()
         logger.info(f'async_get_speech_profile_matching_predictions {sanitize(result)}')
-        if isinstance(result, list) and result and isinstance(result[0], bool):
-            return [{'is_user': r, 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
-
-        if isinstance(result, list) and len(result) == len(segments):
-            return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response, validated against segments length
+        validated = _validate_segment_matches(result, segments)
+        if validated is not None:
+            return validated
 
         # Malformed/empty response shape: fall back to per-segment default so
         # callers that index matches[i] do not crash conversation post-processing.
