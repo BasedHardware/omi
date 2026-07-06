@@ -1,0 +1,20 @@
+mockup/design-system.css
+  s_751b5889fd7450::t_52fa94853f1216 81-85
+  s_751b5889fd7450::t_478bec28b3e7c9 25-29
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4235eb38a1cd8478120ef3c8919a66537d4240bd",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
