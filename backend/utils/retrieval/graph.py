@@ -8,7 +8,6 @@ the requires_context() LLM classification call.
 
 from __future__ import annotations
 
-import uuid
 import asyncio
 from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, cast, TYPE_CHECKING
 
@@ -23,7 +22,6 @@ from utils.llm.chat import retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
-from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
 logger = logging.getLogger(__name__)
@@ -145,7 +143,9 @@ async def execute_persona_chat_stream(
         # attribute 'run_inline'. astream() yields AIMessageChunk objects
         # directly, no callback needed.
         async for chunk in llm.astream(formatted_messages):
-            token = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            raw = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            # LangChain AIMessageChunk.content can be str or list[str|dict]
+            token = raw if isinstance(raw, str) else str(raw)
             if token:
                 full_response.append(token)
                 yield f"data: {token}"

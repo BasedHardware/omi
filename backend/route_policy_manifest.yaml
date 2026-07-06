@@ -28,3 +28,25 @@ routes:
       data_domain: user_profile
       deprecation:
         state: active
+  - route_type: http
+    method: POST
+    path: /v2/integrations/{app_id}/user/persona-chat
+    policy:
+      review_status: legacy_unreviewed
+      auth:
+        mechanisms:
+          - bearer_api_key
+        placement: header
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: standard
+      surface: external_integration
+      visibility: internal
+      data_domain: persona
+      deprecation:
+        state: active

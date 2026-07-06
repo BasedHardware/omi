@@ -457,7 +457,6 @@ backend-main:http:POST:/v2/integrations/{app_id}/notification
 backend-main:http:POST:/v2/integrations/{app_id}/search/conversations
 backend-main:http:POST:/v2/integrations/{app_id}/user/conversations
 backend-main:http:POST:/v2/integrations/{app_id}/user/memories
-backend-main:http:POST:/v2/integrations/{app_id}/user/persona-chat
 backend-main:http:POST:/v2/messages
 backend-main:http:POST:/v2/messages/{message_id}/report
 backend-main:http:POST:/v2/messages/share
