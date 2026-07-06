@@ -245,20 +245,10 @@ extension AppState {
   nonisolated func resetLaunchServicesDatabase() {
     let lsregisterPath =
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: lsregisterPath)
-    process.arguments = ["-kill", "-r", "-domain", "local", "-domain", "user"]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-
-    do {
-      try process.run()
-      process.waitUntilExit()
-      log("Launch Services database reset (exit code: \(process.terminationStatus))")
-    } catch {
-      log("Failed to reset Launch Services: \(error.localizedDescription)")
-    }
+    SystemCommand.runLogging(
+      "Reset Launch Services database",
+      executable: lsregisterPath,
+      arguments: ["-kill", "-r", "-domain", "local", "-domain", "user"])
   }
 
   /// Clean user TCC database entries for Omi apps
@@ -266,43 +256,19 @@ extension AppState {
     let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
     let tccDbPath = "\(homeDir)/Library/Application Support/com.apple.TCC/TCC.db"
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process.arguments = [
-      tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.computer-macos%';",
-    ]
-    process.standardOutput = FileHandle.nullDevice
-    process.standardError = FileHandle.nullDevice
-
-    do {
-      try process.run()
-      process.waitUntilExit()
-      log("User TCC database cleaned (exit code: \(process.terminationStatus))")
-    } catch {
-      log("Failed to clean user TCC database: \(error.localizedDescription)")
-    }
+    SystemCommand.runLogging(
+      "Clean user TCC database (production bundle)",
+      executable: "/usr/bin/sqlite3",
+      arguments: [tccDbPath, "DELETE FROM access WHERE client LIKE '%com.omi.computer-macos%';"])
 
     // Also clean entries for non-production Omi bundles (for example com.omi.desktop-dev, com.omi.1233).
-    let process2 = Process()
-    process2.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    process2.arguments = [
-      tccDbPath,
-      "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
-    ]
-    process2.standardOutput = FileHandle.nullDevice
-    process2.standardError = FileHandle.nullDevice
-
-    do {
-      try process2.run()
-      process2.waitUntilExit()
-      log(
-        "User TCC database cleaned for non-production bundles (exit code: \(process2.terminationStatus))"
-      )
-    } catch {
-      log(
-        "Failed to clean user TCC database for non-production bundles: \(error.localizedDescription)"
-      )
-    }
+    SystemCommand.runLogging(
+      "Clean user TCC database (non-production bundles)",
+      executable: "/usr/bin/sqlite3",
+      arguments: [
+        tccDbPath,
+        "DELETE FROM access WHERE client LIKE 'com.omi.%' AND client != 'com.omi.computer-macos';",
+      ])
   }
 
   /// Reset microphone permission using tccutil (Option 1: Direct)
@@ -312,25 +278,16 @@ extension AppState {
     let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
     log("Resetting microphone permission for \(bundleId) via tccutil...")
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-    process.arguments = ["reset", "Microphone", bundleId]
+    let success = SystemCommand.runLogging(
+      "tccutil reset Microphone (\(bundleId))",
+      executable: "/usr/bin/tccutil",
+      arguments: ["reset", "Microphone", bundleId])
 
-    do {
-      try process.run()
-      process.waitUntilExit()
-      let success = process.terminationStatus == 0
-      log("tccutil reset completed with exit code: \(process.terminationStatus)")
-
-      if success && shouldRestart {
-        restartApp()
-      }
-
-      return success
-    } catch {
-      log("Failed to run tccutil: \(error)")
-      return false
+    if success && shouldRestart {
+      restartApp()
     }
+
+    return success
   }
 
   /// Reset microphone permission via Terminal (Option 2: Visible to user)
@@ -433,4 +390,116 @@ extension AppState {
 
 extension Notification.Name {
   /// Posted when the current app instance should fully clear its own onboarding state.
+}
+
+// MARK: - Privileged system command runner (BL-022)
+
+/// Structured outcome of a system / privileged shell-out (`tccutil`,
+/// `lsregister`, `sqlite3` on `TCC.db`, `xattr`, …).
+///
+/// These call sites previously used `try? process.run()`, which dropped *both*
+/// launch failures and non-zero exits silently — a failed provenance strip broke
+/// future Sparkle updates, and a failed `tccutil`/`sqlite3` reset looked
+/// identical to success (BL-022). Making the outcome explicit lets callers log it
+/// with context and, where a UI surface exists, reflect it — without ever
+/// crashing.
+enum SystemCommandOutcome: Equatable {
+  /// Process ran and exited 0.
+  case succeeded
+  /// Process could not be started (missing binary, sandbox denial, …).
+  case failedToLaunch(String)
+  /// Process ran but exited non-zero; carries a bounded, sanitized stderr snippet.
+  case exitedNonZero(code: Int32, stderr: String)
+
+  var isSuccess: Bool {
+    if case .succeeded = self { return true }
+    return false
+  }
+
+  /// Short, log-safe one-liner describing the outcome.
+  var summary: String {
+    switch self {
+    case .succeeded:
+      return "ok"
+    case .failedToLaunch(let detail):
+      return "failed to launch\(detail.isEmpty ? "" : " — \(detail)")"
+    case .exitedNonZero(let code, let stderr):
+      return "exit \(code)\(stderr.isEmpty ? "" : " — \(stderr)")"
+    }
+  }
+
+  /// Emit a single structured log line. Success is `log`; any failure is
+  /// `logError` so it surfaces in error triage instead of vanishing. Use for
+  /// commands that are expected to succeed (permission resets, provenance strip);
+  /// for best-effort tools whose non-zero exit is benign, log `summary` directly.
+  func logResult(_ label: String) {
+    switch self {
+    case .succeeded:
+      log("\(label): ok")
+    case .failedToLaunch, .exitedNonZero:
+      logError("\(label): \(summary)")
+    }
+  }
+}
+
+/// Runs system/privileged shell-outs and returns a structured outcome instead of
+/// throwing or silently swallowing. stderr is captured (bounded + sanitized) so
+/// failures are diagnosable; stdout is discarded. Blocking — call off the main
+/// thread for slow tools.
+enum SystemCommand {
+  @discardableResult
+  static func run(
+    executable: String,
+    arguments: [String],
+    maxStderrLength: Int = 200
+  ) -> SystemCommandOutcome {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = arguments
+    let stderrPipe = Pipe()
+    process.standardOutput = FileHandle.nullDevice
+    process.standardError = stderrPipe
+
+    do {
+      try process.run()
+    } catch {
+      return .failedToLaunch(
+        sanitizedCommandOutput(error.localizedDescription, maxLength: maxStderrLength))
+    }
+
+    // Drain stderr before waitUntilExit so a chatty tool can't deadlock on a full
+    // pipe buffer; readDataToEndOfFile returns once the child closes the pipe.
+    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+    process.waitUntilExit()
+
+    if process.terminationStatus == 0 {
+      return .succeeded
+    }
+    let snippet = sanitizedCommandOutput(
+      String(decoding: stderrData, as: UTF8.self), maxLength: maxStderrLength)
+    return .exitedNonZero(code: process.terminationStatus, stderr: snippet)
+  }
+
+  /// Run a should-succeed command, log its outcome under `label` (failure →
+  /// `logError`), and return whether it succeeded so callers can branch.
+  @discardableResult
+  static func runLogging(_ label: String, executable: String, arguments: [String]) -> Bool {
+    let outcome = run(executable: executable, arguments: arguments)
+    outcome.logResult(label)
+    return outcome.isSuccess
+  }
+}
+
+/// Collapse captured command output to a single, control-char-free, length-
+/// bounded snippet safe to log. The privileged system tools used here don't emit
+/// user secrets, so this bounds noise rather than scrubbing PII.
+func sanitizedCommandOutput(_ raw: String, maxLength: Int = 200) -> String {
+  let collapsed =
+    raw
+    .replacingOccurrences(of: "\r", with: " ")
+    .replacingOccurrences(of: "\n", with: " ")
+    .replacingOccurrences(of: "\t", with: " ")
+    .trimmingCharacters(in: .whitespacesAndNewlines)
+  if collapsed.count <= maxLength { return collapsed }
+  return String(collapsed.prefix(maxLength)) + "…"
 }
