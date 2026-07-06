@@ -1,0 +1,49 @@
+docs/doc/developer/mcp/tools.mdx
+  s_edfd59e96df44b::t_8cf4e1d3061029 93-115
+backend/tests/unit/test_person_messaging_enrichment.py
+  s_edfd59e96df44b::t_751da359414614 142-201
+backend/utils/conversations/process_conversation.py
+  s_edfd59e96df44b::t_20ec53126dac12 575-581,584
+  s_edfd59e96df44b::t_95d0363e45440b 49
+  s_edfd59e96df44b::t_58a9dc02654ed4 585
+backend/tests/unit/test_subject_memory_writer.py
+  s_edfd59e96df44b::t_83aae4e34c7a4c 202-230
+backend/utils/memory/subject_memory_writer.py
+  s_edfd59e96df44b::t_efcce1117c9e9a 228-229,231-234
+  s_edfd59e96df44b::t_41c41070fbb7e9 223-227,230,235
+  s_edfd59e96df44b::t_c643df70c21c5d 29
+  s_edfd59e96df44b::t_6f8d5b824c03e6 81-86
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_fd285e5852e427 556-684
+backend/utils/prompts.py
+  s_edfd59e96df44b::t_d4692ac78bd394 625,627,633,635
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_e6caa91ac5761a 84-90
+  s_edfd59e96df44b::t_d8b7c94cd16368 108-109,121-130
+  s_edfd59e96df44b::t_9023b5bde5b973 137,145-155
+  s_edfd59e96df44b::t_afcd58b9fcb30f 16,42-54
+  s_edfd59e96df44b::t_284bdecf96dead 55
+  s_edfd59e96df44b::t_298220a097e1fe 131
+backend/tests/unit/test_kg_user_type_mismatch.py
+  s_edfd59e96df44b::t_73f284d6e05301 564-632
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_50babe67243f8a 39
+  s_edfd59e96df44b::t_ddfd54f57798d6 655-675
+  s_edfd59e96df44b::t_36cf1b9998c639 620-628
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6c475b5b17297182c3b2b8aa141d8be0b663e554",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
