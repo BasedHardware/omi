@@ -16,23 +16,23 @@ from typing import Any, Awaitable, Callable, Coroutine, Dict, List, Optional, Se
 import av
 import numpy as np
 
-_opus_import_error: Optional[BaseException] = None
+_OPUS_IMPORT_ERROR: Optional[BaseException] = None
 try:
-    import opuslib
+    import opuslib  # type: ignore[reportMissingImports]
 except Exception as e:
     opuslib = None
-    _opus_import_error = e
+    _OPUS_IMPORT_ERROR = e
 else:
-    _opus_import_error = None
+    _OPUS_IMPORT_ERROR = None
 
-_lc3_import_error: Optional[BaseException] = None
+_LC3_IMPORT_ERROR: Optional[BaseException] = None
 try:
-    import lc3  # type: ignore[reportMissingImports]  # lc3py is an optional native dependency
+    import lc3  # lc3py  # type: ignore[reportMissingImports]
 except Exception as e:
     lc3 = None
-    _lc3_import_error = e
+    _LC3_IMPORT_ERROR = e
 else:
-    _lc3_import_error = None
+    _LC3_IMPORT_ERROR = None
 
 from fastapi import APIRouter, Depends
 from fastapi.websockets import WebSocket, WebSocketDisconnect
@@ -117,6 +117,7 @@ from utils.translation import TranslationService
 from utils.translation_cache import (
     TranscriptSegmentLanguageCache,
     ConversationLanguageState,
+    should_persist_translation,
 )
 from utils.translation_coordinator import TranslationCoordinator
 from utils.transcribe_decisions import (  # async-blockers: no-import-scope; async-blockers: no-changed-range-scope
@@ -201,14 +202,14 @@ def _get_opuslib() -> Any:
         raise RuntimeError(
             'Opus streaming requires opuslib and the native libopus library. '
             'Install the OS-level Opus package before using the opus codec.'
-        ) from _opus_import_error
+        ) from _OPUS_IMPORT_ERROR
     return opuslib
 
 
 def _get_lc3() -> Any:
     if lc3 is None:
         message = 'LC3 streaming requires lc3py and its native codec library. Install lc3py before using the lc3 codec.'
-        raise RuntimeError(message) from _lc3_import_error
+        raise RuntimeError(message) from _LC3_IMPORT_ERROR
     return lc3
 
 
