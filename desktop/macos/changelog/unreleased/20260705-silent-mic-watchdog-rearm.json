@@ -1,0 +1,3 @@
+{
+  "change": "A microphone that goes silent mid-session (Bluetooth profile conflicts or a stale audio route) can now be auto-recovered more than once, instead of only the first time"
+}

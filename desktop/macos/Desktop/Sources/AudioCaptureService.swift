@@ -83,11 +83,12 @@ class AudioCaptureService: @unchecked Sendable {
     private var onAudioChunk: AudioChunkHandler?
     private var onAudioLevel: AudioLevelHandler?
 
-    /// Called once when the mic has been alive-but-silent for `silentMicWindowThreshold`
-    /// seconds. By default this is limited to Bluetooth inputs, where macOS can feed
+    /// Called when the mic has been alive-but-silent for `silentMicWindowThreshold`
+    /// windows. By default this is limited to Bluetooth inputs, where macOS can feed
     /// zeros during A2DP/HFP profile conflicts. PTT enables all-transport detection so
     /// it can recover a stale HAL route that reports the built-in mic but still returns
-    /// silence. Fires at most once per capture session.
+    /// silence. The watchdog re-arms after each fire (see `evaluateSilentMicWindow`), so a
+    /// single capture session can recover from more than one silent episode.
     var onSilentMicDetected: ((SilentMicDetection) -> Void)?
     var detectSilentMicOnAnyTransport = false
 
@@ -98,10 +99,19 @@ class AudioCaptureService: @unchecked Sendable {
         return isBuiltIn ? "built-in id=\(deviceID)" : "id=\(deviceID)"
     }
 
-    // Silent-mic watchdog (fires once per session)
+    // Silent-mic watchdog. Re-arms after each fire so one session can recover from more
+    // than one silent episode; two guards keep it from spinning the recovery loop:
+    //   - `silentMicRecoveryCooldown`: suppress re-detection right after a fire so a freshly
+    //     rebuilt/switched capture has time to deliver real audio before we judge it again.
+    //   - `maxSilentMicFiresPerSession`: hard cap so an unrecoverable mic can't loop forever.
+    // `silentMicDetectedFired` now means "recently fired, awaiting re-arm" (not a permanent latch).
     private var consecutiveSilentWindows: Int = 0
     private var silentMicDetectedFired: Bool = false
+    private var silentMicFireCount: Int = 0
+    private var lastSilentMicFireTime: CFAbsoluteTime = 0
     private let silentMicWindowThreshold: Int = 2  // windows of ~1s each
+    private let silentMicRecoveryCooldown: CFAbsoluteTime = 3.0  // seconds to let recovery take effect
+    private let maxSilentMicFiresPerSession: Int = 3
 
     /// Target sample rate for DeepGram
     private let targetSampleRate: Double = 16000
@@ -135,8 +145,59 @@ class AudioCaptureService: @unchecked Sendable {
     func resetSilentMicWatchdog() {
         consecutiveSilentWindows = 0
         silentMicDetectedFired = false
+        silentMicFireCount = 0
+        lastSilentMicFireTime = 0
         watchdogWindowPeak = 0
         watchdogWindowStart = 0
+    }
+
+    /// Classify one closed ~1-second watchdog window and update re-arm bookkeeping.
+    ///
+    /// Returns a `SilentMicDetection` when the mic has been silent for
+    /// `silentMicWindowThreshold` consecutive windows and the watchdog is armed — the
+    /// caller then invokes `onSilentMicDetected`. Returns `nil` otherwise. After a fire the
+    /// watchdog suppresses re-detection until `silentMicRecoveryCooldown` has elapsed, then
+    /// re-arms, so a mic that recovered and later re-wedged (or a recovery that did not take)
+    /// is detected again — bounded by `maxSilentMicFiresPerSession` so an unrecoverable mic
+    /// cannot loop the recovery path forever.
+    ///
+    /// `internal` (not `private`) so the recover-more-than-once-per-session contract can be
+    /// unit-tested without driving real CoreAudio buffers.
+    func evaluateSilentMicWindow(peak: Int16, isBluetooth: Bool, now: CFAbsoluteTime) -> SilentMicDetection? {
+        // peak ≤ 5 (≈ -76 dBFS) is effectively silent compared to real speech.
+        if peak <= 5 {
+            consecutiveSilentWindows += 1
+        } else {
+            consecutiveSilentWindows = 0
+        }
+
+        // Re-arm once the post-fire cooldown has elapsed.
+        if silentMicDetectedFired, now - lastSilentMicFireTime >= silentMicRecoveryCooldown {
+            silentMicDetectedFired = false
+        }
+
+        guard !silentMicDetectedFired,
+              silentMicFireCount < maxSilentMicFiresPerSession,
+              consecutiveSilentWindows >= silentMicWindowThreshold,
+              isBluetooth || detectSilentMicOnAnyTransport
+        else {
+            return nil
+        }
+
+        let firedWindows = consecutiveSilentWindows
+        silentMicDetectedFired = true
+        silentMicFireCount += 1
+        lastSilentMicFireTime = now
+        // Require a fresh run of silent windows before the next fire so we never re-trigger
+        // on the very next window.
+        consecutiveSilentWindows = 0
+
+        return SilentMicDetection(
+            deviceID: deviceID,
+            deviceDescription: currentDeviceDescription,
+            consecutiveSilentWindows: firedWindows,
+            isBluetoothTransport: isBluetooth
+        )
     }
 
     /// Check if microphone permission is granted
@@ -506,6 +567,11 @@ class AudioCaptureService: @unchecked Sendable {
             // Clamp and convert to Int16 range (-32768 to 32767)
             let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
             pcmData.append(pcmSample)
+
+            // Accumulate the silent-mic peak while converting samples to avoid an
+            // extra pass on the audio callback hot path.
+            let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
+            if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
         }
 
         // Convert to Data (little-endian, which is native on Apple platforms)
@@ -516,44 +582,24 @@ class AudioCaptureService: @unchecked Sendable {
         // Silent-mic watchdog: macOS can accept the IOProc but deliver only zero samples.
         // Bluetooth inputs recover by switching to the built-in mic; PTT can opt into
         // all-transport detection so a stale built-in/default route triggers a full rebuild.
-        // Fires at most once per capture session.
-        if !silentMicDetectedFired {
-            for s in pcmData {
-                // Int16.min has magnitude 32768 which is out of Int16 range — clamp.
-                let a = s == Int16.min ? Int16.max : Int16(s.magnitude)
-                if a > watchdogWindowPeak { watchdogWindowPeak = a }
-            }
-            let nowAbs = CFAbsoluteTimeGetCurrent()
-            if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
-            if nowAbs - watchdogWindowStart >= 1.0 {
-                // Window closed — classify and reset.
-                // peak ≤ 5 (≈ -76 dBFS) is effectively silent compared to real speech.
-                if watchdogWindowPeak <= 5 {
-                    consecutiveSilentWindows += 1
+        // Classify once every ~1s window. Windows keep rolling after a fire (unlike a
+        // one-shot latch) so the watchdog observes recovery and can re-arm for a second
+        // episode — see `evaluateSilentMicWindow`.
+        let nowAbs = CFAbsoluteTimeGetCurrent()
+        if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
+        if nowAbs - watchdogWindowStart >= 1.0 {
+            let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
+            if let detection = evaluateSilentMicWindow(peak: watchdogWindowPeak, isBluetooth: isBluetooth, now: nowAbs) {
+                if isBluetooth {
+                    log("AudioCapture: Bluetooth mic returning silence for \(detection.consecutiveSilentWindows)s — falling back to built-in mic")
                 } else {
-                    consecutiveSilentWindows = 0
+                    log("AudioCapture: Input device returning silence for \(detection.consecutiveSilentWindows)s — rebuilding CoreAudio capture")
                 }
-                let isBluetooth = Self.isBluetoothTransport(deviceID: deviceID)
-                if consecutiveSilentWindows >= silentMicWindowThreshold,
-                   isBluetooth || detectSilentMicOnAnyTransport {
-                    silentMicDetectedFired = true
-                    let detection = SilentMicDetection(
-                        deviceID: deviceID,
-                        deviceDescription: currentDeviceDescription,
-                        consecutiveSilentWindows: consecutiveSilentWindows,
-                        isBluetoothTransport: isBluetooth
-                    )
-                    if isBluetooth {
-                        log("AudioCapture: Bluetooth mic returning silence for \(consecutiveSilentWindows)s — falling back to built-in mic")
-                    } else {
-                        log("AudioCapture: Input device returning silence for \(consecutiveSilentWindows)s — rebuilding CoreAudio capture")
-                    }
-                    let handler = onSilentMicDetected
-                    DispatchQueue.main.async { handler?(detection) }
-                }
-                watchdogWindowPeak = 0
-                watchdogWindowStart = nowAbs
+                let handler = onSilentMicDetected
+                DispatchQueue.main.async { handler?(detection) }
             }
+            watchdogWindowPeak = 0
+            watchdogWindowStart = nowAbs
         }
 
         // Calculate and report audio level (RMS normalized to 0.0 - 1.0)
