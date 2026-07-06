@@ -17,8 +17,32 @@ on:
       - "desktop/macos/Backend-Rust/src/models/**"
       - "desktop/macos/Backend-Rust/src/services/firestore.rs"
       - "desktop/macos/Backend-Rust/src/services/firestore/**"
+      - "desktop/macos/scripts/desktop-core-harness.sh"
+      - "desktop/macos/scripts/desktop-flow-lint.py"
+      - "desktop/macos/e2e/**"
+      - "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
+      - "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
 
 jobs:
+  desktop-core-e2e-t0:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Install flow lint dependency
+        run: python3 -m pip install PyYAML
+
+      - name: Install agent runtime for gauntlet self-check
+        working-directory: desktop/macos/agent
+        run: npm ci
+
+      - name: Desktop core E2E self-check (T0)
+        run: ./desktop/macos/scripts/desktop-core-harness.sh --self-check
+
   contracts:
     runs-on: ubuntu-latest
     defaults:

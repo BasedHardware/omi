@@ -1,5 +1,6 @@
 version: 2
 name: audio-recording
+tier: manual
 description: Audio recording flow — verify microphone permission, Start Recording button, transcription state, and stop recording
 app: com.omi.computer-macos
 covers:
