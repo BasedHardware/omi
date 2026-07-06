@@ -486,6 +486,26 @@ check_desktop_swift_if_needed() {
   )
 }
 
+check_desktop_userdefaults_ratchet_if_needed() {
+  # BL-004 / S-13: fail if new raw inline UserDefaults string keys are added to
+  # the desktop Swift sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop UserDefaults key ratchet because PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/*.swift' \
+    'desktop/macos/Desktop/Sources/**/*.swift' \
+    'desktop/macos/scripts/check-userdefaults-key-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
+}
+
 check_desktop_rust_if_needed() {
   local -a rust_files=()
   local file
@@ -574,6 +594,7 @@ run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
 run_step check_desktop_swift_if_needed
+run_step check_desktop_userdefaults_ratchet_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
