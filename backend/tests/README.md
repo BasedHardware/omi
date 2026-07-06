@@ -32,8 +32,8 @@ the old serial file-by-file run. Set `BACKEND_PYTEST_FILE_ISOLATION=0` to try on
 measures **CPU time of the call phase only** (`time.process_time`), not wall-clock: wall-clock inflates
 unpredictably under parallel contention and makes a hard limit flake, while CPU time is load-independent and
 deterministic regardless of `BACKEND_PYTEST_WORKERS`. `BACKEND_FAST_UNIT_GRACE_SECONDS` can add an optional
-local-only grace, but defaults to `0` so CI enforces the configured 100ms target. The slowest wall-clock times
-are still printed in the `Backend unit test durations` summary for visibility.
+grace; CI defaults it to `0.02` so the 100ms target tolerates only a narrow CPU-accounting jitter margin. The
+slowest wall-clock times are still printed in the `Backend unit test durations` summary for visibility.
 
 Under the default file-isolated runner each test file is a separate pytest process, so the first test of a
 file/class amortizes that process's module import (FastAPI app / router / database graph) into its measured
