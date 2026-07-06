@@ -77,10 +77,6 @@ class Objective(StrictBaseModel):
             raise ValueError('objective weights must sum to 1.0')
         return self
 
-    def as_tuple(self) -> tuple[float, float, float]:
-        """Return weights as a (quality, latency, cost) tuple."""
-        return (self.quality, self.latency, self.cost)
-
 
 class ProviderRef(StrictBaseModel):
     provider: str = Field(min_length=1)
@@ -157,15 +153,6 @@ class LaneConfig(StrictBaseModel):
     credential_policy: CredentialPolicy
     active_route: str = Field(min_length=1)
     last_known_good: str = Field(min_length=1)
-    # When true, the lane accepts per-user weight overrides at pick
-    # time (via the /v1/auto-router/pick endpoint and the
-    # X-Omi-Auto-Weights header). Default False — most production
-    # lanes should ship with overrides disabled so behavior is
-    # fully lane-driven and a misbehaving client can't shift the
-    # routing decision. The chat_structured pilot ships with
-    # objective_overridable: true so we can A/B test user prefs
-    # without code changes per user.
-    objective_overridable: bool = False
 
 
 class RouteArtifact(StrictBaseModel):
