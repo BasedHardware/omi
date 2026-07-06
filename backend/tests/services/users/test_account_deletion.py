@@ -161,8 +161,8 @@ def test_start_account_deletion_raises_when_cloud_task_enqueue_fails(monkeypatch
     submit.assert_not_called()
 
 
-def test_start_account_deletion_tolerates_best_effort_failures_and_missing_firebase_user(monkeypatch):
-    """Stripe/feedback failures are tolerated, but marker write must succeed."""
+def test_start_account_deletion_tolerates_feedback_failure_and_missing_firebase_user(monkeypatch):
+    """Feedback failures are tolerated, but marker and billing checks must succeed."""
     monkeypatch.setattr(
         account_deletion.users_db, 'set_user_deletion_feedback', MagicMock(side_effect=Exception('db down'))
     )
@@ -171,9 +171,7 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
         'mark_user_deletion_wipe_started',
         MagicMock(),
     )
-    monkeypatch.setattr(
-        account_deletion.users_db, 'get_user_subscription', MagicMock(side_effect=Exception('read down'))
-    )
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
     monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock())
     monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock(side_effect=Exception('USER_NOT_FOUND')))
     submit = MagicMock()
@@ -187,6 +185,54 @@ def test_start_account_deletion_tolerates_best_effort_failures_and_missing_fireb
     submit.assert_called_once_with(
         account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1'
     )
+
+
+def test_start_account_deletion_blocks_when_subscription_lookup_fails(monkeypatch):
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock())
+    monkeypatch.setattr(
+        account_deletion.users_db, 'get_user_subscription', MagicMock(side_effect=Exception('read down'))
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_billing_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
+
+    try:
+        account_deletion.start_account_deletion('uid1')
+    except Exception as exc:
+        assert str(exc) == 'read down'
+    else:
+        raise AssertionError('expected subscription lookup failure to raise')
+
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once_with('uid1', None, 'read down')
+    account_deletion.auth.delete_account.assert_not_called()
+    submit.assert_not_called()
+
+
+def test_start_account_deletion_blocks_when_stripe_cancel_returns_none(monkeypatch):
+    sub = types.SimpleNamespace(stripe_subscription_id='sub_123')
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=sub))
+    monkeypatch.setattr(account_deletion.stripe_utils, 'cancel_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_billing_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
+
+    try:
+        account_deletion.start_account_deletion('uid1')
+    except Exception as exc:
+        assert 'stripe cancel returned no subscription' in str(exc)
+    else:
+        raise AssertionError('expected stripe cancellation failure to raise')
+
+    account_deletion.users_db.mark_user_deletion_billing_failed.assert_called_once_with(
+        'uid1', 'sub_123', 'stripe cancel returned no subscription'
+    )
+    account_deletion.auth.delete_account.assert_not_called()
+    submit.assert_not_called()
 
 
 def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
@@ -208,6 +254,29 @@ def test_start_account_deletion_raises_when_marker_persist_fails(monkeypatch):
 
     # Firebase user must NOT be deleted if the intent failed.
     account_deletion.auth.delete_account.assert_not_called()
+    submit.assert_not_called()
+
+
+def test_start_account_deletion_raises_when_pending_marker_persist_fails_after_auth(monkeypatch):
+    """Do not enqueue or report success unless the actionable pending marker exists."""
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock())
+    monkeypatch.setattr(
+        account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock(side_effect=Exception('db down'))
+    )
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+    monkeypatch.setattr(account_deletion.time, 'sleep', lambda *_: None)
+
+    try:
+        account_deletion.start_account_deletion('uid1')
+    except Exception as exc:
+        assert 'marker transition to pending failed' in str(exc)
+    else:
+        raise AssertionError('expected pending marker failure to raise')
+
+    account_deletion.auth.delete_account.assert_called_once_with('uid1')
     submit.assert_not_called()
 
 

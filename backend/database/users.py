@@ -350,6 +350,19 @@ def mark_user_deletion_wipe_failed(uid: str):
     )
 
 
+def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str):
+    """Record that account deletion is blocked on Stripe cancellation."""
+    db.collection('account_deletions').document(uid).set(
+        {
+            'wipe_status': 'billing_failed',
+            'billing_failed_at': datetime.now(timezone.utc),
+            'billing_subscription_id': subscription_id or '',
+            'billing_error': error,
+        },
+        merge=True,
+    )
+
+
 def cancel_user_deletion_wipe(uid: str):
     """Cancel a pending deletion-wipe marker.
 

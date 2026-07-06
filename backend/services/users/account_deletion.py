@@ -194,12 +194,10 @@ def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay
     """Transition the marker to the actionable ``'pending'`` state after auth deletion is confirmed.
 
     Called only after ``auth.delete_account()`` has succeeded (or the user was
-    already gone). On persistent Firestore failure, logs a critical error rather
-    than raising — the Firebase user is already deleted, so raising would
-    surface a misleading error. The background wipe may not be queued
-    immediately, but a stale ``'deleting_auth'`` marker is now recoverable:
-    ``reconcile_pending_deletion_wipes`` will verify the auth user is gone and
-    re-enqueue the wipe.
+    already gone). Raises on persistent failure so callers do not enqueue or
+    report success without an actionable wipe marker. A stale
+    ``'deleting_auth'`` marker remains recoverable: the reconciler verifies the
+    auth user is gone before re-enqueueing the wipe.
     """
     last_err = None
     for attempt in range(max_attempts):
@@ -210,10 +208,48 @@ def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay
             last_err = e
             if attempt < max_attempts - 1:
                 time.sleep(retry_delay * (attempt + 1))
-    logger.critical(
+    raise Exception(
         f'delete_account marker transition to pending failed after {max_attempts} attempts for {uid}: '
-        f'{sanitize(str(last_err))} — Firebase user already deleted, wipe may need manual re-queue.'
+        f'{sanitize(str(last_err))}'
     )
+
+
+def _mark_billing_failed_with_retry(
+    uid: str, subscription_id: str | None, error: Exception, max_attempts: int = 3, retry_delay: float = 0.5
+):
+    last_err = None
+    raw_error = str(error)
+    sanitized_error = sanitize(raw_error)
+    if not isinstance(sanitized_error, str):
+        sanitized_error = raw_error
+    for attempt in range(max_attempts):
+        try:
+            users_db.mark_user_deletion_billing_failed(uid, subscription_id, sanitized_error)
+            return
+        except Exception as e:
+            last_err = e
+            if attempt < max_attempts - 1:
+                time.sleep(retry_delay * (attempt + 1))
+    logger.critical(
+        f'delete_account billing failure status persist failed after {max_attempts} attempts for {uid}: '
+        f'{sanitize(str(last_err))}; original billing error: {sanitized_error}'
+    )
+
+
+def _cancel_subscription_for_account_deletion(uid: str):
+    subscription_id = None
+    try:
+        sub = users_db.get_user_subscription(uid)
+        subscription_id = getattr(sub, 'stripe_subscription_id', None) if sub else None
+        if not subscription_id:
+            return
+        canceled = stripe_utils.cancel_subscription(subscription_id)
+        if not canceled:
+            raise RuntimeError('stripe cancel returned no subscription')
+    except Exception as e:
+        _mark_billing_failed_with_retry(uid, subscription_id, e)
+        logger.error(f'delete_account billing cancellation failed for {uid}: {sanitize(str(e))}')
+        raise
 
 
 def _cancel_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
@@ -257,14 +293,7 @@ def start_account_deletion(uid: str, reason: str | None = None, reason_details: 
     # proceed.
     _persist_wipe_intent_with_retry(uid)
 
-    try:
-        sub = users_db.get_user_subscription(uid)
-        if sub and sub.stripe_subscription_id:
-            canceled = stripe_utils.cancel_subscription(sub.stripe_subscription_id)
-            if not canceled:
-                logger.error(f'delete_account stripe cancel returned None for {uid}')
-    except Exception as e:
-        logger.error(f'delete_account subscription lookup failed for {uid}: {sanitize(str(e))}')
+    _cancel_subscription_for_account_deletion(uid)
 
     try:
         auth.delete_account(uid)
