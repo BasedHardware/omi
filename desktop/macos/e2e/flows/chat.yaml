@@ -37,6 +37,15 @@ steps:
       result.detail.idle: "true"
 
   - id: S4
+    name: Assert stub marker echoed in assistant reply
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "12"
+    expect:
+      result.detail.last_assistant_text: "Stub saw marker: chat-flow"
+
+  - id: S5
     name: Logs clean
     log.expect:
       absent:

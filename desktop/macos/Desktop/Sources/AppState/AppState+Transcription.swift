@@ -1141,31 +1141,43 @@ extension AppState {
   // MARK: - Automation capture test seam (non-prod hermetic E2E)
 
   /// Start a headless capture session without mic/audio — T2 hermetic only.
-  func automationStartCaptureTestSession() -> [String: String] {
+  func automationStartCaptureTestSession() async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "capture test session disabled on production bundles"]
     }
     guard !isTranscribing else {
       return [
         "already_recording": "true",
-        "session_id": currentSessionId ?? "",
+        "session_id": currentSessionId.map { "\($0)" } ?? "",
         "segment_count": "\(totalSegmentCount)",
       ]
     }
-    let sessionId = UUID().uuidString.lowercased()
-    currentSessionId = sessionId
-    recordingStartTime = Date()
-    isTranscribing = true
-    useLocalSTT = false
-    speakerSegments = []
-    totalSegmentCount = 0
-    totalWordCount = 0
-    currentTranscript = ""
-    return [
-      "started": "true",
-      "session_id": sessionId,
-      "is_transcribing": "true",
-    ]
+    do {
+      let sessionId = try await TranscriptionStorage.shared.startSession(
+        source: currentConversationSource.rawValue,
+        language: AssistantSettings.shared.effectiveTranscriptionLanguage,
+        timezone: TimeZone.current.identifier,
+        inputDeviceName: "harness-capture",
+        clientConversationId: UUID().uuidString.lowercased(),
+        finalizationStrategy: .localSegments
+      )
+      currentSessionId = sessionId
+      recordingStartTime = Date()
+      isTranscribing = true
+      useLocalSTT = true
+      speakerSegments = []
+      totalSegmentCount = 0
+      totalWordCount = 0
+      currentTranscript = ""
+      LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+      return [
+        "started": "true",
+        "session_id": "\(sessionId)",
+        "is_transcribing": "true",
+      ]
+    } catch {
+      return ["error": "failed to start capture session: \(error.localizedDescription)"]
+    }
   }
 
   func automationInjectCaptureTestTranscript(text: String) -> [String: String] {
@@ -1190,7 +1202,7 @@ extension AppState {
     handleBackendSegments([segment])
     return [
       "injected": trimmed,
-      "session_id": currentSessionId ?? "",
+      "session_id": currentSessionId.map { "\($0)" } ?? "",
       "segment_count": "\(totalSegmentCount)",
       "conversation_count": "\(totalConversationsCount ?? conversations.count)",
     ]
@@ -1207,18 +1219,44 @@ extension AppState {
       ]
     }
     let beforeCount = totalConversationsCount ?? conversations.count
-    stopTranscription()
-    for _ in 0..<40 {
-      if !isTranscribing { break }
-      try? await Task.sleep(nanoseconds: 100_000_000)
+    let sessionId = currentSessionId
+    let segmentCount = totalSegmentCount
+
+    isTranscribing = false
+    LiveNotesMonitor.shared.endSession()
+
+    if let sessionId {
+      do {
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        await ConversationFinalizationService.shared.finalizeSession(
+          id: sessionId,
+          reason: .userStop,
+          allowCloudForceProcess: false
+        )
+      } catch {
+        return ["error": "failed to finalize capture session: \(error.localizedDescription)"]
+      }
     }
+
+    speakerSegments = []
+    liveSpeakerPersonMap = [:]
+    LiveTranscriptMonitor.shared.clear()
+    LiveNotesMonitor.shared.clear()
+    recordingStartTime = nil
+    currentSessionId = nil
+    useLocalSTT = false
+    totalSegmentCount = 0
+    totalWordCount = 0
+    currentTranscript = ""
+
     await loadConversations()
     let afterCount = totalConversationsCount ?? conversations.count
     return [
       "stopped": "true",
       "conversation_count_before": "\(beforeCount)",
       "conversation_count_after": "\(afterCount)",
-      "segment_count": "\(totalSegmentCount)",
+      "conversation_count_increased": afterCount > beforeCount ? "true" : "false",
+      "segment_count": "\(segmentCount)",
     ]
   }
 

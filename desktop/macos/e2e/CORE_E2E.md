@@ -6,19 +6,30 @@ Tiered desktop confidence ladder built on `dev-harness` (`make dev-up` + `PROVID
 
 ## Quick start (T1 on macOS)
 
+**Hermetic T2 (recommended — local Auth emulator + offline stack):**
+
 ```bash
-# 1. Boot local stack (optional for navigation-only T1)
+# 1. Boot local stack (requires Docker for Typesense)
 PROVIDER_MODE=offline make dev-up
 
-# 2. Build + launch a named test bundle
-cd desktop/macos && OMI_APP_NAME=omi-core-e2e OMI_SKIP_TUNNEL=1 ./run.sh
+# 2. Launch named bundle with harness profile (signs in seeded alice user)
+make desktop-run-local DESKTOP_APP_NAME=omi-core-e2e DESKTOP_USER=alice
+# Note the Automation bridge port printed by run.sh (worktree-specific, not always 47777).
 
-# 3. Seed auth (once per bundle)
-./scripts/omi-auth-seed.sh com.omi.omi-core-e2e
-
-# 4. Run tier 1
-./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
+# 3. Run tier 2 in another terminal (use --port from run.sh output)
+cd desktop/macos
+./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e --port <PORT> --keep-stack
 ```
+
+**T1 smoke (navigation only; can use Omi Dev auth seed):**
+
+```bash
+cd desktop/macos && OMI_APP_NAME=omi-core-e2e OMI_SKIP_TUNNEL=1 ./run.sh
+./scripts/omi-auth-seed.sh com.omi.omi-core-e2e
+./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e --port <PORT>
+```
+
+Do **not** mix `omi-auth-seed.sh` (Omi Dev prod session) with `make desktop-run-local` (Auth emulator) — the app will boot unsigned-in.
 
 Linux / CI static gate:
 

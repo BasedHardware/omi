@@ -366,14 +366,17 @@ final class DesktopAutomationActionRegistry {
       let phase = (params["phase"] ?? "inject").lowercased()
       switch phase {
       case "start":
-        return appState.automationStartCaptureTestSession()
+        return await appState.automationStartCaptureTestSession()
       case "inject":
         return appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
         let marker = params["text"] ?? "[[MARKER:capture-lifecycle]]"
-        _ = appState.automationStartCaptureTestSession()
+        let startResult = await appState.automationStartCaptureTestSession()
+        if startResult["error"] != nil {
+          return startResult
+        }
         _ = appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
@@ -417,7 +420,7 @@ final class DesktopAutomationActionRegistry {
       guard AppState.current != nil else { return ["error": "app state unavailable"] }
       return [
         "refreshed": "true",
-        "is_signed_in": (AppState.current?.isSignedIn == true) ? "true" : "false",
+        "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
       ]
     }
 
