@@ -170,7 +170,13 @@ enum RealtimeHubTools {
     }
     if todoCount > 0 { parts.append("\(todoCount) TODO/FIXME in uncommitted changes") }
 
-    return "Current dev context: " + parts.joined(separator: ", ") + "."
+    let raw = "Current dev context: " + parts.joined(separator: ", ") + "."
+    // Escape angle brackets so repo/user-controlled branch names or commit
+    // messages containing XML-like delimiters (e.g. </dev_context>) cannot
+    // break out of the <dev_context> wrapper and inject prompt instructions.
+    return raw
+      .replacingOccurrences(of: "<", with: "&lt;")
+      .replacingOccurrences(of: ">", with: "&gt;")
   }
 
   /// Resolves the project directory to use for git context.
@@ -189,57 +195,89 @@ enum RealtimeHubTools {
     return ""
   }
 
-  private static func gitOutput(_ args: [String], in cwd: String) -> String? {
+  /// Runs a command with a wall-clock timeout and bounded output collection.
+  /// Uses DispatchWorkItem (not Timer) so the timeout fires even while the
+  /// calling thread is blocked in waitUntilExit — Timer needs a running run
+  /// loop, and waitUntilExit blocks the thread. Reads stdout in a background
+  /// queue with a byte cap so a huge repo (e.g. `git status --short` on a big
+  /// monorepo) can't fill the ~64KB pipe buffer and block the child before
+  /// the char cap is applied.
+  private static func runBounded(
+    executable: String,
+    args: [String],
+    in cwd: String,
+    timeout seconds: TimeInterval = 3.0,
+    maxBytes: Int = 4096
+  ) -> (output: String, status: Int32) {
     let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
+    process.executableURL = URL(fileURLWithPath: executable)
     process.arguments = args
     process.currentDirectoryURL = URL(fileURLWithPath: cwd)
     let pipe = Pipe()
     process.standardOutput = pipe
     process.standardError = Pipe()
+
     do {
       try process.run()
-      let timeout = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-        if process.isRunning { process.terminate() }
-      }
-      process.waitUntilExit()
-      timeout.invalidate()
-      guard process.terminationStatus == 0 else { return nil }
-      let data = pipe.fileHandleForReading.readDataToEndOfFile()
-      let str = String(data: data, encoding: .utf8) ?? ""
-      return str.count > 500 ? String(str.prefix(500)) : str
     } catch {
-      return nil
+      return ("", -1)
     }
+
+    // Wall-clock timeout via DispatchWorkItem — Timer.scheduledTimer fires on
+    // a run loop, but waitUntilExit blocks the thread so the run loop never
+    // runs and the timer never fires.
+    let killWork = DispatchWorkItem { [process] in
+      if process.isRunning { process.terminate() }
+    }
+    DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: killWork)
+
+    // Collect stdout in a background queue so the pipe doesn't fill up and
+    // block the child process. availableData blocks until data is available
+    // or EOF, so this drains the pipe without busy-waiting.
+    var collected = Data()
+    let handle = pipe.fileHandleForReading
+    let readerGroup = DispatchGroup()
+    readerGroup.enter()
+    DispatchQueue.global(qos: .utility).async {
+      while collected.count < maxBytes {
+        let chunk = handle.availableData
+        if chunk.isEmpty { break }
+        collected.append(chunk)
+      }
+      // If we hit the byte cap, terminate the process so it doesn't block
+      // trying to write to a full pipe.
+      if collected.count >= maxBytes, process.isRunning {
+        process.terminate()
+      }
+      readerGroup.leave()
+    }
+
+    process.waitUntilExit()
+    killWork.cancel()
+
+    // Ensure the reader has finished (process exit closes the pipe and
+    // availableData returns empty Data = EOF, so it should already be done).
+    _ = readerGroup.wait(timeout: .now() + 1.0)
+
+    let str = String(data: collected.prefix(maxBytes), encoding: .utf8) ?? ""
+    return (str, process.terminationStatus)
+  }
+
+  private static func gitOutput(_ args: [String], in cwd: String) -> String? {
+    let result = runBounded(executable: "/usr/bin/git", args: args, in: cwd)
+    guard result.status == 0 else { return nil }
+    return result.output.count > 500 ? String(result.output.prefix(500)) : result.output
   }
 
   /// Runs git diff through grep -c so only the count (a single integer) is
   /// returned to Swift, never the full diff output. Avoids unbounded memory.
   private static func countMatchingLines(in cwd: String, pattern: String) -> Int {
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = [
-      "-c",
-      "git diff --unified=0 | grep -cE '\(pattern)' 2>/dev/null || true",
-    ]
-    process.currentDirectoryURL = URL(fileURLWithPath: cwd)
-    let outPipe = Pipe()
-    process.standardOutput = outPipe
-    process.standardError = Pipe()
-    do {
-      try process.run()
-      let timeout = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { _ in
-        if process.isRunning { process.terminate() }
-      }
-      process.waitUntilExit()
-      timeout.invalidate()
-      let data = outPipe.fileHandleForReading.readDataToEndOfFile()
-      let str = String(data: data, encoding: .utf8)?
-        .trimmingCharacters(in: .whitespacesAndNewlines) ?? "0"
-      return Int(str) ?? 0
-    } catch {
-      return 0
-    }
+    let result = runBounded(
+      executable: "/bin/bash",
+      args: ["-c", "git diff --unused=0 | grep -cE '\(pattern)' 2>/dev/null || true"],
+      in: cwd
+    )
+    return Int(result.output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
   }
 
   static func systemInstruction(
