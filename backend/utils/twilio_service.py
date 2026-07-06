@@ -3,7 +3,16 @@ import os
 from typing import Optional
 
 from twilio.rest import Client
-from twilio.base.exceptions import TwilioRestException
+
+try:
+    from twilio.base.exceptions import TwilioRestException
+except ImportError:
+
+    class TwilioRestException(Exception):
+        status = None
+        code = None
+
+
 from twilio.jwt.access_token import AccessToken
 from twilio.jwt.access_token.grants import VoiceGrant
 from twilio.request_validator import RequestValidator
