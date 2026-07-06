@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -35,15 +36,36 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "write"},
+        {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
         {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
         {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "false"},'''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n' + memory_env,
     )
+
+
+GOOGLE_OAUTH_SECRETS = '''\
+        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
+        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},'''
+
+
+def with_cloud_run_oauth_secrets(payload: str) -> str:
+    payload = with_memory_env(payload)
+    return re.sub(
+        r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
+        r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
+        payload,
+        flags=re.MULTILINE,
+    )
+
+
+STANDARD_CLOUD_RUN_SECRETS = {
+    'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
+    'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
+}
 
 
 def test_repo_gke_values_match_manifest():
@@ -66,7 +88,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        with_memory_env(
+        with_cloud_run_oauth_secrets(
             '''
 {
   "services": {
@@ -271,7 +293,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
-                                'secrets': {},
+                                'secrets': STANDARD_CLOUD_RUN_SECRETS,
                             }
                         },
                     },
@@ -287,7 +309,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        with_memory_env(
+        with_cloud_run_oauth_secrets(
             '''
 {
   "services": {
@@ -346,7 +368,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        with_memory_env(
+        with_cloud_run_oauth_secrets(
             '''
 {
   "services": {
@@ -518,6 +540,31 @@ def test_provisional_cloud_run_env_missing_is_allowed():
     )
 
     assert errors == []
+
+
+def test_empty_literal_env_matches_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={'MEMORY_ENABLED_USERS': {'value': ''}},
+        actual={'MEMORY_ENABLED_USERS': {'name': 'MEMORY_ENABLED_USERS'}},
+        strict_provisional=False,
+    )
+
+    assert errors == []
+
+
+def test_non_empty_literal_env_still_rejects_cloud_run_entry_without_value():
+    validator = load_validator()
+    errors = validator._validate_env_entries(
+        scope='cloud_run/backend',
+        expected={'MEMORY_MODE': {'value': 'off'}},
+        actual={'MEMORY_MODE': {'name': 'MEMORY_MODE'}},
+        strict_provisional=False,
+    )
+
+    assert len(errors) == 1
+    assert errors[0].message == "env MEMORY_MODE value mismatch: expected 'off'"
 
 
 def test_backend_listen_chart_only_workflow_preserves_runtime_project():

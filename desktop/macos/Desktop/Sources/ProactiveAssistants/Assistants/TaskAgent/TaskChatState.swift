@@ -336,8 +336,10 @@ class TaskChatState: ObservableObject {
                             && (
                                 !messages[currentIndex].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                                 || !messages[currentIndex].contentBlocks.isEmpty
+                                || !queryResult.artifacts.isEmpty
                             )
                         messages[currentIndex].isStreaming = false
+                        messages[currentIndex].resources = queryResult.artifacts.map(ChatResource.artifact)
                         completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)
                         if shouldPersistPartial {
                             persistMessage(messages[currentIndex])
@@ -347,6 +349,7 @@ class TaskChatState: ObservableObject {
                     let messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
                     messages[index].text = messageText
                     messages[index].isStreaming = false
+                    messages[index].resources = queryResult.artifacts.map(ChatResource.artifact)
                     completeRemainingToolCalls(messageId: aiMessageId)
                     persistMessage(messages[index])
                 }

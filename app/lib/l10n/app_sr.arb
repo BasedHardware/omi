@@ -10632,7 +10632,7 @@
     "syncCustomSttWarningMessage": "Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.",
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kada vam zatreba, umesto uživo. Snimci se čuvaju na telefonu, a zatim ih otpremate da biste kreirali razgovore.",
-    "transcribeLaterNote": "Za sada radi sa Omi uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
+    "transcribeLaterNote": "Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
     "transcribeLaterStorageFull": "Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
@@ -10682,5 +10682,17 @@
     "deviceOnboardingIntroDuration": "Око 1 минута",
     "jumpToLatestMessage": "Иди на најновију поруку",
     "latest": "Најновије",
-    "flashFirmware": "Инсталирај фирмвер"
+    "flashFirmware": "Инсталирај фирмвер",
+    "pendantRecordingTitle": "Snimanje na privesku",
+    "pendantRecordingNote": "Vaš privezak snima samostalno. Snimci se sinhronizuju sa telefonom dok je aplikacija otvorena.",
+    "pendantSyncingRecordings": "Sinhronizacija snimaka sa vašeg priveska…",
+    "pendantMinutesStored": "~{minutes} min sačuvano",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije."
 }

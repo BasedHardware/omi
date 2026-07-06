@@ -115,14 +115,23 @@ function parseTimeValue(timeString: string): number {
   if (timeMatch) {
     const [, hours, minutes, seconds = '0'] = timeMatch;
     // Convert to seconds since midnight for comparison
-    return parseInt(hours, 10) * 3600 + parseInt(minutes, 10) * 60 + parseInt(seconds, 10);
+    return (
+      parseInt(hours, 10) * 3600 + parseInt(minutes, 10) * 60 + parseInt(seconds, 10)
+    );
   }
 
   return 0;
 }
 
-function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, onLocationClick }: JourneyTimelineProps) {
-  const [conversationCache, setConversationCache] = useState<Record<string, { title: string; emoji: string }>>({});
+function JourneyTimeline({
+  locations,
+  onConversationClick,
+  currentIndex = -1,
+  onLocationClick,
+}: JourneyTimelineProps) {
+  const [conversationCache, setConversationCache] = useState<
+    Record<string, { title: string; emoji: string }>
+  >({});
   const [loading, setLoading] = useState(true);
 
   // Determine if we're in progressive mode
@@ -130,19 +139,19 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
 
   // Sort locations by time (memoized to avoid infinite re-renders)
   const sortedLocations = useMemo(() => {
-    return [...locations].sort(
-      (a, b) => parseTimeValue(a.time) - parseTimeValue(b.time)
-    );
+    return [...locations].sort((a, b) => parseTimeValue(a.time) - parseTimeValue(b.time));
   }, [locations]);
 
   // Fetch conversation details
   useEffect(() => {
     const fetchConversations = async () => {
-      const uniqueIds = [...new Set(
-        sortedLocations
-          .map(loc => loc.conversation_id)
-          .filter((id): id is string => !!id)
-      )];
+      const uniqueIds = [
+        ...new Set(
+          sortedLocations
+            .map((loc) => loc.conversation_id)
+            .filter((id): id is string => !!id),
+        ),
+      ];
 
       if (uniqueIds.length === 0) {
         setLoading(false);
@@ -157,12 +166,12 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
           } catch {
             return null;
           }
-        })
+        }),
       );
 
       const cache: Record<string, { title: string; emoji: string }> = {};
-      results.forEach(r => {
-        if (r) cache[r.id] = { title: r.title, emoji: r.emoji };
+      results.forEach((r) => {
+        if (r) cache[r.id] = { title: r.title ?? '', emoji: r.emoji ?? '' };
       });
       setConversationCache(cache);
       setLoading(false);
@@ -226,26 +235,30 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: isProgressiveMode ? 0 : idx * 0.05 }}
                     className={cn(
-                      "relative flex items-start gap-3 group",
-                      onLocationClick && "cursor-pointer"
+                      'relative flex items-start gap-3 group',
+                      onLocationClick && 'cursor-pointer',
                     )}
                     onClick={() => onLocationClick?.(idx)}
                   >
                     {/* Numbered marker */}
-                    <div className={cn(
-                      "relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold transition-all",
-                      isCurrent ? "bg-purple-primary shadow-lg ring-2 ring-purple-primary/50 scale-110" : "bg-purple-primary shadow-md",
-                      isPast && !isCurrent && "opacity-60"
-                    )}>
+                    <div
+                      className={cn(
+                        'relative z-10 w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold transition-all',
+                        isCurrent
+                          ? 'bg-purple-primary shadow-lg ring-2 ring-purple-primary/50 scale-110'
+                          : 'bg-purple-primary shadow-md',
+                        isPast && !isCurrent && 'opacity-60',
+                      )}
+                    >
                       {idx + 1}
                     </div>
 
                     {/* Content */}
                     <div
                       className={cn(
-                        "flex-1 py-1 transition-opacity",
-                        isPast && !isCurrent && "opacity-60",
-                        isCurrent && "opacity-100"
+                        'flex-1 py-1 transition-opacity',
+                        isPast && !isCurrent && 'opacity-60',
+                        isCurrent && 'opacity-100',
                       )}
                       onClick={(e) => {
                         if (loc.conversation_id && onConversationClick) {
@@ -255,20 +268,28 @@ function JourneyTimeline({ locations, onConversationClick, currentIndex = -1, on
                       }}
                     >
                       {/* Time */}
-                      <p className={cn(
-                        "text-xs font-medium",
-                        isCurrent ? "text-purple-primary" : "text-purple-primary/70"
-                      )}>
+                      <p
+                        className={cn(
+                          'text-xs font-medium',
+                          isCurrent ? 'text-purple-primary' : 'text-purple-primary/70',
+                        )}
+                      >
                         {formatJourneyTime(loc.time)}
                       </p>
                       {/* Title */}
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-sm">{display.emoji}</span>
-                        <p className={cn(
-                          "text-sm",
-                          isCurrent ? "text-text-primary font-medium" : "text-text-secondary",
-                          loc.conversation_id && onConversationClick && "group-hover:text-purple-primary transition-colors"
-                        )}>
+                        <p
+                          className={cn(
+                            'text-sm',
+                            isCurrent
+                              ? 'text-text-primary font-medium'
+                              : 'text-text-secondary',
+                            loc.conversation_id &&
+                              onConversationClick &&
+                              'group-hover:text-purple-primary transition-colors',
+                          )}
+                        >
                           {display.title}
                         </p>
                       </div>
@@ -330,28 +351,28 @@ export function RecapDetailPanel({
     const ids = new Set<string>();
 
     // From locations
-    recap.locations?.forEach(loc => {
+    recap.locations?.forEach((loc) => {
       if (loc.conversation_id) ids.add(loc.conversation_id);
     });
 
     // From highlights
-    recap.highlights?.forEach(h => {
-      h.conversation_ids?.forEach(id => ids.add(id));
+    recap.highlights?.forEach((h) => {
+      h.conversation_ids?.forEach((id) => ids.add(id));
     });
 
     // From action items
-    recap.action_items?.forEach(item => {
+    recap.action_items?.forEach((item) => {
       if (item.source_conversation_id) ids.add(item.source_conversation_id);
     });
 
     // From questions, decisions, knowledge nuggets
-    recap.unresolved_questions?.forEach(q => {
+    recap.unresolved_questions?.forEach((q) => {
       if (q.conversation_id) ids.add(q.conversation_id);
     });
-    recap.decisions_made?.forEach(d => {
+    recap.decisions_made?.forEach((d) => {
       if (d.conversation_id) ids.add(d.conversation_id);
     });
-    recap.knowledge_nuggets?.forEach(k => {
+    recap.knowledge_nuggets?.forEach((k) => {
       if (k.conversation_id) ids.add(k.conversation_id);
     });
 
@@ -365,9 +386,7 @@ export function RecapDetailPanel({
 
     // Fire all requests in parallel instead of sequentially
     // The API-level cache will deduplicate and cache results
-    Promise.all(
-      allConversationIds.map(id => getConversation(id).catch(() => {}))
-    );
+    Promise.all(allConversationIds.map((id) => getConversation(id).catch(() => {})));
   }, [allConversationIds]);
 
   // Handle click on source conversation - opens preview panel
@@ -447,20 +466,26 @@ export function RecapDetailPanel({
             <div className="flex items-center gap-4 mt-4">
               <div className="flex items-center gap-1.5 text-text-secondary">
                 <MessageSquare className="w-4 h-4" />
-                <span className="text-sm font-medium">{recap.stats.total_conversations}</span>
+                <span className="text-sm font-medium">
+                  {recap.stats.total_conversations}
+                </span>
                 <span className="text-xs text-text-tertiary">conversations</span>
               </div>
               {recap.stats.total_duration_minutes > 0 && (
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <Clock className="w-4 h-4" />
-                  <span className="text-sm font-medium">{formatDuration(recap.stats.total_duration_minutes)}</span>
+                  <span className="text-sm font-medium">
+                    {formatDuration(recap.stats.total_duration_minutes)}
+                  </span>
                   <span className="text-xs text-text-tertiary">recorded</span>
                 </div>
               )}
               {recap.stats.action_items_count > 0 && (
                 <div className="flex items-center gap-1.5 text-text-secondary">
                   <CheckSquare className="w-4 h-4" />
-                  <span className="text-sm font-medium">{recap.stats.action_items_count}</span>
+                  <span className="text-sm font-medium">
+                    {recap.stats.action_items_count}
+                  </span>
                   <span className="text-xs text-text-tertiary">tasks</span>
                 </div>
               )}
@@ -472,10 +497,10 @@ export function RecapDetailPanel({
                 <button
                   onClick={() => setActiveTab('recap')}
                   className={cn(
-                    "px-4 py-1.5 text-sm font-medium rounded-md transition-all",
+                    'px-4 py-1.5 text-sm font-medium rounded-md transition-all',
                     activeTab === 'recap'
-                      ? "bg-bg-secondary text-text-primary shadow-sm"
-                      : "text-text-tertiary hover:text-text-secondary"
+                      ? 'bg-bg-secondary text-text-primary shadow-sm'
+                      : 'text-text-tertiary hover:text-text-secondary',
                   )}
                 >
                   Recap
@@ -487,10 +512,10 @@ export function RecapDetailPanel({
                     setJourneyPlaying(false);
                   }}
                   className={cn(
-                    "px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5",
+                    'px-4 py-1.5 text-sm font-medium rounded-md transition-all flex items-center gap-1.5',
                     activeTab === 'journey'
-                      ? "bg-bg-secondary text-text-primary shadow-sm"
-                      : "text-text-tertiary hover:text-text-secondary"
+                      ? 'bg-bg-secondary text-text-primary shadow-sm'
+                      : 'text-text-tertiary hover:text-text-secondary',
                   )}
                 >
                   <MapPin className="w-3.5 h-3.5" />
@@ -544,11 +569,13 @@ export function RecapDetailPanel({
             {/* Standalone Overview (only when no locations) */}
             {recap.overview && !hasLocations && (
               <Section title="Overview" icon={Calendar}>
-                <div className={cn(
-                  'noise-overlay p-4 rounded-xl',
-                  'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-                  'border border-white/[0.04]'
-                )}>
+                <div
+                  className={cn(
+                    'noise-overlay p-4 rounded-xl',
+                    'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+                    'border border-white/[0.04]',
+                  )}
+                >
                   <p className="text-sm text-text-secondary leading-relaxed">
                     {recap.overview}
                   </p>
@@ -640,7 +667,6 @@ export function RecapDetailPanel({
         onClose={() => setIsPanelOpen(false)}
         onOpenFull={handleOpenFullConversation}
       />
-
     </div>
   );
 }

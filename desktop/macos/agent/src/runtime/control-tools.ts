@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
 import { AgentRuntimeKernel, type DesktopAwarenessSnapshot } from "./kernel.js";
+import { serializeArtifact } from "./artifact-serialization.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./compatibility-facade.js";
 import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
@@ -606,6 +607,7 @@ export async function handleAgentControlToolCall(
           adapterSessionId: result.adapterSessionId,
           terminalStatus: result.terminalStatus,
           text: result.text,
+          artifacts: result.artifacts.map(serializeArtifact),
         });
       }
       case "spawn_background_agent": {
@@ -922,26 +924,6 @@ function serializeBinding(binding: AdapterBinding): Record<string, unknown> {
     updatedAtMs: binding.updatedAtMs,
     lastUsedAtMs: binding.lastUsedAtMs,
     invalidatedAtMs: binding.invalidatedAtMs,
-  };
-}
-
-function serializeArtifact(artifact: AgentArtifact): Record<string, unknown> {
-  return {
-    artifactId: artifact.artifactId,
-    omiSessionId: artifact.sessionId,
-    runId: artifact.runId,
-    attemptId: artifact.attemptId,
-    kind: artifact.kind,
-    role: artifact.role,
-    uri: artifact.uri,
-    displayName: artifact.displayName,
-    mimeType: artifact.mimeType,
-    contentHash: artifact.contentHash,
-    sizeBytes: artifact.sizeBytes,
-    lifecycleState: artifact.lifecycleState,
-    lifecycleUpdatedAtMs: artifact.lifecycleUpdatedAtMs,
-    metadata: parseJsonObject(artifact.metadataJson),
-    createdAtMs: artifact.createdAtMs,
   };
 }
 

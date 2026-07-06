@@ -1249,6 +1249,16 @@ describe("agent control tools", () => {
   it("sends a follow-up message as a new run in an existing canonical session", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const first = await kernel.executeRun(baseRunInput);
+    adapter.nextArtifacts = [{
+      kind: "markdown",
+      role: "result",
+      uri: "adapter://fake/follow-up.md",
+      displayName: "follow-up.md",
+      mimeType: "text/markdown",
+      contentHash: "sha256:abc",
+      sizeBytes: 12,
+      metadata: { adapterArtifactId: "follow-up" },
+    }];
 
     const sent = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "send_agent_message", {
@@ -1265,6 +1275,14 @@ describe("agent control tools", () => {
     expect(sent.run.omiSessionId).toBe(first.session.sessionId);
     expect(sent.run.runId).not.toBe(first.run.runId);
     expect(sent.run.status).toBe("succeeded");
+    expect(sent.artifacts).toEqual([
+      expect.objectContaining({
+        omiSessionId: first.session.sessionId,
+        runId: sent.run.runId,
+        uri: "adapter://fake/follow-up.md",
+        displayName: "follow-up.md",
+      }),
+    ]);
     expect(adapter.executed).toHaveLength(2);
     expect(adapter.executed[1].sessionId).toBe(first.session.sessionId);
     expect(adapter.executed[1].metadata).toMatchObject({ disableSwiftBackedTools: true });

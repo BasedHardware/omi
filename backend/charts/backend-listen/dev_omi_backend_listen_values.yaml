@@ -131,11 +131,11 @@ env:
         name: dev-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
   - name: MEMORY_MODE
-    value: "write"
+    value: "read"
   - name: MEMORY_ENABLED_USERS
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: MEMORY_V3_GET_ENABLED
-    value: "false"
+    value: "true"
   - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
     value: "false"
   - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED

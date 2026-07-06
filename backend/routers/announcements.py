@@ -26,6 +26,11 @@ from utils.other import endpoints as auth_endpoints
 router = APIRouter()
 
 
+class AnnouncementDeleteResponse(BaseModel):
+    success: bool
+    message: str
+
+
 @router.get("/v1/announcements/changelogs", response_model=List[Announcement])
 def get_changelogs(
     from_version: Optional[str] = Query(None, description="Previous app version (before upgrade)"),
@@ -156,7 +161,16 @@ class DismissAnnouncementRequest(BaseModel):
     cta_clicked: bool = False
 
 
-@router.post("/v1/announcements/{announcement_id}/dismiss", tags=["announcements"])
+class DismissAnnouncementResponse(BaseModel):
+    success: bool
+    message: str
+
+
+@router.post(
+    "/v1/announcements/{announcement_id}/dismiss",
+    tags=["announcements"],
+    response_model=DismissAnnouncementResponse,
+)
 def dismiss_announcement_endpoint(
     announcement_id: str,
     data: DismissAnnouncementRequest,
@@ -342,7 +356,7 @@ def update_announcement_endpoint(
     return updated
 
 
-@router.delete("/v1/announcements/{announcement_id}", tags=["admin"])
+@router.delete("/v1/announcements/{announcement_id}", tags=["admin"], response_model=AnnouncementDeleteResponse)
 def delete_announcement_endpoint(
     announcement_id: str,
     secret_key: str = Header(..., description="Admin secret key"),

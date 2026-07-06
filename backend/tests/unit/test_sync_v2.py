@@ -19,6 +19,7 @@ from io import BytesIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import BaseModel
 
 # ---------------------------------------------------------------------------
 # 1. Structural tests — verify v2 code exists with correct patterns
@@ -1270,6 +1271,7 @@ class TestAsyncCoordinatorBehavioral:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_audio',
             'models.transcript_segment',
             'utils',
             'utils.analytics',
@@ -1354,6 +1356,15 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
         sys.modules['models.conversation_enums'].ConversationSource = MagicMock()
+
+        class _AudioPrecacheResponse(BaseModel):
+            pass
+
+        class _AudioUrlsResponse(BaseModel):
+            pass
+
+        sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+        sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')
         sys.modules['utils.subscription'].has_transcription_credits = MagicMock(return_value=True)
 
@@ -1802,6 +1813,7 @@ class TestV2EndpointExecution:
             'models',
             'models.conversation',
             'models.conversation_enums',
+            'models.sync_audio',
             'models.transcript_segment',
             'utils',
             'utils.analytics',
@@ -1873,6 +1885,15 @@ class TestV2EndpointExecution:
         sys.modules['utils.sync'].playback = sys.modules['utils.sync.playback']
         sys.modules['utils.sync.playback'].build_playback_artifact = MagicMock(return_value=b'')
         sys.modules['utils.sync.playback'].PlaybackBuildError = type('PlaybackBuildError', (Exception,), {})
+
+        class _AudioPrecacheResponse(BaseModel):
+            pass
+
+        class _AudioUrlsResponse(BaseModel):
+            pass
+
+        sys.modules['models.sync_audio'].AudioPrecacheResponse = _AudioPrecacheResponse
+        sys.modules['models.sync_audio'].AudioUrlsResponse = _AudioUrlsResponse
 
         # Mock auth to return test uid
         sys.modules['utils.other.endpoints'].get_current_user_uid = MagicMock(return_value='test-uid')

@@ -382,6 +382,22 @@ final class DesktopAutomationActionRegistry {
       return await harness.run(timeoutSeconds: timeout)
     }
 
+    // Run the post-scan local-file memory import exactly as onboarding does
+    // (indexed-files snapshot → aggregate drafts → import evidence service
+    // with legacy batch fallback). Lets agents verify the import pipeline
+    // without driving the onboarding UI or the cursor.
+    register(
+      name: "onboarding_local_file_import",
+      summary: "Run the post-scan local-file memory import from the indexed snapshot; returns saved count"
+    ) { _ in
+      let coordinator = OnboardingPagedIntroCoordinator()
+      await coordinator.refreshSnapshotIfAvailable()
+      return [
+        "saved": String(coordinator.localFileMemoriesSaved),
+        "file_count": String(coordinator.scanSnapshot?.fileCount ?? 0),
+      ]
+    }
+
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
@@ -417,6 +433,24 @@ final class DesktopAutomationActionRegistry {
       }
       FloatingControlBarManager.shared.openAIInputWithQuery(query, fromVoice: false)
       return ["sent": query]
+    }
+
+    // Force the floating-bar active state so the pill↔notch-island morph and the
+    // "thinking" animation can be exercised without a mic. Same flags a real PTT
+    // turn sets; non-prod bridge only. state = idle|listening|thinking|answering.
+    register(
+      name: "debug_bar_state",
+      summary: "Force floating-bar state: idle|listening|thinking|answering (visual verification)",
+      params: ["state"]
+    ) { params in
+      let s = (params["state"] ?? "thinking").lowercased()
+      let mgr = FloatingControlBarManager.shared
+      guard let bar = mgr.barState else { return ["error": "no bar state"] }
+      if s != "idle", !mgr.isVisible { mgr.show() }
+      bar.isVoiceResponseActive = (s == "answering")
+      bar.isVoiceListening = (s == "listening")
+      bar.isThinking = (s == "thinking")
+      return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),

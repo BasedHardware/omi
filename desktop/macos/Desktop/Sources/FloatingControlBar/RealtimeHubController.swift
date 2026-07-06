@@ -141,7 +141,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var sessionAuth: HubAuth?
   private var pcmPlayer: StreamingPCMPlayer?
   private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active in
-    self?.barState?.isVoiceResponseActive = active
+    if active {
+      self?.barState?.isVoiceResponseActive = true
+    } else {
+      self?.barState?.clearVoiceResponseState()
+    }
   }
   private let agentControlService = AgentControlService()
 
@@ -157,6 +161,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Guards against recording the same turn to chat history twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
+  /// Guards the one-time early append of the user's spoken question to chat history
+  /// (shown the instant the transcript is known, before the reply). Reset per turn.
+  private var earlyUserMessageShown = false
+  /// Chat id of THIS turn's early user bubble (from beginVoiceUserMessage). Captured
+  /// into the completion so recordVoiceTurn reconciles the right bubble even if the
+  /// async completion lands after the next turn has already begun. Reset per turn.
+  private var earlyUserMessageId: String?
 
   // Per-turn language identification (multi-language PTT).
   /// Local copy of this turn's mic audio (16 kHz s16le mono) for on-device language ID.
@@ -294,6 +305,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
          .backendTransient, .providerTransient, .providerPolicyClose, .unknown, .none:
       return false
     }
+  }
+
+  private func recordRealtimeMintFailure(
+    _ error: RealtimeTokenMintError,
+    provider providerParam: String,
+    phase: String,
+    context: String
+  ) {
+    CredentialHealthManager.shared.record(error.healthError, context: context)
+    DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+      provider: providerParam,
+      reason: error.payload?.reason ?? error.healthError.failureClass.logValue,
+      phase: phase,
+      httpStatusCode: error.statusCode,
+      backendRoute: error.payload?.backendRoute,
+      upstreamStatusCode: error.payload?.upstreamStatusCode,
+      providerCode: error.payload?.code,
+      retryable: error.payload?.retryable)
   }
 
   /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
@@ -502,6 +531,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let token: String
       do {
         token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as RealtimeTokenMintError {
+        self.minting = false
+        self.recordRealtimeMintFailure(error, provider: providerParam, phase: "warm", context: "realtime_mint")
+        if error.healthError.failureClass.isAccountWide {
+          log("RealtimeHub: account credential failure during mint — staying on cascade")
+        } else if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
+        }
+        return
       } catch let error as CredentialHealthError {
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
@@ -625,6 +663,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let token: String
       do {
         token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as RealtimeTokenMintError {
+        self.minting = false
+        self.recordRealtimeMintFailure(
+          error,
+          provider: providerParam,
+          phase: "barge_in_replacement",
+          context: "realtime_barge_in_mint")
+        self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
+        if self.shouldFailoverToAlternate(for: error.healthError.failureClass), self.failoverToAlternateProvider() {
+          return
+        } else if !error.healthError.failureClass.isAccountWide {
+          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        }
+        return
       } catch let error as CredentialHealthError {
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
@@ -742,6 +794,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let screenshotTurnGeneration = turnGeneration
     suppressAssistantOutputForCurrentTurn = false
     turnRecorded = false
+    earlyUserMessageShown = false
+    earlyUserMessageId = nil
     turnEpoch += 1
     turnAudio16k.removeAll(keepingCapacity: true)
     earlyLIDTask = nil
@@ -815,7 +869,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     turnRecorded = true
     rememberVoiceContinuityTurn(userText: heard, assistantText: interruptedReply, interrupted: true)
-    FloatingControlBarManager.shared.recordVoiceTurn(userText: heard, assistantText: interruptedReply)
+    // Runs synchronously in beginTurn before earlyUserMessageId is reset, so this is
+    // still the interrupted turn's bubble id.
+    FloatingControlBarManager.shared.recordVoiceTurn(
+      userText: heard, assistantText: interruptedReply, earlyUserMessageId: earlyUserMessageId)
   }
 
   /// Mic chunk (16 kHz PCM16 mono) → resample to the provider's rate → session.
@@ -885,17 +942,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     }
     guard let s = session else {
-      if pendingBargeInReplacement != nil {
-        log("RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — falling back to buffered transcription")
-        clearBargeInReplacementState()
-        responding = false
+      if var pending = pendingBargeInReplacement {
+        pending.pendingCommit = true
+        pendingBargeInReplacement = pending
+        log(
+          "RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — "
+            + "deferring commit (bufferedChunks=\(pending.audioBuffer.count))"
+        )
         ensureWarm()
-        return .rejectedNoSession
-      } else {
-        responding = false
-        exitVoiceUI(clearResponseGlow: true)
-        return .rejectedNoSession
+        return .deferredForReplacement
       }
+      responding = false
+      exitVoiceUI(clearResponseGlow: true)
+      return .rejectedNoSession
     }
     // Hint the provider's transcription with the identified language, entirely
     // synchronously: one configured language → hint it directly; several → whatever the
@@ -986,6 +1045,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard isCurrentSession(source) else { return }
     if isFinal {
       if !text.isEmpty { turnTranscript = text }
+      // OpenAI marks the input transcript final before/as the model starts replying —
+      // surface the question in chat now instead of waiting for the whole turn.
+      showUserQuestionEarly()
     } else {
       turnTranscript += text
     }
@@ -1003,6 +1065,42 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  /// Surface the user's spoken question on the main chat page the instant we can —
+  /// the same immediacy as a typed message — instead of only when the whole voice turn
+  /// (reply + audio playback) finishes. Fires at most once per turn.
+  ///
+  /// Trigger timing differs by provider: OpenAI emits a final input transcript
+  /// (`hubDidReceiveInputTranscript` isFinal), while Gemini streams input transcription
+  /// only as partials and never marks one final — so for Gemini this is driven by the
+  /// first reply chunk (`hubDidReceiveAudio` / `hubDidEmitText`), by which point
+  /// `turnTranscript` holds the full question and the model is already answering it.
+  /// The completed reply is appended later by `recordVoiceTurn`, which reconciles
+  /// against this bubble (correcting its text if the language guard swapped it).
+  private func showUserQuestionEarly() {
+    guard !earlyUserMessageShown else { return }
+    let heard = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !heard.isEmpty else { return }
+    earlyUserMessageShown = true  // decided this turn, whether we show or skip
+
+    // Don't surface a likely language-misdetect early. When the user has picked voice
+    // languages and this provider transcript classifies as none of them (e.g. Gemini —
+    // which ignores the language hint — transcribing English as Japanese), skip the
+    // instant show. The completed turn runs the on-device language-ID correction
+    // (see hubDidFinishTurn) and appends the corrected text, so we show the right
+    // language a beat later instead of flashing a wrong-language bubble.
+    let candidates = AssistantSettings.shared.voiceBaseLanguages
+    if !candidates.isEmpty,
+      let lang = PTTLanguageIdentifier.dominantLanguage(of: heard, hints: []),
+      !candidates.contains(lang) {
+      log(
+        "RealtimeHub: skipping early show — transcript language \(lang) not in user languages "
+          + "\(candidates) (likely provider misdetect); corrected text will appear at turn end")
+      return
+    }
+
+    earlyUserMessageId = FloatingControlBarManager.shared.beginVoiceUserMessage(userText: heard)
+  }
+
   func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     guard !suppressAssistantOutputForCurrentTurn else { return }
@@ -1017,12 +1115,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     realtimePlaybackActive = true
     realtimePlaybackEpoch = pcmPlayer.playbackEpoch
     responseGlowGate.markPlaybackActive()
+    // Reply audio started → the question is fully transcribed; surface it now (covers
+    // Gemini, which never marks its input transcript final).
+    showUserQuestionEarly()
   }
 
   func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
     guard !suppressAssistantOutputForCurrentTurn else { return }
-    if !text.isEmpty { assistantText += text }
+    if !text.isEmpty {
+      assistantText += text
+      // Reply text started → surface the question now (covers Gemini / audio-less turns).
+      showUserQuestionEarly()
+    }
     if isFinal {
       let reply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
       // Fallback only: if the model produced text but no native audio this turn,
@@ -1522,62 +1627,82 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         FloatingControlBarManager.shared.recordVoiceAgentHandoff(
           userText: heard,
           agentTitle: handoff.title,
-          agentBrief: handoff.brief)
+          agentBrief: handoff.brief,
+          earlyUserMessageId: earlyUserMessageId)
       } else {
-      let candidates = AssistantSettings.shared.voiceBaseLanguages
-      let fullTask = fullLIDTask
-      let provider = providerTag
-      Task { @MainActor [weak self] in
-        var userText = heard
-        var providerLang: String?
-        var usedLocal = false
-        var localTranscript: String?
-        var localLang: String?
-        // Bubble-language guard: the provider transcript is auto-detected per utterance
-        // and can come back in a language the user doesn't speak (Russian speech saved
-        // as an Italian bubble). When it does — or when it's empty — substitute the
-        // on-device transcript from the language-ID pass, but only if that transcript
-        // itself is confidently in one of the user's languages.
-        if !candidates.isEmpty, let fullTask {
-          // Classify the provider transcript UNBIASED: hinting toward the user's
-          // languages here masks genuinely foreign transcripts (tested: the Italian
-          // misdetect classified as "en" with hints and slipped through). Wrong swaps
-          // stay bounded because the local transcript must independently classify
-          // into the user's set before it can replace anything.
-          providerLang =
-            heard.isEmpty
-            ? nil : PTTLanguageIdentifier.dominantLanguage(of: heard, hints: [])
-          let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
-          if mismatch {
-            // The decode started at commit and the reply takes seconds — normally long done.
-            let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
-            localTranscript = verdict?.transcript
-            localLang = verdict?.languageCode
-            if let local = localTranscript, !local.isEmpty, localLang != nil {
-              log(
-                "RealtimeHub: provider transcript lang=\(providerLang ?? "none") outside user "
-                  + "languages \(candidates) — using local \(localLang ?? "?") transcript for chat"
-              )
-              userText = local
-              usedLocal = true
+        let candidates = AssistantSettings.shared.voiceBaseLanguages
+        let fullTask = fullLIDTask
+        let provider = providerTag
+        // Capture THIS turn's early bubble id NOW: the task below awaits language-ID (up to
+        // ~1.5s), by which point the next PTT turn may have reset/replaced the controller's
+        // earlyUserMessageId. Reconciling against the captured id keeps a late completion
+        // from rewriting a newer turn's bubble.
+        let capturedEarlyId = earlyUserMessageId
+        let provisionalHeard = heard
+        let provisionalReply = reply
+        rememberVoiceContinuityTurn(
+          userText: provisionalHeard,
+          assistantText: provisionalReply,
+          interrupted: false)
+        Task { @MainActor [weak self] in
+          var userText = heard
+          var providerLang: String?
+          var usedLocal = false
+          var localTranscript: String?
+          var localLang: String?
+          // Bubble-language guard: the provider transcript is auto-detected per utterance
+          // and can come back in a language the user doesn't speak (Russian speech saved
+          // as an Italian bubble). When it does — or when it's empty — substitute the
+          // on-device transcript from the language-ID pass, but only if that transcript
+          // itself is confidently in one of the user's languages.
+          if !candidates.isEmpty, let fullTask {
+            // Classify the provider transcript UNBIASED: hinting toward the user's
+            // languages here masks genuinely foreign transcripts (tested: the Italian
+            // misdetect classified as "en" with hints and slipped through). Wrong swaps
+            // stay bounded because the local transcript must independently classify
+            // into the user's set before it can replace anything.
+            providerLang =
+              heard.isEmpty
+              ? nil : PTTLanguageIdentifier.dominantLanguage(of: heard, hints: [])
+            let mismatch = heard.isEmpty || (providerLang.map { !candidates.contains($0) } ?? false)
+            if mismatch {
+              // The decode started at commit and the reply takes seconds — normally long done.
+              let verdict = await Self.value(of: fullTask, timeoutMs: 1500)
+              localTranscript = verdict?.transcript
+              localLang = verdict?.languageCode
+              if let local = localTranscript, !local.isEmpty, localLang != nil {
+                log(
+                  "RealtimeHub: provider transcript lang=\(providerLang ?? "none") outside user "
+                    + "languages \(candidates) — using local \(localLang ?? "?") transcript for chat"
+                )
+                userText = local
+                usedLocal = true
+              }
             }
           }
+          // Continuity memory + persistence use the CORRECTED text, so a swapped
+          // bubble and the model's follow-up context stay consistent.
+          if usedLocal {
+            self?.replaceVoiceContinuityTurn(
+              originalUserText: provisionalHeard,
+              originalAssistantText: provisionalReply,
+              correctedUserText: userText,
+              correctedAssistantText: reply,
+              interrupted: false)
+          }
+          FloatingControlBarManager.shared.recordVoiceTurn(
+            userText: userText, assistantText: reply, earlyUserMessageId: capturedEarlyId)
+          self?.lastTurnDiagnostics = [
+            "provider": provider,
+            "provider_transcript": heard,
+            "provider_transcript_language": providerLang ?? "",
+            "saved_user_text": userText,
+            "used_local_transcript": usedLocal ? "true" : "false",
+            "local_transcript": localTranscript ?? "",
+            "local_language": localLang ?? "",
+            "assistant_reply": reply,
+          ]
         }
-        // Continuity memory + persistence use the CORRECTED text, so a swapped
-        // bubble and the model's follow-up context stay consistent.
-        self?.rememberVoiceContinuityTurn(userText: userText, assistantText: reply, interrupted: false)
-        FloatingControlBarManager.shared.recordVoiceTurn(userText: userText, assistantText: reply)
-        self?.lastTurnDiagnostics = [
-          "provider": provider,
-          "provider_transcript": heard,
-          "provider_transcript_language": providerLang ?? "",
-          "saved_user_text": userText,
-          "used_local_transcript": usedLocal ? "true" : "false",
-          "local_transcript": localTranscript ?? "",
-          "local_language": localLang ?? "",
-          "assistant_reply": reply,
-        ]
-      }
       }
     }
     if !pendingCompletedAgentDeltaAckIds.isEmpty {
@@ -1590,6 +1715,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
     exitVoiceUI()
+  }
+
+  private func replaceVoiceContinuityTurn(
+    originalUserText: String,
+    originalAssistantText: String,
+    correctedUserText: String,
+    correctedAssistantText: String,
+    interrupted: Bool
+  ) {
+    let originalUser = originalUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let originalAssistant = originalAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let correctedUser = correctedUserText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let correctedAssistant = correctedAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !correctedUser.isEmpty || !correctedAssistant.isEmpty else { return }
+
+    if let index = voiceContinuityTurns.lastIndex(where: {
+      $0.userText == originalUser
+        && $0.assistantText == originalAssistant
+        && $0.interrupted == interrupted
+    }) {
+      voiceContinuityTurns[index] = RealtimeVoiceContinuityTurn(
+        userText: correctedUser,
+        assistantText: correctedAssistant,
+        interrupted: interrupted,
+        recordedAt: voiceContinuityTurns[index].recordedAt
+      )
+      return
+    }
+
+    rememberVoiceContinuityTurn(
+      userText: correctedUser,
+      assistantText: correctedAssistant,
+      interrupted: interrupted)
   }
 
   private func rememberVoiceContinuityTurn(userText: String, assistantText: String, interrupted: Bool) {

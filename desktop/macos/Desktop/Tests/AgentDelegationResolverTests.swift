@@ -33,6 +33,15 @@ final class AgentDelegationResolverTests: XCTestCase {
     XCTAssertTrue(source.contains("Current and recent background agents:"))
   }
 
+  func testExplicitSelfContainedDelegationBypassesResolverModel() throws {
+    let source = try sourceFile("FloatingControlBar/AgentDelegationResolver.swift")
+
+    XCTAssertTrue(source.contains("deterministicExplicitDecision(for: request)"))
+    XCTAssertTrue(source.contains("guard request.explicitDelegationRequested else { return nil }"))
+    XCTAssertTrue(source.contains("DelegationBriefValidator.isStructurallyAcceptable(brief: brief, rawIntent: request.userText)"))
+    XCTAssertTrue(source.contains(#"reason: "explicit self-contained delegation""#))
+  }
+
   func testDelegationExecutorIsOnlyProductionSpawnBoundaryForTopLevelSurfaces() throws {
     let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")

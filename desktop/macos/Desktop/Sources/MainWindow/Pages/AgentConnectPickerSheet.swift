@@ -108,20 +108,19 @@ private struct ConnectOptionCard: View {
   }
 
   private var primaryLabel: String {
+    let presentation = connectionPresentation
     _ = permissionRefreshID
-    if isConnected {
-      return "Connected"
-    }
-    switch destination.mcpExecuteKind {
-    case .localAutonomous:
-      return "Do it for me"
-    case .browserAutonomous:
-      return MemoryExportExecutor.accessibilityPreflightMissing(for: destination)
-        ? "Grant Accessibility"
-        : "Do it for me"
-    case .assisted:
-      return destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
-    }
+    return presentation.primaryActionTitle ?? "Connected"
+  }
+
+  private var connectionPresentation: MemoryExportConnectionPresentation {
+    MemoryExportConnectionPresentation.make(
+      destination: destination,
+      status: statuses[destination],
+      isRunning: isRunning,
+      accessibilityPreflightMissing: MemoryExportExecutor.accessibilityPreflightMissing(
+        for: destination)
+    )
   }
 
   var body: some View {
@@ -141,16 +140,20 @@ private struct ConnectOptionCard: View {
       }
 
       VStack(alignment: .leading, spacing: 8) {
-        // Primary action — the shared app pill (compact, white). Same style the
-        // single-destination sheet uses, so the connect flow is consistent.
-        Button(action: run) {
-          ConnectionModalActionButton(
-            title: isRunning ? "Connecting…" : primaryLabel,
-            isConnected: isConnected
-          )
+        if let completion = connectionPresentation.completion {
+          setupCompleteBlock(completion)
+        } else {
+          // Primary action — the shared app pill (compact, white). Same style the
+          // single-destination sheet uses, so the connect flow is consistent.
+          Button(action: run) {
+            ConnectionModalActionButton(
+              title: isRunning ? "Connecting…" : primaryLabel,
+              isConnected: isConnected
+            )
+          }
+          .buttonStyle(.plain)
+          .disabled(isRunning || isConnected)
         }
-        .buttonStyle(.plain)
-        .disabled(isRunning || isConnected)
 
         // Secondary — full manual instructions in a quiet dropdown.
         if let setup = destination.mcpSetup(key: mcpKey ?? "YOUR_OMI_KEY") {
@@ -241,6 +244,33 @@ private struct ConnectOptionCard: View {
       }
       isRunning = false
     }
+  }
+
+  private func setupCompleteBlock(_ completion: MCPSetupCompletionSummary) -> some View {
+    HStack(alignment: .top, spacing: 10) {
+      Image(systemName: "checkmark.seal.fill")
+        .scaledFont(size: 15, weight: .semibold)
+        .foregroundColor(OmiColors.success)
+        .padding(.top, 1)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(completion.title)
+          .scaledFont(size: 13, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text(completion.subtitle)
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .fixedSize(horizontal: false, vertical: true)
+      }
+    }
+    .padding(10)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 10, style: .continuous)
+        .fill(OmiColors.backgroundTertiary)
+        .overlay(
+          RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .stroke(OmiColors.success.opacity(0.22), lineWidth: 1))
+    )
   }
 
   private func setupFailureMessage(for error: Error) -> String {

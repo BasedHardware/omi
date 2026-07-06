@@ -354,16 +354,9 @@ class AuthService {
         let callbackTransport: String
     }
 
-    // UserDefaults keys for auth persistence (dev builds with ad-hoc signing)
-    private let kAuthIsSignedIn = "auth_isSignedIn"
-    private let kAuthUserEmail = "auth_userEmail"
-    private let kAuthUserId = "auth_userId"
-    private let kAuthGivenName = "auth_givenName"
-    private let kAuthFamilyName = "auth_familyName"
-    private let kAuthIdToken = "auth_idToken"
-    private let kAuthRefreshToken = "auth_refreshToken"
-    private let kAuthTokenExpiry = "auth_tokenExpiry"
-    private let kAuthTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
+    // UserDefaults keys for auth persistence (dev builds with ad-hoc signing).
+    // Keys are defined once in `DefaultsKey` and read/written through the typed
+    // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
 
     // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
     // No hardcoded fallback — if the key isn't available, auth operations will fail
@@ -376,18 +369,36 @@ class AuthService {
         return ""
     }
 
+    /// Resolve the Firebase Web API key or fail loudly (BL-019).
+    ///
+    /// The key is provisioned asynchronously (APIKeyService fetches it from the
+    /// backend and `setenv`s it), so it can legitimately be absent right after a
+    /// cold launch — failing at launch would false-positive. Instead, fail at the
+    /// point of use: every identitytoolkit/securetoken request must resolve the key
+    /// through this helper so a missing/empty key surfaces as a clear, user-visible
+    /// `AuthError` instead of being interpolated into `?key=` and returning an
+    /// opaque HTTP 400 ("API key not valid") that looks like a generic auth failure.
+    private func requireFirebaseApiKey() throws -> String {
+        let key = firebaseApiKey
+        guard !key.isEmpty else {
+            log("AuthService: refusing to build an auth request without FIREBASE_API_KEY")
+            throw AuthError.missingFirebaseApiKey
+        }
+        return key
+    }
+
     // MARK: - User Name Properties
 
     /// Get the user's given name (first name)
     var givenName: String {
-        get { UserDefaults.standard.string(forKey: kAuthGivenName) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: kAuthGivenName) }
+        get { UserDefaults.standard.string(forKey: .authGivenName) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: .authGivenName) }
     }
 
     /// Get the user's family name (last name)
     var familyName: String {
-        get { UserDefaults.standard.string(forKey: kAuthFamilyName) ?? "" }
-        set { UserDefaults.standard.set(newValue, forKey: kAuthFamilyName) }
+        get { UserDefaults.standard.string(forKey: .authFamilyName) ?? "" }
+        set { UserDefaults.standard.set(newValue, forKey: .authFamilyName) }
     }
 
     /// Get the user's full display name
@@ -434,7 +445,7 @@ class AuthService {
             return
         }
 
-        if let savedEmail = UserDefaults.standard.string(forKey: kAuthUserEmail),
+        if let savedEmail = UserDefaults.standard.string(forKey: .authUserEmail),
            !savedEmail.isEmpty, savedEmail != email {
             clearPersistedAuthState()
             clearTokens()
@@ -470,10 +481,7 @@ class AuthService {
         guard let hostPort = DesktopLocalProfile.authEmulatorHost else {
             throw AuthError.invalidURL
         }
-        let apiKey = firebaseApiKey
-        guard !apiKey.isEmpty else {
-            throw AuthError.missingToken
-        }
+        let apiKey = try requireFirebaseApiKey()
         guard let url = URL(
             string: "http://\(hostPort)/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=\(apiKey)"
         ) else {
@@ -526,27 +534,27 @@ class AuthService {
     // MARK: - Auth Persistence (UserDefaults for dev builds)
 
     private func saveAuthState(isSignedIn: Bool, email: String?, userId: String?) {
-        UserDefaults.standard.set(isSignedIn, forKey: kAuthIsSignedIn)
-        UserDefaults.standard.set(email, forKey: kAuthUserEmail)
-        UserDefaults.standard.set(userId, forKey: kAuthUserId)
+        UserDefaults.standard.set(isSignedIn, forKey: .authIsSignedIn)
+        UserDefaults.standard.set(email, forKey: .authUserEmail)
+        UserDefaults.standard.set(userId, forKey: .authUserId)
         UserDefaults.standard.synchronize()  // Force flush before process can be killed
         NSLog("OMI AUTH: Saved auth state - signedIn: %@, email: %@", isSignedIn ? "true" : "false", email ?? "nil")
     }
 
     private func clearPersistedAuthState() {
-        UserDefaults.standard.removeObject(forKey: kAuthIsSignedIn)
-        UserDefaults.standard.removeObject(forKey: kAuthUserEmail)
-        UserDefaults.standard.removeObject(forKey: kAuthUserId)
-        UserDefaults.standard.removeObject(forKey: kAuthIdToken)
-        UserDefaults.standard.removeObject(forKey: kAuthRefreshToken)
-        UserDefaults.standard.removeObject(forKey: kAuthTokenExpiry)
-        UserDefaults.standard.removeObject(forKey: kAuthTokenUserId)
+        UserDefaults.standard.removeObject(forKey: .authIsSignedIn)
+        UserDefaults.standard.removeObject(forKey: .authUserEmail)
+        UserDefaults.standard.removeObject(forKey: .authUserId)
+        UserDefaults.standard.removeObject(forKey: .authIdToken)
+        UserDefaults.standard.removeObject(forKey: .authRefreshToken)
+        UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
+        UserDefaults.standard.removeObject(forKey: .authTokenUserId)
     }
 
     private func restoreAuthState() {
         // Check if we have a saved auth state
-        let savedSignedIn = UserDefaults.standard.bool(forKey: kAuthIsSignedIn)
-        let savedEmail = UserDefaults.standard.string(forKey: kAuthUserEmail)
+        let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
+        let savedEmail = UserDefaults.standard.string(forKey: .authUserEmail)
 
         NSLog("OMI AUTH: Checking saved auth state - savedSignedIn: %@, savedEmail: %@",
               savedSignedIn ? "true" : "false", savedEmail ?? "nil")
@@ -569,12 +577,12 @@ class AuthService {
                 NSLog("OMI AUTH: Restored auth state from UserDefaults (Firebase session expired)")
 
                 // Migration: Fix empty userId by extracting from stored idToken
-                let savedUserId = UserDefaults.standard.string(forKey: kAuthUserId) ?? ""
+                let savedUserId = UserDefaults.standard.string(forKey: .authUserId) ?? ""
                 if savedUserId.isEmpty, let storedToken = storedIdToken {
                     if let payload = decodeJWT(storedToken),
                        let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
                         NSLog("OMI AUTH: Migrating empty userId - extracted from JWT: %@", userId)
-                        UserDefaults.standard.set(userId, forKey: kAuthUserId)
+                        UserDefaults.standard.set(userId, forKey: .authUserId)
                     }
                 }
 
@@ -612,7 +620,7 @@ class AuthService {
                     Task { await SettingsSyncManager.shared.syncFromServer() }
                 } else {
                     // Firebase has no user - check if we have a saved session (for dev builds where Keychain doesn't persist)
-                    let savedSignedIn = UserDefaults.standard.bool(forKey: self?.kAuthIsSignedIn ?? "")
+                    let savedSignedIn = UserDefaults.standard.bool(forKey: .authIsSignedIn)
                     log("AUTH_LISTENER: Firebase user nil, savedSignedIn=\(savedSignedIn), currentIsSignedIn=\(self?.isSignedIn ?? false)")
                     if !savedSignedIn {
                         // No saved session either - user is truly signed out
@@ -1196,6 +1204,7 @@ class AuthService {
         case .invalidCredential: return "invalid_credential"
         case .invalidNonce: return "invalid_nonce"
         case .missingToken: return "missing_token"
+        case .missingFirebaseApiKey: return "missing_firebase_api_key"
         case .notSignedIn: return "not_signed_in"
         case .invalidURL: return "invalid_url"
         case .stateMismatch: return "state_mismatch"
@@ -1525,7 +1534,7 @@ class AuthService {
 
         // Try to update Firebase profile (best effort)
         // Skip during impersonation to avoid overwriting the target user's display name
-        let isImpersonating = UserDefaults.standard.bool(forKey: "auth_isImpersonating")
+        let isImpersonating = UserDefaults.standard.bool(forKey: .authIsImpersonating)
         if isImpersonating {
             NSLog("OMI AUTH: Skipping Firebase displayName update (impersonation mode)")
         } else if let user = Auth.auth().currentUser {
@@ -1598,38 +1607,38 @@ class AuthService {
     // MARK: - Token Storage
 
     private func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) {
-        UserDefaults.standard.set(idToken, forKey: kAuthIdToken)
-        UserDefaults.standard.set(refreshToken, forKey: kAuthRefreshToken)
+        UserDefaults.standard.set(idToken, forKey: .authIdToken)
+        UserDefaults.standard.set(refreshToken, forKey: .authRefreshToken)
         // Store expiry time (current time + expiresIn seconds, minus 5 min buffer)
         let expiryTime = Date().addingTimeInterval(TimeInterval(expiresIn - 300))
-        UserDefaults.standard.set(expiryTime.timeIntervalSince1970, forKey: kAuthTokenExpiry)
+        UserDefaults.standard.set(expiryTime.timeIntervalSince1970, forKey: .authTokenExpiry)
         // Store the user ID that owns these tokens (for validation on retrieval)
-        UserDefaults.standard.set(userId, forKey: kAuthTokenUserId)
+        UserDefaults.standard.set(userId, forKey: .authTokenUserId)
         NSLog("OMI AUTH: Saved tokens for user %@, expires at %@", userId, expiryTime.description)
     }
 
     private func clearTokens() {
-        UserDefaults.standard.removeObject(forKey: kAuthIdToken)
-        UserDefaults.standard.removeObject(forKey: kAuthRefreshToken)
-        UserDefaults.standard.removeObject(forKey: kAuthTokenExpiry)
-        UserDefaults.standard.removeObject(forKey: kAuthTokenUserId)
+        UserDefaults.standard.removeObject(forKey: .authIdToken)
+        UserDefaults.standard.removeObject(forKey: .authRefreshToken)
+        UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
+        UserDefaults.standard.removeObject(forKey: .authTokenUserId)
         NSLog("OMI AUTH: Cleared all tokens")
     }
 
     private var storedIdToken: String? {
-        UserDefaults.standard.string(forKey: kAuthIdToken)
+        UserDefaults.standard.string(forKey: .authIdToken)
     }
 
     private var storedRefreshToken: String? {
-        UserDefaults.standard.string(forKey: kAuthRefreshToken)
+        UserDefaults.standard.string(forKey: .authRefreshToken)
     }
 
     private var storedTokenUserId: String? {
-        UserDefaults.standard.string(forKey: kAuthTokenUserId)
+        UserDefaults.standard.string(forKey: .authTokenUserId)
     }
 
     private var isTokenExpired: Bool {
-        let expiryTime = UserDefaults.standard.double(forKey: kAuthTokenExpiry)
+        let expiryTime = UserDefaults.standard.double(forKey: .authTokenExpiry)
         guard expiryTime > 0 else { return true }
         return Date().timeIntervalSince1970 > expiryTime
     }
@@ -1645,7 +1654,8 @@ class AuthService {
 
     /// Exchange custom token for ID token using Firebase REST API
     private func exchangeCustomTokenForIdToken(customToken: String) async throws -> FirebaseTokenResult {
-        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseApiKey)") else {
+        let apiKey = try requireFirebaseApiKey()
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(apiKey)") else {
             throw AuthError.invalidURL
         }
 
@@ -1711,7 +1721,8 @@ class AuthService {
             throw AuthError.notSignedIn
         }
 
-        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)") else {
+        let apiKey = try requireFirebaseApiKey()
+        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
             throw AuthError.invalidURL
         }
 
@@ -1770,7 +1781,7 @@ class AuthService {
 
     func getIdToken(forceRefresh: Bool = false) async throws -> String {
         // Get the expected user ID (the currently signed-in user)
-        let expectedUserId = UserDefaults.standard.string(forKey: kAuthUserId)
+        let expectedUserId = UserDefaults.standard.string(forKey: .authUserId)
 
         // First try: Use stored token if valid AND belongs to the current user
         if !forceRefresh, let token = storedIdToken, !isTokenExpired {
@@ -1781,7 +1792,7 @@ class AuthService {
                     // expectedUserId missing (migration gap, crash recovery) - trust the token
                     // and backfill the userId so future calls don't hit this path
                     NSLog("OMI AUTH: expectedUserId is nil but token has userId %@ - backfilling", tokenUserId)
-                    UserDefaults.standard.set(tokenUserId, forKey: kAuthUserId)
+                    UserDefaults.standard.set(tokenUserId, forKey: .authUserId)
                     return token
                 } else if tokenUserId == expectedUserId {
                     return token
@@ -1820,7 +1831,7 @@ class AuthService {
                 if expectedUserId == nil {
                     // Backfill the missing userId
                     NSLog("OMI AUTH: expectedUserId is nil, backfilling from Firebase SDK user %@", user.uid)
-                    UserDefaults.standard.set(user.uid, forKey: kAuthUserId)
+                    UserDefaults.standard.set(user.uid, forKey: .authUserId)
                 }
                 let tokenResult = try await user.getIDTokenResult(forcingRefresh: forceRefresh)
                 return tokenResult.token
@@ -2058,7 +2069,8 @@ class AuthService {
     /// Sign in with Firebase using an Apple identity token via REST API
     /// This bypasses the backend entirely - Firebase verifies the Apple JWT directly
     private func signInWithAppleIdentityToken(identityToken: String, nonce: String) async throws -> FirebaseTokenResult {
-        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(firebaseApiKey)") else {
+        let apiKey = try requireFirebaseApiKey()
+        guard let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=\(apiKey)") else {
             throw AuthError.invalidURL
         }
 
@@ -2179,6 +2191,7 @@ enum AuthError: LocalizedError {
     case invalidCredential
     case invalidNonce
     case missingToken
+    case missingFirebaseApiKey
     case notSignedIn
     case invalidURL
     case stateMismatch
@@ -2199,6 +2212,8 @@ enum AuthError: LocalizedError {
             return "Invalid nonce - please try again"
         case .missingToken:
             return "Missing identity token from Apple"
+        case .missingFirebaseApiKey:
+            return "Sign-in is not ready yet (Firebase API key unavailable). Please check your connection and try again in a moment."
         case .notSignedIn:
             return "User is not signed in"
         case .invalidURL:

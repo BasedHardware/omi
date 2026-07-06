@@ -11,6 +11,7 @@ from typing import List, Optional
 from utils.executors import db_executor, storage_executor, run_blocking
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 import database.import_jobs as import_jobs_db
 import database.conversations as conversations_db
@@ -24,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 # Temp directory for uploaded files
 TEMP_DIR = '_temp'
+
+
+class DeleteLimitlessConversationsResponse(BaseModel):
+    deleted_count: int
+    message: str
 
 
 @router.post(
@@ -169,8 +175,52 @@ def get_import_job_status(
     )
 
 
+@router.post('/v1/import/jobs/{job_id}/cancel', response_model=ImportJobResponse, tags=['import'])
+def cancel_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Cancel a pending or processing import job."""
+    job = import_jobs_db.get_import_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    if job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this import job")
+    if job.get('status') not in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
+        raise HTTPException(status_code=409, detail="Only a pending or processing import can be cancelled")
+
+    import_jobs_db.update_import_job(job_id, {'status': ImportJobStatus.cancelled.value, 'error': 'Cancelled by user'})
+    return ImportJobResponse(
+        job_id=job['id'],
+        status=ImportJobStatus.cancelled,
+        total_files=job.get('total_files'),
+        processed_files=job.get('processed_files'),
+        conversations_created=job.get('conversations_created'),
+        created_at=job.get('created_at'),
+        error='Cancelled by user',
+    )
+
+
+class DeleteImportJobResponse(BaseModel):
+    status: str
+    job_id: str
+
+
+@router.delete('/v1/import/jobs/{job_id}', response_model=DeleteImportJobResponse, tags=['import'])
+def delete_import_job(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete a finished (completed, failed, or cancelled) import job."""
+    job = import_jobs_db.get_import_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Import job not found")
+    if job['uid'] != uid:
+        raise HTTPException(status_code=403, detail="Not authorized to modify this import job")
+    if job.get('status') in (ImportJobStatus.pending.value, ImportJobStatus.processing.value):
+        raise HTTPException(status_code=409, detail="Cancel the in-progress import before deleting it")
+
+    import_jobs_db.delete_import_job(job_id)
+    return {'status': 'ok', 'job_id': job_id}
+
+
 @router.delete(
     '/v1/import/limitless/conversations',
+    response_model=DeleteLimitlessConversationsResponse,
     tags=['import'],
 )
 def delete_limitless_conversations(

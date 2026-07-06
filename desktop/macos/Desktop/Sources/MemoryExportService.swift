@@ -348,6 +348,41 @@ enum MemoryExportDestination: String, CaseIterable, Identifiable, Sendable {
     }
   }
 
+  var mcpSetupCompletionSummary: MCPSetupCompletionSummary {
+    switch self {
+    case .codex:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Codex to load Omi Memory."
+      )
+    case .claudeCode:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Claude Code to load Omi Memory."
+      )
+    case .hermes:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "Restart Hermes to load Omi Memory."
+      )
+    case .openclaw:
+      return MCPSetupCompletionSummary(
+        title: "Connected",
+        subtitle: "OpenClaw is ready to read Omi Memory."
+      )
+    case .chatgpt, .claude:
+      return MCPSetupCompletionSummary(
+        title: "Connected",
+        subtitle: "\(title) can read Omi Memory."
+      )
+    case .notion, .obsidian, .gemini, .agents:
+      return MCPSetupCompletionSummary(
+        title: "Setup complete",
+        subtitle: "\(title) is ready."
+      )
+    }
+  }
+
   private static func shellQuote(_ value: String) -> String {
     "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
   }
@@ -621,6 +656,46 @@ struct MemoryExportStatus: Sendable {
   let detailText: String?
   let isConfigured: Bool
   let hasConnection: Bool
+}
+
+struct MCPSetupCompletionSummary: Equatable, Sendable {
+  let title: String
+  let subtitle: String
+}
+
+struct MemoryExportConnectionPresentation: Equatable {
+  let primaryActionTitle: String?
+  let completion: MCPSetupCompletionSummary?
+
+  static func make(
+    destination: MemoryExportDestination,
+    status: MemoryExportStatus?,
+    isRunning: Bool,
+    accessibilityPreflightMissing: Bool = false
+  ) -> MemoryExportConnectionPresentation {
+    if status?.hasConnection == true {
+      return MemoryExportConnectionPresentation(
+        primaryActionTitle: nil,
+        completion: destination.mcpSetupCompletionSummary
+      )
+    }
+
+    let title: String
+    if isRunning {
+      title = "Connecting…"
+    } else {
+      switch destination.mcpExecuteKind {
+      case .localAutonomous:
+        title = "Do it for me"
+      case .browserAutonomous:
+        title = accessibilityPreflightMissing ? "Grant Accessibility" : "Do it for me"
+      case .assisted:
+        title = destination.assistedOverlayHint != nil ? "Open & guide me" : "Open & copy key"
+      }
+    }
+
+    return MemoryExportConnectionPresentation(primaryActionTitle: title, completion: nil)
+  }
 }
 
 /// Rendered MCP connection instructions for a single client.

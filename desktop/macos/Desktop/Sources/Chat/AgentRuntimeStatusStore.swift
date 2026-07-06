@@ -21,6 +21,17 @@ struct AgentSurfaceReference: Hashable, Sendable {
     AgentSurfaceReference(surfaceKind: "task_chat", externalRefKind: "task", externalRefId: taskId)
   }
 
+  /// Notch / floating "Omi Chat" text conversation. Used as an independent
+  /// completed-agent-delta consumer so a finished sub-agent's artifacts can be
+  /// delivered to the floating bar separately from the main chat.
+  static func floatingChat(chatId: String? = nil) -> AgentSurfaceReference {
+    AgentSurfaceReference(
+      surfaceKind: "floating_chat",
+      externalRefKind: "chat",
+      externalRefId: chatId?.isEmpty == false ? chatId! : "default"
+    )
+  }
+
   static func floatingPill(pillId: UUID) -> AgentSurfaceReference {
     AgentSurfaceReference(surfaceKind: "background_agent", externalRefKind: "pill", externalRefId: pillId.uuidString)
   }

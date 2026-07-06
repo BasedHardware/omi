@@ -354,6 +354,12 @@ struct AppsPage: View {
             await connectorStatusStore.refresh()
             exportStatuses = await MemoryExportService.shared.allStatuses()
         }
+        .onChange(of: selectedExportDestination) { _, newValue in
+            guard newValue == nil else { return }
+            Task {
+                exportStatuses = await MemoryExportService.shared.allStatuses()
+            }
+        }
     }
 
     private func selectApp(_ app: OmiApp) {
@@ -662,10 +668,10 @@ struct ImportConnector: Identifiable {
             subtitle: "This Mac",
             description: "Index documents, code, and working folders.",
             brand: .localFiles,
-            statusText: "Connected",
-            metricText: "Available on this device",
-            actionTitle: "Connected",
-            isConnected: true
+            statusText: "Not connected",
+            metricText: nil,
+            actionTitle: "Connect",
+            isConnected: false
         ),
         ImportConnector(
             id: "apple-notes",
@@ -751,11 +757,7 @@ final class ImportConnectorStatusStore: ObservableObject {
 
     func snapshot(for connector: ImportConnector) -> Snapshot {
         let metrics = metricsByID[connector.id] ?? ConnectorMetrics()
-        let isConnected =
-            metrics.memoryCount.map { $0 > 0 } ?? false
-            || metrics.sourceCount.map { $0 > 0 } ?? false
-            || metrics.availabilityText != nil
-            || connector.id == "local-files"
+        let isConnected = isConnected(connector: connector, metrics: metrics)
         let actionTitle: String
         if manualConnectorIDs.contains(connector.id) {
             actionTitle = isConnected ? "Update" : "Connect"
@@ -888,9 +890,18 @@ final class ImportConnectorStatusStore: ObservableObject {
 
             var metrics = metricsByID["local-files"] ?? ConnectorMetrics()
             metrics.sourceCount = result.count
-            metrics.lastSyncedAt = result.lastIndexedAt
-            metrics.availabilityText = "On-device index"
-            defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
+            defaults.set(result.count, forKey: sourceCountKeyPrefix + "local-files")
+            if metrics.lastSyncedAt == nil, let lastIndexedAt = result.lastIndexedAt {
+                metrics.lastSyncedAt = lastIndexedAt
+                defaults.set(lastIndexedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "local-files")
+            }
+            if metrics.lastSyncedAt != nil || result.count > 0 {
+                metrics.availabilityText = "On-device index"
+                defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
+            } else {
+                metrics.availabilityText = nil
+                defaults.removeObject(forKey: availabilityTextKeyPrefix + "local-files")
+            }
             metricsByID["local-files"] = metrics
         } catch {
             log("ImportConnectorStatusStore: Failed to refresh local files metrics: \(error)")
@@ -903,6 +914,12 @@ final class ImportConnectorStatusStore: ObservableObject {
         case .connected(let noteCount, _):
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
             metrics.sourceCount = noteCount
+            defaults.set(noteCount, forKey: sourceCountKeyPrefix + "apple-notes")
+            if metrics.lastSyncedAt == nil {
+                let syncedAt = Date()
+                metrics.lastSyncedAt = syncedAt
+                defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "apple-notes")
+            }
             metrics.availabilityText = "Private notes accessible"
             defaults.set("Private notes accessible", forKey: availabilityTextKeyPrefix + "apple-notes")
             metricsByID["apple-notes"] = metrics
@@ -910,6 +927,14 @@ final class ImportConnectorStatusStore: ObservableObject {
             log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
             clearStoredMetrics(for: "apple-notes")
         }
+    }
+
+    private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {
+        if metrics.lastSyncedAt != nil {
+            return true
+        }
+
+        return manualConnectorIDs.contains(connector.id) && (metrics.memoryCount ?? 0) > 0
     }
 
     private func primaryText(
@@ -922,7 +947,7 @@ final class ImportConnectorStatusStore: ObservableObject {
                 return
                     "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount)) • \(memoryCount.formatted()) memories"
             }
-            if connector.id == "local-files" || sourceCount > 0 {
+            if isConnected || sourceCount > 0 {
                 return "\(sourceCount.formatted()) \(sourceLabel(for: connector, count: sourceCount))"
             }
         }
@@ -1416,12 +1441,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
         return SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count)
     }
 
-    func rescanLocalFiles(appState: AppState?) async -> SyncResult? {
-        guard let appState else {
-            errorMessage = "App state is unavailable right now."
-            return nil
-        }
-
+    func rescanLocalFiles() async -> SyncResult? {
         beginRun(
             title: "Indexing local files",
             detail: "Scanning your on-device files so Omi can use them in memory search."
@@ -1429,16 +1449,22 @@ private final class ImportConnectorSheetModel: ObservableObject {
         defer { finishRun() }
 
         let previousCount = await currentIndexedFileCount()
-        ChatToolExecutor.onboardingAppState = appState
-        let result = await ChatToolExecutor.execute(
-            ToolCall(name: "scan_files", arguments: [:], thoughtSignature: nil)
+        AnalyticsManager.shared.onboardingChatToolUsed(
+            tool: "scan_files",
+            properties: ["surface": "import_connector_sheet"]
         )
+        let result = await ChatToolExecutor.scanLocalFiles()
 
-        if result.lowercased().hasPrefix("error") {
-            errorMessage = result
+        if !result.didCompleteSuccessfully {
+            errorMessage = result.summaryText
+            return nil
+        }
+
+        if !result.hasReadableUserFileTarget {
+            errorMessage = result.summaryText
             return nil
         } else {
-            statusMessage = result
+            statusMessage = result.summaryText
             let updatedCount = await currentIndexedFileCount()
             let newItems = max(updatedCount - previousCount, 0)
             return SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems)
@@ -1597,7 +1623,7 @@ struct ImportConnectorSheet: View {
                             )
                         }
                     case "local-files":
-                        if let result = await model.rescanLocalFiles(appState: appState) {
+                        if let result = await model.rescanLocalFiles() {
                             statusStore.markSynced(
                                 connectorID: connector.id,
                                 sourceCount: result.sourceCount,
@@ -1701,7 +1727,7 @@ struct ImportConnectorSheet: View {
         case "x":
             return model.isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
         case "local-files":
-            return model.isRunning ? "Reindexing…" : "Reindex Local Files"
+            return model.isRunning ? "Reindexing…" : (snapshot.isConnected ? "Reindex Local Files" : "Index Local Files")
         default:
             return model.isRunning ? "Working…" : connector.actionTitle
         }

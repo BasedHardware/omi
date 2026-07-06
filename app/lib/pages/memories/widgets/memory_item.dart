@@ -188,7 +188,7 @@ class MemoryItem extends StatelessWidget {
           color: Colors.white.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppStyles.radiusMedium),
         ),
-        child: const Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
+        child: Center(child: FaIcon(FontAwesomeIcons.message, size: 16, color: Colors.white70)),
       ),
     );
   }
@@ -303,7 +303,7 @@ class MemoryItem extends StatelessWidget {
   // PopupMenuItem<MemoryVisibility> _buildVisibilityItem(
   //   BuildContext context,
   //   MemoryVisibility visibility,
-  //   IconData icon,
+  //   FaIconData icon,
   //   String description,
   // ) {
   //   final isSelected = memory.visibility == visibility;

@@ -3059,7 +3059,7 @@
     "syncCustomSttWarningMessage": "Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.",
     "transcribeLaterTitle": "Phiên âm sau",
     "transcribeLaterDescription": "Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.",
-    "transcribeLaterNote": "Hiện chỉ hoạt động với thiết bị Omi. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
+    "transcribeLaterNote": "Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.",
     "transcribeLaterStorageFull": "Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.",
     "unmute": "Bật tiếng",
     "newRecording": "Ghi âm mới",
@@ -3109,5 +3109,17 @@
     "deviceOnboardingIntroDuration": "Khoảng 1 phút",
     "jumpToLatestMessage": "Đi đến tin nhắn mới nhất",
     "latest": "Mới nhất",
-    "flashFirmware": "Nạp firmware"
+    "flashFirmware": "Nạp firmware",
+    "pendantRecordingTitle": "Đang ghi âm trên mặt dây chuyền",
+    "pendantRecordingNote": "Mặt dây chuyền của bạn đang tự ghi âm. Các bản ghi được đồng bộ về điện thoại khi ứng dụng đang mở.",
+    "pendantSyncingRecordings": "Đang đồng bộ các bản ghi từ mặt dây chuyền của bạn…",
+    "pendantMinutesStored": "~{minutes} phút đã lưu",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ."
 }

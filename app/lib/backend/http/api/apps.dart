@@ -5,9 +5,45 @@ import 'dart:io';
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
+import 'package:omi/backend/schema/gen/apps_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+
+Category _categoryFromWire(wire.GeneratedAppSelectOption option) {
+  return Category(title: option.title, id: option.id);
+}
+
+PaymentPlan _paymentPlanFromWire(wire.GeneratedAppSelectOption option) {
+  return PaymentPlan(title: option.title, id: option.id);
+}
+
+AppCapability _appCapabilityFromWire(wire.GeneratedAppCapabilityResponse capability) {
+  final triggers = capability.triggers ?? const <wire.GeneratedAppSelectOption>[];
+  final scopes = capability.scopes ?? const <wire.GeneratedAppSelectOption>[];
+  final actions = capability.actions ?? const <wire.GeneratedAppCapabilityAction>[];
+  return AppCapability(
+    title: capability.title,
+    id: capability.id,
+    triggerEvents: triggers.map((event) => TriggerEvent(title: event.title, id: event.id)).toList(),
+    notificationScopes: scopes.map((scope) => NotificationScope(title: scope.title, id: scope.id)).toList(),
+    actions: actions
+        .map(
+          (action) => CapacityAction(
+            title: action.title,
+            id: action.id,
+            docUrl: action.docUrl,
+            description: action.description,
+          ),
+        )
+        .toList(),
+  );
+}
+
+Map<String, dynamic> _paginationToJson(wire.GeneratedAppPagination? pagination, int offset, int limit) {
+  return pagination?.toJson() ?? {'total': 0, 'count': 0, 'offset': offset, 'limit': limit};
+}
 
 Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   int offset = 0,
@@ -18,18 +54,20 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
   final response = await makeApiCall(url: url, headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200 || response.body.isEmpty) return [];
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 
-    // Parse grouped response from backend
-    final groups = (data['groups'] as List?) ?? [];
     final List<Map<String, dynamic>> parsed = [];
-    for (final g in groups) {
-      final capability = g['capability'] as Map<String, dynamic>?;
-      final category = g['category'] as Map<String, dynamic>?;
-      final pagination = g['pagination'] as Map<String, dynamic>? ?? {};
-      final items = (g['data'] as List?) ?? [];
-      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-      parsed.add({'capability': capability, 'category': category, 'data': apps, 'pagination': pagination});
+    for (final group in data.groups ?? const <wire.GeneratedAppCatalogGroup>[]) {
+      final apps = (group.data ?? const <wire.GeneratedAppBaseModel>[])
+          .map(App.fromGenerated)
+          .where((app) => !app.deleted)
+          .toList();
+      parsed.add({
+        'capability': group.capability?.toJson(),
+        'category': group.category?.toJson(),
+        'data': apps,
+        'pagination': _paginationToJson(group.pagination, offset, limit),
+      });
     }
     return parsed;
   } catch (e, stackTrace) {
@@ -51,11 +89,11 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     if (response == null || response.statusCode != 200 || response.body.isEmpty) {
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['data'] as List?) ?? [];
-    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
-    final cat = (data['category'] as Map<String, dynamic>?);
+    final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final apps =
+        (data.data ?? const <wire.GeneratedAppBaseModel>[]).map(App.fromGenerated).where((p) => !p.deleted).toList();
+    final pagination = _paginationToJson(data.pagination, offset, limit);
+    final cat = data.category?.toJson();
     return (apps: apps, pagination: pagination, category: cat);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -72,19 +110,18 @@ Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, in
     if (response == null || response.statusCode != 200 || response.body.isEmpty) {
       return (groups: <Map<String, dynamic>>[], capability: null, totalApps: 0);
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final groups = (data['groups'] as List?) ?? [];
+    final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     final List<Map<String, dynamic>> parsed = [];
-    for (final g in groups) {
-      final category = g['category'] as Map<String, dynamic>?;
-      final items = (g['data'] as List?) ?? [];
-      final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-      final count = g['count'] as int? ?? apps.length;
-      parsed.add({'category': category, 'data': apps, 'count': count});
+    for (final group in data.groups ?? const <wire.GeneratedAppCatalogGroup>[]) {
+      final apps = (group.data ?? const <wire.GeneratedAppBaseModel>[])
+          .map(App.fromGenerated)
+          .where((app) => !app.deleted)
+          .toList();
+      final count = group.count ?? apps.length;
+      parsed.add({'category': group.category?.toJson(), 'data': apps, 'count': count});
     }
-    final cap = (data['capability'] as Map<String, dynamic>?);
-    final meta = (data['meta'] as Map<String, dynamic>?) ?? {};
-    final totalApps = meta['totalApps'] as int? ?? 0;
+    final cap = data.capability?.toJson();
+    final totalApps = data.meta?.totalApps ?? 0;
     return (groups: parsed, capability: cap, totalApps: totalApps);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -123,11 +160,11 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
     if (response == null || response.statusCode != 200 || response.body.isEmpty) {
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, filters: null);
     }
-    final data = jsonDecode(response.body) as Map<String, dynamic>;
-    final items = (data['data'] as List?) ?? [];
-    final apps = App.fromJsonList(items).where((p) => !p.deleted).toList();
-    final pagination = (data['pagination'] as Map<String, dynamic>? ?? {});
-    final filters = (data['filters'] as Map<String, dynamic>?);
+    final data = wire.GeneratedAppSearchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    final apps =
+        (data.data ?? const <wire.GeneratedAppBaseModel>[]).map(App.fromGenerated).where((p) => !p.deleted).toList();
+    final pagination = data.pagination.toJson();
+    final filters = data.filters.toJson();
     return (apps: apps, pagination: pagination, filters: filters);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
@@ -141,7 +178,9 @@ Future<List<App>> retrievePopularApps() async {
   if (response != null && response.statusCode == 200 && response.body.isNotEmpty) {
     try {
       log('apps: ${response.body}');
-      var apps = App.fromJsonList(jsonDecode(response.body));
+      var apps = (jsonDecode(response.body) as List<dynamic>)
+          .map((item) => App.fromGenerated(wire.GeneratedAppBaseModel.fromJson(item as Map<String, dynamic>)))
+          .toList();
       apps = apps.where((p) => !p.deleted).toList();
       SharedPreferencesUtil().appsList = apps;
       return apps;
@@ -158,7 +197,7 @@ Future<List<String>> getEnabledAppsServer() async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/enabled', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return [];
-    return (jsonDecode(response.body) as List).cast<String>();
+    return wire.GeneratedEnabledAppsResponse.fromJsonList(jsonDecode(response.body) as List<dynamic>).items;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -167,27 +206,41 @@ Future<List<String>> getEnabledAppsServer() async {
 }
 
 Future<bool> enableAppServer(String appId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('enableAppServer: $appId ${response.body}');
-  return response.statusCode == 200;
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/enable?app_id=$appId',
+      headers: {},
+      method: 'POST',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return false;
+    Logger.debug('enableAppServer: $appId ${response.body}');
+    final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return false;
+  }
 }
 
 Future<bool> disableAppServer(String appId) async {
-  var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/apps/disable?app_id=$appId',
-    headers: {},
-    method: 'POST',
-    body: '',
-  );
-  if (response == null) return false;
-  Logger.debug('disableAppServer: ${response.body}');
-  return response.statusCode == 200;
+  try {
+    var response = await makeApiCall(
+      url: '${Env.apiBaseUrl}v1/apps/disable?app_id=$appId',
+      headers: {},
+      method: 'POST',
+      body: '',
+    );
+    if (response == null || response.statusCode != 200) return false;
+    Logger.debug('disableAppServer: ${response.body}');
+    final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
+  } catch (e, stackTrace) {
+    Logger.debug(e.toString());
+    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    return false;
+  }
 }
 
 Future<bool> reviewApp(String appId, AppReview review) async {
@@ -199,7 +252,9 @@ Future<bool> reviewApp(String appId, AppReview review) async {
       body: jsonEncode(review.toJson()),
     );
     Logger.debug('reviewApp: ${response?.body}');
-    return response?.statusCode == 200;
+    if (response == null || response.statusCode != 200) return false;
+    final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
   } catch (e) {
     Logger.debug('Error reviewing app: $e');
     return false;
@@ -215,8 +270,8 @@ Future<Map<String, String>> uploadAppThumbnail(File file) async {
     );
 
     if (response.statusCode == 200) {
-      var data = jsonDecode(response.body);
-      return {'thumbnail_url': data['thumbnail_url'], 'thumbnail_id': data['thumbnail_id']};
+      final data = wire.GeneratedAppThumbnailUploadResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return {'thumbnail_url': data.thumbnailUrl, 'thumbnail_id': data.thumbnailId};
     } else {
       Logger.debug('Failed to upload thumbnail. Status code: ${response.statusCode}');
       return {};
@@ -273,9 +328,8 @@ Future<bool> isAppSetupCompleted(String? url) async {
     headers: {},
     body: '',
   );
-  var data;
   try {
-    data = jsonDecode(response?.body ?? '{}');
+    final data = jsonDecode(response?.body ?? '{}') as Map<String, dynamic>;
     Logger.debug(data);
     return data['is_setup_completed'] ?? false;
   } on FormatException catch (e) {
@@ -298,14 +352,15 @@ Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> 
     );
 
     if (response.statusCode == 200) {
-      var respData = jsonDecode(response.body);
-      String? appId = respData['app_id'];
+      final respData = wire.GeneratedAppCreateResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      String appId = respData.appId;
       Logger.debug('submitAppServer Response body: $respData');
       return (true, '', appId);
     } else {
       Logger.debug('Failed to submit app. Status code: ${response.statusCode}');
       if (response.body.isNotEmpty) {
-        return (false, jsonDecode(response.body)['detail'] as String, null);
+        final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+        return (false, error.detail is String ? error.detail as String : 'Failed to submit app', null);
       } else {
         return (false, 'Failed to submit app. Please try again later', '');
       }
@@ -329,8 +384,9 @@ Future<bool> updateAppServer(File? file, Map<String, dynamic> appData) async {
     );
 
     if (response.statusCode == 200) {
-      Logger.debug('updateAppServer Response body: ${jsonDecode(response.body)}');
-      return true;
+      final data = wire.GeneratedAppMutationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      Logger.debug('updateAppServer status: ${data.status}');
+      return data.status == 'ok';
     } else {
       Logger.debug('Failed to update app. Status code: ${response.statusCode}');
       return false;
@@ -346,8 +402,11 @@ Future<List<Category>> getAppCategories() async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('getAppCategories: ${response.body}');
-    var res = jsonDecode(response.body);
-    return Category.fromJsonList(res);
+    final res = jsonDecode(response.body) as List;
+    return res
+        .map((item) => wire.GeneratedAppSelectOption.fromJson(item as Map<String, dynamic>))
+        .map(_categoryFromWire)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -360,8 +419,11 @@ Future<List<AppCapability>> getAppCapabilitiesServer() async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('getAppCapabilities: ${response.body}');
-    var res = jsonDecode(response.body);
-    return AppCapability.fromJsonList(res);
+    final res = jsonDecode(response.body) as List;
+    return res
+        .map((item) => wire.GeneratedAppCapabilityResponse.fromJson(item as Map<String, dynamic>))
+        .map(_appCapabilityFromWire)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -423,7 +485,9 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return null;
     log('getAppDetailsServer: ${response.body}');
-    return jsonDecode(response.body);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    wire.GeneratedApp.fromJson(data);
+    return data;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -436,7 +500,11 @@ Future<List<PaymentPlan>> getPaymentPlansServer() async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('getPaymentPlansServer: ${response.body}');
-    return PaymentPlan.fromJsonList(jsonDecode(response.body));
+    final res = jsonDecode(response.body) as List;
+    return res
+        .map((item) => wire.GeneratedAppSelectOption.fromJson(item as Map<String, dynamic>))
+        .map(_paymentPlanFromWire)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -454,7 +522,9 @@ Future<String> getGenratedDescription(String name, String description) async {
   try {
     if (response == null || response.statusCode != 200) return '';
     log('getGenratedDescription: ${response.body}');
-    return jsonDecode(response.body)['description'];
+    return wire.GeneratedAppDescriptionGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).description;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -476,11 +546,10 @@ Future<({String description, String emoji})> getGeneratedDescriptionAndEmoji(Str
       return (description: 'A custom app that $prompt', emoji: '✨');
     }
     log('getGeneratedDescriptionAndEmoji: ${response.body}');
-    var data = jsonDecode(response.body);
-    return (
-      description: (data['description'] as String?) ?? 'A custom app that $prompt',
-      emoji: (data['emoji'] as String?) ?? '✨',
+    final data = wire.GeneratedAppDescriptionEmojiGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
     );
+    return (description: data.description, emoji: data.emoji);
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -503,8 +572,9 @@ Future<List<String>> getGeneratedAppPrompts() async {
       return [];
     }
     log('getGeneratedAppPrompts: ${response.body}');
-    var data = jsonDecode(response.body);
-    return (data['prompts'] as List<dynamic>).cast<String>();
+    return wire.GeneratedAppPromptsGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).prompts;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -526,8 +596,8 @@ Future<Map<String, dynamic>?> generateAppFromPrompt(String prompt) async {
       return null;
     }
     log('generateAppFromPrompt: ${response.body}');
-    var data = jsonDecode(response.body);
-    return data['app'] as Map<String, dynamic>;
+    final data = wire.GeneratedAppGenerationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.app.toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -550,8 +620,9 @@ Future<String?> generateAppIcon(String name, String description, String category
       return null;
     }
     log('generateAppIcon: success');
-    var data = jsonDecode(response.body);
-    return data['icon_base64'] as String;
+    return wire.GeneratedAppIconGenerationResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    ).iconBase64;
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -565,7 +636,10 @@ Future<List<AppApiKey>> listApiKeysServer(String appId) async {
   try {
     if (response == null || response.statusCode != 200) return [];
     log('listApiKeysServer: ${response.body}');
-    return AppApiKey.fromJsonList(jsonDecode(response.body));
+    return (jsonDecode(response.body) as List)
+        .map((item) => wire.GeneratedAppApiKeyResponse.fromJson(item as Map<String, dynamic>))
+        .map(AppApiKey.fromGenerated)
+        .toList();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -580,7 +654,7 @@ Future<Map<String, dynamic>> createApiKeyServer(String appId) async {
       throw Exception('Failed to create apps API key');
     }
     log('createApiKeyServer: ${response.body}');
-    return jsonDecode(response.body);
+    return wire.GeneratedAppApiKeyResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -618,7 +692,8 @@ Future<bool> migrateAppOwnerId(String oldId) async {
   try {
     if (response == null || response.statusCode != 200) return false;
     log('migrateAppOwnerId: ${response.body}');
-    return true;
+    final data = wire.GeneratedAppMigrationResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return data.status == 'ok';
   } catch (e, stackTrace) {
     Logger.debug(e.toString());
     PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
@@ -643,12 +718,12 @@ Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {Strin
     if (response == null) return null;
     Logger.debug('addMcpServer: ${response.statusCode} ${response.body}');
     if (response.statusCode == 200) {
-      return jsonDecode(response.body);
+      return wire.GeneratedMcpAddServerResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
     }
     // Return error detail
     try {
-      var errorData = jsonDecode(response.body);
-      return {'error': errorData['detail'] ?? 'Failed to add MCP server'};
+      final error = misc_wire.GeneratedErrorResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+      return {'error': error.detail is String ? error.detail : 'Failed to add MCP server'};
     } catch (_) {
       return {'error': 'Failed to add MCP server (${response.statusCode})'};
     }

@@ -60,7 +60,7 @@ struct ChatInputView: View {
                 )
             }
 
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 if attachmentsEnabled {
                     Button(action: pickFiles) {
                         Image(systemName: "paperclip")

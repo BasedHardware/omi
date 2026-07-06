@@ -83,7 +83,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
                             ),
                             const SizedBox(width: 4),
-                            const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, color: Colors.black, size: 10),
+                            FaIcon(FontAwesomeIcons.arrowUpRightFromSquare, color: Colors.black, size: 10),
                           ],
                         ),
                       ),
@@ -188,7 +188,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         color: Colors.white,
                                                       ),
                                                     )
-                                                  : const FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
+                                                  : FaIcon(FontAwesomeIcons.image, size: 16, color: Colors.white),
                                             ),
                                           ),
                                         ),
@@ -226,7 +226,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                             ),
                                                           ),
                                                         )
-                                                      : const Center(
+                                                      : Center(
                                                           child: FaIcon(
                                                             FontAwesomeIcons.image,
                                                             size: 28,
@@ -282,7 +282,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         color: Colors.grey[900],
                                                         borderRadius: BorderRadius.circular(8),
                                                       ),
-                                                      child: const FaIcon(FontAwesomeIcons.triangleExclamation),
+                                                      child: FaIcon(FontAwesomeIcons.triangleExclamation),
                                                     ),
                                                   ),
                                                 ),
@@ -297,7 +297,7 @@ class _AddAppPageState extends State<AddAppPage> {
                                                         color: Colors.white,
                                                         shape: BoxShape.circle,
                                                       ),
-                                                      child: const Icon(
+                                                      child: FaIcon(
                                                         FontAwesomeIcons.xmark,
                                                         size: 10,
                                                         color: Colors.black,
