@@ -130,8 +130,8 @@ def get_caller_id(phone_number: str) -> Optional[dict]:
 
 
 def _delete_caller_id_status(sid: str) -> str:
-    client = _get_client()
     try:
+        client = _get_client()
         client.outgoing_caller_ids(sid).delete()
         return 'deleted'
     except TwilioRestException as e:

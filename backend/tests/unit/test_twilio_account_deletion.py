@@ -102,6 +102,14 @@ def test_delete_user_caller_ids_swallows_phone_list_error():
     assert mock_delete.call_count == 0
 
 
+def test_delete_user_caller_ids_swallows_client_init_error():
+    numbers = [{'id': 'a', 'twilio_sid': 'PNaaaa'}]
+    with patch.object(twilio_service, '_get_client', side_effect=ValueError('twilio env missing')), patch.object(
+        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    ):
+        assert twilio_service.delete_user_caller_ids('uid-1') == 0
+
+
 def test_delete_user_caller_ids_strict_raises_on_delete_failure():
     numbers = [{'id': 'a', 'twilio_sid': 'PNaaaa'}]
     with patch.object(twilio_service, '_delete_caller_id_status', return_value='failed'), patch.object(
