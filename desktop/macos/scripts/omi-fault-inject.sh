@@ -22,7 +22,7 @@
 #
 # Modes:
 #   error         every request → HTTP 500 (JSON body)            # generic backend 5xx
-#   status:CODE   every request → HTTP CODE (e.g. status:503, status:429, status:401)
+#   status:CODE   every request → HTTP CODE, 100-599 (e.g. status:503, status:429, status:401)
 #   latency       every request → sleep --latency-ms (default 30000) then 200
 #                                                                  # slow-backend / watchdog
 #   reset         accept the socket then close it, no HTTP reply  # connection reset
@@ -72,13 +72,22 @@ cmd_stop() {
 cmd_status() {
   if is_running; then
     log "running — $(read_meta) (pid $(cat "$PID_FILE"))"
-  elif [ -f "$META_FILE" ]; then
-    # refuse mode: active by design with no listener/pid.
-    log "active — $(read_meta) (refuse: no listener by design)"
-  else
-    log "not running"
+    return 0
+  fi
+  if [ -f "$META_FILE" ]; then
+    local mode; mode="$(read_meta | sed -n 's/.*mode=\([^ ]*\).*/\1/p')"
+    if [ "$mode" = "refuse" ]; then
+      # refuse mode is active by design with no listener/pid.
+      log "active — $(read_meta) (refuse: no listener by design)"
+      return 0
+    fi
+    # A non-refuse server left a meta file but is not running — it crashed or was killed
+    # externally. Report that (not "refuse") so a real failure isn't hidden.
+    log "stale — $(read_meta) but the server is NOT running (crashed or killed externally); run 'stop' to clean up"
     return 1
   fi
+  log "not running"
+  return 1
 }
 
 cmd_url() {
@@ -110,7 +119,9 @@ cmd_start() {
 
   case "$mode" in
     error|latency|reset|refuse) ;;
-    status:*) [[ "${mode#status:}" =~ ^[0-9]{3}$ ]] || die "status mode needs a 3-digit code, e.g. status:503" ;;
+    status:*)
+      { [[ "${mode#status:}" =~ ^[0-9]{3}$ ]] && [ "${mode#status:}" -ge 100 ] && [ "${mode#status:}" -le 599 ]; } \
+        || die "status mode needs an HTTP status code 100-599, e.g. status:503" ;;
     *) die "unknown mode: $mode (error|status:CODE|latency|reset|refuse)" ;;
   esac
 
@@ -168,6 +179,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
     def _serve(self):
+        # Drain any request body so a keep-alive client can't desync the socket, and close
+        # the connection after replying (Connection: close + close_connection) so POST/PUT/
+        # PATCH fault responses stay deterministic instead of racing silent connection reuse.
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = 0
+        if length > 0:
+            try:
+                self.rfile.read(length)
+            except OSError:
+                pass
+        self.close_connection = True
         if mode == "latency":
             time.sleep(latency_ms / 1000.0)
             code = 200
@@ -176,13 +200,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         else:  # error
             code = 500
         body = json.dumps({"error": "omi-fault-inject", "mode": mode, "code": code}).encode()
-        # HEAD and bodiless status codes must not carry a body under HTTP/1.1 keep-alive,
-        # or a strict client desyncs on the reused socket.
-        if self.command == "HEAD" or code in (204, 304):
+        # HTTP forbids a body on HEAD and on 1xx / 204 / 205 / 304 responses; sending one
+        # (even with Connection: close) is malformed and can desync a strict client.
+        if self.command == "HEAD" or code in (204, 205, 304) or 100 <= code < 200:
             body = b""
         self.send_response(code)
         self.send_header("Content-Type", "application/json")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
         self.end_headers()
         if body:
             self.wfile.write(body)
@@ -201,19 +226,13 @@ PY
   echo "$pid" > "$PID_FILE"
   printf 'mode=%s port=%s url=%s\n' "$mode" "$port" "$url" > "$META_FILE"
 
-  # Confirm it actually bound (fail loud instead of leaving a dead pidfile).
+  # Confirm it actually bound (fail loud instead of leaving a dead pidfile). A TCP accept is
+  # the right readiness signal for every mode: an HTTP round-trip would hang on latency,
+  # never reply on reset, and mishandle 1xx status codes (curl waits for a final response).
   local ok=""
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     if ! kill -0 "$pid" 2>/dev/null; then break; fi
-    case "$mode" in
-      reset|latency)
-        # reset never replies and latency delays the response past a short probe — for
-        # both, a TCP accept is the correct readiness signal (an HTTP round-trip would
-        # time out and falsely report "port in use").
-        if nc -z 127.0.0.1 "$port" 2>/dev/null; then ok=1; break; fi ;;
-      *)
-        if curl -s -o /dev/null --max-time 1 "$url" 2>/dev/null; then ok=1; break; fi ;;
-    esac
+    if nc -z 127.0.0.1 "$port" 2>/dev/null; then ok=1; break; fi
     sleep 0.2
   done
   if [ -z "$ok" ]; then

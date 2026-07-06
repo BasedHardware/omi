@@ -65,10 +65,10 @@ OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
 ./scripts/omi-ctl action ask query="hi"                  # exercise the path; assert a surfaced error, not a crash/silent no-op
 ./scripts/omi-fault-inject.sh stop
 ```
-`status:CODE` returns an arbitrary HTTP code (e.g. `status:503`, `status:429`, `status:401`);
+`status:CODE` returns an HTTP status code in 100-599 (e.g. `status:503`, `status:429`, `status:401`);
 `latency` sleeps `--latency-ms` (default 30 000) before replying (watchdog/timeout paths);
 `reset` RSTs the connection; `refuse` leaves the port closed (connection refused). Verify a
-mode with `curl` before launching the app: `curl -sw '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
+mode with `curl` before launching the app: `curl -s -o /dev/null -w '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
 
 ### The full loop
 ```bash
