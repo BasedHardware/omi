@@ -17,6 +17,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.unit.memory_import_isolation import restore_sys_modules, snapshot_sys_modules
+
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 os.environ.setdefault(
@@ -52,6 +54,21 @@ def _load(module_name, rel_path):
 
 # Stub the heavy leaves action_item_tools imports; langchain_core is used for real (the @tool
 # decorator needs it). None of these are exercised by the pure helpers under test.
+_SYS_MODULE_NAMES = [
+    "database",
+    "database.action_items",
+    "database.notifications",
+    "utils",
+    "utils.notifications",
+    "utils.conversations",
+    "utils.conversations.render",
+    "utils.retrieval",
+    "utils.retrieval.agentic",
+    "utils.retrieval.tools",
+    "utils.retrieval.tools.action_item_tools",
+]
+_SYS_MODULES_SNAPSHOT = snapshot_sys_modules(_SYS_MODULE_NAMES)
+
 for _p in [
     "database",
     "utils",
@@ -77,6 +94,9 @@ for _name, _attrs in {
         setattr(_m, _a, MagicMock())
 
 ai = _load("utils.retrieval.tools.action_item_tools", "utils/retrieval/tools/action_item_tools.py")
+
+restore_sys_modules(_SYS_MODULES_SNAPSHOT)
+del _SYS_MODULES_SNAPSHOT, _SYS_MODULE_NAMES
 
 
 class TestCapActionItemsForLlm:
