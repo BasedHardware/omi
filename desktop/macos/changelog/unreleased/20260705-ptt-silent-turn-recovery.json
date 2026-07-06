@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk dead-mic recovery not triggering (or being reported) outside the realtime path, so silent voice turns now attempt a mic-capture rebuild and are logged accurately"
-}

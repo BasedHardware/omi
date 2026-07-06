@@ -1,3 +1,0 @@
-{
-  "change": "Sign-in now shows a clear, actionable message when Firebase configuration is briefly unavailable instead of failing opaquely, and the system-audio permission indicator now reflects your real macOS permission state"
-}
