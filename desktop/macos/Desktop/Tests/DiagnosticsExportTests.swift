@@ -30,6 +30,9 @@ final class DiagnosticsExportTests: XCTestCase {
       "[10:00:01.000] [app] GET /v1/things?api_key=SUPERSECRETKEY123 status=200",
       "[10:00:02.000] [app] Authorization: Bearer BEARERTOKENabc123def456",
       "[10:00:03.000] [app] idToken=\(jwt)",
+      "[10:00:03.500] [app] Authorization: Basic dXNlcjpwYXNzd29yZA==",
+      "[10:00:03.750] [app] openai_key=sk-proj-1234567890abcdef1234567890abcdef",
+      "[10:00:03.900] [app] raw key sk-1234567890abcdef1234567890abcdef",
       "[10:00:04.000] [app] user tapped Report Issue",
     ].joined(separator: "\n")
     try logContents.write(toFile: logPath, atomically: true, encoding: .utf8)
@@ -40,6 +43,9 @@ final class DiagnosticsExportTests: XCTestCase {
     XCTAssertFalse(text.contains("SUPERSECRETKEY123"), "api_key value leaked")
     XCTAssertFalse(text.contains("BEARERTOKENabc123def456"), "bearer token leaked")
     XCTAssertFalse(text.contains(jwt), "JWT leaked")
+    XCTAssertFalse(text.contains("dXNlcjpwYXNzd29yZA=="), "basic auth leaked")
+    XCTAssertFalse(text.contains("sk-proj-1234567890abcdef1234567890abcdef"), "OpenAI key leaked")
+    XCTAssertFalse(text.contains("sk-1234567890abcdef1234567890abcdef"), "bare OpenAI key leaked")
     XCTAssertTrue(text.contains("[redacted"), "expected redaction markers")
 
     // Benign operational lines survive so the report stays useful.
