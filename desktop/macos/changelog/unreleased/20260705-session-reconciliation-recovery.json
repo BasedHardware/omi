@@ -1,3 +1,0 @@
-{
-  "change": "Improved desktop recording recovery so failed cloud reconciliation can retry from saved local transcript segments with clearer diagnostics"
-}

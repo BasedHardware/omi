@@ -1,3 +1,0 @@
-{
-  "change": "Added a \"Save Diagnostics…\" option to Report Issue that saves a redacted diagnostics report locally (works offline, nothing is uploaded), and the app log file is now created owner-only so it is no longer readable by other users on the machine"
-}
