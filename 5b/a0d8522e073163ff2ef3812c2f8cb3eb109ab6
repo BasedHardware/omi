@@ -1,0 +1,51 @@
+mockup/ios/ios-conversations.html
+  s_751b5889fd7450::t_2888d9d27d75d2 1-42
+mockup/ios/ios-device.html
+  s_751b5889fd7450::t_e007483cea29f6 1-52
+mockup/screens/more.html
+  s_751b5889fd7450::t_c5f7c1006add62 23-24
+mockup/index.html
+  s_751b5889fd7450::t_b8b36691c8b6fc 99-100
+  s_751b5889fd7450::t_544d01d2e83922 94,96
+mockup/ios/ios.css
+  s_751b5889fd7450::t_0a040ea6212362 99-178
+  s_751b5889fd7450::t_b61948fb013746 179-183
+mockup/ios/ios-live.html
+  s_751b5889fd7450::t_3c5ab447f43756 1-63
+mockup/ios/ios-home.html
+  s_751b5889fd7450::t_53d1fac1325ece 15-18,23-28,31,43-59,62
+  s_751b5889fd7450::t_a5d9f12054c473 69-70
+mockup/screens/live.html
+  s_751b5889fd7450::t_b522b1fa50bb3d 1-168
+mockup/screens/dashboard.html
+  s_751b5889fd7450::t_da14220f3aa32f 1-126
+mockup/ios/ios-tasks.html
+  s_751b5889fd7450::t_47377dfbb1e238 1-37
+mockup/web/index.html
+  s_751b5889fd7450::t_814e185634197e 186-188
+  s_751b5889fd7450::t_f4ea0b951b8a05 22-25
+mockup/ios/ios-frame.js
+  s_751b5889fd7450::t_32cc856a30f92c 3,6-8,10-12,25-36,39,55-62
+  s_751b5889fd7450::t_c84fe10c909ef5 42-43,49
+mockup/ios/ios-apps.html
+  s_751b5889fd7450::t_cc99e9e275e5ea 1-38
+mockup/ios/ios-settings.html
+  s_751b5889fd7450::t_400d373000c01c 1-45,47-57
+  s_751b5889fd7450::t_6fcdae9bc32995 46
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5ba0d8522e073163ff2ef3812c2f8cb3eb109ab6",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
