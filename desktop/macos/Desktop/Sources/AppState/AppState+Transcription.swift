@@ -1138,5 +1138,89 @@ extension AppState {
     )
   }
 
+  // MARK: - Automation capture test seam (non-prod hermetic E2E)
+
+  /// Start a headless capture session without mic/audio — T2 hermetic only.
+  func automationStartCaptureTestSession() -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test session disabled on production bundles"]
+    }
+    guard !isTranscribing else {
+      return [
+        "already_recording": "true",
+        "session_id": currentSessionId ?? "",
+        "segment_count": "\(totalSegmentCount)",
+      ]
+    }
+    let sessionId = UUID().uuidString.lowercased()
+    currentSessionId = sessionId
+    recordingStartTime = Date()
+    isTranscribing = true
+    useLocalSTT = false
+    speakerSegments = []
+    totalSegmentCount = 0
+    totalWordCount = 0
+    currentTranscript = ""
+    return [
+      "started": "true",
+      "session_id": sessionId,
+      "is_transcribing": "true",
+    ]
+  }
+
+  func automationInjectCaptureTestTranscript(text: String) -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test transcript disabled on production bundles"]
+    }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return ["error": "missing transcript text"] }
+    guard isTranscribing else { return ["error": "no active capture session"] }
+    let start = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+    let segment = TranscriptionService.BackendSegment(
+      id: UUID().uuidString.lowercased(),
+      text: trimmed,
+      speaker: "SPEAKER_00",
+      speaker_id: 0,
+      is_user: true,
+      person_id: nil,
+      start: max(0, start),
+      end: max(0.1, start + 0.5),
+      translations: nil
+    )
+    handleBackendSegments([segment])
+    return [
+      "injected": trimmed,
+      "session_id": currentSessionId ?? "",
+      "segment_count": "\(totalSegmentCount)",
+      "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+    ]
+  }
+
+  func automationStopCaptureTestSession() async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test session disabled on production bundles"]
+    }
+    guard isTranscribing else {
+      return [
+        "already_stopped": "true",
+        "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+      ]
+    }
+    let beforeCount = totalConversationsCount ?? conversations.count
+    stopTranscription()
+    for _ in 0..<40 {
+      if !isTranscribing { break }
+      try? await Task.sleep(nanoseconds: 100_000_000)
+    }
+    await loadConversations()
+    let afterCount = totalConversationsCount ?? conversations.count
+    return [
+      "stopped": "true",
+      "conversation_count_before": "\(beforeCount)",
+      "conversation_count_after": "\(afterCount)",
+      "segment_count": "\(totalSegmentCount)",
+    ]
+  }
+
   // MARK: - Conversations
 }

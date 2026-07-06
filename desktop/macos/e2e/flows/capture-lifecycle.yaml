@@ -1,0 +1,41 @@
+version: 2
+name: capture-lifecycle
+tier: 2
+description: Hermetic capture lifecycle via capture_test_transcript seam (no mic/STT)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Snapshot conversations before capture
+    bridge.action:
+      name: conversation_list_snapshot
+    expect:
+      ok: true
+
+  - id: S2
+    name: Run capture lifecycle with marker transcript
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: lifecycle
+        text: "[[MARKER:capture-lifecycle]] hermetic desktop capture"
+    expect:
+      result.detail.stopped: "true"
+
+  - id: S3
+    name: Assert segment count increased
+    bridge.action:
+      name: conversation_list_snapshot
+    expect:
+      ok: true
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

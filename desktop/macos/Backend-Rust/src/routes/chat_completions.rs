@@ -22,6 +22,7 @@ use crate::byok;
 use crate::models::chat_completions::*;
 use crate::AppState;
 
+use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use super::rate_limit::RateDecision;
 
 /// Default max_tokens when client doesn't specify one.
@@ -611,6 +612,11 @@ async fn chat_completions(
 ) -> Result<Response, StatusCode> {
     let byok_stripped = user.byok_stripped;
     let user: AuthUser = user.into();
+
+    if llm_stub_enabled() {
+        return Ok(stub_chat_completions_response(&req));
+    }
+
     // Validate model
     let route = resolve_model(&req.model).ok_or_else(|| {
         tracing::warn!(

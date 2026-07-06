@@ -19,6 +19,7 @@ use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
 use crate::AppState;
 
+use super::llm_stub::{llm_stub_enabled, stub_gemini_proxy_response};
 use super::rate_limit::{self, RateDecision};
 
 // Allowed Gemini API actions (suffix after model name)
@@ -216,6 +217,10 @@ async fn gemini_proxy(
 
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
+    if llm_stub_enabled() {
+        return Ok(stub_gemini_proxy_response(&body, action));
+    }
+
     if !is_gemini_action_allowed(action) {
         tracing::warn!(
             "gemini_proxy: blocked action '{}' in path '{}'",
@@ -535,6 +540,9 @@ async fn gemini_stream_proxy(
 
     // Validate the action
     let action = extract_gemini_action(&path);
+    if llm_stub_enabled() {
+        return Ok(stub_gemini_proxy_response(&body, action));
+    }
     if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_stream_proxy: blocked action '{}'", action);
         return Err(ProxyError::Status(StatusCode::FORBIDDEN));

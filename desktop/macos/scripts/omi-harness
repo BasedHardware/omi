@@ -703,6 +703,15 @@ def unique_run_dir(run_root: Path, timestamp: str, flow_name: str) -> Path:
 def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing.Any]]:
     flow_path = Path(args.flow).resolve()
     flow = read_yaml(flow_path)
+    max_tier = getattr(args, "max_tier", None)
+    if max_tier is not None:
+        raw_tier = flow.get("tier")
+        if raw_tier == "manual":
+            print(f"omi-harness: skipping manual-tier flow {flow_path.name}")
+            return 0, Path(args.out), {"ok": True, "skipped": True, "reason": "manual-tier"}
+        if raw_tier is not None and int(raw_tier) > int(max_tier):
+            print(f"omi-harness: skipping flow {flow_path.name} (tier {raw_tier} > max {max_tier})")
+            return 0, Path(args.out), {"ok": True, "skipped": True, "reason": "tier-filter"}
     flow_version = validate_flow_schema(flow, args)
     flow_name = str(flow.get("name") or flow_path.stem)
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -1041,6 +1050,12 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         default=env_flag("OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION"),
         help="explicitly allow compatible flows older than the current harness schema",
+    )
+    parser.add_argument(
+        "--max-tier",
+        type=int,
+        default=None,
+        help="skip flows with tier metadata greater than this value",
     )
 
 

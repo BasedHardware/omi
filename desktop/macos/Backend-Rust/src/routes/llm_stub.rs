@@ -1,0 +1,176 @@
+// Deterministic LLM responses for hermetic desktop E2E (OMI_LLM_STUB=1).
+//
+// Returns OpenAI-compatible SSE from fixture files instead of calling upstream
+// providers. Echoes any [[MARKER:...]] token found in the request body.
+
+use axum::body::Bytes;
+use axum::http::{header, StatusCode};
+use axum::response::{IntoResponse, Response};
+use futures::stream;
+use serde_json::{json, Value};
+use std::env;
+
+use crate::models::chat_completions::ChatCompletionRequest;
+
+const DEFAULT_FIXTURE: &str = include_str!("../../fixtures/llm/default_stream.sse");
+
+pub fn llm_stub_enabled() -> bool {
+    env::var("OMI_LLM_STUB")
+        .map(|value| matches!(value.trim(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn extract_user_text(req: &ChatCompletionRequest) -> String {
+    req.messages
+        .iter()
+        .filter(|message| message.role == "user")
+        .filter_map(|message| {
+            message.content.as_ref().and_then(|value| {
+                if let Some(text) = value.as_str() {
+                    Some(text.to_string())
+                } else if let Some(parts) = value.as_array() {
+                    Some(
+                        parts
+                            .iter()
+                            .filter_map(|part| part.get("text").and_then(|text| text.as_str()))
+                            .collect::<Vec<_>>()
+                            .join("\n"),
+                    )
+                } else {
+                    None
+                }
+            })
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn extract_markers(text: &str) -> Vec<String> {
+    let mut markers = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("[[MARKER:") {
+        let after = &rest[start + 9..];
+        if let Some(end) = after.find("]]") {
+            markers.push(after[..end].to_string());
+            rest = &after[end + 2..];
+        } else {
+            break;
+        }
+    }
+    markers
+}
+
+fn fixture_lines(body: &str, default_fixture: &str) -> Vec<String> {
+    let markers = extract_markers(body);
+    if markers.is_empty() {
+        return default_fixture
+            .lines()
+            .map(|line| line.to_string())
+            .filter(|line| !line.is_empty())
+            .collect();
+    }
+    let echoed = markers
+        .iter()
+        .map(|marker| format!("Stub saw marker: {marker}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    vec![
+        format!(
+            r#"data: {{"id":"chatcmpl-stub","object":"chat.completion.chunk","created":0,"model":"omi-stub","choices":[{{"index":0,"delta":{{"role":"assistant","content":{}}},"finish_reason":null}}]}}"#,
+            serde_json::to_string(&echoed).unwrap_or_else(|_| "\"\"".to_string())
+        ),
+        r#"data: {"id":"chatcmpl-stub","object":"chat.completion.chunk","created":0,"model":"omi-stub","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#.to_string(),
+        "data: [DONE]".to_string(),
+    ]
+}
+
+pub fn stub_chat_completions_response(req: &ChatCompletionRequest) -> Response {
+    let user_text = extract_user_text(req);
+    let lines = fixture_lines(&user_text, DEFAULT_FIXTURE);
+    let stream = stream::iter(
+        lines
+            .into_iter()
+            .map(|line| Ok::<_, std::convert::Infallible>(Bytes::from(format!("{line}\n\n")))),
+    );
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "text/event-stream")
+        .header(header::CACHE_CONTROL, "no-cache")
+        .body(axum::body::Body::from_stream(stream))
+        .unwrap()
+        .into_response()
+}
+
+pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
+    let body_text = String::from_utf8_lossy(body);
+    let lines = fixture_lines(&body_text, DEFAULT_FIXTURE);
+    if action == "streamGenerateContent" {
+        let stream = stream::iter(
+            lines
+                .into_iter()
+                .map(|line| Ok::<_, std::convert::Infallible>(Bytes::from(format!("{line}\n\n")))),
+        );
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .body(axum::body::Body::from_stream(stream))
+            .unwrap()
+            .into_response();
+    }
+    let payload: Value = json!({
+        "candidates": [{
+            "content": {
+                "parts": [{"text": "Hermetic Gemini stub response."}],
+                "role": "model"
+            },
+            "finishReason": "STOP"
+        }]
+    });
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(axum::body::Body::from(payload.to_string()))
+        .unwrap()
+        .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::chat_completions::{ChatCompletionRequest, ChatMessage};
+
+    #[test]
+    fn stub_disabled_by_default() {
+        std::env::remove_var("OMI_LLM_STUB");
+        assert!(!llm_stub_enabled());
+    }
+
+    #[test]
+    fn stub_enabled_with_flag() {
+        std::env::set_var("OMI_LLM_STUB", "1");
+        assert!(llm_stub_enabled());
+        std::env::remove_var("OMI_LLM_STUB");
+    }
+
+    #[test]
+    fn fixture_echoes_marker_token() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![ChatMessage {
+                role: "user".to_string(),
+                content: Some(json!("Please recall [[MARKER:desk-core-e2e]]")),
+                name: None,
+                tool_calls: None,
+                tool_call_id: None,
+            }],
+            stream: true,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+        let lines = fixture_lines(&extract_user_text(&req), DEFAULT_FIXTURE);
+        assert!(lines.iter().any(|line| line.contains("desk-core-e2e")));
+    }
+}

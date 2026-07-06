@@ -1,11 +1,11 @@
 version: 2
-name: chat
+name: chat-hermetic
 tier: 2
-description: Main chat navigation and hermetic typed turn
+description: Hermetic main chat turn using Rust OMI_LLM_STUB=1 (no live LLM)
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
 preconditions:
   - automation_bridge_ready
 
@@ -19,16 +19,16 @@ steps:
       state.selectedTabIndex: 2
 
   - id: S2
-    name: Send hermetic query
+    name: Send marker chat query
     bridge.action:
       name: ask_main_chat
       params:
-        query: "Say [[MARKER:chat-flow]]"
+        query: "Reply with exactly [[MARKER:chat-hermetic]]"
     expect:
-      result.detail.sent: "Say [[MARKER:chat-flow]]"
+      result.detail.sent: "Reply with exactly [[MARKER:chat-hermetic]]"
 
   - id: S3
-    name: Wait for idle
+    name: Wait for chat idle
     bridge.action:
       name: wait_main_chat_idle
       params:
@@ -37,6 +37,15 @@ steps:
       result.detail.idle: "true"
 
   - id: S4
+    name: Assert stub marker echoed in assistant reply
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "12"
+    expect:
+      result.detail.last_assistant_text: "Stub saw marker: chat-hermetic"
+
+  - id: S5
     name: Logs clean
     log.expect:
       absent:

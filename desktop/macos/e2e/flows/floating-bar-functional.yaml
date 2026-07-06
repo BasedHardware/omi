@@ -1,0 +1,47 @@
+version: 2
+name: floating-bar-functional
+tier: 2
+description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Ask Omi
+    bridge.action:
+      name: open_ask_omi
+      params:
+        reset: "true"
+        wait: "true"
+    expect:
+      result.detail.askOmiOpen: "true"
+
+  - id: S2
+    name: Send stubbed floating-bar query
+    bridge.action:
+      name: ask
+      params:
+        query: "Hermetic floating bar [[MARKER:floating-bar]]"
+    expect:
+      result.detail.sent: "Hermetic floating bar [[MARKER:floating-bar]]"
+
+  - id: S3
+    name: Assert floating bar still open
+    state.expect:
+      state.askOmiOpen: true
+
+  - id: S4
+    name: Close Ask Omi
+    bridge.action:
+      name: close_ask_omi
+      params:
+        wait: "true"
+
+  - id: S5
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

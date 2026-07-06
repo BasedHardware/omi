@@ -357,6 +357,84 @@ final class DesktopAutomationActionRegistry {
       return ["enabled": enabled ? "true" : "false"]
     }
 
+    register(
+      name: "capture_test_transcript",
+      summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
+      params: ["phase", "text"]
+    ) { params in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      let phase = (params["phase"] ?? "inject").lowercased()
+      switch phase {
+      case "start":
+        return appState.automationStartCaptureTestSession()
+      case "inject":
+        return appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
+      case "stop":
+        return await appState.automationStopCaptureTestSession()
+      case "lifecycle":
+        let marker = params["text"] ?? "[[MARKER:capture-lifecycle]]"
+        _ = appState.automationStartCaptureTestSession()
+        _ = appState.automationInjectCaptureTestTranscript(text: marker)
+        return await appState.automationStopCaptureTestSession()
+      default:
+        return ["error": "phase must be start, inject, stop, or lifecycle"]
+      }
+    }
+
+    register(
+      name: "conversation_list_snapshot",
+      summary: "Return conversation list counts and recent titles for harness assertions",
+      params: ["limit"]
+    ) { params in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      let limit = max(1, intParam(params["limit"], default: 5))
+      let titles = appState.conversations.prefix(limit).map { $0.structured.title }
+      let titlesJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: Array(titles)),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        titlesJSON = encoded
+      } else {
+        titlesJSON = "[]"
+      }
+      return [
+        "conversation_count": "\(appState.totalConversationsCount ?? appState.conversations.count)",
+        "loaded_count": "\(appState.conversations.count)",
+        "is_transcribing": appState.isTranscribing ? "true" : "false",
+        "recent_titles_json": titlesJSON,
+      ]
+    }
+
+    register(
+      name: "memories_snapshot",
+      summary: "Return memories page load state for harness assertions",
+      params: []
+    ) { _ in
+      await MainActor.run {
+        NotificationCenter.default.post(name: .refreshAllData, object: nil)
+      }
+      try? await Task.sleep(nanoseconds: 300_000_000)
+      guard AppState.current != nil else { return ["error": "app state unavailable"] }
+      return [
+        "refreshed": "true",
+        "is_signed_in": (AppState.current?.isSignedIn == true) ? "true" : "false",
+      ]
+    }
+
+    register(
+      name: "tasks_snapshot",
+      summary: "Return tasks store counts for harness assertions",
+      params: []
+    ) { _ in
+      let store = TasksStore.shared
+      let total = store.tasksWithoutDueDate.count + store.overdueTasks.count + store.todaysTasks.count
+      return [
+        "task_count": "\(total)",
+        "overdue_count": "\(store.overdueTasks.count)",
+        "today_count": "\(store.todaysTasks.count)",
+      ]
+    }
+
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
     // real realtime omni STT path and return the transcript. No mic, no human.
     register(

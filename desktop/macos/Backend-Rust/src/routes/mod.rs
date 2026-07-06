@@ -7,6 +7,7 @@ pub mod chat_completions;
 pub mod config;
 pub mod crisp;
 pub mod health;
+pub mod llm_stub;
 pub mod proxy;
 pub mod rate_limit;
 pub mod realtime;

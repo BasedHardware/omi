@@ -4989,6 +4989,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "message_count": "\(messages.count)",
             "messages_json": messagesJSON,
         ]
+        if let lastAssistant = messages.last(where: { $0.sender != .user })?.copyableText {
+            detail["last_assistant_text"] = lastAssistant
+        }
         if let ownerId = runtimeOwnerId {
             detail["owner_id"] = ownerId
         }
