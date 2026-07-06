@@ -268,7 +268,7 @@ async def _on_incoming_message(event):
             omi_base=OMI_BASE_URL,
             text=msg_text,
             uid=user["omi_uid"],
-            timeout_seconds=30.0,
+            timeout_seconds=60.0,
             previous_messages=previous_messages,
         )
 

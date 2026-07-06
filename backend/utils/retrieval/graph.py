@@ -132,60 +132,23 @@ async def execute_persona_chat_stream(
             formatted_messages.append(HumanMessage(content=msg.text))
 
     full_response: List[str] = []
-    callback = AsyncStreamingCallback()
-
-    # Generate run_id for LangSmith tracing
-    langsmith_run_id = str(uuid.uuid4())
-
-    tracer_callbacks = get_chat_tracer_callbacks(
-        run_id=langsmith_run_id,
-        run_name="chat.persona.stream",
-        tags=["chat", "persona", "streaming"],
-        metadata={
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
-    )
-
-    all_callbacks: List[Any] = [callback] + tracer_callbacks
-
-    run_metadata: Dict[str, Any] = {
-        "run_id": langsmith_run_id,
-        "run_name": "chat.persona.stream",
-        "tags": ["chat", "persona", "streaming"],
-        "metadata": {
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
-    }
-
-    if callback_data is not None:
-        callback_data['langsmith_run_id'] = langsmith_run_id
 
     try:
-        task = asyncio.create_task(
-            get_llm('chat_graph', streaming=True).agenerate(
-                messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
-            )
-        )
+        llm = get_llm('chat_graph', streaming=True)
 
-        while True:
-            try:
-                chunk = await callback.queue.get()
-                if chunk:
-                    token = chunk.replace("data: ", "")
-                    full_response.append(token)
-                    yield chunk
-                else:
-                    break
-            except asyncio.CancelledError:
-                break
-
-        await task
+        # Use astream() directly instead of agenerate(callbacks=).
+        # The old agenerate pattern required AsyncStreamingCallback to
+        # implement the full langchain callback protocol (run_inline,
+        # on_llm_new_token, ...) — which it didn't. After the upstream
+        # langchain_core bump, passing a non-conforming callback crashes
+        # with AttributeError: 'AsyncStreamingCallback' object has no
+        # attribute 'run_inline'. astream() yields AIMessageChunk objects
+        # directly, no callback needed.
+        async for chunk in llm.astream(formatted_messages):
+            token = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            if token:
+                full_response.append(token)
+                yield f"data: {token}"
 
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)

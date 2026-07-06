@@ -240,10 +240,20 @@ def update_auto_reply(telegram_user_id: str, enabled: bool) -> None:
 CHAT_HISTORY_MAX = 10
 
 
+def ensure_chat(chat_id: str) -> None:
+    """Create a chat entry if it doesn't exist.
+
+    Called by the auto-reply handler for incoming DMs from new
+    contacts that haven't been pre-registered.
+    """
+    if chat_id not in chats:
+        chats[chat_id] = {"recent_messages": [], "created_at": datetime.utcnow().isoformat()}
+        _save(CHATS_FILE, chats)
+
+
 def append_message(chat_id: str, role: str, text: str) -> None:
     if chat_id not in chats:
-        logger.warning(f"append_message: unknown chat_id {chat_id!r}, ignoring")
-        return
+        ensure_chat(chat_id)
     if role not in ("human", "ai"):
         logger.warning(f"append_message: invalid role {role!r} for chat {chat_id}, ignoring")
         return
