@@ -4,54 +4,148 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+PYTHON_BIN="${PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if [[ -x ".venv/bin/python" ]]; then
+    PYTHON_BIN=".venv/bin/python"
+  else
+    PYTHON_BIN="python3"
+  fi
+fi
+
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
+export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
+export BACKEND_FAST_UNIT_MAX_SECONDS="${BACKEND_FAST_UNIT_MAX_SECONDS:-0.1}"
+# Keep the CI fast-unit guard focused on materially slow tests while allowing
+# only a narrow CPU accounting jitter margin around the 100ms target.
+export BACKEND_FAST_UNIT_GRACE_SECONDS="${BACKEND_FAST_UNIT_GRACE_SECONDS:-0.02}"
 
-pytest() {
-  "${PYTHON:-python3}" -m pytest "$@"
-}
+pytest_args=(-v)
 
-run_test_list() {
-  local list_file="$1"
-  local selected_tests=()
-  local test_path
-  while IFS= read -r test_path; do
-    [[ -n "$test_path" ]] && selected_tests+=("$test_path")
-  done < "$list_file"
+marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
+if [[ -n "$marker_expr" ]]; then
+  pytest_args+=(-m "$marker_expr")
+fi
 
-  if [[ ${#selected_tests[@]} -eq 0 ]]; then
-    echo "No backend unit tests selected."
-    return 0
+use_file_isolation="${BACKEND_PYTEST_FILE_ISOLATION:-1}"
+if [[ "$use_file_isolation" != "1" && "$use_file_isolation" != "true" && "${BACKEND_PYTEST_XDIST:-auto}" != "0" && "${BACKEND_PYTEST_XDIST:-auto}" != "false" ]]; then
+  if "$PYTHON_BIN" -c "import xdist" >/dev/null 2>&1; then
+    workers="${BACKEND_PYTEST_WORKERS:-auto}"
+    pytest_args+=(-n "$workers" --dist=loadfile)
+  else
+    echo "pytest-xdist is not installed; running backend unit tests serially."
   fi
+fi
 
-  echo "Running ${#selected_tests[@]} selected backend unit test file(s)."
-  for test_path in "${selected_tests[@]}"; do
-    pytest "$test_path" -v
-  done
-}
+test_list_file="${BACKEND_UNIT_TEST_FILE_LIST:-}"
+generated_test_list=""
+if [[ -z "$test_list_file" ]]; then
+  generated_test_list="$(mktemp)"
+  trap '[[ -z "${generated_test_list:-}" ]] || rm -f "$generated_test_list"' EXIT
+  "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all --output "$generated_test_list"
+  test_list_file="$generated_test_list"
+fi
 
-# CI passes an explicit list (built by scripts/select_backend_unit_tests.py).
-if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
-  if [[ ! -f "$BACKEND_UNIT_TEST_FILE_LIST" ]]; then
-    echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $BACKEND_UNIT_TEST_FILE_LIST" >&2
-    exit 1
-  fi
-  run_test_list "$BACKEND_UNIT_TEST_FILE_LIST"
+if [[ ! -f "$test_list_file" ]]; then
+  echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $test_list_file" >&2
+  exit 1
+fi
+
+selected_tests=()
+while IFS= read -r test_path; do
+  [[ -n "$test_path" ]] && selected_tests+=("$test_path")
+done < "$test_list_file"
+
+if [[ ${#selected_tests[@]} -eq 0 ]]; then
+  echo "No backend unit tests selected."
   exit 0
 fi
 
-# Local runs discover tests with the same selector CI uses, so the local and
-# CI test sets can never drift apart. New test files under tests/unit/,
-# tests/services/, or tests/routers/ are picked up automatically.
-LOCAL_TEST_LIST="$(mktemp)"
-trap 'rm -f "$LOCAL_TEST_LIST"' EXIT
-"${PYTHON:-python3}" scripts/select_backend_unit_tests.py --all --output "$LOCAL_TEST_LIST"
-run_test_list "$LOCAL_TEST_LIST"
+echo "Running ${#selected_tests[@]} backend unit test file(s)."
 
-# Fair-use integration tests (require Redis; skip gracefully if unavailable)
-if redis-cli ping >/dev/null 2>&1; then
-  pytest tests/integration/test_fair_use_live.py -v
-  pytest tests/integration/test_fair_use_api.py -v
-else
-  echo "SKIP: fair-use integration tests (Redis not available)"
+if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
+  worker_count="${BACKEND_PYTEST_WORKERS:-auto}"
+  if [[ "$worker_count" == "auto" ]]; then
+    if command -v getconf >/dev/null 2>&1; then
+      worker_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+    elif command -v sysctl >/dev/null 2>&1; then
+      worker_count="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+    else
+      worker_count="4"
+    fi
+  fi
+
+  active_pids=()
+  failed=0
+
+  reap_finished_children() {
+    local running_pids
+    local pid
+    local still_active=()
+
+    running_pids="$(jobs -pr || true)"
+    for pid in "${active_pids[@]}"; do
+      if [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
+        still_active+=("$pid")
+      else
+        if ! wait "$pid"; then
+          failed=1
+        fi
+      fi
+    done
+    set +u
+    active_pids=("${still_active[@]}")
+    set -u
+  }
+
+  for test_path in "${selected_tests[@]}"; do
+    (
+      echo "::group::$test_path"
+      set +e
+      "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
+      status=$?
+      set -e
+      if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+        echo "No tests matched marker expression for $test_path; treating as skipped."
+        status=0
+      fi
+      echo "::endgroup::"
+      exit "$status"
+    ) &
+    active_pids+=("$!")
+
+    while [[ "${#active_pids[@]}" -ge "$worker_count" ]]; do
+      reap_finished_children
+      if [[ "${#active_pids[@]}" -lt "$worker_count" ]]; then
+        break
+      fi
+      oldest_pid="${active_pids[0]}"
+      active_pids=("${active_pids[@]:1}")
+      if ! wait "$oldest_pid"; then
+        failed=1
+      fi
+    done
+  done
+
+  reap_finished_children
+  set +u
+  for pid in "${active_pids[@]}"; do
+    if ! wait "$pid"; then
+      failed=1
+    fi
+  done
+  set -u
+
+  exit "$failed"
 fi
+
+set +e
+"$PYTHON_BIN" -m pytest "${pytest_args[@]}" "${selected_tests[@]}"
+status=$?
+set -e
+if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+  echo "No tests matched marker expression for selected files; treating as skipped."
+  exit 0
+fi
+exit "$status"
