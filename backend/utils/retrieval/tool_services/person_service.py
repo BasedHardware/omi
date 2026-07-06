@@ -13,6 +13,7 @@ from typing import Optional, Union
 import database.conversations as conversations_db
 import database.memories as memories_db
 import database.users as users_db
+import database.vector_db as vector_db
 from database.entities import person_entity_id
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -81,7 +82,48 @@ def resolve_person(uid: str, name_or_id: str) -> Union[dict, AmbiguousPerson, No
     return None
 
 
-def get_person_context(uid: str, name_or_id: str, max_conversations: int = 5, max_memories: int = 20) -> str:
+def search_person_memories(uid: str, person_id: str, query: str, limit: int = 10) -> list:
+    """Semantic search over the facts attributed to one person.
+
+    Runs a low-threshold vector search scoped to this person's ``subject_entity_id``,
+    then hydrates each hit from Firestore, keeping only ACTIVE memories
+    (``invalid_at is None``). Returns hydrated memory dicts (each containing at least
+    ``content``) ordered by the vector-similarity ranking. Fully guarded → ``[]`` on
+    any error or empty input, so callers can treat it as best-effort ranking.
+    """
+    if not person_id or not query:
+        return []
+    try:
+        hits = vector_db.find_similar_memories(
+            uid, query, threshold=0.2, limit=limit, subject_entity_id=person_entity_id(person_id)
+        )
+    except Exception as e:
+        logger.warning(f"person_service: person memory search failed for uid={uid}: {e}")
+        return []
+
+    results = []
+    for hit in hits:
+        memory_id = hit.get('memory_id') if isinstance(hit, dict) else None
+        if not memory_id:
+            continue
+        try:
+            memory = memories_db.get_memory(uid, memory_id)
+        except Exception as e:
+            logger.warning(f"person_service: person memory hydrate failed for uid={uid}: {e}")
+            continue
+        if not memory or memory.get('invalid_at') is not None or not memory.get('content'):
+            continue
+        results.append(memory)
+    return results
+
+
+def get_person_context(
+    uid: str,
+    name_or_id: str,
+    max_conversations: int = 5,
+    max_memories: int = 20,
+    query: Optional[str] = None,
+) -> str:
     person = resolve_person(uid, name_or_id)
     if is_ambiguous(person):
         return person.message()
@@ -105,7 +147,23 @@ def get_person_context(uid: str, name_or_id: str, max_conversations: int = 5, ma
     except Exception as e:
         logger.warning(f"person_service: memories lookup failed for uid={uid}: {e}")
         facts = []
-    fact_lines = [f.get('content') for f in facts if f.get('content')]
+    flat_lines = [f.get('content') for f in facts if f.get('content')]
+
+    if query:
+        # Rank the facts block by semantic relevance to the query first, then top up
+        # with the flat recency-ordered list (deduped), preserving the untrusted fencing
+        # emitted below. Falls back cleanly to the flat list when search returns nothing.
+        ranked_lines = [m.get('content') for m in search_person_memories(uid, person_id, query, limit=max_memories)]
+        fact_lines = []
+        seen = set()
+        for c in ranked_lines + flat_lines:
+            if c and c not in seen:
+                seen.add(c)
+                fact_lines.append(c)
+        fact_lines = fact_lines[:max_memories]
+    else:
+        fact_lines = flat_lines
+
     if fact_lines:
         lines.append(f"\n## Known facts about {name}")
         lines.append(UNTRUSTED_DATA_NOTICE)

@@ -51,6 +51,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, start_background_task
 from utils.llm.person_profile import generate_person_profile
+from utils.memory.person_messaging_enrichment import enrich_persons_from_conversation
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -381,6 +382,15 @@ async def _enrich_conversations(
         except Exception as e:
             logger.error(
                 f'imessage: enrichment failed (content already durable) uid={uid} '
+                f'conv={getattr(conversation, "id", "?")}: {sanitize(str(e))}'
+            )
+        # Absorb per-person durable facts (Phase 1). Content is already durable, so a
+        # failure here only means the person-keyed facts are missing (retryable later).
+        try:
+            await run_blocking(llm_executor, enrich_persons_from_conversation, uid, conversation, language or 'en')
+        except Exception as e:
+            logger.warning(
+                f'imessage: person enrichment failed uid={uid} '
                 f'conv={getattr(conversation, "id", "?")}: {sanitize(str(e))}'
             )
 
