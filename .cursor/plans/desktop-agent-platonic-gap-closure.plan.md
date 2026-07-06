@@ -1,6 +1,6 @@
 # Desktop Agent Platonic Architecture — Gap Closure Plan
 
-**Status:** COMPLETE — G1–G12 closed + QA bundle.
+**Status:** COMPLETE — G1–G12 closed + QA bundle; green gauntlet `20260706T022442Z` at train HEAD `d3a7288e51` (`--suite all`, `omi-continuity-qa`).
 **Branch:** continue on `desktop-agent-platonic` (stacked fix branches `desktop-agent-gc<N>-<slug>`).
 **Baseline:** `f598c4a27` (branch HEAD at time of review).
 
@@ -9,8 +9,8 @@
 | Gap | Severity | Status | Branch | Notes |
 |-----|----------|--------|--------|-------|
 | G1 — Warm bindings blind to voice turns | **Blocker** | ✅ Done | `desktop-agent-gc1-binding-delta` | `2032d3c38` |
-| G2 — Owner-switch gauntlet failure | High | ✅ Done | same | kernel identity_keys fix |
-| G3 — No green gauntlet at HEAD | **Blocker** (gate) | ✅ Done | — | GREEN at `48e3f2d6b`: `.harness/agent-continuity-gauntlet/20260705T050201Z` (`passed: true`, all 6 steps) |
+| G2 — Owner-switch gauntlet failure | High | ✅ Done | `desktop-agent-r1-owner-swap` (`19b65da45`, merged onto `desktop-agent-platonic`) | step 06 green on `omi-gauntlet`: full pass `20260705T075032Z` (`7638f2f4f` train HEAD; manifest `git` `c3abf9785`) — `swap_test_owner`, disjoint `conversation_id`, owner-A markers absent from owner-B trace |
+| G3 — No green gauntlet at HEAD | **Blocker** (gate) | ✅ Done | — | GREEN at `7638f2f4f`: `.harness/agent-continuity-gauntlet/20260705T075032Z` (`passed: true`, `--suite all`, all 6 steps) |
 | G4 — Coordinator session-id fallback chains | Medium | ✅ Done | — | single `sessionId` field |
 | G5 — Dead identity vocabulary in Swift | Low | ✅ Done | — | `floatingSessionKey` deleted; case-insensitive INV-5 |
 | G6 — Migration shims without deletion dates | Medium | ✅ Done | — | ship+2 TODO markers + coordinator doc |
