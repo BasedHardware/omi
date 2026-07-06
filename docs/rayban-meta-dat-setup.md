@@ -29,7 +29,20 @@ via `#if canImport(MWDATCore)`, and this compiles clean against 0.8.0
 Dependencies. (Optionally add **MWDATMockDevice** to Debug for hardware-free
 testing.)
 
-## Step 2 — Credentials (the only manual step)
+## Step 2 — Credentials (distribution builds only — SKIP for Developer Mode)
+
+**Developer Mode testing needs no Developer Center configuration at all.**
+Meta's own DAT samples run with: glasses Developer Mode ON in the Meta AI
+app → launch your locally built app → Connect. The Developer Center's
+"Mobile app configuration" (Team ID / Bundle ID / credentials) applies only
+to Meta beta-channel distribution.
+
+Known distribution blocker: Meta's Bundle ID field rejects hyphens, and
+Omi's iOS bundle ids (`com.friend-app-with-wearable.ios12[.development]`)
+contain them — distributing through Meta's channel will require a dedicated
+hyphen-free bundle identifier. Track this before any beta rollout.
+
+### Distribution credentials (when you get there)
 
 Info.plist already carries the `MWDAT` dictionary (`MetaAppID`/`ClientToken`
 resolve from build settings), the `omirayban` callback URL scheme, and the
