@@ -1,0 +1,3 @@
+{
+  "change": "Local diagnostics export now also redacts bare OpenAI-style keys and Authorization Basic headers"
+}
