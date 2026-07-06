@@ -46,11 +46,15 @@ class MetaCaptureQueueItem {
 }
 
 class MetaCaptureQueue {
-  MetaCaptureQueue({required this.rootDirectory});
+  MetaCaptureQueue({required this.rootDirectory, this.compactionThreshold = 64});
 
   static final Random _random = Random.secure();
 
   final Directory rootDirectory;
+
+  /// Compact the append-only ledgers once this many uploads have accumulated;
+  /// without it both files grow for the life of the install.
+  final int compactionThreshold;
 
   Directory get _framesDirectory => Directory('${rootDirectory.path}/meta_capture_frames');
   File get _queueFile => File('${rootDirectory.path}/meta_capture_queue.jsonl');
@@ -78,7 +82,15 @@ class MetaCaptureQueue {
       deviceUuid: deviceUuid,
       deviceName: deviceName,
     );
-    await _queueFile.writeAsString('${jsonEncode(item.toJson())}\n', mode: FileMode.append, flush: true);
+    try {
+      await _queueFile.writeAsString('${jsonEncode(item.toJson())}\n', mode: FileMode.append, flush: true);
+    } catch (_) {
+      // Without a ledger entry the frame is unreachable; don't leak it.
+      try {
+        await frameFile.delete();
+      } catch (_) {}
+      rethrow;
+    }
     return item;
   }
 
@@ -117,6 +129,27 @@ class MetaCaptureQueue {
   Future<void> markUploaded(String id) async {
     await rootDirectory.create(recursive: true);
     await _uploadedFile.writeAsString('$id\n', mode: FileMode.append, flush: true);
+    final uploadedCount = (await _readUploadedIds()).length;
+    if (uploadedCount >= compactionThreshold) {
+      await compact();
+    }
+  }
+
+  /// Rewrites the queue ledger keeping only pending items (not uploaded and
+  /// frame file still present), then drops the now-redundant uploaded ledger.
+  /// Atomic via write-to-temp + rename.
+  Future<void> compact() async {
+    final items = await pending(limit: 1 << 30);
+    final tmp = File('${_queueFile.path}.tmp');
+    final buffer = StringBuffer();
+    for (final item in items) {
+      buffer.writeln(jsonEncode(item.toJson()));
+    }
+    await tmp.writeAsString(buffer.toString(), flush: true);
+    await tmp.rename(_queueFile.path);
+    if (await _uploadedFile.exists()) {
+      await _uploadedFile.delete();
+    }
   }
 
   Future<Set<String>> _readUploadedIds() async {

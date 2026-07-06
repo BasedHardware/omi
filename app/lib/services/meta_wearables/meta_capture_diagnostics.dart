@@ -19,22 +19,26 @@ class MetaCaptureDiagnostics {
     this.failedUploadCount = 0,
   });
 
+  /// Sentinel distinguishing "not passed" from an explicit null, so callers
+  /// can clear nullable fields (`copyWith(lastUploadStatus: null)`).
+  static const Object _unset = Object();
+
   MetaCaptureDiagnostics copyWith({
-    DateTime? lastFrameAt,
-    DateTime? lastUploadAt,
-    String? lastUploadStatus,
-    String? streamState,
-    String? sessionState,
+    Object? lastFrameAt = _unset,
+    Object? lastUploadAt = _unset,
+    Object? lastUploadStatus = _unset,
+    Object? streamState = _unset,
+    Object? sessionState = _unset,
     int? pendingQueueCount,
     int? uploadedCount,
     int? failedUploadCount,
   }) =>
       MetaCaptureDiagnostics(
-        lastFrameAt: lastFrameAt ?? this.lastFrameAt,
-        lastUploadAt: lastUploadAt ?? this.lastUploadAt,
-        lastUploadStatus: lastUploadStatus ?? this.lastUploadStatus,
-        streamState: streamState ?? this.streamState,
-        sessionState: sessionState ?? this.sessionState,
+        lastFrameAt: identical(lastFrameAt, _unset) ? this.lastFrameAt : lastFrameAt as DateTime?,
+        lastUploadAt: identical(lastUploadAt, _unset) ? this.lastUploadAt : lastUploadAt as DateTime?,
+        lastUploadStatus: identical(lastUploadStatus, _unset) ? this.lastUploadStatus : lastUploadStatus as String?,
+        streamState: identical(streamState, _unset) ? this.streamState : streamState as String?,
+        sessionState: identical(sessionState, _unset) ? this.sessionState : sessionState as String?,
         pendingQueueCount: pendingQueueCount ?? this.pendingQueueCount,
         uploadedCount: uploadedCount ?? this.uploadedCount,
         failedUploadCount: failedUploadCount ?? this.failedUploadCount,
