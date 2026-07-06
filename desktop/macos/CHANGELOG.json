@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.37",
+      "date": "2026-07-06",
+      "changes": [
+        "Fixed desktop launch sign-in recovery so a startup token refresh check no longer signs you out unnecessarily"
+      ]
+    },
+    {
       "version": "0.12.36",
       "date": "2026-07-06",
       "changes": [
