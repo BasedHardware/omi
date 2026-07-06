@@ -15,7 +15,7 @@ from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, cast, TYPE_
 if TYPE_CHECKING:
     from models.conversation import Conversation
 
-from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, BaseMessage, BaseMessage
+from langchain_core.messages import SystemMessage, AIMessage, HumanMessage, BaseMessage
 
 from models.app import App
 from models.chat import ChatSession, Message, PageContext
@@ -115,6 +115,7 @@ async def execute_persona_chat_stream(
     cited: Optional[bool] = False,
     callback_data: Optional[Dict[str, Any]] = None,
     chat_session: Optional[ChatSession] = None,
+    extra_user_messages: Optional[List["HumanMessage"]] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle streaming chat responses for persona-type apps."""
     system_prompt = app.persona_prompt

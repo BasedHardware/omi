@@ -264,6 +264,7 @@ def format_memories_for_prompt(memories: List[dict], *, per_memory_max_chars: in
 
 
 def retrieve_for_topic(
+    uid: str,
     topic: str,
     start_timestamp: Optional[int],
     end_timestamp: Optional[int],

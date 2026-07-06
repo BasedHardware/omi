@@ -77,7 +77,7 @@ from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from utils import stripe
-from utils.llm.persona import condense_conversations, generate_persona_description, condense_tweets
+from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
 from utils.retrieval.rag import retrieve_relevant_memories_for_persona, format_memories_for_prompt
 from utils.llm.usage_tracker import track_usage, Features
 from utils.executors import run_blocking, db_executor, llm_executor
@@ -739,7 +739,7 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
         logger.info("twitter is in connected accounts")
         # Get latest tweets
         timeline = await get_twitter_timeline(persona['twitter']['username'])
-        tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
+        _tweets = [{'tweet': tweet.text, 'posted_at': tweet.created_at} for tweet in timeline.timeline]
 
     # T-022: similarity retrieval — pick the top-K memories most relevant
     # to the recent-conversation context instead of LLM-flattening all 250
