@@ -66,7 +66,15 @@ BYOK_POLICIES = {
 RATE_LIMIT_KEY_SUBJECTS = {'uid', 'api_key', 'app_key', 'ip', 'custom', 'none', 'unknown'}
 RATE_LIMIT_ENFORCEMENTS = {'fail_open', 'fail_closed', 'shadow', 'none', 'unknown'}
 RATE_LIMIT_PLACEMENTS = {'dependency', 'inline', 'wrapper', 'websocket_lock', 'none', 'unknown'}
-TIMEOUT_CLASSES = {'default_method', 'sync_job', 'audio_merge', 'streaming', 'websocket', 'unknown'}
+TIMEOUT_CLASSES = {
+    'default_method',
+    'sync_job',
+    'audio_merge',
+    'account_deletion_wipe',
+    'streaming',
+    'websocket',
+    'unknown',
+}
 SURFACES = {
     'first_party_app',
     'developer_api',
@@ -520,7 +528,7 @@ def validate_inventory(
         if not policy:
             continue
         timeout_class = policy.get('timeout_class')
-        if timeout_class in {'sync_job', 'audio_merge'} and entry['path'] not in paths_timeout:
+        if timeout_class in {'sync_job', 'audio_merge', 'account_deletion_wipe'} and entry['path'] not in paths_timeout:
             missing_timeout_overrides.append(f"{entry['route_key']} declares {timeout_class} without a path override")
         if entry['observed']['timeout_override']:
             expected_timeout_class = entry['observed']['timeout_class_hint']
