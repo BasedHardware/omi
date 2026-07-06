@@ -92,4 +92,28 @@ final class DiagnosticsExportTests: XCTestCase {
     let text = DesktopDiagnosticsManager.shared.buildLocalDiagnosticsText(logPath: missing)
     XCTAssertTrue(text.contains("no readable log file"))
   }
+
+  func testLogTailReadsBoundedEndOfLargeLogFile() throws {
+    let logPath = tempDir.appendingPathComponent("omi-dev.log").path
+    // A log larger than the 512 KB bounded-read window: the head line falls
+    // outside both the byte window and the requested line tail and must be
+    // excluded, while the tail marker survives. Exercises the end-of-file seek
+    // plus partial-first-line trim in redactedLogTail.
+    var lines = ["[00:00:00.000] [app] HEAD_MARKER_beyond_window"]
+    for i in 1...15000 {
+      lines.append("[00:00:00.000] [app] filler operational line number \(i)")
+    }
+    lines.append("[23:59:59.999] [app] TAIL_MARKER_at_end")
+    let body = lines.joined(separator: "\n")
+    XCTAssertGreaterThan(
+      body.utf8.count, 512 * 1024, "test log must exceed the bounded-read window")
+    try body.write(toFile: logPath, atomically: true, encoding: .utf8)
+
+    let text = DesktopDiagnosticsManager.shared.buildLocalDiagnosticsText(
+      logPath: logPath, maxLogLines: 50)
+
+    XCTAssertTrue(text.contains("TAIL_MARKER_at_end"), "tail line missing from export")
+    XCTAssertFalse(
+      text.contains("HEAD_MARKER_beyond_window"), "head line should be outside the bounded tail")
+  }
 }

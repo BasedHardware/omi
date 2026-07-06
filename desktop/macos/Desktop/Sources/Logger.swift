@@ -37,15 +37,30 @@ private func appendToLogFileSync(_ line: String) {
 /// Create the file at `path` (if missing) or tighten an existing file so it is
 /// readable and writable only by its owner (0600).
 ///
-/// The log lives in the shared, world-readable `/tmp` directory and can contain
+/// The log lives in the shared, world-*writable* `/tmp` directory and can contain
 /// UIDs, request context, and operational detail, so other local users must not
-/// be able to read it (BL-024 / SET-06). Idempotent and safe to call repeatedly.
+/// be able to read it (BL-024 / SET-06). Because any local user can pre-create
+/// the path, we refuse to adopt anything that isn't a regular file owned by the
+/// current user: a symlink, a non-regular node, or someone else's file is removed
+/// and recreated owner-only, so we never chmod a symlink target or hand our logs
+/// to a file we don't control. Uses `lstat` (not `stat`) so a symlink is judged
+/// on its own, not its target. Idempotent and safe to call repeatedly. Returns
+/// whether the path is now a regular, owner-only file under our control.
 @discardableResult
 func ensureLogFileOwnerOnly(atPath path: String) -> Bool {
   let fileManager = FileManager.default
-  if fileManager.fileExists(atPath: path) {
-    // Tighten files created by older builds (or a create without attributes).
-    return (try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)) != nil
+  var info = stat()
+  if lstat(path, &info) == 0 {
+    let isRegularFile = (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG)
+    let isOwnedByUs = info.st_uid == getuid()
+    if isRegularFile && isOwnedByUs {
+      // Tighten files created by older builds (or a create without attributes).
+      return (try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)) != nil
+    }
+    // Symlink, non-regular node, or another user's file — never adopt it. In
+    // sticky `/tmp` we may be unable to remove an attacker-owned file; then we
+    // report failure (the caller keeps retrying) rather than trusting it.
+    guard (try? fileManager.removeItem(atPath: path)) != nil else { return false }
   }
   return fileManager.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
 }
@@ -57,8 +72,10 @@ private var didEnsureLogFilePermissions = false
 /// Shared file-write implementation (must be called on logQueue)
 private func writeToLogFile(_ data: Data) {
   if !didEnsureLogFilePermissions {
-    didEnsureLogFilePermissions = true
-    ensureLogFileOwnerOnly(atPath: logFile)
+    // Latch only when normalization actually succeeds, so a transient failure
+    // (e.g. a racing create) is retried on the next write instead of leaving
+    // the log permanently world-readable.
+    didEnsureLogFilePermissions = ensureLogFileOwnerOnly(atPath: logFile)
   }
   if FileManager.default.fileExists(atPath: logFile) {
     if let handle = FileHandle(forWritingAtPath: logFile) {

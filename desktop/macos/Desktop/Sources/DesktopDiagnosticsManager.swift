@@ -288,8 +288,23 @@ final class DesktopDiagnosticsManager {
   /// Read up to `maxLines` from the end of the log file, redacting anything that
   /// looks like a secret (tokens, JWTs, credential kv pairs) line by line.
   private func redactedLogTail(logPath: String, maxLines: Int) -> String {
-    guard let content = try? String(contentsOfFile: logPath, encoding: .utf8) else {
+    guard let handle = FileHandle(forReadingAtPath: logPath) else {
       return "(no readable log file at \(logPath))"
+    }
+    defer { handle.closeFile() }
+    // Read only a bounded tail from the end rather than loading the whole log
+    // into memory, so export latency and memory stay predictable on large logs.
+    // 512 KB comfortably covers maxLines (default 500) of log text.
+    let maxTailBytes: UInt64 = 512 * 1024
+    let fileSize = handle.seekToEndOfFile()
+    let start = fileSize > maxTailBytes ? fileSize - maxTailBytes : 0
+    handle.seek(toFileOffset: start)
+    let data = handle.readDataToEndOfFile()
+    // Lenient decode: a byte-offset seek can split a multibyte character, so
+    // substitute rather than fail; the possibly-partial first line is dropped.
+    var content = String(decoding: data, as: UTF8.self)
+    if start > 0, let newline = content.firstIndex(of: "\n") {
+      content = String(content[content.index(after: newline)...])
     }
     let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
     let tail = lines.suffix(max(0, maxLines))

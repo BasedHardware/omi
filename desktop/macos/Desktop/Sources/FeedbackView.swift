@@ -198,11 +198,19 @@ struct FeedbackView: View {
 
     guard panel.runModal() == .OK, let url = panel.url else { return }
 
-    if DesktopDiagnosticsManager.shared.writeLocalDiagnosticsBundle(to: url) {
-      NSWorkspace.shared.activateFileViewerSelecting([url])
-      log("Saved local diagnostics bundle to a user-chosen location")
-    } else {
-      log("Failed to save local diagnostics bundle")
+    // Building the bundle reads the log, serializes snapshots, and writes the
+    // file — keep it off the main thread so a large log can't hang the UI. The
+    // panel already returned; reveal in Finder back on main.
+    DispatchQueue.global(qos: .userInitiated).async {
+      let saved = DesktopDiagnosticsManager.shared.writeLocalDiagnosticsBundle(to: url)
+      DispatchQueue.main.async {
+        if saved {
+          NSWorkspace.shared.activateFileViewerSelecting([url])
+          log("Saved local diagnostics bundle to a user-chosen location")
+        } else {
+          log("Failed to save local diagnostics bundle")
+        }
+      }
     }
   }
 

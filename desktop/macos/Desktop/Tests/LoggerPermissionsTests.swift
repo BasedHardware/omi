@@ -45,6 +45,30 @@ final class LoggerPermissionsTests: XCTestCase {
     XCTAssertEqual(try String(contentsOfFile: path, encoding: .utf8), "prior line\n")
   }
 
+  func testEnsureLogFileOwnerOnlyRejectsSymlinkAndDoesNotTouchTarget() throws {
+    // An attacker in world-writable /tmp pre-creates the log path as a symlink to
+    // a victim file. We must not chmod the victim or write through the link.
+    let victim = tempDir.appendingPathComponent("victim.txt").path
+    XCTAssertTrue(
+      FileManager.default.createFile(
+        atPath: victim, contents: Data("victim content\n".utf8),
+        attributes: [.posixPermissions: 0o644]))
+
+    let path = tempDir.appendingPathComponent("omi-symlinked.log").path
+    try FileManager.default.createSymbolicLink(atPath: path, withDestinationPath: victim)
+
+    XCTAssertTrue(ensureLogFileOwnerOnly(atPath: path))
+
+    // The symlink was replaced by a real owner-only file — the path is no longer
+    // a link (destinationOfSymbolicLink throws once it isn't one).
+    XCTAssertThrowsError(try FileManager.default.destinationOfSymbolicLink(atPath: path))
+    XCTAssertEqual(try posixPermissions(of: path), 0o600)
+
+    // The victim was neither tightened to 0600 nor overwritten through the link.
+    XCTAssertEqual(try posixPermissions(of: victim), 0o644)
+    XCTAssertEqual(try String(contentsOfFile: victim, encoding: .utf8), "victim content\n")
+  }
+
   private func posixPermissions(of path: String) throws -> Int {
     let attributes = try FileManager.default.attributesOfItem(atPath: path)
     let number = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)
