@@ -606,10 +606,32 @@ class AuthService {
                 self.isSignedIn = true
                 AuthState.shared.userEmail = savedEmail
                 AuthState.shared.isRestoringAuth = false
+                validateRestoredUserDefaultsSession()
             }
         } else {
             NSLog("OMI AUTH: No saved auth state found")
             AuthState.shared.isRestoringAuth = false
+        }
+    }
+
+    private func validateRestoredUserDefaultsSession() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                _ = try await self.getIdToken(forceRefresh: true)
+                NSLog("OMI AUTH: Restored UserDefaults session validated by forced token refresh")
+                APIKeyService.shared.startFetchingKeys()
+                Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+            } catch AuthError.notSignedIn {
+                NSLog("OMI AUTH: Restored UserDefaults session failed validation - signed out")
+                self.clearTokens()
+                self.isSignedIn = false
+                AuthState.shared.userEmail = nil
+                AuthState.shared.isRestoringAuth = false
+                self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
+            } catch {
+                NSLog("OMI AUTH: Restored UserDefaults session validation deferred: %@", error.localizedDescription)
+            }
         }
     }
 
