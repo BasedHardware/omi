@@ -72,19 +72,34 @@ def _cap_apps_for_llm(apps: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tupl
 
 def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
     """Apply a hard character budget and, when the set was truncated, append a note telling the
-    model to summarize what it has and offer to narrow, so it answers instead of freezing.
+    model to summarize what it has and to offer to narrow, so it answers instead of freezing.
+
+    When clipping for size, cut back to the start of the last complete app record so a partial app
+    block is never left dangling (each record starts with "**<app>**" on its own line, matching the
+    record-boundary clipping the conversations tool uses). If the first (or only) record is itself
+    larger than the budget, keep the hard-clipped text so its data is still returned truncated rather
+    than dropping every app down to just the summary header.
 
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
     if len(result) > MAX_RESULT_CHARS:
-        result = result[:MAX_RESULT_CHARS]
+        clipped = result[:MAX_RESULT_CHARS]
+        first_record = result.find("\n**")  # boundary just before the first app record
+        boundary = clipped.rfind("\n**")  # boundary just before the last record that fits
+        if boundary > first_record >= 0:
+            # A complete record precedes the cut, so drop only the partial trailing record.
+            result = clipped[:boundary]
+        else:
+            # The first (or only) record overflows the budget; keep the hard-clipped text so its
+            # data is still returned truncated rather than dropping every app to just the header.
+            result = clipped
         truncated = True
     if truncated:
         result += (
-            f"\n\n[Only the most relevant apps are shown here to stay within limits; more may exist. "
-            f"Summarize what is shown and tell the user they can ask about a narrower app or date range "
-            f"for the rest.]"
+            "\n\n[Only the most-used apps are shown here to stay within limits; more may exist. "
+            "Summarize what is shown and tell the user they can ask about a specific app or a "
+            "narrower date range for the rest.]"
         )
     return result
 
