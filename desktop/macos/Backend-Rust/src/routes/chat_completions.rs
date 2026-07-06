@@ -25,13 +25,7 @@ use crate::AppState;
 use super::rate_limit::RateDecision;
 
 fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
-    match builder.body(body) {
-        Ok(response) => response,
-        Err(error) => {
-            tracing::error!("chat_completions: failed to build response: {}", error);
-            StatusCode::INTERNAL_SERVER_ERROR.into_response()
-        }
-    }
+    crate::routes::response_or_500("chat_completions", builder, body)
 }
 
 /// Default max_tokens when client doesn't specify one.
