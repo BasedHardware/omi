@@ -3,6 +3,8 @@ import UserNotifications
 
 enum NotificationRegistrationRepair {
   static let repairedVersionKey = "notificationRegistrationRepairedAppVersion"
+  static let startupAuthorizationAttemptedVersionKey =
+    "notificationStartupAuthorizationAttemptedAppVersion"
 
   private static var isRepairing = false
   private static var pendingCompletions: [(Bool) -> Void] = []
@@ -26,6 +28,26 @@ enum NotificationRegistrationRepair {
     versionIdentifier: String = currentVersionIdentifier()
   ) {
     defaults.set(versionIdentifier, forKey: repairedVersionKey)
+  }
+
+  /// Whether the automatic startup notification-authorization request (which can
+  /// trigger a LaunchServices repair) should run this app version. This path fires
+  /// on every launch/re-activation/wake, so without a guard a user stuck at
+  /// `.notDetermined` re-runs the repair loop indefinitely (issue #9082). Attempt at
+  /// most once per installed version; user-initiated "Enable"/"Fix" flows are not
+  /// gated by this and can still retry on demand.
+  static func shouldAttemptStartupAuthorizationForCurrentVersion(
+    defaults: UserDefaults = .standard,
+    versionIdentifier: String = currentVersionIdentifier()
+  ) -> Bool {
+    defaults.string(forKey: startupAuthorizationAttemptedVersionKey) != versionIdentifier
+  }
+
+  static func markStartupAuthorizationAttemptedForCurrentVersion(
+    defaults: UserDefaults = .standard,
+    versionIdentifier: String = currentVersionIdentifier()
+  ) {
+    defaults.set(versionIdentifier, forKey: startupAuthorizationAttemptedVersionKey)
   }
 
   @MainActor

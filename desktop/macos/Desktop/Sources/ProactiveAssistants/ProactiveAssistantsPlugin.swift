@@ -265,6 +265,17 @@ public class ProactiveAssistantsPlugin: NSObject {
                     return
                 }
 
+                // startMonitoring runs on launch, re-activation, key load, and wake.
+                // A user stuck at .notDetermined (launch-disabled error) would otherwise
+                // re-run the LaunchServices repair loop on every one of those (issue #9082),
+                // so attempt the startup authorization at most once per installed version.
+                // The in-app "Enable"/"Fix" buttons remain unguarded for on-demand retries.
+                guard NotificationRegistrationRepair.shouldAttemptStartupAuthorizationForCurrentVersion() else {
+                    log("Skipping startup notification authorization request (already attempted this app version)")
+                    return
+                }
+                NotificationRegistrationRepair.markStartupAuthorizationAttemptedForCurrentVersion()
+
                 NotificationRegistrationRepair.requestAuthorizationRepairingLaunchServices(
                     reason: "launch_disabled_error_startup",
                     previousStatus: "notDetermined"

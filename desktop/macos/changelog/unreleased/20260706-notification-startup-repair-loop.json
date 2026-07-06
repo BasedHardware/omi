@@ -1,0 +1,3 @@
+{
+  "change": "Fixed macOS notification setup repeatedly re-running its repair step on every launch and wake"
+}
