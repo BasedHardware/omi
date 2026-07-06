@@ -331,6 +331,12 @@ enum BridgeError: LocalizedError {
       return failure.displayMessage
     case .agentError(let msg):
       let lower = msg.lowercased()
+      // Codex auth errors mention codex/OPENAI_API_KEY; without this carve-out
+      // they'd hit the generic "update the app" branch below, which is wrong
+      // guidance (the fix is signing in, not updating).
+      if lower.contains("codex") {
+        return "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
+      }
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
         || lower.contains("unauthorized") || lower.contains("permission denied")
         || lower.contains("invalid key") || lower.contains("forbidden")

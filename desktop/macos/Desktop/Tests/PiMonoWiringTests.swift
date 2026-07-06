@@ -97,7 +97,88 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
   }
 
-  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
+  // MARK: - Codex auth pre-flight
+
+  func testCodexInstalledWithoutAnyCredentialNeedsAuth() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-codex-noauth-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: [:],
+      homeDirectory: home.path,
+      byokOpenAIKeyPresent: false)
+
+    XCTAssertFalse(availability.isAvailable)
+    XCTAssertEqual(availability.status, .needsAuth(command: executable.path))
+    XCTAssertTrue(availability.setupPrompt.contains("codex login"))
+    XCTAssertTrue(availability.setupPrompt.contains("OpenAI API key"))
+  }
+
+  func testCodexCredentialSourcesUnlockAvailability() throws {
+    let home = FileManager.default.temporaryDirectory
+      .appendingPathComponent("omi-codex-auth-\(UUID().uuidString)", isDirectory: true)
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: home) }
+
+    let executable = bin.appendingPathComponent("codex-acp")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    // 1. API key in environment
+    XCTAssertTrue(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: ["OPENAI_API_KEY": "sk-test"],
+        homeDirectory: home.path, byokOpenAIKeyPresent: false
+      ).isAvailable)
+
+    // 2. codex login session (~/.codex/auth.json)
+    let codexDir = home.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
+    try "{}".write(to: codexDir.appendingPathComponent("auth.json"), atomically: true, encoding: .utf8)
+    XCTAssertTrue(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: [:],
+        homeDirectory: home.path, byokOpenAIKeyPresent: false
+      ).isAvailable)
+    try FileManager.default.removeItem(at: codexDir)
+
+    // 3. in-app BYOK OpenAI key
+    XCTAssertTrue(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: [:],
+        homeDirectory: home.path, byokOpenAIKeyPresent: true
+      ).isAvailable)
+  }
+
+  func testCodexMissingBinaryIsMissingNotNeedsAuth() {
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
+      homeDirectory: "/tmp/missing-home",
+      byokOpenAIKeyPresent: true)
+
+    XCTAssertEqual(availability.status, .missing)
+    XCTAssertTrue(availability.setupPrompt.contains("npm i -g"))
+  }
+
+  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() throws {
+    // The detector unconditionally searches /opt/homebrew/bin and
+    // /usr/local/bin; on machines with a real openclaw install this test
+    // cannot observe the "missing" state.
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+      try XCTSkipIf(
+        FileManager.default.isExecutableFile(atPath: "\(dir)/openclaw"),
+        "openclaw is actually installed in \(dir); missing-state is unobservable here")
+    }
     let availability = LocalAgentProviderDetector.availability(
       for: .openclaw,
       environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],

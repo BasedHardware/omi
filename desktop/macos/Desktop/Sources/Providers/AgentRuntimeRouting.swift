@@ -75,6 +75,10 @@ enum AgentRuntimeRouting {
 struct LocalAgentProviderAvailability: Equatable {
     enum Status: Equatable {
         case available(command: String)
+        /// The binary is installed but no credential was found (Codex only).
+        /// Spawning would fail after the fact, so callers should surface
+        /// `setupPrompt` instead of starting the agent.
+        case needsAuth(command: String)
         case missing
     }
 
@@ -87,6 +91,14 @@ struct LocalAgentProviderAvailability: Equatable {
     }
 
     var setupPrompt: String {
+        if case .needsAuth = status {
+            switch provider {
+            case .codex:
+                return "Codex is installed but not signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
+            case .hermes, .openclaw:
+                return "\(provider.displayName) needs setup before it can run. Check its sign-in, then try again."
+            }
+        }
         switch provider {
         case .hermes:
             return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
@@ -107,21 +119,57 @@ enum LocalAgentProviderDetector {
         for provider: AgentPillsManager.DirectedProvider,
         environment: [String: String] = ProcessInfo.processInfo.environment,
         fileManager: FileManager = .default,
-        homeDirectory: String = NSHomeDirectory()
+        homeDirectory: String = NSHomeDirectory(),
+        byokOpenAIKeyPresent: Bool? = nil
     ) -> LocalAgentProviderAvailability {
-        if let command = configuredCommand(for: provider, environment: environment) {
-            return LocalAgentProviderAvailability(provider: provider, status: .available(command: command))
+        let command: String? =
+            configuredCommand(for: provider, environment: environment)
+            ?? firstExecutable(
+                named: provider.executableName,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            )
+
+        guard let command else {
+            return LocalAgentProviderAvailability(provider: provider, status: .missing)
         }
 
-        if let path = firstExecutable(
-            named: provider.executableName,
-            fileManager: fileManager,
-            homeDirectory: homeDirectory
-        ) {
-            return LocalAgentProviderAvailability(provider: provider, status: .available(command: path))
+        // Codex pre-flight: the binary alone isn't enough — codex-acp fails
+        // post-spawn without a credential (NO_BROWSER blocks interactive
+        // login). Detect that up front so callers show sign-in guidance
+        // instead of spawning into a guaranteed failure.
+        if provider == .codex,
+            !codexCredentialPresent(
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory,
+                byokOpenAIKeyPresent: byokOpenAIKeyPresent ?? (APIKeyService.byokKey(.openai) != nil)
+            )
+        {
+            return LocalAgentProviderAvailability(provider: provider, status: .needsAuth(command: command))
         }
 
-        return LocalAgentProviderAvailability(provider: provider, status: .missing)
+        return LocalAgentProviderAvailability(provider: provider, status: .available(command: command))
+    }
+
+    /// Whether any Codex credential source is present: an API key in the
+    /// environment, a `codex login` session (~/.codex/auth.json), or an
+    /// in-app BYOK OpenAI key (seeded as OPENAI_API_KEY at bridge spawn).
+    static func codexCredentialPresent(
+        environment: [String: String],
+        fileManager: FileManager,
+        homeDirectory: String,
+        byokOpenAIKeyPresent: Bool
+    ) -> Bool {
+        for key in ["OPENAI_API_KEY", "CODEX_API_KEY"] {
+            if !(environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true) {
+                return true
+            }
+        }
+        if fileManager.fileExists(atPath: "\(homeDirectory)/.codex/auth.json") {
+            return true
+        }
+        return byokOpenAIKeyPresent
     }
 
     static func isAvailable(
