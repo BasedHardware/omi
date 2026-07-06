@@ -132,7 +132,7 @@ async def execute_persona_chat_stream(
     full_response: List[str] = []
 
     try:
-        llm = get_llm('chat_graph', streaming=True)
+        llm = get_llm('persona_chat', streaming=True)
 
         # Use astream() directly instead of agenerate(callbacks=).
         # The old agenerate pattern required AsyncStreamingCallback to
