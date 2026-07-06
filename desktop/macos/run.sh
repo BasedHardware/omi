@@ -475,7 +475,7 @@ step "Generating tool surfaces..."
   cd agent
   NODE_BIN=""
   for candidate in \
-    "Desktop/Sources/Resources/node" \
+    "../Desktop/Sources/Resources/node" \
     "/opt/homebrew/opt/node@22/bin/node" \
     "/usr/local/opt/node@22/bin/node" \
     "$(command -v node 2>/dev/null || true)"; do

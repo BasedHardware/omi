@@ -2037,7 +2037,7 @@ workflows:
         script: |
           cd agent
           NODE_BIN=""
-          for candidate in Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
+          for candidate in ../Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
             if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
               NODE_BIN="$candidate"
               break

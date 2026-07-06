@@ -6,6 +6,7 @@ import Foundation
 enum TaskChatRuntime {
     private static var agentBridge: AgentBridge?
     private static var bridgeStarted = false
+    private static var activeTaskId: String?
 
     static func query(
         prompt: String,
@@ -24,6 +25,15 @@ enum TaskChatRuntime {
         onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
     ) async throws -> AgentBridge.QueryResult {
         let bridge = try await sharedBridge()
+        if let activeTaskId, activeTaskId != taskId {
+            throw BridgeError.requestAlreadyActive
+        }
+        activeTaskId = taskId
+        defer {
+            if activeTaskId == taskId {
+                activeTaskId = nil
+            }
+        }
         return try await bridge.query(
             prompt: prompt,
             systemPrompt: systemPrompt,
@@ -42,7 +52,8 @@ enum TaskChatRuntime {
         )
     }
 
-    static func interrupt() async {
+    static func interrupt(taskId: String) async {
+        guard activeTaskId == taskId else { return }
         await agentBridge?.interrupt()
     }
 

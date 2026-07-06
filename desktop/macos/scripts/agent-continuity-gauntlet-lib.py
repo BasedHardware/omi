@@ -1117,8 +1117,6 @@ class GauntletRunner:
         snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
         traces = wait_for_new_traces(trace_start, min_count=1, timeout_sec=10.0)
         if not traces:
-            traces = traces_for_query(read_all_traces(), probe_query)
-        if not traces:
             self.fail("owner-switch: owner-B probe produced no QueryTracer evidence")
 
         runtime = self.bridge_act("agent_runtime_evidence")
@@ -1152,9 +1150,9 @@ class GauntletRunner:
                 f"owner-switch: owner B id mismatch "
                 f"(expected={owner_b_id}, actual={owner_b_identity.get('owner_id')})"
             )
-        if not owner_a_kernel or not owner_b_kernel:
+        elif not owner_a_kernel or not owner_b_kernel:
             self.fail("owner-switch: could not read kernel surface_conversations for both owners")
-        if owner_a_kernel.get("conversation_id") == owner_b_kernel.get("conversation_id"):
+        elif owner_a_kernel.get("conversation_id") == owner_b_kernel.get("conversation_id"):
             self.fail(
                 "owner-switch: owner B reused owner A conversation_id "
                 f"({owner_a_kernel.get('conversation_id')})"

@@ -477,7 +477,7 @@ enum BridgeError: LocalizedError {
     case .agentRuntimeFailure(let failure):
       return failure.displayMessage
     case .agentError(let msg):
-      return msg.isEmpty ? "Something went wrong. Please try again." : msg
+      return Self.userFacingAgentErrorMessage(msg)
     case .quotaExceeded(let plan, let unit, let used, let limit, _):
       let limitStr: String = {
         guard let limit = limit else { return "your monthly limit" }
@@ -492,5 +492,23 @@ enum BridgeError: LocalizedError {
       }()
       return "You've hit your \(plan) plan limit (\(limitStr); \(usedStr)). Upgrade in Settings → Plan and Usage, or wait until the next reset."
     }
+  }
+
+  private static func userFacingAgentErrorMessage(_ msg: String) -> String {
+    guard !msg.isEmpty else { return "Something went wrong. Please try again." }
+    let lower = msg.lowercased()
+    if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
+      || lower.contains("unauthorized") || lower.contains("permission denied")
+      || lower.contains("invalid key") || lower.contains("forbidden")
+    {
+      return "AI service authentication error. Please update the app to the latest version."
+    }
+    if lower.contains("quota") || lower.contains("rate limit") || lower.contains("resource exhausted") {
+      return "AI service is busy. Please try again in a moment."
+    }
+    if lower.contains("overloaded") || lower.contains("service unavailable") || lower.contains("internal error") {
+      return "AI service is temporarily unavailable. Please try again later."
+    }
+    return "Something went wrong. Please try again."
   }
 }

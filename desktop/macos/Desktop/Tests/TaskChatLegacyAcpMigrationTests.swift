@@ -20,7 +20,10 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatStateUsesKernelSurfaceRef() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("surface: .taskChat(taskId: taskId)"))
+    XCTAssertTrue(
+      source.contains("AgentSurfaceReference.taskChat(taskId: taskId)")
+        || source.contains("projection.surface == .taskChat(taskId: taskId)")
+    )
     XCTAssertFalse(source.contains("legacyAcpSessionId"))
     XCTAssertFalse(source.contains("currentOmiSessionId"))
     XCTAssertFalse(source.contains("getACPSessionId"))

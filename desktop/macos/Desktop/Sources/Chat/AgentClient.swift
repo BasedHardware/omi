@@ -53,7 +53,8 @@ enum AgentClient {
       self.bridge = AgentBridge(harnessMode: harnessMode)
     }
 
-    func replaceHarness(_ harnessMode: String) {
+    func replaceHarness(_ harnessMode: String) async {
+      await bridge.stop()
       self.harnessMode = harnessMode
       self.bridge = AgentBridge(harnessMode: harnessMode)
     }

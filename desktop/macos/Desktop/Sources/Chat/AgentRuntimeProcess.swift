@@ -225,6 +225,14 @@ actor AgentRuntimeProcess {
       activeControlRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
+    for (requestKey, request) in activeVoiceSeedRequests where request.clientId == clientId {
+      activeVoiceSeedRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeKernelTurnTailRequests where request.clientId == clientId {
+      activeKernelTurnTailRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
 
     if clients.isEmpty {
       await stopProcess(resumeRequestsWith: BridgeError.stopped)
@@ -1400,6 +1408,11 @@ actor AgentRuntimeProcess {
     let seedRequests = activeVoiceSeedRequests.values
     activeVoiceSeedRequests.removeAll()
     for request in seedRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let tailRequests = activeKernelTurnTailRequests.values
+    activeKernelTurnTailRequests.removeAll()
+    for request in tailRequests {
       request.continuation.resume(throwing: error)
     }
   }

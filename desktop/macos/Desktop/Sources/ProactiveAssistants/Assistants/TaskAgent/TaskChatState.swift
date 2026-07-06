@@ -396,7 +396,7 @@ class TaskChatState: ObservableObject {
 
         // Queue follow-up and interrupt current query
         pendingFollowUpText = trimmedText
-        await TaskChatRuntime.interrupt()
+        await TaskChatRuntime.interrupt(taskId: taskId)
         log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
     }
 
@@ -406,7 +406,7 @@ class TaskChatState: ObservableObject {
         guard isSending else { return }
         isStopping = true
         Task {
-            await TaskChatRuntime.interrupt()
+            await TaskChatRuntime.interrupt(taskId: taskId)
         }
     }
 

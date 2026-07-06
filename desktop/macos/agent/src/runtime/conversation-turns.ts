@@ -16,7 +16,10 @@ export interface ConversationTurnImportEntry {
 
 export function conversationIdForSession(store: AgentStore, sessionId: string): string | null {
   const row = store.getOptionalRow(
-    "SELECT conversation_id FROM surface_conversations WHERE agent_session_id = ?",
+    `SELECT conversation_id FROM surface_conversations
+     WHERE agent_session_id = ?
+     ORDER BY last_active_at_ms DESC
+     LIMIT 1`,
     [sessionId],
   );
   return row ? String(row.conversation_id) : null;

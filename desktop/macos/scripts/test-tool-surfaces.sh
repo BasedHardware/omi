@@ -57,12 +57,12 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
 
 (
   cd "$DESKTOP_DIR/agent"
-  "$NODE22" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
+  npm run build --silent
 )
 
 (
   cd "$DESKTOP_DIR/agent"
-  npm run build --silent
+  "$NODE22" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
 )
 
 (

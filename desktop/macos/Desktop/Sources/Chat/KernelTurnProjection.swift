@@ -6,7 +6,6 @@ import Foundation
 final class KernelTurnProjection {
   private weak var host: ChatProvider?
   private var client: AgentClient.Session?
-  private var handlersAttached = false
   private var appliedKernelTurnKeys = Set<String>()
 
   init(host: ChatProvider) {
@@ -15,8 +14,6 @@ final class KernelTurnProjection {
 
   func attachClient(_ client: AgentClient.Session) async {
     self.client = client
-    guard !handlersAttached else { return }
-    handlersAttached = true
     await client.setTurnRecordedHandler { [weak self] turn in
       Task { @MainActor [weak self] in
         self?.apply(turn)
