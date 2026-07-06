@@ -50,6 +50,11 @@ def _stub_package(name):
     mod = types.ModuleType(name)
     mod.__path__ = []
     sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 

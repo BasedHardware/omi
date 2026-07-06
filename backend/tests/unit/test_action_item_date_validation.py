@@ -52,8 +52,18 @@ def _stub_module(name):
 
 
 def _stub_package(name):
-    mod = _stub_module(name)
+    # Always replace package modules with fresh stubs after the sys.modules
+    # snapshot. Reusing an already-imported real package and mutating
+    # ``__path__`` would alter the snapshotted object itself, so restoring the
+    # sys.modules entry later would still leave the original package corrupted.
+    mod = types.ModuleType(name)
     mod.__path__ = []
+    sys.modules[name] = mod
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, mod)
     return mod
 
 
