@@ -61,18 +61,20 @@ final class QueryTracerTests: XCTestCase {
 
     // MARK: - 4. TTFT marking
 
-    func testTTFTMarking() {
+    func testTTFTMarking() throws {
         let tracer = QueryTracer(query: "ttft", inputMode: .text)
         Thread.sleep(forTimeInterval: 0.01)
         tracer.markTTFT()
-        // Second call should be ignored
+        let firstTrace = tracer.buildTrace(tokenCount: 10, model: "gpt-4")
+        let firstTTFT = try XCTUnwrap(firstTrace.ttft_ms)
+
+        // Second call should be ignored.
         Thread.sleep(forTimeInterval: 0.05)
         tracer.markTTFT()
 
         let trace = tracer.buildTrace(tokenCount: 10, model: "gpt-4")
-        XCTAssertNotNil(trace.ttft_ms)
-        // First mark was ~10ms after origin, so ttft should be < 50ms (not second mark)
-        XCTAssertLessThan(trace.ttft_ms!, 50)
+        XCTAssertEqual(trace.ttft_ms, firstTTFT)
+        XCTAssertGreaterThan(trace.total_ms, firstTTFT)
     }
 
     // MARK: - 5. Metadata passthrough
