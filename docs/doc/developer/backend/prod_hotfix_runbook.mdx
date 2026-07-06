@@ -1,0 +1,109 @@
+---
+title: "Prod Backend Deploy and Hotfix Runbook"
+icon: "rocket"
+description: "Safe workflow for prod backend Cloud Run deploys, traffic repair, and Cloud Run-only hotfixes."
+---
+
+## Scope
+
+This runbook covers the `gcp_backend.yml` workflow for prod backend deploys. It exists to prevent wedged Cloud Run services where `spec.traffic` points at a failed revision while `status.traffic` still serves an older good revision.
+
+Product hotfix code changes are separate from deploy-process fixes. Land deploy hardening on `main` first; branch product fixes from current `main`, not stale hotfix forks.
+
+## Workflows
+
+Dispatch [Deploy Backend to Cloud RUN](https://github.com/BasedHardware/omi/actions/workflows/gcp_backend.yml) with:
+
+| Input | Values | When to use |
+|---|---|---|
+| `mode` | `deploy` (default) | Normal image build + rollout |
+| `mode` | `repair-traffic-only` | Restore `spec.traffic` to the currently serving revision without deploying |
+| `deploy_targets` | `all` (default) | Cloud Run + GKE (`backend-secrets`, `backend-listen`) |
+| `deploy_targets` | `cloud-run-only` | REST/MCP/OAuth router changes that do not touch `backend-listen` or WebSocket protocol |
+
+## Pre-deploy checklist (prod)
+
+Run hermetic checks locally or in CI before dispatch:
+
+```bash
+cd backend
+CLOUD_RUN_VPC_NETWORK=offline-check-network \
+CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
+  ./scripts/pre-deploy-check.sh
+```
+
+For live read-only validation with `gcloud` auth:
+
+```bash
+./scripts/pre-deploy-check.sh --live prod based-hardware
+```
+
+1. Confirm the last deploy did not wedge traffic. If unsure, run `mode: repair-traffic-only` first.
+2. Verify runtime env locally:
+   ```bash
+   cd backend
+   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows
+   ```
+3. For secret bindings in `backend/deploy/runtime_env.yaml`, preflight checks Secret Manager before creating revisions:
+   ```bash
+   python3 scripts/preflight-cloud-run-deploy.py \
+     --env prod --project based-hardware --region us-central1 --check-secrets --check-traffic
+   ```
+
+## Deploy flow (mode: deploy)
+
+```mermaid
+sequenceDiagram
+  participant WF as gcp_backend.yml
+  participant PF as preflight-cloud-run-deploy
+  participant CR as CloudRun_no_traffic
+  participant GKE as GKE_optional
+  participant Ready as wait_revision_ready
+  participant Shift as update_traffic
+
+  WF->>PF: secrets + traffic preflight
+  WF->>CR: deploy backend/backend-sync/backend-integration (no traffic)
+  opt deploy_targets=all
+    WF->>GKE: backend-secrets + backend-listen
+  end
+  WF->>Ready: poll revision Ready=True
+  WF->>Shift: shift traffic only after ready
+```
+
+Prod deploys auto-repair `spec.traffic != status.traffic` before creating revisions. Traffic shifts only after new revisions are `Ready=True`.
+
+## Traffic repair
+
+If a deploy fails after creating a non-ready revision:
+
+1. Run `mode: repair-traffic-only` to align `spec.traffic` with `status.traffic`.
+2. Inspect the workflow summary Cloud Run status report for the exact serving revision and repair command.
+3. Retry `mode: deploy` only after repair succeeds and preflight passes.
+
+Manual repair command format:
+
+```bash
+gcloud run services update-traffic backend \
+  --project=based-hardware --region=us-central1 \
+  --to-revisions=<serving-revision>=100 --quiet
+```
+
+## Cloud Run-only hotfixes
+
+Use `deploy_targets: cloud-run-only` when the change only affects Cloud Run REST services (`backend`, `backend-sync`, `backend-integration`) and does not require:
+
+- `backend-listen` Helm chart changes
+- `backend-secrets` ExternalSecret changes
+- WebSocket / listen pipeline changes
+
+For listen-only chart changes, use `gcp_backend_listen_helm.yml` instead.
+
+## Runtime env source of truth
+
+Cloud Run env and secret bindings are declared in `backend/deploy/runtime_env.yaml` and rendered by `backend/scripts/render-backend-runtime-env.py`. After changing the manifest, run `./scripts/pre-deploy-check.sh`.
+
+Prod Cloud Run intentionally omits `SERVICE_ACCOUNT_JSON` and `POSTHOG_PROJECT_API_KEY` bindings (#9164): those secrets are absent in prod Secret Manager and the runtime falls back to ADC / disables PostHog telemetry.
+
+## Related issue
+
+Deploy hardening tracked in [GitHub issue #9164](https://github.com/BasedHardware/omi/issues/9164).

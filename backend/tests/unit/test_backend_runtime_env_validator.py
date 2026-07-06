@@ -572,3 +572,21 @@ def test_backend_listen_chart_only_workflow_preserves_runtime_project():
     workflow_text = workflow_path.read_text(encoding='utf-8')
 
     assert workflow_text.count('--set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }}') == 2
+
+
+def test_repo_rendered_cloud_run_matches_manifest():
+    validator = load_validator()
+
+    assert validator.validate_runtime_env(env='dev', check_rendered_cloud_run=True) == []
+    assert validator.validate_runtime_env(env='prod', check_rendered_cloud_run=True) == []
+
+
+def test_prod_cloud_run_secret_bindings_exclude_stale_optional_secrets():
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    prod_services = manifest['environments']['prod']['cloud_run']['services']
+    stale_secrets = {'SERVICE_ACCOUNT_JSON', 'POSTHOG_PROJECT_API_KEY'}
+
+    for service_name, service_config in prod_services.items():
+        secret_names = set((service_config.get('secrets') or {}).keys())
+        assert stale_secrets.isdisjoint(secret_names), f'{service_name} still binds stale secrets'
