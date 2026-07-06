@@ -1,3 +1,0 @@
-{
-  "change": "Fixed the macOS app repeatedly requesting Screen Recording permission on launch when it has not been granted"
-}
