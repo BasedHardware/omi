@@ -1,0 +1,3 @@
+{
+  "change": "Fixed agents installed mid-session (Hermes, OpenClaw, Codex) not being usable until Omi restarted"
+}

@@ -56,12 +56,14 @@ import { JsonlCompatibilityFacade, type McpServerBuildContext } from "./runtime/
 import { AgentRuntimeKernel } from "./runtime/kernel.js";
 import { resolveToolCallCorrelation } from "./runtime/tool-correlation.js";
 import {
+  ADAPTER_ACTIVATION_ENV,
   adapterActivationError,
   adapterIdForHarnessMode,
   ensureRegisteredAdapter,
   selectBestAdapterForTask,
   type TaskExecutionAdapterId,
 } from "./runtime/adapter-selection.js";
+import { discoverAdapterCommand, type DiscoverableAdapterId } from "./runtime/adapter-discovery.js";
 import {
   activeControlToolOwnerId,
   controlRequestKey,
@@ -916,7 +918,18 @@ async function main(): Promise<void> {
   };
 
   const piMonoAvailable = await ensurePiMonoAdapter(process.env.OMI_AUTH_TOKEN);
+  // Swift seeds OMI_*_ADAPTER_COMMAND at bridge start; re-discover at query
+  // time so agents installed mid-session (install-help flow) become available
+  // without a bridge restart.
+  const discoverExternalAdapter = (adapterId: DiscoverableAdapterId): void => {
+    const alreadyConfigured = Boolean(process.env[ADAPTER_ACTIVATION_ENV[adapterId]]?.trim());
+    const command = discoverAdapterCommand(adapterId);
+    if (!alreadyConfigured && command) {
+      logErr(`Adapter command discovered at query time id=${adapterId}`);
+    }
+  };
   const ensureHermesAdapter = async (): Promise<boolean> => {
+    discoverExternalAdapter("hermes");
     return ensureRegisteredAdapter(registry, "hermes", {
       log: logErr,
       maxWorkers: 1,
@@ -924,6 +937,7 @@ async function main(): Promise<void> {
     });
   };
   const ensureOpenClawAdapter = async (): Promise<boolean> => {
+    discoverExternalAdapter("openclaw");
     return ensureRegisteredAdapter(registry, "openclaw", {
       log: logErr,
       maxWorkers: configuredPiMonoMaxWorkers(),
@@ -931,6 +945,7 @@ async function main(): Promise<void> {
     });
   };
   const ensureCodexAdapter = async (): Promise<boolean> => {
+    discoverExternalAdapter("codex");
     return ensureRegisteredAdapter(registry, "codex", {
       log: logErr,
       maxWorkers: 1,
