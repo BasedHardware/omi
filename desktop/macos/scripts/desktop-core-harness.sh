@@ -191,13 +191,12 @@ PY
 }
 
 # Probe dev-harness stack health + provider_mode from config-digest.json.
-# Exit 0: healthy offline stack (JSON on stdout)
-# Exit 1: stack not up / unhealthy (caller may dev-up)
+# Exit 0: healthy offline stack owned by this worktree/instance (JSON on stdout)
+# Exit 1: stack not up / unhealthy / foreign (caller may dev-up)
 # Exit 2: config digest reports non-offline provider_mode (T2 must abort)
 probe_dev_stack() {
   python3 - "$REPO_ROOT" <<'PY'
 import json
-import socket
 import sys
 import urllib.error
 import urllib.request
@@ -205,7 +204,15 @@ from pathlib import Path
 
 repo_root = Path(sys.argv[1])
 sys.path.insert(0, str(repo_root / "scripts" / "dev-harness"))
-from dev_harness import config
+from dev_harness import config, safety
+
+REQUIRED_SERVICES = (
+    "firestore",
+    "auth",
+    "typesense",
+    "backend",
+    "desktop-backend",
+)
 
 
 def http_ok(url: str, headers: dict[str, str] | None = None, timeout: float = 1.0) -> bool:
@@ -217,6 +224,49 @@ def http_ok(url: str, headers: dict[str, str] | None = None, timeout: float = 1.
         return exc.code < 500
     except Exception:
         return False
+
+
+def load_process_records(cfg: config.HarnessConfig) -> list[dict[str, object]]:
+    manifest_path = cfg.layout.process_manifest
+    if not manifest_path.is_file():
+        return []
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    records = manifest.get("processes") if isinstance(manifest, dict) else None
+    return records if isinstance(records, list) else []
+
+
+def service_record(records: list[dict[str, object]], service: str) -> dict[str, object] | None:
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        if record.get("service") != service:
+            continue
+        pid = int(record.get("pid", -1))
+        if safety.process_exists(pid):
+            return record
+    return None
+
+
+def ownership_failure(
+    reason: str,
+    *,
+    provider_mode: str | None,
+    digest_path: Path,
+    details: object | None = None,
+) -> None:
+    payload: dict[str, object] = {
+        "healthy": False,
+        "provider_mode": provider_mode,
+        "reason": reason,
+        "config_digest_path": str(digest_path),
+    }
+    if details is not None:
+        payload["details"] = details
+    print(json.dumps(payload))
+    raise SystemExit(1)
 
 
 cfg = config.load_config(repo_root)
@@ -236,6 +286,43 @@ if isinstance(provider_mode, str) and provider_mode.strip():
 else:
     provider_mode = None
 
+if not cfg.layout.sentinel_path.is_file():
+    ownership_failure("missing_sentinel", provider_mode=provider_mode, digest_path=digest_path)
+
+try:
+    safety.read_and_validate_sentinel(
+        cfg.layout.state_root,
+        repo_root=cfg.repo_root,
+        instance=cfg.instance,
+    )
+except safety.SafetyError as exc:
+    ownership_failure(
+        "sentinel_invalid",
+        provider_mode=provider_mode,
+        digest_path=digest_path,
+        details=str(exc),
+    )
+
+if not digest_path.is_file():
+    ownership_failure("missing_config_digest", provider_mode=provider_mode, digest_path=digest_path)
+
+if digest.get("instance") != cfg.instance:
+    ownership_failure(
+        "digest_instance_mismatch",
+        provider_mode=provider_mode,
+        digest_path=digest_path,
+        details={"expected": cfg.instance, "got": digest.get("instance")},
+    )
+
+expected_state_root = str(cfg.layout.state_root)
+if str(digest.get("state_root", "")) != expected_state_root:
+    ownership_failure(
+        "digest_state_root_mismatch",
+        provider_mode=provider_mode,
+        digest_path=digest_path,
+        details={"expected": expected_state_root, "got": digest.get("state_root")},
+    )
+
 if provider_mode and provider_mode != "offline":
     print(
         json.dumps(
@@ -248,6 +335,31 @@ if provider_mode and provider_mode != "offline":
         )
     )
     raise SystemExit(2)
+
+records = load_process_records(cfg)
+missing_services: list[str] = []
+for service in REQUIRED_SERVICES:
+    record = service_record(records, service)
+    if record is None:
+        missing_services.append(service)
+        continue
+    pid = int(record["pid"])
+    try:
+        safety.validate_owned_pid(
+            pid,
+            process_manifest=cfg.layout.process_manifest,
+            service=service,
+        )
+    except safety.SafetyError as exc:
+        missing_services.append(f"{service}:{exc}")
+
+if missing_services:
+    ownership_failure(
+        "stale_or_missing_process_records",
+        provider_mode=provider_mode,
+        digest_path=digest_path,
+        details=missing_services,
+    )
 
 typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
 checks = {
@@ -290,7 +402,17 @@ if provider_mode != "offline":
     )
     raise SystemExit(1)
 
-print(json.dumps({"healthy": True, "provider_mode": provider_mode, "config_digest_path": str(digest_path)}))
+print(
+    json.dumps(
+        {
+            "healthy": True,
+            "provider_mode": provider_mode,
+            "config_digest_path": str(digest_path),
+            "instance": cfg.instance,
+            "state_root": expected_state_root,
+        }
+    )
+)
 PY
 }
 

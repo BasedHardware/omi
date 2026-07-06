@@ -100,6 +100,63 @@ resolve_automation_port() {
 
 AUTOMATION_PORT="$(resolve_automation_port)"
 
+derive_bundle_id() {
+  local app_name="$1"
+  # shellcheck source=app-config.sh
+  source "$REPO_ROOT/desktop/macos/scripts/app-config.sh"
+  derive_omi_app_config "$app_name"
+  printf '%s\n' "$BUNDLE_ID"
+}
+
+kill_process_tree() {
+  local pid="$1"
+  local children child
+  [[ -z "$pid" ]] && return 0
+  children="$(pgrep -P "$pid" 2>/dev/null || true)"
+  for child in $children; do
+    kill_process_tree "$child"
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill -TERM "$pid" 2>/dev/null || true
+  fi
+}
+
+terminate_bless_desktop() {
+  local bundle="$1"
+  local bundle_id app_path=""
+  bundle_id="$(derive_bundle_id "$bundle" 2>/dev/null || true)"
+  app_path="/Applications/${bundle}.app"
+
+  if [[ -n "$bundle_id" ]]; then
+    osascript -e "tell application id \"$bundle_id\" to quit" 2>/dev/null \
+      || osascript -e "quit app id \"$bundle_id\"" 2>/dev/null \
+      || true
+  fi
+
+  if [[ -d "$app_path" ]]; then
+    pkill -f "$app_path" 2>/dev/null || true
+  fi
+
+  if [[ -n "$DESKTOP_LAUNCH_PID" ]]; then
+    kill_process_tree "$DESKTOP_LAUNCH_PID"
+    wait "$DESKTOP_LAUNCH_PID" 2>/dev/null || true
+  fi
+
+  if [[ -n "$WORKTREE" && -d "$WORKTREE" ]]; then
+    pkill -f "$WORKTREE/desktop/macos/run.sh" 2>/dev/null || true
+  fi
+
+  sleep 0.5
+
+  if pgrep -f "$app_path" >/dev/null 2>&1; then
+    echo "bless cleanup: ${bundle}.app still running; sending SIGKILL" >&2
+    pkill -9 -f "$app_path" 2>/dev/null || true
+  fi
+  if [[ -n "$bundle_id" ]] && pgrep -f "$bundle_id" >/dev/null 2>&1; then
+    pkill -9 -f "$bundle_id" 2>/dev/null || true
+  fi
+}
+
 wait_for_bridge() {
   local port="$1"
   local deadline=$((SECONDS + BRIDGE_WAIT_SECS))
@@ -136,8 +193,10 @@ PY
 
 cleanup() {
   local exit_code=$?
-  if [[ -n "$DESKTOP_LAUNCH_PID" ]] && kill -0 "$DESKTOP_LAUNCH_PID" 2>/dev/null; then
-    kill -TERM "$DESKTOP_LAUNCH_PID" 2>/dev/null || true
+  if [[ -n "$BUNDLE" ]]; then
+    terminate_bless_desktop "$BUNDLE"
+  elif [[ -n "$DESKTOP_LAUNCH_PID" ]]; then
+    kill_process_tree "$DESKTOP_LAUNCH_PID"
     wait "$DESKTOP_LAUNCH_PID" 2>/dev/null || true
   fi
   if [[ "$KEEP_STACK" -eq 0 && -d "$WORKTREE" ]]; then

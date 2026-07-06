@@ -57,7 +57,10 @@ def preflight_release(release_json_path: Path, tag: str) -> None:
 def check_manifest(manifest_path: Path) -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not manifest.get("passed"):
-        raise SystemExit(1)
+        raise SystemExit("manifest passed=false")
+    provider_mode = manifest.get("provider_mode")
+    if provider_mode != "offline":
+        raise SystemExit(f"manifest provider_mode must be 'offline', got {provider_mode!r}")
 
 
 def update_blessed_keys(
@@ -72,6 +75,7 @@ def update_blessed_keys(
     had_trailing_newline = body_path.read_text(encoding="utf-8").endswith("\n")
     out: list[str] = []
     in_block = False
+    saw_key_value_block = False
     seen = {key: False for key in BLESSED_KEYS}
     blessed_values = {
         "blessed": "true",
@@ -85,6 +89,7 @@ def update_blessed_keys(
         stripped = _strip_comment(line)
         if stripped == "KEY_VALUE_START":
             in_block = True
+            saw_key_value_block = True
             out.append(line)
             continue
         if stripped == "KEY_VALUE_END":
@@ -102,6 +107,9 @@ def update_blessed_keys(
                 continue
         out.append(line)
 
+    if not saw_key_value_block:
+        raise SystemExit("release body missing KEY_VALUE_START/KEY_VALUE_END block")
+
     body_path.write_text("\n".join(out) + ("\n" if had_trailing_newline else ""), encoding="utf-8")
 
 
@@ -117,23 +125,37 @@ def _self_test() -> int:
 
     passing_manifest = Path("/tmp/release-keyvalue-pass-manifest.json")
     failing_manifest = Path("/tmp/release-keyvalue-fail-manifest.json")
-    passing_manifest.write_text(json.dumps({"passed": True, "tier": 2}), encoding="utf-8")
-    failing_manifest.write_text(json.dumps({"passed": False, "tier": 2}), encoding="utf-8")
+    missing_provider_manifest = Path("/tmp/release-keyvalue-missing-provider-manifest.json")
+    passing_manifest.write_text(
+        json.dumps({"passed": True, "tier": 2, "provider_mode": "offline"}),
+        encoding="utf-8",
+    )
+    failing_manifest.write_text(json.dumps({"passed": False, "tier": 2, "provider_mode": "offline"}), encoding="utf-8")
+    missing_provider_manifest.write_text(json.dumps({"passed": True, "tier": 2}), encoding="utf-8")
 
     try:
         check_manifest(passing_manifest)
         ok("check-manifest passing manifest exits 0")
     except SystemExit as exc:
-        fail("check-manifest passing manifest", f"unexpected exit {exc.code}")
+        fail("check-manifest passing manifest", f"unexpected exit {exc.code}: {exc}")
 
     try:
         check_manifest(failing_manifest)
-        fail("check-manifest failing manifest", "expected SystemExit(1)")
+        fail("check-manifest failing manifest", "expected SystemExit")
     except SystemExit as exc:
-        if exc.code == 1:
-            ok("check-manifest failing manifest exits 1")
+        if exc.code != 0 and str(exc) == "manifest passed=false":
+            ok("check-manifest failing manifest rejects passed=false")
         else:
-            fail("check-manifest failing manifest", f"exit code {exc.code}")
+            fail("check-manifest failing manifest", f"unexpected exit {exc.code}: {exc}")
+
+    try:
+        check_manifest(missing_provider_manifest)
+        fail("check-manifest missing provider_mode", "expected SystemExit")
+    except SystemExit as exc:
+        if "provider_mode" in str(exc):
+            ok("check-manifest missing provider_mode fails loudly")
+        else:
+            fail("check-manifest missing provider_mode", f"unexpected exit: {exc}")
 
     sample_body = """Release notes
 
@@ -151,6 +173,22 @@ blessed: false
         fail("update-blessed", f"unexpected metadata: {updated}")
     else:
         ok("update-blessed writes blessed keys")
+
+    malformed_body_path = Path("/tmp/release-keyvalue-body-no-kv.md")
+    malformed_body_path.write_text("Release notes without KEY_VALUE block\n", encoding="utf-8")
+    try:
+        update_blessed_keys(
+            malformed_body_path,
+            stamp="2026-07-06T12:00:00Z",
+            sha="abc123",
+            asset="evidence.json",
+        )
+        fail("update-blessed missing KEY_VALUE block", "expected SystemExit")
+    except SystemExit as exc:
+        if "KEY_VALUE" in str(exc):
+            ok("update-blessed missing KEY_VALUE block fails loudly")
+        else:
+            fail("update-blessed missing KEY_VALUE block", f"unexpected exit: {exc}")
 
     release_json = Path("/tmp/release-keyvalue-release.json")
     release_json.write_text(
