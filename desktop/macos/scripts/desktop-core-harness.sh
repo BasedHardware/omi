@@ -197,6 +197,7 @@ PY
 probe_dev_stack() {
   python3 - "$REPO_ROOT" <<'PY'
 import json
+import subprocess
 import sys
 import urllib.error
 import urllib.request
@@ -206,9 +207,15 @@ repo_root = Path(sys.argv[1])
 sys.path.insert(0, str(repo_root / "scripts" / "dev-harness"))
 from dev_harness import config, safety
 
+# Services with process records in the dev-harness manifest. The Firebase Auth
+# emulator has no record of its own — it runs inside the "firestore" process
+# (firebase emulators:start --only firestore,auth); auth liveness is covered by
+# the firestore PID plus the auth HTTP health check below. Typesense's record is
+# the harness supervise wrapper around `docker run`, so alive-PID + ownership
+# marker semantics hold for it like any other service.
 REQUIRED_SERVICES = (
     "firestore",
-    "auth",
+    "redis",
     "typesense",
     "backend",
     "desktop-backend",
@@ -352,6 +359,18 @@ for service in REQUIRED_SERVICES:
         )
     except safety.SafetyError as exc:
         missing_services.append(f"{service}:{exc}")
+        continue
+    if service == "typesense":
+        container = f"omi-dev-harness-{cfg.instance}-typesense"
+        container_running = subprocess.run(
+            ["docker", "ps", "--filter", f"name={container}", "--filter", "status=running", "-q"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        ).stdout.strip()
+        if not container_running:
+            missing_services.append(f"{service}:container-not-running")
 
 if missing_services:
     ownership_failure(
@@ -417,7 +436,7 @@ PY
 }
 
 ensure_dev_stack() {
-  local probe_json probe_status
+  local probe_json probe_status attempt
   set +e
   probe_json="$(probe_dev_stack)"
   probe_status=$?
@@ -440,17 +459,29 @@ ensure_dev_stack() {
   echo "$probe_json"
   PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up
 
-  set +e
-  probe_json="$(probe_dev_stack)"
-  probe_status=$?
-  set -e
-  if [[ "$probe_status" -ne 0 ]]; then
-    echo "desktop-core-harness: dev stack still unhealthy after dev-up" >&2
-    echo "$probe_json" >&2
-    exit 1
-  fi
-  DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
-  echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
+  for attempt in $(seq 1 15); do
+    set +e
+    probe_json="$(probe_dev_stack)"
+    probe_status=$?
+    set -e
+    if [[ "$probe_status" -eq 0 ]]; then
+      DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
+      echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
+      return 0
+    fi
+    if [[ "$probe_status" -eq 2 ]]; then
+      echo "desktop-core-harness: dev stack provider_mode is not offline after dev-up" >&2
+      echo "$probe_json" >&2
+      exit 1
+    fi
+    if [[ "$attempt" -lt 15 ]]; then
+      sleep 2
+    fi
+  done
+
+  echo "desktop-core-harness: dev stack still unhealthy after dev-up" >&2
+  echo "$probe_json" >&2
+  exit 1
 }
 
 if [[ "$SELF_CHECK" -eq 1 ]]; then
