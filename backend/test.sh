@@ -14,7 +14,7 @@ if [[ -z "$PYTHON_BIN" ]]; then
 fi
 
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
-export OPENAI_API_KEY="${OPENAI_API_KEY:-test-openai-key-not-real}"
+export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
 export BACKEND_FAST_UNIT_MAX_SECONDS="${BACKEND_FAST_UNIT_MAX_SECONDS:-0.1}"
 
@@ -137,4 +137,12 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   exit "$failed"
 fi
 
+set +e
 "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "${selected_tests[@]}"
+status=$?
+set -e
+if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+  echo "No tests matched marker expression for selected files; treating as skipped."
+  exit 0
+fi
+exit "$status"

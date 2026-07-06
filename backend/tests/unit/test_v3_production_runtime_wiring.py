@@ -21,8 +21,6 @@ from utils.memory.v3_composed_get_service import (
 )
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 
-pytestmark = pytest.mark.slow
-
 
 @dataclass
 class FakeSnapshot:
@@ -264,6 +262,7 @@ def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_of
     assert db.streams == []
 
 
+@pytest.mark.slow
 def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_calls_legacy(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
@@ -285,6 +284,7 @@ def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_call
     assert db.writes == []
 
 
+@pytest.mark.slow
 def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
@@ -303,6 +303,7 @@ def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch
     assert db.writes == []
 
 
+@pytest.mark.slow
 def test_real_router_cursor_read_requires_cursor_secret_and_never_calls_legacy(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')

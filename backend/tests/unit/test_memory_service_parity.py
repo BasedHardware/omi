@@ -204,7 +204,6 @@ class TestMemoryServiceParity:
         assert decision.fail_closed is True
         assert decision.reason == "invalid_rollout_config"
 
-    @pytest.mark.slow
     def test_read_matches_direct_legacy_helper(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         memories = [_sample_memory_dict("mem-1"), _sample_memory_dict("mem-2")]
