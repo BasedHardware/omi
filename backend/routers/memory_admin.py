@@ -6,7 +6,7 @@ remains an importable alias. Registers ``/memory/admin/*`` paths.
 
 import os
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Header, HTTPException, Query
 
@@ -21,6 +21,7 @@ from utils.memory.default_read_rollout import (
 )
 
 router = APIRouter()
+Payload = Dict[str, Any]
 
 
 def _parse_expected_source_ids(expected_source_ids: Optional[str]) -> Optional[List[str]]:
@@ -56,7 +57,7 @@ def _validate_lifecycle_run_inputs(run_id: str, limit: int) -> None:
 
 def _short_term_lifecycle_response(
     *, uid: str, run_id: str, evaluated_at: datetime, report: ShortTermLifecycleWorkerReport
-) -> dict:
+) -> Payload:
     transition_count = report.created_count + report.existing_count
     return {
         'uid': uid,
@@ -129,7 +130,7 @@ def post_short_term_lifecycle_run(
     evaluated_at: Optional[str] = Query(None),
     limit: int = Query(500),
     secret_key: str = Header(...),
-):
+) -> Payload:
     """Run the memory Short-term lifecycle worker for one user.
 
     The endpoint is an explicit admin/job entrypoint around the concrete

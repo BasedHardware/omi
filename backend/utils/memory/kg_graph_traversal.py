@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, cast
 
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
@@ -19,6 +19,10 @@ from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.product_memory_read_service import fetch_authoritative_product_memory_items
 
 logger = logging.getLogger(__name__)
+
+GraphNode = Dict[str, Any]
+GraphEdge = Dict[str, Any]
+MemoryCitation = Dict[str, str]
 
 # Q14 defaults — hop budget + fan-out + subgraph caps (long_term-only source).
 MAX_TRAVERSAL_HOPS = int(os.environ.get("KG_TRAVERSAL_MAX_HOPS", "2"))
@@ -37,25 +41,41 @@ class GraphTriple:
     hop_distance: int
 
 
+def _empty_str_list() -> List[str]:
+    return []
+
+
+def _empty_triple_list() -> List[GraphTriple]:
+    return []
+
+
+def _empty_node_list() -> List[GraphNode]:
+    return []
+
+
+def _empty_citation_list() -> List[MemoryCitation]:
+    return []
+
+
 @dataclass
 class TraversalResult:
     entity_query: str
     requested_hops: int
     effective_hops: int
     hops_capped: bool
-    seed_node_ids: List[str] = field(default_factory=list)
-    triples: List[GraphTriple] = field(default_factory=list)
-    nodes: List[Dict[str, Any]] = field(default_factory=list)
-    memory_citations: List[Dict[str, str]] = field(default_factory=list)
+    seed_node_ids: List[str] = field(default_factory=_empty_str_list)
+    triples: List[GraphTriple] = field(default_factory=_empty_triple_list)
+    nodes: List[GraphNode] = field(default_factory=_empty_node_list)
+    memory_citations: List[MemoryCitation] = field(default_factory=_empty_citation_list)
     skipped_reason: Optional[str] = None
 
 
-def user_allows_kg_traversal(uid: str, *, db_client=None) -> bool:
+def user_allows_kg_traversal(uid: str, *, db_client: Any = None) -> bool:
     """Traversal is meaningful only for the canonical memory cohort."""
     return resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
 
 
-def _long_term_memory_ids(uid: str, *, db_client) -> Set[str]:
+def _long_term_memory_ids(uid: str, *, db_client: Any) -> Set[str]:
     items = fetch_authoritative_product_memory_items(uid=uid, db_client=db_client)
     return {item.memory_id for item in items if is_indexable_long_term_atom(item)}
 
@@ -68,7 +88,7 @@ def _normalize_hops(requested: int) -> Tuple[int, bool]:
     return requested, False
 
 
-def _resolve_seed_node_ids(nodes: List[Dict[str, Any]], entity_query: str) -> List[str]:
+def _resolve_seed_node_ids(nodes: List[GraphNode], entity_query: str) -> List[str]:
     query = (entity_query or "").strip().lower()
     if not query:
         return []
@@ -80,7 +100,10 @@ def _resolve_seed_node_ids(nodes: List[Dict[str, Any]], entity_query: str) -> Li
         if not node_id:
             continue
         label = (node.get("label") or "").lower()
-        aliases = [str(alias).lower() for alias in node.get("aliases") or []]
+        raw_aliases = node.get("aliases")
+        aliases = (
+            [str(alias).lower() for alias in cast(List[Any], raw_aliases)] if isinstance(raw_aliases, list) else []
+        )
         if label == query or query in aliases:
             exact.append(node_id)
         elif query in label or any(query in alias for alias in aliases):
@@ -89,15 +112,15 @@ def _resolve_seed_node_ids(nodes: List[Dict[str, Any]], entity_query: str) -> Li
     return exact or partial
 
 
-def _build_adjacency(edges: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
-    adjacency: Dict[str, List[Dict[str, Any]]] = {}
+def _build_adjacency(edges: List[GraphEdge]) -> Dict[str, List[GraphEdge]]:
+    adjacency: Dict[str, List[GraphEdge]] = {}
     for edge in edges:
         source_id = edge.get("source_id")
         target_id = edge.get("target_id")
         if not source_id or not target_id:
             continue
         adjacency.setdefault(source_id, []).append(edge)
-        reverse = {
+        reverse: GraphEdge = {
             "id": edge.get("id"),
             "source_id": target_id,
             "target_id": source_id,
@@ -110,12 +133,21 @@ def _build_adjacency(edges: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, An
 
 
 def _edge_triple(
-    edge: Dict[str, Any],
-    nodes_by_id: Dict[str, Dict[str, Any]],
+    edge: GraphEdge,
+    nodes_by_id: Dict[str, GraphNode],
     hop_distance: int,
     allowed_memory_ids: Set[str],
 ) -> Optional[GraphTriple]:
-    memory_ids = tuple(mid for mid in (edge.get("memory_ids") or []) if mid in allowed_memory_ids)
+    raw_memory_ids = edge.get("memory_ids")
+    memory_ids = (
+        tuple(
+            memory_id
+            for memory_id in cast(List[Any], raw_memory_ids)
+            if isinstance(memory_id, str) and memory_id in allowed_memory_ids
+        )
+        if isinstance(raw_memory_ids, list)
+        else ()
+    )
     if not memory_ids:
         return None
 
@@ -140,7 +172,7 @@ def traverse_knowledge_graph(
     entity_query: str,
     *,
     hops: int = 1,
-    db_client=None,
+    db_client: Any = None,
     graph: Optional[Dict[str, Any]] = None,
 ) -> TraversalResult:
     """Read-only BFS neighborhood expansion capped at ``MAX_TRAVERSAL_HOPS``."""
@@ -159,11 +191,16 @@ def traverse_knowledge_graph(
 
     allowed_memory_ids = _long_term_memory_ids(uid, db_client=client)
     if graph is None:
-        graph = kg_db.get_knowledge_graph(uid)
+        get_knowledge_graph = cast(Callable[[str], Dict[str, Any]], getattr(kg_db, "get_knowledge_graph"))
+        graph = get_knowledge_graph(uid)
 
-    nodes = graph.get("nodes") or []
-    edges = graph.get("edges") or []
-    nodes_by_id = {node["id"]: node for node in nodes if node.get("id")}
+    raw_nodes = graph.get("nodes")
+    raw_edges = graph.get("edges")
+    nodes = cast(List[GraphNode], raw_nodes) if isinstance(raw_nodes, list) else []
+    edges = cast(List[GraphEdge], raw_edges) if isinstance(raw_edges, list) else []
+    nodes_by_id: Dict[str, GraphNode] = {
+        node_id: node for node in nodes if isinstance((node_id := node.get("id")), str)
+    }
     result.seed_node_ids = _resolve_seed_node_ids(nodes, entity_query)
     if not result.seed_node_ids:
         return result

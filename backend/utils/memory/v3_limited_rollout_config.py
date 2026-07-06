@@ -6,6 +6,7 @@ Neutral ``v3_limited_rollout_config`` is the source of truth. Legacy ``v3_limite
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
@@ -20,12 +21,12 @@ OWNER = 'memory_platform'
 @dataclass(frozen=True)
 class LimitedRolloutConfigBundle:
     uid: str
-    documents: dict[str, dict]
+    documents: dict[str, dict[str, Any]]
     apply_by_default: bool = False
     writes_executed: bool = False
 
 
-def build_disabled_global_read_gate() -> dict:
+def build_disabled_global_read_gate() -> dict[str, Any]:
     return {
         'route_scope': ROUTE_SCOPE,
         'purpose': 'v3_runtime_enablement',
@@ -36,7 +37,7 @@ def build_disabled_global_read_gate() -> dict:
     }
 
 
-def build_write_convergence_gate() -> dict:
+def build_write_convergence_gate() -> dict[str, Any]:
     return {
         'route_scope': ROUTE_SCOPE,
         'purpose': 'v3_write_convergence_gate',
@@ -57,7 +58,7 @@ def build_whitelisted_user_control_state(
     projection_ready: bool = False,
     default_memory_grant: bool = False,
     archive_grant: bool = False,
-) -> dict:
+) -> dict[str, Any]:
     if not uid:
         raise ValueError('uid required')
     if account_generation < 0:

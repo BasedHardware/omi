@@ -1,23 +1,32 @@
 import copy
+import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, Iterator, List, Optional, cast
 
 from google.api_core.exceptions import AlreadyExists, Conflict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from database import users as users_db
 from models.chat import Message
 from utils import encryption
-from utils.other.endpoints import timeit
 from ._client import db
-from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
-import logging
+from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
 
 logger = logging.getLogger(__name__)
 
 BATCH_LIMIT = 500  # Firestore hard limit
+
+
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
+
+    Returns an empty dict when the document has no fields (None payload),
+    so callers can safely mutate and read keys without Optional checks.
+    """
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
 
 # *********************************
 # ******* ENCRYPTION HELPERS ******
@@ -50,10 +59,7 @@ def _prepare_data_for_write(data: Dict[str, Any], uid: str, level: str) -> Dict[
     return data
 
 
-def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
-    if not message_data:
-        return None
-
+def _prepare_message_for_read(message_data: Dict[str, Any], uid: str) -> Dict[str, Any]:
     level = message_data.get('data_protection_level')
     if level == 'enhanced':
         return _decrypt_chat_data(message_data, uid)
@@ -68,7 +74,7 @@ def _prepare_message_for_read(message_data: Optional[Dict[str, Any]], uid: str) 
 
 @set_data_protection_level(data_arg_name='message_data')
 @prepare_for_write(data_arg_name='message_data', prepare_func=_prepare_data_for_write)
-def add_message(uid: str, message_data: dict):
+def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     del message_data['memories']
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
@@ -80,10 +86,10 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         id=str(uuid.uuid4()),
         text=text,
         created_at=datetime.now(timezone.utc),
-        sender='ai',
+        sender='ai',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageSender enum
         app_id=app_id,
         from_external_integration=False,
-        type='text',
+        type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[conversation_id] if conversation_id else [],
     )
     add_message(uid, ai_message.model_dump())
@@ -100,10 +106,10 @@ def add_integration_chat_message(text: str, app_id: Optional[str], uid: str) -> 
         id=str(uuid.uuid4()),
         text=text,
         created_at=datetime.now(timezone.utc),
-        sender='ai',
+        sender='ai',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageSender enum
         app_id=app_id,
         from_external_integration=True,
-        type='text',
+        type='text',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         chat_session_id=chat_session_id,
     )
     add_message(uid, ai_message.model_dump())
@@ -117,10 +123,10 @@ def add_summary_message(text: str, uid: str) -> Message:
         id=str(uuid.uuid4()),
         text=text,
         created_at=datetime.now(timezone.utc),
-        sender='ai',
+        sender='ai',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageSender enum
         app_id=None,
         from_external_integration=False,
-        type='day_summary',
+        type='day_summary',  # type: ignore[reportArgumentType]  # pydantic accepts str for MessageType enum
         memories_id=[],
     )
     add_message(uid, ai_message.model_dump())
@@ -128,7 +134,9 @@ def add_summary_message(text: str, uid: str) -> Message:
 
 
 @prepare_for_read(decrypt_func=_prepare_message_for_read)
-def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False):
+def get_app_messages(
+    uid: str, app_id: str, limit: int = 20, offset: int = 0, include_conversations: bool = False
+) -> List[Dict[str, Any]]:
     user_ref = db.collection('users').document(uid)
     messages_ref = (
         user_ref.collection('messages')
@@ -137,12 +145,12 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
         .limit(limit)
         .offset(offset)
     )
-    messages = []
-    conversations_id = set()
+    messages: List[Dict[str, Any]] = []
+    conversations_id: set[str] = set()
 
     # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
-        message = doc.to_dict()
+        message: Dict[str, Any] = _typed_doc(doc)
         if message.get('reported') is True:
             continue
         messages.append(message)
@@ -152,13 +160,13 @@ def get_app_messages(uid: str, app_id: str, limit: int = 20, offset: int = 0, in
         return messages
 
     # Fetch all conversations at once
-    conversations = {}
+    conversations: Dict[str, Any] = {}
     conversations_ref = user_ref.collection('conversations')
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
     docs = db.get_all(doc_refs)
     for doc in docs:
         if doc.exists:
-            conversation = doc.to_dict()
+            conversation: Dict[str, Any] = _typed_doc(doc)
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
@@ -180,7 +188,7 @@ def get_messages(
     include_conversations: bool = False,
     app_id: Optional[str] = None,
     chat_session_id: Optional[str] = None,
-):
+) -> List[Dict[str, Any]]:
     logger.info(f'get_messages {uid} {limit} {offset} {app_id} {include_conversations}')
     user_ref = db.collection('users').document(uid)
     messages_ref = user_ref.collection('messages')
@@ -194,13 +202,13 @@ def get_messages(
 
     messages_ref = messages_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit).offset(offset)
 
-    messages = []
-    conversations_id = set()
-    files_id = set()
+    messages: List[Dict[str, Any]] = []
+    conversations_id: set[str] = set()
+    files_id: set[str] = set()
 
     # Fetch messages and collect conversation IDs
     for doc in messages_ref.stream():
-        message = doc.to_dict()
+        message: Dict[str, Any] = _typed_doc(doc)
         if message.get('reported') is True:
             continue
         messages.append(message)
@@ -211,13 +219,13 @@ def get_messages(
         return messages
 
     # Fetch all conversations at once
-    conversations = {}
+    conversations: Dict[str, Any] = {}
     conversations_ref = user_ref.collection('conversations')
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversations_id]
     docs = db.get_all(doc_refs)
     for doc in docs:
         if doc.exists:
-            conversation = doc.to_dict()
+            conversation: Dict[str, Any] = _typed_doc(doc)
             conversations[conversation['id']] = conversation
 
     # Attach conversations to messages
@@ -229,13 +237,13 @@ def get_messages(
         ]
 
     # Fetch file chat
-    files = {}
+    files: Dict[str, Any] = {}
     files_ref = user_ref.collection('files')
     files_ref = [files_ref.document(str(file_id)) for file_id in files_id]
     doc_files = db.get_all(files_ref)
     for doc in doc_files:
         if doc.exists:
-            file = doc.to_dict()
+            file: Dict[str, Any] = _typed_doc(doc)
             files[file['id']] = file
 
     # Attach files to messages
@@ -252,16 +260,16 @@ def get_message_count(uid: str) -> int:
     return int(docs[0][0].value) if docs and docs[0] else 0
 
 
-def iter_all_messages(uid: str, batch_size: int = 1000):
+def iter_all_messages(uid: str, batch_size: int = 1000) -> Iterator[Dict[str, Any]]:
     """Yield all chat messages for a user, decrypted, in batches. Used for streaming data export."""
     user_ref = db.collection('users').document(uid)
     msgs_ref = user_ref.collection('messages').order_by('created_at', direction=firestore.Query.DESCENDING)
     offset = 0
     while True:
         batch_ref = msgs_ref.limit(batch_size).offset(offset)
-        batch = []
+        batch: List[Dict[str, Any]] = []
         for doc in batch_ref.stream():
-            msg = doc.to_dict()
+            msg: Dict[str, Any] = _typed_doc(doc)
             msg['id'] = doc.id
             msg = _prepare_message_for_read(msg, uid) or msg
             batch.append(msg)
@@ -278,17 +286,17 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     if not message_doc:
         return None
 
-    message_data = message_doc.to_dict()
+    message_data: Dict[str, Any] = _typed_doc(message_doc)
     if not message_data:
         return None
 
-    decrypted_data = _prepare_message_for_read(message_data, uid)
+    decrypted_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
     message = Message(**decrypted_data)
 
     return message, message_doc.id
 
 
-def report_message(uid: str, msg_doc_id: str):
+def report_message(uid: str, msg_doc_id: str) -> Dict[str, str]:
     user_ref = db.collection('users').document(uid)
     message_ref = user_ref.collection('messages').document(msg_doc_id)
     try:
@@ -299,7 +307,7 @@ def report_message(uid: str, msg_doc_id: str):
         return {"message": f"Update failed: {e}"}
 
 
-def update_message_rating(uid: str, message_id: str, rating: int | None):
+def update_message_rating(uid: str, message_id: str, rating: Optional[int]) -> bool:
     """
     Update the rating on a message document.
 
@@ -325,8 +333,8 @@ def update_message_rating(uid: str, message_id: str, rating: int | None):
 
 
 def batch_delete_messages(
-    parent_doc_ref, batch_size=450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
-):
+    parent_doc_ref: Any, batch_size: int = 450, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
+) -> None:
     messages_ref = parent_doc_ref.collection('messages')
     messages_ref = messages_ref.where(filter=FieldFilter('plugin_id', '==', app_id))
     if chat_session_id:
@@ -335,7 +343,7 @@ def batch_delete_messages(
 
     while True:
         docs_stream = messages_ref.limit(batch_size).stream()
-        docs_list = list(docs_stream)
+        docs_list: List[Any] = list(docs_stream)
 
         if not docs_list:
             logger.info("No more messages to delete")
@@ -353,7 +361,9 @@ def batch_delete_messages(
             break
 
 
-def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
+def clear_chat(
+    uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None
+) -> Optional[Dict[str, str]]:
     try:
         user_ref = db.collection('users').document(uid)
         logger.info(f"Deleting messages for user: {uid}")
@@ -365,7 +375,7 @@ def clear_chat(uid: str, app_id: Optional[str] = None, chat_session_id: Optional
         return {"message": str(e)}
 
 
-def add_multi_files(uid: str, files_data: list):
+def add_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
 
@@ -376,60 +386,66 @@ def add_multi_files(uid: str, files_data: list):
     batch.commit()
 
 
-def get_chat_files(uid: str, files_id: List[str] = []):
+def get_chat_files(uid: str, files_id: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     files_ref = db.collection('users').document(uid).collection('files')
+
+    if files_id is None:
+        files_id = []
 
     # If no specific files requested, return all
     if len(files_id) == 0:
-        return [doc.to_dict() for doc in files_ref.stream()]
+        return [_typed_doc(doc) for doc in files_ref.stream()]
 
     # Firestore IN operator supports max 30 values, so chunk the queries
     if len(files_id) <= 30:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
-        return [doc.to_dict() for doc in files_ref.stream()]
+        return [_typed_doc(doc) for doc in files_ref.stream()]
 
     # Chunk into batches of 30
-    results = []
+    results: List[Dict[str, Any]] = []
     for i in range(0, len(files_id), 30):
         chunk = files_id[i : i + 30]
         chunk_ref = db.collection('users').document(uid).collection('files')
         chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
-        results.extend([doc.to_dict() for doc in chunk_ref.stream()])
+        results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
     return results
 
 
-def get_chat_files_desc(uid: str, files_id: List[str] = [], limit: int = 10):
+def get_chat_files_desc(uid: str, files_id: Optional[List[str]] = None, limit: int = 10) -> List[Dict[str, Any]]:
     """Get the most recent chat files ordered by created_at descending, optionally filtered by file IDs"""
     files_ref = db.collection('users').document(uid).collection('files')
+
+    if files_id is None:
+        files_id = []
 
     # If no specific files requested, return most recent files
     if len(files_id) == 0:
         files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-        return [doc.to_dict() for doc in files_ref.stream()]
+        return [_typed_doc(doc) for doc in files_ref.stream()]
 
     # If specific files requested, filter by them first
     # Firestore IN operator supports max 30 values
     if len(files_id) <= 30:
         files_ref = files_ref.where(filter=FieldFilter('id', 'in', files_id))
         files_ref = files_ref.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-        return [doc.to_dict() for doc in files_ref.stream()]
+        return [_typed_doc(doc) for doc in files_ref.stream()]
 
     # Chunk into batches of 30 if more than 30 files
-    results = []
+    results: List[Dict[str, Any]] = []
     for i in range(0, len(files_id), 30):
         chunk = files_id[i : i + 30]
         chunk_ref = db.collection('users').document(uid).collection('files')
         chunk_ref = chunk_ref.where(filter=FieldFilter('id', 'in', chunk))
         chunk_ref = chunk_ref.order_by('created_at', direction=firestore.Query.DESCENDING)
-        results.extend([doc.to_dict() for doc in chunk_ref.stream()])
+        results.extend([_typed_doc(doc) for doc in chunk_ref.stream()])
 
     # Sort all results by created_at and limit
     results.sort(key=lambda x: x.get('created_at', datetime.min), reverse=True)
     return results[:limit]
 
 
-def delete_multi_files(uid: str, files_data: list):
+def delete_multi_files(uid: str, files_data: List[Dict[str, Any]]) -> None:
     batch = db.batch()
     user_ref = db.collection('users').document(uid)
 
@@ -440,13 +456,13 @@ def delete_multi_files(uid: str, files_data: list):
     batch.commit()
 
 
-def add_chat_session(uid: str, chat_session_data: dict):
+def add_chat_session(uid: str, chat_session_data: Dict[str, Any]) -> Dict[str, Any]:
     user_ref = db.collection('users').document(uid)
     user_ref.collection('chat_sessions').document(chat_session_data['id']).set(chat_session_data)
     return chat_session_data
 
 
-def get_chat_session(uid: str, app_id: Optional[str] = None):
+def get_chat_session(uid: str, app_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     session_ref = (
         db.collection('users')
         .document(uid)
@@ -457,12 +473,12 @@ def get_chat_session(uid: str, app_id: Optional[str] = None):
 
     sessions = session_ref.stream()
     for session in sessions:
-        return session.to_dict()
+        return _typed_doc(session)
 
     return None
 
 
-def get_chat_session_by_id(uid: str, chat_session_id: str):
+def get_chat_session_by_id(uid: str, chat_session_id: str) -> Optional[Dict[str, Any]]:
     """Get a specific chat session by its ID"""
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
@@ -476,7 +492,7 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     return None
 
 
-def delete_chat_session(uid, chat_session_id, cascade_messages: bool = False):
+def delete_chat_session(uid: str, chat_session_id: str, cascade_messages: bool = False) -> Optional[bool]:
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
 
@@ -486,7 +502,7 @@ def delete_chat_session(uid, chat_session_id, cascade_messages: bool = False):
         msg_col = user_ref.collection('messages')
         query = msg_col.where(filter=FieldFilter('chat_session_id', '==', chat_session_id))
         while True:
-            docs = list(query.limit(BATCH_LIMIT).stream())
+            docs: List[Any] = list(query.limit(BATCH_LIMIT).stream())
             if not docs:
                 break
             batch = db.batch()
@@ -495,15 +511,16 @@ def delete_chat_session(uid, chat_session_id, cascade_messages: bool = False):
             batch.commit()
 
     session_ref.delete()
+    return None
 
 
-def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str):
+def add_message_to_chat_session(uid: str, chat_session_id: str, message_id: str) -> None:
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
     session_ref.update({"message_ids": firestore.ArrayUnion([message_id])})
 
 
-def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]):
+def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str]) -> None:
     if not file_ids:
         return
 
@@ -512,12 +529,12 @@ def add_files_to_chat_session(uid: str, chat_session_id: str, file_ids: List[str
     session_ref.update({"file_ids": firestore.ArrayUnion(file_ids)})
 
 
-def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str):
+def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: str, assistant_id: str) -> None:
     """Update OpenAI thread and assistant IDs for a chat session"""
     user_ref = db.collection('users').document(uid)
     session_ref = user_ref.collection('chat_sessions').document(chat_session_id)
 
-    update_data = {}
+    update_data: Dict[str, str] = {}
     if thread_id:
         update_data['openai_thread_id'] = thread_id
     if assistant_id:
@@ -533,7 +550,7 @@ def update_chat_session_openai_ids(uid: str, chat_session_id: str, thread_id: st
 # **************************************
 
 
-def get_chats_to_migrate(uid: str, target_level: str) -> List[dict]:
+def get_chats_to_migrate(uid: str, target_level: str) -> List[Dict[str, Any]]:
     """
     Finds all chat messages that are not at the target protection level by fetching all documents
     and filtering them in memory. This simplifies the code but may be less performant for
@@ -542,9 +559,9 @@ def get_chats_to_migrate(uid: str, target_level: str) -> List[dict]:
     messages_ref = db.collection('users').document(uid).collection('messages')
     all_messages = messages_ref.select(['data_protection_level']).stream()
 
-    to_migrate = []
+    to_migrate: List[Dict[str, Any]] = []
     for doc in all_messages:
-        doc_data = doc.to_dict()
+        doc_data: Dict[str, Any] = _typed_doc(doc)
         current_level = doc_data.get('data_protection_level', 'standard')
         if target_level != current_level:
             to_migrate.append({'id': doc.id, 'type': 'chat'})
@@ -552,7 +569,7 @@ def get_chats_to_migrate(uid: str, target_level: str) -> List[dict]:
     return to_migrate
 
 
-def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level: str):
+def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level: str) -> None:
     """
     Migrates a batch of chat messages to the target protection level.
     """
@@ -566,20 +583,20 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
             logger.warning(f"Message {doc_snapshot.id} not found, skipping.")
             continue
 
-        message_data = doc_snapshot.to_dict()
+        message_data: Dict[str, Any] = _typed_doc(doc_snapshot)
         current_level = message_data.get('data_protection_level', 'standard')
 
         if current_level == target_level:
             continue
 
-        plain_data = _prepare_message_for_read(message_data, uid)
+        plain_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
         plain_text = plain_data.get('text')
         migrated_text = plain_text
         if target_level == 'enhanced':
             if isinstance(plain_text, str):
                 migrated_text = encryption.encrypt(plain_text, uid)
 
-        update_data = {'data_protection_level': target_level, 'text': migrated_text}
+        update_data: Dict[str, Any] = {'data_protection_level': target_level, 'text': migrated_text}
         batch.update(doc_snapshot.reference, update_data)
 
     batch.commit()
@@ -619,10 +636,10 @@ def _normalize_chat_session(data: Optional[dict]) -> Optional[dict]:
     return data
 
 
-def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict:
+def create_chat_session(uid: str, title: Optional[str] = None, app_id: Optional[str] = None) -> Dict[str, Any]:
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
-    doc = {
+    doc: Dict[str, Any] = {
         'id': session_id,
         'title': title or 'New Chat',
         'preview': None,
@@ -637,7 +654,7 @@ def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict
     return doc
 
 
-def acquire_chat_session(uid: str, app_id: str = None) -> str:
+def acquire_chat_session(uid: str, app_id: Optional[str] = None) -> str:
     """Get or create a chat session for the given app_id (None = main chat).
 
     Queries by plugin_id to match both Python chat.py and Rust backend behavior.
@@ -653,8 +670,12 @@ def acquire_chat_session(uid: str, app_id: str = None) -> str:
 
 
 def get_chat_sessions(
-    uid: str, app_id: str = None, limit: int = 50, offset: int = 0, starred: bool = None
-) -> List[dict]:
+    uid: str,
+    app_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    starred: Optional[bool] = None,
+) -> List[Dict[str, Any]]:
     col = db.collection('users').document(uid).collection('chat_sessions')
     # Order by updated_at — v2 sessions always have this field.
     # Legacy v1 sessions (missing updated_at) are excluded by Firestore,
@@ -667,25 +688,32 @@ def get_chat_sessions(
         query = query.where(filter=FieldFilter('starred', '==', starred))
 
     query = query.offset(offset).limit(limit)
-    items = []
+    items: List[Dict[str, Any]] = []
     for doc in query.stream():
-        data = doc.to_dict()
+        data: Dict[str, Any] = _typed_doc(doc)
         data['id'] = doc.id
-        items.append(_normalize_chat_session(data))
+        normalized = _normalize_chat_session(data)
+        if normalized is not None:
+            items.append(normalized)
     return items
 
 
-def update_chat_session(uid: str, session_id: str, title: str = None, starred: bool = None) -> Optional[dict]:
+def update_chat_session(
+    uid: str,
+    session_id: str,
+    title: Optional[str] = None,
+    starred: Optional[bool] = None,
+) -> Optional[Dict[str, Any]]:
     ref = db.collection('users').document(uid).collection('chat_sessions').document(session_id)
     if not ref.get().exists:
         return None
-    updates = {'updated_at': datetime.now(timezone.utc)}
+    updates: Dict[str, Any] = {'updated_at': datetime.now(timezone.utc)}
     if title is not None:
         updates['title'] = title
     if starred is not None:
         updates['starred'] = starred
     ref.update(updates)
-    result = ref.get().to_dict()
+    result: Dict[str, Any] = _typed_doc(ref.get())
     result['id'] = session_id
     return _normalize_chat_session(result)
 
@@ -705,12 +733,12 @@ def save_message(
     uid: str,
     text: str,
     sender: str,
-    app_id: str = None,
-    session_id: str = None,
-    metadata: str = None,
-    client_message_id: str = None,
+    app_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    metadata: Optional[str] = None,
+    client_message_id: Optional[str] = None,
     message_source: str = 'desktop_chat',
-) -> dict:
+) -> Dict[str, Any]:
     """Save a chat message for the desktop app.
 
     Writes all fields expected by chat.py's Message model so messages are
@@ -723,9 +751,9 @@ def save_message(
     if client_message_id:
         existing_message = message_ref.get()
         if existing_message.exists:
-            existing = existing_message.to_dict() or {}
+            existing: Dict[str, Any] = _typed_doc(existing_message)
             existing_created_at = existing.get('created_at')
-            if hasattr(existing_created_at, 'isoformat'):
+            if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
                 existing_created_at = existing_created_at.isoformat()
             return {
                 'id': msg_id,
@@ -738,7 +766,7 @@ def save_message(
     if not session_id:
         session_id = acquire_chat_session(uid, app_id=app_id)
 
-    doc = {
+    doc: Dict[str, Any] = {
         'id': msg_id,
         'text': text,
         'created_at': now,
@@ -760,9 +788,9 @@ def save_message(
         try:
             message_ref.create(doc)
         except (AlreadyExists, Conflict):
-            existing = message_ref.get().to_dict() or {}
+            existing = _typed_doc(message_ref.get())
             existing_created_at = existing.get('created_at')
-            if hasattr(existing_created_at, 'isoformat'):
+            if existing_created_at is not None and hasattr(existing_created_at, 'isoformat'):
                 existing_created_at = existing_created_at.isoformat()
             return {
                 'id': msg_id,
@@ -789,7 +817,7 @@ def save_message(
     return {'id': msg_id, 'created_at': now.isoformat(), 'session_id': session_id, 'created': created}
 
 
-def delete_messages(uid: str, app_id: str = None, session_id: str = None) -> int:
+def delete_messages(uid: str, app_id: Optional[str] = None, session_id: Optional[str] = None) -> int:
     """Delete messages matching app_id/session_id.  Returns count deleted."""
     col = db.collection('users').document(uid).collection('messages')
     if session_id:
@@ -801,7 +829,7 @@ def delete_messages(uid: str, app_id: str = None, session_id: str = None) -> int
 
     deleted = 0
     while True:
-        docs = list(query.limit(BATCH_LIMIT).stream())
+        docs: List[Any] = list(query.limit(BATCH_LIMIT).stream())
         if not docs:
             break
         batch = db.batch()

@@ -87,8 +87,31 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
+  }
+
+  func testPiMonoInvalidTokenRetriesAfterForcedAuthRefresh() throws {
+    let bridgeSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentBridge.swift")
+    let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(bridgeSource.contains("error.isSessionAuthenticationFailure"))
+    XCTAssertTrue(bridgeSource.contains("!bridgeOutputTracker.hasOutput"))
+    XCTAssertTrue(bridgeSource.contains("private final class BridgeOutputTracker: @unchecked Sendable"))
+    XCTAssertTrue(bridgeSource.contains("refreshing token and retrying once"))
+    // The refresh must convert real auth failures to authMissing so ChatProvider
+    // routes to the sign-in recovery CTA, while propagating CancellationError so a
+    // cancelled request is not misrouted to auth recovery.
+    XCTAssertTrue(bridgeSource.contains("catch is CancellationError"))
+    XCTAssertTrue(bridgeSource.contains("throw CancellationError()"))
+    XCTAssertTrue(bridgeSource.contains("catch {"))
+    XCTAssertTrue(bridgeSource.contains("throw BridgeError.authMissing"))
+    XCTAssertFalse(bridgeSource.contains("guard try await refreshAuthToken()"))
+    XCTAssertFalse(bridgeSource.contains("(try? await refreshAuthToken()) == true"))
+    XCTAssertTrue(bridgeSource.contains("let retryRequestId = UUID().uuidString"))
   }
 
   func testNamedBundleStateDirectoriesAreIsolated() {

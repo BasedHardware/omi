@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-import utils.memory.memory_system as memory_system_mod
+import importlib
+import sys
 
 
 def set_canonical_cohort(monkeypatch, *uids: str) -> None:
     """Inject canonical test uids and matching env activation."""
+    memory_system_mod = importlib.import_module("utils.memory.memory_system")
     monkeypatch.setattr(memory_system_mod, "CANONICAL_MEMORY_USERS", frozenset(uids))
+    for module_name, module in list(sys.modules.items()):
+        if module_name.startswith("utils.memory.") and hasattr(module, "resolve_memory_system"):
+            monkeypatch.setattr(module, "resolve_memory_system", memory_system_mod.resolve_memory_system)
     if uids:
         monkeypatch.setenv("MEMORY_MODE", "read")
         monkeypatch.setenv("MEMORY_ENABLED_USERS", ",".join(uids))

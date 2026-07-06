@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Fixed chat sign-in recovery so expired desktop sessions refresh or reopen the real Google sign-in flow instead of only visiting the Omi home page."
+  ]
+}

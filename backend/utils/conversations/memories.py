@@ -1,5 +1,5 @@
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import database._client as db_client_module
 import database.memories as memories_db
@@ -44,7 +44,7 @@ def process_external_integration_memory(
     uid: str, memory_data: ExternalIntegrationCreateMemory, app_id: str
 ) -> List[MemoryDB]:
     memory_data.app_id = app_id
-    saved_memories = []
+    saved_memories: List[MemoryDB] = []
     language = users_db.get_user_language_preference(uid)
 
     # Process explicit memories if provided
@@ -147,7 +147,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
         return []
 
     # Convert extracted memories to database format
-    saved_memories = []
+    saved_memories: List[MemoryDB] = []
     for memory in extracted_memories:
         source_id = f"{persona_id}:text:{_stable_source_id('twitter_tweets', tweets_text)}"
         memory_db = MemoryDB.from_memory(

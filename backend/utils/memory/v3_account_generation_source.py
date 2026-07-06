@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, cast
 
 from database.memory_collections import MemoryCollections
 
@@ -53,18 +53,18 @@ class V3TrustedAccountGenerationResult:
 _MALFORMED_SNAPSHOT_DATA = object()
 
 
-def _snapshot_data(snapshot) -> dict[str, Any] | None | object:
+def _snapshot_data(snapshot: Any) -> dict[str, Any] | None | object:
     if snapshot is None or getattr(snapshot, 'exists', False) is False:
         return None
     data = snapshot.to_dict()
-    return data if isinstance(data, dict) else _MALFORMED_SNAPSHOT_DATA
+    return cast(dict[str, Any], data) if isinstance(data, dict) else _MALFORMED_SNAPSHOT_DATA
 
 
 def _fail(*, uid: str, source_path: str, reason: V3AccountGenerationFailureReason) -> V3TrustedAccountGenerationResult:
     return V3TrustedAccountGenerationResult(uid=uid, source_path=source_path, read_error_reason=reason)
 
 
-def read_memory_v3_trusted_account_generation(*, uid: str, db_client) -> V3TrustedAccountGenerationResult:
+def read_memory_v3_trusted_account_generation(*, uid: str, db_client: Any) -> V3TrustedAccountGenerationResult:
     """Read and validate the independent account-generation state-head source.
 
     Future `/v3` GET wiring must feed this returned generation into projection
@@ -85,22 +85,23 @@ def read_memory_v3_trusted_account_generation(*, uid: str, db_client) -> V3Trust
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.MALFORMED_STATE_HEAD)
     if not isinstance(data, dict):
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.MALFORMED_STATE_HEAD)
-    if data.get('schema_version') != V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION:
+    payload = cast(dict[str, Any], data)
+    if payload.get('schema_version') != V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.UNSUPPORTED_SCHEMA)
-    if data.get('uid') != uid:
+    if payload.get('uid') != uid:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.UID_MISMATCH)
-    if data.get('source') != V3_TRUSTED_ACCOUNT_GENERATION_SOURCE:
+    if payload.get('source') != V3_TRUSTED_ACCOUNT_GENERATION_SOURCE:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.SOURCE_MISMATCH)
 
-    account_generation = data.get('account_generation')
+    account_generation = payload.get('account_generation')
     if isinstance(account_generation, bool) or not isinstance(account_generation, int) or account_generation < 0:
         return _fail(
             uid=uid,
             source_path=source_path,
             reason=V3AccountGenerationFailureReason.MALFORMED_ACCOUNT_GENERATION,
         )
-    head_commit_id = data.get('head_commit_id')
-    commit_sequence = data.get('commit_sequence')
+    head_commit_id = payload.get('head_commit_id')
+    commit_sequence = payload.get('commit_sequence')
     if not isinstance(head_commit_id, str) or not head_commit_id:
         return _fail(uid=uid, source_path=source_path, reason=V3AccountGenerationFailureReason.MALFORMED_STATE_HEAD)
     if isinstance(commit_sequence, bool) or not isinstance(commit_sequence, int) or commit_sequence < 0:
@@ -115,11 +116,3 @@ def read_memory_v3_trusted_account_generation(*, uid: str, db_client) -> V3Trust
         source=V3_TRUSTED_ACCOUNT_GENERATION_SOURCE,
         schema_version=V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION,
     )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION = V3_TRUSTED_ACCOUNT_GENERATION_SCHEMA_VERSION
-V3_TRUSTED_ACCOUNT_GENERATION_SOURCE = V3_TRUSTED_ACCOUNT_GENERATION_SOURCE
-V3AccountGenerationFailureReason = V3AccountGenerationFailureReason
-V3TrustedAccountGenerationReadError = V3TrustedAccountGenerationReadError
-V3TrustedAccountGenerationResult = V3TrustedAccountGenerationResult

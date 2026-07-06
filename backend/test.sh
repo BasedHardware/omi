@@ -75,6 +75,25 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
 
   active_pids=()
   failed=0
+
+  reap_finished_children() {
+    local running_pids
+    local pid
+    local still_active=()
+
+    running_pids="$(jobs -pr || true)"
+    for pid in "${active_pids[@]}"; do
+      if [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
+        still_active+=("$pid")
+      else
+        if ! wait "$pid"; then
+          failed=1
+        fi
+      fi
+    done
+    active_pids=("${still_active[@]}")
+  }
+
   for test_path in "${selected_tests[@]}"; do
     (
       echo "::group::$test_path"
@@ -91,15 +110,20 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     ) &
     active_pids+=("$!")
 
-    if [[ "${#active_pids[@]}" -ge "$worker_count" ]]; then
+    while [[ "${#active_pids[@]}" -ge "$worker_count" ]]; do
+      reap_finished_children
+      if [[ "${#active_pids[@]}" -lt "$worker_count" ]]; then
+        break
+      fi
       oldest_pid="${active_pids[0]}"
       active_pids=("${active_pids[@]:1}")
       if ! wait "$oldest_pid"; then
         failed=1
       fi
-    fi
+    done
   done
 
+  reap_finished_children
   for pid in "${active_pids[@]}"; do
     if ! wait "$pid"; then
       failed=1

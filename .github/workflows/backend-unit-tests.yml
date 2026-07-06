@@ -41,11 +41,18 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: uv pip sync pylock.toml --system
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Run preflight
         working-directory: backend
         run: bash test-preflight.sh
+
+      - name: Type-check backend typed boundary
+        working-directory: backend
+        run: bash scripts/typecheck.sh
 
       - name: Select backend unit tests
         id: select-tests

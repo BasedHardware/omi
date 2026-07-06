@@ -5,10 +5,10 @@ from __future__ import annotations
 import os
 import sys
 import types
+import importlib
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -36,6 +36,7 @@ def _document_id_from_seed(seed: str) -> str:
 
 
 _db_client_mod.document_id_from_seed = _document_id_from_seed
+
 
 from tests.unit.memory_import_isolation import (
     ensure_utils_memory_packages_importable,
@@ -155,7 +156,33 @@ def _data_protection_db(level: str = "enhanced") -> MagicMock:
 def _canonical_cohort(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
+    atom_index = importlib.import_module("utils.memory.atom_keyword_index")
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    memory_system = importlib.import_module("utils.memory.memory_system")
+    globals().update(
+        {
+            "AtomKeywordRebuildReport": atom_index.AtomKeywordRebuildReport,
+            "build_atom_keyword_document": atom_index.build_atom_keyword_document,
+            "is_indexable_long_term_atom": atom_index.is_indexable_long_term_atom,
+            "keyword_search_memory_ids": atom_index.keyword_search_memory_ids,
+            "memories_collection_name": atom_index.memories_collection_name,
+            "merge_memory_search_ids": atom_index.merge_memory_search_ids,
+            "rebuild_atom_keyword_index": atom_index.rebuild_atom_keyword_index,
+            "sync_atom_keyword_index_for_item": atom_index.sync_atom_keyword_index_for_item,
+            "upsert_atom_keyword_doc": atom_index.upsert_atom_keyword_doc,
+            "purge_canonical_derived_user_data": canonical_adapter.purge_canonical_derived_user_data,
+            "retract_conversation_sourced_memories": canonical_adapter.retract_conversation_sourced_memories,
+            "search_canonical_memories": canonical_adapter.search_canonical_memories,
+            "MemorySystem": memory_system.MemorySystem,
+        }
+    )
     set_canonical_cohort(monkeypatch, CANONICAL_UID)
+    cohort = frozenset({CANONICAL_UID})
+    for resolve_func in (
+        upsert_atom_keyword_doc.__globals__["resolve_memory_system"],
+        search_canonical_memories.__globals__["resolve_memory_system"],
+    ):
+        monkeypatch.setitem(resolve_func.__globals__, "CANONICAL_MEMORY_USERS", cohort)
 
 
 @pytest.fixture

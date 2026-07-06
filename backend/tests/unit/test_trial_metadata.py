@@ -146,9 +146,8 @@ def _get_trial_metadata_fn():
         return False
 
     namespace['plan_grants_desktop'] = _plan_grants_desktop_stub
-    # _get_user wraps firebase_auth.get_user — needed because subscription.py
-    # extracts it into a module-level helper for type safety.
-    # cast is used for type narrowing annotations in the extracted function source.
+    # _get_user wraps firebase_auth.get_user — subscription.py extracts it
+    # into a module-level helper for type safety. cast is used for type narrowing.
     from typing import cast as _cast
 
     namespace['_get_user'] = lambda uid: namespace['firebase_auth'].get_user(uid)

@@ -205,6 +205,7 @@ _proactive_mod.generate_notification = MagicMock(return_value="")
 _proactive_mod.validate_notification = MagicMock(return_value=False)
 _proactive_mod.FREQUENCY_TO_BASE_THRESHOLD = {1: 0.5, 2: 0.4, 3: 0.3}
 _proactive_mod.MAX_DAILY_NOTIFICATIONS = 10
+_proactive_mod.Record = MagicMock
 
 # Stub usage tracker
 _usage_mod = sys.modules["utils.llm.usage_tracker"]

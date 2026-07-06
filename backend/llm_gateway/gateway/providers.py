@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 import json
 import os
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import httpx
 
@@ -210,15 +210,16 @@ class AnthropicMessagesProvider:
 def _anthropic_request(request: Mapping[str, Any], provider_ref: ProviderRef) -> dict[str, Any]:
     system_blocks: list[Any] = []
     messages: list[Mapping[str, Any]] = []
-    for message in request.get('messages') or []:
+    for message in cast(list[object], request.get('messages') or []):
         if not isinstance(message, Mapping):
             continue
-        if message.get('role') == 'system':
-            system_text = _text_content(message.get('content'))
+        typed_message = cast(Mapping[str, Any], message)
+        if typed_message.get('role') == 'system':
+            system_text = _text_content(typed_message.get('content'))
             if system_text:
                 system_blocks.append(system_text)
         else:
-            messages.append(message)
+            messages.append(typed_message)
 
     payload: dict[str, Any] = {
         'model': provider_ref.model,
@@ -241,19 +242,20 @@ def _anthropic_to_openai_response(response: Mapping[str, Any], *, requested_mode
     text_parts: list[str] = []
     tool_calls: list[dict[str, Any]] = []
     if isinstance(content_blocks, list):
-        for block in content_blocks:
+        for block in cast(list[object], content_blocks):
             if not isinstance(block, Mapping):
                 continue
-            if block.get('type') == 'text' and isinstance(block.get('text'), str):
-                text_parts.append(block['text'])
-            elif block.get('type') == 'tool_use':
+            typed_block = cast(Mapping[str, Any], block)
+            if typed_block.get('type') == 'text' and isinstance(typed_block.get('text'), str):
+                text_parts.append(typed_block['text'])
+            elif typed_block.get('type') == 'tool_use':
                 tool_calls.append(
                     {
-                        'id': block.get('id') or '',
+                        'id': typed_block.get('id') or '',
                         'type': 'function',
                         'function': {
-                            'name': block.get('name') or '',
-                            'arguments': json.dumps(block.get('input') or {}, separators=(',', ':')),
+                            'name': typed_block.get('name') or '',
+                            'arguments': json.dumps(typed_block.get('input') or {}, separators=(',', ':')),
                         },
                     }
                 )
@@ -281,9 +283,12 @@ def _text_content(content: Any) -> str:
         return content
     if isinstance(content, list):
         parts: list[str] = []
-        for part in content:
-            if isinstance(part, Mapping) and part.get('type') == 'text' and isinstance(part.get('text'), str):
-                parts.append(part['text'])
+        for part in cast(list[object], content):
+            if not isinstance(part, Mapping):
+                continue
+            typed_part = cast(Mapping[str, Any], part)
+            if typed_part.get('type') == 'text' and isinstance(typed_part.get('text'), str):
+                parts.append(typed_part['text'])
         return '\n'.join(parts)
     return ''
 
@@ -431,12 +436,12 @@ async def _read_bounded_preview(response: httpx.Response, *, max_bytes: int) -> 
 
 def _parse_limited_json_response(body: bytes) -> Mapping[str, Any]:
     try:
-        parsed = json.loads(body)
+        parsed = cast(object, json.loads(body))
     except ValueError as exc:
         raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
     if not isinstance(parsed, Mapping):
         raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
-    return parsed
+    return cast(Mapping[str, Any], parsed)
 
 
 def _validate_chat_completion_response_shape(response: Mapping[str, Any]) -> None:
@@ -449,11 +454,16 @@ def _validate_chat_completion_response_shape(response: Mapping[str, Any]) -> Non
     choices = response.get('choices')
     if not isinstance(choices, list) or not choices:
         raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
-    for choice in choices:
+    typed_choices = cast(list[object], choices)
+    for choice in typed_choices:
         if not isinstance(choice, Mapping):
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
-        message = choice.get('message')
-        if not isinstance(message, Mapping) or message.get('role') != 'assistant':
+        typed_choice = cast(Mapping[str, object], choice)
+        message = typed_choice.get('message')
+        if not isinstance(message, Mapping):
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
+        typed_message = cast(Mapping[str, object], message)
+        if typed_message.get('role') != 'assistant':
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID)
 
 

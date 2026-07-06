@@ -208,6 +208,7 @@ final class ChatErrorStateTests: XCTestCase {
   func testFromBridgeErrorMapsInvalidTokenAgentErrorToAuthRequired() {
     let mapped = ChatErrorState.from(.agentError("401 \"invalid_token\""))
     XCTAssertEqual(mapped, .authRequired)
+    XCTAssertTrue(BridgeError.agentError("401 \"invalid_token\"").isSessionAuthenticationFailure)
   }
 
   func testFromBridgeErrorMapsUnauthorizedAgentErrorToAuthRequired() {
@@ -224,5 +225,56 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertNil(ChatErrorState.from(.agentError("AI service authentication failed")))
     XCTAssertNil(ChatErrorState.from(.agentError("Anthropic provider unauthorized")))
     XCTAssertNil(ChatErrorState.from(.agentError("invalid key")))
+    XCTAssertFalse(BridgeError.agentError("Anthropic provider unauthorized").isSessionAuthenticationFailure)
+  }
+
+  func testChatSignInRecoveryUsesDesktopOAuthInsteadOfHomepage() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(source.contains("try await AuthService.shared.signInWithGoogle()"))
+    XCTAssertTrue(source.contains("ChatErrorCard: .signIn recovery — starting desktop OAuth"))
+    XCTAssertFalse(source.contains("ChatErrorCard: .signIn recovery — opening omi.me sign-in URL"))
+    XCTAssertFalse(source.contains(#"URL(string: "https://omi.me/")"#))
+  }
+
+  func testSavedUserDefaultsSessionIsValidatedBeforeUse() throws {
+    let source = try sourceFile("AuthService.swift")
+
+    XCTAssertTrue(source.contains("validateRestoredUserDefaultsSession()"))
+    XCTAssertTrue(source.contains("getIdToken(forceRefresh: true)"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validated by forced token refresh"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session failed validation - signed out"))
+  }
+
+  func testRestoredSessionFailureClearsPersistedTokens() throws {
+    // Regression: a failed restored-session validation must clear tokens, not just flip
+    // isSignedIn, otherwise the UI shows signed-out while API auth still succeeds.
+    let source = try sourceFile("AuthService.swift")
+    let validationBlockRange = source.range(of: "Restored UserDefaults session failed validation - signed out")
+    XCTAssertNotNil(validationBlockRange)
+    let snippet = String(source[validationBlockRange!.lowerBound...])
+      .prefix(500)
+    XCTAssertTrue(snippet.contains("clearTokens()"))
+  }
+
+  func testChatSignInRecoveryDoesNotDuplicatePlanRefresh() throws {
+    // signInWithGoogle() already schedules fetchPlan() on success (twice, in
+    // the OAuth completion path); the recovery path must not duplicate it.
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let recoveryRange = source.range(of: "ChatErrorCard: .signIn recovery — starting desktop OAuth")
+    XCTAssertNotNil(recoveryRange)
+    let snippet = String(source[recoveryRange!.lowerBound...])
+      .prefix(400)
+    XCTAssertTrue(snippet.contains("try await AuthService.shared.signInWithGoogle()"))
+    XCTAssertFalse(snippet.contains("FloatingBarUsageLimiter.shared.fetchPlan()"))
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

@@ -4723,10 +4723,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     ///
     /// - `.retry`: re-issue the last failed prompt.
     /// - `.dismiss`: clear without further action.
-    /// - `.signIn`: open `https://omi.me/` so the user can complete
-    ///   sign-in. Triggering native OAuth from a chat-error context
-    ///   needs more UI plumbing than fits in this scope — surfacing
-    ///   the URL is the honest minimum.
+    /// - `.signIn`: start the same desktop Google OAuth flow used by the
+    ///   normal sign-in screen, then refresh account-scoped usage gates.
     /// - `.installRuntime`: open `https://nodejs.org/` so the user can
     ///   install Node before the bridge can spawn.
     func recoverFromError() async {
@@ -4753,9 +4751,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         case .dismiss:
             break  // already cleared above
         case .signIn:
-            log("ChatErrorCard: .signIn recovery — opening omi.me sign-in URL")
-            if let url = URL(string: "https://omi.me/") {
-                NSWorkspace.shared.open(url)
+            log("ChatErrorCard: .signIn recovery — starting desktop OAuth")
+            do {
+                try await AuthService.shared.signInWithGoogle()
+            } catch let signInError {
+                logError("ChatErrorCard: sign-in recovery failed", error: signInError)
+                currentError = error
+                errorMessage = signInError.localizedDescription
             }
         case .installRuntime:
             log("ChatErrorCard: .installRuntime recovery — opening nodejs.org for runtime install")
