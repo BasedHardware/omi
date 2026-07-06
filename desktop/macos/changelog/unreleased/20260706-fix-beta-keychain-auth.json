@@ -1,0 +1,3 @@
+{
+  "change": "Improved desktop auth continuity when macOS Keychain token storage is unavailable"
+}
