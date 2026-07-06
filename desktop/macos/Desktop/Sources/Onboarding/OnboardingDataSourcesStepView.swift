@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct OnboardingDataSourcesStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator

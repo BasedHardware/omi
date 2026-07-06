@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 struct OnboardingTrustStepView: View {
   @ObservedObject var coordinator: OnboardingPagedIntroCoordinator

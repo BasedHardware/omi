@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Animated audio level waveform visualization
 /// Shows 12 vertical bars that scale with audio level

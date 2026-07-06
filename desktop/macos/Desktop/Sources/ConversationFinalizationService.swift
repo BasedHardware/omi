@@ -443,6 +443,17 @@ actor ConversationFinalizationService {
       let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
       let retryCount = (session?.retryCount ?? 0) + 1
       if retryCount >= maxRetries {
+        // Retries are exhausted. The in-line reconciliation fallback (resolveExhaustedCloudReconciliation)
+        // only runs when the final attempt returns cleanly with no match; when it fails by *throwing*
+        // (backend/network error), we land here instead and would abandon the session, dropping any
+        // recorded audio/transcript we still hold locally (#9083). Try to finalize from saved local
+        // segments first so the recording is not lost.
+        if let session,
+           let recovered = try? await resolveExhaustedCloudReconciliation(session: session, sessionId: sessionId),
+           recovered {
+          log("ConversationFinalization: Recovered exhausted session \(sessionId) from local data after finalize error")
+          return
+        }
         let segmentCount = try? await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
         let diagnostics = ReconciliationFailureDiagnostics(
           session: session,

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 struct SearchableDropdownOption: Identifiable, Hashable {
   let id: String

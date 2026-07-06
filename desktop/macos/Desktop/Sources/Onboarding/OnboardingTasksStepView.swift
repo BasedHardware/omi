@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Onboarding step explaining that omi auto-creates tasks.
 struct OnboardingTasksStepView: View {

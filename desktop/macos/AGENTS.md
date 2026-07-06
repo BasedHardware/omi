@@ -67,6 +67,25 @@ print('Connected to Firebase: based-hardware')
 "
 ```
 
+## Module Layout (SwiftPM)
+
+`Desktop/Package.swift` is incrementally splitting the monolithic executable into
+library targets with enforced dependency edges:
+
+- `OmiTheme` — shared colors, typography, chrome (`Sources/Theme/`)
+- `OmiWAL` — write-ahead log model + coordinator (`Sources/OmiWAL/`)
+- `OmiSupport` — shared desktop runtime helpers (`Sources/OmiSupport/`, e.g. `DesktopLocalProfile`)
+
+`Rewind/Core/` remains in the executable target for now — it still references main-app
+types (`TaskActionItem`, `PowerMonitor`, etc.) and needs a shared-models carve-out first.
+
+**Do not add new `.swift` files directly under `Desktop/Sources/`.** Place new
+code in a feature directory (`Onboarding/`, `MainWindow/`, `Chat/`, etc.). CI
+enforces this via `scripts/check-sources-root-layout.py`.
+
+When carving out additional leaf modules, prefer bottom-up order (models and
+storage before UI) and wire `import` + `public` on the extracted target's API.
+
 ## Key Architecture Notes
 
 ### Authentication

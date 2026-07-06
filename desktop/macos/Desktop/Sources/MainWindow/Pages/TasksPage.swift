@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Combine
 import UniformTypeIdentifiers
+import OmiTheme
 
 // MARK: - Task Category (by due date)
 

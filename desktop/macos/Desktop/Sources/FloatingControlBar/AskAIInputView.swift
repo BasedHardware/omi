@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 /// "Ask a question..." input panel for the floating control bar.
 struct AskAIInputView: View {

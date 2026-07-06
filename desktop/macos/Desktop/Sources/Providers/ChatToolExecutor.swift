@@ -189,9 +189,9 @@ class ChatToolExecutor {
     case .fillCloudConnectorForm:
       return await CloudConnectorFormAutomation.fill(toolCall.arguments)
 
-    // Backend RAG tools — call Python backend /v1/tools/* endpoints
+    // Backend RAG/calendar tools — call Python backend /v1/tools/* endpoints
     case .getConversations, .searchConversations, .getMemories, .searchMemories, .getActionItems,
-      .createActionItem, .updateActionItem:
+      .createActionItem, .updateActionItem, .createCalendarEvent:
       return await executeBackendTool(toolCall)
 
     case .unhandled:

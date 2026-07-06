@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Onboarding step: hold the voice shortcut, ask a question, and see the AI respond.
 /// Comes after the shortcut-test step so the user has already confirmed the key works.

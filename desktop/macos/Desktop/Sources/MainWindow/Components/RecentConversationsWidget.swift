@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct RecentConversationsWidget: View {
     let conversations: [ServerConversation]

@@ -69,7 +69,7 @@ enum GeneratedToolExecutors {
     .completeOnboarding: .chatToolExecutor,
     .getEmailInsights: .chatToolExecutor,
     .getTasks: .realtimeHub,
-    .createCalendarEvent: .realtimeHub,
+    .createCalendarEvent: .chatToolExecutor,
     .askHigherModel: .realtimeHub,
     .screenshot: .realtimeHub,
     .pointClick: .realtimeHub
@@ -127,6 +127,7 @@ enum GeneratedToolExecutors {
     case askFollowup
     case completeOnboarding
     case getEmailInsights
+    case createCalendarEvent
     case unhandled
   }
 
@@ -158,6 +159,7 @@ enum GeneratedToolExecutors {
     case .askFollowup: return .askFollowup
     case .completeOnboarding: return .completeOnboarding
     case .getEmailInsights: return .getEmailInsights
+    case .createCalendarEvent: return .createCalendarEvent
     default: return .unhandled
     }
   }

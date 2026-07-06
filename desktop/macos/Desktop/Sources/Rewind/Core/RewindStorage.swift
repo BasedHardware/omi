@@ -2,6 +2,7 @@ import AppKit
 import AVFoundation
 import CoreImage
 import Foundation
+import OmiSupport
 import Sentry
 
 /// File storage manager for Rewind screenshots

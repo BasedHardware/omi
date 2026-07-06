@@ -1,6 +1,7 @@
 import Combine
 import SwiftUI
 import AppKit
+import OmiTheme
 
 // MARK: - Dashboard View Model
 

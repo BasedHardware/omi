@@ -1,8 +1,10 @@
 import FirebaseAuth
 import FirebaseCore
+import OmiSupport
 import Sentry
 import Sparkle
 import SwiftUI
+import OmiTheme
 
 // MARK: - Launch Mode
 /// Determines which UI to show based on command-line arguments

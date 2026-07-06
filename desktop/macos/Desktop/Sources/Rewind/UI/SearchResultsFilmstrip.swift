@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Horizontally scrollable filmstrip of search result thumbnails
 struct SearchResultsFilmstrip: View {
