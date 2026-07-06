@@ -413,15 +413,35 @@ final class DesktopAutomationActionRegistry {
       summary: "Return memories page load state for harness assertions",
       params: []
     ) { _ in
-      await MainActor.run {
-        NotificationCenter.default.post(name: .refreshAllData, object: nil)
+      guard AuthState.shared.isSignedIn else {
+        return [
+          "is_signed_in": "false",
+          "load_state": "signed_out",
+          "memory_count_valid": "false",
+        ]
       }
-      try? await Task.sleep(nanoseconds: 300_000_000)
-      guard AppState.current != nil else { return ["error": "app state unavailable"] }
-      return [
-        "refreshed": "true",
-        "is_signed_in": AuthState.shared.isSignedIn ? "true" : "false",
-      ]
+      do {
+        // Same local-first path MemoriesViewModel.loadMemories uses: API page → SQLite sync → count.
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        try await MemoryStorage.shared.syncServerMemories(page.memories)
+        let memoryCount = try await MemoryStorage.shared.getLocalMemoriesCount()
+        return [
+          "is_signed_in": "true",
+          "load_state": "loaded",
+          "memory_count": "\(memoryCount)",
+          "api_page_count": "\(page.memories.count)",
+          "memory_count_valid": "true",
+          "has_error": "false",
+        ]
+      } catch {
+        return [
+          "is_signed_in": "true",
+          "load_state": "error",
+          "has_error": "true",
+          "memory_count_valid": "false",
+          "error_message": error.localizedDescription,
+        ]
+      }
     }
 
     register(
@@ -429,12 +449,36 @@ final class DesktopAutomationActionRegistry {
       summary: "Return tasks store counts for harness assertions",
       params: []
     ) { _ in
+      guard AuthState.shared.isSignedIn else {
+        return [
+          "is_signed_in": "false",
+          "load_state": "signed_out",
+          "task_count_valid": "false",
+        ]
+      }
       let store = TasksStore.shared
+      await store.loadTasksIfNeeded()
+      let deadline = Date().addingTimeInterval(30)
+      while store.isLoading, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
       let total = store.tasksWithoutDueDate.count + store.overdueTasks.count + store.todaysTasks.count
+      let loadState: String
+      if store.error != nil {
+        loadState = "error"
+      } else if store.isLoading {
+        loadState = "loading"
+      } else {
+        loadState = "loaded"
+      }
       return [
+        "is_signed_in": "true",
+        "load_state": loadState,
         "task_count": "\(total)",
         "overdue_count": "\(store.overdueTasks.count)",
         "today_count": "\(store.todaysTasks.count)",
+        "task_count_valid": loadState == "loaded" ? "true" : "false",
+        "has_error": store.error != nil ? "true" : "false",
       ]
     }
 

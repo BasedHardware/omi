@@ -28,7 +28,9 @@ steps:
     bridge.action:
       name: tasks_snapshot
     expect:
-      ok: true
+      result.detail.is_signed_in: "true"
+      result.detail.load_state: "loaded"
+      result.detail.task_count_valid: "true"
 
   - id: S4
     name: Logs clean

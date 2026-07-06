@@ -1208,6 +1208,10 @@ extension AppState {
     ]
   }
 
+  /// Hermetic capture teardown: mirrors the session-finalization portion of
+  /// `stopTranscription()` (finish session, finalize conversation, clear live
+  /// transcript state, reload conversations) without stopping the audio engine
+  /// or cloud STT WebSocket. Keep this in sync when `stopTranscription()` changes.
   func automationStopCaptureTestSession() async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "capture test session disabled on production bundles"]

@@ -29,18 +29,36 @@ steps:
       result.detail.sent: "Hermetic floating bar [[MARKER:floating-bar]]"
 
   - id: S3
+    name: Wait for floating-bar chat idle
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S4
+    name: Assert stub marker echoed in assistant reply
+    bridge.action:
+      name: main_chat_snapshot
+      params:
+        limit: "12"
+    expect:
+      result.detail.last_assistant_text: "Stub saw marker: floating-bar"
+
+  - id: S5
     name: Assert floating bar still open
     state.expect:
       state.askOmiOpen: true
 
-  - id: S4
+  - id: S6
     name: Close Ask Omi
     bridge.action:
       name: close_ask_omi
       params:
         wait: "true"
 
-  - id: S5
+  - id: S7
     name: Logs clean
     log.expect:
       absent:

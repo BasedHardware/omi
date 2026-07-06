@@ -27,7 +27,10 @@ steps:
     bridge.action:
       name: memories_snapshot
     expect:
-      result.detail.refreshed: "true"
+      result.detail.is_signed_in: "true"
+      result.detail.load_state: "loaded"
+      result.detail.memory_count_valid: "true"
+      # memory_count may be 0 on a fresh profile; happy_path alice seed has 22 default-scope memories.
 
   - id: S4
     name: Logs clean
