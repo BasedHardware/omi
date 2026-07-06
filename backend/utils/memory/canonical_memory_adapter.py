@@ -834,9 +834,11 @@ def purge_canonical_derived_user_data(uid: str, *, db_client=None) -> Dict[str, 
     if vector_ids:
         from database.vector_db import delete_pinecone_memory_vectors_by_id
 
-        delete_pinecone_memory_vectors_by_id(vector_ids)
+        vector_deleted = delete_pinecone_memory_vectors_by_id(vector_ids)
+        if vector_deleted < len(vector_ids):
+            raise RuntimeError(f"canonical vector purge only deleted {vector_deleted}/{len(vector_ids)} vectors")
 
-    keyword_deleted = purge_user_atom_keyword_index(uid, db_client=client, force=True)
+    keyword_deleted = purge_user_atom_keyword_index(uid, db_client=client, force=True, raise_on_failure=True)
     kg_db.delete_knowledge_graph(uid, db_client=client)
 
     trusted = read_memory_v3_trusted_account_generation(uid=uid, db_client=client)

@@ -83,6 +83,7 @@ from utils.memory.atom_keyword_index import (
     keyword_search_memory_ids,
     memories_collection_name,
     merge_memory_search_ids,
+    purge_user_atom_keyword_index,
     rebuild_atom_keyword_index,
     sync_atom_keyword_index_for_item,
     upsert_atom_keyword_doc,
@@ -408,6 +409,15 @@ class TestKeywordSearchAndHybrid:
 
 
 class TestPurgeAndRebuild:
+    def test_strict_keyword_purge_raises_on_typesense_failure(self, monkeypatch):
+        monkeypatch.setattr(
+            "utils.memory.atom_keyword_index._typesense_client",
+            MagicMock(side_effect=RuntimeError("typesense down")),
+        )
+
+        with pytest.raises(RuntimeError, match="typesense down"):
+            purge_user_atom_keyword_index(CANONICAL_UID, force=True, raise_on_failure=True)
+
     def test_account_delete_purges_keyword_index(self, mock_typesense, monkeypatch):
         collections, docs_store = mock_typesense
         item = _long_term_item()

@@ -13,6 +13,8 @@ accept task traffic.
 import json
 import logging
 import os
+import hashlib
+import uuid
 from typing import Optional
 
 from fastapi import HTTPException, Request
@@ -71,6 +73,14 @@ def is_audio_merge_dispatch_enabled() -> bool:
     return os.getenv('AUDIO_MERGE_DISPATCH_MODE', 'inline') == 'cloud_tasks'
 
 
+def is_account_deletion_dispatch_enabled() -> bool:
+    return os.getenv('ACCOUNT_DELETION_DISPATCH_MODE', 'inline') == 'cloud_tasks'
+
+
+def get_account_deletion_tasks_max_attempts() -> int:
+    return int(os.getenv('ACCOUNT_DELETION_TASKS_MAX_ATTEMPTS', get_sync_tasks_max_attempts()))
+
+
 def _enqueue_named_task(queue: str, url: str, task_id: str, payload: dict) -> None:
     """Enqueue one named HTTP task. Duplicate names are treated as success —
     Cloud Tasks deduplicates named tasks. Any other failure raises."""
@@ -121,6 +131,18 @@ def enqueue_audio_merge_job(payload: dict) -> None:
         os.getenv('AUDIO_MERGE_HANDLER_URL', ''),
         task_id,
         payload,
+    )
+
+
+def enqueue_account_deletion_wipe(uid: str) -> None:
+    """Enqueue one durable account-deletion wipe task for a Firebase uid."""
+    uid_hash = hashlib.sha256(uid.encode('utf-8')).hexdigest()[:32]
+    task_id = f"account-delete-{uid_hash}-{uuid.uuid4().hex}"
+    _enqueue_named_task(
+        os.getenv('ACCOUNT_DELETION_TASKS_QUEUE', ''),
+        os.getenv('ACCOUNT_DELETION_HANDLER_URL', ''),
+        task_id,
+        {'uid': uid},
     )
 
 
