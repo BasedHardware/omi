@@ -48,6 +48,9 @@ jobs:
           # UserDefaults key ratchet: run when desktop Swift sources, the ratchet
           # script, or this workflow change (so the gate dogfoods itself).
           echo "has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          # asyncAfter ratchet: run when floating-bar / PTT sources, the ratchet
+          # script, or this workflow change (so the gate dogfoods itself).
+          echo "has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
 
       # -- Universal source hygiene --
       - name: Check merge conflict markers
@@ -103,6 +106,10 @@ jobs:
       - name: Check desktop UserDefaults key ratchet
         if: steps.changed.outputs.has_desktop_defaults_ratchet == 'true'
         run: python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
+
+      - name: Check desktop asyncAfter ratchet
+        if: steps.changed.outputs.has_desktop_async_after_ratchet == 'true'
+        run: python3 desktop/macos/scripts/check-async-after-ratchet.py
 
       - name: Check GitHub Actions workflows
         if: steps.changed.outputs.has_workflows == 'true'
