@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a rare case where a stale/mismatched saved session could leave the app showing signed-in with no working credentials, instead of returning you to sign-in"
+}

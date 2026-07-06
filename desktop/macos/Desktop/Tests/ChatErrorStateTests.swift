@@ -260,12 +260,31 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(source.contains("Definitive auth failure - clearing tokens and session"))
   }
 
+  func testRestoredSessionSignsOutWhenValidationClearedTokens() throws {
+    // Follow-up to #9161 (Copilot): getIdToken(forceRefresh: false) can clear tokens
+    // internally on a stored token/user mismatch and then surface notSignedIn. Preserving
+    // isSignedIn there would leave a ghost signed-in UI with no credentials, so the catch
+    // must sign out when the tokens are gone — gated on the tokens actually being cleared,
+    // so the transient/race case (tokens intact) is still preserved.
+    let source = try sourceFile("AuthService.swift")
+    let range = source.range(of: "Restored UserDefaults session validation cleared tokens - signing out")
+    XCTAssertNotNil(range)
+    let snippet = String(source[range!.lowerBound...]).prefix(320)
+    XCTAssertTrue(snippet.contains("self.isSignedIn = false"))
+    XCTAssertTrue(snippet.contains("saveAuthState(isSignedIn: false"))
+    // The sign-out branch is gated on the tokens actually being gone (not a blanket clear).
+    let methodStart = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    XCTAssertNotNil(methodStart)
+    let method = String(source[methodStart!.lowerBound...]).prefix(1700)
+    XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
+  }
+
   func testRestoredSessionValidationClearsInMemoryEmailIfAlreadySignedOut() throws {
     let source = try sourceFile("AuthService.swift")
     let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
-      .prefix(1800)
+      .prefix(2600)
 
     XCTAssertTrue(snippet.contains("if self.isSignedIn"))
     XCTAssertTrue(snippet.contains("Restored UserDefaults session validation found signed-out state"))

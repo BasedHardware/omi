@@ -632,7 +632,21 @@ class AuthService {
                 APIKeyService.shared.startFetchingKeys()
                 Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
             } catch AuthError.notSignedIn {
-                if self.isSignedIn {
+                if self.storedIdToken == nil || self.storedRefreshToken == nil {
+                    // getIdToken() can clear tokens internally before surfacing notSignedIn —
+                    // e.g. a stored token/user mismatch after an account switch (it clears the
+                    // stale token, then the refresh path has no token). The entry guard proved
+                    // a cached ID token existed, so if it's gone now the session is genuinely
+                    // dead; preserving isSignedIn would leave a ghost signed-in UI with no
+                    // credentials. Sign out cleanly so the UI shows sign-in.
+                    NSLog("OMI AUTH: Restored UserDefaults session validation cleared tokens - signing out")
+                    self.isSignedIn = false
+                    AuthState.shared.userEmail = nil
+                    AuthState.shared.isRestoringAuth = false
+                    self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                } else if self.isSignedIn {
+                    // Tokens survived — a transient/race failure (e.g. Firebase SDK user not
+                    // yet restored). Keep the restored session; on-demand refresh recovers it.
                     NSLog("OMI AUTH: Restored UserDefaults session validation deferred - preserving restored session")
                 } else {
                     NSLog("OMI AUTH: Restored UserDefaults session validation found signed-out state")
