@@ -1180,7 +1180,7 @@ extension AppState {
     }
   }
 
-  func automationInjectCaptureTestTranscript(text: String) -> [String: String] {
+  func automationInjectCaptureTestTranscript(text: String) async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "capture test transcript disabled on production bundles"]
     }
@@ -1200,6 +1200,9 @@ extension AppState {
       translations: nil
     )
     handleBackendSegments([segment])
+    if let sessionId = currentSessionId {
+      await persistBackendSegmentsToStorage([segment], sessionId: sessionId)
+    }
     return [
       "injected": trimmed,
       "session_id": currentSessionId.map { "\($0)" } ?? "",

@@ -92,7 +92,8 @@ actor TranscriptionStorage {
                 return false
             }
 
-            record.finishedAt = Date()
+            let now = Date()
+            record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
             record.status = .pendingUpload
             if let strategy {
                 record.finalizationStrategy = strategy
