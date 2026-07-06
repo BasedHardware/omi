@@ -85,6 +85,16 @@ SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tes
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
 trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
+# Require backend/.venv/bin/python for all backend Python scripts. The system
+# python3 does not have backend deps (fastapi, pydantic, etc.) and using it
+# silently produces misleading failures. If the venv is missing, tell the
+# developer exactly how to create it.
+BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+if [[ ! -x "$BACKEND_PYTHON" ]]; then
+  echo "FAIL: backend/.venv/bin/python not found." >&2
+  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  exit 1
+fi
 
 run_step() {
   echo "==> $*"
@@ -234,8 +244,8 @@ check_backend_runtime_env_if_needed() {
     return
   fi
 
-  python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
-  python3 backend/scripts/validate-backend-runtime-env.py --env prod
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env prod
 }
 
 check_backend_async_blockers_if_needed() {
@@ -255,7 +265,7 @@ check_backend_async_blockers_if_needed() {
     scanner_args+=(--full-report)
   fi
 
-  python3 backend/scripts/scan_async_blockers.py \
+  "$BACKEND_PYTHON" backend/scripts/scan_async_blockers.py \
     --dirs backend/routers backend/utils \
     --diff-base "$BASE_REF" \
     --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def \
@@ -287,14 +297,14 @@ check_module_stub_pollution_if_needed() {
   done
 
   if [ -s "$filter_file" ]; then
-    python3 backend/scripts/check_module_stub_pollution.py --files "$filter_file"
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --files "$filter_file"
   else
-    python3 backend/scripts/check_module_stub_pollution.py --quiet
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --quiet
   fi
   rm -f "$filter_file"
 
   # Enforce monotone-shrinking allowlist regardless of which files changed.
-  python3 backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
+  "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
 }
 
 check_import_time_side_effects_if_needed() {
@@ -324,13 +334,13 @@ check_import_time_side_effects_if_needed() {
   done
 
   if [ -s "$filter_file" ]; then
-    python3 backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
   else
-    python3 backend/scripts/scan_import_time_side_effects.py --quiet
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --quiet
   fi
   rm -f "$filter_file"
 
-  python3 backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
+  "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
 }
 
 check_backend_unit_tests_if_needed() {
@@ -349,7 +359,7 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
-  python3 backend/scripts/select_backend_unit_tests.py \
+  "$BACKEND_PYTHON" backend/scripts/select_backend_unit_tests.py \
     --changed-files "$CHANGED_FILES_LIST" \
     --output "$SELECTED_BACKEND_TESTS" \
     --reason-output "$SELECTED_BACKEND_TESTS_REASON"
@@ -387,8 +397,8 @@ check_backend_unit_tests_if_needed() {
   echo "Selected $selected_count backend unit test file(s): $reason"
   (
     cd backend
-    bash test-preflight.sh
-    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" bash test.sh
+    PYTHON="$BACKEND_PYTHON" bash test-preflight.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
   )
 }
 
@@ -474,6 +484,26 @@ check_desktop_swift_if_needed() {
     cd desktop/macos
     xcrun swift build -c debug --package-path Desktop
   )
+}
+
+check_desktop_userdefaults_ratchet_if_needed() {
+  # BL-004 / S-13: fail if new raw inline UserDefaults string keys are added to
+  # the desktop Swift sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop UserDefaults key ratchet because PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/*.swift' \
+    'desktop/macos/Desktop/Sources/**/*.swift' \
+    'desktop/macos/scripts/check-userdefaults-key-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
 }
 
 check_desktop_rust_if_needed() {
@@ -573,6 +603,7 @@ run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
 run_step check_desktop_swift_if_needed
+run_step check_desktop_userdefaults_ratchet_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
