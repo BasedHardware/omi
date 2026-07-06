@@ -483,17 +483,24 @@ actor AgentRuntimeProcess {
       throw BridgeError.bridgeScriptNotFound
     }
 
+    Self.removeInheritedBYOKEnvironment(from: &env)
+    let byok = await Self.usableBYOKEnvironment()
+    for (key, value) in byok.values {
+      env[key] = value
+    }
     if APIKeyService.isByokActive {
-      for provider in BYOKProvider.allCases {
-        if let key = APIKeyService.byokKey(provider) {
-          env["OMI_BYOK_\(provider.rawValue.uppercased())"] = key
+      if !byok.suppressedProviders.isEmpty {
+        for provider in byok.suppressedProviders {
+          log(
+            "CredentialHealth: context=agent_runtime_env failure_class=byok_invalid_suppressed provider=\(provider.rawValue)"
+          )
         }
       }
-      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(BYOKProvider.allCases.count) user keys")
+      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
     }
 
     let authService = await MainActor.run { AuthService.shared }
-    if let token = try? await authService.getIdToken(), !token.isEmpty {
+    if let token = try? await authService.getIdToken(forceRefresh: preferredAdapterId == .piMono), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
     } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
@@ -624,6 +631,40 @@ actor AgentRuntimeProcess {
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
+  }
+
+  static func byokEnvironmentKey(for provider: BYOKProvider) -> String {
+    "OMI_BYOK_\(provider.rawValue.uppercased())"
+  }
+
+  static func removeInheritedBYOKEnvironment(from env: inout [String: String]) {
+    let inheritedBYOKKeys = env.keys.filter { $0.uppercased().hasPrefix("OMI_BYOK_") }
+    for key in inheritedBYOKKeys {
+      env.removeValue(forKey: key)
+    }
+  }
+
+  @MainActor
+  static func usableBYOKEnvironment() -> (values: [String: String], suppressedProviders: [BYOKProvider]) {
+    guard APIKeyService.isByokActive else {
+      return ([:], [])
+    }
+
+    var candidateValues: [String: String] = [:]
+    var suppressedProviders: [BYOKProvider] = []
+    for provider in BYOKProvider.allCases {
+      guard let key = APIKeyService.byokKey(provider) else { continue }
+      let fingerprint = APIKeyService.byokFingerprint(key)
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = key
+      } else {
+        suppressedProviders.append(provider)
+      }
+    }
+    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+      return ([:], suppressedProviders)
+    }
+    return (candidateValues, [])
   }
 
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
