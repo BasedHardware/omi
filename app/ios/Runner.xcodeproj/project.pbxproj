@@ -28,6 +28,8 @@
 		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
 		BAADF00DF00DF00DF00DFC03 /* RayBanMetaAudioCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC01 /* RayBanMetaAudioCapture.swift */; };
 		BAADF00DF00DF00DF00DFC04 /* RayBanMetaHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFC02 /* RayBanMetaHostApiImpl.swift */; };
+		BAADF00DF00DF00DF00DFC13 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = BAADF00DF00DF00DF00DFC11 /* MWDATCore */; };
+		BAADF00DF00DF00DF00DFC14 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = BAADF00DF00DF00DF00DFC12 /* MWDATCamera */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
@@ -227,6 +229,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */,
+				BAADF00DF00DF00DF00DFC13 /* MWDATCore in Frameworks */,
+				BAADF00DF00DF00DF00DFC14 /* MWDATCamera in Frameworks */,
 				9958B35F20EB7136AF2389D8 /* Pods_Runner.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -482,6 +486,10 @@
 				42A7BA3D2E788BD400138969 /* PBXTargetDependency */,
 			);
 			name = Runner;
+			packageProductDependencies = (
+				BAADF00DF00DF00DF00DFC11 /* MWDATCore */,
+				BAADF00DF00DF00DF00DFC12 /* MWDATCamera */,
+			);
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
 			productType = "com.apple.product-type.application";
@@ -514,6 +522,9 @@
 			);
 			mainGroup = 97C146E51CF9000F007C117D;
 			preferredProjectObjectVersion = 77;
+			packageReferences = (
+				BAADF00DF00DF00DF00DFC10 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
+			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -2354,6 +2365,30 @@
 			name = "Debug-dev";
 		};
 /* End XCBuildConfiguration section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		BAADF00DF00DF00DF00DFC10 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 0.8.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		BAADF00DF00DF00DF00DFC11 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BAADF00DF00DF00DF00DFC10 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCore;
+		};
+		BAADF00DF00DF00DF00DFC12 /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BAADF00DF00DF00DF00DFC10 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCamera;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCConfigurationList section */
 		42A7BA3F2E788BD400138969 /* Build configuration list for PBXNativeTarget "omiWatchApp" */ = {

@@ -18,66 +18,33 @@ capture + HFP audio. Full mode is required for founder acceptance.
    testers through the Wearables Developer Center beta channel.
 4. Xcode 15.4+ (repo currently builds with Xcode 26), iOS device on iOS 15.2+.
 
-## Step 1 — Add the DAT Swift package
+## Step 1 — DAT Swift package (already in the project)
 
-The Omi iOS project uses CocoaPods for everything else; the Meta toolkit is
-SPM-only, so it is added as an SPM package reference on the Runner project:
+The Runner project carries an SPM reference to
+`https://github.com/facebook/meta-wearables-dat-ios` (exact 0.8.0; binary
+xcframeworks) with products **MWDATCore** and **MWDATCamera** on the Runner
+target. Nothing to do — `RayBanMetaHostApiImpl.swift` activates its DAT path
+via `#if canImport(MWDATCore)`, and this compiles clean against 0.8.0
+(verified). To bump versions, edit the package requirement in Xcode's Package
+Dependencies. (Optionally add **MWDATMockDevice** to Debug for hardware-free
+testing.)
 
-1. Open `app/ios/Runner.xcworkspace` in Xcode.
-2. Runner project → **Package Dependencies** → `+` →
-   `https://github.com/facebook/meta-wearables-dat-ios` (0.8.x or newer tag).
-3. Add products **MWDATCore** and **MWDATCamera** to the **Runner** target.
-   (Optionally **MWDATMockDevice** for hardware-free testing on Debug.)
+## Step 2 — Credentials (the only manual step)
 
-No source changes are needed: `RayBanMetaHostApiImpl.swift` activates its DAT
-path via `#if canImport(MWDATCore)` the moment the package is present. If the
-0.8 API surface has drifted from what the bridge was written against
-(registration/device/session/stream symbols), fix-ups belong only in
-`app/ios/Runner/RayBanMeta/RayBanMetaHostApiImpl.swift`.
+Info.plist already carries the `MWDAT` dictionary (`MetaAppID`/`ClientToken`
+resolve from build settings), the `omirayban` callback URL scheme, and the
+`com.meta.ar.wearable` accessory protocol. Provide the credentials via a
+git-ignored xcconfig:
 
-## Step 2 — Configure Info.plist
-
-Add to `app/ios/Runner/Info.plist` (values from the Developer Center; do NOT
-commit real credentials — inject via xcconfig/build settings):
-
-```xml
-<key>MWDAT</key>
-<dict>
-    <key>MetaAppID</key>
-    <string>$(META_APP_ID)</string>
-    <key>ClientToken</key>
-    <string>$(META_CLIENT_TOKEN)</string>
-    <key>TeamID</key>
-    <string>$(DEVELOPMENT_TEAM)</string>
-    <key>AppLinkURLScheme</key>
-    <string>omirayban://</string>
-    <key>DAMEnabled</key>
-    <true/>
-</dict>
-<key>UISupportedExternalAccessoryProtocols</key>
-<array>
-    <string>com.meta.ar.wearable</string>
-</array>
+```bash
+cd app/ios/Flutter
+cp RayBanMetaCredentials.xcconfig.template RayBanMetaCredentials.xcconfig
+# fill in META_APP_ID and META_CLIENT_TOKEN from the Developer Center
 ```
 
-And register the callback URL scheme (Meta AI app → back to Omi):
-
-```xml
-<key>CFBundleURLTypes</key>
-<array>
-    <dict>
-        <key>CFBundleURLSchemes</key>
-        <array>
-            <string>omirayban</string>
-        </array>
-    </dict>
-</array>
-```
-
-Set `META_APP_ID` / `META_CLIENT_TOKEN` in `ios/Flutter/devDebug.xcconfig`
-(and the flavor configs you build) or as Xcode user-defined build settings.
-Register the exact `omirayban://` scheme in the Wearables Developer Center app
-settings.
+With the file absent the build stays in audio-only mode; with it present,
+`getAvailabilityMode()` returns `full`. Register the exact `omirayban://`
+scheme and your iOS bundle id in the Wearables Developer Center app settings.
 
 Already present in Omi's Info.plist (no action): `NSMicrophoneUsageDescription`,
 `NSBluetoothAlwaysUsageDescription`, `NSCameraUsageDescription`, background
