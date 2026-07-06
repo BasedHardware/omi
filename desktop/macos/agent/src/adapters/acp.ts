@@ -779,6 +779,14 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         return false;
       }
 
+      // codex-acp extension updates: thread metadata and streaming token
+      // counts. No Omi event to emit, but they ARE liveness signals — counting
+      // them as progress keeps the no-progress idle-cancel from killing a
+      // healthy Codex turn that is quiet apart from these.
+      case "session_info_update":
+      case "usage_update":
+        return true;
+
       default:
         this.log(`Unknown session update type: ${sessionUpdate}`);
         return false;

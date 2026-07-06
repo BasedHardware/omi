@@ -56,6 +56,18 @@ rl.on("line", (line) => {
       const auth = process.env.OPENAI_API_KEY ? "auth=1" : "auth=0";
       const mode = process.env.INITIAL_AGENT_MODE ?? "mode=unset";
       const noBrowser = process.env.NO_BROWSER ?? "nb=unset";
+      // Real codex-acp emits these extension update kinds mid-turn; the
+      // adapter must tolerate them (and count them as progress).
+      send({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: { update: { sessionUpdate: "session_info_update", title: "dogfood" } },
+      });
+      send({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: { update: { sessionUpdate: "usage_update", inputTokens: 5 } },
+      });
       // Stream a chunk that encodes what env the real subprocess received.
       send({
         jsonrpc: "2.0",
