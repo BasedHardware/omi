@@ -1,0 +1,27 @@
+desktop/macos/changelog/unreleased/20260703-whatsapp-send-confirm.json
+  s_51e027d4890829::t_5e7cbae793bbb5 2
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_51e027d4890829::t_d46a0a44e50776 272-275,280-282,284-285
+desktop/macos/Desktop/Sources/WhatsAppReaderService.swift
+  s_51e027d4890829::t_dda9c5ecc9b210 145-175
+desktop/macos/Desktop/Sources/WhatsAppSenderService.swift
+  s_51e027d4890829::t_cf00ef4f67abb9 2,6-7,9-18,25-29,36-39,41-57,59-63,66-81,85,99-100,105-109,112-114,117-118,123-154,158,160,164-168,171-172,188-278,292-305,309,332
+desktop/macos/Desktop/Sources/WhatsAppInboxStore.swift
+  s_51e027d4890829::t_9c052f90457e25 261-262,265-270
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bc1ad23838ba2e2e00a562360c31bc3edd1bf30e",
+  "prompts": {},
+  "sessions": {
+    "s_51e027d4890829": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61e4d8cb-cb32-46e7-903c-106ed88e5fde",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

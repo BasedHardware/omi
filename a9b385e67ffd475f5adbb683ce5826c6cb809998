@@ -1,0 +1,22 @@
+desktop/macos/Desktop/Sources/MessagingMedia.swift
+  s_a0ba892d21e486::t_b6b1c151bfa359 19-22
+  s_a0ba892d21e486::t_29700894a74f5a 53
+desktop/macos/Desktop/Sources/IMessageModels.swift
+  s_a0ba892d21e486::t_9c52075dd7fc0f 33-39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a9b385e67ffd475f5adbb683ce5826c6cb809998",
+  "prompts": {},
+  "sessions": {
+    "s_a0ba892d21e486": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2027e0a6-1ed1-4496-9186-7a24083f6964",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

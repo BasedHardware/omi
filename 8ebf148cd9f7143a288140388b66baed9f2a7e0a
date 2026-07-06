@@ -1,0 +1,26 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_d9b279e6f46a50::t_d9d7ae0fd60871 36-38
+  s_d9b279e6f46a50::t_9df742535659ac 11
+desktop/macos/Desktop/Sources/OmiApp.swift
+  s_d9b279e6f46a50::t_d4d98d21bb2339 606-613,616
+desktop/macos/Desktop/Sources/IMessageInboxStore.swift
+  s_d9b279e6f46a50::t_43d7c313a4dfd9 7-13
+desktop/macos/changelog/unreleased/20260703-imessage-auto-reply-app-wide.json
+  s_d9b279e6f46a50::t_35571bb18ecbdd 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8ebf148cd9f7143a288140388b66baed9f2a7e0a",
+  "prompts": {},
+  "sessions": {
+    "s_d9b279e6f46a50": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c954d140-dd18-484c-84c7-7e2bf1d146f9",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

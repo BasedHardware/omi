@@ -1,0 +1,28 @@
+desktop/macos/Desktop/Sources/WhatsAppSenderService.swift
+  s_51e027d4890829::t_3de62215fb5356 151-156,169-174,177-178,180
+  s_51e027d4890829::t_9c86f4080179b6 299-303,307-311
+  s_51e027d4890829::t_3aeb916047a45c 13-16,18-22
+  s_51e027d4890829::t_250c46dfc83ef9 54-60,62-65,69-71
+  s_51e027d4890829::t_5d76b5d47c4a06 33-36
+  s_51e027d4890829::t_9402157dd9dc73 82
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_51e027d4890829::t_25caa365a9c512 280-283,286
+desktop/macos/Desktop/Sources/WhatsAppReaderService.swift
+  s_51e027d4890829::t_aa78f7784c373f 157-167,169-170,174,180,184-185,198-199,202
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "f82e177d0654e426b54c7faae013e5e1499cfb61",
+  "prompts": {},
+  "sessions": {
+    "s_51e027d4890829": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "61e4d8cb-cb32-46e7-903c-106ed88e5fde",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

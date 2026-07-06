@@ -1,0 +1,19 @@
+backend/utils/llm/reply_draft.py
+  s_7568e58f73c9b6::t_88d2c92c0a8ebb 15,19,31-32,110-282,284-289,291-292,294-299,301-306,308,311-353,355-364
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ce0c480712e95bf8102dbe17b164a9f187d5db5f",
+  "prompts": {},
+  "sessions": {
+    "s_7568e58f73c9b6": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "edf3dee6-06ad-4599-bba1-f75570bb3d0c",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}

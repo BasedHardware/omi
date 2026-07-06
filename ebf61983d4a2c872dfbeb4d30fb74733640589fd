@@ -1,0 +1,19 @@
+backend/utils/llm/reply_draft.py
+  s_ddd71af34c629b::t_191e63c504a066 885-894,896-909
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ebf61983d4a2c872dfbeb4d30fb74733640589fd",
+  "prompts": {},
+  "sessions": {
+    "s_ddd71af34c629b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1d822f2-7dfc-4029-85b7-bfe6670f2ed6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
