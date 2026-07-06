@@ -238,7 +238,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                     'steps': [
                         {
                             'id': 'runtime-env',
-                            'run': 'python3 backend/scripts/render-backend-runtime-env.py --env dev',
+                            'run': 'python3 backend/scripts/render_backend_runtime_env.py --env dev',
                         },
                         {
                             'uses': 'google-github-actions/deploy-cloudrun@v2',

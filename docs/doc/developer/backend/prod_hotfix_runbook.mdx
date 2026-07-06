@@ -100,7 +100,7 @@ For listen-only chart changes, use `gcp_backend_listen_helm.yml` instead.
 
 ## Runtime env source of truth
 
-Cloud Run env and secret bindings are declared in `backend/deploy/runtime_env.yaml` and rendered by `backend/scripts/render-backend-runtime-env.py`. After changing the manifest, run `./scripts/pre-deploy-check.sh`.
+Cloud Run env and secret bindings are declared in `backend/deploy/runtime_env.yaml` and rendered by `backend/scripts/render_backend_runtime_env.py`. After changing the manifest, run `./scripts/pre-deploy-check.sh`.
 
 Prod Cloud Run intentionally omits `SERVICE_ACCOUNT_JSON` and `POSTHOG_PROJECT_API_KEY` bindings (#9164): those secrets are absent in prod Secret Manager and the runtime falls back to ADC / disables PostHog telemetry.
 

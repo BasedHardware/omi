@@ -60,3 +60,23 @@ def test_repair_command_format() -> None:
         'gcloud run services update-traffic backend '
         '--project=based-hardware --region=us-central1 --to-revisions=backend-good-1=100 --quiet'
     )
+
+
+def test_repair_from_state_accepts_top_level_service_list(tmp_path: Path) -> None:
+    state = json.loads((FIXTURES / 'cloud_run_spec_status_mismatch.json').read_text(encoding='utf-8'))
+    state_path = tmp_path / 'services.json'
+    state_path.write_text(json.dumps(state['services']), encoding='utf-8')
+
+    from scripts.repair_cloud_run_traffic import _load_state
+
+    loaded = _load_state(str(state_path))
+    results = repair_from_state(
+        loaded,
+        services=('backend',),
+        repair=False,
+        project='based-hardware',
+        region='us-central1',
+    )
+
+    assert len(results) == 1
+    assert results[0].action == 'failed'

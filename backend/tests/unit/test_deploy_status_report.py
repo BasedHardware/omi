@@ -154,5 +154,27 @@ def test_cloud_run_report_flags_spec_status_mismatch_and_emits_repair_command() 
     )
 
 
+def test_cloud_run_report_uses_state_project_region_when_cli_project_missing() -> None:
+    state = load_json(FIXTURES / 'cloud_run_spec_status_mismatch.json')
+    state = {**state, 'project': 'saved-project', 'region': 'europe-west1'}
+
+    _, findings = render_cloud_run_report(
+        state,
+        services=['backend'],
+        expected_traffic={},
+    )
+
+    assert (
+        Finding(
+            'FAIL',
+            'backend',
+            'spec.traffic (backend-failed-1) != status.traffic (backend-good-1); repair: '
+            'gcloud run services update-traffic backend --project=saved-project '
+            '--region=europe-west1 --to-revisions=backend-good-1=100 --quiet',
+        )
+        in findings
+    )
+
+
 def test_secret_key_verifier_reads_expected_keys_without_secret_values() -> None:
     assert expected_keys(FIXTURES / 'backend_secrets_values.yaml') == {'OPENAI_API_KEY', 'SENTINEL_FAKE_ONLY'}

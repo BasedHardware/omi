@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import argparse
-import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -10,6 +10,10 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import render_backend_runtime_env  # noqa: E402
+import repair_cloud_run_traffic  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -59,20 +63,22 @@ def main() -> int:
             print(f'secret preflight passed for {args.env}')
 
     if args.check_traffic or args.repair_traffic:
-        repair_module = _load_repair_module()
-        results = repair_module.repair_live(
+        results = repair_cloud_run_traffic.repair_live(
             project=args.project,
             region=args.region,
             services=services,
             repair=args.repair_traffic,
         )
         for result in results:
-            print(repair_module._format_result(result))
+            print(repair_cloud_run_traffic._format_result(result))
             if result.action == 'failed':
                 exit_code = 1
 
     if args.wait_revision_ready:
-        targets = _parse_revision_targets(args.wait_revision_ready)
+        try:
+            targets = _parse_revision_targets(args.wait_revision_ready)
+        except ValueError as exc:
+            parser.error(str(exc))
         for service, revision in targets.items():
             if not wait_revision_ready(
                 project=args.project,
@@ -89,20 +95,19 @@ def main() -> int:
 
 
 def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> list[SecretBinding]:
-    render_module = _load_render_module()
-    manifest = render_module._load_yaml(manifest_path)
-    environments = render_module._as_config_dict(manifest['environments']) or {}
-    env_config = render_module._as_config_dict(environments[env]) or {}
-    cloud_run = render_module._as_config_dict(env_config['cloud_run']) or {}
-    service_configs = render_module._as_config_dict(cloud_run.get('services')) or {}
+    manifest = render_backend_runtime_env._load_yaml(manifest_path)
+    environments = render_backend_runtime_env._as_config_dict(manifest['environments']) or {}
+    env_config = render_backend_runtime_env._as_config_dict(environments[env]) or {}
+    cloud_run = render_backend_runtime_env._as_config_dict(env_config['cloud_run']) or {}
+    service_configs = render_backend_runtime_env._as_config_dict(cloud_run.get('services')) or {}
 
     missing: list[SecretBinding] = []
     seen: set[tuple[str, str]] = set()
     for raw_service_config in service_configs.values():
-        service_config = render_module._as_config_dict(raw_service_config) or {}
-        secret_entries = render_module._as_config_dict(service_config.get('secrets')) or {}
+        service_config = render_backend_runtime_env._as_config_dict(raw_service_config) or {}
+        secret_entries = render_backend_runtime_env._as_config_dict(service_config.get('secrets')) or {}
         for env_name, raw_entry in secret_entries.items():
-            entry = render_module._as_config_dict(raw_entry)
+            entry = render_backend_runtime_env._as_config_dict(raw_entry)
             if entry is None or 'secret' not in entry:
                 continue
             binding = SecretBinding(
@@ -154,8 +159,6 @@ def _revision_ready_state(*, project: str, region: str, revision: str) -> tuple[
     result = subprocess.run(command, check=False, capture_output=True, text=True)
     if result.returncode != 0:
         return False, f'describe failed with exit code {result.returncode}'
-    import json
-
     revision_doc = cast(dict[str, Any], json.loads(result.stdout))
     conditions = cast(list[Any], revision_doc.get('status', {}).get('conditions') or [])
     ready_condition = next(
@@ -220,25 +223,12 @@ def _parse_revision_targets(entries: list[str]) -> dict[str, str]:
         if '=' not in entry:
             raise ValueError(f'revision target must be SERVICE=REVISION: {entry}')
         service, revision = entry.split('=', 1)
-        result[service.strip()] = revision.strip()
+        service = service.strip()
+        revision = revision.strip()
+        if not service or not revision:
+            raise ValueError(f'revision target must include non-empty SERVICE and REVISION: {entry}')
+        result[service] = revision
     return result
-
-
-def _load_module(name: str, path: Path):
-    spec = importlib.util.spec_from_file_location(name, path)
-    module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def _load_render_module():
-    return _load_module('render_backend_runtime_env', ROOT / 'backend/scripts/render-backend-runtime-env.py')
-
-
-def _load_repair_module():
-    return _load_module('repair_cloud_run_traffic', ROOT / 'backend/scripts/repair_cloud_run_traffic.py')
 
 
 if __name__ == '__main__':

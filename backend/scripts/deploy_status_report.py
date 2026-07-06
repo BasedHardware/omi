@@ -93,12 +93,14 @@ def main() -> int:
             )
         cloud_run_services = cast(list[str], args.cloud_run_services or list(DEFAULT_CLOUD_RUN_SERVICES))
         expected_traffic = parse_expected_traffic(args.expect_cloud_run_traffic)
+        report_project = args.project or ''
+        report_region = args.region
         section, cloud_findings = render_cloud_run_report(
             cloud_run_state,
             services=cloud_run_services,
             expected_traffic=expected_traffic,
-            project=args.project or '',
-            region=args.region,
+            project=report_project,
+            region=report_region,
         )
         sections.append(section)
         findings.extend(cloud_findings)
@@ -200,6 +202,8 @@ def render_cloud_run_report(
     project: str = '',
     region: str = DEFAULT_REGION,
 ) -> tuple[str, list[Finding]]:
+    project = project or str(state.get('project') or '')
+    region = str(state.get('region') or region)
     service_map = normalize_cloud_run_services(state)
     fetch_errors = cloud_run_fetch_errors_by_service(state)
     lines = [

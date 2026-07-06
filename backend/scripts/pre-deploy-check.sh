@@ -22,6 +22,14 @@ EOF
 }
 
 run_hermetic() {
+  if [[ -f .python-version ]]; then
+    expected="$(tr -d '[:space:]' < .python-version)"
+    actual="$(python3 --version 2>&1 | awk '{print $2}')"
+    if [[ "$actual" != "$expected" ]]; then
+      echo "ERROR: Python version mismatch: expected $expected from .python-version, got $actual" >&2
+      exit 1
+    fi
+  fi
   python3 -m pip install -q pyyaml pytest
   python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows --check-rendered-cloud-run

@@ -50,7 +50,13 @@ def main() -> int:
     services = tuple(args.services or DEFAULT_SERVICES)
     if args.state:
         state = _load_state(args.state)
-        results = repair_from_state(state, services=services, repair=args.repair)
+        results = repair_from_state(
+            state,
+            services=services,
+            repair=args.repair,
+            project=args.project,
+            region=args.region,
+        )
     else:
         results = repair_live(
             project=args.project,
@@ -88,12 +94,13 @@ def repair_live(
             )
         except subprocess.CalledProcessError as exc:
             print(f'ERROR [{service}]: traffic repair failed with exit code {exc.returncode}', file=sys.stderr)
+            state = analyze_service_traffic(service_doc, service=service)
             results.append(
                 RepairResult(
                     service=service,
                     action='failed',
-                    serving_revision=analyze_service_traffic(service_doc, service=service).serving_revision,
-                    spec_revision=analyze_service_traffic(service_doc, service=service).spec_revision,
+                    serving_revision=state.serving_revision,
+                    spec_revision=state.spec_revision,
                 )
             )
     return results
@@ -250,8 +257,10 @@ def _fetch_service(*, project: str, region: str, service: str) -> dict[str, Any]
 def _load_state(path: str) -> dict[str, Any]:
     with open(path, encoding='utf-8') as handle:
         loaded = json.load(handle)
+    if isinstance(loaded, list):
+        return {'services': loaded}
     if not isinstance(loaded, dict):
-        raise ValueError('state file must contain a JSON object')
+        raise ValueError('state file must contain a JSON object or list of services')
     return loaded
 
 

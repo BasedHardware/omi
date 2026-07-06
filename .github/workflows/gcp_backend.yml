@@ -139,6 +139,9 @@ jobs:
           echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
       - name: Render backend runtime env
         id: runtime-env
         env:
@@ -146,12 +149,10 @@ jobs:
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
         run: |
-          python3 -m pip install -q pyyaml
-          python3 backend/scripts/render-backend-runtime-env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
       - name: Preflight Cloud Run deploy
         run: |
-          python3 -m pip install -q pyyaml
           PREFLIGHT_ARGS=(
             --env ${{ vars.ENV }}
             --project ${{ vars.GCP_PROJECT_ID }}
@@ -166,7 +167,6 @@ jobs:
 
       - name: Validate backend runtime env before deploy
         run: |
-          python3 -m pip install -q pyyaml
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
 
       - name: Build and Push Docker image
@@ -241,9 +241,7 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
-        run: |
-          python3 -m pip install -q pyyaml
-          backend/scripts/deploy-backend-secrets.sh
+        run: backend/scripts/deploy-backend-secrets.sh
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE using Helm
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
@@ -292,7 +290,6 @@ jobs:
 
       - name: Validate backend runtime env after deploy
         run: |
-          python3 -m pip install -q pyyaml
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-live-cloud-run
 
       - name: Verify validated revisions are still current
@@ -310,6 +307,7 @@ jobs:
       - name: Cloud Run deploy status report
         if: always()
         run: |
+          set -o pipefail
           python3 backend/scripts/deploy_status_report.py \
             --env ${{ vars.ENV }} \
             --project ${{ vars.GCP_PROJECT_ID }} \
@@ -321,7 +319,7 @@ jobs:
             --expect-cloud-run-traffic backend=${{ steps.capture-backend-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
             --expect-cloud-run-traffic backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }} \
-            | tee /tmp/cloud-run-deploy-status.txt || true
+            | tee /tmp/cloud-run-deploy-status.txt
           if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
             {
               echo ""

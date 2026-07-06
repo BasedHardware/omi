@@ -46,7 +46,7 @@
         "scripts/rag/current.py",
         "scripts/rag/memories.py",
         "scripts/rag/memories_mem0.py",
-        "scripts/render-backend-runtime-env.py",
+        "scripts/render_backend_runtime_env.py",
         "scripts/reproduce_parakeet_oom.py",
         "scripts/rollout_schema_readiness.py",
         "scripts/scan_async_blockers.py",

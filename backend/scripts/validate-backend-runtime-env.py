@@ -562,7 +562,7 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
         if step_dict.get('id') != 'runtime-env':
             continue
         run = step_dict.get('run')
-        if not isinstance(run, str) or 'render-backend-runtime-env.py' not in run:
+        if not isinstance(run, str) or 'render_backend_runtime_env.py' not in run:
             continue
         rendered_env = _extract_renderer_env(run, env=env)
         if rendered_env is None:
