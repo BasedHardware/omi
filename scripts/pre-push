@@ -506,6 +506,26 @@ check_desktop_userdefaults_ratchet_if_needed() {
   python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
 }
 
+check_desktop_async_after_ratchet_if_needed() {
+  # BL-005 / S-14b: fail if new fixed-delay asyncAfter calls are added to the
+  # floating-bar / PTT sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_ASYNC_AFTER_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop asyncAfter ratchet because PRE_PUSH_SKIP_DESKTOP_ASYNC_AFTER_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/FloatingControlBar/*.swift' \
+    'desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift' \
+    'desktop/macos/scripts/check-async-after-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-async-after-ratchet.py
+}
+
 check_desktop_rust_if_needed() {
   local -a rust_files=()
   local file
@@ -595,6 +615,7 @@ run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
 run_step check_desktop_swift_if_needed
 run_step check_desktop_userdefaults_ratchet_if_needed
+run_step check_desktop_async_after_ratchet_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
