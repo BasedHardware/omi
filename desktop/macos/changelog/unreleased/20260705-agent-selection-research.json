@@ -1,0 +1,3 @@
+{
+  "change": "Refined automatic agent selection to prefer Claude Code for deep codebase tasks and Codex for terminal-native work"
+}

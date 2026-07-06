@@ -959,6 +959,7 @@ async function main(): Promise<void> {
   };
   const connectedTaskAdapterIds = async (): Promise<TaskExecutionAdapterId[]> => {
     const connected: TaskExecutionAdapterId[] = [];
+    if (defaultAdapterId === "acp" && registry.has("acp")) connected.push("acp");
     if (await ensureHermesAdapter()) connected.push("hermes");
     if (await ensureOpenClawAdapter()) connected.push("openclaw");
     if (await ensureCodexAdapter()) connected.push("codex");
@@ -1058,7 +1059,7 @@ async function main(): Promise<void> {
           query.adapterSelectionReason = selection?.reason;
           if (selection) {
             logErr(
-              `Adapter auto-selection selected=${selection.adapterId} reason=${selection.reason} codeLike=${selection.codeLike} connected=${selection.connectedAdapterIds.join(",") || "none"} fallback=${selection.fallbackAdapterIds.join(",") || "none"}`
+              `Adapter auto-selection selected=${selection.adapterId} reason=${selection.reason} taskKind=${selection.taskKind} codeLike=${selection.codeLike} connected=${selection.connectedAdapterIds.join(",") || "none"} fallback=${selection.fallbackAdapterIds.join(",") || "none"}`
             );
           }
           if (query.protocolVersion === 2 && !query.clientId?.trim()) {

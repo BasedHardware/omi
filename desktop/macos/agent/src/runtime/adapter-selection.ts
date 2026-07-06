@@ -14,11 +14,13 @@ export const ADAPTER_ACTIVATION_ENV = {
 } as const;
 
 export type SelectableAdapterId = keyof typeof ADAPTER_ACTIVATION_ENV;
-export const TASK_EXECUTION_ADAPTER_IDS = ["hermes", "openclaw", "codex"] as const;
+export const TASK_EXECUTION_ADAPTER_IDS = ["acp", "hermes", "openclaw", "codex"] as const;
 export type TaskExecutionAdapterId = typeof TASK_EXECUTION_ADAPTER_IDS[number];
 
-const CODE_TASK_ADAPTER_PRIORITY = ["codex", "hermes", "openclaw"] as const satisfies readonly TaskExecutionAdapterId[];
-const GENERAL_TASK_ADAPTER_PRIORITY = ["hermes", "openclaw", "codex"] as const satisfies readonly TaskExecutionAdapterId[];
+const DEEP_CODEBASE_TASK_ADAPTER_PRIORITY = ["acp", "codex", "hermes", "openclaw"] as const satisfies readonly TaskExecutionAdapterId[];
+const TERMINAL_NATIVE_TASK_ADAPTER_PRIORITY = ["codex", "acp", "hermes", "openclaw"] as const satisfies readonly TaskExecutionAdapterId[];
+const STRAIGHTFORWARD_CODE_TASK_ADAPTER_PRIORITY = ["codex", "acp", "hermes", "openclaw"] as const satisfies readonly TaskExecutionAdapterId[];
+const GENERAL_TASK_ADAPTER_PRIORITY = ["hermes", "openclaw", "codex", "acp"] as const satisfies readonly TaskExecutionAdapterId[];
 
 const CODE_RELATED_KEYWORD_PATTERN =
   /\b(bug|debug|fix|implement|implementation|function|method|class|struct|interface|test|tests|refactor|compile|build|lint|typescript|javascript|swift|python|rust|code|repo|stack trace|exception|regression|endpoint)\b/i;
@@ -27,12 +29,25 @@ const FILE_NAME_PATTERN =
 const FILE_PATH_PATTERN = /(^|[\s"'(])(?:\.{1,2}\/|~\/|\/|[A-Za-z0-9_.-]+\/)[^\s"'`]+\.[A-Za-z0-9]{1,8}(?=$|[\s"'),.:;])/;
 const INLINE_CODE_PATTERN = /```|`[^`]*(?:=>|function|class|def|import|const|let|var|return|\{|\})[^`]*`/i;
 const CODE_SYMBOL_PATTERN = /\b(function|func|class|struct|enum|interface|def|async|await|import|export|return|throws?)\b|[{};]\s*$/im;
+const CODE_IDENTIFIER_PATTERN =
+  /\b(?:[A-Za-z_$][\w$]*_[\w$]+|[a-z_$][\w$]*\d[\w$]*[A-Z][\w$]*|[a-z_$][\w$]*[A-Z][\w$]*\d[\w$]*)\b/;
+const CODEBASE_SCOPE_PATTERN =
+  /\b(?:multi[-\s]?file|codebase[-\s]?wide|repo(?:sitory)?[-\s]?wide|project[-\s]?wide|cross[-\s]?(?:file|module|service)|across\s+(?:the\s+)?(?:codebase|repo(?:sitory)?|project|files?|modules?|services?|packages?)|across\s+(?:these\s+|the\s+)?(?:\w+\s+){0,4}(?:files?|modules?|services?|packages?))\b/i;
+const DEEP_CODE_REASONING_PATTERN =
+  /\b(?:trace|root cause|debug(?:ging)?|hard bug|race condition|deadlock|regression|architecture|architectural|plan|planning|design|understand\s+how|interact(?:ion)?|data flow|control flow|call graph|dependency graph|decouple|restructure|redesign|modulari[sz]e)\b/i;
+const TERMINAL_NATIVE_TASK_PATTERN =
+  /\b(?:ci\/cd|ci|github actions?|workflow|pipeline|docker|kubernetes|k8s|deploy(?:ment)?|release|migration|migrations|dependency|dependencies|lockfile|package-lock|pnpm-lock|yarn\.lock|npm|pnpm|yarn|brew|shell|bash|zsh|terminal|cli|script|makefile|generate\s+(?:docs?|documentation|readme|changelog)|documentation|readme|changelog)\b/i;
+const RUN_TECHNICAL_ARTIFACT_PATTERN =
+  /\b(?:run|execute|apply)\b[\s\S]{0,80}\b(?:script|command|migration|migrations|test|tests|build|lint|typecheck|workflow|pipeline)\b/i;
+
+export type AdapterSelectionTaskKind = "deep_codebase" | "terminal_devops" | "straightforward_code" | "general";
 
 export interface AdapterAutoSelectionResult {
   adapterId: string;
   fallbackAdapterIds: TaskExecutionAdapterId[];
   reason: string;
   codeLike: boolean;
+  taskKind: AdapterSelectionTaskKind;
   connectedAdapterIds: TaskExecutionAdapterId[];
 }
 
@@ -128,8 +143,28 @@ export function taskTextLooksCodeRelated(text: string): boolean {
     FILE_NAME_PATTERN.test(trimmed) ||
     FILE_PATH_PATTERN.test(trimmed) ||
     INLINE_CODE_PATTERN.test(trimmed) ||
-    CODE_SYMBOL_PATTERN.test(trimmed)
+    CODE_SYMBOL_PATTERN.test(trimmed) ||
+    CODE_IDENTIFIER_PATTERN.test(trimmed)
   );
+}
+
+function taskTextLooksDeepCodebaseRelated(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return CODEBASE_SCOPE_PATTERN.test(trimmed) || (DEEP_CODE_REASONING_PATTERN.test(trimmed) && taskTextLooksCodeRelated(trimmed));
+}
+
+function taskTextLooksTerminalNative(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return TERMINAL_NATIVE_TASK_PATTERN.test(trimmed) || RUN_TECHNICAL_ARTIFACT_PATTERN.test(trimmed);
+}
+
+export function classifyTaskForAdapterSelection(text: string): AdapterSelectionTaskKind {
+  if (taskTextLooksDeepCodebaseRelated(text)) return "deep_codebase";
+  if (taskTextLooksTerminalNative(text)) return "terminal_devops";
+  if (taskTextLooksCodeRelated(text)) return "straightforward_code";
+  return "general";
 }
 
 export function selectBestAdapterForTask(input: {
@@ -138,7 +173,15 @@ export function selectBestAdapterForTask(input: {
   connectedAdapterIds: readonly TaskExecutionAdapterId[];
 }): AdapterAutoSelectionResult {
   const codeLike = taskTextLooksCodeRelated(input.prompt);
-  const priority = codeLike ? CODE_TASK_ADAPTER_PRIORITY : GENERAL_TASK_ADAPTER_PRIORITY;
+  const taskKind = classifyTaskForAdapterSelection(input.prompt);
+  const priority =
+    taskKind === "deep_codebase"
+      ? DEEP_CODEBASE_TASK_ADAPTER_PRIORITY
+      : taskKind === "terminal_devops"
+        ? TERMINAL_NATIVE_TASK_ADAPTER_PRIORITY
+        : taskKind === "straightforward_code"
+          ? STRAIGHTFORWARD_CODE_TASK_ADAPTER_PRIORITY
+          : GENERAL_TASK_ADAPTER_PRIORITY;
   const connected = new Set(input.connectedAdapterIds);
   const connectedAdapterIds = TASK_EXECUTION_ADAPTER_IDS.filter((adapterId) => connected.has(adapterId));
   const selectedAdapterId = priority.find((adapterId) => connected.has(adapterId));
@@ -148,14 +191,16 @@ export function selectBestAdapterForTask(input: {
       fallbackAdapterIds: [],
       reason: "default_no_connected_task_adapters",
       codeLike,
+      taskKind,
       connectedAdapterIds,
     };
   }
   return {
     adapterId: selectedAdapterId,
     fallbackAdapterIds: priority.filter((adapterId) => adapterId !== selectedAdapterId && connected.has(adapterId)),
-    reason: `${codeLike ? "code" : "general"}_task_${selectedAdapterId}`,
+    reason: `${taskKind}_task_${selectedAdapterId}`,
     codeLike,
+    taskKind,
     connectedAdapterIds,
   };
 }
