@@ -5,6 +5,11 @@ private let logFile: String = {
   let isDev = AppBuild.isNonProduction
   return isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
 }()
+/// The on-disk app-log path for the current build. Single source of truth for
+/// the log location so callers (feedback export, diagnostics bundle) don't
+/// re-derive it. Owner-only permissions are enforced by `ensureLogFileOwnerOnly`.
+func omiLogFilePath() -> String { logFile }
+
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
   let formatter = DateFormatter()
@@ -29,8 +34,32 @@ private func appendToLogFileSync(_ line: String) {
   }
 }
 
+/// Create the file at `path` (if missing) or tighten an existing file so it is
+/// readable and writable only by its owner (0600).
+///
+/// The log lives in the shared, world-readable `/tmp` directory and can contain
+/// UIDs, request context, and operational detail, so other local users must not
+/// be able to read it (BL-024 / SET-06). Idempotent and safe to call repeatedly.
+@discardableResult
+func ensureLogFileOwnerOnly(atPath path: String) -> Bool {
+  let fileManager = FileManager.default
+  if fileManager.fileExists(atPath: path) {
+    // Tighten files created by older builds (or a create without attributes).
+    return (try? fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)) != nil
+  }
+  return fileManager.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
+}
+
+/// Guards the one-time permission normalization. Mutated only on the serial
+/// `logQueue` (every writer hops through it), so it needs no extra locking.
+private var didEnsureLogFilePermissions = false
+
 /// Shared file-write implementation (must be called on logQueue)
 private func writeToLogFile(_ data: Data) {
+  if !didEnsureLogFilePermissions {
+    didEnsureLogFilePermissions = true
+    ensureLogFileOwnerOnly(atPath: logFile)
+  }
   if FileManager.default.fileExists(atPath: logFile) {
     if let handle = FileHandle(forWritingAtPath: logFile) {
       handle.seekToEndOfFile()
@@ -38,7 +67,9 @@ private func writeToLogFile(_ data: Data) {
       handle.closeFile()
     }
   } else {
-    FileManager.default.createFile(atPath: logFile, contents: data)
+    // Recreate owner-only if the file was removed mid-session.
+    FileManager.default.createFile(
+      atPath: logFile, contents: data, attributes: [.posixPermissions: 0o600])
   }
 }
 
