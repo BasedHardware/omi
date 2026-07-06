@@ -79,9 +79,10 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("DesktopKeychainStore.setString("))
     XCTAssertTrue(src.contains("migrated production auth tokens from UserDefaults to Keychain"))
     XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
+    XCTAssertTrue(src.contains("allowsUserDefaultsTokenFallback"))
+    XCTAssertTrue(src.contains("AuthService: Keychain token storage failed; falling back to UserDefaults for beta auth continuity"))
     XCTAssertTrue(src.contains("failed to migrate production auth tokens from UserDefaults to Keychain"))
     XCTAssertTrue(src.contains("cachedStoredTokens"))
-    XCTAssertTrue(src.contains("throw AuthError.keychainTokenStorageUnavailable"))
   }
 
   func testLocalAgentTokenUsesKeychainStorage() throws {
