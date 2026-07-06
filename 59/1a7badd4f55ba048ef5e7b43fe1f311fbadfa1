@@ -1,0 +1,19 @@
+mockup/web/index.html
+  s_751b5889fd7450::t_d3155be57374d1 6,12,17-18,20,22-26,31-43,53-57,60,63-64,84-136,140,143,145-149,152-162,164-167,169-171,173-175,177,185-191,193,201-203,206,210-211,214,224-231,236,245-256,259,263-267,273-315,318-322,324-325,329,331-343,351-354,360-382,384,398-410,412-413
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "591a7badd4f55ba048ef5e7b43fe1f311fbadfa1",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
