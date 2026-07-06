@@ -274,7 +274,7 @@ enum RealtimeHubTools {
   private static func countMatchingLines(in cwd: String, pattern: String) -> Int {
     let result = runBounded(
       executable: "/bin/bash",
-      args: ["-c", "git diff --unused=0 | grep -cE '\(pattern)' 2>/dev/null || true"],
+      args: ["-c", "git diff --unified=0 | grep -cE '\(pattern)' 2>/dev/null || true"],
       in: cwd
     )
     return Int(result.output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
