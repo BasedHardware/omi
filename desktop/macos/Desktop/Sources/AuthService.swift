@@ -1722,11 +1722,20 @@ class AuthService {
         }
 
         let apiKey = try requireFirebaseApiKey()
-        guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
-            throw AuthError.invalidURL
+        let refreshURL: URL
+        if let hostPort = DesktopLocalProfile.authEmulatorHost {
+            guard let url = URL(string: "http://\(hostPort)/securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
+                throw AuthError.invalidURL
+            }
+            refreshURL = url
+        } else {
+            guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
+                throw AuthError.invalidURL
+            }
+            refreshURL = url
         }
 
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: refreshURL)
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         request.httpBody = "grant_type=refresh_token&refresh_token=\(refreshToken)".data(using: .utf8)
@@ -1748,6 +1757,13 @@ class AuthService {
                 || errorBody.contains("USER_DISABLED")
                 || httpResponse.statusCode == 400
             if isDefinitiveAuthFailure {
+                if DesktopLocalProfile.isEnabled {
+                    NSLog("OMI AUTH LOCAL: refresh failed — re-bootstrapping emulator session")
+                    await bootstrapLocalHarnessAuthIfNeeded()
+                    if let token = storedIdToken, !isTokenExpired {
+                        return token
+                    }
+                }
                 NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
                 clearTokens()
                 // Also clear auth state so the UI shows sign-in instead of a ghost session
@@ -1826,7 +1842,8 @@ class AuthService {
 
         // Third try: Use Firebase SDK (only if user matches expected user)
         // This prevents returning a stale user's token during sign-out race conditions
-        if let user = Auth.auth().currentUser {
+        // Local harness skips FirebaseApp.configure(); Auth.auth() traps if called.
+        if !DesktopLocalProfile.isEnabled, let user = Auth.auth().currentUser {
             if expectedUserId == nil || user.uid == expectedUserId {
                 if expectedUserId == nil {
                     // Backfill the missing userId

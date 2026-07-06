@@ -366,7 +366,10 @@ case "$TIER" in
     echo "desktop-core-harness: start bundle first, e.g. OMI_APP_NAME=$BUNDLE ./run.sh" >&2
     exit 1
   }
-  mapfile -t FLOW_PATHS < <(flows_for_max_tier "$TIER")
+  FLOW_PATHS=()
+  while IFS= read -r flow_path; do
+    [[ -n "$flow_path" ]] && FLOW_PATHS+=("$flow_path")
+  done < <(flows_for_max_tier "$TIER")
   for flow_path in "${FLOW_PATHS[@]}"; do
   [[ -f "$flow_path" ]] || continue
   flow_name="$(basename "$flow_path" .yaml)"
