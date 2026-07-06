@@ -1506,7 +1506,12 @@ final class DesktopAutomationBridge {
     guard let authorization else {
       return false
     }
-    let supplied = authorization.hasPrefix("Bearer ") ? String(authorization.dropFirst(7)) : authorization
+    let supplied: String
+    if authorization.lowercased().hasPrefix("bearer ") {
+      supplied = String(authorization.dropFirst(7))
+    } else {
+      supplied = authorization
+    }
     return constantTimeEquals(supplied, DesktopAutomationLaunchOptions.token)
   }
 

@@ -367,6 +367,14 @@ class AuthService {
         let tokenUserId: String
     }
 
+    private var cachedStoredTokens: StoredAuthTokens?
+    private var cachedStoredTokensLoaded = false
+
+    private func invalidateStoredTokensCache() {
+        cachedStoredTokens = nil
+        cachedStoredTokensLoaded = false
+    }
+
     // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
     // No hardcoded fallback — if the key isn't available, auth operations will fail
     // with a clear error instead of silently using a potentially wrong key.
@@ -1639,12 +1647,14 @@ class AuthService {
             // Store the user ID that owns these tokens (for validation on retrieval)
             UserDefaults.standard.set(userId, forKey: .authTokenUserId)
         }
+        invalidateStoredTokensCache()
         NSLog("OMI AUTH: Saved tokens for user %@, expires at %@", userId, expiryTime.description)
     }
 
     private func clearTokens() {
         DesktopKeychainStore.delete(service: authTokenKeychainService, account: authTokenKeychainAccount)
         clearUserDefaultsTokens()
+        invalidateStoredTokensCache()
         NSLog("OMI AUTH: Cleared all tokens")
     }
 
@@ -1716,22 +1726,34 @@ class AuthService {
     }
 
     private func storedTokens() -> StoredAuthTokens? {
-        if usesKeychainTokenStorage {
-            if let tokens = loadKeychainTokens() {
-                return tokens
-            }
-            guard let defaultsTokens = loadUserDefaultsTokens() else {
-                return nil
-            }
-            guard saveKeychainTokens(defaultsTokens) else {
-                log("AuthService: failed to migrate production auth tokens from UserDefaults to Keychain")
-                return nil
-            }
-            clearUserDefaultsTokens()
-            log("AuthService: migrated production auth tokens from UserDefaults to Keychain")
-            return defaultsTokens
+        if cachedStoredTokensLoaded {
+            return cachedStoredTokens
         }
-        return loadUserDefaultsTokens()
+
+        let tokens: StoredAuthTokens?
+        if usesKeychainTokenStorage {
+            if let keychainTokens = loadKeychainTokens() {
+                tokens = keychainTokens
+            } else if let defaultsTokens = loadUserDefaultsTokens() {
+                if saveKeychainTokens(defaultsTokens) {
+                    clearUserDefaultsTokens()
+                    log("AuthService: migrated production auth tokens from UserDefaults to Keychain")
+                    tokens = defaultsTokens
+                } else {
+                    clearUserDefaultsTokens()
+                    log("AuthService: failed to migrate production auth tokens from UserDefaults to Keychain")
+                    tokens = nil
+                }
+            } else {
+                tokens = nil
+            }
+        } else {
+            tokens = loadUserDefaultsTokens()
+        }
+
+        cachedStoredTokens = tokens
+        cachedStoredTokensLoaded = true
+        return tokens
     }
 
     private var storedIdToken: String? {

@@ -1,6 +1,17 @@
 import Foundation
 import Network
 
+enum LocalAgentAPIError: LocalizedError {
+  case tokenStorageUnavailable
+
+  var errorDescription: String? {
+    switch self {
+    case .tokenStorageUnavailable:
+      return "Couldn't save the local agent token securely."
+    }
+  }
+}
+
 enum LocalAgentAPISettings {
   static let defaultPort: UInt16 = 47778
 
@@ -42,29 +53,30 @@ enum LocalAgentAPISettings {
       log("LocalAgentAPISettings: migrated token from UserDefaults to Keychain")
       return token
     }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
     log("LocalAgentAPISettings: failed to migrate token to Keychain")
     return nil
   }
 
-  static func ensureToken() -> String {
+  static func ensureToken() throws -> String {
     if let token = storedToken() {
       return token
     }
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
     guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
       log("LocalAgentAPISettings: failed to save token to Keychain")
-      return ""
+      throw LocalAgentAPIError.tokenStorageUnavailable
     }
     UserDefaults.standard.removeObject(forKey: tokenKey)
     return token
   }
 
-  static func createNewToken() -> String {
+  static func createNewToken() throws -> String {
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
     guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
       isEnabled = false
       log("LocalAgentAPISettings: failed to save replacement token to Keychain")
-      return ""
+      throw LocalAgentAPIError.tokenStorageUnavailable
     }
     UserDefaults.standard.removeObject(forKey: tokenKey)
     isEnabled = true
@@ -72,12 +84,8 @@ enum LocalAgentAPISettings {
     return token
   }
 
-  static func enable() -> String {
-    let token = ensureToken()
-    guard !token.isEmpty else {
-      isEnabled = false
-      return ""
-    }
+  static func enable() throws -> String {
+    let token = try ensureToken()
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token

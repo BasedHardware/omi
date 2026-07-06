@@ -79,6 +79,8 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("DesktopKeychainStore.setString("))
     XCTAssertTrue(src.contains("migrated production auth tokens from UserDefaults to Keychain"))
     XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
+    XCTAssertTrue(src.contains("failed to migrate production auth tokens from UserDefaults to Keychain"))
+    XCTAssertTrue(src.contains("cachedStoredTokens"))
     XCTAssertTrue(src.contains("throw AuthError.keychainTokenStorageUnavailable"))
   }
 
@@ -88,7 +90,16 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("tokenKeychainService"))
     XCTAssertTrue(src.contains("DesktopKeychainStore.string(service: tokenKeychainService"))
     XCTAssertTrue(src.contains("DesktopKeychainStore.setString(token, service: tokenKeychainService"))
+    XCTAssertTrue(src.contains("enum LocalAgentAPIError"))
+    XCTAssertTrue(src.contains("throw LocalAgentAPIError.tokenStorageUnavailable"))
     XCTAssertFalse(src.contains("UserDefaults.standard.set(token, forKey: tokenKey)"))
+  }
+
+  func testDesktopKeychainStoreUsesDataProtectionKeychain() throws {
+    let src = try source(relativePath: "Sources/DesktopKeychainStore.swift")
+
+    XCTAssertTrue(src.contains("kSecUseDataProtectionKeychain"))
+    XCTAssertTrue(src.contains("useDataProtectionKeychain: true"))
   }
 
   func testDesktopAutomationBridgeIsNonProductionAndAuthenticated() throws {
@@ -102,6 +113,7 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("authenticate(request.headers[\"authorization\"])"))
     XCTAssertTrue(src.contains("invalid_or_missing_automation_token"))
     XCTAssertTrue(src.contains("constantTimeEquals"))
+    XCTAssertTrue(src.contains("authorization.lowercased().hasPrefix(\"bearer \")"))
     XCTAssertTrue(src.contains("DesktopAutomationHealth"))
     XCTAssertTrue(src.contains("requiresAuth: true"))
   }

@@ -173,7 +173,10 @@ token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
 if not token:
     token_file = Path(os.environ.get("OMI_AUTOMATION_TOKEN_FILE") or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token"))
     if token_file.exists():
-        token = token_file.read_text(encoding="utf-8").strip()
+        try:
+            token = token_file.read_text(encoding="utf-8").strip()
+        except OSError as exc:
+            raise SystemExit(f"automation bridge token unavailable on port {port}: {exc}")
 try:
     request = urllib.request.Request(f"http://127.0.0.1:{port}/health")
     if token:
