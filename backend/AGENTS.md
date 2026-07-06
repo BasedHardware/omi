@@ -135,11 +135,20 @@ bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
 ```
 
-**New test files must be added to `test.sh`** or they won't run in CI.
+**Tests are auto-discovered.** Any test file under `tests/unit/`, `tests/services/`, or `tests/routers/` runs in CI and in local `test.sh` runs — both use `scripts/select_backend_unit_tests.py`, so the local and CI test sets cannot drift. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is never auto-discovered; note in the PR how you ran them.
 
 **Test isolation / import purity** — never mutate `sys.modules` at module scope in tests; production modules must not construct clients or do IO at import time. Sanctioned seams: `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides`. Enforced by `python scripts/check_module_stub_pollution.py` and `python scripts/scan_import_time_side_effects.py`. Full prescription: `backend/docs/test_isolation.md`.
 
 Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
+
+## Self-Testing a Change (run the real path)
+
+A passing unit test is not the same as exercising the endpoint. Before putting a change in a PR:
+
+1. **Serve locally**: `./scripts/dev-serve.sh` (per-worktree port) or `uvicorn main:app --port 8080`. No GCP credentials? Use the offline harness — `PROVIDER_MODE=offline make dev-up` from the repo root (fake providers, no external services).
+2. **Authenticate without a client**: set `ADMIN_KEY` in `.env`, then call endpoints as any uid with `Authorization: Bearer <ADMIN_KEY><uid>` (the key concatenated with the uid).
+3. **Hit the changed endpoints** with curl and read the server logs — verify the behavior changed as intended, not just that the route returns 200.
+4. **Record the commands and output** in the PR description (root `AGENTS.md` → Definition of Done).
 
 ## Formatting
 

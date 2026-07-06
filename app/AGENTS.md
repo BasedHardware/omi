@@ -80,8 +80,9 @@ Set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/` for local backend tests
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
-- Prefer focused unit, widget, provider, and hermetic tests that run in CI.
-- Keep live-service integration tests off CI; they are acceptable only when self-driven by agents, documented, and not required for normal validation.
+- Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
+- A test that needs a live service or device goes under `integration_test/`, which `test.sh`/CI never runs. State in the PR how you ran it; it must not be the only evidence the change works.
+- Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
 
 ## Localization (l10n)
 
