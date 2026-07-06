@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.35",
+      "date": "2026-07-06",
+      "changes": [
+        "Improved desktop reliability by modularizing shared theme, support, and sync code"
+      ]
+    },
+    {
       "version": "0.12.34",
       "date": "2026-07-06",
       "changes": [
