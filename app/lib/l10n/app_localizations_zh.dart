@@ -8307,12 +8307,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 
@@ -9033,11 +9028,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音可同步',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音可同步');
     return '$_temp0';
   }
 
@@ -9049,11 +9040,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音需要关注',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音需要关注');
     return '$_temp0';
   }
 
@@ -9171,7 +9158,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
 
   @override
-  String get transcribeLaterNote => '目前仅支持 Omi 设备。在你主动上传之前，音频会一直保留在手机上。';
+  String get transcribeLaterNote => '目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
@@ -9319,4 +9306,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get flashFirmware => '刷写固件';
+
+  @override
+  String get pendantRecordingTitle => '吊坠录音中';
+
+  @override
+  String get pendantRecordingNote => '你的吊坠会自行录音。应用打开时，录音会同步到手机。';
+
+  @override
+  String get pendantSyncingRecordings => '正在从吊坠同步录音…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes 分钟已存储';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '吊坠存储空间即将用尽——请保持应用打开以同步。';
 }

@@ -1714,12 +1714,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8458,12 +8453,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9342,7 +9332,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'فعلاً فقط با دستگاه‌های Omi کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
+      'فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9492,4 +9482,22 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'فلش کردن میان‌افزار';
+
+  @override
+  String get pendantRecordingTitle => 'در حال ضبط روی آویز';
+
+  @override
+  String get pendantRecordingNote =>
+      'آویز شما به‌صورت مستقل ضبط می‌کند. تا وقتی برنامه باز است، ضبط‌ها با گوشی شما همگام‌سازی می‌شوند.';
+
+  @override
+  String get pendantSyncingRecordings => 'در حال همگام‌سازی ضبط‌ها از آویز شما…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes دقیقه ذخیره شده';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید.';
 }

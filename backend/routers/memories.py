@@ -50,6 +50,17 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+
+class MemoryMutationResponse(BaseModel):
+    status: str
+
+
+class ReviewResolutionResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    status: str
+
+
 # Hard cap on memories per batch request. Keep aligned with the corresponding
 # Pydantic max_length validator below and with the Swift client chunker.
 MEMORIES_BATCH_MAX = 100
@@ -62,10 +73,14 @@ _MEMORY_GET_ALLOWLISTED_RESPONSE_HEADERS = frozenset(
         'X-Omi-Memory-Read-Decision',
         'X-Omi-Memory-Next-Cursor',
         'X-Omi-Memory-Device-Scope-Supported',
+        'X-Omi-Memory-Canonical-Lifecycle-Exposed',
         'Link',
         'Cache-Control',
     }
 )
+
+_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER = 'X-Omi-Memory-Canonical-Lifecycle-Exposed'
+_MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER = 'X-Omi-Memory-Device-Scope-Supported'
 
 
 @dataclass(frozen=True)
@@ -201,7 +216,10 @@ def _legacy_memories_response(memories: List[MemoryDB]) -> JSONResponse:
     return memory_list_response(
         memories,
         MemoryApiExposure.LEGACY,
-        headers={'X-Omi-Memory-Device-Scope-Supported': 'false'},
+        headers={
+            _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
+            _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+        },
     )
 
 
@@ -273,7 +291,18 @@ def _validate_device_scope_request(device_scope: str, resolved_device_id: Option
 
 
 def _set_device_scope_capability_header(http_response: Response, *, supported: bool) -> None:
-    http_response.headers['X-Omi-Memory-Device-Scope-Supported'] = 'true' if supported else 'false'
+    http_response.headers[_MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER] = 'true' if supported else 'false'
+
+
+def _set_canonical_lifecycle_exposure_header(http_response: Response, *, exposed: bool) -> None:
+    http_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = 'true' if exposed else 'false'
+
+
+def _canonical_lifecycle_exposed_for(memory_response: V3ComposedResponse) -> bool:
+    return memory_response.http_status == 200 and memory_response.source in {
+        'memory',
+        'memory_compatibility_projection',
+    }
 
 
 def _canonical_write_enabled_or_fail_closed(uid: str, *, db_client) -> bool:
@@ -448,7 +477,7 @@ async def create_memories_batch(
                 )
         committed_ids: List[str] = []
         for memory_db in memory_dbs:
-            payload = memory_db.dict()
+            payload = memory_db.model_dump()
             if memory_db.manually_added:
                 payload = required_promotion_payload(payload, source_surface="v3_manual")
             committed_id = await run_blocking(db_executor, memory_service.write, uid, payload)
@@ -574,11 +603,16 @@ def get_memories(
         raise HTTPException(
             status_code=400,
             detail='device_scope filtering is only supported for canonical memory users',
+            headers={
+                _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'false',
+                _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'false',
+            },
         )
 
     if is_canonical:
         _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
+        _set_canonical_lifecycle_exposure_header(response, exposed=True)
         # Clamp pagination parameters so the canonical branch (which bypasses
         # _legacy_get_memories clamping) never receives values that would
         # slice the visible list incorrectly — e.g. limit=-1 returning nearly
@@ -603,6 +637,7 @@ def get_memories(
         return _legacy_memories_response(_legacy_get_memories(uid, limit, offset))
 
     _set_device_scope_capability_header(response, supported=False)
+    _set_canonical_lifecycle_exposure_header(response, exposed=False)
 
     if memory_runtime.service is None:
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=malformed_runtime_dependency")
@@ -614,6 +649,11 @@ def get_memories(
         logger.info("v3_get route=GET /v3/memories source=none status=503 decision=adapter_contract")
         raise HTTPException(status_code=503, detail='infrastructure_failure')
 
+    canonical_lifecycle_exposed = _canonical_lifecycle_exposed_for(memory_response)
+    memory_response.headers[_MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER] = 'true' if canonical_lifecycle_exposed else 'false'
+    memory_response.headers[_MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER] = (
+        'true' if canonical_lifecycle_exposed else 'false'
+    )
     _apply_memory_response_headers(response, memory_response)
     logger.info(
         "v3_get route=GET /v3/memories source=%s status=%s decision=%s",
@@ -625,10 +665,11 @@ def get_memories(
         _raise_memory_http_exception(memory_response)
     headers = _memory_allowlisted_headers(memory_response)
     headers['Cache-Control'] = 'no-store'
-    return memory_list_response(memory_response.body or [], MemoryApiExposure.CANONICAL, headers=headers)
+    exposure = MemoryApiExposure.CANONICAL if canonical_lifecycle_exposed else MemoryApiExposure.LEGACY
+    return memory_list_response(memory_response.body or [], exposure, headers=headers)
 
 
-@router.get('/v3/memories/review-queue', tags=['memories'])
+@router.get('/v3/memories/review-queue', tags=['memories'], response_model=List[Dict[str, Any]])
 def list_memory_review_queue(
     status: str = Query('pending'),
     limit: int = Query(100, ge=1, le=500),
@@ -637,7 +678,35 @@ def list_memory_review_queue(
     return review_queue.list_review_conflicts(uid, status=status, limit=limit)
 
 
-@router.post('/v3/memories/review-queue/{review_id}/resolve', tags=['memories'])
+class MemoryReviewItemResponse(BaseModel):
+    model_config = {"extra": "allow"}
+
+    review_id: str
+    status: str = 'pending'
+
+
+@router.get('/v3/memories/review-queue/{review_id}', response_model=MemoryReviewItemResponse, tags=['memories'])
+def get_memory_review_item(
+    review_id: str,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:review")),
+):
+    """Fetch a single memory review conflict by id.
+
+    The list endpoint only returns conflicts in the 'pending' status, so once a conflict is
+    resolved it can no longer be retrieved. This fetches any of the user's review conflicts
+    by id regardless of status, returning 404 if it does not exist.
+    """
+    conflict = review_queue.get_review_conflict(uid, review_id)
+    if conflict is None:
+        raise HTTPException(status_code=404, detail='Review item not found')
+    return conflict
+
+
+@router.post(
+    '/v3/memories/review-queue/{review_id}/resolve',
+    tags=['memories'],
+    response_model=ReviewResolutionResponse,
+)
 def resolve_memory_review_item(
     review_id: str,
     request: ReviewResolutionRequest,
@@ -658,7 +727,7 @@ def resolve_memory_review_item(
     return result
 
 
-@router.delete('/v3/memories/{memory_id}', tags=['memories'])
+@router.delete('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memory(
     memory_id: str,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete")),
@@ -680,7 +749,7 @@ def delete_memory(
     return {'status': 'ok'}
 
 
-@router.delete('/v3/memories', tags=['memories'])
+@router.delete('/v3/memories', tags=['memories'], response_model=MemoryMutationResponse)
 def delete_memories(
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "memories:delete_all")),
 ):
@@ -711,7 +780,7 @@ def delete_memories(
     return {'status': 'ok'}
 
 
-@router.post('/v3/memories/{memory_id}/review', tags=['memories'])
+@router.post('/v3/memories/{memory_id}/review', tags=['memories'], response_model=MemoryMutationResponse)
 def review_memory(
     memory_id: str,
     value: bool,
@@ -727,7 +796,7 @@ def review_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}', tags=['memories'])
+@router.patch('/v3/memories/{memory_id}', tags=['memories'], response_model=MemoryMutationResponse)
 def edit_memory(
     memory_id: str,
     value: str,
@@ -753,7 +822,7 @@ def edit_memory(
     return {'status': 'ok'}
 
 
-@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'])
+@router.patch('/v3/memories/{memory_id}/visibility', tags=['memories'], response_model=MemoryMutationResponse)
 def update_memory_visibility(
     memory_id: str,
     value: str,

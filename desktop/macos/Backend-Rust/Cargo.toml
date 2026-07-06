@@ -7,7 +7,7 @@ edition = "2021"
 # Web framework
 axum = "0.7"
 tokio = { version = "1", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace"] }
+tower-http = { version = "0.5", features = ["cors", "trace", "catch-panic"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

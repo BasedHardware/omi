@@ -1716,12 +1716,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'IERĪCES',
-      one: 'IERĪCE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'IERĪCES', one: 'IERĪCE');
     return '$count $_temp0 ATRASTAS TUVUMĀ';
   }
 
@@ -9362,7 +9357,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
+      'Pagaidām darbojas ar Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9512,4 +9507,22 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Instalēt aparātprogrammatūru';
+
+  @override
+  String get pendantRecordingTitle => 'Ierakstīšana kulonā';
+
+  @override
+  String get pendantRecordingNote =>
+      'Jūsu kulons ieraksta patstāvīgi. Ieraksti tiek sinhronizēti ar jūsu tālruni, kamēr lietotne ir atvērta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Notiek ierakstu sinhronizēšana no jūsu kulona…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min saglabāts';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu.';
 }

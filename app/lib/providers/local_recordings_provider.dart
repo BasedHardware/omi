@@ -117,10 +117,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
       final seen = <String>{};
       for (final entity in dir.listSync().whereType<File>()) {
         final name = entity.path.split('/').last;
-        // Only batch recordings (audio_omibatch_*) — never offline-sync WAL flushes,
-        // which share this directory and the same audio_*.bin naming. The native
-        // writer stamps the `batchRecordingDevice` marker into the device segment.
-        if (!name.startsWith('audio_${batchRecordingDevice}_') || !name.endsWith('.bin')) continue;
+        // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
+        // marker) — never offline-sync WAL flushes, which share this directory and
+        // the same audio_*.bin naming.
+        if (!name.startsWith('audio_$batchRecordingDevice') || !name.endsWith('.bin')) continue;
         final size = await entity.length();
         seen.add(name);
         final rec = LocalRecording.fromFile(
@@ -340,16 +340,16 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// playback). Never stored anywhere. `filePath` is the relative name, which
   /// `Wal.getFilePath` resolves against the app documents dir (== batchAudioDir).
   Wal _walFor(LocalRecording r) => Wal(
-        timerStart: r.timerStart,
-        codec: r.codec,
-        seconds: r.seconds,
-        sampleRate: 16000,
-        channel: 1,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        filePath: r.fileName,
-        device: batchRecordingDevice,
-      );
+    timerStart: r.timerStart,
+    codec: r.codec,
+    seconds: r.seconds,
+    sampleRate: 16000,
+    channel: 1,
+    status: WalStatus.miss,
+    storage: WalStorage.disk,
+    filePath: r.fileName,
+    device: batchRecordingDevice,
+  );
 
   String? get currentPlayingId => _audio.currentPlayingId;
   bool get isProcessingAudio => _audio.isProcessingAudio;

@@ -1718,12 +1718,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANGKAT',
-      one: 'PERANGKAT',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANGKAT', one: 'PERANGKAT');
     return '$count $_temp0 DITEMUKAN DI SEKITAR';
   }
 
@@ -9203,11 +9198,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rekaman siap disinkronkan',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rekaman siap disinkronkan');
     return '$_temp0';
   }
 
@@ -9219,11 +9210,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rekaman perlu perhatian',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rekaman perlu perhatian');
     return '$_temp0';
   }
 
@@ -9348,7 +9335,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Untuk saat ini hanya berfungsi dengan perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
+      'Untuk saat ini berfungsi dengan perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9499,4 +9486,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flash Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Merekam di liontin';
+
+  @override
+  String get pendantRecordingNote =>
+      'Liontin Anda merekam secara mandiri. Rekaman disinkronkan ke ponsel Anda selama aplikasi terbuka.';
+
+  @override
+  String get pendantSyncingRecordings => 'Menyinkronkan rekaman dari liontin Anda…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes mnt tersimpan';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Penyimpanan liontin hampir penuh — biarkan aplikasi tetap terbuka untuk menyinkronkan.';
 }

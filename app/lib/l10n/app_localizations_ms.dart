@@ -1719,12 +1719,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'PERANTI',
-      one: 'PERANTI',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -9217,11 +9212,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rakaman sedia untuk disegerakkan',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rakaman sedia untuk disegerakkan');
     return '$_temp0';
   }
 
@@ -9233,11 +9224,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count rakaman memerlukan perhatian',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rakaman memerlukan perhatian');
     return '$_temp0';
   }
 
@@ -9363,7 +9350,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Buat masa ini berfungsi dengan peranti Omi. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
+      'Buat masa ini berfungsi dengan peranti Omi dan Limitless. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9515,4 +9502,22 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flash Perisian Tegar';
+
+  @override
+  String get pendantRecordingTitle => 'Merakam pada loket';
+
+  @override
+  String get pendantRecordingNote =>
+      'Loket anda merakam dengan sendirinya. Rakaman disegerakkan ke telefon anda semasa aplikasi dibuka.';
+
+  @override
+  String get pendantSyncingRecordings => 'Menyegerakkan rakaman daripada loket anda…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min disimpan';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan.';
 }

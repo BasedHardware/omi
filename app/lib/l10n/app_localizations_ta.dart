@@ -1722,12 +1722,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8515,12 +8510,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9406,7 +9396,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'தற்போது Omi சாதனங்களுடன் மட்டுமே இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+      'தற்போது Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9558,4 +9548,23 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'ஃபார்ம்வேரை ஃபிளாஷ் செய்யவும்';
+
+  @override
+  String get pendantRecordingTitle => 'பெண்டன்ட்டில் பதிவு நடக்கிறது';
+
+  @override
+  String get pendantRecordingNote =>
+      'உங்கள் பெண்டன்ட் தானாகவே பதிவு செய்கிறது. ஆப்ஸ் திறந்திருக்கும்போது பதிவுகள் உங்கள் தொலைபேசியுடன் ஒத்திசைக்கப்படும்.';
+
+  @override
+  String get pendantSyncingRecordings => 'உங்கள் பெண்டன்ட்டிலிருந்து பதிவுகள் ஒத்திசைக்கப்படுகின்றன…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes நிமிடங்கள் சேமிக்கப்பட்டுள்ளன';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்.';
 }

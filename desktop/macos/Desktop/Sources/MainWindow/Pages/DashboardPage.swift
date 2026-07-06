@@ -3162,8 +3162,9 @@ private struct HomeListeningStatusButton: View {
     let action: () -> Void
     let modeAction: () -> Void
 
-    @State private var isHoveringMain = false
-    @State private var isHoveringMode = false
+    // Single pill-level hover flag so moving between the title and the mode
+    // toggle never flickers the revealed controls.
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -3186,10 +3187,15 @@ private struct HomeListeningStatusButton: View {
                             .scaledFont(size: 12, weight: .semibold)
                             .lineLimit(1)
 
-                        Text(modeTitle)
-                            .scaledFont(size: 8, weight: .medium)
-                            .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
-                            .lineLimit(1)
+                        // Mode ("Always" / "In meeting" / …) is revealed only on
+                        // hover to keep the resting pill clean.
+                        if isHovering {
+                            Text(modeTitle)
+                                .scaledFont(size: 8, weight: .medium)
+                                .foregroundStyle(status.isActive ? HomePalette.secondary : HomePalette.muted)
+                                .lineLimit(1)
+                                .transition(.opacity)
+                        }
                     }
                 }
                 .padding(.leading, 12)
@@ -3199,25 +3205,29 @@ private struct HomeListeningStatusButton: View {
             }
             .buttonStyle(.plain)
             .disabled(isToggling)
-            .onHover { isHoveringMain = $0 }
             .help("Listening: \(status.text), \(modeTitle)")
             .accessibilityLabel("Listening \(status.text), \(modeTitle)")
 
-            Rectangle()
-                .fill(HomePalette.hairline.opacity(0.65))
-                .frame(width: 1, height: 18)
+            // Divider + mode toggle are revealed only on hover to keep the
+            // resting pill compact.
+            if isHovering {
+                Rectangle()
+                    .fill(HomePalette.hairline.opacity(0.65))
+                    .frame(width: 1, height: 18)
+                    .transition(.opacity)
 
-            Button(action: modeAction) {
-                Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
-                    .scaledFont(size: 11, weight: .semibold)
-                    .foregroundStyle(modeIconColor)
-                    .frame(width: 30, height: 34)
-                    .contentShape(Rectangle())
+                Button(action: modeAction) {
+                    Image(systemName: isMeetingsOnly ? "person.2.fill" : "person.fill")
+                        .scaledFont(size: 11, weight: .semibold)
+                        .foregroundStyle(modeIconColor)
+                        .frame(width: 30, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
+                .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
+                .transition(.opacity)
             }
-            .buttonStyle(.plain)
-            .onHover { isHoveringMode = $0 }
-            .help(isMeetingsOnly ? "Switch to always listening" : "Switch to meetings only")
-            .accessibilityLabel(isMeetingsOnly ? "Switch Listening to Always" : "Switch Listening to Meetings Only")
         }
         .foregroundStyle(status.isActive ? HomePalette.ink : (status.isBlocked ? status.indicator : HomePalette.muted))
         .background(
@@ -3230,6 +3240,8 @@ private struct HomeListeningStatusButton: View {
         )
         .contentShape(Capsule())
         .frame(height: 34)
+        .onHover { isHovering = $0 }
+        .animation(.easeInOut(duration: 0.14), value: isHovering)
     }
 
     private var modeIconColor: Color {
@@ -3238,12 +3250,12 @@ private struct HomeListeningStatusButton: View {
 
     private var statusFill: Color {
         if status.isActive {
-            return HomePalette.green.opacity(isHoveringMain || isHoveringMode ? 0.20 : 0.12)
+            return HomePalette.green.opacity(isHovering ? 0.20 : 0.12)
         }
         if status.isBlocked {
-            return status.indicator.opacity(isHoveringMain || isHoveringMode ? 0.16 : 0.10)
+            return status.indicator.opacity(isHovering ? 0.16 : 0.10)
         }
-        return isHoveringMain || isHoveringMode ? HomePalette.tileHover : HomePalette.panel
+        return isHovering ? HomePalette.tileHover : HomePalette.panel
     }
 
     private var statusStroke: Color {
@@ -3251,9 +3263,9 @@ private struct HomeListeningStatusButton: View {
             return HomePalette.green.opacity(0.38)
         }
         if status.isBlocked {
-            return status.indicator.opacity(isHoveringMain || isHoveringMode ? 0.54 : 0.38)
+            return status.indicator.opacity(isHovering ? 0.54 : 0.38)
         }
-        return HomePalette.hairline.opacity(isHoveringMain || isHoveringMode ? 0.8 : 0.58)
+        return HomePalette.hairline.opacity(isHovering ? 0.8 : 0.58)
     }
 }
 

@@ -40,9 +40,9 @@ class GraphNode3D {
     required this.baseColor,
     required v.Vector3 initialPosition,
     this.isFixed = false,
-  })  : position = initialPosition,
-        velocity = v.Vector3.zero(),
-        force = v.Vector3.zero();
+  }) : position = initialPosition,
+       velocity = v.Vector3.zero(),
+       force = v.Vector3.zero();
 }
 
 class GraphEdge3D {
@@ -592,7 +592,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [IconButton(icon: FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
                   : null,
             )
           : null,

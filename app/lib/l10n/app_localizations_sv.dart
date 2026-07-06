@@ -1715,12 +1715,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ENHETER',
-      one: 'ENHET',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ENHETER', one: 'ENHET');
     return '$count $_temp0 HITTAD(E) I NÄRHETEN';
   }
 
@@ -9345,7 +9340,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
+      'Fungerar med Omi- och Limitless-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9495,4 +9490,23 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Installera firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Spelar in på hänget';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ditt hänge spelar in på egen hand. Inspelningar synkroniseras till din telefon medan appen är öppen.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkroniserar inspelningar från ditt hänge…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min lagrat';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera.';
 }

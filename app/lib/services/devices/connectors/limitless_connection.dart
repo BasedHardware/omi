@@ -43,8 +43,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   LimitlessDeviceConnection(super.device, super.transport);
 
+  /// Injected in main.dart; true while Transcribe Later keeps the pendant recording to flash.
+  static bool Function()? realtimeSuppressionPolicy;
+  bool _realtimeSuppressed = false;
+
   @override
   Future<void> connect({Function(String deviceId, DeviceConnectionState state)? onConnectionStateChanged}) async {
+    _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? false;
     await super.connect(onConnectionStateChanged: onConnectionStateChanged);
 
     await Future.delayed(const Duration(seconds: 1));
@@ -74,8 +79,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
-    _rxSubscription =
-        transport.getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid).listen(_handleNotification);
+    _rxSubscription = transport
+        .getCharacteristicStream(limitlessServiceUuid, limitlessRxCharUuid)
+        .listen(_handleNotification);
   }
 
   Future<void> _handleTransportReconnected() async {
@@ -96,12 +102,28 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   Future<void> _reinitializeAfterReconnect() async {
+    _realtimeSuppressed = realtimeSuppressionPolicy?.call() ?? _realtimeSuppressed;
+    // Re-enabling streaming here is the same msg8 that toggles drain mode, so it
+    // must not fire mid-drain or while Transcribe Later keeps the pendant on flash.
+    if (_isBatchMode || _realtimeSuppressed) return;
     try {
       final dataStreamCmd = _encodeEnableDataStream();
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
       DebugLogManager.logInfo('Limitless device re-initialized after reconnect');
     } catch (e) {
       Logger.debug('Limitless: Re-initialization after reconnect failed: $e');
+    }
+  }
+
+  Future<void> setRealtimeAudioSuppressed(bool suppressed) async {
+    _realtimeSuppressed = suppressed;
+    if (!_isInitialized || _isBatchMode) return;
+    try {
+      final cmd = _encodeEnableDataStream(enable: !suppressed);
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      DebugLogManager.logInfo('Limitless realtime ${suppressed ? 'suppressed' : 'resumed'} (Transcribe Later)');
+    } catch (e) {
+      Logger.debug('Limitless: setRealtimeAudioSuppressed($suppressed) failed: $e');
     }
   }
 
@@ -125,10 +147,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, timeSyncCmd);
       await Future.delayed(const Duration(seconds: 1));
 
-      // Command 2: Enable data streaming
-      final dataStreamCmd = _encodeEnableDataStream();
-      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
-      await Future.delayed(const Duration(seconds: 1));
+      // Command 2: Enable data streaming (skipped in Transcribe Later — pendant records to flash)
+      if (!_realtimeSuppressed) {
+        final dataStreamCmd = _encodeEnableDataStream();
+        await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, dataStreamCmd);
+        await Future.delayed(const Duration(seconds: 1));
+      }
 
       _isInitialized = true;
       DebugLogManager.logInfo('Limitless device initialized successfully');
@@ -374,8 +398,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
           } else {
             // Audio page that yielded zero frames — genuine parse failure
             final firstBytesLen = flashPageData.length < 64 ? flashPageData.length : 64;
-            final firstBytes =
-                flashPageData.sublist(0, firstBytesLen).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
+            final firstBytes = flashPageData
+                .sublist(0, firstBytesLen)
+                .map((b) => b.toRadixString(16).padLeft(2, '0'))
+                .join(' ');
             DebugLogManager.logWarning('Limitless flash page yielded zero Opus frames', {
               'index': index,
               'session': session,
@@ -1045,8 +1071,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
       _completedFlashPages.clear();
       _firstFlashPageTimestampMs = null;
 
-      // Send command to switch back to real-time mode
-      final cmd = _encodeDownloadFlashPages(batchMode: false, realTime: true);
+      // Back to real-time — or to record-to-flash ({0,0}) while Transcribe Later is on
+      final cmd = _realtimeSuppressed
+          ? _encodeEnableDataStream(enable: false)
+          : _encodeDownloadFlashPages(batchMode: false, realTime: true);
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
 
       _isBatchMode = false;
@@ -1776,8 +1804,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetBleStorageBytesListener({
     required void Function(List<int>) onStorageBytesReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future performCameraStartPhotoController() async {}
@@ -1791,8 +1818,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;

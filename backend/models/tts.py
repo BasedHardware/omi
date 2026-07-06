@@ -23,7 +23,9 @@ class TtsSynthesizeRequest(BaseModel):
     # `model_id` collides with pydantic's `model_` protected namespace; disable.
     model_config = ConfigDict(protected_namespaces=())
 
-    text: str = Field(..., min_length=1)
+    # Upper bound mirrors _TTS_REQUEST_CHAR_LIMIT in routers/tts.py (and the Rust backend), so an
+    # oversized request is rejected at the schema/contract boundary rather than only at runtime.
+    text: str = Field(..., min_length=1, max_length=5000)
     voice_id: str = DEFAULT_VOICE_ID
     model_id: str = DEFAULT_MODEL_ID
     output_format: str = DEFAULT_OUTPUT_FORMAT

@@ -3022,7 +3022,7 @@
     "syncCustomSttWarningMessage": "Du verwendest einen eigenen Transkriptionsanbieter. Beim Synchronisieren werden diese Aufnahmen stattdessen auf den Servern von Omi transkribiert und auf das Transkriptionslimit deines Tarifs angerechnet.",
     "transcribeLaterTitle": "Später transkribieren",
     "transcribeLaterDescription": "Nimm Audio jetzt auf und transkribiere es bei Bedarf statt in Echtzeit. Die Aufnahmen werden auf deinem Smartphone gespeichert; lade sie anschließend hoch, um Gespräche zu erstellen.",
-    "transcribeLaterNote": "Funktioniert vorerst mit Omi-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.",
+    "transcribeLaterNote": "Funktioniert vorerst mit Omi- und Limitless-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.",
     "transcribeLaterStorageFull": "Auf deinem Smartphone wird der Speicher knapp, daher ist die Aufnahme pausiert. Gib Speicher frei oder lade deine Aufnahmen hoch – danach wird sie automatisch fortgesetzt.",
     "unmute": "Ton an",
     "newRecording": "Neue Aufnahme",
@@ -3072,5 +3072,17 @@
     "deviceOnboardingIntroDuration": "Etwa 1 Minute",
     "jumpToLatestMessage": "Zur neuesten Nachricht springen",
     "latest": "Neueste",
-    "flashFirmware": "Firmware flashen"
+    "flashFirmware": "Firmware flashen",
+    "pendantRecordingTitle": "Aufnahme auf dem Pendant",
+    "pendantRecordingNote": "Dein Pendant nimmt selbstständig auf. Aufnahmen werden mit deinem Smartphone synchronisiert, solange die App geöffnet ist.",
+    "pendantSyncingRecordings": "Aufnahmen vom Pendant werden synchronisiert…",
+    "pendantMinutesStored": "~{minutes} Min. gespeichert",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Der Speicher des Pendants ist fast voll — lass die App geöffnet, um zu synchronisieren."
 }

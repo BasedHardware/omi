@@ -1404,6 +1404,47 @@ def _oauth_error(error: str, description: str, status_code: int = 400) -> JSONRe
     return JSONResponse(status_code=status_code, content={"error": error, "error_description": description})
 
 
+class McpSseAuthMethodResponse(BaseModel):
+    header: Optional[str] = None
+    format: Optional[str] = None
+    authorization_endpoint: Optional[str] = None
+    token_endpoint: Optional[str] = None
+    resource: Optional[str] = None
+    scopes: list[str] = []
+
+
+class McpSseAuthenticationResponse(BaseModel):
+    methods: list[str]
+    api_key: McpSseAuthMethodResponse
+    oauth2: McpSseAuthMethodResponse
+
+
+class McpSseInstructionsResponse(BaseModel):
+    step1: str
+    step2: str
+    step3: str
+
+
+class McpSseInfoResponse(BaseModel):
+    endpoint: str
+    transport: str
+    protocol_version: str
+    authentication: McpSseAuthenticationResponse
+    instructions: McpSseInstructionsResponse
+
+
+class McpAuthorizeConsentResponse(BaseModel):
+    redirect_uri: str
+
+
+class McpTokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str
+    expires_in: int
+    scope: str
+
+
 def _validate_authorize_request(
     response_type: str,
     client_id: str,
@@ -1496,7 +1537,7 @@ def mcp_authorize(
     )
 
 
-@router.post("/authorize", tags=["mcp"])
+@router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
 def mcp_authorize_consent(
     response_type: str = Form(...),
     client_id: str = Form(...),
@@ -1528,7 +1569,7 @@ def mcp_authorize_consent(
     return {"redirect_uri": _redirect_with_code(redirect_uri, code, state)}
 
 
-@router.post("/token", tags=["mcp"])
+@router.post("/token", tags=["mcp"], response_model=McpTokenResponse)
 async def mcp_token(request: Request):
     """OAuth token endpoint."""
     try:
@@ -1587,7 +1628,7 @@ async def mcp_token(request: Request):
     return _oauth_error("unsupported_grant_type", "grant_type must be authorization_code or refresh_token")
 
 
-@router.post("/v1/mcp/sse", tags=["mcp"])
+@router.post("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 async def mcp_streamable_http(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1668,7 +1709,7 @@ async def mcp_streamable_http(
             return JSONResponse(content=responses, headers=headers)
 
 
-@router.get("/v1/mcp/sse", tags=["mcp"])
+@router.get("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 async def mcp_sse_get(
     request: Request,
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1709,14 +1750,14 @@ async def mcp_sse_get(
     )
 
 
-@router.head("/v1/mcp/sse", tags=["mcp"])
+@router.head("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_sse_head(authorization: Optional[str] = Header(None, alias="Authorization")):
     if not authenticate_mcp_request(authorization):
         raise invalid_mcp_auth_exception()
     return Response(status_code=200)
 
 
-@router.delete("/v1/mcp/sse", tags=["mcp"])
+@router.delete("/v1/mcp/sse", tags=["mcp"], response_class=Response)
 def mcp_delete_session(
     mcp_session_id: Optional[str] = Header(None, alias="Mcp-Session-Id"),
     authorization: Optional[str] = Header(None, alias="Authorization"),
@@ -1733,7 +1774,7 @@ def mcp_delete_session(
     return Response(status_code=204)
 
 
-@router.get("/v1/mcp/sse/info", tags=["mcp"])
+@router.get("/v1/mcp/sse/info", tags=["mcp"], response_model=McpSseInfoResponse)
 def mcp_sse_info(request: Request):
     """
     Get information about the pre-hosted MCP server.

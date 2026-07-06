@@ -30,6 +30,17 @@ class SharedPreferencesUtil {
     _preferences = await SharedPreferences.getInstance();
   }
 
+  /// Picks up values written natively (the Dart cache doesn't see those otherwise).
+  static Future<void> reload() async {
+    await _preferences?.reload();
+  }
+
+  int get pendantPagesStored => getInt('pendantPagesStored');
+
+  bool get pendantDraining => getBool('pendantDraining');
+
+  bool get pendantStorageAlmostFull => getBool('pendantStorageAlmostFull');
+
   set uid(String value) => saveString('uid', value);
 
   String get uid => getString('uid');

@@ -69,6 +69,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     static let notchCompactSideWidth: CGFloat = 30
     static let notchActiveSideWidth: CGFloat = 42
+    /// Wider lobes while "thinking" so the right lobe fits the word alongside the
+    /// spinning Omi mark on the left.
+    static let notchThinkingSideWidth: CGFloat = 62
     static let defaultNotchChromeHeight: CGFloat = 34
     static var notchChromeHeight: CGFloat { defaultNotchChromeHeight }
     static let notchActivationHeight: CGFloat = 17
@@ -121,6 +124,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
     private static let notificationSpacing: CGFloat = 8
+    /// Height of the transient PTT hint row shown below the notch chrome
+    /// (e.g. "Hold longer to record") after a too-short tap.
+    static let pttHintRowHeight: CGFloat = 30
     private static let askOmiAnimationDuration: TimeInterval = 0.14
     private static let askOmiSettleDelay: TimeInterval = 0.16
     private static let frameNoopEpsilon: CGFloat = 0.5
@@ -145,6 +151,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var suppressHoverResize = false
     private var inputHeightCancellable: AnyCancellable?
     private var responseHeightCancellable: AnyCancellable?
+    private var pttHintCancellable: AnyCancellable?
     private var agentPillsCancellable: AnyCancellable?
     private var voiceResponseGlowCancellable: AnyCancellable?
     private var previousVoiceResponseGlowActive = false
@@ -159,14 +166,27 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Used by savePreChatCenterIfNeeded() to snap to the correct pill position
     /// if a new PTT query fires while the restore animation is still running.
     private var pendingRestoreOrigin: NSPoint?
+    /// The idle pill frame captured just before morphing into the active island
+    /// on a non-notch display, so the pill returns to the exact same spot.
+    private var savedPillFrame: NSRect?
     private var frameAnimationToken: Int = 0
     private var pendingFrameAnimationTarget: NSRect?
     private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
 
+    /// The bar adopts the notch-island presentation whenever it is actively
+    /// engaged — PTT listening, thinking, or speaking a reply — on ANY display,
+    /// so external monitors morph from the idle pill into the island too.
+    private var barWantsActiveIsland: Bool {
+        state.isVoiceListening || state.isThinking || state.isVoiceResponseGlowActive
+    }
     private var notchModeEnabled: Bool {
+        Self.screenHasCameraHousing(screenForPlacement) || barWantsActiveIsland
+    }
+    /// Hardware-only notch detection (ignores the transient active-island state) —
+    /// "does this display physically have a camera housing".
+    var usesNotchIslandForCurrentScreen: Bool {
         Self.screenHasCameraHousing(screenForPlacement)
     }
-    var usesNotchIslandForCurrentScreen: Bool { notchModeEnabled }
     private var screenForPlacement: NSScreen? {
         self.screen ?? NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens.first
     }
@@ -356,6 +376,10 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         // hardware so the fallback surface can be exercised locally. getenv so
         // values loaded from the bundle .env (BundleEnvironment) are seen too.
         if let forced = getenv("OMI_FORCE_NO_NOTCH"), String(cString: forced) == "1" { return false }
+        // Testing hook: force the notch-island presentation on non-notch hardware
+        // (external display / dev machine) so notch-only UI can be exercised
+        // locally. Mirror of OMI_FORCE_NO_NOTCH; NO_NOTCH wins if both are set.
+        if let forced = getenv("OMI_FORCE_NOTCH"), String(cString: forced) == "1" { return true }
         guard let screen else { return false }
         if #available(macOS 12.0, *) {
             if let leftArea = screen.auxiliaryTopLeftArea,
@@ -417,6 +441,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func updateNotchIslandState() {
         let usesNotch = notchModeEnabled
+        // Leaving the idle pill for the active island on a non-notch display —
+        // remember the pill's exact spot so we can restore it when we return
+        // (otherwise the pill drifts to a recomputed top-center each cycle).
+        if usesNotch, !state.usesNotchIsland, !Self.screenHasCameraHousing(screenForPlacement),
+           !state.showingAIConversation, state.currentNotification == nil {
+            savedPillFrame = frame
+        }
         if state.usesNotchIsland != usesNotch {
             state.usesNotchIsland = usesNotch
         }
@@ -548,6 +579,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         startCursorScreenTracking()
         observeNotchAgentPills()
         observeVoiceResponseGlow()
+        observePttHint()
     }
 
     private func performSpacesTransitionGrowIn() {
@@ -561,6 +593,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let size: NSSize
         if state.showingAIConversation {
             size = NSSize(width: expandedContentWidth, height: max(inputPanelHeight, frame.height))
+        } else if notchModeEnabled && !state.pttHintText.isEmpty {
+            size = NSSize(
+                width: Self.notchExpandedWidth,
+                height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.pttHintRowHeight
+            )
         } else if state.isVoiceListening {
             size = notchSize(active: true)
         } else if state.currentNotification != nil {
@@ -586,6 +623,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let reservedGlowOutset = usesNotchIsland ? Self.notchGlowOutsetBottom : 0
             let contentHeight = max(panelHeight, frame.height - reservedGlowOutset)
             return NSSize(width: width, height: contentHeight)
+        }
+        // Notch: grow just enough to fit the transient too-short PTT hint row.
+        // (isVoiceListening is true during the hint, so this must precede it.)
+        if usesNotchIsland && !state.pttHintText.isEmpty {
+            return NSSize(
+                width: Self.notchExpandedWidth,
+                height: notchChromeHeightForCurrentScreen + Self.notificationSpacing + Self.pttHintRowHeight
+            )
         }
         if state.isVoiceListening {
             return usesNotchIsland ? notchSize(active: true) : Self.voiceBarSize
@@ -613,6 +658,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             let chromeHeight = Self.notchChromeHeight(for: screen)
             let panelHeight = usesNotchIsland ? Self.notchInputPanelHeight(for: screen) : Self.pillInputPanelHeight
             size = NSSize(width: width, height: max(panelHeight, frame.height, chromeHeight))
+        } else if usesNotchIsland && !state.pttHintText.isEmpty {
+            let chromeHeight = Self.notchChromeHeight(for: screen)
+            size = NSSize(
+                width: Self.notchExpandedWidth,
+                height: chromeHeight + Self.notificationSpacing + Self.pttHintRowHeight
+            )
         } else if state.isVoiceListening {
             size = usesNotchIsland ? notchSize(sideWidth: Self.notchActiveSideWidth, for: screen) : Self.voiceBarSize
         } else if state.currentNotification != nil {
@@ -827,6 +878,27 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                       self.state.currentNotification == nil
                 else { return }
                 self.resizeToFrame(self.canonicalCollapsedPillFrame(), makeResizable: false, animated: false)
+            }
+    }
+
+    /// Resize the notch surface when the transient too-short PTT hint appears or
+    /// clears. `isVoiceListening` is already true when the hint fires (no size
+    /// transition fires on its own), so the hint needs its own resize. Notch only —
+    /// the pill layout renders the hint inside its existing voice size.
+    private func observePttHint() {
+        pttHintCancellable = state.$pttHintText
+            .map { $0.isEmpty }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self, self.notchModeEnabled else { return }
+                guard !self.state.showingAIConversation else { return }
+                self.resizeAnchored(
+                    to: self.currentSurfaceSizeForCurrentScreen(),
+                    makeResizable: false,
+                    animated: true,
+                    anchorTop: true
+                )
             }
     }
 
@@ -1645,6 +1717,79 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeToFrame(targetFrame, makeResizable: false, animated: true, animationDuration: 0.18)
     }
 
+    /// Size the notch to fit the "thinking" indicator (active width) while a PTT
+    /// query is being processed, then collapse it back once the response takes
+    /// over. Voice listening and the open conversation surface own sizing while
+    /// they are active, so this defers to them.
+    /// Single authority for the pill ↔ notch-island morph across the active PTT
+    /// lifecycle (idle pill → listening → thinking → answering → idle pill).
+    /// Called whenever any active flag changes. Because notchModeEnabled is
+    /// active-aware, this engages the island on external monitors too.
+    func syncActiveIsland() {
+        // The chat panel and notifications own their own geometry.
+        guard !state.showingAIConversation, state.currentNotification == nil else { return }
+        guard let screen = screenForPlacement else { return }
+
+        let wasIsland = state.usesNotchIsland
+        updateNotchIslandState()  // sets state.usesNotchIsland + level from notchModeEnabled
+        let island = state.usesNotchIsland
+        let target = activeIslandTargetFrame(on: screen, island: island)
+
+        if wasIsland != island && island {
+            // Idle pill → active island: grow with the reveal pop.
+            styleMask.remove(.resizable)
+            animateGrowOutFromNotch(to: target)
+        } else if wasIsland != island && !island {
+            // Active island → idle pill: shrink back to the resting pill at the
+            // exact spot it left from (fall back to the computed top-center).
+            state.notchRevealProgress = 1
+            let pillFrame: NSRect
+            if let saved = savedPillFrame {
+                pillFrame = NSRect(origin: saved.origin, size: target.size)
+                savedPillFrame = nil
+            } else {
+                pillFrame = target
+            }
+            resizeToFrame(pillFrame, makeResizable: false, animated: true, animationDuration: 0.16)
+        } else {
+            // Same mode, different sub-state (e.g. listening → thinking).
+            resizeToFrame(target, makeResizable: false, animated: true, animationDuration: Self.askOmiAnimationDuration)
+        }
+    }
+
+    /// The window frame for the current active sub-state, in the given mode.
+    private func activeIslandTargetFrame(on screen: NSScreen, island: Bool) -> NSRect {
+        let size: NSSize
+        if island {
+            let base: NSSize
+            if state.isVoiceListening {
+                base = notchSize(sideWidth: Self.notchActiveSideWidth, for: screen)
+            } else if state.isThinking || state.isVoiceResponseWaiting {
+                base = notchSize(sideWidth: Self.notchThinkingSideWidth, for: screen)
+            } else {
+                // Answering (voice-response glow) or a brief transient — collapsed island.
+                base = notchCollapsedSize(for: screen)
+            }
+            size = responseGlowWindowSize(forSurfaceSize: base, usesNotchIsland: true)
+        } else {
+            size = state.isVoiceListening ? Self.voiceBarSize : Self.minBarSize
+        }
+        return NSRect(
+            origin: topCenteredOrigin(for: size, on: screen, usesNotchIsland: island),
+            size: size
+        )
+    }
+
+    /// Pop the notch in from a near-zero scale the first time it is revealed via
+    /// Push-to-Talk (it stays hidden at launch on notched displays).
+    func playNotchRevealAnimation() {
+        guard notchModeEnabled else { return }
+        state.notchRevealProgress = 0.01
+        withAnimation(.easeOut(duration: 0.24)) {
+            state.notchRevealProgress = 1
+        }
+    }
+
     func showNotification(_ notification: FloatingBarNotification, animated: Bool = true) {
         guard !state.showingAIConversation else { return }
         state.currentNotification = notification
@@ -1981,6 +2126,10 @@ class FloatingControlBarManager {
     }
 
     private var window: FloatingControlBarWindow?
+    /// On notched displays the notch is not shown at launch — it reveals only
+    /// after the user's first Push-to-Talk press. Tracks whether that reveal has
+    /// happened this session so `showInitial()` can gate the launch presentation.
+    private var hasRevealedNotchThisSession = false
     private var snoozeTimer: Timer?
     private var recordingCancellable: AnyCancellable?
     private var durationCancellable: AnyCancellable?
@@ -2421,6 +2570,18 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Launch-time presentation. On notched displays the notch stays hidden until
+    /// the user's first Push-to-Talk press (which calls `show()`); on other
+    /// displays it behaves exactly like `show()`.
+    func showInitial() {
+        if window?.usesNotchIslandForCurrentScreen == true, !hasRevealedNotchThisSession {
+            isEnabled = true
+            log("FloatingControlBarManager: showInitial() — notch hidden until first Push-to-Talk")
+            return
+        }
+        show()
+    }
+
     /// Show the floating bar and persist the preference.
     func show() {
         log("FloatingControlBarManager: show() called, window=\(window != nil), isVisible=\(window?.isVisible ?? false)")
@@ -2429,8 +2590,13 @@ class FloatingControlBarManager {
             log("FloatingControlBarManager: show() suppressed because bar is snoozed until \(snoozedUntil?.description ?? "?")")
             return
         }
+        let isFirstNotchReveal = window?.usesNotchIslandForCurrentScreen == true && !hasRevealedNotchThisSession
+        hasRevealedNotchThisSession = true
         window?.normalizeForTemporaryShow()
         window?.makeKeyAndOrderFront(nil)
+        if isFirstNotchReveal {
+            window?.playNotchRevealAnimation()
+        }
         log("FloatingControlBarManager: show() done, frame=\(window?.frame ?? .zero)")
 
         // Auto-focus input if AI conversation is open

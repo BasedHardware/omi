@@ -24,6 +24,84 @@ python3 scripts/v3_dev_cloud_readiness.py
 
 Expected status without a fully specified dev target is `BLOCKED` with missing-env blockers. This is correct and is not a failure.
 
+## First-user dev read-mode persistence
+
+The first-user dev/beta read proof uses deploy plane `based-hardware-dev` and runtime data/auth Firestore project `based-hardware`.
+
+Checked-in dev runtime config intentionally preserves the first-user read baseline across future dev deploys:
+
+```text
+MEMORY_MODE=read
+MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23
+MEMORY_V3_GET_ENABLED=true
+MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false
+MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false
+```
+
+This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled.
+
+## First-user projection operator
+
+Use `backend/scripts/apply_first_user_v3_projection.py` to build the first-user compatibility projection from existing canonical `memory_items`. Dry-run is the default and prints only doc paths, IDs, generations, fences, field names, and content lengths.
+
+Dry-run:
+
+```bash
+cd backend
+python3 scripts/apply_first_user_v3_projection.py \
+  --uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --project based-hardware \
+  --limit 25
+```
+
+Apply one known memory only after reviewing the dry-run:
+
+```bash
+cd backend
+python3 scripts/apply_first_user_v3_projection.py \
+  --uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --project based-hardware \
+  --memory-id <memory-id> \
+  --apply \
+  --confirm-uid vi7SA9ckQCe4ccobWNxlbdcNdC23
+```
+
+The script writes only:
+
+```text
+users/{uid}/v3_compatibility_projection/state
+users/{uid}/v3_compatibility_projection_items/{memory_id}
+```
+
+It refuses cross-user docs, non-active/tombstoned/archive rows, restricted sensitivity labels, and generation/fence mismatches with `users/{uid}/memory_state/head`. Output includes a rollback manifest listing the exact touched projection doc paths; rollback means deleting or restoring only those listed paths from a known-good backup. The script does not write rollout gates, user control state, env vars, vectors, or production data.
+
+## First-user read-only E2E proof
+
+Use `backend/scripts/first_user_memory_e2e_proof.py` after projection docs and dev read gates are expected to be ready. The script is read-only: it performs Firestore reads plus authenticated/unauthenticated `GET /v3/memories` calls, and it redacts memory content and tokens.
+
+```bash
+cd backend
+python3 scripts/first_user_memory_e2e_proof.py \
+  --uid vi7SA9ckQCe4ccobWNxlbdcNdC23 \
+  --project based-hardware \
+  --backend-url <dev-backend-url> \
+  --id-token-file /path/to/firebase-id-token.txt \
+  --limit 10
+```
+
+The proof checks:
+
+- global read gate open and kill switch clear;
+- write convergence gate ready;
+- user control state `mode=read` with `grants.omi_chat.default_memory=true`;
+- `memory_state/head` exists;
+- projection state/items exist and match head generation/fences;
+- authenticated `/v3/memories` returns 200 for only the requested UID;
+- canonical lifecycle fields such as `layer`/`memory_tier` are present when items are returned;
+- unauthenticated `/v3/memories` fails 401/403.
+
+Search, vector, MCP/developer, and other default-read surfaces are reported as `not_checked` unless a route-specific harness is added. Do not treat a passing first-user `/v3/memories` proof as full Gate 2 GO.
+
 Prepare a local evidence-bundle skeleton for the deployed dev-cloud CI/proof job to fill:
 
 ```bash

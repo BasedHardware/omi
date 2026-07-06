@@ -127,8 +127,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                               color: batteryLevel > 75
                                   ? const Color.fromARGB(255, 0, 255, 8)
                                   : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
+                                  ? Colors.yellow.shade700
+                                  : Colors.red,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -234,9 +234,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                   ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                                 )
                               : isMemoriesPage
-                                  ? Text(context.l10n.connect,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12))
-                                  : const SizedBox.shrink(),
+                              ? Text(context.l10n.connect, style: const TextStyle(color: Colors.white, fontSize: 12))
+                              : const SizedBox.shrink(),
                         ],
                       ),
                     ),
@@ -280,14 +279,14 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                           )
                                         else
-                                          const Icon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
+                                          FaIcon(FontAwesomeIcons.microphone, size: 12, color: Colors.white),
                                         const SizedBox(width: 6),
                                         Text(
                                           isRecording
                                               ? context.l10n.stop
                                               : isInitialising
-                                                  ? '...'
-                                                  : context.l10n.record,
+                                              ? '...'
+                                              : context.l10n.record,
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 12,
@@ -398,7 +397,7 @@ class _RecordOptionsSheet extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           _RecordOption(
-            icon: Icons.phone_in_talk_rounded,
+            icon: FontAwesomeIcons.phone,
             title: context.l10n.phoneCall,
             subtitle: context.l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,
@@ -410,7 +409,7 @@ class _RecordOptionsSheet extends StatelessWidget {
 }
 
 class _RecordOption extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -447,7 +446,7 @@ class _RecordOption extends StatelessWidget {
                   ),
                 ],
               ),
-              child: Icon(icon, color: Colors.white, size: 18),
+              child: FaIcon(icon, color: Colors.white, size: 18),
             ),
             const SizedBox(width: 14),
             Expanded(

@@ -1715,12 +1715,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8480,12 +8475,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9368,7 +9358,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Пакуль працуе з прыладамі Omi. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
+      'Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9519,4 +9509,23 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Усталяваць прашыўку';
+
+  @override
+  String get pendantRecordingTitle => 'Запіс на кулоне';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ваш кулон запісвае самастойна. Запісы сінхранізуюцца з тэлефонам, пакуль праграма адкрыта.';
+
+  @override
+  String get pendantSyncingRecordings => 'Сінхранізацыя запісаў з вашага кулона…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes хв захавана';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Памяць кулона амаль запоўнена — трымайце праграму адкрытай для сінхранізацыі.';
 }

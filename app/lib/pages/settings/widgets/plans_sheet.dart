@@ -311,13 +311,13 @@ class _PlansSheetState extends State<PlansSheet> {
           children: [
             Text('You will experience these limitations:', style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
             const SizedBox(height: 16),
-            _buildDowngradeLimitationRow(Icons.battery_alert, '7x battery consumption'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.carBattery, '7x battery consumption'),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(Icons.warning_amber, '30% less transcription quality'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.triangleExclamation, '30% less transcription quality'),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(Icons.timer_off, '5-7 second delay'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.clock, '5-7 second delay'),
             const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(Icons.person_off, 'Cannot identify speakers'),
+            _buildDowngradeLimitationRow(FontAwesomeIcons.userSlash, 'Cannot identify speakers'),
           ],
         ),
         actions: [
@@ -341,10 +341,10 @@ class _PlansSheetState extends State<PlansSheet> {
     await _handleSwitchToFreePlan();
   }
 
-  Widget _buildDowngradeLimitationRow(IconData icon, String text) {
+  Widget _buildDowngradeLimitationRow(FaIconData icon, String text) {
     return Row(
       children: [
-        Icon(icon, color: Colors.red.shade400, size: 18),
+        FaIcon(icon, color: Colors.red.shade400, size: 18),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -374,13 +374,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -396,7 +396,8 @@ class _PlansSheetState extends State<PlansSheet> {
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier &&
         (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
@@ -429,11 +430,11 @@ class _PlansSheetState extends State<PlansSheet> {
                 style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 12),
-              _buildBillingInfoItem(icon: Icons.schedule, text: context.l10n.monthlyPlanContinues),
+              _buildBillingInfoItem(icon: FontAwesomeIcons.clock, text: context.l10n.monthlyPlanContinues),
               const SizedBox(height: 8),
-              _buildBillingInfoItem(icon: Icons.credit_card, text: context.l10n.paymentMethodCharged),
+              _buildBillingInfoItem(icon: FontAwesomeIcons.creditCard, text: context.l10n.paymentMethodCharged),
               const SizedBox(height: 8),
-              _buildBillingInfoItem(icon: Icons.calendar_today, text: context.l10n.annualSubscriptionStarts),
+              _buildBillingInfoItem(icon: FontAwesomeIcons.calendarDay, text: context.l10n.annualSubscriptionStarts),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -964,7 +965,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1033,7 +1035,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1196,7 +1199,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
+                            final shouldShowContinueButton =
+                                !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1269,13 +1273,19 @@ class _PlansSheetState extends State<PlansSheet> {
                           const SizedBox(height: 16),
                           Column(
                             children: [
-                              _buildLimitationItem(icon: Icons.battery_alert, text: '7x battery consumption'),
+                              _buildLimitationItem(icon: FontAwesomeIcons.carBattery, text: '7x battery consumption'),
                               const SizedBox(height: 12),
-                              _buildLimitationItem(icon: Icons.warning_amber, text: '30% less transcription quality'),
+                              _buildLimitationItem(
+                                icon: FontAwesomeIcons.triangleExclamation,
+                                text: '30% less transcription quality',
+                              ),
                               const SizedBox(height: 12),
-                              _buildLimitationItem(icon: Icons.timer_off, text: '5-7 second delay (not real-time)'),
+                              _buildLimitationItem(
+                                icon: FontAwesomeIcons.clock,
+                                text: '5-7 second delay (not real-time)',
+                              ),
                               const SizedBox(height: 12),
-                              _buildLimitationItem(icon: Icons.person_off, text: 'Cannot identify speakers'),
+                              _buildLimitationItem(icon: FontAwesomeIcons.userSlash, text: 'Cannot identify speakers'),
                             ],
                           ),
                         ],
@@ -1721,7 +1731,7 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildFeatureItem({required IconData faIcon, required String text}) {
+  Widget _buildFeatureItem({required dynamic faIcon, required String text}) {
     return Row(
       children: [
         Container(
@@ -1745,7 +1755,7 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildLimitationItem({required IconData icon, required String text}) {
+  Widget _buildLimitationItem({required FaIconData icon, required String text}) {
     return Row(
       children: [
         Container(
@@ -1756,7 +1766,7 @@ class _PlansSheetState extends State<PlansSheet> {
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: Colors.red.shade400, width: 1),
           ),
-          child: Center(child: Icon(icon, color: Colors.red.shade400, size: 18)),
+          child: Center(child: FaIcon(icon, color: Colors.red.shade400, size: 18)),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -2103,11 +2113,11 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildBillingInfoItem({required IconData icon, required String text}) {
+  Widget _buildBillingInfoItem({required FaIconData icon, required String text}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, color: Colors.green, size: 16),
+        FaIcon(icon, color: Colors.green, size: 16),
         const SizedBox(width: 8),
         Expanded(
           child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),

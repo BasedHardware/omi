@@ -44,7 +44,17 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
-@router.post('/v2/tts/synthesize', tags=['tts'])
+@router.post(
+    '/v2/tts/synthesize',
+    tags=['tts'],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "MP3 audio stream.",
+            "content": {"audio/mpeg": {"schema": {"type": "string", "format": "binary"}}},
+        }
+    },
+)
 async def tts_synthesize(
     req: TtsSynthesizeRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "tts:synthesize")),

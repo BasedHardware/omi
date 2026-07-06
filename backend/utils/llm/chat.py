@@ -1310,7 +1310,7 @@ def select_structured_filters(question: str, filters_available: dict) -> dict:
         response.topics = [t for t in response.topics if t in filters_available['topics']]
         response.people = [p for p in response.people if p in filters_available['people']]
         response.entities = [e for e in response.entities if e in filters_available['entities']]
-        return response.dict()
+        return response.model_dump()
     except ValidationError:
         return {}
 

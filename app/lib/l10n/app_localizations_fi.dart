@@ -1712,12 +1712,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -9340,7 +9335,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Toimii toistaiseksi Omi-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
+      'Toimii toistaiseksi Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9490,4 +9485,23 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Asenna laiteohjelmisto';
+
+  @override
+  String get pendantRecordingTitle => 'Tallennus riipuksella';
+
+  @override
+  String get pendantRecordingNote =>
+      'Riipuksesi tallentaa itsenäisesti. Tallenteet synkronoituvat puhelimeesi, kun sovellus on auki.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkronoidaan tallenteita riipuksestasi…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min tallennettu';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten.';
 }

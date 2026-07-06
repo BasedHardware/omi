@@ -2358,7 +2358,11 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
-            cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
+            if [ ! -d ".harness/agent-runtime/agent-node_modules" ]; then
+              echo "ERROR: packaged agent dependencies missing"
+              exit 1
+            fi
+            cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -2376,7 +2380,11 @@ workflows:
             cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package-lock.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-            cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            if [ ! -d ".harness/agent-runtime/pi-mono-extension-node_modules" ]; then
+              echo "ERROR: packaged pi-mono-extension dependencies missing"
+              exit 1
+            fi
+            cp -Rf .harness/agent-runtime/pi-mono-extension-node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
           else
             echo "ERROR: pi-mono-extension directory not found"
             exit 1

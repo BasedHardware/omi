@@ -233,121 +233,119 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                           ],
                         )
                       : provider.isClearingChat
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                                const SizedBox(height: 16),
-                                Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
-                              ],
-                            )
-                          : (provider.messages.isEmpty)
-                              ? Center(
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(bottom: 100.0),
-                                    child: Text(
-                                      connectivityProvider.isConnected
-                                          ? context.l10n.noMessagesYet
-                                          : context.l10n.noInternetConnection,
-                                      textAlign: TextAlign.center,
-                                      style: const TextStyle(color: Colors.white),
+                      ? Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
+                            const SizedBox(height: 16),
+                            Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
+                          ],
+                        )
+                      : (provider.messages.isEmpty)
+                      ? Center(
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 100.0),
+                            child: Text(
+                              connectivityProvider.isConnected
+                                  ? context.l10n.noMessagesYet
+                                  : context.l10n.noInternetConnection,
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                textSelectionTheme: TextSelectionThemeData(
+                                  selectionColor: Colors.white.withValues(alpha: 0.3),
+                                  selectionHandleColor: Colors.blue,
+                                ),
+                              ),
+                              child: Stack(
+                                children: [
+                                  NotificationListener<ScrollNotification>(
+                                    onNotification: _handleScrollNotification,
+                                    child: ListView.builder(
+                                      shrinkWrap: false,
+                                      reverse: false,
+                                      controller: scrollController,
+                                      padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
+                                      itemCount: provider.messages.length,
+                                      itemBuilder: (context, chatIndex) {
+                                        if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
+                                          _hasInitialScrolled = true;
+                                          _schedulePostFrameModeAwareScroll();
+                                        }
+
+                                        final message = provider.messages[chatIndex];
+                                        double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
+                                        double bottomPadding = chatIndex == 0 ? 16 : 0;
+
+                                        return Padding(
+                                          key: ValueKey(message.id),
+                                          padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
+                                          child: message.sender == MessageSender.ai
+                                              ? Builder(
+                                                  builder: (context) {
+                                                    final child = AIMessage(
+                                                      showTypingIndicator:
+                                                          provider.showTypingIndicator &&
+                                                          chatIndex == provider.messages.length - 1,
+                                                      showThinkingAfterText: provider.agentThinkingAfterText,
+                                                      message: message,
+                                                      sendMessage: _sendMessageUtil,
+                                                      onAskOmi: (text) {
+                                                        setState(() {
+                                                          _selectedContext = text;
+                                                        });
+                                                        textFieldFocusNode.requestFocus();
+                                                      },
+                                                      displayOptions: provider.messages.length <= 1,
+                                                      appSender: provider.messageSenderApp(message.appId),
+                                                      updateConversation: (ServerConversation conversation) {
+                                                        context.read<ConversationProvider>().updateConversation(
+                                                          conversation,
+                                                        );
+                                                      },
+                                                      setMessageNps: (int value, {String? reason}) {
+                                                        provider.setMessageNps(message, value, reason: reason);
+                                                      },
+                                                    );
+
+                                                    // Dynamic spacer logic
+                                                    if (chatIndex == provider.messages.length - 1 && _allowSpacer) {
+                                                      return Container(
+                                                        constraints: BoxConstraints(
+                                                          minHeight: MediaQuery.of(context).size.height * 0.5,
+                                                        ),
+                                                        alignment: Alignment.topLeft,
+                                                        child: child,
+                                                      );
+                                                    }
+                                                    return child;
+                                                  },
+                                                )
+                                              : HumanMessage(
+                                                  message: message,
+                                                  onAskOmi: (text) {
+                                                    setState(() {
+                                                      _selectedContext = text;
+                                                    });
+                                                    textFieldFocusNode.requestFocus();
+                                                  },
+                                                ),
+                                        );
+                                      },
                                     ),
                                   ),
-                                )
-                              : LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    return Theme(
-                                      data: Theme.of(context).copyWith(
-                                        textSelectionTheme: TextSelectionThemeData(
-                                          selectionColor: Colors.white.withValues(alpha: 0.3),
-                                          selectionHandleColor: Colors.blue,
-                                        ),
-                                      ),
-                                      child: Stack(
-                                        children: [
-                                          NotificationListener<ScrollNotification>(
-                                            onNotification: _handleScrollNotification,
-                                            child: ListView.builder(
-                                              shrinkWrap: false,
-                                              reverse: false,
-                                              controller: scrollController,
-                                              padding: const EdgeInsets.fromLTRB(18, 16, 18, 10),
-                                              itemCount: provider.messages.length,
-                                              itemBuilder: (context, chatIndex) {
-                                                if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
-                                                  _hasInitialScrolled = true;
-                                                  _schedulePostFrameModeAwareScroll();
-                                                }
-
-                                                final message = provider.messages[chatIndex];
-                                                double topPadding = chatIndex == provider.messages.length - 1 ? 8 : 16;
-                                                double bottomPadding = chatIndex == 0 ? 16 : 0;
-
-                                                return Padding(
-                                                  key: ValueKey(message.id),
-                                                  padding: EdgeInsets.only(bottom: bottomPadding, top: topPadding),
-                                                  child: message.sender == MessageSender.ai
-                                                      ? Builder(
-                                                          builder: (context) {
-                                                            final child = AIMessage(
-                                                              showTypingIndicator: provider.showTypingIndicator &&
-                                                                  chatIndex == provider.messages.length - 1,
-                                                              showThinkingAfterText: provider.agentThinkingAfterText,
-                                                              message: message,
-                                                              sendMessage: _sendMessageUtil,
-                                                              onAskOmi: (text) {
-                                                                setState(() {
-                                                                  _selectedContext = text;
-                                                                });
-                                                                textFieldFocusNode.requestFocus();
-                                                              },
-                                                              displayOptions: provider.messages.length <= 1,
-                                                              appSender: provider.messageSenderApp(message.appId),
-                                                              updateConversation: (ServerConversation conversation) {
-                                                                context.read<ConversationProvider>().updateConversation(
-                                                                      conversation,
-                                                                    );
-                                                              },
-                                                              setMessageNps: (int value, {String? reason}) {
-                                                                provider.setMessageNps(message, value, reason: reason);
-                                                              },
-                                                            );
-
-                                                            // Dynamic spacer logic
-                                                            if (chatIndex == provider.messages.length - 1 &&
-                                                                _allowSpacer) {
-                                                              return Container(
-                                                                constraints: BoxConstraints(
-                                                                  minHeight: MediaQuery.of(context).size.height * 0.5,
-                                                                ),
-                                                                alignment: Alignment.topLeft,
-                                                                child: child,
-                                                              );
-                                                            }
-                                                            return child;
-                                                          },
-                                                        )
-                                                      : HumanMessage(
-                                                          message: message,
-                                                          onAskOmi: (text) {
-                                                            setState(() {
-                                                              _selectedContext = text;
-                                                            });
-                                                            textFieldFocusNode.requestFocus();
-                                                          },
-                                                        ),
-                                                );
-                                              },
-                                            ),
-                                          ),
-                                          if (_chatScrollMode == _ChatScrollMode.freeScrolling)
-                                            _buildJumpToLatestButton(),
-                                        ],
-                                      ),
-                                    );
-                                  },
-                                ),
+                                  if (_chatScrollMode == _ChatScrollMode.freeScrolling) _buildJumpToLatestButton(),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                 ),
                 // Send message area
                 Container(
@@ -439,11 +437,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     color: Colors.white,
                                                     borderRadius: BorderRadius.circular(10),
                                                   ),
-                                                  child: const Icon(
-                                                    FontAwesomeIcons.xmark,
-                                                    size: 10,
-                                                    color: Colors.black,
-                                                  ),
+                                                  child: FaIcon(FontAwesomeIcons.xmark, size: 10, color: Colors.black),
                                                 ),
                                               ),
                                             ),
@@ -470,9 +464,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                 bottom: widget.isPivotBottom
                                     ? 6
                                     : (textFieldFocusNode.hasFocus &&
-                                            (textController.text.length > 40 || textController.text.contains('\n'))
-                                        ? 0
-                                        : 2),
+                                              (textController.text.length > 40 || textController.text.contains('\n'))
+                                          ? 0
+                                          : 2),
                               ),
                               child: Stack(
                                 clipBehavior: Clip.none,
@@ -666,8 +660,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                         FontAwesomeIcons.arrowUp,
                                                         color:
                                                             voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                                ? const Color(0xFF1f1f25)
-                                                                : Colors.grey.shade400,
+                                                            ? const Color(0xFF1f1f25)
+                                                            : Colors.grey.shade400,
                                                         size: 16,
                                                       ),
                                                     ),
@@ -690,7 +684,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                       color: Colors.white,
                                                       shape: BoxShape.circle,
                                                     ),
-                                                    child: const Center(
+                                                    child: Center(
                                                       child: FaIcon(
                                                         FontAwesomeIcons.microphone,
                                                         color: Color(0xFF1f1f25),
@@ -707,7 +701,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                     bool hasText = value.text.trim().isNotEmpty;
                                                     if (!hasText) return const SizedBox.shrink();
 
-                                                    bool canSend = hasText &&
+                                                    bool canSend =
+                                                        hasText &&
                                                         !provider.sendingMessage &&
                                                         !provider.isUploadingFiles &&
                                                         connectivityProvider.isConnected;
@@ -728,7 +723,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                           color: Colors.white,
                                                           shape: BoxShape.circle,
                                                         ),
-                                                        child: const Center(
+                                                        child: Center(
                                                           child: FaIcon(
                                                             FontAwesomeIcons.arrowUp,
                                                             color: Color(0xFF1f1f25),
@@ -801,7 +796,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                           itemBuilder: (context) => [
                                             PullDownMenuItem(
                                               title: context.l10n.takePhoto,
-                                              iconWidget: const FaIcon(FontAwesomeIcons.camera, size: 16),
+                                              iconWidget: FaIcon(FontAwesomeIcons.camera, size: 16),
                                               onTap: () {
                                                 HapticFeedback.selectionClick();
                                                 if (mounted) {
@@ -811,7 +806,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             ),
                                             PullDownMenuItem(
                                               title: context.l10n.photoLibrary,
-                                              iconWidget: const FaIcon(FontAwesomeIcons.images, size: 16),
+                                              iconWidget: FaIcon(FontAwesomeIcons.images, size: 16),
                                               onTap: () {
                                                 HapticFeedback.selectionClick();
                                                 if (mounted) {
@@ -821,7 +816,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                             ),
                                             PullDownMenuItem(
                                               title: context.l10n.chooseFile,
-                                              iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
+                                              iconWidget: FaIcon(FontAwesomeIcons.folder, size: 16),
                                               onTap: () {
                                                 HapticFeedback.selectionClick();
                                                 if (mounted) {
@@ -1381,7 +1376,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                         style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                       ),
                       IconButton(
-                        icon: const Padding(
+                        icon: Padding(
                           padding: EdgeInsets.only(left: 2, top: 1),
                           child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
                         ),
@@ -1393,7 +1388,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                 const Divider(color: Colors.white12, height: 1),
                 // Actions
                 ListTile(
-                  leading: const Padding(
+                  leading: Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
                     child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
                   ),
@@ -1404,12 +1399,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                   },
                 ),
                 ListTile(
-                  leading: const Padding(
+                  leading: Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
                     child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
                   ),
                   title: Text(context.l10n.enableApps, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                  trailing: const Padding(
+                  trailing: Padding(
                     padding: EdgeInsets.only(left: 2, top: 1),
                     child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
                   ),
@@ -1551,23 +1546,23 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
         overflow: TextOverflow.ellipsis,
       ),
       trailing: isSelected
-          ? const Padding(
+          ? Padding(
               padding: EdgeInsets.only(left: 2, top: 1),
               child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
             )
           : appId != null && onConfirmDelete != null
-              ? GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _pendingDeleteAppId = appId;
-                    });
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
-                  ),
-                )
-              : null,
+          ? GestureDetector(
+              onTap: () {
+                setState(() {
+                  _pendingDeleteAppId = appId;
+                });
+              },
+              child: Padding(
+                padding: EdgeInsets.only(left: 2, top: 1),
+                child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
+              ),
+            )
+          : null,
       selected: isSelected,
       selectedTileColor: Colors.white.withValues(alpha: 0.1),
       onTap: onTap,

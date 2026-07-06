@@ -380,6 +380,7 @@ export function useGraphSimulation(
   centerNodeId?: string
 ): { nodes: NodePosition[]; sim: GraphSimulation; reduced: boolean } {
   const simRef = useRef<GraphSimulation>(undefined)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId)
   const reducedRef = useRef(
     typeof window !== 'undefined' &&
@@ -396,6 +397,7 @@ export function useGraphSimulation(
     setNodes(sim.getPositions())
   }, [graph])
 
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   return { nodes, sim: simRef.current, reduced: reducedRef.current }
 }
 

@@ -38,6 +38,36 @@ final class StartupWarmupPolicyTests: XCTestCase {
         )
     }
 
+    func testProactiveAssistantsRemainingDelayIsFullAtLaunch() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: 0),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay
+        )
+    }
+
+    func testProactiveAssistantsRemainingDelayCountsDownFromLaunch() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: 2.0),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay - 2.0,
+            accuracy: 0.0001
+        )
+    }
+
+    func testProactiveAssistantsRemainingDelayIsZeroOnceWindowHasElapsed() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(
+                elapsedSinceLaunch: StartupWarmupPolicy.proactiveAssistantsStartDelay + 60),
+            0
+        )
+    }
+
+    func testProactiveAssistantsRemainingDelayClampsNegativeElapsedToFullDelay() {
+        XCTAssertEqual(
+            StartupWarmupPolicy.remainingProactiveAssistantsStartDelay(elapsedSinceLaunch: -5),
+            StartupWarmupPolicy.proactiveAssistantsStartDelay
+        )
+    }
+
     func testConversationWarmupWaitsUntilAfterDeferredWarmupStarts() {
         XCTAssertGreaterThan(
             StartupWarmupPolicy.conversationWarmupDelay,

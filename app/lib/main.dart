@@ -68,6 +68,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/important_conversation_notification_handler.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -127,6 +128,7 @@ Future _init() async {
 
   // Service manager
   await ServiceManager.init();
+  LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
   if (Firebase.apps.isEmpty) {
@@ -287,8 +289,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider4<
+          ConversationProvider,
+          MessageProvider,
+          PeopleProvider,
+          UsageProvider,
+          CaptureProvider
+        >(
           create: (context) => CaptureProvider(),
           update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(

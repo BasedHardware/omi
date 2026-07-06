@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
@@ -35,15 +36,36 @@ def with_memory_env(payload: str) -> str:
         {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
-        {"name": "MEMORY_MODE", "value": "write"},
+        {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
-        {"name": "MEMORY_V3_GET_ENABLED", "value": "false"},
+        {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
         {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
         {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "false"},'''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n' + memory_env,
     )
+
+
+GOOGLE_OAUTH_SECRETS = '''\
+        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
+        {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},'''
+
+
+def with_cloud_run_oauth_secrets(payload: str) -> str:
+    payload = with_memory_env(payload)
+    return re.sub(
+        r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
+        r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
+        payload,
+        flags=re.MULTILINE,
+    )
+
+
+STANDARD_CLOUD_RUN_SECRETS = {
+    'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
+    'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
+}
 
 
 def test_repo_gke_values_match_manifest():
@@ -66,7 +88,7 @@ def test_cloud_run_state_reports_missing_gateway_url(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        with_memory_env(
+        with_cloud_run_oauth_secrets(
             '''
 {
   "services": {
@@ -271,7 +293,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
-                                'secrets': {},
+                                'secrets': STANDARD_CLOUD_RUN_SECRETS,
                             }
                         },
                     },
@@ -287,7 +309,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        with_memory_env(
+        with_cloud_run_oauth_secrets(
             '''
 {
   "services": {
@@ -346,7 +368,7 @@ def test_cloud_run_state_rejects_old_secret_versions(tmp_path):
     validator = load_validator()
     state_path = tmp_path / 'cloud_run_state.json'
     state_path.write_text(
-        with_memory_env(
+        with_cloud_run_oauth_secrets(
             '''
 {
   "services": {

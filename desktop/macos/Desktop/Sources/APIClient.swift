@@ -198,6 +198,9 @@ actor APIClient {
 
     do {
       return try await performRealtimeMintRequest(request, provider: providerType, retriedAuth: false)
+    } catch let error as RealtimeTokenMintError {
+      log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
+      throw error
     } catch let error as CredentialHealthError {
       log("APIClient: realtime token mint failed for \(provider): \(error.localizedDescription)")
       throw error
@@ -233,6 +236,8 @@ actor APIClient {
         let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
         log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
         return token
+      } catch let error as RealtimeTokenMintError {
+        throw error
       } catch let error as CredentialHealthError {
         throw error
       } catch {
@@ -242,10 +247,11 @@ actor APIClient {
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let payload = Self.extractErrorPayload(from: data)
-      throw CredentialHealthManager.classifyHTTPFailure(
+      let healthError = CredentialHealthManager.classifyHTTPFailure(
         statusCode: httpResponse.statusCode,
         payload: payload,
         provider: provider)
+      throw RealtimeTokenMintError(statusCode: httpResponse.statusCode, healthError: healthError, payload: payload)
     }
 
     let resp = try decoder.decode(Resp.self, from: data)
@@ -434,6 +440,25 @@ enum APIError: LocalizedError {
     case .unsupportedTierScopedBulkMutation(let operation):
       return "Layer-scoped bulk memory \(operation) is not supported yet."
     }
+  }
+}
+
+struct RealtimeTokenMintError: LocalizedError {
+  let statusCode: Int
+  let healthError: CredentialHealthError
+  let payload: APIErrorPayload?
+
+  var errorDescription: String? {
+    var description = healthError.localizedDescription
+    description += " [status: \(statusCode)"
+    if let reason = payload?.reason {
+      description += ", reason: \(reason)"
+    }
+    if let code = payload?.code {
+      description += ", code: \(code)"
+    }
+    description += "]"
+    return description
   }
 }
 
@@ -886,29 +911,57 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.Conversation (generated from app-client OpenAPI).
+    // The domain model adapts wire string-dates into Date via the APIClient
+    // decoder's ISO8601 strategy, preserves tolerant defaults, and tracks
+    // whether transcript_segments was present in the response.
+    let wire = try OmiAPI.Conversation(from: decoder)
     let container = try decoder.container(keyedBy: CodingKeys.self)
 
-    id = try container.decode(String.self, forKey: .id)
-    createdAt = try container.decode(Date.self, forKey: .createdAt)
-    startedAt = try container.decodeIfPresent(Date.self, forKey: .startedAt)
-    finishedAt = try container.decodeIfPresent(Date.self, forKey: .finishedAt)
-    structured = try container.decode(Structured.self, forKey: .structured)
+    id = wire.id
+    createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
+    startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
+    finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
+    structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
+    // container.contains distinguishes `"transcript_segments": null` (present,
+    // empty) from the key being absent (omitted). wire.transcriptSegments is
+    // nil for both, so we must check the container directly.
     transcriptSegmentsIncluded = container.contains(.transcriptSegments)
-    transcriptSegments =
-      try container.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments) ?? []
-    geolocation = try container.decodeIfPresent(Geolocation.self, forKey: .geolocation)
-    photos = try container.decodeIfPresent([ConversationPhoto].self, forKey: .photos) ?? []
-    appsResults = try container.decodeIfPresent([AppResponse].self, forKey: .appsResults) ?? []
-    source = try container.decodeIfPresent(ConversationSource.self, forKey: .source)
-    language = try container.decodeIfPresent(String.self, forKey: .language)
-    status = try container.decodeIfPresent(ConversationStatus.self, forKey: .status) ?? .completed
-    discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted) ?? false
-    isLocked = try container.decodeIfPresent(Bool.self, forKey: .isLocked) ?? false
-    starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
-    folderId = try container.decodeIfPresent(String.self, forKey: .folderId)
-    inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
-    deferred = try container.decodeIfPresent(Bool.self, forKey: .deferred) ?? false
+    transcriptSegments = (wire.transcriptSegments ?? []).map(TranscriptSegment.init)
+    geolocation = wire.geolocation
+    photos = (wire.photos ?? []).map(ConversationPhoto.init)
+    appsResults = (wire.appsResults ?? []).map(AppResponse.init)
+    source = wire.source.map { ConversationSource(rawValue: $0.rawValue) ?? .unknown }
+    language = wire.language
+    status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
+    discarded = wire.discarded ?? false
+    deleted = false  // backend REST Conversation schema does not expose deleted
+    isLocked = wire.isLocked ?? false
+    starred = wire.starred ?? false
+    folderId = wire.folderId
+    inputDeviceName = wire.clientDeviceId
+    deferred = wire.deferred ?? false
+  }
+
+  // Date helpers shared with Event/Structured adapters.
+  private static let fractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private static let standardFormatter = ISO8601DateFormatter()
+
+  private static func parseDate(_ s: String, decoder: Decoder) throws -> Date {
+    if let d = fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s) { return d }
+    throw DecodingError.dataCorrupted(.init(
+      codingPath: decoder.codingPath,
+      debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
+    ))
+  }
+
+  private static func parseOptionalDate(_ s: String?, decoder: Decoder) throws -> Date? {
+    guard let s else { return nil }
+    return try parseDate(s, decoder: decoder)
   }
 
   /// Memberwise initializer for creating from local storage
@@ -1021,21 +1074,59 @@ struct Structured: Codable, Equatable {
   let actionItems: [ActionItem]
   let events: [Event]
 
-  enum CodingKeys: String, CodingKey {
-    case title, overview, emoji, category
-    case actionItems = "action_items"
-    case events
+  init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.Structured (generated from app-client OpenAPI).
+    // The domain model adds tolerant defaults the wire DTO does not guarantee.
+    let wire = try OmiAPI.Structured(from: decoder)
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    // CategoryEnum is the backend's strict union; fall back to "other" when the
+    // backend returns a value outside it (decoded as ._unknown).
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
   }
 
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
+  init(_ wire: OmiAPI.Structured) {
+    title = wire.title ?? ""
+    overview = wire.overview ?? ""
+    emoji = wire.emoji ?? ""
+    if let cat = wire.category, cat != ._unknown {
+      category = cat.rawValue
+    } else {
+      category = "other"
+    }
+    actionItems = (wire.actionItems ?? []).map(ActionItem.init)
+    events = (wire.events ?? []).map(Event.init)
+  }
 
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-    overview = try container.decodeIfPresent(String.self, forKey: .overview) ?? ""
-    emoji = try container.decodeIfPresent(String.self, forKey: .emoji) ?? ""
-    category = try container.decodeIfPresent(String.self, forKey: .category) ?? "other"
-    actionItems = try container.decodeIfPresent([ActionItem].self, forKey: .actionItems) ?? []
-    events = try container.decodeIfPresent([Event].self, forKey: .events) ?? []
+  func encode(to encoder: Encoder) throws {
+    let actionItemsWire = actionItems.map {
+      OmiAPI.ActionItem(completed: $0.completed, completedAt: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, updatedAt: nil)
+    }
+    let eventsWire = events.map {
+      OmiAPI.Event(
+        created: $0.created,
+        description_: $0.description,
+        duration: $0.duration,
+        start: Event.encodeDateForWire($0.startsAt),
+        title: $0.title
+      )
+    }
+    let wire = OmiAPI.Structured(
+      actionItems: actionItemsWire,
+      category: OmiAPI.CategoryEnum(rawValue: category),
+      emoji: emoji,
+      events: eventsWire,
+      overview: overview,
+      title: title
+    )
+    try wire.encode(to: encoder)
   }
 
   /// Memberwise initializer for creating from local storage
@@ -1068,11 +1159,33 @@ struct ActionItem: Codable, Identifiable, Equatable {
     self.deleted = deleted
   }
 
+  /// Adapter from the generated wire DTO (OmiAPI.ActionItem). `deleted` is a
+  /// desktop-only field the backend REST schema does not expose; it defaults
+  /// to false on decode.
+  init(_ wire: OmiAPI.ActionItem) {
+    self.description = wire.description_
+    self.completed = wire.completed ?? false
+    self.deleted = false
+  }
+
   init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    completed = try container.decodeIfPresent(Bool.self, forKey: .completed) ?? false
-    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted) ?? false
+    let wire = try OmiAPI.ActionItem(from: decoder)
+    self.description = wire.description_
+    self.completed = wire.completed ?? false
+    self.deleted = false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let wire = OmiAPI.ActionItem(
+      completed: completed,
+      completedAt: nil,
+      conversationId: nil,
+      createdAt: nil,
+      description_: description,
+      dueAt: nil,
+      updatedAt: nil
+    )
+    try wire.encode(to: encoder)
   }
 }
 
@@ -1084,29 +1197,88 @@ struct Event: Codable, Identifiable, Equatable {
   let description: String
   let created: Bool
 
-  enum CodingKeys: String, CodingKey {
-    case title
-    case startsAt = "starts_at"
-    case duration
-    case description
-    case created
+  /// Adapter from the generated wire DTO (OmiAPI.Event). The backend `Event`
+  /// model exposes `start` (not `starts_at`); this adapter maps the field and
+  /// parses the ISO8601 string into a Date using the APIClient decoder's
+  /// strategy via JSONDecoder reuse.
+  init(_ wire: OmiAPI.Event) {
+    self.title = wire.title
+    self.startsAt = Self.parseDate(wire.start) ?? Date()
+    self.duration = wire.duration ?? 0
+    self.description = wire.description_ ?? ""
+    self.created = wire.created ?? false
   }
 
   init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
-    startsAt = try container.decodeIfPresent(Date.self, forKey: .startsAt) ?? Date()
-    duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
-    description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
-    created = try container.decodeIfPresent(Bool.self, forKey: .created) ?? false
+    // Decode via the generated wire shape, then adapt. `start` is the backend
+    // field name (generated); cached rows may still use legacy `starts_at`.
+    if let wire = try? OmiAPI.Event(from: decoder) {
+      self.title = wire.title
+      self.startsAt = Self.parseDate(wire.start) ?? Date()
+      self.duration = wire.duration ?? 0
+      self.description = wire.description_ ?? ""
+      self.created = wire.created ?? false
+      return
+    }
+
+    enum LegacyKeys: String, CodingKey {
+      case title, start, startsAt = "starts_at", duration, description, created
+    }
+    let container = try decoder.container(keyedBy: LegacyKeys.self)
+    self.title = try container.decode(String.self, forKey: .title)
+    let startString = try container.decodeIfPresent(String.self, forKey: .start)
+      ?? container.decodeIfPresent(String.self, forKey: .startsAt)
+    self.startsAt = startString.flatMap(Self.parseDate) ?? Date()
+    self.duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
+    self.description = try container.decodeIfPresent(String.self, forKey: .description) ?? ""
+    self.created = try container.decodeIfPresent(Bool.self, forKey: .created) ?? false
+  }
+
+  func encode(to encoder: Encoder) throws {
+    let startString = Self.encodeDate(startsAt)
+    let wire = OmiAPI.Event(
+      created: created,
+      description_: description,
+      duration: duration,
+      start: startString,
+      title: title
+    )
+    try wire.encode(to: encoder)
+  }
+
+  // Date helpers — reuse the APIClient decoder's ISO8601-with-fractional strategy.
+  private static let fractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
+  private static let standardFormatter = ISO8601DateFormatter()
+
+  private static func parseDate(_ s: String) -> Date? {
+    fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
+  }
+
+  private static func decodeDate(_ s: String, using decoder: Decoder) throws -> Date {
+    if let date = parseDate(s) { return date }
+    let context = DecodingError.Context(
+      codingPath: decoder.codingPath,
+      debugDescription: "Event.start is not a valid ISO8601 date: \(s)"
+    )
+    throw DecodingError.dataCorrupted(context)
+  }
+
+  private static func encodeDate(_ date: Date) -> String {
+    fractionalFormatter.string(from: date)
+  }
+
+  fileprivate static func encodeDateForWire(_ date: Date) -> String {
+    encodeDate(date)
   }
 }
 
-/// Translation from backend
-struct TranscriptTranslation: Codable {
-  let lang: String
-  let text: String
-}
+/// Schema authority: OmiAPI.Translation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO, so this is a thin alias.
+typealias TranscriptTranslation = OmiAPI.Translation
 
 struct TranscriptSegment: Codable, Identifiable {
   let id: String
@@ -1150,6 +1322,22 @@ struct TranscriptSegment: Codable, Identifiable {
       try container.decodeIfPresent([TranscriptTranslation].self, forKey: .translations) ?? []
   }
 
+  /// Adapter from the generated wire DTO (OmiAPI.TranscriptSegment). The
+  /// generated wire exposes `speaker_id` directly; the domain derives it from
+  /// `speaker` to preserve legacy behavior.
+  init(_ wire: OmiAPI.TranscriptSegment) {
+    let decodedId = wire.id
+    self.id = decodedId ?? UUID().uuidString
+    self.backendId = decodedId
+    self.text = wire.text
+    self.speaker = wire.speaker
+    self.isUser = wire.isUser
+    self.personId = wire.personId
+    self.start = wire.start
+    self.end = wire.end
+    self.translations = []  // wire translations map omitted; legacy field
+  }
+
   /// Memberwise initializer for creating from local storage
   init(
     id: String,
@@ -1189,17 +1377,11 @@ struct TranscriptSegment: Codable, Identifiable {
   }
 }
 
-struct Geolocation: Codable {
-  let latitude: Double?
-  let longitude: Double?
-  let address: String?
-  let locationType: String?
-
-  enum CodingKeys: String, CodingKey {
-    case latitude, longitude, address
-    case locationType = "location_type"
-  }
-}
+/// Schema authority: OmiAPI.Geolocation (generated from app-client OpenAPI).
+/// Field-for-field identical to the wire DTO; the prior adapter only passed
+/// the four exposed fields through with no transformation (no Date parsing,
+/// no defaults, no computed properties), so this is a thin alias.
+typealias Geolocation = OmiAPI.Geolocation
 
 struct ConversationPhoto: Codable, Identifiable {
   let id: String
@@ -1222,6 +1404,24 @@ struct ConversationPhoto: Codable, Identifiable {
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
     discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
   }
+
+  /// Adapter from the generated wire DTO (OmiAPI.ConversationPhoto). The wire
+  /// exposes `created_at` as a string; this adapter parses it via the shared
+  /// ISO8601 strategy.
+  init(_ wire: OmiAPI.ConversationPhoto) {
+    self.id = wire.id ?? UUID().uuidString
+    self.base64 = wire.base64
+    self.description = wire.description_
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    if let s = wire.createdAt, let d = f.date(from: s) ?? std.date(from: s) {
+      self.createdAt = d
+    } else {
+      self.createdAt = Date()
+    }
+    self.discarded = wire.discarded ?? false
+  }
 }
 
 struct AppResponse: Codable, Identifiable {
@@ -1232,6 +1432,12 @@ struct AppResponse: Codable, Identifiable {
   enum CodingKeys: String, CodingKey {
     case appId = "app_id"
     case content
+  }
+
+  /// Adapter from the generated wire DTO (OmiAPI.AppResult).
+  init(_ wire: OmiAPI.AppResult) {
+    self.appId = wire.appId
+    self.content = wire.content
   }
 
   init(from decoder: Decoder) throws {
@@ -1355,6 +1561,13 @@ enum MemoryCategory: String, Codable, CaseIterable {
     case .manual: return "square.and.pencil"
     case .workflow: return "arrow.triangle.branch"
     }
+  }
+
+  /// Adapter from the generated wire enum (OmiAPI.MemoryCategory). The backend
+  /// exposes a wider enum than the desktop renders; unknown values collapse to
+  /// `.system` so the row still decodes.
+  init(_ wire: OmiAPI.MemoryCategory) {
+    self = MemoryCategory(rawValue: wire.rawValue) ?? .system
   }
 }
 
@@ -1524,13 +1737,21 @@ struct ServerMemory: Decodable, Identifiable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    let idValue = try container.decodeIfPresent(String.self, forKey: .id)
-    let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
+    // Schema authority: OmiAPI.MemoryDB (generated from app-client OpenAPI).
+    // The wire DTO validates backend-owned fields against the generated
+    // contract, but its required fields (uid, id, createdAt, updatedAt) are
+    // stricter than the legacy decoder which used decodeIfPresent for
+    // tolerance. We try the wire DTO and fall back to the container for any
+    // field it rejects, preserving the old tolerant behavior.
+    let wire = try? OmiAPI.MemoryDB(from: decoder)
+
+    // id / memory_id alias resolution: wire.id is the backend authority
+    // (required String); memory_id is an optional legacy alias. Preserve the
+    // silent-mismatch behavior from the legacy decoder.
+    let idValue = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id)
+    let memoryIdValue = try wire?.memoryId ?? container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
     case let (.some(id), .some(memoryId)) where id != memoryId:
-      // Legacy docs stored memory_id = conversation_id; a mismatched alias must
-      // not reject the row — one bad row used to blank the whole memories list.
-      // Silent by design: long-time accounts have thousands of these per sync.
       self.id = id
     case let (.some(id), _):
       self.id = id
@@ -1546,16 +1767,26 @@ struct ServerMemory: Decodable, Identifiable {
       )
     }
 
-    content = try container.decode(String.self, forKey: .content)
-    category = try container.decodeIfPresent(MemoryCategory.self, forKey: .category) ?? .system
+    content = try wire?.content ?? container.decode(String.self, forKey: .content)
+    category = wire?.category.map(MemoryCategory.init) ?? .system
     capturedAt = try container.decodeIfPresent(Date.self, forKey: .capturedAt)
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? capturedAt ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    let createdAtString = wire?.createdAt
+    createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? capturedAt ?? Date()
+    let updatedAtString = wire?.updatedAt
+    updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     expiresAt = try container.decodeIfPresent(Date.self, forKey: .expiresAt)
 
-    let layerValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
+    // layer / tier / memory_tier alias resolution. Prefer wire DTO fields
+    // (schema-validated); fall back to container decoding when the wire DTO
+    // could not be constructed (missing required fields like uid).
+    let layerValue = try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
     let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
-    let memoryTierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
+    let memoryTierValue = try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
+      ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
     tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
 
     let presentTierAliases: [(String, MemoryLayer)] = [
@@ -1582,26 +1813,26 @@ struct ServerMemory: Decodable, Identifiable {
       self.tier = .longTerm
     }
 
-    conversationId = try container.decodeIfPresent(String.self, forKey: .conversationId)
-    reviewed = try container.decodeIfPresent(Bool.self, forKey: .reviewed) ?? false
-    userReview = try container.decodeIfPresent(Bool.self, forKey: .userReview)
-    visibility = try container.decodeIfPresent(String.self, forKey: .visibility) ?? "private"
-    manuallyAdded = try container.decodeIfPresent(Bool.self, forKey: .manuallyAdded) ?? false
-    scoring = try container.decodeIfPresent(String.self, forKey: .scoring)
+    conversationId = wire?.conversationId
+    reviewed = wire?.reviewed ?? false
+    userReview = wire?.userReview
+    visibility = wire?.visibility ?? "private"
+    manuallyAdded = wire?.manuallyAdded ?? false
+    scoring = wire?.scoring
     source = try container.decodeIfPresent(String.self, forKey: .source)
-    confidence = try container.decodeIfPresent(Double.self, forKey: .confidence)
-    sourceApp = try container.decodeIfPresent(String.self, forKey: .sourceApp)
+    confidence = wire?.captureConfidence
+    sourceApp = wire?.appId
     contextSummary = try container.decodeIfPresent(String.self, forKey: .contextSummary)
     isRead = try container.decodeIfPresent(Bool.self, forKey: .isRead) ?? false
     isDismissed = try container.decodeIfPresent(Bool.self, forKey: .isDismissed) ?? false
-    tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+    tags = wire?.tags ?? []
     reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
     currentActivity = try container.decodeIfPresent(String.self, forKey: .currentActivity)
     inputDeviceName = try container.decodeIfPresent(String.self, forKey: .inputDeviceName)
     windowTitle = try container.decodeIfPresent(String.self, forKey: .windowTitle)
-    primaryCaptureDevice = try container.decodeIfPresent(String.self, forKey: .primaryCaptureDevice)
-    captureDeviceIds = try container.decodeIfPresent([String].self, forKey: .captureDeviceIds) ?? []
-    headline = try container.decodeIfPresent(String.self, forKey: .headline)
+    primaryCaptureDevice = wire?.primaryCaptureDevice
+    captureDeviceIds = wire?.captureDeviceIds ?? []
+    headline = wire?.headline
   }
 
   var isPublic: Bool {
@@ -1772,6 +2003,9 @@ extension APIClient {
 // MARK: - Memories API
 
 extension APIClient {
+  private static let canonicalLifecycleExposedHeader = "X-Omi-Memory-Canonical-Lifecycle-Exposed"
+  private static let deviceScopeSupportedHeader = "X-Omi-Memory-Device-Scope-Supported"
+
   struct MemoryListPage {
     let memories: [ServerMemory]
     let canonicalLifecycleExposed: Bool
@@ -1855,11 +2089,13 @@ extension APIClient {
     }
 
     let memories = try decoder.decode([ServerMemory].self, from: data)
-    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: "X-Omi-Memory-Device-Scope-Supported")
+    let lifecycleHeader = httpResponse.value(forHTTPHeaderField: Self.canonicalLifecycleExposedHeader)
+    let canonicalLifecycleExposed = lifecycleHeader == "true"
+    let deviceScopeHeader = httpResponse.value(forHTTPHeaderField: Self.deviceScopeSupportedHeader)
     let deviceScopeSupported = deviceScopeHeader.map { $0.caseInsensitiveCompare("true") == .orderedSame }
     return MemoryListPage(
       memories: memories,
-      canonicalLifecycleExposed: deviceScopeSupported == true,
+      canonicalLifecycleExposed: canonicalLifecycleExposed,
       deviceScopeSupported: deviceScopeSupported
     )
   }
@@ -3306,19 +3542,32 @@ struct Goal: Codable, Identifiable {
   }
 
   init(from decoder: Decoder) throws {
+    // Schema authority: OmiAPI.GoalResponse (generated from app-client OpenAPI).
+    // The domain model layers on client-only fields (description, completedAt,
+    // source) the backend REST schema does not expose, read via the same
+    // container with tolerant fallbacks.
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+    // Wire DTO required fields (created_at, title, etc.) are stricter than the
+    // legacy decoder; use try? and fall back to the container for tolerance.
+    let wire = try? OmiAPI.GoalResponse(from: decoder)
+
+    id = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id) ?? ""
+    title = try wire?.title ?? container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description)
-    goalType = try container.decodeIfPresent(GoalType.self, forKey: .goalType) ?? .boolean
-    targetValue = try container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 1.0
-    currentValue = try container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0.0
-    minValue = try container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0.0
-    maxValue = try container.decodeIfPresent(Double.self, forKey: .maxValue) ?? 100.0
-    unit = try container.decodeIfPresent(String.self, forKey: .unit)
-    isActive = try container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
+    goalType = GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "") ?? .boolean
+    targetValue = try wire?.targetValue ?? container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 0
+    currentValue = try wire?.currentValue ?? container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0
+    minValue = try wire?.minValue ?? container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0
+    maxValue = try wire?.maxValue ?? container.decodeIfPresent(Double.self, forKey: .maxValue) ?? 0
+    unit = try wire?.unit ?? container.decodeIfPresent(String.self, forKey: .unit)
+    isActive = try wire?.isActive ?? container.decodeIfPresent(Bool.self, forKey: .isActive) ?? true
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let std = ISO8601DateFormatter()
+    let createdAtString = wire?.createdAt
+    createdAt = (createdAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? Date()
+    let updatedAtString = wire?.updatedAt
+    updatedAt = (updatedAtString.flatMap { f.date(from: $0) ?? std.date(from: $0) }) ?? createdAt
     completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
     source = try container.decodeIfPresent(String.self, forKey: .source)
   }

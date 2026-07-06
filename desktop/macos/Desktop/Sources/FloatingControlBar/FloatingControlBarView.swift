@@ -50,6 +50,9 @@ struct FloatingControlBarView: View {
                 ? FloatingControlBarWindow.notchCompactSideWidth
                 : FloatingControlBarWindow.notchActiveSideWidth
         }
+        if showingNotchThinking {
+            return FloatingControlBarWindow.notchThinkingSideWidth
+        }
         if agentPills.pills.isEmpty && !state.isVoiceListening {
             return FloatingControlBarWindow.notchCompactSideWidth
         }
@@ -106,6 +109,17 @@ struct FloatingControlBarView: View {
         )
         .background(Color.clear)
         .animation(.spring(response: 0.35, dampingFraction: 0.82), value: state.currentNotification?.id)
+        // Placed on the always-mounted root (not inside unifiedFloatingSurface) so
+        // the pill→island morph still fires when transitioning out of the idle pill.
+        .onChange(of: activeLifecycleKey) { _, _ in
+            (window as? FloatingControlBarWindow)?.syncActiveIsland()
+        }
+    }
+
+    /// Composite key for the active PTT lifecycle — any change drives the
+    /// pill ↔ notch-island morph (see FloatingControlBarWindow.syncActiveIsland).
+    private var activeLifecycleKey: String {
+        "\(state.isVoiceListening)-\(state.isThinking)-\(state.isVoiceResponseGlowActive)"
     }
 
     /// Whether the bar chrome should stretch to fill the window width
@@ -129,6 +143,14 @@ struct FloatingControlBarView: View {
 
     private var showingNotchWaveform: Bool {
         state.isVoiceListening && !state.isVoiceFollowUp && !state.showingAIConversation
+    }
+
+    /// The notch "thinking" state: a PTT query is committed and being processed,
+    /// with no live listening or open conversation surface. Shows the spinning
+    /// Omi mark + "Thinking" in the notch lobes.
+    private var showingNotchThinking: Bool {
+        (state.isThinking || state.isVoiceResponseWaiting)
+            && !state.showingAIConversation && !state.isVoiceListening
     }
 
     private var shouldUseOmiChatOverlayHitTarget: Bool {
@@ -166,6 +188,14 @@ struct FloatingControlBarView: View {
                 } else {
                     pillAgentListMenu
                 }
+            }
+
+            if state.usesNotchIsland && !state.pttHintText.isEmpty && !state.showingAIConversation {
+                notchPttHintRow
+                    .frame(height: FloatingControlBarWindow.pttHintRowHeight)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 6)
+                    .transition(.opacity)
             }
 
             if state.showingAIConversation {
@@ -223,6 +253,7 @@ struct FloatingControlBarView: View {
                 let hasExpandedSurface = state.showingAIConversation
                     || state.currentNotification != nil
                     || shouldShowNotchHoverMenu
+                    || !state.pttHintText.isEmpty
                 let bottomRadius: CGFloat = state.showingAIConversation || state.currentNotification != nil ? 22 : 18
                 let surfaceWidth = hasExpandedSurface
                     ? max(notchChromeWidth, geometry.size.width - notchSurfaceHorizontalInset * 2)
@@ -331,6 +362,11 @@ struct FloatingControlBarView: View {
                     .scaleEffect(0.72)
                     .frame(width: 28, height: 15)
                     .frame(width: 38, height: 27)
+            } else if showingNotchThinking {
+                NotchThinkingMark()
+                    .frame(width: 24, height: 24)
+                    .frame(width: notchSideWidth, height: notchChromeHeight, alignment: .trailing)
+                    .padding(.trailing, 2)
             } else {
                 ZStack(alignment: .trailing) {
                     NotchAgentPillsRowView(manager: agentPills, barWindow: window)
@@ -387,14 +423,22 @@ struct FloatingControlBarView: View {
             }
             .buttonStyle(.plain)
 
-            if notchSettingsHovering {
+            if showingNotchThinking {
+                Text("Thinking")
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            } else if notchSettingsHovering {
                 notchSettingsButton
                     .zIndex(1)
                     .transition(.scale.combined(with: .opacity))
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.leading, 5)
+        .padding(.leading, 6)
         .accessibilityElement(children: .contain)
     }
 
@@ -412,6 +456,22 @@ struct FloatingControlBarView: View {
         .accessibilityIdentifier("notch_floating_bar_settings")
         .accessibilityLabel("Floating Bar Settings")
         .accessibilityHint("Open settings")
+    }
+
+    /// Transient too-short PTT hint shown below the notch chrome (notch layout has
+    /// no inline text spot, unlike the pill's `voiceListeningView`). White/neutral,
+    /// no toast; cleared on the same ~2s lifecycle as `pttHintText`.
+    private var notchPttHintRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "mic.fill")
+                .scaledFont(size: 11, weight: .semibold)
+                .foregroundColor(.white.opacity(0.9))
+            Text(state.pttHintText)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(.white)
+                .lineLimit(1)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var notchOmiChatRow: some View {
@@ -933,7 +993,15 @@ struct FloatingControlBarView: View {
     private var controlBarView: some View {
         let allowsHoverExpansion = isHovering && !state.isVoiceResponseGlowActive
         return Group {
-            if state.isVoiceListening && !state.isVoiceFollowUp {
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT hint takes precedence over every other bar state
+                // (incl. follow-up turns) for its brief window.
+                voiceListeningView
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .frame(height: 42)
+                    .transition(.opacity)
+            } else if state.isVoiceListening && !state.isVoiceFollowUp {
                 voiceListeningView
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -1142,20 +1210,30 @@ struct FloatingControlBarView: View {
 
     private var voiceListeningView: some View {
         HStack(spacing: 7) {
-            // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: state.isVoiceListening)
+            if !state.pttHintText.isEmpty {
+                // Too-short PTT tap: inline hint instead of the live waveform.
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
+                Text(state.pttHintText)
+                    .scaledFont(size: 11, weight: .medium)
+                    .foregroundColor(.white)
+            } else {
+                // Playful realtime mic waveform (replaces the old pulsing red dot)
+                VoiceWaveformBars(isActive: state.isVoiceListening)
 
-            Image(systemName: "mic.fill")
-                .scaledFont(size: 12, weight: .semibold)
-                .foregroundColor(.white)
+                Image(systemName: "mic.fill")
+                    .scaledFont(size: 12, weight: .semibold)
+                    .foregroundColor(.white)
 
-            if state.isVoiceLocked {
-                Image(systemName: "lock.fill")
-                    .scaledFont(size: 10, weight: .bold)
-                    .foregroundColor(.orange)
-                    .frame(width: 18, height: 18)
-                    .background(Color.orange.opacity(0.2))
-                    .cornerRadius(4)
+                if state.isVoiceLocked {
+                    Image(systemName: "lock.fill")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundColor(.orange)
+                        .frame(width: 18, height: 18)
+                        .background(Color.orange.opacity(0.2))
+                        .cornerRadius(4)
+                }
             }
         }
     }
@@ -1454,6 +1532,29 @@ private struct NotchOmiMark: View {
         }
         .drawingGroup(opaque: false, colorMode: .linear)
         .accessibilityHidden(true)
+    }
+}
+
+/// The Omi mark rendered as a spinning "thinking" indicator. The ring's dots
+/// carry a brightness trail (bright head → faint tail) so the continuous
+/// rotation reads as a sweeping comet rather than a static ring of dots.
+private struct NotchThinkingMark: View {
+    @State private var angle: Double = 0
+
+    private static let trail: [Color] = (0..<8).map { index in
+        Color.white.opacity(1.0 - Double(index) * 0.1)
+    }
+
+    var body: some View {
+        NotchOmiMark(dotColors: Self.trail)
+            .rotationEffect(.degrees(angle))
+            .onAppear {
+                angle = 0
+                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
+                    angle = 360
+                }
+            }
+            .accessibilityLabel("Thinking")
     }
 }
 

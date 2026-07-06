@@ -4,7 +4,7 @@ from enum import Enum
 import re
 from typing import Optional, List, Dict, Any
 
-from pydantic import BaseModel, Field, computed_field, validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from config.memory_confidence import (
     CONFIDENCE_BANDS,
@@ -122,7 +122,8 @@ class Memory(BaseModel):
     )
     durability: Optional[str] = Field(description="Expected durability horizon for the fact", default=None)
 
-    @validator('category', pre=True)
+    @field_validator('category', mode='before')
+    @classmethod
     def map_legacy_categories(cls, v):
         """Map legacy categories to new ones when creating memories"""
         if isinstance(v, MemoryCategory):
@@ -405,7 +406,7 @@ def _model_or_dict_to_dict(item: Any) -> Any:
     if hasattr(item, 'model_dump'):
         return item.model_dump()
     if hasattr(item, 'dict'):
-        return item.dict()
+        return item.model_dump()
     return item
 
 

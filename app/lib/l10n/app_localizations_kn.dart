@@ -1715,12 +1715,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -8486,12 +8481,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9371,7 +9361,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ಸದ್ಯಕ್ಕೆ Omi ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+      'ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9520,4 +9510,22 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get flashFirmware => 'ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ';
+
+  @override
+  String get pendantRecordingTitle => 'ಪೆಂಡೆಂಟ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get pendantRecordingNote =>
+      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ತಾನಾಗಿಯೇ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಿದೆ. ಆ್ಯಪ್ ತೆರೆದಿರುವಾಗ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ನಿಮ್ಮ ಫೋನ್‌ಗೆ ಸಿಂಕ್ ಆಗುತ್ತವೆ.';
+
+  @override
+  String get pendantSyncingRecordings => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್‌ನಿಂದ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತಿದೆ…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes ನಿಮಿಷ ಸಂಗ್ರಹವಾಗಿದೆ';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ.';
 }
