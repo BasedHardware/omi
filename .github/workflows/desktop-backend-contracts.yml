@@ -41,7 +41,7 @@ jobs:
         run: npm ci
 
       - name: Desktop core E2E self-check (T0)
-        run: ./desktop/macos/scripts/desktop-core-harness.sh --self-check
+        run: ./desktop/macos/scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
 
   contracts:
     runs-on: ubuntu-latest

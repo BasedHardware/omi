@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ./scripts/desktop-core-harness.sh --self-check
+#   ./scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
 #   ./scripts/desktop-core-harness.sh --tier 0
 #   ./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
 #   ./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e --keep-stack
@@ -17,19 +18,22 @@ TIER=""
 BUNDLE="${OMI_CORE_E2E_BUNDLE:-omi-core-e2e}"
 KEEP_STACK=0
 SELF_CHECK=0
+SKIP_BACKEND_CONTRACTS=0
 PORT="${OMI_AUTOMATION_PORT:-47777}"
+DEV_STACK_PROVIDER_MODE=""
 
 usage() {
   cat <<'USAGE'
 Desktop core E2E harness.
 
 Options:
-  --tier N          Run tier N checks (0-3). Required unless --self-check.
-  --bundle NAME     Named test bundle for T1+ (default: omi-core-e2e)
-  --port PORT       Automation bridge port (default: OMI_AUTOMATION_PORT or 47777)
-  --keep-stack      On T2+, leave dev-up running after the run
-  --self-check      Linux-safe static checks only (flow lint + gauntlet self-check)
-  --help            Show this help
+  --tier N                    Run tier N checks (0-3). Required unless --self-check.
+  --bundle NAME               Named test bundle for T1+ (default: omi-core-e2e)
+  --port PORT                 Automation bridge port (default: OMI_AUTOMATION_PORT or 47777)
+  --keep-stack                On T2+, leave dev-up running after the run
+  --self-check                Static checks (flow lint + gauntlet self-check; backend contracts locally)
+  --skip-backend-contracts    With --self-check, skip backend preflight + pytest contracts (CI desktop gate)
+  --help                      Show this help
 USAGE
 }
 
@@ -52,6 +56,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --self-check)
       SELF_CHECK=1
+      ;;
+    --skip-backend-contracts)
+      SKIP_BACKEND_CONTRACTS=1
       ;;
     --help|-h)
       usage
@@ -81,12 +88,12 @@ finalize_run() {
   local started_at="$4"
   local duration_s="$5"
   local flows_json="$6"
-  python3 - "$run_dir/manifest.json" "$passed" "$tier_value" "$started_at" "$duration_s" "$flows_json" "$BUNDLE" "$(git_sha)" <<'PY'
+  python3 - "$run_dir/manifest.json" "$passed" "$tier_value" "$started_at" "$duration_s" "$flows_json" "$BUNDLE" "$(git_sha)" "$DEV_STACK_PROVIDER_MODE" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-path, passed, tier_value, started_at, duration_s, flows_json, bundle, git_sha = sys.argv[1:9]
+path, passed, tier_value, started_at, duration_s, flows_json, bundle, git_sha, provider_mode = sys.argv[1:10]
 manifest = {
     "passed": passed == "true",
     "tier": int(tier_value) if tier_value.isdigit() else tier_value,
@@ -96,6 +103,8 @@ manifest = {
     "duration_s": float(duration_s),
     "flows": json.loads(flows_json or "[]"),
 }
+if provider_mode:
+    manifest["provider_mode"] = provider_mode
 Path(path).write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
   if [[ "$passed" == "true" ]]; then
@@ -106,6 +115,9 @@ PY
     echo ""
     echo "- tier: ${tier_value}"
     echo "- bundle: ${BUNDLE}"
+    if [[ -n "$DEV_STACK_PROVIDER_MODE" ]]; then
+      echo "- provider_mode: ${DEV_STACK_PROVIDER_MODE}"
+    fi
     echo "- passed: ${passed}"
     echo "- duration_s: ${duration_s}"
     echo "- evidence: ${run_dir}"
@@ -115,10 +127,11 @@ PY
 run_self_check() {
   echo "=== desktop-core-harness self-check ==="
   python3 "$SCRIPT_DIR/desktop-flow-lint.py"
-  if [[ "$(uname -s)" == "Darwin" ]]; then
-    python3 "$SCRIPT_DIR/agent-continuity-gauntlet-lib.py" --self-check
-  else
-    python3 "$SCRIPT_DIR/agent-continuity-gauntlet-lib.py" --self-check
+  python3 "$SCRIPT_DIR/agent-continuity-gauntlet-lib.py" --self-check
+  if [[ "$SKIP_BACKEND_CONTRACTS" -eq 1 ]]; then
+    echo "desktop-core-harness: skipping backend preflight + pytest contracts (--skip-backend-contracts; CI desktop gate)"
+    echo "desktop-core-harness self-check passed (desktop static checks only)"
+    return 0
   fi
   if [[ -x "$REPO_ROOT/backend/test-preflight.sh" ]]; then
     bash "$REPO_ROOT/backend/test-preflight.sh" >/dev/null
@@ -126,25 +139,6 @@ run_self_check() {
   python3 -m pytest "$REPO_ROOT/backend/testing/contracts" -q --maxfail=1 -k "desktop" 2>/dev/null \
     || python3 -m pytest "$REPO_ROOT/backend/testing/contracts" -q --maxfail=1
   echo "desktop-core-harness self-check passed"
-}
-
-flow_tier() {
-  local flow_path="$1"
-  python3 - "$flow_path" <<'PY'
-import sys
-from pathlib import Path
-import yaml
-
-path = Path(sys.argv[1])
-flow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-tier = flow.get("tier")
-if tier == "manual":
-    print("manual")
-elif tier is None:
-    print("missing")
-else:
-    print(int(tier))
-PY
 }
 
 flows_for_max_tier() {
@@ -196,12 +190,145 @@ if not payload.get("ok"):
 PY
 }
 
+# Probe dev-harness stack health + provider_mode from config-digest.json.
+# Exit 0: healthy offline stack (JSON on stdout)
+# Exit 1: stack not up / unhealthy (caller may dev-up)
+# Exit 2: config digest reports non-offline provider_mode (T2 must abort)
+probe_dev_stack() {
+  python3 - "$REPO_ROOT" <<'PY'
+import json
+import socket
+import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
+
+repo_root = Path(sys.argv[1])
+sys.path.insert(0, str(repo_root / "scripts" / "dev-harness"))
+from dev_harness import config
+
+
+def http_ok(url: str, headers: dict[str, str] | None = None, timeout: float = 1.0) -> bool:
+    try:
+        request = urllib.request.Request(url, headers=headers or {})
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status < 500
+    except urllib.error.HTTPError as exc:
+        return exc.code < 500
+    except Exception:
+        return False
+
+
+cfg = config.load_config(repo_root)
+digest_path = cfg.layout.config_digest_path
+digest: dict[str, object] = {}
+if digest_path.is_file():
+    try:
+        loaded = json.loads(digest_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        loaded = {}
+    if isinstance(loaded, dict):
+        digest = loaded
+
+provider_mode = digest.get("provider_mode")
+if isinstance(provider_mode, str) and provider_mode.strip():
+    provider_mode = provider_mode.strip()
+else:
+    provider_mode = None
+
+if provider_mode and provider_mode != "offline":
+    print(
+        json.dumps(
+            {
+                "healthy": False,
+                "provider_mode": provider_mode,
+                "reason": "non_offline_provider_mode",
+                "config_digest_path": str(digest_path),
+            }
+        )
+    )
+    raise SystemExit(2)
+
+typesense_headers = {"X-TYPESENSE-API-KEY": config.LOCAL_TYPESENSE_API_KEY}
+checks = {
+    "firestore": f"http://{cfg.firestore_host}/",
+    "auth": f"http://{cfg.auth_host}/",
+    "typesense": f"http://127.0.0.1:{config.TYPESENSE_PORT}/collections",
+    "backend": f"{cfg.backend_url}/docs",
+    "desktop-backend": f"{cfg.desktop_backend_url}/health",
+}
+failures: list[str] = []
+for service, url in checks.items():
+    headers = typesense_headers if service == "typesense" else None
+    if not http_ok(url, headers=headers):
+        failures.append(service)
+
+if failures:
+    print(
+        json.dumps(
+            {
+                "healthy": False,
+                "provider_mode": provider_mode,
+                "reason": "health_check_failed",
+                "failures": failures,
+                "config_digest_path": str(digest_path),
+            }
+        )
+    )
+    raise SystemExit(1)
+
+if provider_mode != "offline":
+    print(
+        json.dumps(
+            {
+                "healthy": False,
+                "provider_mode": provider_mode,
+                "reason": "missing_offline_digest",
+                "config_digest_path": str(digest_path),
+            }
+        )
+    )
+    raise SystemExit(1)
+
+print(json.dumps({"healthy": True, "provider_mode": provider_mode, "config_digest_path": str(digest_path)}))
+PY
+}
+
 ensure_dev_stack() {
-  if make -C "$REPO_ROOT" dev-status >/dev/null 2>&1; then
-    :
-  else
-    PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up
+  local probe_json probe_status
+  set +e
+  probe_json="$(probe_dev_stack)"
+  probe_status=$?
+  set -e
+
+  if [[ "$probe_status" -eq 0 ]]; then
+    DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
+    echo "desktop-core-harness: dev stack healthy (provider_mode=${DEV_STACK_PROVIDER_MODE})"
+    return 0
   fi
+
+  if [[ "$probe_status" -eq 2 ]]; then
+    echo "desktop-core-harness: refusing T2+ run — dev stack provider_mode is not offline" >&2
+    echo "$probe_json" >&2
+    echo "Run 'make dev-down' then retry with PROVIDER_MODE=offline make dev-up" >&2
+    exit 1
+  fi
+
+  echo "desktop-core-harness: dev stack not healthy; starting with PROVIDER_MODE=offline"
+  echo "$probe_json"
+  PROVIDER_MODE=offline make -C "$REPO_ROOT" dev-up
+
+  set +e
+  probe_json="$(probe_dev_stack)"
+  probe_status=$?
+  set -e
+  if [[ "$probe_status" -ne 0 ]]; then
+    echo "desktop-core-harness: dev stack still unhealthy after dev-up" >&2
+    echo "$probe_json" >&2
+    exit 1
+  fi
+  DEV_STACK_PROVIDER_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["provider_mode"])' "$probe_json")"
+  echo "desktop-core-harness: dev stack ready (provider_mode=${DEV_STACK_PROVIDER_MODE})"
 }
 
 if [[ "$SELF_CHECK" -eq 1 ]]; then
@@ -240,12 +367,6 @@ case "$TIER" in
     exit 1
   }
   mapfile -t FLOW_PATHS < <(flows_for_max_tier "$TIER")
-  if [[ "$TIER" -eq 1 ]]; then
-    FLOW_PATHS=(
-      "$DESKTOP_DIR/e2e/flows/harness-smoke.yaml"
-      "$DESKTOP_DIR/e2e/flows/navigation.yaml"
-    )
-  fi
   for flow_path in "${FLOW_PATHS[@]}"; do
   [[ -f "$flow_path" ]] || continue
   flow_name="$(basename "$flow_path" .yaml)"

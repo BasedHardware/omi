@@ -31,7 +31,13 @@ cd desktop/macos && OMI_APP_NAME=omi-core-e2e OMI_SKIP_TUNNEL=1 ./run.sh
 
 Do **not** mix `omi-auth-seed.sh` (Omi Dev prod session) with `make desktop-run-local` (Auth emulator) — the app will boot unsigned-in.
 
-Linux / CI static gate:
+Linux / CI static gate (desktop checks only — backend contracts run in the sibling `contracts` job):
+
+```bash
+./desktop/macos/scripts/desktop-core-harness.sh --self-check --skip-backend-contracts
+```
+
+Local full T0 (includes backend preflight + pytest desktop contracts):
 
 ```bash
 ./desktop/macos/scripts/desktop-core-harness.sh --self-check
@@ -41,9 +47,9 @@ Linux / CI static gate:
 
 | Tier | Where | Time | Contents | Command |
 | --- | --- | --- | --- | --- |
-| **T0** | Linux + macOS, CI | <2 min | flow lint, gauntlet `--self-check`, backend desktop contracts | `--tier 0` / `--self-check` |
-| **T1** | macOS agent-local | ~5 min | `harness-smoke` + `navigation` on bridge lane | `--tier 1` |
-| **T2** | macOS agent-local; **bless tier** | ~15 min | dev-up offline; core matrix flows + spatial overlay swift tests | `--tier 2` |
+| **T0** | Linux + macOS, CI | <2 min | flow lint, gauntlet `--self-check`; backend contracts locally or in CI `contracts` job | `--tier 0` / `--self-check` |
+| **T1** | macOS agent-local | ~5 min | all flows with `tier: 1` metadata on bridge lane | `--tier 1` |
+| **T2** | macOS agent-local; **bless tier** | ~15 min | dev-up offline (enforced); all flows with `tier <= 2` + spatial overlay swift tests | `--tier 2` |
 | **T3** | macOS opt-in | 30+ min | agent continuity gauntlet (live LLM/BYOK) | `--tier 3` |
 
 ## Change → tier map
@@ -83,19 +89,19 @@ Linux / CI static gate:
 | `rewind` | v2 | manual `do:` | manual | |
 | `screen-recording-permission` | v2 | manual `do:` | manual | TCC-dependent |
 
-Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summary.md}` plus `latest-green` on pass.
+Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summary.md}` plus `latest-green` on pass. T2+ manifests include `provider_mode` (must be `offline` for bless-eligible runs).
 
 ## Failure playbook
 
 1. Read `manifest.json` for tier, git SHA, per-flow pass/fail.
 2. Read `summary.md` for human summary.
 3. For failed flows, open `flows/<name>/` for `omi-harness` step artifacts.
-4. T2 hermetic failures: confirm `PROVIDER_MODE=offline`, `OMI_LLM_STUB=1` on Rust backend, bridge `/health`.
+4. T2 hermetic failures: confirm `provider_mode: offline` in `manifest.json`, `PROVIDER_MODE=offline` in dev-harness `config-digest.json`, `OMI_LLM_STUB=1` on Rust backend, bridge `/health`. If a live stack is already up, the harness fails loudly instead of reusing it.
 5. T3 failures: check LLM credentials / quota; inspect gauntlet evidence under `.harness/agent-continuity-gauntlet/`.
 
 ## Hermetic vs live
 
-- **Hermetic (T2):** `make dev-up` with `PROVIDER_MODE=offline`, Rust `OMI_LLM_STUB=1`, bridge transcript seam — no real LLM or mic/STT.
+- **Hermetic (T2):** `make dev-up` with `PROVIDER_MODE=offline` (verified via config digest + service health; non-offline stacks abort), Rust `OMI_LLM_STUB=1`, bridge transcript seam — no real LLM or mic/STT.
 - **Live (T3):** Real provider credentials; agent continuity gauntlet.
 
 See also `desktop/macos/e2e/SKILL.md` and `scripts/dev-harness/`.
