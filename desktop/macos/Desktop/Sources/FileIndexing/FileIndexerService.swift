@@ -153,7 +153,7 @@ actor FileIndexerService {
             db = try await ensureDB()
         } catch {
             log("FileIndexer: DB init failed: \(error.localizedDescription)")
-            return FileIndexingScanResult(indexedCount: 0, failure: FileIndexingFailure.classify(error))
+            return FileIndexingScanResult(indexedCount: 0, failure: FileIndexingFailure.classifyInitializationFailure(error))
         }
 
         // For incremental scans, load existing index for O(1) lookup
@@ -592,6 +592,7 @@ struct FileIndexingScanResult: Equatable {
 
 enum FileIndexingFailure: Error, Equatable, LocalizedError {
     case diskFull
+    case localIndexUnavailable
     case localWriteFailed
 
     static func classify(_ error: Error) -> FileIndexingFailure {
@@ -601,10 +602,19 @@ enum FileIndexingFailure: Error, Equatable, LocalizedError {
         return .localWriteFailed
     }
 
+    static func classifyInitializationFailure(_ error: Error) -> FileIndexingFailure {
+        if isDiskFull(error) {
+            return .diskFull
+        }
+        return .localIndexUnavailable
+    }
+
     var userMessage: String {
         switch self {
         case .diskFull:
             return "Mac storage is full. Free up space and try again."
+        case .localIndexUnavailable:
+            return "Omi couldn't open the file index. Try again."
         case .localWriteFailed:
             return "Omi couldn't save the file index. Try again."
         }
@@ -618,6 +628,8 @@ enum FileIndexingFailure: Error, Equatable, LocalizedError {
         switch self {
         case .diskFull:
             return "disk full"
+        case .localIndexUnavailable:
+            return "local file index unavailable"
         case .localWriteFailed:
             return "local file index write failed"
         }

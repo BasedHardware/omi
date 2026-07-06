@@ -29,10 +29,31 @@ final class FileIndexingFailureTests: XCTestCase {
         XCTAssertEqual(FileIndexingFailure.classify(error), .localWriteFailed)
     }
 
+    func testClassifiesInitializationFailureSeparatelyFromWriteFailure() {
+        XCTAssertEqual(
+            FileIndexingFailure.classifyInitializationFailure(FileIndexerError.databaseNotInitialized),
+            .localIndexUnavailable
+        )
+    }
+
+    func testClassifiesInitializationDiskFullAsDiskFull() {
+        let error = NSError(
+            domain: NSCocoaErrorDomain,
+            code: NSFileWriteUnknownError,
+            userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))]
+        )
+
+        XCTAssertEqual(FileIndexingFailure.classifyInitializationFailure(error), .diskFull)
+    }
+
     func testUserFacingMessagesAreShortAndActionable() {
         XCTAssertEqual(
             FileIndexingFailure.diskFull.toolErrorMessage,
             "Error: Mac storage is full. Free up space and try again."
+        )
+        XCTAssertEqual(
+            FileIndexingFailure.localIndexUnavailable.toolErrorMessage,
+            "Error: Omi couldn't open the file index. Try again."
         )
         XCTAssertEqual(
             FileIndexingFailure.localWriteFailed.toolErrorMessage,
