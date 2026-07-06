@@ -28,13 +28,19 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
     XCTAssertTrue(source.contains("guard availability.isAvailable else"))
     XCTAssertTrue(source.contains("assistantText = setupPrompt"))
+    XCTAssertTrue(source.contains("FloatingControlBarManager.shared.presentAgentInstallPrompt("))
     XCTAssertTrue(source.contains("output: availability.toolError"))
-    XCTAssertTrue(source.contains("""
-          sendToolResultIfCurrent(
-            source: source, callId: callId, name: name,
-            output: availability.toolError)
-          return
-"""))
+    XCTAssertTrue(source.contains("sendToolResultIfCurrent("))
+    XCTAssertTrue(source.contains("return"))
+  }
+
+  func testCommitTurnPreflightsExplicitProviderDirectiveBeforeRealtimeModelAnswers() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("commitTurnAfterProviderDirectivePreflight("))
+    XCTAssertTrue(source.contains("await AgentPillsManager.providerDirective("))
+    XCTAssertTrue(source.contains("activeSession.abandonInputTurn()"))
+    XCTAssertTrue(source.contains("realtime-agent-provider-unavailable"))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {

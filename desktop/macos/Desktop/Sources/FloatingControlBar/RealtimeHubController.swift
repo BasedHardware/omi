@@ -666,7 +666,66 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       }
       return
     }
-    session?.commitInputTurn()
+    let transcript = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !transcript.isEmpty else {
+      session?.commitInputTurn()
+      return
+    }
+    let expectedSession = session
+    Task { [weak self] in
+      await self?.commitTurnAfterProviderDirectivePreflight(
+        transcript: transcript,
+        expectedSession: expectedSession
+      )
+    }
+  }
+
+  private func commitTurnAfterProviderDirectivePreflight(
+    transcript: String,
+    expectedSession: RealtimeHubSession?
+  ) async {
+    guard let expectedSession, session === expectedSession, let activeSession = session else { return }
+    guard let directive = await AgentPillsManager.providerDirective(
+      from: transcript,
+      contextualPreviousRequest: nil
+    ) else {
+      activeSession.commitInputTurn()
+      return
+    }
+
+    activeSession.abandonInputTurn()
+    suppressAssistantOutputForCurrentTurn = true
+    responding = false
+    let availability = LocalAgentProviderDetector.availability(for: directive.provider)
+    if availability.isAvailable {
+      let model = ShortcutSettings.shared.selectedModel.isEmpty
+        ? ModelQoS.Claude.defaultSelection : ShortcutSettings.shared.selectedModel
+      let pill = AgentPillsManager.shared.spawnFromUserQuery(
+        directive.rewrittenQuery,
+        model: model,
+        fromVoice: false,
+        preFetchedTitle: directive.title,
+        preFetchedAck: directive.ack,
+        bridgeHarnessOverride: directive.provider.harnessMode)
+      let ack = "Starting \(directive.provider.displayName) in \(pill.title)."
+      assistantText = ack
+      speak(ack)
+      FloatingControlBarManager.shared.recordVoiceTurn(userText: transcript, assistantText: ack)
+      log("RealtimeHub[\(providerTag)]: provider directive preflight spawned provider=\(directive.provider.rawValue)")
+      exitVoiceUI(clearResponseGlow: false)
+      return
+    }
+
+    assistantText = availability.setupPrompt
+    FloatingControlBarManager.shared.presentAgentInstallPrompt(
+      for: directive,
+      originalRequest: transcript,
+      fromVoice: true,
+      provider: nil,
+      logLabel: "realtime-agent-provider-unavailable"
+    )
+    speak(directive.provider.setupNeededStatus)
+    log("RealtimeHub[\(providerTag)]: provider directive preflight unavailable provider=\(directive.provider.rawValue)")
   }
 
   /// Abandon the turn without committing (silent tap / cancel). Must leave NO open
@@ -1019,11 +1078,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
       case "openclaw": directedProvider = .openclaw
       case "hermes": directedProvider = .hermes
       case "codex": directedProvider = .codex
+      case "claudecode": directedProvider = .claudeCode
       case "": directedProvider = nil
       default:
         session?.sendToolResult(
           callId: callId, name: name,
-          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', or 'codex'.")
+          output: "Unsupported agent provider '\(providerName)'. Use 'hermes', 'openclaw', 'codex', or 'claudeCode'.")
         return
       }
       if let directedProvider {
@@ -1032,6 +1092,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
           let setupPrompt = availability.setupPrompt
           assistantText = setupPrompt
           barState?.isVoiceResponseActive = true
+          FloatingControlBarManager.shared.presentAgentInstallPrompt(
+            for: AgentPillsManager.ProviderDirective(
+              provider: directedProvider,
+              rewrittenQuery: brief.isEmpty ? turnTranscript : brief,
+              title: directedProvider.displayName,
+              ack: "Asking \(directedProvider.displayName)."
+            ),
+            originalRequest: turnTranscript.isEmpty ? brief : turnTranscript,
+            fromVoice: true,
+            provider: nil,
+            logLabel: "realtime-agent-provider-unavailable"
+          )
           if !audioReceivedThisTurn {
             speak(directedProvider.setupNeededStatus)
           }

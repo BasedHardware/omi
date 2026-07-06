@@ -154,6 +154,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(
       AgentPillsManager.DirectedProvider.codex.installPlan.installCommand,
       "curl -fsSL https://chatgpt.com/codex/install.sh | sh")
+    XCTAssertNil(AgentPillsManager.DirectedProvider.claudeCode.installPlan.installCommand)
   }
 
   // MARK: - ApiKeysResponse shape assertion
@@ -299,7 +300,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testProviderDirectiveRoutesAskOpenClawToOpenClawHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Please ask openclaw how it's going")
+    let directive = AgentPillsManager.literalProviderDirective(from: "Please ask openclaw how it's going")
 
     XCTAssertEqual(directive?.provider, .openclaw)
     XCTAssertEqual(directive?.provider.harnessMode, .openclaw)
@@ -308,7 +309,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testProviderDirectiveRoutesHermesToHermesHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Hermes: summarize your current status")
+    let directive = AgentPillsManager.literalProviderDirective(from: "Hermes: summarize your current status")
 
     XCTAssertEqual(directive?.provider, .hermes)
     XCTAssertEqual(directive?.provider.harnessMode, .hermes)
@@ -317,7 +318,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testProviderDirectiveRoutesCodexToCodexHarness() {
-    let directive = AgentPillsManager.providerDirective(from: "Use Codex inspect this repo")
+    let directive = AgentPillsManager.literalProviderDirective(from: "Use Codex inspect this repo")
 
     XCTAssertEqual(directive?.provider, .codex)
     XCTAssertEqual(directive?.provider.harnessMode, .codex)
@@ -326,13 +327,44 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testProviderDirectiveIgnoresNonProviderQuestions() {
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is openclaw?"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "openclaw architecture"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "codex architecture"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "hermes scarf"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "compare hermes and openclaw"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "what is codex?"))
-    XCTAssertNil(AgentPillsManager.providerDirective(from: "how is it going?"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "what is openclaw?"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "openclaw architecture"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "codex architecture"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "hermes scarf"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "compare hermes and openclaw"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "what is codex?"))
+    XCTAssertNil(AgentPillsManager.literalProviderDirective(from: "how is it going?"))
+  }
+
+  func testProviderDirectiveClassifierParsesNaturalOpenClawDelegation() {
+    let directive = AgentPillsManager.parseProviderDirectiveClassifierOutput(
+      #"{"provider":"openclaw","task":"message Nook on Telegram"}"#,
+      originalText: "can you use openclaw to message nook on telegram",
+      contextualPreviousRequest: nil)
+
+    XCTAssertEqual(directive?.provider, .openclaw)
+    XCTAssertEqual(directive?.rewrittenQuery, "message Nook on Telegram")
+    XCTAssertEqual(directive?.title, "OpenClaw")
+  }
+
+  func testAgentInstallPromptFirstClickCanStopBeforeRunningSetup() {
+    var prompt = AgentInstallPromptState(plan: AgentPillsManager.DirectedProvider.openclaw.installPlan)
+
+    XCTAssertEqual(prompt.primaryActionTitle, "Connect OpenClaw")
+    XCTAssertEqual(prompt.status.automationValue, "ready")
+    XCTAssertEqual(prompt.primaryAction, .beginConnection)
+    XCTAssertTrue(prompt.primaryActionEnabled)
+
+    prompt.status = .confirming
+    prompt.confirmingSince = Date()
+
+    XCTAssertEqual(prompt.primaryActionTitle, "Run setup")
+    XCTAssertEqual(prompt.primaryAction, .runSetup)
+    XCTAssertEqual(prompt.status.automationValue, "confirming")
+    XCTAssertFalse(prompt.primaryActionEnabled)
+    prompt.confirmingSince = nil
+    XCTAssertTrue(prompt.primaryActionEnabled)
+    XCTAssertEqual(prompt.detailText, "Ready to run the setup command shown below.")
   }
 
   // MARK: - Rename completeness: no ACPBridge / acp-bridge in Swift sources

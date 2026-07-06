@@ -92,6 +92,8 @@ struct LocalAgentProviderAvailability: Equatable {
             return "I don't see OpenClaw connected. I can run the official OpenClaw installer or open setup docs."
         case .codex:
             return "I don't see Codex connected. I can run the official Codex CLI installer or open setup docs."
+        case .claudeCode:
+            return "I don't see Claude Code connected. I can open setup docs so you can connect it."
         }
     }
 
@@ -107,6 +109,14 @@ enum LocalAgentProviderDetector {
         fileManager: FileManager = .default,
         homeDirectory: String = NSHomeDirectory()
     ) -> LocalAgentProviderAvailability {
+        if provider == .claudeCode {
+            return claudeCodeAvailability(
+                provider: provider,
+                environment: environment,
+                fileManager: fileManager,
+                homeDirectory: homeDirectory
+            )
+        }
         if let command = configuredCommand(for: provider, environment: environment) {
             return LocalAgentProviderAvailability(provider: provider, status: .available(command: command))
         }
@@ -137,8 +147,56 @@ enum LocalAgentProviderDetector {
         environment: [String: String]
     ) -> String? {
         let key = provider.commandEnvironmentName
+        guard !key.isEmpty else { return nil }
         let value = environment[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return value.isEmpty ? nil : value
+    }
+
+    private static func claudeCodeAvailability(
+        provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String],
+        fileManager: FileManager,
+        homeDirectory: String
+    ) -> LocalAgentProviderAvailability {
+        let configPath = (homeDirectory as NSString)
+            .appendingPathComponent("Library/Application Support/Claude/config.json")
+        if fileManager.fileExists(atPath: configPath),
+           let data = fileManager.contents(atPath: configPath),
+           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let tokenCache = json["oauth:tokenCache"] as? String,
+           !tokenCache.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return LocalAgentProviderAvailability(provider: provider, status: .available(command: "Claude Code OAuth token"))
+        }
+
+        if keychainHasClaudeCodeCredentials() {
+            return LocalAgentProviderAvailability(provider: provider, status: .available(command: "Claude Code keychain token"))
+        }
+
+        if let path = firstExecutable(
+            named: provider.executableName,
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        ) {
+            return LocalAgentProviderAvailability(provider: provider, status: .available(command: path))
+        }
+
+        return LocalAgentProviderAvailability(provider: provider, status: .missing)
+    }
+
+    private static func keychainHasClaudeCodeCredentials() -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        process.arguments = ["find-generic-password", "-s", "Claude Code-credentials"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
+        }
     }
 
     private static func firstExecutable(

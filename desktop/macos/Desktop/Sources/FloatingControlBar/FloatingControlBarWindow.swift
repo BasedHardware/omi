@@ -1829,41 +1829,79 @@ class FloatingControlBarManager {
         switch action {
         case .openDocs:
             openAgentInstallDocs(messageId: messageId, plan: prompt.plan)
-        case .install:
+        case .beginConnection:
+            let confirmingSince = Date()
+            window.state.updateAgentInstallPrompt(for: messageId) {
+                $0.status = .confirming
+                $0.confirmingSince = confirmingSince
+            }
+            window.resizeToResponseHeightPublic(animated: true)
+            DispatchQueue.main.asyncAfter(deadline: .now() + AgentInstallPromptState.setupConfirmationDelay) { [weak self] in
+                guard let window = self?.window else { return }
+                window.state.updateAgentInstallPrompt(for: messageId) {
+                    guard case .confirming = $0.status,
+                          $0.confirmingSince == confirmingSince
+                    else { return }
+                    $0.confirmingSince = nil
+                }
+                window.resizeToResponseHeightPublic(animated: true)
+            }
+        case .runSetup:
             guard let command = prompt.plan.installCommand else {
                 openAgentInstallDocs(messageId: messageId, plan: prompt.plan)
                 return
             }
-            guard confirmAgentInstall(plan: prompt.plan, command: command) else {
-                window.state.updateAgentInstallPrompt(for: messageId) { $0.status = .cancelled }
-                window.resizeToResponseHeightPublic(animated: true)
-                return
-            }
+            guard case .confirming = prompt.status,
+                  prompt.confirmingSince == nil
+            else { return }
             runAgentInstaller(messageId: messageId, plan: prompt.plan, command: command)
         }
     }
 
-    private func openAgentInstallDocs(messageId: String, plan: LocalAgentInstallPlan) {
-        NSWorkspace.shared.open(plan.documentationURL)
-        window?.state.updateAgentInstallPrompt(for: messageId) { $0.status = .docsOpened }
-        window?.resizeToResponseHeightPublic(animated: true)
+    @discardableResult
+    func presentAgentInstallPrompt(
+        for directive: AgentPillsManager.ProviderDirective,
+        originalRequest: String,
+        fromVoice: Bool,
+        provider: ChatProvider? = nil,
+        logLabel: String = "floating-agent-provider-unavailable"
+    ) -> Bool {
+        guard let window else { return false }
+        let availability = LocalAgentProviderDetector.availability(for: directive.provider)
+        let assistantText = availability.setupPrompt
+        let promptProvider = provider ?? activeFloatingProvider() ?? historyChatProvider
+        let recordedTurn = promptProvider?.recordCompletedTurn(
+            userText: originalRequest,
+            assistantText: assistantText,
+            logLabel: logLabel
+        )
+        let assistantMessage = recordedTurn?.assistant ?? ChatMessage(text: assistantText, sender: .ai)
+        let retryContext = AgentInstallRetryContext(
+            originalRequest: originalRequest,
+            rewrittenQuery: directive.rewrittenQuery,
+            title: directive.title,
+            ack: directive.ack,
+            fromVoice: fromVoice
+        )
+        window.state.setAgentInstallPrompt(
+            AgentInstallPromptState(plan: directive.provider.installPlan, retryContext: retryContext),
+            for: assistantMessage.id
+        )
+        completeVisibleAgentResponse(
+            userText: originalRequest,
+            assistantMessage: assistantMessage,
+            barWindow: window
+        )
+        return true
     }
 
-    private func confirmAgentInstall(plan: LocalAgentInstallPlan, command: String) -> Bool {
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = "Install \(plan.provider.displayName)?"
-        alert.informativeText = """
-        Omi will run this command in /bin/zsh:
-
-        \(command)
-
-        Source: \(plan.documentationURL.absoluteString)
-        """
-        alert.addButton(withTitle: "Run Install")
-        alert.addButton(withTitle: "Cancel")
-        NSApp.activate(ignoringOtherApps: true)
-        return alert.runModal() == .alertFirstButtonReturn
+    private func openAgentInstallDocs(messageId: String, plan: LocalAgentInstallPlan) {
+        NSWorkspace.shared.open(plan.documentationURL)
+        window?.state.updateAgentInstallPrompt(for: messageId) {
+            $0.status = .docsOpened
+            $0.confirmingSince = nil
+        }
+        window?.resizeToResponseHeightPublic(animated: true)
     }
 
     private func runAgentInstaller(
@@ -1872,7 +1910,10 @@ class FloatingControlBarManager {
         command: String
     ) {
         guard let window else { return }
-        window.state.updateAgentInstallPrompt(for: messageId) { $0.status = .installing }
+        window.state.updateAgentInstallPrompt(for: messageId) {
+            $0.status = .installing
+            $0.confirmingSince = nil
+        }
         window.resizeToResponseHeightPublic(animated: true)
 
         Task { [weak self] in
@@ -1881,17 +1922,42 @@ class FloatingControlBarManager {
             if result.exitCode != 0 {
                 window.state.updateAgentInstallPrompt(for: messageId) {
                     $0.status = .commandFailed(exitCode: result.exitCode, output: result.output)
+                    $0.confirmingSince = nil
                 }
             } else {
                 let availability = LocalAgentProviderDetector.availability(for: plan.provider)
-                window.state.updateAgentInstallPrompt(for: messageId) {
-                    $0.status = availability.isAvailable
-                        ? .connected
-                        : .finishedButMissing(output: result.output)
+                if availability.isAvailable {
+                    let retryContext = window.state.agentInstallPrompt(for: messageId)?.retryContext
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .connected
+                        $0.confirmingSince = nil
+                    }
+                    if let retryContext {
+                        self.retryAgentInstallPrompt(retryContext, provider: plan.provider)
+                    }
+                } else {
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .finishedButMissing(output: result.output)
+                        $0.confirmingSince = nil
+                    }
                 }
             }
             window.resizeToResponseHeightPublic(animated: true)
         }
+    }
+
+    private func retryAgentInstallPrompt(
+        _ retryContext: AgentInstallRetryContext,
+        provider: AgentPillsManager.DirectedProvider
+    ) {
+        _ = AgentPillsManager.shared.spawnFromUserQuery(
+            retryContext.rewrittenQuery,
+            model: selectedFloatingModel,
+            fromVoice: retryContext.fromVoice,
+            preFetchedTitle: retryContext.title,
+            preFetchedAck: retryContext.ack,
+            bridgeHarnessOverride: provider.harnessMode
+        )
     }
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
@@ -2190,6 +2256,8 @@ class FloatingControlBarManager {
             "docs": prompt.plan.documentationURL.absoluteString,
             "detail": prompt.detailText,
             "busy": prompt.status.isBusy ? "true" : "false",
+            "status": prompt.status.automationValue,
+            "retry": prompt.retryContext == nil ? "false" : "true",
         ]
     }
 
@@ -2653,7 +2721,7 @@ class FloatingControlBarManager {
         provider: ChatProvider,
         presentation: QueryPresentation
     ) async {
-        let directive = AgentPillsManager.providerDirective(
+        let directive = await AgentPillsManager.providerDirective(
             from: message,
             contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
         )
@@ -2683,23 +2751,13 @@ class FloatingControlBarManager {
             routerTracer?.mark("router_classify", metadata: ["route": "agent", "provider": directive.provider.rawValue])
             let availability = LocalAgentProviderDetector.availability(for: directive.provider)
             guard availability.isAvailable else {
-                let assistantText = availability.setupPrompt
-                let recordedTurn = provider.recordCompletedTurn(
-                    userText: message,
-                    assistantText: assistantText,
-                    logLabel: "floating-agent-provider-unavailable"
-                )
                 switch presentation {
                 case .visible:
-                    let assistantMessage = recordedTurn.assistant ?? ChatMessage(text: assistantText, sender: .ai)
-                    barWindow.state.setAgentInstallPrompt(
-                        AgentInstallPromptState(plan: directive.provider.installPlan),
-                        for: assistantMessage.id
-                    )
-                    completeVisibleAgentResponse(
-                        userText: message,
-                        assistantMessage: assistantMessage,
-                        barWindow: barWindow
+                    presentAgentInstallPrompt(
+                        for: directive,
+                        originalRequest: message,
+                        fromVoice: presentation.fromVoice,
+                        provider: provider
                     )
                 case .voiceOnly:
                     barWindow.state.currentQueryFromVoice = false

@@ -1,0 +1,3 @@
+{
+  "change": "Detect natural requests for specific local agents and guide disconnected agents through setup before retrying"
+}

@@ -10,22 +10,28 @@ struct LocalAgentInstallPlan: Equatable {
         installCommand ?? "Open setup documentation"
     }
 
-    var primaryActionTitle: String {
-        installCommand == nil ? "Open setup" : "Install \(provider.displayName)"
-    }
-
     var docsActionTitle: String {
         "Open docs"
     }
 }
 
+struct AgentInstallRetryContext: Equatable {
+    let originalRequest: String
+    let rewrittenQuery: String
+    let title: String
+    let ack: String
+    let fromVoice: Bool
+}
+
 enum AgentInstallPromptAction {
-    case install
+    case beginConnection
+    case runSetup
     case openDocs
 }
 
 enum AgentInstallStatus: Equatable {
     case ready
+    case confirming
     case installing
     case cancelled
     case docsOpened
@@ -37,33 +43,96 @@ enum AgentInstallStatus: Equatable {
         if case .installing = self { return true }
         return false
     }
+
+    var automationValue: String {
+        switch self {
+        case .ready: return "ready"
+        case .confirming: return "confirming"
+        case .installing: return "installing"
+        case .cancelled: return "cancelled"
+        case .docsOpened: return "docsOpened"
+        case .connected: return "connected"
+        case .commandFailed: return "commandFailed"
+        case .finishedButMissing: return "finishedButMissing"
+        }
+    }
 }
 
 struct AgentInstallPromptState: Equatable {
+    static let setupConfirmationDelay: TimeInterval = 2.5
+
     let plan: LocalAgentInstallPlan
+    let retryContext: AgentInstallRetryContext?
     var status: AgentInstallStatus = .ready
+    var confirmingSince: Date?
+
+    init(
+        plan: LocalAgentInstallPlan,
+        retryContext: AgentInstallRetryContext? = nil,
+        status: AgentInstallStatus = .ready,
+        confirmingSince: Date? = nil
+    ) {
+        self.plan = plan
+        self.retryContext = retryContext
+        self.status = status
+        self.confirmingSince = confirmingSince
+    }
 
     var detailText: String {
         switch status {
         case .ready:
-            if let command = plan.installCommand {
-                return "Official installer: \(command)"
+            if plan.installCommand != nil {
+                return "Omi will run the official setup command, then check the connection."
             }
             return plan.postInstallInstruction
+        case .confirming:
+            return "Ready to run the setup command shown below."
         case .installing:
-            return "Running installer, then checking whether \(plan.provider.displayName) is connected."
+            return "Connecting \(plan.provider.displayName)…"
         case .cancelled:
-            return "Install cancelled."
+            return "Connection cancelled."
         case .docsOpened:
             return "Opened setup docs. \(plan.postInstallInstruction)"
         case .connected:
-            return "\(plan.provider.displayName) is connected. Retry the request when you're ready."
+            if retryContext != nil {
+                return "\(plan.provider.displayName) is connected. Retrying your request now."
+            }
+            return "\(plan.provider.displayName) is connected. Try your request again."
         case .commandFailed(let exitCode, let output):
             let suffix = output.isEmpty ? "" : " \(output)"
-            return "Installer failed with exit code \(exitCode).\(suffix)"
+            return "Setup failed with exit code \(exitCode).\(suffix)"
         case .finishedButMissing(let output):
             let suffix = output.isEmpty ? "" : " \(output)"
-            return "Installer finished, but Omi still can't find \(plan.provider.displayName). \(plan.postInstallInstruction)\(suffix)"
+            return "Setup finished, but Omi still can't find \(plan.provider.displayName). \(plan.postInstallInstruction)\(suffix)"
+        }
+    }
+
+    var primaryActionTitle: String {
+        switch status {
+        case .confirming:
+            return "Run setup"
+        default:
+            return "Connect \(plan.provider.displayName)"
+        }
+    }
+
+    var primaryAction: AgentInstallPromptAction {
+        switch status {
+        case .confirming:
+            return .runSetup
+        default:
+            return .beginConnection
+        }
+    }
+
+    var primaryActionEnabled: Bool {
+        switch status {
+        case .installing, .connected:
+            return false
+        case .confirming:
+            return confirmingSince == nil
+        default:
+            return true
         }
     }
 }
@@ -136,6 +205,12 @@ extension AgentPillsManager.DirectedProvider {
                 installCommand: "curl -fsSL https://chatgpt.com/codex/install.sh | sh",
                 documentationURL: URL(string: "https://developers.openai.com/codex/cli")!,
                 postInstallInstruction: "Run codex once and sign in, then retry.")
+        case .claudeCode:
+            return LocalAgentInstallPlan(
+                provider: self,
+                installCommand: nil,
+                documentationURL: URL(string: "https://claude.ai/code")!,
+                postInstallInstruction: "Install Claude Code and sign in, then try again.")
         }
     }
 }

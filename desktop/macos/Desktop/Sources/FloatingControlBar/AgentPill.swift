@@ -173,12 +173,14 @@ final class AgentPillsManager: ObservableObject {
         case hermes
         case openclaw
         case codex
+        case claudeCode
 
         var displayName: String {
             switch self {
             case .hermes: return "Hermes"
             case .openclaw: return "OpenClaw"
             case .codex: return "Codex"
+            case .claudeCode: return "Claude Code"
             }
         }
 
@@ -187,6 +189,7 @@ final class AgentPillsManager: ObservableObject {
             case .hermes: return .hermes
             case .openclaw: return .openclaw
             case .codex: return .codex
+            case .claudeCode: return .acp
             }
         }
 
@@ -195,6 +198,7 @@ final class AgentPillsManager: ObservableObject {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
             case .codex: return "codex"
+            case .claudeCode: return "claude"
             }
         }
 
@@ -203,6 +207,7 @@ final class AgentPillsManager: ObservableObject {
             case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
             case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
             case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+            case .claudeCode: return ""
             }
         }
 
@@ -371,18 +376,35 @@ final class AgentPillsManager: ObservableObject {
         return 1
     }
 
-    nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
-        providerDirective(from: text, contextualPreviousRequest: nil)
+    static func providerDirective(from text: String) async -> ProviderDirective? {
+        await providerDirective(from: text, contextualPreviousRequest: nil)
     }
 
-    nonisolated static func providerDirective(
+    static func providerDirective(
+        from text: String,
+        contextualPreviousRequest: String?
+    ) async -> ProviderDirective? {
+        if let directive = await runProviderDirectiveClassifier(
+            for: text,
+            contextualPreviousRequest: contextualPreviousRequest
+        ) {
+            return directive
+        }
+        return literalProviderDirective(from: text, contextualPreviousRequest: contextualPreviousRequest)
+    }
+
+    nonisolated static func literalProviderDirective(from text: String) -> ProviderDirective? {
+        literalProviderDirective(from: text, contextualPreviousRequest: nil)
+    }
+
+    nonisolated static func literalProviderDirective(
         from text: String,
         contextualPreviousRequest: String?
     ) -> ProviderDirective? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let providerPattern = "(open\\s*claw|openclaw|hermes|codex)"
+        let providerPattern = "(open\\s*claw|openclaw|hermes|codex|claude\\s*code|claudecode)"
         let patterns = [
             #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
             #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
@@ -401,6 +423,7 @@ final class AgentPillsManager: ObservableObject {
             case "openclaw": provider = .openclaw
             case "hermes": provider = .hermes
             case "codex": provider = .codex
+            case "claudecode": provider = .claudeCode
             default: continue
             }
 
@@ -430,6 +453,167 @@ final class AgentPillsManager: ObservableObject {
         }
 
         return nil
+    }
+
+    private static func runProviderDirectiveClassifier(
+        for text: String,
+        contextualPreviousRequest: String?
+    ) async -> ProviderDirective? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let baseURL = await APIClient.shared.rustBackendURL
+        guard !baseURL.isEmpty else {
+            log("AgentPill: provider directive classifier skipped — rustBackendURL empty")
+            return nil
+        }
+        let normalized = baseURL.hasSuffix("/") ? baseURL : baseURL + "/"
+        guard let url = URL(string: normalized + "v2/chat/completions") else { return nil }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 3
+        do {
+            let headers = try await APIClient.shared.buildHeaders(requireAuth: true)
+            for (key, value) in headers {
+                request.setValue(value, forHTTPHeaderField: key)
+            }
+        } catch {
+            log("AgentPill: provider directive classifier skipped — auth header unavailable (\(error.localizedDescription))")
+            return nil
+        }
+
+        let previous = contextualPreviousRequest?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let previousBlock = (previous?.isEmpty == false)
+            ? "\nPrevious visible user request, for correction context only:\n\"\(previous!)\"\n"
+            : ""
+        let prompt = """
+        Classify whether the user is explicitly directing this task to one named local agent.
+
+        User message:
+        "\(trimmed)"
+        \(previousBlock)
+        Agents:
+        - Hermes => "hermes"
+        - OpenClaw => "openclaw"
+        - Codex => "codex"
+        - Claude Code => "claude_code"
+
+        Return ONLY a single-line JSON object:
+        {"provider":"hermes"|"openclaw"|"codex"|"claude_code"|null,"task":"<task for that agent, with the delegation phrase removed>"}
+
+        Use a provider only when the user is asking that named agent to handle, do, answer, inspect, run, draft, send, or work on the current task. Natural phrasing counts: "can you get OpenClaw on this", "have Codex handle it", "I want Hermes to do this one".
+        Return null for comparisons, definitions, documentation questions, architecture questions, or casual mentions such as "what is OpenClaw?", "compare Hermes and Codex", or "openclaw architecture".
+        If the user is only correcting the provider ("I meant Hermes", "OpenClaw instead") and the previous request is relevant, put the previous task in "task".
+        If the provider is explicit but no task remains, use "Say how it's going."
+        """
+        let body: [String: Any] = [
+            "model": ModelQoS.Claude.synthesis,
+            "max_tokens": 120,
+            "messages": [["role": "user", "content": prompt]],
+            "stream": false,
+        ]
+
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else {
+                log("AgentPill: provider directive classifier failed — no HTTP response")
+                return nil
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                let bodyText = String(data: data.prefix(200), encoding: .utf8) ?? "<binary>"
+                log("AgentPill: provider directive classifier HTTP \(http.statusCode) — \(bodyText)")
+                return nil
+            }
+            guard let text = chatCompletionText(from: data) else {
+                log("AgentPill: provider directive classifier response shape unexpected")
+                return nil
+            }
+            let directive = parseProviderDirectiveClassifierOutput(
+                text,
+                originalText: trimmed,
+                contextualPreviousRequest: contextualPreviousRequest
+            )
+            if let directive {
+                log("AgentPill: provider directive classifier matched provider=\(directive.provider.rawValue)")
+            } else {
+                log("AgentPill: provider directive classifier returned no explicit provider")
+            }
+            return directive
+        } catch {
+            log("AgentPill: provider directive classifier threw — \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private nonisolated static func chatCompletionText(from data: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let choices = json["choices"] as? [[String: Any]],
+              let message = choices.first?["message"] as? [String: Any],
+              let text = message["content"] as? String else {
+            return nil
+        }
+        return text
+    }
+
+    nonisolated static func parseProviderDirectiveClassifierOutput(
+        _ output: String,
+        originalText: String,
+        contextualPreviousRequest: String?
+    ) -> ProviderDirective? {
+        let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        let jsonBody: String
+        if let firstBrace = trimmed.firstIndex(of: "{"),
+           let lastBrace = trimmed.lastIndex(of: "}"),
+           firstBrace <= lastBrace {
+            jsonBody = String(trimmed[firstBrace...lastBrace])
+        } else {
+            jsonBody = trimmed
+        }
+        guard let data = jsonBody.data(using: .utf8),
+              let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+
+        let providerToken = (payload["provider"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "_", with: "")
+            .replacingOccurrences(of: "-", with: "")
+        let provider: DirectedProvider
+        switch providerToken {
+        case "hermes": provider = .hermes
+        case "openclaw": provider = .openclaw
+        case "codex": provider = .codex
+        case "claudecode": provider = .claudeCode
+        default: return nil
+        }
+
+        var task = (payload["task"] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if task.isEmpty,
+           let contextual = contextualPreviousRequest
+            .flatMap({ providerObjective(from: $0) })?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !contextual.isEmpty {
+            task = contextual
+        }
+        if task.isEmpty {
+            task = providerObjective(from: originalText).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        if task.isEmpty {
+            task = "Say how it's going."
+        }
+
+        return ProviderDirective(
+            provider: provider,
+            rewrittenQuery: task,
+            title: provider.displayName,
+            ack: "Asking \(provider.displayName)."
+        )
     }
 
     nonisolated static func providerObjective(from text: String) -> String {

@@ -356,7 +356,7 @@ struct AIResponseView: View {
                 AgentInstallHelpPromptView(
                     prompt: prompt,
                     onInstall: {
-                        onAgentInstallAction?(message.id, .install)
+                        onAgentInstallAction?(message.id, prompt.primaryAction)
                     },
                     onOpenDocs: {
                         onAgentInstallAction?(message.id, .openDocs)
@@ -507,33 +507,15 @@ private struct AgentInstallHelpPromptView: View {
     let onInstall: () -> Void
     let onOpenDocs: () -> Void
 
+    private var isConnected: Bool {
+        if case .connected = prompt.status { return true }
+        return false
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(prompt.detailText)
-                .scaledFont(size: 12)
-                .foregroundColor(.white.opacity(0.78))
-                .lineLimit(4)
-                .textSelection(.enabled)
-
             HStack(spacing: 8) {
-                Button(action: onInstall) {
-                    HStack(spacing: 6) {
-                        Image(systemName: prompt.status.isBusy ? "hourglass" : "terminal")
-                            .scaledFont(size: 12, weight: .semibold)
-                        Text(prompt.plan.primaryActionTitle)
-                            .scaledFont(size: 12, weight: .semibold)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Color.white.opacity(prompt.status.isBusy ? 0.08 : 0.18))
-                    .cornerRadius(8)
-                }
-                .buttonStyle(.plain)
-                .disabled(prompt.status.isBusy)
-                .help(prompt.plan.commandDisplay)
-                .accessibilityLabel(prompt.plan.primaryActionTitle)
-                .accessibilityIdentifier("agent-install-\(prompt.plan.provider.rawValue)")
+                primaryActionControl
 
                 Button(action: onOpenDocs) {
                     HStack(spacing: 6) {
@@ -554,6 +536,21 @@ private struct AgentInstallHelpPromptView: View {
                 .accessibilityLabel("\(prompt.plan.provider.displayName) setup docs")
                 .accessibilityIdentifier("agent-install-docs-\(prompt.plan.provider.rawValue)")
             }
+
+            Text(prompt.detailText)
+                .scaledFont(size: 12)
+                .foregroundColor(.white.opacity(0.78))
+                .lineLimit(3)
+                .textSelection(.enabled)
+
+            if let command = prompt.plan.installCommand {
+                Text(command)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.58))
+                    .lineLimit(2)
+                    .textSelection(.enabled)
+                    .padding(.top, 1)
+            }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 9)
@@ -563,6 +560,31 @@ private struct AgentInstallHelpPromptView: View {
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
         )
         .cornerRadius(8)
+    }
+
+    private var primaryActionControl: some View {
+        let isEnabled = prompt.primaryActionEnabled && !isConnected
+
+        return HStack(spacing: 6) {
+            Image(systemName: prompt.status.isBusy ? "hourglass" : (isConnected ? "checkmark" : "link"))
+                .scaledFont(size: 12, weight: .semibold)
+            Text(prompt.primaryActionTitle)
+                .scaledFont(size: 12, weight: .semibold)
+        }
+        .foregroundColor(.white.opacity(isEnabled ? 1.0 : 0.6))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color.white.opacity(isEnabled ? 0.18 : 0.08))
+        .cornerRadius(8)
+        .contentShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            guard isEnabled else { return }
+            onInstall()
+        }
+        .help(prompt.plan.commandDisplay)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(prompt.primaryActionTitle)
+        .accessibilityIdentifier("agent-install-\(prompt.plan.provider.rawValue)")
     }
 }
 

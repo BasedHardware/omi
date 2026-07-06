@@ -28,7 +28,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   }
 
   func testProviderCorrectionUsesPreviousFloatingRequestObjective() throws {
-    let directive = AgentPillsManager.providerDirective(
+    let directive = AgentPillsManager.literalProviderDirective(
       from: "I meant ask OpenClaw",
       contextualPreviousRequest: "ask grok to search for david zhang on X and tell me who the top 3 are")
 
@@ -40,19 +40,34 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarWindowSource()
 
     XCTAssertTrue(source.contains("contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)"))
+    XCTAssertTrue(source.contains("await AgentPillsManager.providerDirective("))
     XCTAssertTrue(source.contains("private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String?"))
     XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
   }
 
   func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
     let source = try floatingControlBarWindowSource()
+    let responseSource = try aiResponseViewSource()
 
     XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directive.provider)"))
     XCTAssertTrue(source.contains("guard availability.isAvailable else"))
     XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
+    XCTAssertTrue(source.contains("presentAgentInstallPrompt("))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
+    XCTAssertTrue(source.contains("case .beginConnection:"))
+    XCTAssertTrue(source.contains("case .runSetup:"))
+    XCTAssertTrue(source.contains("$0.status = .confirming"))
+    XCTAssertTrue(source.contains("AgentInstallPromptState.setupConfirmationDelay"))
+    XCTAssertTrue(source.contains("prompt.confirmingSince == nil"))
+    XCTAssertTrue(source.contains("runAgentInstaller(messageId: messageId, plan: prompt.plan, command: command)"))
+    XCTAssertTrue(source.contains("$0.confirmingSince = nil"))
     XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)"))
+    XCTAssertTrue(responseSource.contains("private var primaryActionControl: some View"))
+    XCTAssertTrue(responseSource.contains(".onTapGesture {"))
+    XCTAssertFalse(responseSource.contains("Button(action: onInstall)"))
+    XCTAssertFalse(responseSource.contains(".accessibilityAction {"))
+    XCTAssertFalse(responseSource.contains(".accessibilityAddTraits(.isButton)"))
   }
 
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {

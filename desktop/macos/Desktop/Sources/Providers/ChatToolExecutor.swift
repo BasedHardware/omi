@@ -474,9 +474,10 @@ class ChatToolExecutor {
     case "openclaw": directedProvider = .openclaw
     case "hermes": directedProvider = .hermes
     case "codex": directedProvider = .codex
+    case "claudecode": directedProvider = .claudeCode
     case "": directedProvider = nil
     default:
-      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex."
+      return "Error: Unsupported provider '\(providerName)'. Supported providers: openclaw, hermes, codex, claudeCode."
     }
     if let directedProvider {
       let availability = LocalAgentProviderDetector.availability(for: directedProvider)
