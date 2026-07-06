@@ -1,0 +1,3 @@
+{
+  "change": "Fixed beta sign-in failing with \"Could not securely store sign-in tokens\" — credentials now save to the login keychain reliably on signed builds"
+}

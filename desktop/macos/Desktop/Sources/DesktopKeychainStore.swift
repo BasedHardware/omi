@@ -2,14 +2,20 @@ import Foundation
 import Security
 
 enum DesktopKeychainStore {
-  private static let useDataProtectionKeychain = kSecUseDataProtectionKeychain as String
-
   private static func baseQuery(service: String, account: String) -> [String: Any] {
+    // Use the file-based (login) keychain, NOT the iOS-style data-protection keychain.
+    // Opting into the data-protection keychain requires a `keychain-access-groups` entitlement
+    // this non-sandboxed Developer ID app does not have (see Omi-Release.entitlements:
+    // app-sandbox=false, no keychain-access-groups). On the signed/notarized build that made
+    // every SecItem write fail with errSecMissingEntitlement (-34018), so token storage failed
+    // ("Could not securely store sign-in tokens") and sign-in was blocked. The default
+    // file-based keychain works for a signed non-sandboxed app with no extra entitlement and
+    // still keeps tokens out of UserDefaults. (Dev builds don't hit this — they use
+    // UserDefaults, so it only ever failed on prod/beta.)
     [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,
       kSecAttrAccount as String: account,
-      useDataProtectionKeychain: true,
     ]
   }
 
@@ -39,6 +45,8 @@ enum DesktopKeychainStore {
     let query = baseQuery(service: service, account: account)
     let attributes: [String: Any] = [
       kSecValueData as String: data,
+      // Advisory on the file-based keychain (it's a data-protection-keychain attribute, so it's
+      // accepted but not cryptographically enforced here); kept for intent + parity with iOS.
       kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
     ]
 
