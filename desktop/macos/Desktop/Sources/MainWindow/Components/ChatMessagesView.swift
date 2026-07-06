@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 /// A token that callers pass when the local user sends a message.
 /// This allows ChatMessagesView to distinguish genuine user sends from
 /// messages arriving via polling, sync, or other sources — without

@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Page for managing user's AI persona/clone
 struct PersonaPage: View {

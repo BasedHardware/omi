@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Onboarding step: prompts user to press ⌘+Enter, then activates the real
 /// floating bar at the top of the screen. Shows Continue after the AI responds.

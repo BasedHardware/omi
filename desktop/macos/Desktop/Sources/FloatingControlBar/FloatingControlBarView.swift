@@ -3,6 +3,7 @@ import Combine
 import MarkdownUI
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 enum ShortcutHintLayout {
     static func visibleTokens(for keys: [String]) -> [String] {

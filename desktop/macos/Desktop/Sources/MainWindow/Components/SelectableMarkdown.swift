@@ -1,5 +1,6 @@
 import SwiftUI
 import MarkdownUI
+import OmiTheme
 
 /// A markdown text view that supports text selection across paragraph breaks.
 ///

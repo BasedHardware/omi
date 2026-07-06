@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Onboarding step: configure and test the floating bar shortcut.
 /// Only detects the keypress and does not open the floating bar.

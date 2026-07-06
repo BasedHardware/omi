@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import OmiTheme
 
 /// Memory categories for filtering. Mirrors the mobile app: filtering is driven
 /// purely by the backend `category` field (no tag-derived pseudo-categories), so

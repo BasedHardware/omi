@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Onboarding step: verify the push-to-talk shortcut without opening the voice bar.
 struct OnboardingVoiceShortcutStepView: View {

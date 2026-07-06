@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct TasksWidget: View {
     let overdueTasks: [TaskActionItem]

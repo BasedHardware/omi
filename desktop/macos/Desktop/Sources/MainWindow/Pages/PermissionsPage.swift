@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVFoundation
+import OmiTheme
 
 struct PermissionsPage: View {
     @ObservedObject var appState: AppState

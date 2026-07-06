@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import OmiSupport
 
 /// Actor-based database manager for Rewind screenshots
 actor RewindDatabase {

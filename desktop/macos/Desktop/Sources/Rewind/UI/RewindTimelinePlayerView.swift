@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// A full-screen timeline player view with playback controls
 /// Similar to screenpipe's timeline view - shows the current frame with a timeline slider
