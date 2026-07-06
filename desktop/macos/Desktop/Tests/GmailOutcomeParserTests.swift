@@ -41,11 +41,11 @@ final class GmailOutcomeParserTests: XCTestCase {
     }
 
     XCTAssertEqual(cls, .notSignedIn)
-    XCTAssertEqual(cls.asError.errorDescription, GmailReaderError.notSignedIn.errorDescription)
+    XCTAssertTrue(cls.needsSignIn)
     XCTAssertEqual(attempts.count, 2)
   }
 
-  func testSessionExpiredMapsToReloginError() {
+  func testClassifiedFailurePreservesProviderSummary() {
     let json: [String: Any] = [
       "ok": false,
       "error_class": "session_expired",
@@ -60,7 +60,10 @@ final class GmailOutcomeParserTests: XCTestCase {
     }
 
     XCTAssertEqual(cls, .sessionExpired)
-    XCTAssertEqual(cls.asError(summary: summary).errorDescription, GmailReaderError.sessionExpired.errorDescription)
+    let error = GmailReaderError.provider(cls, message: summary)
+    XCTAssertEqual(error.errorDescription, summary)
+    XCTAssertEqual(error.classification, "session_expired")
+    XCTAssertTrue(error.needsSignIn)
   }
 
   func testNoBrowserAndUnknownFallbacks() {
@@ -87,7 +90,7 @@ final class GmailOutcomeParserTests: XCTestCase {
     }
 
     XCTAssertEqual(unknownClass, .unknown)
-    XCTAssertFalse(summary.isEmpty)
+    XCTAssertEqual(summary, GmailFailureClass.unknown.defaultMessage)
   }
 
   func testDiagnosticsLineCarriesOnlyNonSensitiveFields() {

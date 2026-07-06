@@ -1,0 +1,3 @@
+{
+  "change": "Sped up Gmail and Calendar import, and fixed a misleading \"couldn't reach Gmail\" error that actually meant your browser's sign-in had expired."
+}

@@ -1210,24 +1210,9 @@ final class DesktopAutomationActionRegistry {
           "query": query,
         ]
       } catch let error as GmailReaderError {
-        let classification: String
-        switch error {
-        case .noBrowserFound:
-          classification = "no_browser"
-        case .noGmailCookies, .notSignedIn:
-          classification = "not_signed_in"
-        case .sessionExpired, .authFailed:
-          classification = "session_expired"
-        case .cookieDecryptionFailed:
-          classification = "decrypt_failed"
-        case .networkError:
-          classification = "network"
-        case .pythonNotFound:
-          classification = "python_not_found"
-        }
         return [
           "status": "error",
-          "classification": classification,
+          "classification": error.classification,
           "message": error.errorDescription ?? "\(error)",
           "maxResults": "\(maxResults)",
           "query": query,
