@@ -542,7 +542,13 @@ def claim_deletion_wipe(
 
 @transactional
 def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
-    """Claim a Cloud Tasks delivery before running an account-deletion wipe."""
+    """Claim a Cloud Tasks delivery before running an account-deletion wipe.
+
+    The claim intentionally stays in ``retrying`` until the cleanup worker
+    starts and ``background_wipe_user_data`` marks it ``running``. If the HTTP
+    request is cancelled while waiting for a cleanup thread, a later delivery can
+    retry without waiting for the long running-stale lease.
+    """
     snapshot = doc_ref.get(transaction=transaction)
     if not snapshot.exists:
         return 'missing'
@@ -561,7 +567,7 @@ def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: tim
             return 'running'
 
     if status in ('pending', 'retrying', 'failed', 'running'):
-        transaction.update(doc_ref, {'wipe_status': 'running', 'wipe_running_at': now})
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
         return 'claimed'
 
     return 'not_actionable'
