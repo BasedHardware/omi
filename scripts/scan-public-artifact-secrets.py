@@ -66,6 +66,7 @@ HEURISTIC_SCAN_EXTENSIONS = {
     ".log",
     ".m",
     ".mm",
+    ".plist",
     ".properties",
     ".proto",
     ".py",

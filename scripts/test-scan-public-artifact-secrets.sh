@@ -180,6 +180,37 @@ run_expect_fail "exact-denied-in-text-caught" "OPENAI_API_KEY" \
   python3 "$SCANNER" "$WORK/exact-text.ipa"
 
 echo ""
+echo "=== Security: server secret in Info.plist caught ==="
+mkdir -p "$WORK/plist-leak/Payload/Runner.app"
+cat > "$WORK/plist-leak/Payload/Runner.app/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>GOOGLE_CLIENT_SECRET</key><string>not-a-real-secret</string>
+</dict></plist>
+EOF
+make_zip "$WORK/plist-leak" "$WORK/plist-leak.ipa"
+run_expect_fail "secret-in-info-plist-caught" "GOOGLE_CLIENT_SECRET" \
+  python3 "$SCANNER" "$WORK/plist-leak.ipa"
+
+echo ""
+echo "=== Realistic Info.plist metadata passes ==="
+mkdir -p "$WORK/plist-ok/Payload/Runner.app"
+cat > "$WORK/plist-ok/Payload/Runner.app/Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLSchemes</key><array><string>$(GOOGLE_REVERSE_CLIENT_ID)</string></array>
+  </dict></array>
+  <key>UIBackgroundModes</key><array><string>audio</string><string>voip</string></array>
+</dict></plist>
+EOF
+make_zip "$WORK/plist-ok" "$WORK/plist-ok.ipa"
+run_expect_pass "realistic-info-plist-pass" \
+  python3 "$SCANNER" "$WORK/plist-ok.ipa"
+
+echo ""
 echo "=== Compiled binaries with denied-looking symbols are skipped ==="
 mkdir -p "$WORK/bin-ok/Payload/Runner.app/BatteryWidget.appex"
 printf 'CLIENT_EARLY_TRAFFIC_SECRET\nPRIVATE_KEY_ENCODE_ERROR\nSERVER_HANDSHAKE_TRAFFIC_SECRET' \
