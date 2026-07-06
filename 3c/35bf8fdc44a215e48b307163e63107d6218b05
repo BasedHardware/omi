@@ -1,0 +1,57 @@
+mockup/web/index.html
+  s_751b5889fd7450::t_555029e7a89144 238
+  s_751b5889fd7450::t_b6aab0c37a818a 427-448
+  s_751b5889fd7450::t_546d8a218a0ae0 400-402
+  s_751b5889fd7450::t_5636626f98c8c4 55,57-74
+  s_751b5889fd7450::t_b52b4b33990398 230
+  s_751b5889fd7450::t_6f70c2e5655b79 227
+mockup/common.js
+  s_751b5889fd7450::t_9564b5f4e353cd 10
+mockup/index.html
+  s_751b5889fd7450::t_87e260e05fbeb4 12-13,16
+  s_751b5889fd7450::t_22b97f632beed9 27
+  s_751b5889fd7450::t_792196e3e35f49 50
+  s_751b5889fd7450::t_bc57b9091e1a07 40
+  s_751b5889fd7450::t_dfcfdf58894bfe 31-34
+  s_751b5889fd7450::t_8d344b444f037d 72
+mockup/assets/logos/brands/anthropic.svg
+  s_751b5889fd7450::t_75aeaff2146735 1
+mockup/assets/logos/brands/figma.svg
+  s_751b5889fd7450::t_fa8ece355b08c5 1
+mockup/assets/logos/brands/linear.svg
+  s_751b5889fd7450::t_f429de240e1683 1
+mockup/assets/logos/brands/loom.svg
+  s_751b5889fd7450::t_411b573f6f1ca3 1
+mockup/assets/logos/brands/notion.svg
+  s_751b5889fd7450::t_bd85316e5b8510 1
+mockup/assets/logos/brands/openai.svg
+  s_751b5889fd7450::t_4f2515729e2c0e 1
+mockup/assets/logos/brands/perplexity.svg
+  s_751b5889fd7450::t_c206a1b6b6eef2 1
+mockup/assets/logos/brands/ramp.svg
+  s_751b5889fd7450::t_5dbbe82b974ce8 1
+mockup/assets/logos/brands/rippling.svg
+  s_751b5889fd7450::t_ceb0e14c91eadd 1
+mockup/assets/logos/brands/stripe.svg
+  s_751b5889fd7450::t_a0fba1f08aa4b4 1
+mockup/assets/logos/brands/vercel.svg
+  s_751b5889fd7450::t_0237d307e7abeb 1
+mockup/assets/logos/brands/ycombinator.svg
+  s_751b5889fd7450::t_018cac2b9ce7a8 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3c35bf8fdc44a215e48b307163e63107d6218b05",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
