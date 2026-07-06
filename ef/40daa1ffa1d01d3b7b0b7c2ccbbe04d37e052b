@@ -1,0 +1,19 @@
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_dc6a379d8f7717 63-65
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ef40daa1ffa1d01d3b7b0b7c2ccbbe04d37e052b",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
