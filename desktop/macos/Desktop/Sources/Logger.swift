@@ -117,6 +117,8 @@ private func writeToStandardError(_ message: String) {
 
 enum LocalLogFileWriteError: Error, Equatable, CustomStringConvertible {
   case openFailed(errno: Int32)
+  case statFailed(errno: Int32)
+  case unsafeFile
   case writeFailed(errno: Int32)
   case closeFailed(errno: Int32)
 
@@ -124,6 +126,10 @@ enum LocalLogFileWriteError: Error, Equatable, CustomStringConvertible {
     switch self {
     case .openFailed(let code):
       return "open failed: \(Self.message(for: code))"
+    case .statFailed(let code):
+      return "stat failed: \(Self.message(for: code))"
+    case .unsafeFile:
+      return "unsafe log file"
     case .writeFailed(let code):
       return "write failed: \(Self.message(for: code))"
     case .closeFailed(let code):
@@ -138,9 +144,15 @@ enum LocalLogFileWriteError: Error, Equatable, CustomStringConvertible {
 
 enum LocalLogFileWriter {
   static func append(_ data: Data, to path: String) -> Result<Void, LocalLogFileWriteError> {
-    let fd = open(path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, S_IRUSR | S_IWUSR)
+    let flags = O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+    let fd = open(path, flags, S_IRUSR | S_IWUSR)
     guard fd >= 0 else {
       return .failure(.openFailed(errno: errno))
+    }
+
+    if let validationFailure = validateOpenedFile(fd) {
+      close(fd)
+      return .failure(validationFailure)
     }
 
     let writeFailure = data.withUnsafeBytes { rawBuffer -> LocalLogFileWriteError? in
@@ -170,6 +182,21 @@ enum LocalLogFileWriter {
       return .failure(.closeFailed(errno: errno))
     }
     return .success(())
+  }
+
+  private static func validateOpenedFile(_ fd: Int32) -> LocalLogFileWriteError? {
+    var fileStat = stat()
+    guard fstat(fd, &fileStat) == 0 else {
+      return .statFailed(errno: errno)
+    }
+
+    let isRegularFile = (fileStat.st_mode & S_IFMT) == S_IFREG
+    let isOwnedByCurrentUser = fileStat.st_uid == geteuid()
+    let hasSingleLink = fileStat.st_nlink == 1
+    guard isRegularFile, isOwnedByCurrentUser, hasSingleLink else {
+      return .unsafeFile
+    }
+    return nil
   }
 }
 
