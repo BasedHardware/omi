@@ -1,0 +1,29 @@
+mockup/index.html
+  s_751b5889fd7450::t_7350534f3f0e24 157-192
+  s_751b5889fd7450::t_6972dbbfa80f5f 69-70
+  s_751b5889fd7450::t_6148f1317a5694 51-56
+  s_751b5889fd7450::t_718577fc8e8d9c 117-129,133
+mockup/screens/accent-preview.html
+  s_751b5889fd7450::t_22bf51313db6e4 1-54
+mockup/design-system.css
+  s_751b5889fd7450::t_a18ee38fb08b2d 284
+  s_751b5889fd7450::t_9c01cb3727b0c4 29
+  s_751b5889fd7450::t_11eac2b82a71ad 372
+  s_751b5889fd7450::t_d17b1f075f011e 25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b4ca88c065e18a43628828e1de478835e267f058",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
