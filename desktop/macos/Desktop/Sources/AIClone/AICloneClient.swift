@@ -19,11 +19,11 @@ actor AICloneClient {
     private let session: URLSession
     private let decoder: JSONDecoder
 
-    init(session: URLSession = AICloneClient.makeSession()) {
+    init(session: URLSession = AICloneClient.makeSession(), decoder: JSONDecoder? = nil) {
         self.session = session
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        self.decoder = decoder
+        let d = decoder ?? JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        self.decoder = d
     }
 
     private static func makeSession() -> URLSession {

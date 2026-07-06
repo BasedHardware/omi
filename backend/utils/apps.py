@@ -40,11 +40,7 @@ from database.apps import (
 )
 from database.auth import get_user_name
 from database.conversations import get_conversations
-from database.memories import get_memories, get_user_public_memories
-from database._client import db as firestore_db
-from utils.memory.memory_service import MemoryService
-from utils.memory.memory_system import MemorySystem
-from utils.memory.surface_routing import pin_memory_system
+from database.memories import get_memories
 from database.redis_db import (
     get_enabled_apps,
     get_app_reviews,

@@ -823,8 +823,6 @@ async def persona_chat_via_integration(
     prior_messages: list[Message] = []
     if body.previous_messages:
         for turn in body.previous_messages[:20]:
-            if not isinstance(turn, dict):
-                continue
             role = turn.get("role")
             text = turn.get("text")
             if role not in ("human", "ai") or not isinstance(text, str):
