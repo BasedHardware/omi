@@ -183,7 +183,8 @@ actor TranscriptionStorage {
     func markSessionCompleted(
         id: Int64,
         backendId: String,
-        conversationStatus: LocalConversationStatus = .completed
+        conversationStatus: LocalConversationStatus = .completed,
+        allowBackendIdOverride: Bool = false
     ) async throws -> Bool {
         let db = try await ensureInitialized()
 
@@ -192,7 +193,7 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
-            guard record.canAcceptCompletion(backendId: backendId) else {
+            guard allowBackendIdOverride || record.canAcceptCompletion(backendId: backendId) else {
                 log("TranscriptionStorage: Skipping conflicting completion for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))")
                 return false
             }
@@ -662,7 +663,19 @@ actor TranscriptionStorage {
                 .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
                 .filter(Column("retryCount") >= maxRetries)
                 .filter(Column("retryCount") < retryLimit)
-                .filter(Column("finalizationStrategy") == TranscriptionFinalizationStrategy.cloudReconcile.rawValue)
+                .filter(
+                    sql: """
+                        finalizationStrategy = ?
+                        OR (
+                            finalizationStrategy IS NULL
+                            AND ((backendId IS NOT NULL AND backendId != '') OR source != ?)
+                        )
+                        """,
+                    arguments: [
+                        TranscriptionFinalizationStrategy.cloudReconcile.rawValue,
+                        ConversationSource.desktop.rawValue,
+                    ]
+                )
                 .filter(
                     sql: """
                         EXISTS (
