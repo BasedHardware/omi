@@ -7,7 +7,9 @@ streams AI responses.
 """
 
 import logging
-from typing import Any, Callable, List, cast
+import uuid
+from datetime import datetime, timezone
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -32,10 +34,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
-# parameter; route access through a cast so this strict-checked file sees a
-# concrete callable type instead of `Unknown`.
-_auth_module = cast(Any, auth)
+
 # ============================================================================
 # MODELS
 # ============================================================================

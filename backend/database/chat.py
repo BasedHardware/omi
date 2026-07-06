@@ -1,32 +1,19 @@
 import copy
-import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
+from typing import Optional, List, Dict, Any
 
 from google.api_core.exceptions import AlreadyExists, Conflict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
-from models.chat import Message, MessageSender, MessageType
+from database import users as users_db
+from models.chat import Message
 from utils import encryption
+from utils.other.endpoints import timeit
 from ._client import db
-from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
-
-logger = logging.getLogger(__name__)
-
-BATCH_LIMIT = 500  # Firestore hard limit
-
-
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
-
-    Returns an empty dict when the document has no fields (None payload),
-    so callers can safely mutate and read keys without Optional checks.
-    """
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-
+from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
+import logging
 
 logger = logging.getLogger(__name__)
 

@@ -89,10 +89,10 @@ logger = logging.getLogger(__name__)
 
 def _safe_build_app(app_dict: dict) -> Optional[App]:
     """Build an App from a raw marketplace record, skipping (not raising on) a malformed one.
-    def _safe_build_app(app_dict: dict[str, Any]) -> Optional[App]:
-        The marketplace list builders are shared and Redis/process-cached across all users, so one
-        legacy or malformed app document must not 500 the whole listing for everyone. Returns None
-        for a record that fails validation, logging the app id and the offending field names only.
+
+    The marketplace list builders are shared and Redis/process-cached across all users, so one
+    legacy or malformed app document must not 500 the whole listing for everyone. Returns None
+    for a record that fails validation, logging the app id and the offending field names only.
     """
     try:
         return App(**app_dict)

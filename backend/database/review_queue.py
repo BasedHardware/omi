@@ -1,6 +1,6 @@
 import copy
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Any, Dict, List, Optional
 
 from config.memory_confidence import CONFIDENCE_BANDS
 from database import memories as memories_db
@@ -18,7 +18,7 @@ review_queue_collection = 'memory_review_queue'
 corrections_collection = 'memory_corrections'
 memories_collection = 'memories'
 
-ACTION_POLICY: Dict[str, Set[str]] = {
+ACTION_POLICY = {
     'accepted': {'answers', 'actions'},
     'pending': {'answers_with_disclaimer'},
     'pending_review': {'answers_with_disclaimer'},
@@ -30,7 +30,7 @@ ACTION_POLICY: Dict[str, Set[str]] = {
 }
 
 
-def permitted_uses(status: str) -> Set[str]:
+def permitted_uses(status: str) -> set[str]:
     return ACTION_POLICY.get(status or 'accepted', ACTION_POLICY['accepted'])
 
 
@@ -41,16 +41,14 @@ def can_use_for_action(status: str, action_kind: str) -> bool:
 
 
 def impact_score(new_fact: Dict[str, Any], conflict_fact: Dict[str, Any]) -> float:
-    qualifiers_raw: object = new_fact.get('qualifiers')
-    qualifiers: Dict[str, Any] = cast(Dict[str, Any], qualifiers_raw) if isinstance(qualifiers_raw, dict) else {}
-    importance = qualifiers.get('importance', new_fact.get('importance', 0.5))
-    new_veracity: float = cast(float, new_fact.get('veracity') or 0.0)
-    conflict_veracity: float = cast(float, conflict_fact.get('veracity') or 0.0)
+    importance = (new_fact.get('qualifiers') or {}).get('importance', new_fact.get('importance', 0.5))
+    new_veracity = new_fact.get('veracity') or 0.0
+    conflict_veracity = conflict_fact.get('veracity') or 0.0
     return float(importance) * abs(conflict_veracity - new_veracity)
 
-    new_veracity: float = cast(float, new_fact.get('veracity') or 0.0)
-    conflict_veracity: float = cast(float, conflict_fact.get('veracity') or 0.0)
-    ambiguous = new_veracity < CONFIDENCE_BANDS['medium'] and conflict_veracity >= CONFIDENCE_BANDS['high']
+
+def should_escalate_conflict(new_fact: Dict[str, Any], conflict_fact: Dict[str, Any]) -> bool:
+    new_veracity = new_fact.get('veracity') or 0.0
     conflict_veracity = conflict_fact.get('veracity') or 0.0
     ambiguous = new_veracity < CONFIDENCE_BANDS['medium'] and conflict_veracity >= CONFIDENCE_BANDS['high']
     return ambiguous and impact_score(new_fact, conflict_fact) >= 0.1

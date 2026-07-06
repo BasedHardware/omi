@@ -18,7 +18,6 @@ Constants:
 
 import logging
 import time
-from typing import Any, Dict, cast
 
 import av
 
@@ -102,10 +101,10 @@ end
 return {1, used + request, math.max(0, budget - used - request)}
 """
 
-_CONSUME_LUA: Any = None
 try:
     _CONSUME_LUA = r.register_script(_CONSUME_LUA_SRC)
 except Exception:
+    _CONSUME_LUA = None
     logger.warning('voice_duration_limiter: failed to register Lua script (Redis unavailable?)')
 
 
@@ -181,7 +180,7 @@ def record_actual_duration(uid: str, duration_ms: int) -> bool:
         return True  # Fail-open
 
 
-def get_budget_status(uid: str) -> Dict[str, Any]:
+def get_budget_status(uid: str) -> dict:
     """Get the current budget status for a user.
 
     Returns dict with: daily_limit_ms, used_ms, remaining_ms, exhausted.
@@ -228,9 +227,7 @@ def read_wav_duration_ms(file_path: str) -> int | None:
             stream = container.streams.audio[0]
             # Prefer container-level duration; fall back to stream-level
             if container.duration is not None:
-                duration_s = float(container.duration) / cast(
-                    int, getattr(av, 'time_base')
-                )  # av.time_base is AV_TIME_BASE (1_000_000), not in stubs
+                duration_s = float(container.duration) / av.time_base
             elif stream.duration is not None and stream.time_base is not None:
                 duration_s = float(stream.duration * stream.time_base)
             else:

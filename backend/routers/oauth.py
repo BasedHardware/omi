@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Optional, Set, cast
+from typing import Optional
 from fastapi import APIRouter, Request, HTTPException, Form
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -34,10 +34,6 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 
-def _verify_id_token(id_token: str) -> Dict[str, Any]:
-    return firebase_admin.auth.verify_id_token(id_token)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
-
-
 @router.get("/v1/oauth/authorize", response_class=HTMLResponse)
 def oauth_authorize(
     request: Request,
@@ -57,7 +53,7 @@ def oauth_authorize(
         raise HTTPException(status_code=400, detail="App home URL not configured for this app.")
 
     # Prepare permission strings
-    permissions: List[Dict[str, str]] = []
+    permissions = []
     if app.capabilities:
         if "chat" in app.capabilities:
             permissions.append({"icon": "💬", "text": "Engage in chat conversations with Omi."})
@@ -103,8 +99,8 @@ def oauth_authorize(
         permissions.append({"icon": "✅", "text": "Access your basic Omi profile information."})
 
     # Remove duplicate permissions (based on text)
-    unique_permissions: List[Dict[str, str]] = []
-    seen_texts: Set[str] = set()
+    unique_permissions = []
+    seen_texts = set()
     for perm in permissions:
         if perm["text"] not in seen_texts:
             unique_permissions.append(perm)
@@ -130,8 +126,8 @@ def oauth_authorize(
 @router.post("/v1/oauth/token", response_model=OAuthTokenResponse)
 async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)):
     try:
-        decoded_token: Dict[str, Any] = _verify_id_token(firebase_id_token)
-        uid: str = decoded_token['uid']
+        decoded_token = firebase_admin.auth.verify_id_token(firebase_id_token)
+        uid = decoded_token['uid']
     except firebase_admin.auth.InvalidIdTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
     except Exception as e:

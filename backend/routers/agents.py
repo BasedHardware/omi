@@ -1,5 +1,3 @@
-from typing import Any, Dict, Optional, cast
-
 from fastapi import APIRouter
 from fastapi import Request, HTTPException
 
@@ -12,22 +10,15 @@ router = APIRouter()
 
 
 @router.post('/v1/agents/hume/callback', response_model=shared.EmptyResponse, tags=['agent', 'hume', 'callback'])
-def hume_expression_measurement_callback(request: Request, data: Dict[str, Any]) -> Dict[str, Any]:
+def hume_expression_measurement_callback(request: Request, data: dict):
     # body untyped: external Hume AI webhook payload, forwarded wholesale to HumeJobCallbackModel.from_dict
     # which defensively parses an arbitrarily-nested prosody predictions structure. Modeling it would
     # duplicate Hume's API schema with no validation benefit since from_dict is the real parser.
-    job_callback = cast(
-        Optional[hume.HumeJobCallbackModel],
-        hume.HumeJobCallbackModel.from_dict("prosody", data),  # type: ignore[reportUnknownMemberType]  # utils.other.hume.from_dict takes an untyped dict
-    )
+    job_callback = hume.HumeJobCallbackModel.from_dict("prosody", data)
     if job_callback is None:
         raise HTTPException(status_code=400, detail="Job callback is invalid")
 
-    process_user_expression_measurement_callback(
-        task.TaskActionProvider.HUME,
-        cast(str, job_callback.job_id),  # type: ignore[reportUnknownMemberType]  # utils.other.hume.HumeJobCallbackModel.job_id is untyped
-        job_callback,
-    )
+    process_user_expression_measurement_callback(task.TaskActionProvider.HUME, job_callback.job_id, job_callback)
 
     # Empty response
     return {}

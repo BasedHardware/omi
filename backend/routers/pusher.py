@@ -4,7 +4,8 @@ import contextvars
 import json
 import time
 from collections import deque
-from typing import Any, Awaitable, Dict, List, Optional, Set, TypedDict, cast
+from datetime import datetime, timezone
+from typing import Dict, Optional, Set
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -13,6 +14,7 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
+from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from utils.conversations.factory import deserialize_conversation
 from models.geolocation import Geolocation
@@ -32,7 +34,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunks_batch
+from utils.other.storage import upload_audio_chunk, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -72,31 +74,6 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 # before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
 # blocking cleanup indefinitely.
 BG_DRAIN_TIMEOUT = 30.0  # seconds
-
-
-class _SpeakerSampleRequest(TypedDict):
-    person_id: str
-    conversation_id: str
-    segment_ids: List[str]
-    queued_at: float
-
-
-class _TranscriptQueueItem(TypedDict):
-    segments: List[Dict[str, Any]]
-    memory_id: Optional[str]
-
-
-class _AudioBytesQueueItem(TypedDict):
-    type: str
-    sample_rate: int
-    data: bytearray
-
-
-class _PrivateCloudChunk(TypedDict):
-    data: bytes
-    conversation_id: str
-    timestamp: float
-    retries: int
 
 
 async def _process_conversation_task(

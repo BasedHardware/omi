@@ -6,7 +6,7 @@ import uuid
 from utils.executors import db_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Any, Optional, List
+from typing import Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db

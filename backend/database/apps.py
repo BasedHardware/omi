@@ -1,9 +1,9 @@
+import os
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import List
 
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 from google.cloud.firestore import ArrayUnion, ArrayRemove
-from google.cloud.firestore_v1.types import StructuredQuery
 
 from ulid import ULID
 
@@ -12,17 +12,6 @@ from ._client import db
 import logging
 
 logger = logging.getLogger(__name__)
-
-# Firestore composite-filter operator. The string 'AND' is accepted at runtime
-# but is untyped to pyright; use the typed enum value instead (byte-identical
-# protobuf output, verified equivalent).
-_AND_OP = StructuredQuery.CompositeFilter.Operator.AND
-
-
-def _typed_doc(doc: Any) -> Dict[str, Any]:
-    raw: object = doc.to_dict()
-    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
-
 
 # *****************************
 # ********** CRUD *************

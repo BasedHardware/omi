@@ -3,14 +3,10 @@ import hashlib
 import json
 import re
 from collections import Counter, OrderedDict
-from typing import Any, Callable, Dict, List, Match, Optional, Pattern, Set, Tuple, Union, cast
+from typing import List, Optional, Tuple
 
 from google.cloud import translate_v3
-from langdetect import (  # type: ignore[reportUnknownVariableType]  # langdetect ships no py.typed marker; symbols are untyped
-    detect as langdetect_detect,
-    detect_langs as langdetect_detect_langs,
-    DetectorFactory,
-)
+from langdetect import detect as langdetect_detect, detect_langs as langdetect_detect_langs, DetectorFactory
 from langdetect.lang_detect_exception import LangDetectException
 from enum import Enum
 import logging
@@ -19,7 +15,10 @@ from database.redis_db import r
 from models.transcript_segment import SENTENCE_FINDALL_RE
 
 logger = logging.getLogger(__name__)
-detection_cache: "OrderedDict[str, Union[str, Tuple[str, float]]]" = OrderedDict()
+
+
+# LRU Cache for language detection (local, free via langdetect)
+detection_cache = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -192,18 +191,18 @@ TRANSLATION_CACHE_TTL = int(os.environ.get("TRANSLATION_CACHE_TTL", 60 * 60 * 24
 MAX_BATCH_SIZE = 100
 
 
-def _detect_with_langdetect(text: str, hint_language: Optional[str] = None) -> Optional[str]:
+def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
     # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
     base_hint = hint_language.split('-')[0] if hint_language else None
     if base_hint not in LANGDETECT_RELIABLE_LANGUAGES:
         return None
     try:
-        return cast(str, langdetect_detect(text))
+        return langdetect_detect(text)
     except LangDetectException:
         return None
 
 
-def detect_language(text: str, remove_non_lexical: bool = False, hint_language: Optional[str] = None) -> Optional[str]:
+def detect_language(text: str, remove_non_lexical: bool = False, hint_language: str = None) -> str | None:
     """Detect language using free local langdetect library only (no paid API calls)."""
     text_for_detection = text
     if remove_non_lexical:
@@ -215,9 +214,9 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
 
     if text_for_detection in detection_cache:
         detection_cache.move_to_end(text_for_detection)
-        return cast(str, detection_cache[text_for_detection])
+        return detection_cache[text_for_detection]
 
-    detected_language: Optional[str] = None
+    detected_language = None
 
     try:
         detected_language = _detect_with_langdetect(text_for_detection, hint_language)

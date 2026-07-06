@@ -2,11 +2,11 @@
 Tools for accessing and managing user action items.
 """
 
-from datetime import datetime, timedelta, timezone, tzinfo
-from typing import Any, Dict, List, Optional, Tuple, cast
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 import contextvars
 
-from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
+from langchain_core.tools import tool
 from langchain_core.runnables import RunnableConfig
 
 import database.action_items as action_items_db
@@ -30,7 +30,7 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
-def _format_local(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
+def _format_local(dt, display_tz, tz_label: str) -> str:
     """Render a stored timestamp in the user's local timezone with a tz label.
 
     Action-item timestamps are stored tz-aware (UTC); a naive value is treated as
@@ -51,7 +51,7 @@ MAX_ACTION_ITEMS_FOR_LLM = 200
 MAX_RESULT_CHARS = 60000
 
 
-def _cap_action_items_for_llm(items: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], bool]:
+def _cap_action_items_for_llm(items: list):
     """Keep at most ``MAX_ACTION_ITEMS_FOR_LLM`` action items for the chat model.
 
     Items arrive in the order the database returned them, so this keeps the first ones. Returns
@@ -95,7 +95,7 @@ def get_action_items_tool(
     end_date: Optional[str] = None,
     due_start_date: Optional[str] = None,
     due_end_date: Optional[str] = None,
-    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+    config: RunnableConfig = None,
 ) -> str:
     """
     Retrieve the user's action items (tasks, to-dos) with optional filters.
@@ -157,34 +157,31 @@ def get_action_items_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
+    if config is None:
         try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
+            config = agent_config_context.get()
+            if config:
                 logger.info(f"🔧 get_action_items_tool - got config from context variable")
         except LookupError:
             logger.warning(f"❌ get_action_items_tool - config not found in context variable")
-            cfg = None
+            config = None
 
     # Safely access config
     try:
-        if cfg is None:
+        if config is None:
             logger.info(f"❌ get_action_items_tool - config is None")
             return "Error: Configuration not available"
 
-        if 'configurable' not in cfg:
+        if 'configurable' not in config:
             logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
+                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(config.keys()) if config else 'None'}"
             )
             return "Error: Configuration format invalid"
 
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
+        uid = config['configurable'].get('user_id')
         if not uid:
             logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
+                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(config['configurable'].keys()) if config.get('configurable') else 'None'}"
             )
             return "Error: User ID not found in configuration"
 
@@ -195,6 +192,9 @@ def get_action_items_tool(
 
         traceback.print_exc()
         return f"Error: Configuration error - {str(config_error)}"
+
+    # Get safety guard from config if available
+    safety_guard = config['configurable'].get('safety_guard')
 
     # Cap at 500 per call
     if limit > 500:

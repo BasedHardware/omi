@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, cast
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
@@ -14,27 +14,6 @@ from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _response_text(response: object) -> str:
-    """Extract a plain-text string from an LLM response object."""
-    content = getattr(response, 'content', response)
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        parts: List[str] = []
-        for item in cast(List[object], content):
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict):
-                block = cast(Dict[str, object], item)
-                text = block.get('text') or block.get('content') or ''
-                if text:
-                    parts.append(str(text))
-            elif item is not None:
-                parts.append(str(item))
-        return ''.join(parts)
-    return str(content)
 
 
 def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
@@ -75,10 +54,10 @@ class ExtractedMemory(BaseModel):
 
 class Memories(BaseModel):
     facts: List[ExtractedMemory] = Field(
-        min_length=0,
-        max_length=2,
+        min_items=0,
+        max_items=2,
         description="List of **new** memories. Maximum 2 per conversation.",
-        default_factory=list,
+        default=[],
     )
 
     def to_memories(self) -> List[Memory]:
@@ -87,19 +66,16 @@ class Memories(BaseModel):
 
 class HighRecallMemories(BaseModel):
     facts: List[Memory] = Field(
-        min_length=0,
+        min_items=0,
         description="List of **new** memories. Include all memory-worthy facts from the conversation.",
-        default_factory=list,
+        default=[],
     )
-
-    def to_memories(self) -> List[Memory]:
-        return list(self.facts)
 
 
 class MemoriesByTexts(BaseModel):
     facts: List[ExtractedMemory] = Field(
         description="List of **new** facts. If any",
-        default_factory=list,
+        default=[],
     )
 
     def to_memories(self) -> List[Memory]:
