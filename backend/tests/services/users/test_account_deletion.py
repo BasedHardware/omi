@@ -168,6 +168,11 @@ def test_start_account_deletion_tolerates_feedback_failure_and_missing_firebase_
     )
     monkeypatch.setattr(
         account_deletion.users_db,
+        'mark_user_deletion_wipe_intent',
+        MagicMock(),
+    )
+    monkeypatch.setattr(
+        account_deletion.users_db,
         'mark_user_deletion_wipe_started',
         MagicMock(),
     )
@@ -437,6 +442,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
     monkeypatch.setattr(
         account_deletion, 'delete_all_conversation_recordings', lambda uid: calls.append(('recordings', uid))
     )
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -471,6 +477,9 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     monkeypatch.setattr(
         account_deletion, 'delete_all_conversation_recordings', MagicMock(side_effect=Exception('gcs down'))
     )
+    monkeypatch.setattr(
+        account_deletion, 'purge_canonical_derived_user_data', MagicMock(side_effect=Exception('canonical down'))
+    )
 
     result = account_deletion.purge_derived_user_data('uid1')
 
@@ -481,11 +490,13 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
     account_deletion.delete_action_item_vectors_batch.assert_called_once_with('uid1', ['a1'])
     account_deletion.delete_screen_activity_vectors.assert_called_once_with('uid1', ['s1'])
     account_deletion.delete_all_conversation_recordings.assert_called_once_with('uid1')
+    account_deletion.purge_canonical_derived_user_data.assert_called_once_with('uid1')
     assert [failure['operation'] for failure in result['required_failures']] == [
         'conversation_vectors',
         'transcript_chunk_vectors',
         'memory_vectors',
         'conversation_recordings',
+        'canonical_derived_data',
     ]
     assert result['best_effort_failures'] == []
 
@@ -502,6 +513,7 @@ def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monke
     monkeypatch.setattr(account_deletion, 'delete_action_item_vectors_batch', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_screen_activity_vectors', MagicMock())
     monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock())
+    monkeypatch.setattr(account_deletion, 'purge_canonical_derived_user_data', MagicMock())
 
     result = account_deletion.purge_derived_user_data('uid1')
 

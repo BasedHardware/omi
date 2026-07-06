@@ -201,7 +201,9 @@ def delete_atom_keyword_doc(uid: str, memory_id: str, *, db_client=None) -> None
         logger.warning("delete_atom_keyword_doc failed uid=%s memory_id=%s: %s", uid, memory_id, exc)
 
 
-def purge_user_atom_keyword_index(uid: str, *, db_client=None, force: bool = False) -> int:
+def purge_user_atom_keyword_index(
+    uid: str, *, db_client=None, force: bool = False, raise_on_failure: bool = False
+) -> int:
     """Delete all keyword docs for a canonical user. Returns deleted count when available."""
     if not force and not user_allows_atom_keyword_index(uid, db_client=db_client):
         return 0
@@ -214,6 +216,8 @@ def purge_user_atom_keyword_index(uid: str, *, db_client=None, force: bool = Fal
         return int(result.get("num_deleted") or 0)
     except Exception as exc:
         logger.warning("purge_user_atom_keyword_index failed uid=%s: %s", uid, exc)
+        if raise_on_failure:
+            raise
         return 0
 
 
