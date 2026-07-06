@@ -18,6 +18,7 @@ struct FileIndexingView: View {
     @State private var chatMessages: [String] = []
     @State private var pipelineStarted = false
     @State private var scanFailed = false
+    @State private var pipelineTask: Task<Void, Never>?
 
     @StateObject private var graphViewModel = MemoryGraphViewModel()
 
@@ -269,6 +270,7 @@ struct FileIndexingView: View {
     // MARK: - Pipeline
 
     private func startLoadingPipeline() {
+        pipelineTask?.cancel()
         totalFilesScanned = 0
         progress = 0.0
         scanFailed = false
@@ -277,21 +279,25 @@ struct FileIndexingView: View {
         // when onboarding completes mid-pipeline
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
 
-        Task {
+        pipelineTask = Task {
             // Stage 1: File Scanning (0% → 60%)
             let scanSucceeded = await runFileScanning()
+            guard !Task.isCancelled else { return }
             guard scanSucceeded else {
                 await MainActor.run {
                     UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
+                    pipelineTask = nil
                 }
                 return
             }
 
             // Stage 2: AI Exploration (60% → 90%)
             await runAIExploration()
+            guard !Task.isCancelled else { return }
 
             // Stage 3: Knowledge Graph Build (90% → 100%)
             await runKnowledgeGraphBuild()
+            guard !Task.isCancelled else { return }
 
             // Transition to brain map
             await MainActor.run {
@@ -299,6 +305,7 @@ struct FileIndexingView: View {
                     phase = .brainMap
                     isBrainMapPhase?.wrappedValue = true
                 }
+                pipelineTask = nil
             }
         }
     }
@@ -307,6 +314,7 @@ struct FileIndexingView: View {
     private func runFileScanning() async -> Bool {
         // Check if files were already indexed (e.g., during onboarding chat via scan_files tool)
         let existingCount = await FileIndexerService.shared.getIndexedFileCount()
+        guard !Task.isCancelled else { return false }
         if existingCount > 0 {
             log("FileIndexingView: Skipping file scan — \(existingCount) files already indexed")
             await MainActor.run {
@@ -344,6 +352,7 @@ struct FileIndexingView: View {
                 scanningFolder = name
             }
             let scanResult = await FileIndexerService.shared.scanFolders([url])
+            guard !Task.isCancelled else { return false }
             if let failure = scanResult.failure {
                 await showScanFailure(failure)
                 return false
@@ -357,6 +366,7 @@ struct FileIndexingView: View {
 
         // Also index installed app names from /Applications
         let appScanResult = await scanApplicationNames()
+        guard !Task.isCancelled else { return false }
         if let failure = appScanResult.failure {
             await showScanFailure(failure)
             return false
@@ -498,6 +508,9 @@ struct FileIndexingView: View {
         var count = 0
         for dir in appDirs {
             let scanResult = await FileIndexerService.shared.scanFolders([dir])
+            guard !Task.isCancelled else {
+                return FileIndexingScanResult(indexedCount: count + scanResult.indexedCount)
+            }
             if let failure = scanResult.failure {
                 return FileIndexingScanResult(
                     indexedCount: count + scanResult.indexedCount,
@@ -626,6 +639,8 @@ struct FileIndexingView: View {
 
     private func skip() {
         log("FileIndexingView: User skipped file indexing")
+        pipelineTask?.cancel()
+        pipelineTask = nil
         UserDefaults.standard.set(true, forKey: "hasCompletedFileIndexing")
         onComplete(0)
     }
