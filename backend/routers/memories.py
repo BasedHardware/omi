@@ -163,7 +163,7 @@ async def _guard_import_memory_write(request: Request, *, endpoint: str, uid: st
         # acknowledge-and-drop them without persisting, and a 409 here
         # (enforce mode) would fail an old desktop build's whole batch
         # before that drop can happen.
-        violation = import_write_violation_for_guard(cast(Dict[str, Any], payload))
+        violation = import_write_violation_for_guard(payload)  # type: ignore[reportUnknownArgumentType]  # payload narrowed from List[object] via isinstance
         if not violation:
             continue
         logger.warning(
