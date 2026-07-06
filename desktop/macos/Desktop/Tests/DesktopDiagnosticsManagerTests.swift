@@ -114,6 +114,7 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
       httpStatusCode: 503,
       backendRoute: "/v2/realtime/session",
       upstreamStatusCode: 503,
+      providerCode: "UNAVAILABLE",
       retryable: true)
 
     let snapshot = try latestSnapshot()
@@ -125,6 +126,7 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["http_status_code"] as? Int, 503)
     XCTAssertEqual(snapshot["backend_route"] as? String, "/v2/realtime/session")
     XCTAssertEqual(snapshot["upstream_status_code"] as? Int, 503)
+    XCTAssertEqual(snapshot["provider_code"] as? String, "UNAVAILABLE")
     XCTAssertEqual(snapshot["retryable"] as? Bool, true)
   }
 

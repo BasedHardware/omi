@@ -321,6 +321,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       httpStatusCode: error.statusCode,
       backendRoute: error.payload?.backendRoute,
       upstreamStatusCode: error.payload?.upstreamStatusCode,
+      providerCode: error.payload?.code,
       retryable: error.payload?.retryable)
   }
 

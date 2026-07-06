@@ -132,6 +132,7 @@ final class DesktopDiagnosticsManager {
     httpStatusCode: Int? = nil,
     backendRoute: String? = nil,
     upstreamStatusCode: Int? = nil,
+    providerCode: String? = nil,
     retryable: Bool? = nil
   ) {
     var properties: [String: Any] = [
@@ -147,6 +148,9 @@ final class DesktopDiagnosticsManager {
     }
     if let upstreamStatusCode {
       properties["upstream_status_code"] = upstreamStatusCode
+    }
+    if let providerCode {
+      properties["provider_code"] = providerCode
     }
     if let retryable {
       properties["retryable"] = retryable

@@ -310,6 +310,9 @@ final class APIClientRoutingTests: XCTestCase {
             XCTAssertEqual(error.payload?.upstreamStatusCode, 429)
             XCTAssertEqual(error.payload?.retryable, true)
             XCTAssertEqual(error.healthError.failureClass.logValue, "provider_quota_exceeded")
+            XCTAssertTrue(error.localizedDescription.contains("status: 429"))
+            XCTAssertTrue(error.localizedDescription.contains("reason: provider_quota_exceeded"))
+            XCTAssertTrue(error.localizedDescription.contains("code: insufficient_quota"))
         }
     }
 

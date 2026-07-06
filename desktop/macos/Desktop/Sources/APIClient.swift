@@ -236,6 +236,8 @@ actor APIClient {
         let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
         log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
         return token
+      } catch let error as RealtimeTokenMintError {
+        throw error
       } catch let error as CredentialHealthError {
         throw error
       } catch {
@@ -447,7 +449,16 @@ struct RealtimeTokenMintError: LocalizedError {
   let payload: APIErrorPayload?
 
   var errorDescription: String? {
-    healthError.localizedDescription
+    var description = healthError.localizedDescription
+    description += " [status: \(statusCode)"
+    if let reason = payload?.reason {
+      description += ", reason: \(reason)"
+    }
+    if let code = payload?.code {
+      description += ", code: \(code)"
+    }
+    description += "]"
+    return description
   }
 }
 

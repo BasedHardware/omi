@@ -86,7 +86,7 @@ impl IntoResponse for MintError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "provider_not_configured",
                 format!("{} realtime is not configured", p),
-                None,
+                Some(p),
                 None,
                 None,
                 true,
@@ -189,10 +189,16 @@ fn parse_upstream_error(body: &str) -> (Option<String>, String) {
     let parsed = serde_json::from_str::<serde_json::Value>(body).ok();
     let error = parsed.as_ref().and_then(|v| v.get("error"));
     let code = error
-        .and_then(|e| e.get("code").or_else(|| e.get("status")))
-        .or_else(|| parsed.as_ref().and_then(|v| v.get("code")))
-        .and_then(|v| v.as_str())
-        .map(str::to_string);
+        .and_then(|e| {
+            value_as_string_code(e.get("code"))
+                .or_else(|| value_as_string_code(e.get("status")))
+                .or_else(|| value_as_numeric_code(e.get("code")))
+        })
+        .or_else(|| {
+            parsed.as_ref().and_then(|v| {
+                value_as_string_code(v.get("code")).or_else(|| value_as_numeric_code(v.get("code")))
+            })
+        });
     let message = error
         .and_then(|e| e.get("message"))
         .or_else(|| parsed.as_ref().and_then(|v| v.get("message")))
@@ -206,6 +212,20 @@ fn parse_upstream_error(body: &str) -> (Option<String>, String) {
             }
         });
     (code, message)
+}
+
+fn value_as_string_code(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::String(s) if !s.is_empty() => Some(s.clone()),
+        _ => None,
+    }
+}
+
+fn value_as_numeric_code(value: Option<&serde_json::Value>) -> Option<String> {
+    match value? {
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        _ => None,
+    }
 }
 
 fn http_client() -> reqwest::Client {
@@ -573,5 +593,30 @@ mod tests {
         assert_eq!(body["upstream_status_code"], 429);
         assert_eq!(body["code"], "RESOURCE_EXHAUSTED");
         assert_eq!(body["retryable"], true);
+    }
+
+    #[test]
+    fn missing_key_error_body_includes_provider() {
+        let (_status, body) = mint_error_body(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "provider_not_configured",
+            "Gemini realtime is not configured".to_string(),
+            Some("Gemini"),
+            None,
+            None,
+            true,
+        );
+
+        assert_eq!(body["provider"], "Gemini");
+    }
+
+    #[test]
+    fn parse_upstream_error_preserves_status_when_code_is_numeric() {
+        let (code, message) = parse_upstream_error(
+            r#"{"error":{"code":429,"status":"RESOURCE_EXHAUSTED","message":"Quota exhausted"}}"#,
+        );
+
+        assert_eq!(code.as_deref(), Some("RESOURCE_EXHAUSTED"));
+        assert_eq!(message, "Quota exhausted");
     }
 }
