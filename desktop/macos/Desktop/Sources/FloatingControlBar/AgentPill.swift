@@ -281,6 +281,13 @@ final class AgentPillsManager: ObservableObject {
         "needs setup",
         "adapter is unavailable",
         "requires omi_",
+        // The adapter subprocess could not reach its backend at startup
+        // (e.g. OpenClaw's `acp` bridge with the gateway daemon not running:
+        // "ACP bridge failed: connect ECONNREFUSED 127.0.0.1:18789").
+        // Connection-refused means no work was performed, so retrying on
+        // another agent is safe.
+        "econnrefused",
+        "acp bridge failed",
     ]
 
     nonisolated static func isStartupClassFailure(_ errorText: String) -> Bool {

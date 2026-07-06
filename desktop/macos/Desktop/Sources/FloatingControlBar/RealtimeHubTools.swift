@@ -85,9 +85,10 @@ enum RealtimeHubTools {
       parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
     }
     let missingText = unavailable
-      .map { "\($0.provider.displayName): \($0.setupPrompt)" }
+      .map { "\($0.provider.displayName): \"\($0.setupPrompt)\"" }
       .joined(separator: " ")
-    parts.append("If the user asks to use/ask an unavailable local provider, do NOT spawn a default agent. Say it needs setup and use this guidance: \(missingText)")
+    parts.append(
+      "IMPORTANT — not-connected agents: \(unavailable.map(\.provider.displayName).joined(separator: ", ")) \(unavailable.count == 1 ? "is" : "are") NOT connected right now. If the user names one of them: (1) do NOT call spawn_agent for it and do NOT silently substitute another agent; (2) tell the user it isn't connected and read them the exact setup instructions below, including any command verbatim; (3) offer two choices — Omi can install/set it up for them, or run the task with the built-in Omi agent instead; (4) if they choose install, call spawn_agent with NO provider and a brief of exactly: 'Run this install command in the terminal and report the result: <the command from the setup instructions>'; (5) only proceed with either choice after they agree. Setup instructions — \(missingText)")
     return parts.joined(separator: " ")
   }
 

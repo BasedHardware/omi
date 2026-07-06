@@ -101,9 +101,9 @@ struct LocalAgentProviderAvailability: Equatable {
         }
         switch provider {
         case .hermes:
-            return "I don't see Hermes installed. Make sure Hermes is installed first, then try again."
+            return "I don't see Hermes installed. Install the Hermes agent from Nous Research (hermes-agent.nousresearch.com), then try again."
         case .openclaw:
-            return "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again."
+            return "I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again."
         case .codex:
             return "I don't see Codex installed. Install it with `npm i -g @openai/codex @agentclientprotocol/codex-acp`, then try again."
         }

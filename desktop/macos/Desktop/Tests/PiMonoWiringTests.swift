@@ -110,6 +110,9 @@ final class PiMonoWiringTests: XCTestCase {
       "Not authenticated. Run `codex login` or set OPENAI_API_KEY.",
       "codex adapter requires OMI_CODEX_ADAPTER_COMMAND",
       "OpenClaw needs setup",
+      // Found live in dogfooding: openclaw binary present but gateway daemon
+      // not running — subprocess dies before any work happens.
+      "OpenClaw failed: ACP bridge failed: connect ECONNREFUSED 127.0.0.1:18789",
     ]
     for message in startupFailures {
       XCTAssertTrue(AgentPillsManager.isStartupClassFailure(message), "should be startup-class: \(message)")
@@ -232,10 +235,10 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+      "I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again.")
     XCTAssertEqual(
       availability.toolError,
-      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+      "Error: I don't see OpenClaw installed. Install it with `npm i -g openclaw`, start it with `openclaw gateway`, then try again.")
   }
 
   // MARK: - ApiKeysResponse shape assertion

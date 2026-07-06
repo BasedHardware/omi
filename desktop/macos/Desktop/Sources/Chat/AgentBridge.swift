@@ -337,6 +337,12 @@ enum BridgeError: LocalizedError {
       if lower.contains("codex") {
         return "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again."
       }
+      // OpenClaw's `acp` mode bridges to the local gateway daemon; when it
+      // isn't running the raw error is "ACP bridge failed: connect
+      // ECONNREFUSED 127.0.0.1:18789" — surface what to actually do instead.
+      if lower.contains("openclaw"), lower.contains("econnrefused") || lower.contains("bridge failed") {
+        return "OpenClaw is installed but not running. Start OpenClaw (run `openclaw gateway` or open the OpenClaw app), then try again."
+      }
       if lower.contains("leaked") || lower.contains("api key") || lower.contains("api_key")
         || lower.contains("unauthorized") || lower.contains("permission denied")
         || lower.contains("invalid key") || lower.contains("forbidden")
