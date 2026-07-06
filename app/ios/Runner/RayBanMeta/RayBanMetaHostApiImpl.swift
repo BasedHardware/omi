@@ -54,18 +54,14 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
         }
     }
 
-    private static var hasMetaCredentials: Bool {
-        guard let mwdat = Bundle.main.object(forInfoDictionaryKey: "MWDAT") as? [String: Any],
-            let appId = mwdat["MetaAppID"] as? String
-        else { return false }
-        return !appId.isEmpty
-    }
-
     // MARK: - Availability
 
+    // Full mode requires only the linked toolkit. Meta's Developer Center:
+    // the MWDAT Info.plist credentials must NOT be set when testing via
+    // glasses Developer Mode; they matter only for distribution builds.
     func getAvailabilityMode() throws -> String {
         #if canImport(MWDATCore)
-            return Self.hasMetaCredentials ? "full" : "audio_only"
+            return "full"
         #else
             return "audio_only"
         #endif
@@ -108,17 +104,11 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
 
         #if canImport(MWDATCamera)
             private var cameraStream: MWDATCamera.Stream?
+            private var cameraListenerTokens: [Any] = []
         #endif
 
         func initialize() throws {
             guard !configured else { return }
-            guard Self.hasMetaCredentials else {
-                throw PigeonError(
-                    code: "not_configured",
-                    message: "Meta app credentials missing from Info.plist (MWDAT dictionary)",
-                    details: nil
-                )
-            }
             try Wearables.configure()
             configured = true
 
@@ -130,6 +120,7 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                     let normalized: String
                     switch state {
                     case .registered: normalized = "registered"
+                    case .registering: normalized = "registering"
                     default: normalized = "unregistered"
                     }
                     DispatchQueue.main.async {
@@ -139,10 +130,10 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             })
 
             observerTasks.append(Task { [weak self] in
-                for await devices in wearables.devicesStream() {
+                for await identifiers in wearables.devicesStream() {
                     guard let self = self else { return }
-                    let mapped = devices.map { device in
-                        (id: String(describing: device.identifier), name: device.name)
+                    let mapped = identifiers.map { identifier in
+                        (id: identifier, name: wearables.deviceForIdentifier(identifier)?.nameOrId() ?? "Ray-Ban Meta")
                     }
                     self.latestGlasses = mapped
                     DispatchQueue.main.async {
@@ -160,18 +151,31 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             guard configured else { return "unregistered" }
             switch Wearables.shared.registrationState {
             case .registered: return "registered"
+            case .registering: return "registering"
             default: return "unregistered"
             }
         }
 
         func startRegistration() throws {
             try initialize()
-            try Wearables.shared.startRegistration()
+            Task { [weak self] in
+                do {
+                    try await Wearables.shared.startRegistration()
+                } catch {
+                    self?.emitError(code: "registration", message: String(describing: error))
+                }
+            }
         }
 
         func unregister() throws {
             guard configured else { return }
-            try Wearables.shared.startUnregistration()
+            Task { [weak self] in
+                do {
+                    try await Wearables.shared.startUnregistration()
+                } catch {
+                    self?.emitError(code: "unregistration", message: String(describing: error))
+                }
+            }
         }
 
         /// Forwarded from AppDelegate for the Meta AI app registration callback.
@@ -317,15 +321,15 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                 }
                 cameraStream = stream
 
-                stream.statePublisher.listen { [weak self] state in
+                cameraListenerTokens.append(stream.statePublisher.listen { [weak self] state in
                     guard let self = self else { return }
                     let normalized = String(describing: state)
                     DispatchQueue.main.async {
                         self.flutterAPI.onCameraStateChanged(state: normalized) { _ in }
                     }
-                }
+                })
 
-                stream.photoDataPublisher.listen { [weak self] photoData in
+                cameraListenerTokens.append(stream.photoDataPublisher.listen { [weak self] photoData in
                     guard let self = self else { return }
                     let data = photoData.data
                     DispatchQueue.main.async {
@@ -334,9 +338,9 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                             orientationDegrees: 0
                         ) { _ in }
                     }
-                }
+                })
 
-                try stream.start()
+                stream.start()
             #else
                 throw PigeonError(code: "camera_unavailable", message: "MWDATCamera not linked", details: nil)
             #endif
@@ -346,6 +350,7 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             #if canImport(MWDATCamera)
                 cameraStream?.stop()
                 cameraStream = nil
+                cameraListenerTokens.removeAll()
                 DispatchQueue.main.async { self.flutterAPI.onCameraStateChanged(state: "stopped") { _ in } }
             #endif
         }
@@ -359,7 +364,13 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                         details: nil
                     )
                 }
-                stream.capturePhoto(format: .jpeg)
+                guard stream.capturePhoto(format: .jpeg) else {
+                    throw PigeonError(
+                        code: "capture_failed",
+                        message: "The camera stream is not ready to capture yet",
+                        details: nil
+                    )
+                }
             #else
                 throw PigeonError(code: "camera_unavailable", message: "MWDATCamera not linked", details: nil)
             #endif
