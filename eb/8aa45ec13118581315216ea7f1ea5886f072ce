@@ -1,0 +1,98 @@
+mockup/web/index.html
+  s_751b5889fd7450::t_dca3ef36859147 296
+  s_751b5889fd7450::t_c9596f5dd483f0 300
+  s_751b5889fd7450::t_456973924904e9 304
+  s_751b5889fd7450::t_07345271787b07 292
+  s_751b5889fd7450::t_e84c4272c0e444 115-116
+  s_751b5889fd7450::t_ae979f8f1adbd5 117
+mockup/interactions.js
+  s_751b5889fd7450::t_fe84f2abb43bff 1-159
+mockup/screens/accent-preview.html
+  s_751b5889fd7450::t_545db8b8669502 53
+mockup/screens/apps.html
+  s_751b5889fd7450::t_c16e2c76d7ff86 91
+mockup/screens/ask.html
+  s_751b5889fd7450::t_5466eae256a09c 92
+mockup/screens/conversations.html
+  s_751b5889fd7450::t_2cae9ce9a759e4 94
+mockup/screens/dashboard.html
+  s_751b5889fd7450::t_7a879abb693218 125
+mockup/screens/empty-states.html
+  s_751b5889fd7450::t_e78b38699d3f4b 44
+mockup/screens/focus.html
+  s_751b5889fd7450::t_d45ce367c8cfb1 50
+mockup/screens/help.html
+  s_751b5889fd7450::t_231eddbc01ef39 39
+mockup/screens/home.html
+  s_751b5889fd7450::t_a7b6d6bce47077 65
+mockup/screens/insights.html
+  s_751b5889fd7450::t_a541751e829a15 40
+mockup/screens/live.html
+  s_751b5889fd7450::t_744561b369c767 167
+mockup/screens/memory-graph.html
+  s_751b5889fd7450::t_c989c55a91d563 43
+mockup/screens/memory.html
+  s_751b5889fd7450::t_d98026a15869aa 102
+mockup/screens/messages-imessage.html
+  s_751b5889fd7450::t_78594e33968f4b 122
+mockup/screens/messages-telegram.html
+  s_751b5889fd7450::t_b78bded87a8ed1 129
+mockup/screens/messages-whatsapp.html
+  s_751b5889fd7450::t_5b9336939d24fd 121
+mockup/screens/more.html
+  s_751b5889fd7450::t_68308d5078ee8a 57
+mockup/screens/notification.html
+  s_751b5889fd7450::t_c0e8a2d87081c5 51
+mockup/screens/ob-brainlive.html
+  s_751b5889fd7450::t_c47f9ac2b0bacf 58
+mockup/screens/ob-goal.html
+  s_751b5889fd7450::t_f6a916616c7277 54
+mockup/screens/ob-import.html
+  s_751b5889fd7450::t_745b8605722d8f 53
+mockup/screens/ob-permissions.html
+  s_751b5889fd7450::t_6fb2c0ee754269 54
+mockup/screens/ob-ping.html
+  s_751b5889fd7450::t_e2e074c1b45b0d 53
+mockup/screens/ob-promise.html
+  s_751b5889fd7450::t_fecf741e59d736 45
+mockup/screens/ob-welcome.html
+  s_751b5889fd7450::t_b5da83d3b9f5cd 69
+mockup/screens/onboarding.html
+  s_751b5889fd7450::t_ce6c2c624b3ddc 159
+mockup/screens/permissions.html
+  s_751b5889fd7450::t_3e389900c11458 50
+mockup/screens/persona.html
+  s_751b5889fd7450::t_c4f4f8d29b02a4 43
+mockup/screens/plan-usage.html
+  s_751b5889fd7450::t_f905aeccac2153 57
+mockup/screens/referral.html
+  s_751b5889fd7450::t_031333d6cd13db 37
+mockup/screens/rewind.html
+  s_751b5889fd7450::t_c617037545339d 116
+mockup/screens/settings.html
+  s_751b5889fd7450::t_62c5edc0925444 145
+mockup/screens/share-card.html
+  s_751b5889fd7450::t_4ac885e0537f30 48
+mockup/screens/signin.html
+  s_751b5889fd7450::t_4eaa6743581dc0 46
+mockup/screens/spotlight.html
+  s_751b5889fd7450::t_6f8f1fc47c08fb 63
+mockup/screens/tasks.html
+  s_751b5889fd7450::t_b0c5c935de1d53 70
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "eb8aa45ec13118581315216ea7f1ea5886f072ce",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
