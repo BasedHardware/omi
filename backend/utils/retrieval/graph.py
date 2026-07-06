@@ -216,6 +216,7 @@ async def execute_chat_stream(
     callback_data: Dict[str, Any] = {},
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    extra_user_messages: Optional[List["HumanMessage"]] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -228,7 +229,13 @@ async def execute_chat_stream(
     # 1. Persona apps
     if app and app.is_a_persona():
         async for chunk in execute_persona_chat_stream(
-            uid, messages, app, cited=cited, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=cited,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            extra_user_messages=extra_user_messages,
         ):
             yield chunk
         return

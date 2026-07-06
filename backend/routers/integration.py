@@ -1,5 +1,3 @@
-import os
-import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
@@ -11,7 +9,7 @@ from fastapi.responses import StreamingResponse
 import database.apps as apps_db
 import database.conversations as conversations_db
 import utils.apps as apps_utils
-from utils.apps import verify_api_key, verify_api_key_for_uid, app_can_read_tasks
+from utils.apps import verify_api_key, verify_api_key_for_uid
 import database.redis_db as redis_db
 import database.memories as memory_db
 from database._client import db as firestore_db

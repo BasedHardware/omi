@@ -77,7 +77,7 @@ from models.app import App, UsageHistoryItem, UsageHistoryType
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from utils import stripe
-from utils.llm.persona import condense_conversations, condense_memories, generate_persona_description, condense_tweets
+from utils.llm.persona import condense_conversations, generate_persona_description, condense_tweets
 from utils.retrieval.rag import retrieve_relevant_memories_for_persona, format_memories_for_prompt
 from utils.llm.usage_tracker import track_usage, Features
 from utils.executors import run_blocking, db_executor, llm_executor
@@ -768,16 +768,10 @@ async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
         memories_text,
         per_memory_max_chars=500,
     )
-    # Condense memories
-    with track_usage(uid, Features.PERSONA):
-        memories_text = await run_blocking(
-            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name or ""
-        )
-
     # First-person framing — template lives in _render_persona_prompt_template
     # so generate_persona_prompt and update_persona_prompt cannot drift.
     return _render_persona_prompt_template(
-        user_name=user_name,
+        user_name=user_name or "",
         memories_text=memories_text,
         conversation_history=conversation_history,
         tweets_text=tweets_text,
@@ -925,14 +919,8 @@ async def update_persona_prompt(persona: Dict[str, Any]):
         memories_text,
         per_memory_max_chars=500,
     )
-    # Condense memories
-    with track_usage(uid, Features.PERSONA):
-        memories_text = await run_blocking(
-            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name or ""
-        )
-
     persona_prompt = _render_persona_prompt_template(
-        user_name=user_name,
+        user_name=user_name or "",
         memories_text=memories_text,
         conversation_history=conversation_history,
         tweets_text=condensed_tweets,

@@ -72,22 +72,11 @@ export function failureFromProcessExit(input: {
   const technicalMessage = diagnostic || `${input.adapterId} ACP process exited with code ${input.exitCode}`;
   const classified = classifyAdapterProcessFailure(input.adapterId, diagnostic);
   if (classified) {
-    // Mirror the non-classified branch below: RuntimeFailure
-    // requires `code` and `userMessage` (not optional under
-    // strictNullChecks). Without explicit values here, the
-    // inferred type of the spread `...classified` is
-    // `{code?: string|undefined, userMessage?: string|undefined, ...}`
-    // which fails the assignment to RuntimeFailure. Using the
-    // same `code` and `userMessage` as the non-classified
-    // branch keeps the public contract uniform across both
-    // paths and pins the bug to a single string.
     return normalizeRuntimeFailure({
       source: "adapter_process",
       adapterId: input.adapterId,
       technicalMessage,
       ...classified,
-      code: classified.code ?? "adapter_process_exited",
-      userMessage: classified.userMessage ?? `${input.adapterId} process failed: ${technicalMessage}`,
     });
   }
   const provider = providerFromDiagnostic(diagnostic);
