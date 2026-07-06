@@ -1,0 +1,21 @@
+mockup/index.html
+  s_751b5889fd7450::t_c2bbe27b9a609c 13,24-26,29-50,56,68-79,81,83-89,91-102,104-110,113-119,121-122,124-127,129-131,133,136-140,143
+mockup/screens/onboarding.html
+  s_751b5889fd7450::t_51f4a03095ffab 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "55b5a3cc6d50a90dd0413b7aca96fa71c8d442fd",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
