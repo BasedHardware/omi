@@ -25,6 +25,10 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
+  blessed: boolean;
+  blessed_at: string | null;
+  blessed_evidence_url: string | null;
+  channel: 'beta' | 'stable' | null;
 }
 
 // --- GitHub ---
@@ -46,8 +50,28 @@ async function fetchGithubReleases(): Promise<any[]> {
 }
 
 function parseVersion(tag: string): string | null {
-  const m = tag.match(/^v(\d+\.\d+\.\d+)\+\d+-macos$/);
+  const m = tag.match(/^v(\d+\.\d+(?:\.\d+)?)\+\d+-macos$/);
   return m ? m[1] : null;
+}
+
+function parseReleaseMetadata(body: string | null | undefined): Record<string, string> {
+  if (!body) return {};
+  const metadata: Record<string, string> = {};
+  let inBlock = false;
+  for (const line of body.split('\n')) {
+    let stripped = line.trim();
+    if (stripped.startsWith('<!--')) stripped = stripped.slice(4).trim();
+    if (stripped.endsWith('-->')) stripped = stripped.slice(0, -3).trim();
+    if (stripped === 'KEY_VALUE_START') {
+      inBlock = true;
+      continue;
+    }
+    if (stripped === 'KEY_VALUE_END') break;
+    if (!inBlock || !stripped || stripped.startsWith('#') || !stripped.includes(':')) continue;
+    const [key, ...rest] = stripped.split(':');
+    metadata[key.trim()] = rest.join(':').trim();
+  }
+  return metadata;
 }
 
 // --- PostHog ---
@@ -236,21 +260,33 @@ export async function GET(request: NextRequest) {
   const rows: ReleaseRow[] = desktopReleases.map((r) => {
     const version = parseVersion(r.tag_name)!;
     const m = metricsMap.get(version);
-    const crashRate = m && m.launches > 0 ? m.crashes / m.launches : null;
     const { rating, summary } = m ? computeRatingAndSummary(m) : { rating: null, summary: null };
+    const metadata = parseReleaseMetadata(r.body);
+    const channelRaw = metadata.channel;
+    const channel =
+      channelRaw === 'beta' || channelRaw === 'stable' ? channelRaw : null;
+    const blessed = metadata.blessed?.toLowerCase() === 'true';
+    const blessedEvidence = metadata.blessedEvidence;
+    const blessedEvidenceUrl = blessedEvidence
+      ? r.assets?.find((asset: { name?: string }) => asset.name === blessedEvidence)?.browser_download_url ?? null
+      : null;
 
     return {
       version,
       tag: r.tag_name,
       published_at: r.published_at,
       html_url: r.html_url,
-      crash_rate: crashRate,
+      crash_rate: m && m.launches > 0 ? m.crashes / m.launches : null,
       crash_count: m?.crashes ?? null,
       session_count: m?.launches ?? null,
       feedback_count: m?.feedbacks ?? null,
       broken_count: m?.brokens ?? null,
       rating,
       summary,
+      blessed,
+      blessed_at: metadata.blessedAt ?? null,
+      blessed_evidence_url: blessedEvidenceUrl,
+      channel,
     };
   });
 

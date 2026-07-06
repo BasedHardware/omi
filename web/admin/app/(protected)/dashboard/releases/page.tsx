@@ -25,6 +25,10 @@ interface ReleaseRow {
   broken_count: number | null;
   rating: number | null;
   summary: string | null;
+  blessed: boolean;
+  blessed_at: string | null;
+  blessed_evidence_url: string | null;
+  channel: "beta" | "stable" | null;
 }
 
 interface ReleasesResponse {
@@ -110,6 +114,29 @@ function FeedbackCell({ row }: { row: ReleaseRow }) {
   );
 }
 
+function BlessedCell({ row }: { row: ReleaseRow }) {
+  if (row.channel === "stable") {
+    return <span className="text-xs font-medium text-sky-500">In prod</span>;
+  }
+  if (!row.blessed) {
+    return <span className="text-xs text-muted-foreground">Not blessed</span>;
+  }
+  const label = row.blessed_at ? formatDate(row.blessed_at) : "recently";
+  if (row.blessed_evidence_url) {
+    return (
+      <a
+        href={row.blessed_evidence_url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-xs font-medium text-emerald-500 hover:underline"
+      >
+        Blessed {label}
+      </a>
+    );
+  }
+  return <span className="text-xs font-medium text-emerald-500">Blessed {label}</span>;
+}
+
 export default function ReleasesPage() {
   const { token } = useAuthToken();
   const { data, error, isLoading } = useSWR<ReleasesResponse>(
@@ -138,10 +165,18 @@ export default function ReleasesPage() {
   }
 
   const releases = data?.releases ?? [];
+  const newestBlessed = releases.find((row) => row.blessed && row.channel !== "stable");
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Desktop Releases</h1>
+
+      {newestBlessed && (
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-600">
+          Prod deployable: v{newestBlessed.version}
+          {newestBlessed.blessed_at ? `, blessed ${formatDate(newestBlessed.blessed_at)}` : ""}
+        </div>
+      )}
 
       {data?.partial && (
         <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-500">
@@ -163,16 +198,14 @@ export default function ReleasesPage() {
               <TableHead className="w-[140px]">Crash Rate</TableHead>
               <TableHead className="w-[120px]">Issues</TableHead>
               <TableHead className="w-[60px] text-center">Rating</TableHead>
+              <TableHead className="w-[130px]">Blessed</TableHead>
               <TableHead>Summary</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {releases.length === 0 && (
               <TableRow>
-                <TableCell
-                  colSpan={6}
-                  className="text-center py-8 text-muted-foreground"
-                >
+                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                   No releases found.
                 </TableCell>
               </TableRow>
@@ -201,6 +234,9 @@ export default function ReleasesPage() {
                 </TableCell>
                 <TableCell className="text-center">
                   <RatingBadge rating={r.rating} />
+                </TableCell>
+                <TableCell>
+                  <BlessedCell row={r} />
                 </TableCell>
                 <TableCell className="text-sm max-w-sm">
                   {r.summary || <span className="text-muted-foreground">—</span>}
