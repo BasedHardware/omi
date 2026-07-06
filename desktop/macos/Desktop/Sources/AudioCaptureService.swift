@@ -567,6 +567,11 @@ class AudioCaptureService: @unchecked Sendable {
             // Clamp and convert to Int16 range (-32768 to 32767)
             let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
             pcmData.append(pcmSample)
+
+            // Accumulate the silent-mic peak while converting samples to avoid an
+            // extra pass on the audio callback hot path.
+            let absoluteSample = pcmSample == Int16.min ? Int16.max : Int16(pcmSample.magnitude)
+            if absoluteSample > watchdogWindowPeak { watchdogWindowPeak = absoluteSample }
         }
 
         // Convert to Data (little-endian, which is native on Apple platforms)
@@ -577,14 +582,9 @@ class AudioCaptureService: @unchecked Sendable {
         // Silent-mic watchdog: macOS can accept the IOProc but deliver only zero samples.
         // Bluetooth inputs recover by switching to the built-in mic; PTT can opt into
         // all-transport detection so a stale built-in/default route triggers a full rebuild.
-        // Accumulate this callback's peak, then classify once every ~1s window. Windows keep
-        // rolling after a fire (unlike a one-shot latch) so the watchdog observes recovery and
-        // can re-arm for a second episode — see `evaluateSilentMicWindow`.
-        for s in pcmData {
-            // Int16.min has magnitude 32768 which is out of Int16 range — clamp.
-            let a = s == Int16.min ? Int16.max : Int16(s.magnitude)
-            if a > watchdogWindowPeak { watchdogWindowPeak = a }
-        }
+        // Classify once every ~1s window. Windows keep rolling after a fire (unlike a
+        // one-shot latch) so the watchdog observes recovery and can re-arm for a second
+        // episode — see `evaluateSilentMicWindow`.
         let nowAbs = CFAbsoluteTimeGetCurrent()
         if watchdogWindowStart == 0 { watchdogWindowStart = nowAbs }
         if nowAbs - watchdogWindowStart >= 1.0 {
