@@ -74,6 +74,11 @@ function parseReleaseMetadata(body: string | null | undefined): Record<string, s
   return metadata;
 }
 
+function isBlessedMetadata(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase();
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
+}
+
 // --- PostHog ---
 
 async function posthogQuery(query: string): Promise<any> {
@@ -265,7 +270,7 @@ export async function GET(request: NextRequest) {
     const channelRaw = metadata.channel;
     const channel =
       channelRaw === 'beta' || channelRaw === 'stable' ? channelRaw : null;
-    const blessed = metadata.blessed?.toLowerCase() === 'true';
+    const blessed = isBlessedMetadata(metadata.blessed);
     const blessedEvidence = metadata.blessedEvidence;
     const blessedEvidenceUrl = blessedEvidence
       ? r.assets?.find((asset: { name?: string }) => asset.name === blessedEvidence)?.browser_download_url ?? null

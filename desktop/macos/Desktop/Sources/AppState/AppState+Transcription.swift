@@ -1145,12 +1145,15 @@ extension AppState {
     guard AppBuild.isNonProduction else {
       return ["error": "capture test session disabled on production bundles"]
     }
-    guard !isTranscribing else {
-      return [
-        "already_recording": "true",
-        "session_id": currentSessionId.map { "\($0)" } ?? "",
-        "segment_count": "\(totalSegmentCount)",
-      ]
+    if isTranscribing {
+      if automationCaptureTestSessionActive {
+        return [
+          "already_recording": "true",
+          "session_id": currentSessionId.map { "\($0)" } ?? "",
+          "segment_count": "\(totalSegmentCount)",
+        ]
+      }
+      return ["error": "real capture session already active"]
     }
     do {
       let sessionId = try await TranscriptionStorage.shared.startSession(
@@ -1170,6 +1173,7 @@ extension AppState {
       totalWordCount = 0
       currentTranscript = ""
       LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+      automationCaptureTestSessionActive = true
       return [
         "started": "true",
         "session_id": "\(sessionId)",
@@ -1186,6 +1190,12 @@ extension AppState {
     }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return ["error": "missing transcript text"] }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot inject into non-automation capture session"]
+      }
+      return ["error": "no active capture session"]
+    }
     guard isTranscribing else { return ["error": "no active capture session"] }
     let start = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
     let segment = TranscriptionService.BackendSegment(
@@ -1219,7 +1229,17 @@ extension AppState {
     guard AppBuild.isNonProduction else {
       return ["error": "capture test session disabled on production bundles"]
     }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot stop non-automation capture session"]
+      }
+      return [
+        "already_stopped": "true",
+        "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+      ]
+    }
     guard isTranscribing else {
+      automationCaptureTestSessionActive = false
       return [
         "already_stopped": "true",
         "conversation_count": "\(totalConversationsCount ?? conversations.count)",
@@ -1255,6 +1275,7 @@ extension AppState {
     totalSegmentCount = 0
     totalWordCount = 0
     currentTranscript = ""
+    automationCaptureTestSessionActive = false
 
     await loadConversations()
     let afterCount = totalConversationsCount ?? conversations.count

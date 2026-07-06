@@ -4833,6 +4833,48 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         AnalyticsManager.shared.chatCleared()
     }
 
+    /// Harness-only chat reset that awaits backend deletion before returning.
+    func automationResetChatForHarness() async {
+        guard AppBuild.isNonProduction else { return }
+        isClearing = true
+        defer { isClearing = false }
+
+        if isInDefaultChat {
+            let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
+            let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
+            messages = []
+            resetMessagesPagination()
+            AgentRuntimeStatusStore.shared.clear(surface: surface)
+            await invalidateAgentSurface(surface: surface)
+            do {
+                _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
+            } catch {
+                logError("Failed to clear default chat messages for harness reset", error: error)
+            }
+        } else {
+            let sessionToDelete = currentSession
+            if let session = sessionToDelete {
+                let surface = AgentSurfaceReference.mainChat(chatId: session.id)
+                AgentRuntimeStatusStore.shared.clear(surface: surface)
+                await invalidateAgentSurface(surface: surface)
+            }
+            if let session = sessionToDelete {
+                sessions.removeAll { $0.id == session.id }
+            }
+            currentSession = nil
+            messages = []
+            resetMessagesPagination()
+            if let session = sessionToDelete {
+                do {
+                    try await APIClient.shared.deleteChatSession(sessionId: session.id)
+                } catch {
+                    logError("Failed to delete chat session for harness reset", error: error)
+                }
+            }
+            _ = await createNewSession()
+        }
+    }
+
     // MARK: - App Selection
 
     /// Select a chat app and load its sessions

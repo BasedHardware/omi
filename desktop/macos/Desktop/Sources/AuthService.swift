@@ -1216,6 +1216,7 @@ class AuthService {
         case .tokenExchangeFailed(let code): return "token_exchange_http_\(code)"
         case .missingCustomToken: return "missing_custom_token"
         case .cancelled: return "cancelled"
+        case .invalidConfiguration: return "invalid_configuration"
         }
     }
 
@@ -1728,6 +1729,8 @@ class AuthService {
                 throw AuthError.invalidURL
             }
             refreshURL = url
+        } else if DesktopLocalProfile.isEnabled {
+            throw AuthError.invalidConfiguration
         } else {
             guard let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(apiKey)") else {
                 throw AuthError.invalidURL
@@ -2220,6 +2223,7 @@ enum AuthError: LocalizedError {
     case tokenExchangeFailed(Int)
     case missingCustomToken
     case cancelled
+    case invalidConfiguration
 
     var errorDescription: String? {
         switch self {
@@ -2253,6 +2257,8 @@ enum AuthError: LocalizedError {
             return "Server did not return authentication token"
         case .cancelled:
             return "Sign in cancelled"
+        case .invalidConfiguration:
+            return "Local harness auth is misconfigured (Firebase auth emulator host missing)"
         }
     }
 }

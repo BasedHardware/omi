@@ -165,7 +165,10 @@ export default function ReleasesPage() {
   }
 
   const releases = data?.releases ?? [];
-  const newestBlessed = releases.find((row) => row.blessed && row.channel !== "stable");
+  const newestStableIndex = releases.findIndex((row) => row.channel === "stable");
+  const deployableCandidates =
+    newestStableIndex >= 0 ? releases.slice(0, newestStableIndex) : releases;
+  const newestBlessed = deployableCandidates.find((row) => row.blessed && row.channel !== "stable");
 
   return (
     <div className="space-y-4">

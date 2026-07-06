@@ -92,6 +92,7 @@ jobs:
           OVERRIDE_ARGS=()
           if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
             OVERRIDE_ARGS=(--override-unblessed --override-confirm "$OVERRIDE_CONFIRM")
+            echo "::warning::Prod promotion override_unblessed enabled for $RELEASE_TAG"
             echo "::warning::Prod promotion override_unblessed enabled for $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
           fi
 
@@ -103,8 +104,7 @@ jobs:
 
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
           BLESSED_SHA=$(grep '^blessed_sha=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2- || true)
-          BLESSED_OVERRIDE=$(grep '^blessed_override=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2- || true)
-          if [ "$BLESSED_OVERRIDE" != "true" ] && [ -n "$BLESSED_SHA" ] && [ "$BLESSED_SHA" != "$TARGET_SHA" ]; then
+          if [ -n "$BLESSED_SHA" ] && [ "$BLESSED_SHA" != "$TARGET_SHA" ]; then
             echo "blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA)" >&2
             exit 1
           fi

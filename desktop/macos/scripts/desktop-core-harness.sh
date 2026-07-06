@@ -176,6 +176,12 @@ refuse_prod_bundle() {
   fi
 }
 
+maybe_teardown_dev_stack() {
+  if [[ "$KEEP_STACK" -eq 0 && "${TIER:-0}" -ge 2 ]]; then
+    make -C "$REPO_ROOT" dev-down >/dev/null 2>&1 || true
+  fi
+}
+
 bridge_health() {
   python3 - "$PORT" <<'PY'
 import json
@@ -517,6 +523,7 @@ case "$TIER" in
   fi
   bridge_health || {
     echo "desktop-core-harness: start bundle first, e.g. OMI_APP_NAME=$BUNDLE ./run.sh" >&2
+    maybe_teardown_dev_stack
     exit 1
   }
   FLOW_PATHS=()
@@ -576,7 +583,7 @@ PY
   fi
   if [[ "$TIER" -eq 3 ]]; then
     set +e
-    OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/agent-continuity-gauntlet.sh" --bundle-id "com.omi.${BUNDLE#omi-}"
+    OMI_AUTOMATION_PORT="$PORT" "$SCRIPT_DIR/agent-continuity-gauntlet.sh" --bundle-id "com.omi.${BUNDLE}"
     gauntlet_status=$?
     set -e
     if [[ "$gauntlet_status" -ne 0 ]]; then
@@ -593,7 +600,7 @@ PY
 )
   fi
   if [[ "$KEEP_STACK" -eq 0 && "$TIER" -ge 2 ]]; then
-    make -C "$REPO_ROOT" dev-down >/dev/null 2>&1 || true
+    maybe_teardown_dev_stack
   fi
   ;;
   *)

@@ -584,11 +584,14 @@ final class DesktopAutomationActionRegistry {
       summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
       params: []
     ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_main_chat is disabled on production bundles"]
+      }
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
       _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
-      await provider.clearChat()
+      await provider.automationResetChatForHarness()
       return ["reset": "true"]
     }
 

@@ -107,8 +107,8 @@ def lint_flow(path: Path, actions: set[str]) -> list[str]:
     for step in steps:
         if not isinstance(step, dict):
             continue
-        if "do:" in step:
-            errors.append(f"{path.name}: typed flow must not contain do: steps")
+        if "do" in step:
+            errors.append(f"{path.name}: typed flow must not contain do steps")
             continue
         for name in collect_bridge_action_names(step):
             if name not in actions:

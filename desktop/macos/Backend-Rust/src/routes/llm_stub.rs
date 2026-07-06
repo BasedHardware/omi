@@ -6,17 +6,25 @@
 use axum::body::Bytes;
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
+use axum::Json;
 use futures::stream;
 use serde_json::{json, Value};
 use std::env;
 
-use crate::models::chat_completions::ChatCompletionRequest;
+use crate::models::chat_completions::{
+    ChatCompletionRequest, ChatCompletionResponse, Choice, ResponseMessage,
+};
 
 const DEFAULT_FIXTURE: &str = include_str!("../../fixtures/llm/default_stream.sse");
+const DEFAULT_ASSISTANT_TEXT: &str = "Hermetic LLM stub response.";
+
+pub fn llm_stub_flag_is_truthy(value: &str) -> bool {
+    matches!(value.trim(), "1" | "true" | "yes" | "on")
+}
 
 pub fn llm_stub_enabled() -> bool {
     env::var("OMI_LLM_STUB")
-        .map(|value| matches!(value.trim(), "1" | "true" | "yes" | "on"))
+        .map(|value| llm_stub_flag_is_truthy(&value))
         .unwrap_or(false)
 }
 
@@ -67,20 +75,27 @@ fn extract_markers(text: &str) -> Vec<String> {
     markers
 }
 
-fn fixture_lines(body: &str, default_fixture: &str) -> Vec<String> {
+fn stub_assistant_text(body: &str) -> String {
     let markers = extract_markers(body);
     if markers.is_empty() {
+        return DEFAULT_ASSISTANT_TEXT.to_string();
+    }
+    markers
+        .iter()
+        .map(|marker| format!("Stub saw marker: {marker}"))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn fixture_lines(body: &str, default_fixture: &str) -> Vec<String> {
+    let echoed = stub_assistant_text(body);
+    if echoed == DEFAULT_ASSISTANT_TEXT {
         return default_fixture
             .lines()
             .map(|line| line.to_string())
             .filter(|line| !line.is_empty())
             .collect();
     }
-    let echoed = markers
-        .iter()
-        .map(|marker| format!("Stub saw marker: {marker}"))
-        .collect::<Vec<_>>()
-        .join(" ");
     vec![
         format!(
             r#"data: {{"id":"chatcmpl-stub","object":"chat.completion.chunk","created":0,"model":"omi-stub","choices":[{{"index":0,"delta":{{"role":"assistant","content":{}}},"finish_reason":null}}]}}"#,
@@ -91,8 +106,55 @@ fn fixture_lines(body: &str, default_fixture: &str) -> Vec<String> {
     ]
 }
 
+fn gemini_stream_lines(text: &str) -> Vec<String> {
+    let chunk = json!({
+        "candidates": [{
+            "content": {
+                "parts": [{"text": text}],
+                "role": "model"
+            }
+        }]
+    });
+    let stop = json!({
+        "candidates": [{
+            "content": {
+                "parts": [{"text": ""}],
+                "role": "model"
+            },
+            "finishReason": "STOP"
+        }]
+    });
+    vec![
+        format!("data: {chunk}"),
+        format!("data: {stop}"),
+        "data: [DONE]".to_string(),
+    ]
+}
+
 pub fn stub_chat_completions_response(req: &ChatCompletionRequest) -> Response {
     let user_text = extract_latest_user_text(req);
+    let echoed = stub_assistant_text(&user_text);
+
+    if !req.stream {
+        let payload = ChatCompletionResponse {
+            id: "chatcmpl-stub".to_string(),
+            object: "chat.completion",
+            created: 0,
+            model: "omi-stub".to_string(),
+            choices: vec![Choice {
+                index: 0,
+                message: ResponseMessage {
+                    role: "assistant".to_string(),
+                    content: Some(echoed),
+                    tool_calls: None,
+                },
+                finish_reason: Some("stop".to_string()),
+            }],
+            usage: None,
+        };
+        return Json(payload).into_response();
+    }
+
     let lines = fixture_lines(&user_text, DEFAULT_FIXTURE);
     let stream = stream::iter(
         lines
@@ -110,8 +172,9 @@ pub fn stub_chat_completions_response(req: &ChatCompletionRequest) -> Response {
 
 pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
     let body_text = String::from_utf8_lossy(body);
-    let lines = fixture_lines(&body_text, DEFAULT_FIXTURE);
+    let echoed = stub_assistant_text(&body_text);
     if action == "streamGenerateContent" {
+        let lines = gemini_stream_lines(&echoed);
         let stream = stream::iter(
             lines
                 .into_iter()
@@ -127,7 +190,7 @@ pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
     let payload: Value = json!({
         "candidates": [{
             "content": {
-                "parts": [{"text": "Hermetic Gemini stub response."}],
+                "parts": [{"text": echoed}],
                 "role": "model"
             },
             "finishReason": "STOP"
@@ -147,16 +210,11 @@ mod tests {
     use crate::models::chat_completions::{ChatCompletionRequest, ChatMessage};
 
     #[test]
-    fn stub_disabled_by_default() {
-        std::env::remove_var("OMI_LLM_STUB");
-        assert!(!llm_stub_enabled());
-    }
-
-    #[test]
-    fn stub_enabled_with_flag() {
-        std::env::set_var("OMI_LLM_STUB", "1");
-        assert!(llm_stub_enabled());
-        std::env::remove_var("OMI_LLM_STUB");
+    fn stub_flag_truthy_values() {
+        assert!(llm_stub_flag_is_truthy("1"));
+        assert!(llm_stub_flag_is_truthy("true"));
+        assert!(!llm_stub_flag_is_truthy("0"));
+        assert!(!llm_stub_flag_is_truthy("false"));
     }
 
     #[test]
@@ -222,5 +280,12 @@ mod tests {
         assert!(!payload.contains("stale-marker"));
         assert_eq!(payload.matches("chat-hermetic").count(), 1);
         assert!(payload.contains("Stub saw marker: chat-hermetic"));
+    }
+
+    #[test]
+    fn gemini_non_stream_echoes_markers() {
+        let body = Bytes::from(r#"{"contents":[{"parts":[{"text":"[[MARKER:gemini-test]]"}]}]}"#);
+        let response = stub_gemini_proxy_response(&body, "generateContent");
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

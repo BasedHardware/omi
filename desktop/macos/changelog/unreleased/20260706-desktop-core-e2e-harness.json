@@ -1,3 +1,0 @@
-{
-  "change": "Add desktop core E2E harness with tiered flows, flow lint, T0 CI self-check, and hermetic LLM stub for offline testing."
-}

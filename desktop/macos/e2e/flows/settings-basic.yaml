@@ -1,7 +1,7 @@
 version: 2
-name: settings
+name: settings-basic
 tier: 2
-description: Settings navigation across core sections via automation bridge
+description: Settings navigation smoke for General, Transcription, and Privacy sections
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift

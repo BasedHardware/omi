@@ -58,6 +58,9 @@ def check_manifest(manifest_path: Path) -> None:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     if not manifest.get("passed"):
         raise SystemExit("manifest passed=false")
+    tier = manifest.get("tier")
+    if tier not in {2, "2"}:
+        raise SystemExit(f"manifest tier must be 2, got {tier!r}")
     provider_mode = manifest.get("provider_mode")
     if provider_mode != "offline":
         raise SystemExit(f"manifest provider_mode must be 'offline', got {provider_mode!r}")
@@ -107,6 +110,9 @@ def update_blessed_keys(
                 continue
         out.append(line)
 
+    if in_block:
+        raise SystemExit("release body has unclosed KEY_VALUE block (missing KEY_VALUE_END)")
+
     if not saw_key_value_block:
         raise SystemExit("release body missing KEY_VALUE_START/KEY_VALUE_END block")
 
@@ -132,6 +138,11 @@ def _self_test() -> int:
     )
     failing_manifest.write_text(json.dumps({"passed": False, "tier": 2, "provider_mode": "offline"}), encoding="utf-8")
     missing_provider_manifest.write_text(json.dumps({"passed": True, "tier": 2}), encoding="utf-8")
+    wrong_tier_manifest = Path("/tmp/release-keyvalue-wrong-tier-manifest.json")
+    wrong_tier_manifest.write_text(
+        json.dumps({"passed": True, "tier": 1, "provider_mode": "offline"}),
+        encoding="utf-8",
+    )
 
     try:
         check_manifest(passing_manifest)
@@ -157,6 +168,15 @@ def _self_test() -> int:
         else:
             fail("check-manifest missing provider_mode", f"unexpected exit: {exc}")
 
+    try:
+        check_manifest(wrong_tier_manifest)
+        fail("check-manifest wrong tier", "expected SystemExit")
+    except SystemExit as exc:
+        if "tier" in str(exc):
+            ok("check-manifest rejects non-T2 tier")
+        else:
+            fail("check-manifest wrong tier", f"unexpected exit: {exc}")
+
     sample_body = """Release notes
 
 <!-- KEY_VALUE_START -->
@@ -176,6 +196,11 @@ blessed: false
 
     malformed_body_path = Path("/tmp/release-keyvalue-body-no-kv.md")
     malformed_body_path.write_text("Release notes without KEY_VALUE block\n", encoding="utf-8")
+    unclosed_body_path = Path("/tmp/release-keyvalue-body-unclosed-kv.md")
+    unclosed_body_path.write_text(
+        "Release notes\n\n<!-- KEY_VALUE_START -->\nchannel: beta\n",
+        encoding="utf-8",
+    )
     try:
         update_blessed_keys(
             malformed_body_path,
@@ -189,6 +214,20 @@ blessed: false
             ok("update-blessed missing KEY_VALUE block fails loudly")
         else:
             fail("update-blessed missing KEY_VALUE block", f"unexpected exit: {exc}")
+
+    try:
+        update_blessed_keys(
+            unclosed_body_path,
+            stamp="2026-07-06T12:00:00Z",
+            sha="abc123",
+            asset="evidence.json",
+        )
+        fail("update-blessed unclosed KEY_VALUE block", "expected SystemExit")
+    except SystemExit as exc:
+        if "KEY_VALUE_END" in str(exc):
+            ok("update-blessed unclosed KEY_VALUE block fails loudly")
+        else:
+            fail("update-blessed unclosed KEY_VALUE block", f"unexpected exit: {exc}")
 
     release_json = Path("/tmp/release-keyvalue-release.json")
     release_json.write_text(

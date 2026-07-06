@@ -203,7 +203,7 @@ cleanup() {
     (cd "$WORKTREE" && PROVIDER_MODE=offline make dev-down) >/dev/null 2>&1 || true
   fi
   if [[ "$BLESS_SUCCESS" -eq 1 ]]; then
-    rm -rf "$WORKTREE"
+    git -C "$REPO_ROOT" worktree remove --force "$WORKTREE" 2>/dev/null || rm -rf "$WORKTREE"
   fi
   exit "$exit_code"
 }
