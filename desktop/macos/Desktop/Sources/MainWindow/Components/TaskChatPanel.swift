@@ -157,13 +157,6 @@ struct TaskChatPanel: View {
                         .scaledFont(size: 10)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if let sessionId = taskState.legacyAcpSessionId {
-                        Text("·")
-                            .scaledFont(size: 10)
-                        Text(String(sessionId.prefix(8)))
-                            .scaledFont(size: 10)
-                            .fontDesign(.monospaced)
-                    }
                     Spacer()
                 }
                 .foregroundColor(OmiColors.textTertiary.opacity(0.7))

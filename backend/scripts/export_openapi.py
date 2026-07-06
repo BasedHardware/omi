@@ -541,6 +541,10 @@ def install_hermetic_dependency_patches():
     from fakes.storage import patch_google_storage, setup_fake_storage
 
     dotenv.load_dotenv = lambda *args, **kwargs: False
+    # load_backend_env() reads .env files via dotenv_values and writes
+    # os.environ directly, so a personal backend/.env would otherwise leak
+    # into the export and trip assert_env_unchanged.
+    dotenv.dotenv_values = lambda *args, **kwargs: {}
     google.auth.default = lambda *args, **kwargs: (
         google.auth.credentials.AnonymousCredentials(),
         'test-openapi-project',

@@ -352,6 +352,32 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
     assert purge_record["vector_id"] == expected_vector_id
 
 
+def test_canonical_account_delete_purge_raises_on_partial_vector_delete(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-acct-partial"
+    content = "Canonical fact for partial account delete"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.resolve_memory_system",
+        lambda uid, **_: MemorySystem.CANONICAL,
+    )
+    monkeypatch.setattr(
+        "database.vector_db.delete_pinecone_memory_vectors_by_id",
+        lambda vector_ids: 0,
+        raising=False,
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+
+    with pytest.raises(RuntimeError, match="canonical vector purge only deleted 0/1 vectors"):
+        purge_canonical_derived_user_data(uid, db_client=canonical_db)
+
+
 def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):
     db = _legacy_db_with_control()
     assert resolve_memory_system(LEGACY_UID, db_client=db) == MemorySystem.LEGACY

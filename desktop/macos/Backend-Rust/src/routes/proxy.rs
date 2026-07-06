@@ -6,7 +6,7 @@
 // Issue #6624: Model allowlist, body size limit, request body validation.
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -63,6 +63,10 @@ enum ProxyError {
     UpstreamTimeout,
 }
 
+fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
+    crate::routes::response_or_500("gemini_proxy", builder, body)
+}
+
 impl IntoResponse for ProxyError {
     fn into_response(self) -> Response {
         match self {
@@ -73,19 +77,21 @@ impl IntoResponse for ProxyError {
                 let body = rate_limit::rate_limit_error_json(
                     "Resource exhausted: rate limit exceeded. Please try again later.",
                 );
-                Response::builder()
-                    .status(StatusCode::TOO_MANY_REQUESTS)
-                    .header("content-type", "application/json")
-                    .header("retry-after", "60")
-                    .body(axum::body::Body::from(body))
-                    .unwrap()
+                response_or_500(
+                    Response::builder()
+                        .status(StatusCode::TOO_MANY_REQUESTS)
+                        .header("content-type", "application/json")
+                        .header("retry-after", "60"),
+                    Body::from(body),
+                )
             }
-            ProxyError::UpstreamTimeout => Response::builder()
-                .status(StatusCode::GATEWAY_TIMEOUT)
-                .header("content-type", "application/json")
-                .header("retry-after", "30")
-                .body(axum::body::Body::from(upstream_timeout_json()))
-                .unwrap(),
+            ProxyError::UpstreamTimeout => response_or_500(
+                Response::builder()
+                    .status(StatusCode::GATEWAY_TIMEOUT)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "30"),
+                Body::from(upstream_timeout_json()),
+            ),
         }
     }
 }
@@ -630,13 +636,14 @@ async fn gemini_stream_proxy(
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
     let stream = upstream.bytes_stream();
-    let body = axum::body::Body::from_stream(stream);
+    let body = Body::from_stream(stream);
 
-    Ok(Response::builder()
-        .status(status)
-        .header("content-type", "text/event-stream")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(status)
+            .header("content-type", "text/event-stream"),
+        body,
+    ))
 }
 
 /// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
@@ -741,13 +748,14 @@ async fn gemini_stream_server_key(
 
     // Stream the response body through
     let stream = upstream.bytes_stream();
-    let body = axum::body::Body::from_stream(stream);
+    let body = Body::from_stream(stream);
 
-    Ok(Response::builder()
-        .status(status)
-        .header("content-type", "text/event-stream")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(status)
+            .header("content-type", "text/event-stream"),
+        body,
+    ))
 }
 
 /// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")

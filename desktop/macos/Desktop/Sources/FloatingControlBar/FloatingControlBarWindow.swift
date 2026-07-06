@@ -2159,9 +2159,9 @@ class FloatingControlBarManager {
     private var storedNotificationMessages: [UUID: StoredNotificationMessage] = [:]
     private var mostRecentNotificationID: UUID?
     private var pendingNotificationContext: PendingNotificationContext?
-    private var floatingSessionKey = "floating"
     private var activeQueryGeneration: Int = 0
     private var deliveredAgentArtifactKeys: Set<String> = []
+    private var projectedPillCompletionKeys: Set<String> = []
 
     private var selectedFloatingModel: String {
         let selected = ShortcutSettings.shared.selectedModel
@@ -2793,24 +2793,13 @@ class FloatingControlBarManager {
         chatCancellable = nil
         window.cancelInputHeightObserver()
 
-        // Reset visible state directly (no animation) to avoid contract-then-expand flicker.
-        // Provider session context remains intact; only the floating-bar UI is reset.
-        // Pass cancelInFlightWork: false because we already cancelled our own
-        // subscriptions above (chatCancellable/input height observer) and are about
-        // to route a new typed query through the same provider — killing its session
-        // here would break the incoming query. (Cubic P2 — semantic mismatch.)
+        // Reset visible state without animation; keep provider session (cancelInFlightWork: false).
         window.state.showingAIConversation = false
         window.state.clearVisibleConversation(cancelInFlightWork: false)
         window.state.currentQueryFromVoice = fromVoice
         pendingNotificationContext = nil
-        floatingSessionKey = "floating"
 
-        // Re-wire the onSendQuery to use the isolated floating-bar provider.
-        // Subsequent typed messages also go through the AI router. A message arriving
-        // through onSendQuery was always TYPED (PTT/voice bypass this closure and call
-        // routeQuery directly), so force fromVoice:false — otherwise a typed follow-up
-        // after a voice turn inherits the stale currentQueryFromVoice=true and gets
-        // spoken aloud.
+        // Re-wire onSendQuery for typed follow-ups (force fromVoice:false after voice turns).
         window.onSendQuery = { [weak self, weak window, weak provider] message in
             guard let self = self, let window = window, let provider = provider else { return }
             Task { @MainActor in
@@ -2996,6 +2985,28 @@ class FloatingControlBarManager {
         await dispatchChatQuery(message, barWindow: barWindow, provider: provider, presentation: presentation)
     }
 
+    private func recordDelegationExchange(
+        provider: ChatProvider,
+        userText: String,
+        assistantText: String,
+        origin: String,
+        idempotencyKey: String
+    ) async -> (user: ChatMessage?, assistant: ChatMessage?) {
+        let turn = provider.recordCompletedTurn(
+            userText: userText,
+            assistantText: assistantText,
+            logLabel: origin
+        )
+        await recordSurfaceTurn(
+            surface: provider.mainChatSurfaceReference(),
+            userText: userText,
+            assistantText: assistantText,
+            origin: origin,
+            idempotencyKey: idempotencyKey
+        )
+        return turn
+    }
+
     private func resolveDelegationAndDispatch(
         originalRequest: String,
         proposedBrief: String,
@@ -3008,6 +3019,16 @@ class FloatingControlBarManager {
         presentation: QueryPresentation,
         logLabel: String
     ) async {
+        let exchangeId = UUID().uuidString
+        var topLevelSections: [String] = []
+        let kernelSeed = await kernelVoiceSeedContext()
+        if !kernelSeed.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            topLevelSections.append(kernelSeed)
+        }
+        let floatingAgents = await floatingAgentStatusContext()
+        if !floatingAgents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            topLevelSections.append(floatingAgents)
+        }
         let decision = await AgentDelegationResolver.shared.resolve(
             .init(
                 surface: .floatingText,
@@ -3016,7 +3037,7 @@ class FloatingControlBarManager {
                 proposedTitle: proposedTitle,
                 proposedAck: proposedAck,
                 directedProvider: directedProvider,
-                topLevelContext: topLevelVoiceContinuityContext(),
+                topLevelContext: topLevelSections.joined(separator: "\n\n"),
                 agentStatusSummary: AgentPillsManager.shared.snapshotJSON(limit: 8),
                 explicitDelegationRequested: explicitDelegationRequested
             )
@@ -3026,10 +3047,12 @@ class FloatingControlBarManager {
               !brief.isEmpty
         else {
             let assistantText = decision.userFacingText
-            let recordedTurn = provider.recordCompletedTurn(
+            let recordedTurn = await recordDelegationExchange(
+                provider: provider,
                 userText: originalRequest,
                 assistantText: assistantText,
-                logLabel: "\(logLabel)-resolver-\(decision.action.rawValue)"
+                origin: "floating_resolver",
+                idempotencyKey: "floating_resolver:\(exchangeId):\(decision.action.rawValue)"
             )
             switch presentation {
             case .visible:
@@ -3051,10 +3074,12 @@ class FloatingControlBarManager {
             let availability = LocalAgentProviderDetector.availability(for: resolvedProvider)
             guard availability.isAvailable else {
                 let assistantText = availability.setupPrompt
-                let recordedTurn = provider.recordCompletedTurn(
+                let recordedTurn = await recordDelegationExchange(
+                    provider: provider,
                     userText: originalRequest,
                     assistantText: assistantText,
-                    logLabel: "\(logLabel)-provider-unavailable"
+                    origin: "floating_provider_unavailable",
+                    idempotencyKey: "floating_resolver:\(exchangeId):provider-unavailable"
                 )
                 switch presentation {
                 case .visible:
@@ -3084,10 +3109,12 @@ class FloatingControlBarManager {
             fromVoice: presentation.fromVoice
         ) else {
             let assistantText = "What should the background agent do?"
-            let recordedTurn = provider.recordCompletedTurn(
+            let recordedTurn = await recordDelegationExchange(
+                provider: provider,
                 userText: originalRequest,
                 assistantText: assistantText,
-                logLabel: "\(logLabel)-invalid-brief"
+                origin: "floating_invalid_brief",
+                idempotencyKey: "floating_resolver:\(exchangeId):invalid-brief"
             )
             switch presentation {
             case .visible:
@@ -3110,10 +3137,12 @@ class FloatingControlBarManager {
         let assistantText = ack?.isEmpty == false
             ? "\(ack!) I started \(providerPrefix)a background agent\(titleSuffix) for that."
             : "I started \(providerPrefix)a background agent\(titleSuffix) for that."
-        let recordedTurn = provider.recordCompletedTurn(
+        let recordedTurn = await recordDelegationExchange(
+            provider: provider,
             userText: originalRequest,
             assistantText: assistantText,
-            logLabel: logLabel
+            origin: "floating_spawn",
+            idempotencyKey: "floating_spawn:\(pill.id)"
         )
         switch presentation {
         case .visible:
@@ -3415,43 +3444,53 @@ class FloatingControlBarManager {
         mostRecentNotificationID = notification.id
     }
 
-    /// Show the user's spoken question in the main chat history the instant its
-    /// transcript is known — before the reply is generated — so a voice/PTT question
-    /// appears on the home-page chat immediately, the same as a typed message. Returns
-    /// the bubble's id; the caller keeps it for THIS turn and passes it back to
-    /// `recordVoiceTurn`/`recordVoiceAgentHandoff` for reconciliation. Nil if not set up.
-    func beginVoiceUserMessage(userText: String) -> String? {
-        historyChatProvider?.beginVoiceUserMessage(userText: userText)?.id
+    func mainChatSurfaceReference() -> AgentSurfaceReference {
+        historyChatProvider?.mainChatSurfaceReference()
+            ?? .mainChat(chatId: "default")
     }
 
-    /// Record a completed realtime-hub voice turn into the main chat history (+ backend
-    /// sync) via the shared history provider — the same provider notifications use. The
-    /// hub plays its own audio and never routes through the query path, so this is the
-    /// only way voice turns reach chat history. No-op if the bar isn't set up yet.
-    /// `earlyUserMessageId` reconciles this turn's early bubble (see beginVoiceUserMessage).
-    func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil) {
-        historyChatProvider?.recordVoiceTurn(
-            userText: userText, assistantText: assistantText, earlyUserMessageId: earlyUserMessageId)
+    func kernelVoiceSeedContext() async -> String {
+        guard let provider = historyChatProvider else { return "" }
+        return await provider.kernelTurnProjection.fetchVoiceSeedContext(
+            surface: provider.mainChatSurfaceReference()
+        )
     }
 
-    func recordVoiceAgentHandoff(
-        userText: String, agentTitle: String, agentBrief: String, earlyUserMessageId: String? = nil
-    ) {
-        let title = agentTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let brief = agentBrief.trimmingCharacters(in: .whitespacesAndNewlines)
-        let assistantText = "Started background agent\(title.isEmpty ? "" : " \"\(title)\"")\(brief.isEmpty ? "." : " for: \(brief)")"
-        historyChatProvider?.recordCompletedTurn(
+    func recordSurfaceTurn(
+        surface: AgentSurfaceReference,
+        userText: String,
+        assistantText: String,
+        origin: String = "realtime_voice",
+        interrupted: Bool = false,
+        idempotencyKey: String? = nil
+    ) async {
+        await historyChatProvider?.kernelTurnProjection.recordSurfaceTurn(
+            surface: surface,
             userText: userText,
             assistantText: assistantText,
-            logLabel: "voice_agent_handoff",
-            messageSource: "realtime_voice",
-            earlyUserMessageId: earlyUserMessageId
+            origin: origin,
+            interrupted: interrupted,
+            idempotencyKey: idempotencyKey
         )
+    }
+
+    func floatingAgentStatusContext() async -> String {
+        let floatingStatus = await DesktopCoordinatorService.shared.floatingAgentStatusSummary(limit: 8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !floatingStatus.isEmpty,
+              floatingStatus != "No floating agent pills are running or recently finished." else {
+            return ""
+        }
+        return """
+        Recent floating background agents:
+        \(floatingStatus)
+        """
     }
 
     func recordAgentArtifactCompletion(
         pillID: UUID,
         runId: String?,
+        userText: String,
         title: String,
         finalText: String?,
         resources: [ChatResource]
@@ -3485,24 +3524,53 @@ class FloatingControlBarManager {
         )
         let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
         deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
+        Task {
+            await recordPillTerminalCompletion(
+                pillID: pillID,
+                runId: runId,
+                userText: userText,
+                assistantText: messageText
+            )
+        }
     }
 
-    func topLevelVoiceContinuityContext() -> String {
-        var sections: [String] = []
-        if let history = historyChatProvider?.buildTopLevelVoiceContinuityContext(),
-           !history.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append(history)
+    /// Project one terminal pill summary into kernel `main_chat` for cross-surface continuity.
+    func recordPillTerminalCompletion(
+        pillID: UUID,
+        runId: String?,
+        userText: String,
+        assistantText: String
+    ) async {
+        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAssistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedAssistant.isEmpty else { return }
+
+        let idempotencyKey: String
+        if let runId, !runId.isEmpty {
+            idempotencyKey = "pill_completion:\(runId)"
+        } else {
+            idempotencyKey = "pill_completion:\(pillID.uuidString)"
         }
-        // Use a stable signal (pills.isEmpty) rather than parsing a
-        // human-readable English substring from statusSummary().
-        if !AgentPillsManager.shared.pills.isEmpty {
-            let floatingStatus = AgentPillsManager.shared.statusSummary()
-            sections.append("""
-            Recent floating background agents:
-            \(floatingStatus)
-            """)
-        }
-        return sections.joined(separator: "\n\n")
+        guard !projectedPillCompletionKeys.contains(idempotencyKey) else { return }
+        projectedPillCompletionKeys.insert(idempotencyKey)
+
+        // Assistant-only projection: the spawn handoff (Fix A) already recorded the user's
+        // request on main_chat; repeating it here would double-spend the voice seed budget.
+        let requestSnippet = trimmedUser.count > 120
+            ? String(trimmedUser.prefix(120)) + "…"
+            : trimmedUser
+        let summary = requestSnippet.isEmpty
+            ? trimmedAssistant
+            : "[Background agent — \(requestSnippet)] \(trimmedAssistant)"
+
+        guard let provider = historyChatProvider else { return }
+        await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+            surface: provider.mainChatSurfaceReference(),
+            userText: "",
+            assistantText: summary,
+            origin: "pill_completion",
+            idempotencyKey: idempotencyKey
+        )
     }
 
     private func openRecentNotificationConversationIfAvailable(in window: FloatingControlBarWindow) -> Bool {
@@ -3556,9 +3624,10 @@ class FloatingControlBarManager {
             message: notificationMessage,
             context: stored.context
         )
-        floatingSessionKey = "floating"
         Task {
-            await activeFloatingProvider()?.invalidateAgentSession(sessionKey: "floating")
+            if let provider = activeFloatingProvider() {
+                await provider.invalidateAgentSurface(surface: provider.mainChatSurfaceReference())
+            }
         }
         storedNotificationMessages.removeValue(forKey: notificationID)
         if mostRecentNotificationID == notificationID {
@@ -3600,13 +3669,24 @@ class FloatingControlBarManager {
 
     private func deliverAgentArtifactCompletionToFloatingSurface(_ message: ChatMessage) {
         guard let window else { return }
-        let exchange = FloatingChatExchange(
-            question: nil,
-            questionMessageId: nil,
-            aiMessage: message
-        )
-        window.state.chatHistory.append(exchange)
-        window.state.currentAIMessage = nil
+        chatCancellable?.cancel()
+        chatCancellable = nil
+
+        var completedMessage = message
+        completedMessage.isStreaming = false
+
+        if let current = window.state.currentAIMessage {
+            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            window.state.chatHistory.append(
+                FloatingChatExchange(
+                    question: currentQuery.isEmpty ? nil : currentQuery,
+                    questionMessageId: window.state.currentQuestionMessageId,
+                    aiMessage: current
+                )
+            )
+        }
+
+        window.state.currentAIMessage = completedMessage
         window.state.displayedQuery = ""
         window.state.currentQuestionMessageId = nil
         window.state.isAILoading = false
@@ -3863,7 +3943,7 @@ class FloatingControlBarManager {
             model: selectedFloatingModel,
             systemPromptSuffix: notificationContextSuffix,
             systemPromptStyle: .floating,
-            sessionKey: floatingSessionKey,
+            surfaceRef: provider.mainChatSurfaceReference(),
             imageData: screenshotData,
             turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice)),
             clientTurnId: clientTurnId
@@ -3988,7 +4068,7 @@ class FloatingControlBarManager {
             message,
             model: selectedFloatingModel,
             systemPromptStyle: .floating,
-            sessionKey: floatingSessionKey,
+            surfaceRef: provider.mainChatSurfaceReference(),
             imageData: screenshotData,
             turnOwner: .floatingVoice,
             clientTurnId: clientTurnId
@@ -4062,7 +4142,6 @@ Assistant message:
 
     func clearPendingNotificationContext() {
         pendingNotificationContext = nil
-        floatingSessionKey = "floating"
     }
 }
 

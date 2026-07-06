@@ -17,7 +17,6 @@ describe("macOS release CI", () => {
     const runScript = readFileSync(new URL("../../run.sh", import.meta.url), "utf8");
 
     for (const manifestFile of [
-      "control-tool-manifest.js",
       "control-tool-manifest.ts",
       "node-tools.ts",
       "omi-tool-manifest.ts",

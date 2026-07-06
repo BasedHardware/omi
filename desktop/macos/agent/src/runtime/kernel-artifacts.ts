@@ -1,0 +1,239 @@
+import type {
+  AdapterAttemptResult,
+  AdapterBindingHandle,
+  CancelDispatchResult,
+  OpenedBinding,
+  RuntimeAdapter,
+} from "../adapters/interface.js";
+import type { OutboundMessage } from "../protocol.js";
+import { AdapterRegistry } from "./adapter-registry.js";
+import { AdapterRuntimeError, failureFromError } from "./failures.js";
+import {
+  clearOwnerSurfaceState,
+  importLegacyMainChatSessions,
+  resolveSurfaceSession,
+  type LegacyMainChatSessionEntry,
+  type ResolveSurfaceSessionInput,
+} from "./surface-session.js";
+import {
+  appendConversationTurn,
+  conversationIdForSession,
+  importConversationTurnsForSurface,
+  recordSurfaceTurn as persistSurfaceTurn,
+} from "./conversation-turns.js";
+import {
+  acknowledgeCompletionDelta,
+  assembleTurnContext,
+  bindingCarriesNativeHistory,
+  getVoiceSeedContext,
+} from "./turn-context.js";
+import type {
+  AdapterBinding,
+  AgentArtifact,
+  AgentDelegation,
+  AgentRun,
+  AgentSession,
+  AgentStore,
+  AgentGrant,
+  NewAgentArtifact,
+  NewAgentGrant,
+  RunAttempt,
+  RunStatus,
+  DelegationStatus,
+  DesktopAttentionOverride,
+  NewDesktopCoordinatorDispatch,
+} from "./types.js";
+import { buildDesktopActionQueue } from "./desktop-action-queue.js";
+import { buildDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
+import { routeDesktopIntent } from "./desktop-intent-router.js";
+import { OmiArtifactStorage } from "./artifact-storage.js";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import {
+  ACTIVE_STATUSES,
+  TERMINAL_STATUSES,
+  DEFAULT_DELEGATION_MAX_DEPTH,
+  HARD_DELEGATION_MAX_DEPTH,
+  DEFAULT_DELEGATION_MAX_BUDGET_USD,
+  HARD_DELEGATION_MAX_BUDGET_USD,
+  requiresVerifiedContextDispatch,
+  bindingMetadata,
+  stableHash,
+  stableJsonStringify,
+  stableMcpServerConfig,
+  stableJsonHash,
+  parseJsonObject,
+  placeholders,
+  isStaleBindingError,
+  messageFrom,
+  boundedLimit,
+  sessionFromRow,
+  runFromRow,
+  delegationFromRow,
+  delegationValues,
+  buildDelegatedPrompt,
+  requiredChildSessionId,
+  attemptFromRow,
+  bindingFromRow,
+  eventFromRow,
+  artifactFromRow,
+  desktopDispatchFromRow,
+  desktopArtifactDeliveryFromRow,
+  desktopMemoryCandidateFromRow,
+  desktopTaskCandidateFromRow,
+  desktopAttentionOverrideFromRow,
+  dispatchToQueueInput,
+  deliveryToQueueInput,
+  memoryCandidateToQueueInput,
+  taskCandidateToQueueInput,
+  overrideToQueueInput,
+  intentCandidateStatus,
+  updateByColumns,
+  queueRunGoalText,
+  stringValue,
+  numberValue,
+  nullableString,
+  nullableNumber,
+  nullableText,
+  text,
+} from "./kernel-support.js";
+import type {
+  KernelSessionResolutionInput,
+  ExecuteAgentRunInput,
+  KernelRunResult,
+  CancelRunResult,
+  ListSessionsInput,
+  KernelSessionSummary,
+  GetRunInput,
+  KernelRunDetails,
+  InspectArtifactsInput,
+  DesktopAwarenessSnapshotInput,
+  DesktopAwarenessSnapshot,
+  DesktopActionQueueInput,
+  DesktopOpenLoopsInput,
+  DesktopContextPacketPersistInput,
+  ResolveDesktopDispatchInput,
+  ResolveDesktopDispatchResult,
+  UpdateArtifactLifecycleInput,
+  UpdateArtifactLifecycleResult,
+  PersistArtifactInput,
+  InvalidateBindingsInput,
+  InvalidateBindingsResult,
+  StaleProcessLocalBindingsInput,
+  StaleProcessLocalBindingsResult,
+  SendAgentMessageInput,
+  SpawnBackgroundAgentInput,
+  SpawnBackgroundAgentResult,
+  DelegateAgentInput,
+  DelegateAgentResult,
+  KernelEventSubscriber,
+  AgentRuntimeKernelOptions,
+} from "./kernel-types.js";
+import { StaleAdapterBindingError } from "./kernel-types.js";
+
+import { KernelRuns } from "./kernel-runs.js";
+
+export class KernelArtifacts extends KernelRuns {
+  getRun(input: GetRunInput): KernelRunDetails {
+    const run = this.readRun(input.runId);
+    const session = this.readSession(run.sessionId);
+    if (input.ownerId) {
+      this.assertSessionOwner(session, input.ownerId);
+    }
+    return {
+      session,
+      run,
+      attempts: this.readAttemptsForRun(run.runId),
+      adapterBindings: this.readBindingsForSession(session.sessionId),
+      artifacts: this.readArtifacts({ runId: run.runId, limit: 100 }),
+      events: input.includeEvents ? this.readEventsForRun(run.runId, boundedLimit(input.eventLimit, 100, 500)) : [],
+      parentDelegations: this.readParentDelegationsForRun(run.runId),
+      childDelegations: this.readChildDelegationsForRun(run.runId),
+    };
+  }
+
+  inspectArtifacts(input: InspectArtifactsInput): AgentArtifact[] {
+    if (!input.artifactId && !input.sessionId && !input.runId && !input.attemptId) {
+      throw new Error("Inspecting artifacts requires artifactId, sessionId, runId, or attemptId");
+    }
+    if (input.ownerId) {
+      this.assertArtifactSelectorOwner(input, input.ownerId);
+    }
+    return this.readArtifacts(input);
+  }
+
+  updateArtifactLifecycle(input: UpdateArtifactLifecycleInput): UpdateArtifactLifecycleResult {
+    return this.withTransaction(() => {
+      const artifact = this.readArtifact(input.artifactId);
+      this.assertArtifactScope(artifact, input);
+      if (input.ownerId) {
+        this.assertSessionOwner(this.readSession(artifact.sessionId), input.ownerId);
+      }
+      if (artifact.lifecycleState === input.state) {
+        return { artifact, changed: false, event: null };
+      }
+
+      const now = Date.now();
+      this.store.execute(
+        "UPDATE artifacts SET lifecycle_state = ?, lifecycle_updated_at_ms = ? WHERE artifact_id = ?",
+        [input.state, now, artifact.artifactId],
+      );
+      const updatedArtifact = this.readArtifact(artifact.artifactId);
+      const event = this.appendEvent({
+        sessionId: updatedArtifact.sessionId,
+        runId: updatedArtifact.runId,
+        attemptId: updatedArtifact.attemptId,
+        type: "artifact.lifecycle_updated",
+        payload: {
+          artifactId: updatedArtifact.artifactId,
+          previousState: artifact.lifecycleState,
+          state: updatedArtifact.lifecycleState,
+          reason: input.reason ?? null,
+          metadata: input.metadata ?? {},
+          lifecycleUpdatedAtMs: now,
+        },
+      });
+      return { artifact: updatedArtifact, changed: true, event };
+    });
+  }
+
+  persistArtifact(input: PersistArtifactInput): AgentArtifact {
+    return this.withTransaction(() => this.persistArtifactInTransaction(input));
+  }
+
+  hasActiveExecutionForAdapter(adapterId: string): boolean {
+    for (const active of this.activeExecutions.values()) {
+      if (active.adapter.adapterId === adapterId) return true;
+    }
+    return false;
+  }
+
+  hasActiveExecutionForSessionAdapter(sessionId: string, adapterId: string): boolean {
+    for (const active of this.activeExecutions.values()) {
+      if (active.sessionId === sessionId && active.adapter.adapterId === adapterId) return true;
+    }
+    return false;
+  }
+
+  hasExecutionCapacityForAdapter(adapterId: string): boolean {
+    if (!this.registry.has(adapterId)) return false;
+    let activeCount = 0;
+    for (const active of this.activeExecutions.values()) {
+      if (active.adapter.adapterId === adapterId) activeCount += 1;
+    }
+    return activeCount < this.registry.capacity(adapterId);
+  }
+
+  isAdapterRegistered(adapterId: string): boolean {
+    return this.registry.has(adapterId);
+  }
+
+  defaultAdapterIdForSession(sessionId: string): string {
+    return this.readSession(sessionId).defaultAdapterId;
+  }
+
+  defaultAdapterIdForRun(runId: string): string {
+    const run = this.readRun(runId);
+    return this.readSession(run.sessionId).defaultAdapterId;
+  }
+}

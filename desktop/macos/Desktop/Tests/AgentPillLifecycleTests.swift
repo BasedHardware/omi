@@ -29,7 +29,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testFloatingPillSpawnsCanonicalBackgroundAgentRun() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnBackgroundAgent("))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
     XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill)"))
     XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
@@ -48,6 +48,18 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatProviderSource.contains("resources: [ChatResource] = []"))
     XCTAssertTrue(chatProviderSource.contains("sender: .ai,"))
     XCTAssertTrue(chatProviderSource.contains("resources: resources"))
+  }
+
+  func testArtifactDeliveryClearsFloatingTypingState() throws {
+    let windowSource = try floatingControlBarWindowSource()
+    let responseSource = try aiResponseViewSource()
+
+    XCTAssertTrue(windowSource.contains("chatCancellable?.cancel()"))
+    XCTAssertTrue(windowSource.contains("completedMessage.isStreaming = false"))
+    XCTAssertTrue(windowSource.contains("window.state.currentAIMessage = completedMessage"))
+    XCTAssertFalse(windowSource.contains("window.state.currentAIMessage = nil\n        window.state.displayedQuery = \"\""))
+    XCTAssertTrue(responseSource.contains("} else if isLoading {"))
+    XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
   }
 
   func testVoiceAgentKickoffUsesCachedPhrasePack() throws {
@@ -75,13 +87,10 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testFloatingPillPromptRemovesNestedSpawnCapabilities() throws {
     let source = try chatProviderSource()
 
-    XCTAssertTrue(source.contains("legacyClientScope == AgentLegacyClientScope.floatingPill"))
-    XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
-    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains("isFloatingPillSurface(resolvedSurface)"))
+    XCTAssertTrue(source.contains("buildFloatingBarSystemPrompt("))
+    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "run_agent_and_wait"]"#))
     XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
-    XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
-    XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
-    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent"]"#))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
@@ -125,7 +134,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
     XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
     XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
-    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
+    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -564,7 +573,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("private func trimForNewPillIfNeeded()"))
     XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done && $0.id != activeChatPillID })"))
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
-    XCTAssertTrue(viewSource.contains("if pill.status == .done"))
+    XCTAssertTrue(viewSource.contains("if pill.status.isFinished"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
   }
 
@@ -664,8 +673,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("private struct PendingBargeInReplacementTurn"))
     XCTAssertTrue(hubSource.contains("private var pendingBargeInReplacement: PendingBargeInReplacementTurn?"))
     XCTAssertTrue(hubSource.contains("func commitTurn() -> RealtimeHubCommitResult"))
-    XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
-    XCTAssertTrue(hubSource.contains("case .ephemeral:\n      remintReplacementSessionForBargeIn(provider: provider)"))
+    XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn(interruptedTurn: InterruptedTurnPayload?) -> Bool"))
+    XCTAssertTrue(hubSource.contains("case .ephemeral:\n            self.remintReplacementSessionForBargeIn(provider: provider)"))
     XCTAssertTrue(hubSource.contains("token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
     XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
     XCTAssertTrue(hubSource.contains("barge-in replacement queued behind existing token mint"))
@@ -685,7 +694,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("private var turnGeneration: UInt64 = 0"))
     XCTAssertTrue(hubSource.contains("let screenshotTurnGeneration = turnGeneration"))
     XCTAssertTrue(hubSource.contains("guard self.turnGeneration == screenshotTurnGeneration else { return }"))
-    XCTAssertTrue(hubSource.contains("preserveInterruptedTurnForContinuity()"))
+    XCTAssertTrue(hubSource.contains("captureInterruptedTurnPayloadIfNeeded()"))
+    XCTAssertTrue(hubSource.contains("completeBargeInReplacementAfterContinuity("))
     XCTAssertTrue(hubSource.contains("var replacementSessionOwnsInputTurn = false"))
     XCTAssertTrue(hubSource.contains("case .freshSession:"))
     XCTAssertTrue(hubSource.contains("replace the connection and let the fresh session buffer this new turn while it opens"))

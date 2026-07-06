@@ -861,6 +861,47 @@ class TasksViewModel: ObservableObject {
         }
     }
 
+    /// Width of each category's numeric sortOrder band. Category N owns the
+    /// half-open range `[N*bandWidth, (N+1)*bandWidth)`. Kept at 100_000 so
+    /// orders already persisted under the previous fixed scheme keep the same
+    /// band assignment.
+    nonisolated static let sortOrderBandWidth = 100_000
+
+    /// Compute a task's sortOrder so every item in a category stays strictly
+    /// inside that category's band — even when the category holds enough items
+    /// that the previous fixed 1000-spacing would overflow into the next
+    /// category's band and corrupt cross-category ordering (BL-016).
+    ///
+    /// The old scheme (`categoryIndex*100_000 + (itemIndex+1)*1000`) had a hard
+    /// ceiling of ~100 items per category: item 100 landed on the next band's
+    /// base. Here the spacing is derived from the item count as
+    /// `bandWidth / (count + 1)`, capped at the historical 1000 so small
+    /// categories keep the familiar sparse spacing (room for future in-place
+    /// inserts). While `count < bandWidth` the integer spacing is >= 1 and the
+    /// largest value is `count * spacing <= count/(count+1) * bandWidth < bandWidth`,
+    /// so the last item never reaches the next band's base — true for any realistic
+    /// category size (values are byte-identical to the old scheme for count <= 99).
+    /// Only when `count >= bandWidth` (~100k+ items in one section, not reachable
+    /// in practice) does the integer spacing floor to 0; that degenerate case is
+    /// handled separately by distributing items evenly so the result still stays
+    /// strictly inside the band. Both reorder sites (`moveTask`,
+    /// `collectSortOrderUpdates`) call this single helper so their optimistic and
+    /// persisted orders agree.
+    nonisolated static func sortOrder(categoryIndex: Int, itemIndex: Int, itemCount: Int) -> Int {
+        let band = sortOrderBandWidth
+        let base = categoryIndex * band
+        let rawSpacing = band / (itemCount + 1)
+        guard rawSpacing >= 1 else {
+            // Degenerate: itemCount >= bandWidth leaves no integer room for unique
+            // spacing. Spread items evenly across [base, base+band) so the result
+            // never leaves the band; ordering is preserved even if exact spacing
+            // is not. Unreachable for any real task section.
+            return base + min(band - 1, (itemIndex * (band - 1)) / max(1, itemCount - 1))
+        }
+        let spacing = min(1000, rawSpacing)
+        return base + (itemIndex + 1) * spacing
+    }
+
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
         log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
@@ -881,11 +922,12 @@ class TasksViewModel: ObservableObject {
         // write to only one of them misses when filters/search are active. Each
         // reassignment fires its own @Published; recomputeAllCaches at the end folds
         // them all into categorizedTasks.
-        let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
+        let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
+        let itemCount = order.count
 
         func applyOrder(to array: inout [TaskActionItem]) {
             for (index, taskId) in order.enumerated() {
-                let newSortOrder = categoryOffset + (index + 1) * 1000
+                let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
                 if let i = array.firstIndex(where: { $0.id == taskId }) {
                     array[i].sortOrder = newSortOrder
                 }
@@ -1163,12 +1205,14 @@ class TasksViewModel: ObservableObject {
 
         for category in TaskCategory.allCases {
             let orderedTasks = getOrderedTasks(for: category)
-            // Category offset: today=0, tomorrow=100_000, later=200_000, noDeadline=300_000
-            let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
+            // Category bands: today=[0,100k), tomorrow=[100k,200k), later=[200k,300k),
+            // noDeadline=[300k,400k). Spacing is derived from the per-category count so a
+            // large category never overflows its band (BL-016); see TasksViewModel.sortOrder.
+            let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
 
             for (index, task) in orderedTasks.enumerated() {
                 guard !task.id.hasPrefix("local_"), !task.id.hasPrefix("staged_") else { continue }
-                let sortOrder = categoryOffset + (index + 1) * 1000
+                let sortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: orderedTasks.count)
                 let indent = indentLevels[task.id] ?? task.indentLevel ?? 0
                 updates.append((id: task.id, sortOrder: sortOrder, indentLevel: indent))
             }
@@ -3318,14 +3362,16 @@ struct TasksPage: View {
                                     draggedTaskId: viewModel.draggedTaskId,
                                     findTaskGlobal: { viewModel.findTask($0) },
                                     onDragStarted: { viewModel.draggedTaskId = $0 },
-                                    onDragEnded: {
-                                        // Idempotent: TaskDragItemProvider.deinit fires onDragEnded
-                                        // a second time after the synchronous drop handler. Without
-                                        // this guard, the duplicate dispatch would no-op redundantly
-                                        // in the common case but could clobber state during a rapid
-                                        // re-drag (deinit dispatch is one main.async hop, sub-ms).
-                                        // Keep the guard so the design is strictly idempotent.
-                                        guard viewModel.draggedTaskId != nil else { return }
+                                    onDragEnded: { endedId in
+                                        // Drag-end is task-scoped. Both the drop handler and
+                                        // TaskDragItemProvider.deinit route here; deinit hops one
+                                        // main.async and can land *after* the user has already
+                                        // started a new drag. A late deinit from a prior drag
+                                        // carries that prior task's id, so guarding on
+                                        // draggedTaskId == endedId stops it clobbering the new
+                                        // drag's dim state (BL-030). Same-id re-fires are idempotent
+                                        // (second call sees a nil/other draggedTaskId and no-ops).
+                                        guard viewModel.draggedTaskId == endedId else { return }
                                         viewModel.draggedTaskId = nil
                                         viewModel.dropTargetTaskId = nil
                                     },
@@ -3551,7 +3597,10 @@ struct TaskCategorySection: View {
     // Non-optional with no-op defaults: this callback is load-bearing for the
     // dim-while-dragging effect, and a silent nil here was the original bug.
     var onDragStarted: (String) -> Void = { _ in }
-    var onDragEnded: () -> Void = {}
+    // Carries the id of the task whose drag ended, so the receiver can scope the
+    // dim/drag-state reset to that exact task and ignore a stale late end from a
+    // prior drag (BL-030).
+    var onDragEnded: (String) -> Void = { _ in }
     var onDragHoverChanged: ((String, Bool) -> Void)?
 
     // Edit mode support
@@ -3750,7 +3799,9 @@ struct TaskDragDropModifier: ViewModifier {
     var findTask: ((String) -> TaskActionItem?)?
     var findTargetIndex: (() -> Int?)?
     var onMoveTask: ((TaskActionItem, Int) -> Void)?
-    var onDragEnded: (() -> Void)?
+    /// Called with the id of the dragged task when a drop lands, so the drag-end
+    /// reset stays scoped to that task (BL-030).
+    var onDragEnded: ((String) -> Void)?
     var onHoverChanged: ((String, Bool) -> Void)?
 
     func body(content: Content) -> some View {
@@ -3776,9 +3827,10 @@ struct TaskDragDropModifier: ViewModifier {
                     }
                 )) { providers in
                     log("DROP: Received drop on task \(taskId), providers=\(providers.count)")
-                    onDragEnded?()
                     guard let provider = providers.first else {
                         log("DROP: No providers")
+                        // No payload to identify the dragged task; the provider's
+                        // deinit is the catch-all that fires the id-scoped reset.
                         return false
                     }
                     provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
@@ -3789,6 +3841,11 @@ struct TaskDragDropModifier: ViewModifier {
                             return
                         }
                         DispatchQueue.main.async {
+                            // End the drag scoped to the task that was actually dragged
+                            // (droppedId), before applying the move. The provider's deinit
+                            // fires the same scoped reset as the catch-all; both are
+                            // idempotent via the draggedTaskId == endedId guard (BL-030).
+                            onDragEnded?(droppedId)
                             guard let targetIndex = findTargetIndex?() else {
                                 log("DROP: findTargetIndex returned nil")
                                 return
@@ -3816,9 +3873,11 @@ struct TaskDragDropModifier: ViewModifier {
 /// NSEvent.addLocalMonitor/addGlobalMonitor approach that didn't fire from
 /// inside the AppKit drag modal loop, leaving the dragged row stuck dimmed.
 final class TaskDragItemProvider: NSItemProvider {
-    private let onEnd: () -> Void
+    private let taskId: String
+    private let onEnd: (String) -> Void
 
-    init(taskId: String, onEnd: @escaping () -> Void) {
+    init(taskId: String, onEnd: @escaping (String) -> Void) {
+        self.taskId = taskId
         self.onEnd = onEnd
         super.init()
         registerObject(taskId as NSString, visibility: .all)
@@ -3826,9 +3885,12 @@ final class TaskDragItemProvider: NSItemProvider {
 
     deinit {
         // deinit may run off-main when AppKit releases its reference. Hop to
-        // main before mutating @Published state.
+        // main before mutating @Published state. Pass this drag's own taskId so
+        // a late deinit from a *prior* drag can't clear a newer drag's dim
+        // state (BL-030): the receiver clears only when draggedTaskId == this id.
         let cb = onEnd
-        DispatchQueue.main.async { cb() }
+        let endedId = taskId
+        DispatchQueue.main.async { cb(endedId) }
     }
 }
 
@@ -3958,9 +4020,11 @@ struct TaskRow: View {
     /// Non-optional with no-op default: load-bearing for the dim effect, and a
     /// silent-nil here was the original bug we're fixing.
     var onDragStarted: (String) -> Void = { _ in }
-    /// Fires when the drag actually ends (mouseUp), regardless of drop outcome.
-    /// Required so the dimmed row is restored even if the drop misses every target.
-    var onDragEnded: () -> Void = {}
+    /// Fires when the drag actually ends (mouseUp), regardless of drop outcome,
+    /// carrying the id of the task whose drag ended. Required so the dimmed row is
+    /// restored even if the drop misses every target — and so a late end from a
+    /// prior drag doesn't clear a newer drag's dim (BL-030).
+    var onDragEnded: (String) -> Void = { _ in }
     /// True iff this row is the one currently being dragged. Drives the dim effect.
     var isBeingDragged: Bool = false
     var isChatActive: Bool = false
