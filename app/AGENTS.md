@@ -73,15 +73,13 @@ flutter test           # same thing
 flutter test test/unit/  # specific directory
 ```
 
-`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL`.
-Set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/` for local backend tests, or
-`OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default.
+`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
-- A test that needs a live service or device goes under `integration_test/`, which `test.sh`/CI never runs. State in the PR how you ran it; it must not be the only evidence the change works.
+- A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default. State in the PR how you ran it; it must not be the only evidence the change works.
 - Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
 
 ## Localization (l10n)

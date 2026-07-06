@@ -14,9 +14,9 @@ Collection: users/{uid}/chat_sessions and users/{uid}/messages.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChatSessionResponse(BaseModel):
@@ -31,6 +31,32 @@ class ChatSessionResponse(BaseModel):
     plugin_id: Optional[str] = Field(default=None, description='Mirrors app_id for cross-platform query compatibility.')
     message_count: int = Field(description='Number of messages in the session.')
     starred: bool = Field(description='Whether the user starred the session.')
+
+    @model_validator(mode='before')
+    @classmethod
+    def _repair_legacy_session_shape(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+
+        app_id_val = data.get('app_id')
+        plugin_id_val = data.get('plugin_id')
+        if app_id_val is not None:
+            data['plugin_id'] = app_id_val
+        elif plugin_id_val is not None:
+            data['app_id'] = plugin_id_val
+
+        if not data.get('title'):
+            data['title'] = 'New Chat'
+        if 'preview' not in data:
+            data['preview'] = None
+        if data.get('updated_at') is None and data.get('created_at') is not None:
+            data['updated_at'] = data['created_at']
+        if data.get('message_count') is None:
+            data['message_count'] = len(data.get('message_ids') or [])
+        if data.get('starred') is None:
+            data['starred'] = False
+
+        return data
 
 
 class SaveMessageResponse(BaseModel):

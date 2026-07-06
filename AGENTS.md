@@ -296,7 +296,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 - **Every bug fix adds the regression test that would have caught it.** This is the one non-negotiable way coverage grows; it compounds exactly where the codebase has proven fragile.
 - **New features test the core path and the main error path.** Don't chase exhaustive coverage — a small test that will still be meaningful in a year beats ten brittle ones.
 - **CI tests must be hermetic**: no live services, no network, no sleeps, no ordering dependence. A test that needs a live service stays out of the CI suite; note in the PR how you ran it instead.
-- **A test that doesn't run in CI doesn't exist.** Put new tests where the component's runner discovers them, and confirm they execute in a full local run.
+- **Hermetic tests must run in CI.** Put new hermetic tests where the component's runner discovers them and confirm they execute in a full local run; if a test requires a live service, keep it out of CI and document how you ran it in the PR.
 - Delete or fix a flaky/obsolete test you encounter (see Leave It Better) — a suite people distrust is worse than a smaller suite.
 
 ### Running Tests

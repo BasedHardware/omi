@@ -241,6 +241,107 @@ def test_check_reports_missing_stale_and_duplicate_registered_routes():
     assert summary['duplicate_registered_routes'] == 1
 
 
+def test_missing_manifest_route_keys_returns_live_keys_not_in_manifest():
+    app = FastAPI()
+
+    @app.get('/items')
+    def items():
+        return {'ok': True}
+
+    @app.post('/items')
+    def create_item():
+        return {'ok': True}
+
+    entries = inventory.iter_inventory_entries(app)
+    manifest = _manifest([_route('GET', '/items')])
+
+    assert inventory.missing_manifest_route_keys(entries, manifest) == ['backend-main:http:POST:/items']
+
+
+def test_missing_baseline_allows_legacy_missing_routes_and_rejects_new_routes():
+    missing = ['backend-main:http:GET:/legacy', 'backend-main:http:POST:/new']
+
+    problems, summary = inventory.validate_missing_baseline(
+        missing=missing,
+        baseline_keys={'backend-main:http:GET:/legacy'},
+    )
+
+    assert 'new routes missing manifest entries' in '\n'.join(problems)
+    assert 'backend-main:http:POST:/new' in '\n'.join(problems)
+    assert summary['new_missing_manifest_entries'] == 1
+    assert summary['stale_missing_baseline_entries'] == 0
+
+
+def test_missing_baseline_passes_when_current_missing_matches_baseline():
+    problems, summary = inventory.validate_missing_baseline(
+        missing=['backend-main:http:GET:/legacy'],
+        baseline_keys={'backend-main:http:GET:/legacy'},
+        base_baseline_keys={'backend-main:http:GET:/legacy'},
+    )
+
+    assert problems == []
+    assert summary['baseline_additions'] == 0
+    assert summary['new_missing_manifest_entries'] == 0
+    assert summary['stale_missing_baseline_entries'] == 0
+
+
+def test_missing_baseline_reports_stale_entries_when_routes_are_manifested_or_removed():
+    problems, summary = inventory.validate_missing_baseline(
+        missing=['backend-main:http:GET:/legacy'],
+        baseline_keys={'backend-main:http:GET:/legacy', 'backend-main:http:DELETE:/removed'},
+    )
+
+    assert 'stale legacy missing-route baseline entries' in '\n'.join(problems)
+    assert 'backend-main:http:DELETE:/removed' in '\n'.join(problems)
+    assert summary['new_missing_manifest_entries'] == 0
+    assert summary['stale_missing_baseline_entries'] == 1
+
+
+def test_missing_baseline_rejects_additions_relative_to_base_branch():
+    problems, summary = inventory.validate_missing_baseline(
+        missing=['backend-main:http:GET:/legacy', 'backend-main:http:POST:/new'],
+        baseline_keys={'backend-main:http:GET:/legacy', 'backend-main:http:POST:/new'},
+        base_baseline_keys={'backend-main:http:GET:/legacy'},
+    )
+
+    assert 'legacy missing-route baseline grew relative to the base branch' in '\n'.join(problems)
+    assert 'backend-main:http:POST:/new' in '\n'.join(problems)
+    assert summary['baseline_additions'] == 1
+    assert summary['new_missing_manifest_entries'] == 0
+
+
+def test_route_key_baseline_loader_ignores_comments_and_rejects_invalid_entries(tmp_path):
+    path = tmp_path / 'baseline.txt'
+    path.write_text(
+        '\n'.join(
+            [
+                '# comment',
+                '',
+                'backend-main:http:GET:/items',
+                'other:http:GET:/items',
+                'backend-main:system:GET:/docs',
+                'backend-main:http:GET:/items',
+            ]
+        )
+    )
+
+    with pytest.raises(inventory.RoutePolicyError) as exc_info:
+        inventory.load_route_key_baseline(path)
+
+    message = str(exc_info.value)
+    assert 'invalid route policy baseline entries' in message
+    assert 'duplicate route policy baseline entries' in message
+
+
+def test_missing_baseline_writer_outputs_sorted_route_keys(tmp_path):
+    path = tmp_path / 'baseline.txt'
+
+    inventory.write_missing_baseline(path, ['backend-main:http:POST:/b', 'backend-main:http:GET:/a'])
+
+    lines = [line for line in path.read_text().splitlines() if line and not line.startswith('#')]
+    assert lines == ['backend-main:http:GET:/a', 'backend-main:http:POST:/b']
+
+
 def test_check_reports_equivalent_path_template_duplicates():
     app = FastAPI()
 

@@ -135,7 +135,7 @@ bash test-preflight.sh   # Verify env
 bash test.sh             # Run all tests (CI source of truth)
 ```
 
-**Tests are auto-discovered.** Any test file under `tests/unit/`, `tests/services/`, or `tests/routers/` runs in CI and in local `test.sh` runs — both use `scripts/select_backend_unit_tests.py`, so the local and CI test sets cannot drift. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is never auto-discovered; note in the PR how you ran them.
+**Tests are selector-driven.** Local `test.sh` runs the full discovered set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`; CI uses the same selector but may run only a changed-file subset on PRs. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
 
 **Test isolation / import purity** — never mutate `sys.modules` at module scope in tests; production modules must not construct clients or do IO at import time. Sanctioned seams: `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides`. Enforced by `python scripts/check_module_stub_pollution.py` and `python scripts/scan_import_time_side_effects.py`. Full prescription: `backend/docs/test_isolation.md`.
 
