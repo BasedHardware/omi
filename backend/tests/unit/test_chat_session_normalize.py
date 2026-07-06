@@ -10,8 +10,10 @@ fields the model marks required (``title``, ``created_at``, ``message_count``,
 """
 
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
-from database.chat import _normalize_chat_session
+from database import chat as chat_db
+from database.chat import _normalize_chat_session, get_chat_session_by_id
 from models.chat_session import ChatSessionResponse
 
 
@@ -34,6 +36,46 @@ def test_normalize_fills_missing_required_fields_and_validates():
 
     # The previously-failing step: strict response_model validation must pass.
     ChatSessionResponse.model_validate(normalized)
+
+
+def test_normalize_fills_missing_timestamps_with_utc_now():
+    raw = {'id': 'sess-legacy', 'plugin_id': None}
+
+    normalized = _normalize_chat_session(raw)
+
+    assert normalized['created_at'] is not None
+    assert normalized['updated_at'] is not None
+    assert normalized['created_at'] == normalized['updated_at']
+    ChatSessionResponse.model_validate(normalized)
+
+
+def test_get_chat_session_by_id_injects_document_id(monkeypatch):
+    session_id = 'doc-key-123'
+    now = datetime.now(timezone.utc)
+    session_data = {'updated_at': now, 'plugin_id': None}
+
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = session_data
+
+    mock_session_ref = MagicMock()
+    mock_session_ref.get.return_value = mock_doc
+
+    mock_sessions_col = MagicMock()
+    mock_sessions_col.document.return_value = mock_session_ref
+
+    mock_user_ref = MagicMock()
+    mock_user_ref.collection.return_value = mock_sessions_col
+
+    mock_users_col = MagicMock()
+    mock_users_col.document.return_value = mock_user_ref
+
+    monkeypatch.setattr(chat_db, 'db', MagicMock(collection=MagicMock(return_value=mock_users_col)))
+
+    result = get_chat_session_by_id('uid-1', session_id)
+
+    assert result['id'] == session_id
+    ChatSessionResponse.model_validate(result)
 
 
 def test_normalize_preserves_existing_values():

@@ -2,6 +2,18 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.27",
+      "date": "2026-07-06",
+      "changes": [
+        "Sign-in now shows a clear, actionable message when Firebase configuration is briefly unavailable instead of failing opaquely, and the system-audio permission indicator now reflects your real macOS permission state",
+        "Fixed push-to-talk dead-mic recovery not triggering (or being reported) outside the realtime path, so silent voice turns now attempt a mic-capture rebuild and are logged accurately",
+        "Launching a second copy of Omi now brings the existing window to the front instead of starting a duplicate that could corrupt your data",
+        "Show a retryable error when task reordering cannot sync locally or to Omi Cloud",
+        "Improved reliability of AI and screen-activity features when backend errors occur",
+        "Fixed cached short-term memories appearing in the desktop Memories UI before the account is enabled for the new memory lifecycle."
+      ]
+    },
+    {
       "version": "0.12.26",
       "date": "2026-07-05",
       "changes": [

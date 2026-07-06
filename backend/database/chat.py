@@ -469,7 +469,9 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     session_doc = session_ref.get()
 
     if session_doc.exists:
-        return _normalize_chat_session(session_doc.to_dict())
+        data = session_doc.to_dict()
+        data['id'] = chat_session_id
+        return _normalize_chat_session(data)
 
     return None
 
@@ -611,9 +613,9 @@ def _normalize_chat_session(data: Optional[dict]) -> Optional[dict]:
     # created_at/updated_at are required datetimes; fall back to each other when
     # one is missing (the list query orders by updated_at, so it is present there).
     if data.get('created_at') is None:
-        data['created_at'] = data.get('updated_at')
+        data['created_at'] = data.get('updated_at') or datetime.now(timezone.utc)
     if data.get('updated_at') is None:
-        data['updated_at'] = data.get('created_at')
+        data['updated_at'] = data.get('created_at') or datetime.now(timezone.utc)
     return data
 
 
