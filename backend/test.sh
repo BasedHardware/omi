@@ -78,8 +78,14 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   for test_path in "${selected_tests[@]}"; do
     (
       echo "::group::$test_path"
+      set +e
       "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
       status=$?
+      set -e
+      if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+        echo "No tests matched marker expression for $test_path; treating as skipped."
+        status=0
+      fi
       echo "::endgroup::"
       exit "$status"
     ) &
