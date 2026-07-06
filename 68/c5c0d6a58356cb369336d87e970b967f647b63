@@ -1,0 +1,19 @@
+mockup/screens/onboarding.html
+  s_751b5889fd7450::t_cf21198e8c8e58 9-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "68c5c0d6a58356cb369336d87e970b967f647b63",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
