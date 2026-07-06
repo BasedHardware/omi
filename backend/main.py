@@ -81,6 +81,7 @@ from utils.executors import (
     start_background_task,
 )
 from services.users.account_deletion import reconcile_pending_deletion_wipes
+from utils.text_speaker_detection import close_async_client as close_text_speaker_detection_client
 
 # Log LangSmith tracing status at startup
 log_langsmith_status()
@@ -236,6 +237,7 @@ async def _periodic_deletion_wipe_reconcile(interval_seconds: int = 300):
 async def shutdown_event():
     await drain_background_tasks(timeout=10.0)
     await close_all_clients()
+    await close_text_speaker_detection_client()
 
 
 paths = ['_temp', '_samples', '_segments', '_speech_profiles']
