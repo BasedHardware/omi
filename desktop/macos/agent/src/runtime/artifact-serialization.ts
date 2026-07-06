@@ -4,7 +4,7 @@ import type { AgentArtifact } from "./types.js";
 export function serializeArtifact(artifact: AgentArtifact): SerializedArtifact {
   return {
     artifactId: artifact.artifactId,
-    omiSessionId: artifact.sessionId,
+    sessionId: artifact.sessionId,
     runId: artifact.runId,
     attemptId: artifact.attemptId,
     kind: artifact.kind,

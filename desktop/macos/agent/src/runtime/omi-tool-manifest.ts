@@ -8,6 +8,24 @@ export type OmiToolAdapterId = "pi-mono" | "omi-tools-stdio" | "local-agent-api"
 export type OmiToolCondition = "always" | "onboardingOnly" | "nonOnboarding";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
 export type OmiToolTimeoutClass = "normal" | "long";
+export type OmiToolSurface = "desktop_chat" | "realtime_voice" | "onboarding" | "task_chat";
+
+export interface OmiToolCapabilityDoc {
+  title: string;
+  summary: string;
+  bullets: string[];
+}
+
+export interface OmiToolAliasCapabilityDoc extends OmiToolCapabilityDoc {
+  surfaces?: OmiToolSurface[];
+}
+
+export interface OmiToolVoiceConfig {
+  realtimeDescription?: string;
+  schemaOverride?: OmiToolInputSchema;
+  speakGuidance?: string;
+  realtimeExpose?: boolean;
+}
 
 export interface OmiToolAnnotations {
   readOnlyHint?: boolean;
@@ -54,9 +72,27 @@ export interface OmiToolManifestEntry {
     executorName?: string;
   };
   aliases?: string[];
+  surfaces: OmiToolSurface[];
+  capabilityDoc: OmiToolCapabilityDoc;
+  aliasCapabilityDocs?: Record<string, OmiToolAliasCapabilityDoc>;
+  voice?: OmiToolVoiceConfig;
   intendedForAgents: boolean;
   runtimePreconditions: string[];
   adapters: Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>>;
+}
+
+type OmiToolManifestEntryDraft = Omit<
+  OmiToolManifestEntry,
+  "surfaces" | "capabilityDoc" | "aliasCapabilityDocs" | "voice"
+> &
+  Partial<Pick<OmiToolManifestEntry, "surfaces" | "capabilityDoc" | "aliasCapabilityDocs" | "voice">>;
+
+interface OmiToolSurfacePatch {
+  surfaces: OmiToolSurface[];
+  capabilityDoc: OmiToolCapabilityDoc;
+  aliasCapabilityDocs?: Record<string, OmiToolAliasCapabilityDoc>;
+  voice?: OmiToolVoiceConfig;
+  executor?: OmiToolManifestEntry["executor"];
 }
 
 export interface OmiToolProjectionContext {
@@ -129,7 +165,435 @@ function trustedDirectControlOnly(): Partial<Record<OmiToolAdapterId, OmiToolAda
   return {};
 }
 
-export const swiftToolManifest: OmiToolManifestEntry[] = [
+function doc(title: string, summary: string, bullets: string[]): OmiToolCapabilityDoc {
+  return { title, summary, bullets };
+}
+
+function mapControlSurfaces(surfaces: AgentControlManifestTool["surfaces"]): OmiToolSurface[] {
+  return surfaces.map((surface) => (surface === "desktopChat" ? "desktop_chat" : "realtime_voice"));
+}
+
+function withSurfacePatch(entry: OmiToolManifestEntryDraft, patch: OmiToolSurfacePatch): OmiToolManifestEntry {
+  const executor = patch.executor ?? entry.executor;
+  if (executor.kind === "swiftTool" && !executor.executorName) {
+    executor.executorName = "chatToolExecutor";
+  }
+  return {
+    ...entry,
+    ...patch,
+    executor,
+  };
+}
+
+function finalizeManifestEntries(drafts: OmiToolManifestEntryDraft[], patches: Record<string, OmiToolSurfacePatch>): OmiToolManifestEntry[] {
+  return drafts.map((entry) => {
+    const patch = patches[entry.name];
+    if (!patch) {
+      throw new Error(`Missing surface patch for tool ${entry.name}`);
+    }
+    return withSurfacePatch(entry, patch);
+  });
+}
+
+const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
+  execute_sql: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Execute SQL",
+      "Run SQL on the local omi.db database for structured local data.",
+      [
+        "Supports SELECT, INSERT, UPDATE, DELETE.",
+        "Use for personal facts, app usage stats, time queries, task lookups, conversations, memories, aggregations, and anything structured.",
+        "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
+        "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
+        "Prefer semantic_search for fuzzy screen-history questions and backend task tools for creating/updating tasks.",
+      ],
+    ),
+  },
+  semantic_search: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Semantic Search",
+      "Vector similarity search on the user's screen history.",
+      [
+        "Use for fuzzy/conceptual questions about what the user saw, read, or worked on where exact SQL keywords will not work.",
+        "Examples: \"reading about machine learning\", \"working on design mockups\".",
+        "Parameters: query (required), days (default 7), app_filter (optional).",
+      ],
+    ),
+    aliasCapabilityDocs: {
+      search_screen_history: {
+        ...doc(
+          "Search Screen History",
+          "Search the user's on-screen history by meaning.",
+          ["Use for what the user saw, read, or worked on. Speak a short summary of the result."],
+        ),
+        surfaces: ["realtime_voice"],
+      },
+    },
+    voice: {
+      realtimeDescription:
+        "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z'. Returns matching moments with the app and context. Fast synchronous read. Speak the result.",
+    },
+  },
+  get_daily_recap: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Daily Recap",
+      "Pre-formatted activity recap: apps, conversations, tasks, focus, memories, and observations.",
+      [
+        "Use for what the user did today/yesterday/this week; it is faster than composing many SQL queries.",
+        "Parameters: days_ago (0=today, 1=yesterday, 7=past week; default 1).",
+      ],
+    ),
+    voice: {
+      realtimeDescription:
+        "Get a recap of what the user actually DID on their Mac — apps used (with minutes), conversations, tasks, focus sessions, and screen activity — for a day. First choice for 'what did I do yesterday', 'what did I do today', 'which apps did I use the most', 'how did I spend my time': one fast synchronous read, where searching conversations or spawning an agent would be slower and less complete. Speak a short summary of what it returns.",
+    },
+  },
+  fill_cloud_connector_form: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Fill Cloud Connector Form",
+      "Fill the visible ChatGPT or Claude custom MCP connector form using Omi's native macOS Accessibility automation.",
+      [
+        "Call this first for ChatGPT or Claude cloud MCP connector setup when the connector form is visible.",
+        "Do not install browser extensions before trying this tool.",
+      ],
+    ),
+  },
+  search_tasks: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Search Tasks",
+      "Vector similarity search on tasks (action_items + staged_tasks).",
+      [
+        "Use for finding tasks by meaning, not exact keywords, e.g. \"find tasks about shopping\".",
+        "Examples: \"tasks about shopping\", \"anything related to the presentation\".",
+        "Parameters: query (required), include_completed (default false).",
+        "More reliable than hand-writing MATCH queries for task search.",
+      ],
+    ),
+  },
+  get_tasks: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc(
+      "Get Tasks",
+      "Read the user's overdue and due-today tasks locally.",
+      [
+        "Use for plain voice questions like what are my tasks, what's due today, or what's on my list.",
+        "Prefer get_action_items for completed tasks, date ranges, or the full list.",
+      ],
+    ),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Read the user's tasks (overdue + due today) locally and get them back as text to speak. Fast synchronous read — use this for 'what are my tasks', 'what's due today', 'what's on my list'. Reading tasks is always a direct call, never background work.",
+    },
+  },
+  complete_task: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Complete Task",
+      "Toggle a task's completion status by backendId.",
+      ["Use after finding the task with execute_sql or search_tasks."],
+    ),
+  },
+  delete_task: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Delete Task",
+      "Delete a task permanently by backendId.",
+      ["Use after finding the task with execute_sql or search_tasks."],
+    ),
+  },
+  load_skill: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Load Skill", "Load the full instructions for a named skill listed in available_skills.", [
+      "Use the exact skill name from available_skills.",
+    ]),
+  },
+  save_knowledge_graph: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Save Knowledge Graph",
+      "Save a knowledge graph of entities and relationships extracted from the user's data.",
+      [
+        "Parameters: nodes (array of {id, label, node_type, aliases}), edges (array of {source_id, target_id, label}).",
+        "node_type must be one of: person, organization, place, thing, concept.",
+        "Use when exploring the user's files during onboarding to build their knowledge graph.",
+        "Deduplication is handled automatically; provide all entities you find.",
+      ],
+    ),
+  },
+  get_conversations: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Get Conversations",
+      "Retrieve conversations by recency or date range.",
+      [
+        "Use for latest/recent conversations and time-based conversation retrieval.",
+        "For voice, this returns summaries only and should be spoken briefly.",
+      ],
+    ),
+    voice: {
+      realtimeDescription:
+        "List the user's MOST RECENT conversations, newest first (titles + summaries, no full transcripts). Use this — NOT search_conversations — for 'what was my most recent / latest / last conversation', 'what did we just talk about', or 'my recent conversations'. search_conversations is semantic and does NOT order by time, so it's wrong for 'recent'. Fast synchronous read. Speak the result.",
+    },
+  },
+  search_conversations: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Search Conversations",
+      "Semantic search across the user's past conversations.",
+      ["Use for specific topics, decisions, or events discussed in conversations."],
+    ),
+    voice: {
+      realtimeDescription:
+        "Search the user's past conversations for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'). Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+    },
+  },
+  get_memories: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Get Memories",
+      "Retrieve stored facts, preferences, habits, people, and background about the user.",
+      ["Use for broad 'what do you know about me' questions or personal facts."],
+    ),
+    voice: {
+      realtimeDescription:
+        "Read what Omi knows about the user — their memories and facts (preferences, background, people, habits). Fast synchronous read with NO query. Use this for 'who am I', 'what do you know about me', 'what are my preferences'. Speak what it returns.",
+    },
+  },
+  search_memories: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Search Memories",
+      "Semantic search across user memories.",
+      ["Use for a specific personal fact that is not already in the visible user context."],
+    ),
+    voice: {
+      realtimeDescription:
+        "Search the user's memories / facts for a SPECIFIC thing ('what's my dog's name', 'where do I work', 'what's my partner's name'). Fast synchronous read. Speak the result.",
+    },
+  },
+  get_action_items: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Get Action Items",
+      "Retrieve the user's tasks with optional completion and due-date filters.",
+      [
+        "Use for completed tasks, date ranges, or the full task list.",
+        "For voice, prefer get_tasks for plain overdue/due-today questions.",
+      ],
+    ),
+    voice: {
+      realtimeDescription:
+        "Read the user's tasks / to-dos from the backend, with optional filters. Use for COMPLETED tasks ('what did I finish'), a DATE RANGE ('what's due next week'), or the FULL list ('all my tasks') — for plain 'what's due today / overdue', prefer get_tasks. Fast synchronous read. Speak a short summary of what it returns.",
+    },
+  },
+  create_action_item: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Create Action Item",
+      "Create a new task, to-do, or reminder.",
+      [
+        "Use when the user explicitly asks to add something to their list.",
+        "Pass a concise description and due_at only when the user gave a time.",
+      ],
+    ),
+    voice: {
+      realtimeDescription:
+        "Create a new task / to-do / reminder for the user ('remind me to…', 'add … to my list', 'I need to…'). Fast synchronous write. Confirm out loud after it returns.",
+    },
+  },
+  update_action_item: {
+    surfaces: ["desktop_chat", "realtime_voice"],
+    capabilityDoc: doc(
+      "Update Action Item",
+      "Update an existing task's status, description, or due date.",
+      ["Find the task first, then update the matching id. Do not guess task ids."],
+    ),
+    voice: {
+      realtimeDescription:
+        "Update an existing task: mark it done, edit its text, or reschedule it. You MUST first call get_tasks to get the matching task's id, then pass that id here. Fast synchronous write.",
+      schemaOverride: schema(
+        {
+          id: { type: "string", description: "The task id from get_tasks." },
+          completed: { type: "boolean", description: "Set true to mark the task done." },
+          description: { type: "string", description: "New task text, if changing it." },
+          due_at: { type: "string", description: "New ISO-8601 due date/time, if rescheduling." },
+        },
+        ["id"],
+      ),
+    },
+  },
+  create_calendar_event: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc(
+      "Create Calendar Event",
+      "Create a new Google Calendar event.",
+      [
+        "Use when the user asks to add, create, schedule, or put a specific event on their calendar.",
+        "Pass title, start_time, and end_time as ISO-8601 strings with timezone; include location, description, and attendees when provided.",
+        "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people.",
+      ],
+    ),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
+      schemaOverride: schema(
+        {
+          title: { type: "string", description: "Event title." },
+          start_time: {
+            type: "string",
+            description: "Event start time in ISO-8601 with timezone, e.g. 2026-06-28T14:00:00-04:00.",
+          },
+          end_time: {
+            type: "string",
+            description: "Event end time in ISO-8601 with timezone, e.g. 2026-06-28T15:00:00-04:00.",
+          },
+          description: { type: "string", description: "Optional event description." },
+          location: { type: "string", description: "Optional event location." },
+          attendees: {
+            type: "string",
+            description: "Optional comma-separated attendee names or email addresses.",
+          },
+        },
+        ["title", "start_time", "end_time"],
+      ),
+    },
+  },
+  capture_screen: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Capture Screen",
+      "Capture a screenshot of the user's current screen.",
+      [
+        "Call capture_screen when the user asks about what's on their screen.",
+        "After capture_screen returns a file path, use Read to view the image.",
+      ],
+    ),
+  },
+  check_permission_status: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc("Check Permission Status", "Check whether a required macOS permission has been granted.", [
+      "Onboarding-only.",
+    ]),
+  },
+  request_permission: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc("Request Permission", "Open or guide the user through granting a required macOS permission.", [
+      "Onboarding-only.",
+    ]),
+  },
+  scan_files: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc("Scan Files", "Scan selected files/folders during onboarding to build local context.", [
+      "Onboarding-only.",
+    ]),
+  },
+  set_user_preferences: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc("Set User Preferences", "Persist onboarding preferences such as name and language.", [
+      "Onboarding-only.",
+    ]),
+  },
+  ask_followup: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc("Ask Followup", "Ask the user a follow-up onboarding question with optional quick replies.", [
+      "Onboarding-only.",
+    ]),
+  },
+  complete_onboarding: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc("Complete Onboarding", "Complete onboarding after required goals and context are collected.", [
+      "Onboarding-only.",
+    ]),
+  },
+  get_email_insights: {
+    surfaces: ["onboarding"],
+    capabilityDoc: doc(
+      "Get Email Insights",
+      "Read precomputed email/calendar onboarding insights.",
+      ["Onboarding-only; requires background insights to be loaded."],
+    ),
+  },
+  get_local_status: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Get Local Status",
+      "Report whether local Omi Desktop context is available.",
+      ["Local API only."],
+    ),
+  },
+  get_screenshot: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Get Screenshot", "Fetch a local Rewind screenshot image by screenshot_id.", ["Local API only."]),
+  },
+  get_work_context: {
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc(
+      "Get Work Context",
+      "Get the user's current screen plus a compressed timeline of recent on-screen activity.",
+      ["Local API only."],
+    ),
+  },
+  ask_higher_model: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc(
+      "Ask Higher Model",
+      "Get a second opinion from the larger model when the user pushes back or current facts are needed.",
+      ["Use sparingly; answer simple or creative requests yourself."],
+    ),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "Get a second opinion from a smarter model and receive text to speak. Use it when the user is dissatisfied with your previous answer (pushes back, rephrases, says you're wrong, or asks for a better/deeper answer), or when you genuinely need precise up-to-date facts you don't know. Answer general, creative, and long-form requests yourself.",
+      schemaOverride: schema(
+        {
+          query: { type: "string", description: "The full question to escalate." },
+          context: {
+            type: "string",
+            description:
+              "Relevant context you already have that helps answer well — facts you fetched, what the user is referring to, or the previous answer they pushed back on. Include only what's relevant; omit if there's nothing useful.",
+          },
+        },
+        ["query"],
+      ),
+    },
+  },
+  screenshot: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Screenshot", "Capture the user's current screen.", [
+      "Use when the user asks about what is on screen.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription: "Capture the user's current screen so you can see what they're looking at.",
+    },
+  },
+  point_click: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Point Click", "Click at on-screen pixel coordinates.", [
+      "Use only when the user clearly asks you to click something.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription: "Click the mouse at on-screen pixel coordinates.",
+      schemaOverride: schema(
+        {
+          x: { type: "number", description: "X pixel coordinate." },
+          y: { type: "number", description: "Y pixel coordinate." },
+        },
+        ["x", "y"],
+      ),
+    },
+  },
+};
+
+const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
   {
     name: "execute_sql",
     label: "Execute SQL",
@@ -197,25 +661,6 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     },
   },
   {
-    name: "get_task_agent_status",
-    label: "Task Agent Status",
-    description:
-      "Inspect Omi's local task-chat agents/subagents and floating agent pills. Use when the user asks about your subagents, task agents, running agents, finished agents, errors, or timeouts.",
-    promptSnippet: "get_task_agent_status - Inspect Omi task-chat agents and floating agent pills",
-    promptGuidelines: [
-      "If the user says 'your subagents', interpret that as Omi task-chat agents, not Cursor or external IDE agents.",
-      "Call this before claiming there are no subagents or before diagnosing a task-agent timeout.",
-    ],
-    latency: "fast local",
-    inputSchema: schema({}),
-    annotations: readOnlyLocal,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires the desktop app task-agent stores."],
-    adapters: piAndStdio(),
-  },
-  {
     name: "fill_cloud_connector_form",
     label: "Fill Cloud Connector Form",
     description:
@@ -267,62 +712,6 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
       ...piAndStdio(),
       "local-agent-api": { advertised: true },
     },
-  },
-  {
-    name: "spawn_agent",
-    label: "Spawn Agent",
-    description:
-      "Start canonical Omi background work and show it in the floating-bar pill UI. Use when the user explicitly asks for a visible floating/background agent, or for multi-step work in other apps/browser/files.",
-    promptSnippet: "spawn_agent - Start a canonical background agent with pill UI",
-    promptGuidelines: [
-      "Calling spawn_agent is the only way to start the circular floating-bar subagent; saying you will start one does not start it.",
-      "Use delegate_agent instead when the new work must be linked to a known parent run.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes' instead of treating that name as a session to inspect.",
-      "Return immediately after spawning; the pill keeps working in the background.",
-    ],
-    latency: "async background",
-    inputSchema: schema(
-      {
-        brief: { type: "string", description: "Clear, self-contained task brief for the background agent." },
-        title: { type: "string", description: "Short Title Case label for the agent pill." },
-        provider: {
-          type: "string",
-          enum: ["openclaw", "hermes"],
-          description: "Optional local agent provider to run this pill through.",
-        },
-      },
-      ["brief"],
-    ),
-    annotations: localWrite,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires Swift AgentBridge/floating pill support."],
-    adapters: piAndStdio(),
-  },
-  {
-    name: "manage_agent_pills",
-    label: "Manage Agent Pills",
-    description: "List, dismiss, or clear completed floating agent pills shown below the floating bar.",
-    promptSnippet: "manage_agent_pills - List, dismiss, or clear completed floating agent pills",
-    promptGuidelines: [
-      "Call get_task_agent_status first when dismissing a specific pill so you have its id.",
-      "Use clear_completed only when the user asks to clear finished/done agents.",
-    ],
-    latency: "fast local",
-    inputSchema: schema(
-      {
-        action: { type: "string", enum: ["list", "dismiss", "clear_completed"], description: "Management action." },
-        agent_id: { type: "string", description: "Floating agent pill id from get_task_agent_status; required for dismiss." },
-      },
-      ["action"],
-    ),
-    annotations: localWrite,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires Swift floating agent pill registry."],
-    adapters: piAndStdio(),
   },
   {
     name: "search_tasks",
@@ -734,6 +1123,98 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     adapters: stdioOnly("onboardingOnly"),
   },
   {
+    name: "get_tasks",
+    label: "Get Tasks",
+    description: "Read the user's overdue and due-today tasks locally for voice responses.",
+    promptSnippet: "get_tasks - Read overdue and due-today tasks locally",
+    latency: "fast local",
+    inputSchema: schema({}),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; requires local TasksStore."],
+    adapters: {},
+  },
+  {
+    name: "create_calendar_event",
+    label: "Create Calendar Event",
+    description: "Create a Google Calendar event through the backend calendar tool.",
+    promptSnippet: "create_calendar_event - Create a Google Calendar event",
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        title: { type: "string", description: "Event title." },
+        start_time: { type: "string", description: "Event start time in ISO-8601 with timezone." },
+        end_time: { type: "string", description: "Event end time in ISO-8601 with timezone." },
+        description: { type: "string", description: "Optional event description." },
+        location: { type: "string", description: "Optional event location." },
+        attendees: { type: "string", description: "Optional comma-separated attendee names or email addresses." },
+      },
+      ["title", "start_time", "end_time"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Requires authenticated backend calendar access."],
+    adapters: {},
+  },
+  {
+    name: "ask_higher_model",
+    label: "Ask Higher Model",
+    description: "Escalate a hard question to the larger model and speak its answer.",
+    promptSnippet: "ask_higher_model - Escalate to a higher model for a second opinion",
+    latency: "fast network",
+    inputSchema: schema(
+      {
+        query: { type: "string", description: "The full question to escalate." },
+        context: { type: "string", description: "Optional relevant context for the escalation." },
+      },
+      ["query"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only."],
+    adapters: {},
+  },
+  {
+    name: "screenshot",
+    label: "Screenshot",
+    description: "Capture the user's current screen for realtime vision.",
+    promptSnippet: "screenshot - Capture the user's current screen",
+    latency: "fast local",
+    inputSchema: schema({}),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; requires Screen Recording permission."],
+    adapters: {},
+  },
+  {
+    name: "point_click",
+    label: "Point Click",
+    description: "Click at on-screen pixel coordinates.",
+    promptSnippet: "point_click - Click at on-screen coordinates",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        x: { type: "number", description: "X pixel coordinate." },
+        y: { type: "number", description: "Y pixel coordinate." },
+      },
+      ["x", "y"],
+    ),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; requires Accessibility permission."],
+    adapters: {},
+  },
+  {
     name: "get_local_status",
     label: "Get Local Status",
     description:
@@ -777,10 +1258,115 @@ export const swiftToolManifest: OmiToolManifestEntry[] = [
     runtimePreconditions: ["Local API only."],
     adapters: localApiOnly(),
   },
-] satisfies OmiToolManifestEntry[];
+];
+
+export const swiftToolManifest: OmiToolManifestEntry[] = finalizeManifestEntries(
+  swiftToolManifestDrafts,
+  swiftToolSurfacePatches,
+);
+
+const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiToolVoiceConfig>> = {
+  spawn_agent: {
+    realtimeDescription:
+      "Start canonical Omi background work. Visible runs appear as floating-bar pills. Use for multi-step work in the user's apps/browser/files that you cannot do directly.",
+    schemaOverride: schema(
+      {
+        objective: { type: "string", description: "Self-contained background-agent objective." },
+        provider: { type: "string", enum: ["openclaw", "hermes"], description: "Optional local provider override." },
+        parent_run_id: { type: "string", description: "Optional parent run to link via delegation." },
+        visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
+        title: { type: "string", description: "Optional visible session title." },
+      },
+      ["objective"],
+    ),
+  },
+  list_agent_sessions: {
+    realtimeDescription:
+      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+    schemaOverride: schema(
+      {
+        status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
+        surfaceKind: {
+          type: "string",
+          enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],
+          description: "Optional canonical surface filter.",
+        },
+        limit: { type: "number", description: "Maximum sessions to return. Default 50." },
+      },
+      [],
+    ),
+  },
+  get_agent_run: {
+    realtimeDescription: "Inspect one canonical Omi-managed agent run. Prefer an agentRef from list_agent_sessions.",
+    schemaOverride: schema(
+      {
+        agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },
+        runId: { type: "string", description: "Canonical Omi run id." },
+        includeEvents: { type: "boolean", description: "Include ordered kernel events. Default true." },
+        eventLimit: { type: "number", description: "Maximum events to return. Default 100." },
+      },
+      [],
+    ),
+  },
+  cancel_agent_run: {
+    realtimeDescription:
+      "Request cancellation for one canonical Omi-managed agent run. Use when the user asks to stop or kill a running canonical agent/subagent.",
+    schemaOverride: schema(
+      {
+        agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },
+        runId: { type: "string", description: "Canonical Omi run id to cancel." },
+      },
+      [],
+    ),
+  },
+  inspect_agent_artifacts: {
+    realtimeDescription:
+      "Inspect metadata and references for canonical Omi-managed agent artifacts. Does not read arbitrary artifact contents.",
+    schemaOverride: schema(
+      {
+        agentRef: { type: "string", description: "Opaque agent handle from list_agent_sessions." },
+        artifactRef: { type: "string", description: "Opaque artifact handle from inspect_agent_artifacts." },
+        artifactId: { type: "string", description: "Canonical Omi artifact id." },
+        sessionId: { type: "string", description: "Canonical Omi session id." },
+        runId: { type: "string", description: "Canonical Omi run id." },
+        attemptId: { type: "string", description: "Canonical Omi attempt id." },
+        role: {
+          type: "string",
+          enum: ["input", "result", "checkpoint", "tool_output", "log", "other"],
+          description: "Optional artifact role filter.",
+        },
+        limit: { type: "number", description: "Maximum artifacts to return. Default 50." },
+      },
+      [],
+    ),
+  },
+  update_agent_artifact_lifecycle: {
+    realtimeDescription:
+      "Update metadata-only lifecycle state for one canonical Omi-managed agent artifact. Does not open, delete, retain, or read files.",
+    schemaOverride: schema(
+      {
+        artifactRef: { type: "string", description: "Opaque artifact handle from inspect_agent_artifacts." },
+        artifactId: { type: "string", description: "Canonical Omi artifact id." },
+        state: {
+          type: "string",
+          enum: ["retained", "dismissed", "opened"],
+          description: "Target metadata lifecycle state.",
+        },
+        sessionId: { type: "string", description: "Optional canonical Omi session id scope guard." },
+        runId: { type: "string", description: "Optional canonical Omi run id scope guard." },
+        attemptId: { type: "string", description: "Optional canonical Omi attempt id scope guard." },
+        reason: { type: "string", description: "Optional short reason." },
+      },
+      ["state"],
+    ),
+  },
+};
 
 function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
-  const adapters = tool.name === "resolve_desktop_dispatch" ? trustedDirectControlOnly() : piAndStdio();
+  const adapters =
+    tool.name === "resolve_desktop_dispatch" || tool.name === "spawn_background_agent"
+      ? trustedDirectControlOnly()
+      : piAndStdio();
   return {
     name: tool.name,
     label: tool.label,
@@ -800,7 +1386,10 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     annotations: readOnlyLocal,
     timeoutClass: tool.timeoutClass,
     executor: { kind: "runtimeControl" },
-    intendedForAgents: true,
+    surfaces: tool.name === "spawn_background_agent" ? [] : mapControlSurfaces(tool.surfaces),
+    capabilityDoc: tool.capabilityDoc,
+    voice: controlVoicePatches[tool.name],
+    intendedForAgents: tool.name !== "spawn_background_agent",
     runtimePreconditions: tool.runtimePreconditions,
     adapters,
   };

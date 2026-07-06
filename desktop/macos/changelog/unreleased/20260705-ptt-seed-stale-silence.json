@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk going silent after a typed message when the voice session reconnects for updated context"
+}

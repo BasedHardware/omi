@@ -501,7 +501,6 @@ validate_runtime_tree() {
   require_executable "$NODE_RESOURCE"
   require_file "$AGENT_DIR/dist/index.js"
   require_file "$AGENT_DIR/dist/patched-acp-entry.mjs"
-  require_file "$AGENT_DIR/src/runtime/control-tool-manifest.js"
   require_file "$AGENT_DIR/src/runtime/control-tool-manifest.ts"
   require_file "$AGENT_DIR/src/runtime/node-tools.ts"
   require_file "$AGENT_DIR/src/runtime/omi-tool-manifest.ts"
