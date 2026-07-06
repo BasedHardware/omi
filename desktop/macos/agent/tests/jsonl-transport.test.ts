@@ -5,10 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OutboundMessage, QueryMessage } from "../src/protocol.js";
 import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import {
-  JsonlCompatibilityFacade,
+  JsonlTransport,
   selectAdapterScopedToolCallCorrelation,
   selectUnscopedToolCallCorrelation,
-} from "../src/runtime/compatibility-facade.js";
+} from "../src/runtime/jsonl-transport.js";
 import { AdapterRuntimeError } from "../src/runtime/failures.js";
 import { AgentRuntimeKernel } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
@@ -22,10 +22,10 @@ afterEach(() => {
   }
 });
 
-describe("JsonlCompatibilityFacade", () => {
-  it("rejects protocol v2 queries that only provide legacy id", async () => {
+describe("JsonlTransport", () => {
+  it("rejects queries without requestId", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "fake",
@@ -34,16 +34,15 @@ describe("JsonlCompatibilityFacade", () => {
 
     await expect(
       facade.handleQuery({
-        ...v1Query({ id: "legacy-id-only", prompt: "missing v2 request id" }),
-        protocolVersion: 2,
-        requestId: undefined,
+        ...v2Query({ prompt: "missing request id" }),
+        requestId: "",
         clientId: "client-v2",
       }),
-    ).rejects.toThrow("protocol v2 query requires requestId");
+    ).rejects.toThrow("query requires requestId");
     store.close();
   });
 
-  it("emits structured runtime failures with the legacy error message", async () => {
+  it("emits structured runtime failures from adapter errors", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];
     adapter.failNextExecutionError = new AdapterRuntimeError({
@@ -55,7 +54,7 @@ describe("JsonlCompatibilityFacade", () => {
       userMessage: "OpenClaw failed: OpenAI API error: upstream unavailable",
       technicalMessage: "OpenAI API error: upstream unavailable",
     });
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -63,7 +62,7 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     await facade.handleQuery({
-      ...v1Query({ id: "request-failed", prompt: "fail" }),
+      ...v2Query({ requestId: "request-failed", prompt: "fail" }),
       protocolVersion: 2,
       requestId: "request-failed",
       clientId: "client-failed",
@@ -94,7 +93,7 @@ describe("JsonlCompatibilityFacade", () => {
         "OpenClaw needs a config migration. Run `openclaw doctor --fix`, then retry. Inspect with `openclaw config validate`.",
       technicalMessage: "OpenClaw config is invalid",
     });
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -102,7 +101,7 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     await facade.handleQuery({
-      ...v1Query({ id: "request-binding-failed", prompt: "fail before execution" }),
+      ...v2Query({ requestId: "request-binding-failed", prompt: "fail before execution" }),
       protocolVersion: 2,
       requestId: "request-binding-failed",
       clientId: "client-binding-failed",
@@ -180,7 +179,7 @@ describe("JsonlCompatibilityFacade", () => {
   it("tracks externally-created control runs for Swift-backed tool routing", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -237,7 +236,7 @@ describe("JsonlCompatibilityFacade", () => {
   it("requires client id when resolving request-scoped v2 tool-call correlation", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "fake",
@@ -283,7 +282,7 @@ describe("JsonlCompatibilityFacade", () => {
       clientId: "client-b",
       runId: adapter.executed[1].runId,
     });
-    expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-control-run")).toEqual({});
+    expect(facade.unscopedToolCallCorrelation("shared-control-run")).toEqual({});
 
     adapter.resolveDeferred({
       text: "done",      adapterSessionId: adapter.executed[0].binding.adapterNativeSessionId,
@@ -303,7 +302,7 @@ describe("JsonlCompatibilityFacade", () => {
     registry.register("hermes", () => hermes, 1);
     registry.register("openclaw", () => openclaw, 1);
     const kernel = new AgentRuntimeKernel({ store, registry });
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "hermes",
@@ -363,7 +362,7 @@ describe("JsonlCompatibilityFacade", () => {
       clientId: "client-openclaw",
       runId: openclaw.executed[0].runId,
     });
-    expect(facade.legacyUnscopedToolCallCorrelationForRequest("shared-request")).toEqual({});
+    expect(facade.unscopedToolCallCorrelation()).toEqual({});
 
     hermes.resolveDeferred({
       adapterSessionId: hermes.executed[0].binding.adapterNativeSessionId,
@@ -377,42 +376,6 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
-  it("does not infer unscoped v2 tool-call correlation when v1 concurrency makes routing ambiguous", () => {
-    expect(
-      selectUnscopedToolCallCorrelation([
-        {
-          protocolVersion: 1,
-          requestId: "legacy-running",
-          clientId: "legacy-client",
-          isRunning: true,
-        },
-        {
-          protocolVersion: 2,
-          requestId: "request-v2",
-          clientId: "client-v2",
-          runId: "run-v2",
-          attemptId: "attempt-v2",
-        },
-      ]),
-    ).toEqual({});
-
-    expect(
-      selectUnscopedToolCallCorrelation([
-        {
-          protocolVersion: 1,
-          requestId: "legacy-queued",
-          clientId: "legacy-client",
-        },
-        {
-          protocolVersion: 2,
-          requestId: "request-v2",
-          clientId: "client-v2",
-          runId: "run-v2",
-          attemptId: "attempt-v2",
-        },
-      ]),
-    ).toEqual({});
-  });
 
   it("selects the sole running adapter context for adapter-scoped tool-call correlation", () => {
     expect(
@@ -448,7 +411,7 @@ describe("JsonlCompatibilityFacade", () => {
   it("passes request correlation into MCP server builders", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const buildMcpServers = vi.fn(() => []);
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "fake",
@@ -457,17 +420,16 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     await facade.handleQuery({
-      ...v1Query({ prompt: "mcp context" }),
+      ...v2Query({ prompt: "mcp context" }),
       protocolVersion: 2,
       ownerId: "owner-firebase-uid",
       requestId: "request-mcp",
       clientId: "client-mcp",
       sessionId: "session-mcp",
-      legacySessionKey: "mcp-key",
       cwd: "/tmp/mcp",
     });
 
-    expect(buildMcpServers).toHaveBeenCalledWith("act", "/tmp/mcp", "mcp-key", {
+    expect(buildMcpServers).toHaveBeenCalledWith("act", "/tmp/mcp", "task_chat|task|task-1", {
       ownerId: "owner-firebase-uid",
       requestId: "request-mcp",
       clientId: "client-mcp",
@@ -478,56 +440,12 @@ describe("JsonlCompatibilityFacade", () => {
     store.close();
   });
 
-  it("maps v1 sessionKey to a legacy alias and returns adapter-native sessionId compatibility", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
-      kernel,
-      send: (message) => sent.push(message),
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
 
-    await facade.handleQuery(v1Query({ id: "request-1", sessionKey: "task-1" }));
-    await facade.handleQuery(v1Query({ id: "request-2", sessionKey: "task-1" }));
-
-    const sessions = store.allRows("SELECT session_id, legacy_session_key FROM sessions");
-    expect(sessions).toHaveLength(1);
-    expect(sessions[0].legacy_session_key).toBe("task-1");
-    expect(sessions[0].session_id).not.toBe("native-1");
-    expect(adapter.opened).toHaveLength(1);
-    expect(adapter.resumed).toHaveLength(1);
-    expect(adapter.resumed[0].adapterNativeSessionId).toBe("native-1");
-
-    const results = sent.filter((message): message is Extract<OutboundMessage, { type: "result" }> => message.type === "result");
-    expect(results).toHaveLength(2);
-    expect(results[0].sessionId).toBe("native-1");
-    expect(results[0].protocolVersion).toBeUndefined();
-    store.close();
-  });
-
-  it("maps v1 resume only as a legacy adapter-native session id", async () => {
-    const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const facade = new JsonlCompatibilityFacade({
-      kernel,
-      send: () => {},
-      defaultAdapterId: "fake",
-      defaultCwd: () => "/tmp/default",
-    });
-
-    await facade.handleQuery(v1Query({ id: "request-1", sessionKey: "task-1", resume: "legacy-native" }));
-
-    const session = store.getRow("SELECT session_id FROM sessions");
-    expect(session.session_id).not.toBe("legacy-native");
-    expect(adapter.resumed).toHaveLength(1);
-    expect(adapter.resumed[0].adapterNativeSessionId).toBe("legacy-native");
-    store.close();
-  });
 
   it("adds v2 request, session, run, attempt, event, and adapter correlation to stream and result messages", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -535,12 +453,10 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     await facade.handleQuery({
-      ...v1Query({ prompt: "hello v2" }),
+      ...v2Query({ prompt: "hello v2" }),
       protocolVersion: 2,
       requestId: "request-v2",
       clientId: "client-v2",
-      legacyClientScope: "task-chat",
-      legacySessionKey: "task-2",
     });
 
     const textDelta = sent.find((message): message is Extract<OutboundMessage, { type: "text_delta" }> => message.type === "text_delta");
@@ -572,7 +488,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -580,11 +496,10 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "cancel me" }),
+      ...v2Query({ prompt: "cancel me" }),
       protocolVersion: 2,
       requestId: "request-cancel",
       clientId: "client-cancel",
-      legacySessionKey: "cancel-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -621,7 +536,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -629,12 +544,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "cancel by run id" }),
+      ...v2Query({ prompt: "cancel by run id" }),
       protocolVersion: 2,
       requestId: "request-run-only-cancel",
       clientId: "client-run-only-cancel",
       ownerId: "owner-run-only-cancel",
-      legacySessionKey: "run-only-cancel-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -671,7 +585,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -679,12 +593,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "reject bare run id cancel" }),
+      ...v2Query({ prompt: "reject bare run id cancel" }),
       protocolVersion: 2,
       requestId: "request-bare-run-cancel",
       clientId: "client-bare-run-cancel",
       ownerId: "owner-bare-run-cancel",
-      legacySessionKey: "bare-run-cancel-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -723,7 +636,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -731,12 +644,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "do not cancel cross-owner" }),
+      ...v2Query({ prompt: "do not cancel cross-owner" }),
       protocolVersion: 2,
       requestId: "request-owner-guard",
       clientId: "client-owner-guard",
       ownerId: "owner-a",
-      legacySessionKey: "owner-guard-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -771,7 +683,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -779,12 +691,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "cancel firebase owner" }),
+      ...v2Query({ prompt: "cancel firebase owner" }),
       protocolVersion: 2,
       requestId: "request-firebase-owner",
       clientId: "client-firebase-owner",
       ownerId: "firebase-owner",
-      legacySessionKey: "firebase-owner-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -817,7 +728,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -825,12 +736,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "cancel without client id" }),
+      ...v2Query({ prompt: "cancel without client id" }),
       protocolVersion: 2,
       requestId: "request-without-client",
       clientId: "non-default-client",
       ownerId: "owner-without-client",
-      legacySessionKey: "without-client-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -863,7 +773,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -871,12 +781,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "do not cancel cross-client" }),
+      ...v2Query({ prompt: "do not cancel cross-client" }),
       protocolVersion: 2,
       requestId: "shared-request-id",
       clientId: "client-a",
       ownerId: "owner-a",
-      legacySessionKey: "cross-client-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -907,7 +816,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -915,12 +824,11 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "do not cancel with empty explicit client" }),
+      ...v2Query({ prompt: "do not cancel with empty explicit client" }),
       protocolVersion: 2,
       requestId: "empty-client-request",
       clientId: "client-a",
       ownerId: "owner-a",
-      legacySessionKey: "empty-client-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
@@ -951,7 +859,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -959,20 +867,18 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const first = facade.handleQuery({
-      ...v1Query({ prompt: "shared request client a" }),
+      ...v2Query({ prompt: "shared request client a", externalRefId: "task-client-a" }),
       protocolVersion: 2,
       requestId: "shared-request-id",
       clientId: "client-a",
       ownerId: "owner-shared",
-      legacySessionKey: "shared-a",
     });
     const second = facade.handleQuery({
-      ...v1Query({ prompt: "shared request client b" }),
+      ...v2Query({ prompt: "shared request client b", externalRefId: "task-client-b" }),
       protocolVersion: 2,
       requestId: "shared-request-id",
       clientId: "client-b",
       ownerId: "owner-shared",
-      legacySessionKey: "shared-b",
     });
     await waitUntil(() => adapter.executed.length === 2);
 
@@ -1006,7 +912,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -1014,27 +920,24 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const ownerA = facade.handleQuery({
-      ...v1Query({ prompt: "owner a" }),
+      ...v2Query({ prompt: "owner a" }),
       protocolVersion: 2,
       requestId: "request-owner-a",
       clientId: "shared-client",
       ownerId: "owner-a",
-      legacySessionKey: "owner-a-key",
     });
     const ownerB = facade.handleQuery({
-      ...v1Query({ prompt: "owner b" }),
+      ...v2Query({ prompt: "owner b" }),
       protocolVersion: 2,
       requestId: "request-owner-b",
       clientId: "shared-client",
       ownerId: "owner-b",
-      legacySessionKey: "owner-b-key",
     });
     await waitUntil(() => adapter.executed.length === 2);
 
     await facade.handleInterrupt({
       type: "interrupt",
-      protocolVersion: 2,
-      id: "legacy-interrupt-id",
+      protocolVersion: 2, requestId: "interrupt-owner-a",
       clientId: "shared-client",
       ownerId: "owner-a",
     });
@@ -1062,7 +965,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 2);
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -1070,20 +973,18 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const first = facade.handleQuery({
-      ...v1Query({ prompt: "first" }),
+      ...v2Query({ prompt: "first" }),
       protocolVersion: 2,
       requestId: "request-first",
       clientId: "b:c",
       ownerId: "a",
-      legacySessionKey: "first-key",
     });
     const second = facade.handleQuery({
-      ...v1Query({ prompt: "second" }),
+      ...v2Query({ prompt: "second" }),
       protocolVersion: 2,
       requestId: "request-second",
       clientId: "c",
       ownerId: "a:b",
-      legacySessionKey: "second-key",
     });
     await waitUntil(() => adapter.executed.length === 2);
 
@@ -1116,7 +1017,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "fake", 1);
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -1124,20 +1025,18 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const first = facade.handleQuery({
-      ...v1Query({ prompt: "first" }),
+      ...v2Query({ prompt: "first" }),
       protocolVersion: 2,
       requestId: "request-one",
       clientId: "client-one",
-      legacySessionKey: "shared-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
 
     const second = facade.handleQuery({
-      ...v1Query({ prompt: "second" }),
+      ...v2Query({ prompt: "second" }),
       protocolVersion: 2,
       requestId: "request-two",
       clientId: "client-two",
-      legacySessionKey: "shared-key",
     });
 
     await new Promise((resolve) => setTimeout(resolve, 10));
@@ -1180,7 +1079,7 @@ describe("JsonlCompatibilityFacade", () => {
     registry.register("pi-mono", () => piMonoAdapter, 1);
     const kernel = new AgentRuntimeKernel({ store, registry });
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "acp",
@@ -1189,20 +1088,18 @@ describe("JsonlCompatibilityFacade", () => {
 
     await Promise.all([
       facade.handleQuery({
-        ...v1Query({ prompt: "use acp" }),
+        ...v2Query({ prompt: "use acp" }),
         protocolVersion: 2,
         requestId: "request-acp",
         clientId: "client-acp",
         adapterId: "acp",
-        legacySessionKey: "mixed-acp",
       }),
       facade.handleQuery({
-        ...v1Query({ prompt: "use pi" }),
+        ...v2Query({ prompt: "use pi" }),
         protocolVersion: 2,
         requestId: "request-pi",
         clientId: "client-pi",
         adapterId: "pi-mono",
-        legacySessionKey: "mixed-pi",
       }),
     ]);
 
@@ -1221,7 +1118,7 @@ describe("JsonlCompatibilityFacade", () => {
 
   it("records warmup as a hint and invalidate_session invalidates bindings without deleting the canonical session", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "fake",
@@ -1231,11 +1128,11 @@ describe("JsonlCompatibilityFacade", () => {
     facade.handleWarmup({
       type: "warmup",
       cwd: "/tmp/warm",
-      sessions: [{ key: "main", model: "fake-model", systemPrompt: "warm system" }],
+      sessions: [{ key: "task_chat|task|task-1", model: "fake-model", systemPrompt: "warm system" }],
     });
     expect(store.allRows("SELECT * FROM sessions")).toHaveLength(0);
 
-    await facade.handleQuery(v1Query({ id: "request-1", sessionKey: "main", cwd: undefined, systemPrompt: "" }));
+    await facade.handleQuery(v2Query({ requestId: "request-1", cwd: undefined, systemPrompt: "" }));
     expect(adapter.opened[0]).toMatchObject({
       cwd: "/tmp/warm",
       model: "fake-model",
@@ -1244,7 +1141,15 @@ describe("JsonlCompatibilityFacade", () => {
     const sessionId = String(store.getRow("SELECT session_id FROM sessions").session_id);
     expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("active");
 
-    facade.handleInvalidateSession({ type: "invalidate_session", sessionKey: "main" });
+    facade.handleInvalidateSession({
+      type: "invalidate_session",
+      protocolVersion: 2,
+      requestId: "invalidate-1",
+      clientId: "client-invalidate",
+      surfaceKind: "task_chat",
+      externalRefKind: "task",
+      externalRefId: "task-1",
+    });
 
     expect(store.getRow("SELECT session_id FROM sessions").session_id).toBe(sessionId);
     expect(store.getRow("SELECT status FROM adapter_bindings").status).toBe("invalid");
@@ -1253,14 +1158,14 @@ describe("JsonlCompatibilityFacade", () => {
 
   it("uses pi-mono default model when configured as the default adapter", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "pi-mono",
       defaultCwd: () => "/tmp/default",
     });
 
-    await facade.handleQuery(v1Query({ id: "request-1", sessionKey: undefined, model: undefined }));
+    await facade.handleQuery(v2Query({ requestId: "request-1", model: undefined }));
 
     expect(adapter.opened[0].model).toBe("omi-sonnet");
     expect(store.getRow("SELECT default_adapter_id FROM sessions").default_adapter_id).toBe("pi-mono");
@@ -1275,17 +1180,15 @@ describe("JsonlCompatibilityFacade", () => {
     registry.register("pi-mono", () => piMonoAdapter, 1);
     registry.register("openclaw", () => openclawAdapter, 1);
     const kernel = new AgentRuntimeKernel({ store, registry });
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "pi-mono",
       defaultCwd: () => "/tmp/default",
     });
 
-    await facade.handleQuery(v1Query({
-      id: "request-openclaw",
+    await facade.handleQuery(v2Query({ requestId: "request-openclaw",
       adapterId: "openclaw",
-      sessionKey: undefined,
       model: undefined,
     }));
 
@@ -1300,7 +1203,7 @@ describe("JsonlCompatibilityFacade", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
     adapter.deferResult();
     const sent: OutboundMessage[] = [];
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "pi-mono",
@@ -1309,11 +1212,10 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "use tools" }),
+      ...v2Query({ prompt: "use tools" }),
       protocolVersion: 2,
       requestId: "request-pi",
       clientId: "client-pi",
-      legacySessionKey: "pi-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
     const attemptId = adapter.executed[0].attemptId;
@@ -1351,7 +1253,7 @@ describe("JsonlCompatibilityFacade", () => {
   it("clears running marker after a terminal run event for unscoped correlation", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     adapter.deferResult();
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "fake",
@@ -1359,11 +1261,10 @@ describe("JsonlCompatibilityFacade", () => {
     });
 
     const running = facade.handleQuery({
-      ...v1Query({ prompt: "terminal marker" }),
+      ...v2Query({ prompt: "terminal marker" }),
       protocolVersion: 2,
       requestId: "request-terminal-marker",
       clientId: "client-terminal-marker",
-      legacySessionKey: "terminal-marker-key",
     });
     await waitUntil(() => adapter.executed.length === 1);
     expect(facade.unscopedToolCallCorrelation()).toMatchObject({
@@ -1398,7 +1299,7 @@ describe("JsonlCompatibilityFacade", () => {
     let authFlowCalls = 0;
     const authError = Object.assign(new Error("auth required"), { code: -32000 });
     adapter.failNextOpenError = authError;
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -1410,7 +1311,7 @@ describe("JsonlCompatibilityFacade", () => {
       maxRecoverableRetries: 2,
     });
 
-    await facade.handleQuery(v1Query({ id: "request-auth", sessionKey: "auth-key" }));
+    await facade.handleQuery(v2Query({ requestId: "request-auth"}));
 
     expect(authFlowCalls).toBe(1);
     expect(sent.some((message) => message.type === "error")).toBe(false);
@@ -1430,7 +1331,7 @@ describe("JsonlCompatibilityFacade", () => {
     let authFlowCalls = 0;
     const authError = Object.assign(new Error("auth required during prompt"), { code: -32000 });
     adapter.failNextExecutionError = authError;
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: () => {},
       defaultAdapterId: "fake",
@@ -1442,7 +1343,7 @@ describe("JsonlCompatibilityFacade", () => {
       maxRecoverableRetries: 2,
     });
 
-    await facade.handleQuery(v1Query({ id: "request-auth-exec", sessionKey: "auth-exec-key" }));
+    await facade.handleQuery(v2Query({ requestId: "request-auth-exec"}));
 
     expect(authFlowCalls).toBe(1);
     const runIds = new Set(store.allRows("SELECT run_id FROM run_attempts").map((row) => row.run_id));
@@ -1460,7 +1361,7 @@ describe("JsonlCompatibilityFacade", () => {
     const sent: OutboundMessage[] = [];
     const authError = Object.assign(new Error("auth required"), { code: -32000 });
     adapter.failNextOpenError = authError;
-    const facade = new JsonlCompatibilityFacade({
+    const facade = new JsonlTransport({
       kernel,
       send: (message) => sent.push(message),
       defaultAdapterId: "fake",
@@ -1472,7 +1373,7 @@ describe("JsonlCompatibilityFacade", () => {
       maxRecoverableRetries: 2,
     });
 
-    await facade.handleQuery(v1Query({ id: "request-auth-fail", sessionKey: "auth-fail-key" }));
+    await facade.handleQuery(v2Query({ requestId: "request-auth-fail"}));
 
     expect(sent.some((message) => message.type === "error")).toBe(true);
     expect(store.getRow("SELECT status FROM runs").status).toBe("failed");
@@ -1482,10 +1383,15 @@ describe("JsonlCompatibilityFacade", () => {
   });
 });
 
-function v1Query(overrides: Partial<QueryMessage> = {}): QueryMessage {
+function v2Query(overrides: Partial<QueryMessage> = {}): QueryMessage {
   return {
     type: "query",
-    id: "request",
+    protocolVersion: 2,
+    requestId: "request",
+    clientId: "client",
+    surfaceKind: "task_chat",
+    externalRefKind: "task",
+    externalRefId: "task-1",
     prompt: "hello",
     systemPrompt: "system",
     cwd: "/tmp/work",

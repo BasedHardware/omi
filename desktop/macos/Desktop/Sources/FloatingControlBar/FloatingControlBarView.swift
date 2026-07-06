@@ -1699,7 +1699,7 @@ private struct AgentMainChatView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             Group {
-                if pill.status == .done {
+                if pill.status.isFinished {
                     Button {
                         manager.dismiss(pillID: pill.id)
                         onBackToAgentRows()
@@ -1707,7 +1707,7 @@ private struct AgentMainChatView: View {
                         statusBadgeLabel
                     }
                     .buttonStyle(.plain)
-                    .help("Dismiss completed agent")
+                    .help("Dismiss agent")
                 } else {
                     statusBadgeLabel
                 }
@@ -1956,16 +1956,6 @@ private struct AgentMainChatView: View {
                 .buttonStyle(.plain)
                 .help(isRecording ? "Stop voice follow-up" : "Voice follow-up")
 
-                Button(action: pickAttachments) {
-                    Image(systemName: "paperclip")
-                        .scaledFont(size: 15, weight: .medium)
-                        .foregroundColor(.secondary)
-                        .frame(width: 24, height: 24)
-                }
-                .buttonStyle(.plain)
-                .help("Attach files")
-                .disabled(attachments.count >= kMaxChatAttachments)
-
                 TextField("Ask this agent...", text: $followUpText)
                     .textFieldStyle(.plain)
                     .scaledFont(size: 13)
@@ -2031,47 +2021,10 @@ private struct AgentMainChatView: View {
 
     // MARK: - Attachments
 
-    private func pickAttachments() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = true
-        panel.allowedContentTypes = [
-            .image, .jpeg, .png, .gif, .heic, .heif, .webP, .tiff, .bmp,
-            .pdf, .plainText, .json, .commaSeparatedText, .html,
-            .text, .content,
-        ]
-        if panel.runModal() == .OK {
-            addAttachmentURLs(panel.urls)
-        }
-    }
-
     private func handleAttachmentDrop(providers: [NSItemProvider]) -> Bool {
-        var urls: [URL] = []
-        let lock = NSLock()
-        let group = DispatchGroup()
-        for provider in providers {
-            guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { continue }
-            group.enter()
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
-                defer { group.leave() }
-                let loadedURL: URL?
-                if let data = item as? Data, let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    loadedURL = url
-                } else if let url = item as? URL {
-                    loadedURL = url
-                } else {
-                    loadedURL = nil
-                }
-                if let loadedURL {
-                    lock.lock()
-                    urls.append(loadedURL)
-                    lock.unlock()
-                }
-            }
+        ChatAttachmentDropHandler.collectURLs(from: providers) { urls in
+            addAttachmentURLs(urls)
         }
-        group.notify(queue: .main) { addAttachmentURLs(urls) }
-        return !providers.isEmpty
     }
 
     private func addAttachmentURLs(_ urls: [URL]) {

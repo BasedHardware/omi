@@ -147,8 +147,9 @@ final class AgentRuntimeProcessTests: XCTestCase {
       cacheWriteTokens: 0
     )
 
-    XCTAssertEqual(withAdapter.sessionId, "adapter-session")
-    XCTAssertEqual(withoutAdapter.sessionId, "omi-session")
+    XCTAssertEqual(withAdapter.adapterSessionId, "adapter-session")
+    XCTAssertEqual(withoutAdapter.omiSessionId, "omi-session")
+    XCTAssertNil(withoutAdapter.adapterSessionId)
   }
 
   func testSharedRuntimeDoesNotTrackCurrentHarnessMode() throws {

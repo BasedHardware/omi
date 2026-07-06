@@ -1272,10 +1272,14 @@ class _PlansSheetState extends State<PlansSheet> {
                               _buildLimitationItem(icon: FontAwesomeIcons.carBattery, text: '7x battery consumption'),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
-                                  icon: FontAwesomeIcons.triangleExclamation, text: '30% less transcription quality'),
+                                icon: FontAwesomeIcons.triangleExclamation,
+                                text: '30% less transcription quality',
+                              ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
-                                  icon: FontAwesomeIcons.clock, text: '5-7 second delay (not real-time)'),
+                                icon: FontAwesomeIcons.clock,
+                                text: '5-7 second delay (not real-time)',
+                              ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(icon: FontAwesomeIcons.userSlash, text: 'Cannot identify speakers'),
                             ],

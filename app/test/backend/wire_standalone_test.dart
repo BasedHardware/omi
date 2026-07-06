@@ -58,11 +58,7 @@ void main() {
     });
 
     test('defaults applied for optional fields', () {
-      final json = {
-        'id': 'ai-min',
-        'description': 'Minimal',
-        'completed': false,
-      };
+      final json = {'id': 'ai-min', 'description': 'Minimal', 'completed': false};
 
       final item = action_items.GeneratedActionItemResponse.fromJson(json);
       expect(item.indentLevel, 0);

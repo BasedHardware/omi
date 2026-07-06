@@ -488,8 +488,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent(
-      {required FaIconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircularButtonContent({
+    required FaIconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return Container(
       height: 56,
       width: 56,

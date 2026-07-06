@@ -379,11 +379,7 @@ class App {
     );
   }
 
-  factory App.fromGeneratedDetail(
-    wire.GeneratedApp generated, {
-    bool? approvedFallback,
-    bool? privateFallback,
-  }) {
+  factory App.fromGeneratedDetail(wire.GeneratedApp generated, {bool? approvedFallback, bool? privateFallback}) {
     return App(
       category: generated.category,
       approved: approvedFallback ?? generated.approved,
@@ -432,11 +428,7 @@ class App {
     );
   }
 
-  factory App.fromGenerated(
-    wire.GeneratedAppBaseModel generated, {
-    bool? approvedFallback,
-    bool? privateFallback,
-  }) {
+  factory App.fromGenerated(wire.GeneratedAppBaseModel generated, {bool? approvedFallback, bool? privateFallback}) {
     return App(
       category: generated.category,
       approved: approvedFallback ?? generated.approved,

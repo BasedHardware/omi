@@ -2,42 +2,32 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class TaskChatLegacyAcpMigrationTests: XCTestCase {
-  func testTaskChatRecordStoresOnlyExplicitLegacyAcpSessionId() {
+final class TaskChatKernelIdentityTests: XCTestCase {
+  func testTaskChatRecordDoesNotPersistSessionIdentity() {
     let message = ChatMessage(id: "message-1", text: "hello", sender: .user)
-
-    let legacyRecord = TaskChatMessageRecord.from(
-      message,
-      taskId: "task-1",
-      acpSessionId: "acp-native-session-1"
-    )
-    let canonicalRecord = TaskChatMessageRecord.from(
-      message,
-      taskId: "task-1",
-      acpSessionId: nil
-    )
-
-    XCTAssertEqual(legacyRecord.acpSessionId, "acp-native-session-1")
-    XCTAssertNil(canonicalRecord.acpSessionId)
+    let record = TaskChatMessageRecord.from(message, taskId: "task-1")
+    XCTAssertEqual(record.taskId, "task-1")
+    XCTAssertEqual(record.messageId, "message-1")
   }
 
-  func testTaskChatStateSeparatesCanonicalOmiAndLegacyAcpSessionSources() throws {
+  func testTaskChatStateUsesSharedRuntimeNotPerTaskBridge() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+    XCTAssertTrue(source.contains("TaskChatRuntime.query("))
+    XCTAssertFalse(source.contains("private var agentBridge"))
+    XCTAssertFalse(source.contains("ensureBridgeStarted"))
+  }
+
+  func testTaskChatStateUsesKernelSurfaceRef() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("@Published var legacyAcpSessionId: String?"))
-    XCTAssertTrue(source.contains("@Published var currentOmiSessionId: String?"))
-    XCTAssertFalse(source.contains("@Published var currentSessionId: String?"))
-    XCTAssertTrue(source.contains("omiSessionId: currentOmiSessionId ?? AgentRuntimeStatusStore.shared.knownSessionId(for: .taskChat(taskId: taskId))"))
-    XCTAssertTrue(source.contains("resume: legacyAcpSessionId"))
-    XCTAssertTrue(source.contains("legacyAcpSessionId = adapterSessionId"))
-    XCTAssertFalse(source.contains("legacyAcpSessionId = queryResult.omiSessionId"))
-
-    // Adapter-namespacing guard: adapterSessionId must only be stored into
-    // legacyAcpSessionId when the active harness supports legacy resume
-    // (ACP/pi-mono), preventing cross-adapter resume ID pollution.
-    XCTAssertTrue(source.contains("private var currentHarness: String?"))
-    XCTAssertTrue(source.contains("currentHarness = harness"))
-    XCTAssertTrue(source.contains("let supportsLegacyResume = (currentHarness == \"acp\" || currentHarness == \"piMono\")"))
+    XCTAssertTrue(
+      source.contains("AgentSurfaceReference.taskChat(taskId: taskId)")
+        || source.contains("projection.surface == .taskChat(taskId: taskId)")
+    )
+    XCTAssertFalse(source.contains("legacyAcpSessionId"))
+    XCTAssertFalse(source.contains("currentOmiSessionId"))
+    XCTAssertFalse(source.contains("getACPSessionId"))
+    XCTAssertFalse(source.contains("acpSessionId"))
   }
 
   func testTaskChatFailureKeepsVisibleAssistantMessage() throws {
@@ -49,14 +39,13 @@ final class TaskChatLegacyAcpMigrationTests: XCTestCase {
     XCTAssertTrue(source.contains("surfaceRuntimeFailure(projection)"))
   }
 
-  func testTaskChatUsesContextPacketsWhilePreservingVisibleTaskContext() throws {
+  func testTaskChatSendsRawPromptAndSurfaceContextToKernel() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("buildContextPacketSummary("))
-    XCTAssertTrue(source.contains("build_desktop_context_packet"))
-    XCTAssertTrue(source.contains("DesktopContextPacket"))
-    XCTAssertTrue(source.contains("# Task Context\\n\\n\\(taskContext)\\n\\n---\\n\\n# User Message"))
-    XCTAssertTrue(source.contains("The full task context is included below in the prompt."))
+    XCTAssertTrue(source.contains("prompt: trimmedText"))
+    XCTAssertTrue(source.contains("surfaceContextJson: taskContext"))
+    XCTAssertFalse(source.contains("buildContextPacketSummary("))
+    XCTAssertFalse(source.contains("build_desktop_context_packet"))
   }
 
   @MainActor

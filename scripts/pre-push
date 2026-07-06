@@ -573,6 +573,15 @@ check_desktop_tool_surfaces_if_needed() {
   done
 }
 
+check_gauntlet_evidence_if_needed() {
+  if [ "${PRE_PUSH_SKIP_GAUNTLET_EVIDENCE:-}" = "1" ]; then
+    echo "Skipping gauntlet evidence check because PRE_PUSH_SKIP_GAUNTLET_EVIDENCE=1."
+    return
+  fi
+
+  desktop/macos/scripts/check-gauntlet-evidence-at-head.sh warn
+}
+
 run_step check_merge_conflicts
 run_step check_arch_guardrails
 run_step python3 .github/scripts/desktop-changelog.py validate
@@ -598,6 +607,7 @@ run_step check_desktop_userdefaults_ratchet_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
+run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
 echo "Fast pre-push checks passed."

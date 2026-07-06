@@ -19,7 +19,7 @@ describe("omi tool manifest", () => {
       "execute_sql",
       "semantic_search",
       "get_daily_recap",
-      "get_task_agent_status",
+      "fill_cloud_connector_form",
       "list_agent_sessions",
       "get_agent_run",
       "build_desktop_awareness_snapshot",
@@ -33,11 +33,9 @@ describe("omi tool manifest", () => {
       "inspect_agent_artifacts",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
-      "spawn_background_agent",
-      "delegate_agent",
-      "fill_cloud_connector_form",
       "spawn_agent",
-      "manage_agent_pills",
+      "run_agent_and_wait",
+      "set_desktop_attention_override",
       "search_tasks",
       "complete_task",
       "delete_task",
@@ -53,6 +51,11 @@ describe("omi tool manifest", () => {
       "capture_screen",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
+  });
+
+  it("keeps spawn_background_agent internal to coordinator RPC only", () => {
+    expect(toolNamesForAdapter("pi-mono")).not.toContain("spawn_background_agent");
+    expect(toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent")).toBeDefined();
   });
 
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {
@@ -107,19 +110,12 @@ describe("omi tool manifest", () => {
   it("preserves control-tool schema preconditions in MCP projections", () => {
     const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
     const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
-    const delegateAgent = tools.find((tool) => tool.name === "delegate_agent");
 
     expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
       { required: ["artifactId"] },
       { required: ["sessionId"] },
       { required: ["runId"] },
       { required: ["attemptId"] },
-    ]);
-    expect(delegateAgent?.inputSchema.allOf).toEqual([
-      {
-        if: { properties: { mode: { const: "continue" } }, required: ["mode"] },
-        then: { required: ["childSessionId"] },
-      },
     ]);
   });
 
@@ -156,5 +152,19 @@ describe("omi tool manifest", () => {
     expect(snapshot.advertisedToolNames).toEqual(toolNamesForAdapter("pi-mono"));
     expect(snapshot.aliases["mcp__omi-tools__execute_sql"]).toBe("execute_sql");
     expect(snapshot.disabled.some((tool) => tool.name === "request_permission")).toBe(true);
+  });
+
+  it("requires surfaces and capabilityDoc on every manifest entry", () => {
+    // spawn_background_agent is the coordinator-RPC-only entrypoint and is
+    // deliberately advertised on no agent-facing surface (see sibling test).
+    const internalOnlyTools = new Set(["spawn_background_agent"]);
+    for (const tool of omiToolManifest) {
+      if (!internalOnlyTools.has(tool.name)) {
+        expect(tool.surfaces.length, `${tool.name} surfaces`).toBeGreaterThan(0);
+      }
+      expect(tool.capabilityDoc.title, `${tool.name} capabilityDoc.title`).toBeTruthy();
+      expect(tool.capabilityDoc.summary, `${tool.name} capabilityDoc.summary`).toBeTruthy();
+      expect(tool.capabilityDoc.bullets.length, `${tool.name} capabilityDoc.bullets`).toBeGreaterThan(0);
+    }
   });
 });

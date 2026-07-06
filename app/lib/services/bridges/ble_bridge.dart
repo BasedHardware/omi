@@ -113,7 +113,8 @@ class BleBridge implements BleFlutterApi {
   @override
   void onBatchRecordingFinalized(String fileName) {
     debugPrint(
-        'BleBridge: batch recording finalized: $fileName (${_batchRecordingFinalizedListeners.length} listeners)');
+      'BleBridge: batch recording finalized: $fileName (${_batchRecordingFinalizedListeners.length} listeners)',
+    );
     for (final cb in List.of(_batchRecordingFinalizedListeners)) {
       cb(fileName);
     }

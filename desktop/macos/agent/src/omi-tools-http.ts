@@ -9,6 +9,7 @@
 
 import { createServer, type IncomingMessage, type ServerResponse } from "http";
 import type { ToolUseMessage, ToolResultMessage } from "./protocol.js";
+import { PROTOCOL_VERSION } from "./protocol.js";
 
 // Current query mode — set before each query
 let currentMode: "ask" | "act" = "act";
@@ -49,7 +50,7 @@ async function requestSwiftTool(
 
   return new Promise<string>((resolve) => {
     pendingToolCalls.set(callId, { resolve });
-    sendToSwift({ type: "tool_use", callId, name, input });
+    sendToSwift({ type: "tool_use", protocolVersion: PROTOCOL_VERSION, callId, name, input });
   });
 }
 

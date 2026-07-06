@@ -146,7 +146,7 @@ final class AgentControlService {
       let mode = stringValue(selectedRun["mode"])
       let updatedAt = stringValue(session["updatedAt"]) ?? stringValue(selectedRun["updatedAt"])
       agentHandles[agentRef] = AgentHandle(
-        sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+        sessionId: stringValue(session["sessionId"]),
         runId: stringValue(selectedRun["runId"]),
         attemptId: stringValue(selectedAttempt["attemptId"])
       )

@@ -237,8 +237,9 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
                 color: selected ? Colors.grey.shade800 : Colors.grey.shade800.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child:
-                  Center(child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600)),
+              child: Center(
+                child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(

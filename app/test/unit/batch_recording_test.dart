@@ -24,7 +24,8 @@ void main() {
 
     test('parses the limitless flash-drain marker (omibatchlimitless)', () {
       final info = BatchRecordingInfo.fromFileName(
-          'audio_${limitlessBatchRecordingDevice}_opus_fs320_16000_1_fs320_1735689600.bin');
+        'audio_${limitlessBatchRecordingDevice}_opus_fs320_16000_1_fs320_1735689600.bin',
+      );
       expect(info, isNotNull);
       expect(info!.codec, BleAudioCodec.opusFS320);
       expect(info.frameSize, 320);

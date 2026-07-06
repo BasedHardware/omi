@@ -48,7 +48,10 @@ class MessageActionMenu extends StatelessWidget {
             const SizedBox(height: 16),
             _buildActionButton(title: context.l10n.copy, icon: const Icon(Icons.copy), onTap: onCopy),
             _buildActionButton(
-                title: context.l10n.selectText, icon: const Icon(Icons.description_outlined), onTap: onSelectText),
+              title: context.l10n.selectText,
+              icon: const Icon(Icons.description_outlined),
+              onTap: onSelectText,
+            ),
             _buildActionButton(title: context.l10n.share, icon: const FaIcon(FontAwesomeIcons.share), onTap: onShare),
             if (onThumbsDown != null) ...[
               _buildActionButton(

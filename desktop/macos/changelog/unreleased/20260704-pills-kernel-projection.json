@@ -1,0 +1,3 @@
+{
+  "change": "Floating agent pills now project from canonical kernel runs (spawn_agent, list_agent_sessions, attention overrides) instead of a separate pill lifecycle"
+}
