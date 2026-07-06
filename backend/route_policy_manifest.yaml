@@ -35,8 +35,8 @@ routes:
       review_status: legacy_unreviewed
       auth:
         mechanisms:
-          - bearer_api_key
-        placement: header
+          - developer_api_key
+        placement: inline
         scopes: []
       byok: not_applicable
       rate_limit:
@@ -44,9 +44,9 @@ routes:
         key_subject: none
         enforcement: none
         placement: none
-      timeout_class: standard
-      surface: external_integration
+      timeout_class: streaming
+      surface: webhook
       visibility: internal
-      data_domain: persona
+      data_domain: chat
       deprecation:
         state: active
