@@ -126,14 +126,8 @@
 	<dict>
 		<key>AppLinkURLScheme</key>
 		<string>omirayban://</string>
-		<key>ClientToken</key>
-		<string>$(META_CLIENT_TOKEN)</string>
 		<key>DAMEnabled</key>
 		<true/>
-		<key>MetaAppID</key>
-		<string>$(META_APP_ID)</string>
-		<key>TeamID</key>
-		<string>$(DEVELOPMENT_TEAM)</string>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Bluetooth permission is required to connect with your Omi.</string>
