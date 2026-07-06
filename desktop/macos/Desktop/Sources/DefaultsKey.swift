@@ -26,6 +26,7 @@ enum DefaultsKey: String {
     case authTokenExpiry = "auth_tokenExpiry"
     case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
     case authIsImpersonating = "auth_isImpersonating"
+    case chatBridgeMode = "chatBridgeMode"
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

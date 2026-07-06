@@ -359,7 +359,7 @@ export class KernelCore {
         }
       }
 
-      if (conversationId && surfaceRef) {
+      if (conversationId && surfaceRef && attemptNo === 1) {
         appendConversationTurn(this.store, {
           conversationId,
           role: "user",

@@ -403,14 +403,19 @@ actor AgentBridge {
   private static let floatingChatMigrationDefaultsKey = "floatingChatToMainChatMigration_v1"
 
   private func migrateFloatingChatIntoMainChatIfNeeded() async {
-    guard !UserDefaults.standard.bool(forKey: Self.floatingChatMigrationDefaultsKey) else { return }
+    let ownerId = await MainActor.run {
+      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+    }
+    guard let ownerId, !ownerId.isEmpty else { return }
+    let migrationKey = "\(Self.floatingChatMigrationDefaultsKey).\(ownerId)"
+    guard !UserDefaults.standard.bool(forKey: migrationKey) else { return }
     await mergeFloatingChatIntoMainChat(chatId: "default")
-    UserDefaults.standard.set(true, forKey: Self.floatingChatMigrationDefaultsKey)
+    UserDefaults.standard.set(true, forKey: migrationKey)
   }
 
   private func migrateLegacyMainChatSessionsIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId")
+      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     guard let map = UserDefaults.standard.dictionary(forKey: Self.legacyMainChatDefaultsKey) as? [String: String],
@@ -426,7 +431,12 @@ actor AgentBridge {
     if !entries.isEmpty {
       await importLegacyMainChatSessions(entries)
     }
-    UserDefaults.standard.removeObject(forKey: Self.legacyMainChatDefaultsKey)
+    let remaining = map.filter { key, _ in !key.hasPrefix(prefix) }
+    if remaining.isEmpty {
+      UserDefaults.standard.removeObject(forKey: Self.legacyMainChatDefaultsKey)
+    } else {
+      UserDefaults.standard.set(remaining, forKey: Self.legacyMainChatDefaultsKey)
+    }
   }
 }
 
@@ -509,6 +519,6 @@ enum BridgeError: LocalizedError {
     if lower.contains("overloaded") || lower.contains("service unavailable") || lower.contains("internal error") {
       return "AI service is temporarily unavailable. Please try again later."
     }
-    return "Something went wrong. Please try again."
+    return msg
   }
 }

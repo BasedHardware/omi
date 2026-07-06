@@ -892,7 +892,10 @@ function serializeAgentSessionsList(
 ): Record<string, unknown> {
   const dismissed = new Set(
     overrides
-      .filter((override) => override.dismissedAtMs != null)
+      .filter(
+        (override) =>
+          override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now(),
+      )
       .map((override) => `${override.subjectKind}:${override.subjectId}`),
   );
   const summaries = sessions.map(serializeSessionSummary);
@@ -903,7 +906,7 @@ function serializeAgentSessionsList(
       if (surfaceKind !== "floating_bar" && surfaceKind !== "background_agent" && surfaceKind !== "floating_pill") {
         return false;
       }
-      const run = summary.activeRun as Record<string, unknown> | null;
+      const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
       const runId = typeof run?.runId === "string" ? run.runId : null;
       if (runId && dismissed.has(`run:${runId}`)) return false;
       const sessionId = typeof session.sessionId === "string" ? session.sessionId : null;

@@ -537,7 +537,7 @@ final class DesktopAutomationActionRegistry {
     register(
       name: "kernel_turn_tail",
       summary: "Return the last N kernel main_chat turns for continuity harness evidence",
-      params: ["limit", "chatId"]
+      params: ["limit"]
     ) { params in
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]

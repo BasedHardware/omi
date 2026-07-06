@@ -1201,8 +1201,23 @@ final class AgentPillsManager: ObservableObject {
             partial = partial &* 31 &+ UInt64(byte)
         }
         withUnsafeMutableBytes(of: &bytes) { raw in
-            raw.storeBytes(of: hash, as: UInt64.self)
-            raw.storeBytes(of: hash.byteSwapped, toByteOffset: 8, as: UInt64.self)
+            raw[0] = UInt8(truncatingIfNeeded: hash)
+            raw[1] = UInt8(truncatingIfNeeded: hash >> 8)
+            raw[2] = UInt8(truncatingIfNeeded: hash >> 16)
+            raw[3] = UInt8(truncatingIfNeeded: hash >> 24)
+            raw[4] = UInt8(truncatingIfNeeded: hash >> 32)
+            raw[5] = UInt8(truncatingIfNeeded: hash >> 40)
+            raw[6] = UInt8(truncatingIfNeeded: hash >> 48)
+            raw[7] = UInt8(truncatingIfNeeded: hash >> 56)
+            let swapped = hash.byteSwapped
+            raw[8] = UInt8(truncatingIfNeeded: swapped)
+            raw[9] = UInt8(truncatingIfNeeded: swapped >> 8)
+            raw[10] = UInt8(truncatingIfNeeded: swapped >> 16)
+            raw[11] = UInt8(truncatingIfNeeded: swapped >> 24)
+            raw[12] = UInt8(truncatingIfNeeded: swapped >> 32)
+            raw[13] = UInt8(truncatingIfNeeded: swapped >> 40)
+            raw[14] = UInt8(truncatingIfNeeded: swapped >> 48)
+            raw[15] = UInt8(truncatingIfNeeded: swapped >> 56)
         }
         bytes[6] = (bytes[6] & 0x0F) | 0x40
         bytes[8] = (bytes[8] & 0x3F) | 0x80

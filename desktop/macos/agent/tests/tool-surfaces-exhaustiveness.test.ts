@@ -41,7 +41,7 @@ describe("tool surface exhaustiveness", () => {
     const nodeSource = readFileSync(join(__dirname, "../src/omi-tools-stdio.ts"), "utf8");
     for (const tool of omiToolManifest) {
       if (tool.executor.kind !== "nodeTool") continue;
-      expect(nodeSource.includes(tool.name)).toBe(true);
+      expect(nodeSource.includes(`"${tool.name}"`)).toBe(true);
     }
   });
 

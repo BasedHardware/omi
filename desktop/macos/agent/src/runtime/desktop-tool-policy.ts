@@ -331,8 +331,8 @@ export function resolveExternalAcpPermission(input: {
   options: AcpPermissionOption[];
 }): AcpPermissionDecision | AcpPermissionRejection {
   const selected =
-    input.options.find((option) => /deny|reject|disallow/i.test(option.kind)) ??
     input.options.find((option) => option.kind === "allow_once") ??
+    input.options.find((option) => /deny|reject|disallow/i.test(option.kind)) ??
     input.options.find((option) => option.kind !== "allow_always");
 
   if (!selected) {

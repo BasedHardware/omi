@@ -1428,7 +1428,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private static let conversationTurnBackfillKey = "conversationTurnBackfill_v1"
 
     private func backfillConversationTurnsIfNeeded(for surface: AgentSurfaceReference) async {
-        let key = "\(Self.conversationTurnBackfillKey).\(surface.key)"
+        let ownerId = runtimeOwnerId ?? "unknown"
+        let key = "\(Self.conversationTurnBackfillKey).\(ownerId).\(surface.key)"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         let recent = messages
             .filter { !$0.copyableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.isStreaming }

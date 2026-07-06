@@ -25,7 +25,7 @@ enum TaskChatRuntime {
         onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
     ) async throws -> AgentBridge.QueryResult {
         let bridge = try await sharedBridge()
-        if let activeTaskId, activeTaskId != taskId {
+        if activeTaskId != nil {
             throw BridgeError.requestAlreadyActive
         }
         activeTaskId = taskId
@@ -69,7 +69,7 @@ enum TaskChatRuntime {
             return bridge
         }
 
-        let mode = UserDefaults.standard.string(forKey: "chatBridgeMode") ?? "piMono"
+        let mode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
         let harness = ChatProvider.harnessMode(for: ChatProvider.BridgeMode(rawValue: mode) ?? .piMono)
         let bridge = AgentClient.makeBridge(harnessMode: harness)
         try await bridge.start()
