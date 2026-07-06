@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.28",
+      "date": "2026-07-06",
+      "changes": [
+        "Chat now asks you to sign in again when the AI session token is rejected instead of showing a generic error"
+      ]
+    },
+    {
       "version": "0.12.27",
       "date": "2026-07-06",
       "changes": [
