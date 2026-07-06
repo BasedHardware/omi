@@ -208,6 +208,7 @@ final class ChatErrorStateTests: XCTestCase {
   func testFromBridgeErrorMapsInvalidTokenAgentErrorToAuthRequired() {
     let mapped = ChatErrorState.from(.agentError("401 \"invalid_token\""))
     XCTAssertEqual(mapped, .authRequired)
+    XCTAssertTrue(BridgeError.agentError("401 \"invalid_token\"").isSessionAuthenticationFailure)
   }
 
   func testFromBridgeErrorMapsUnauthorizedAgentErrorToAuthRequired() {
@@ -224,5 +225,33 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertNil(ChatErrorState.from(.agentError("AI service authentication failed")))
     XCTAssertNil(ChatErrorState.from(.agentError("Anthropic provider unauthorized")))
     XCTAssertNil(ChatErrorState.from(.agentError("invalid key")))
+    XCTAssertFalse(BridgeError.agentError("Anthropic provider unauthorized").isSessionAuthenticationFailure)
+  }
+
+  func testChatSignInRecoveryUsesDesktopOAuthInsteadOfHomepage() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(source.contains("try await AuthService.shared.signInWithGoogle()"))
+    XCTAssertTrue(source.contains("ChatErrorCard: .signIn recovery — starting desktop OAuth"))
+    XCTAssertFalse(source.contains("ChatErrorCard: .signIn recovery — opening omi.me sign-in URL"))
+    XCTAssertFalse(source.contains(#"URL(string: "https://omi.me/")"#))
+  }
+
+  func testSavedUserDefaultsSessionIsValidatedBeforeUse() throws {
+    let source = try sourceFile("AuthService.swift")
+
+    XCTAssertTrue(source.contains("validateRestoredUserDefaultsSession()"))
+    XCTAssertTrue(source.contains("getIdToken(forceRefresh: true)"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validated by forced token refresh"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session failed validation - signed out"))
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

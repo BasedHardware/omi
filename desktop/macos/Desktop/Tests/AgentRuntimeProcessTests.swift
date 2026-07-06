@@ -87,8 +87,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
 
     XCTAssertTrue(bridgeSource.contains("AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) == AgentAdapterId.piMono.rawValue"))
     XCTAssertTrue(bridgeSource.contains("if isPiMonoHarness, tokenRefreshTask == nil"))
-    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return }"))
+    XCTAssertTrue(bridgeSource.contains("guard isPiMonoHarness else { return false }"))
     XCTAssertFalse(bridgeSource.contains(#"harnessMode == "piMono""#))
+  }
+
+  func testPiMonoInvalidTokenRetriesAfterForcedAuthRefresh() throws {
+    let bridgeSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentBridge.swift")
+    let bridgeSource = try String(contentsOf: bridgeSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(bridgeSource.contains("error.isSessionAuthenticationFailure"))
+    XCTAssertTrue(bridgeSource.contains("!bridgeOutputTracker.hasOutput"))
+    XCTAssertTrue(bridgeSource.contains("private final class BridgeOutputTracker: @unchecked Sendable"))
+    XCTAssertTrue(bridgeSource.contains("refreshing token and retrying once"))
+    XCTAssertTrue(bridgeSource.contains("guard try await refreshAuthToken()"))
+    XCTAssertTrue(bridgeSource.contains("let retryRequestId = UUID().uuidString"))
   }
 
   func testNamedBundleStateDirectoriesAreIsolated() {
