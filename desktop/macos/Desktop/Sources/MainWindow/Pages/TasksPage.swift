@@ -2183,14 +2183,20 @@ class TasksViewModel: ObservableObject {
 
         registry.register(
             name: "toggle_task",
-            summary: "Toggle a task's completed state by id (mirrors the checkbox)",
+            summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
             params: ["id"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
+            // Load from SQLite first so a headless caller (Tasks page never opened) resolves
+            // the task instead of getting a spurious "not found".
+            await self.ensureTasksLoadedForAutomation()
             guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
             else { return ["error": "task not found: \(params["id"] ?? "")"] }
             await self.toggleTask(task)
-            return ["id": id, "completed": (!task.completed) ? "true" : "false"]
+            // Report the real post-toggle state read back from the store rather than the
+            // assumed negation — TasksStore leaves the prior state if the local write fails.
+            let completed = self.store.tasks.first(where: { $0.id == id })?.completed ?? !task.completed
+            return ["id": id, "completed": completed ? "true" : "false"]
         }
 
         registry.register(
@@ -2199,6 +2205,9 @@ class TasksViewModel: ObservableObject {
             params: ["id"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
+            // Load from SQLite first so a headless caller resolves the task instead of a
+            // spurious "not found" when the Tasks page was never opened.
+            await self.ensureTasksLoadedForAutomation()
             guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
             else { return ["error": "task not found: \(params["id"] ?? "")"] }
             await self.deleteTask(task)
@@ -2226,18 +2235,19 @@ class TasksViewModel: ObservableObject {
 
         registry.register(
             name: "dump_tasks",
-            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence",
-            params: ["includeCompleted", "category", "limit"]
+            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field",
+            params: ["includeCompleted", "limit"]
         ) { params in
             let includeCompleted = ["true", "1", "yes"].contains(params["includeCompleted"]?.lowercased() ?? "")
             let limit = Int(params["limit"] ?? "") ?? 500
             let items: [TaskActionItem]
             do {
-                // Pass `category` into the SQLite query, which matches both the `category`
-                // column and serialized tags in `tagsJson` (an in-memory `== category`
-                // post-filter would miss tag-categorized items and over-fetch).
+                // No category filter here: `category` means the due-date display bucket in
+                // reorder_task, but the stored classification/tags here — overloading one
+                // param name for two concepts is a footgun. Return all rows (each carries
+                // its own `category`) and let the caller filter.
                 items = try await ActionItemStorage.shared.getLocalActionItems(
-                    limit: limit, completed: includeCompleted ? nil : false, category: params["category"])
+                    limit: limit, completed: includeCompleted ? nil : false)
             } catch {
                 return ["error": "sqlite read failed: \(error.localizedDescription)"]
             }
