@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import hashlib
+import importlib
 import os
 import re
 import sys
@@ -79,10 +80,28 @@ from utils.memory.canonical_memory_adapter import (
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 
+def _refresh_canonical_memory_adapter_runtime() -> None:
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    globals().update(
+        {
+            "delete_all_canonical_memories": canonical_adapter.delete_all_canonical_memories,
+            "delete_canonical_memory": canonical_adapter.delete_canonical_memory,
+            "extraction_memory_id": canonical_adapter.extraction_memory_id,
+            "neutral_vector_id_for_memory": canonical_adapter.neutral_vector_id_for_memory,
+            "purge_canonical_derived_user_data": canonical_adapter.purge_canonical_derived_user_data,
+            "retract_conversation_sourced_memories": canonical_adapter.retract_conversation_sourced_memories,
+            "update_canonical_memory_content": canonical_adapter.update_canonical_memory_content,
+            "update_canonical_memory_visibility": canonical_adapter.update_canonical_memory_visibility,
+            "write_canonical_extraction_memory": canonical_adapter.write_canonical_extraction_memory,
+        }
+    )
+
+
 @pytest.fixture(autouse=True)
 def _clear_canonical_env(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _refresh_canonical_memory_adapter_runtime()
     clear_canonical_cohort(monkeypatch)
 
 
@@ -331,6 +350,32 @@ def test_canonical_account_delete_purge_emits_neutral_vector_outbox(monkeypatch,
         if canonical_db.docs[path].get("reason") == "account_delete_canonical_purge"
     )
     assert purge_record["vector_id"] == expected_vector_id
+
+
+def test_canonical_account_delete_purge_raises_on_partial_vector_delete(monkeypatch, canonical_db):
+    uid = "uid-canonical-ws-j"
+    conversation_id = "conv-acct-partial"
+    content = "Canonical fact for partial account delete"
+    payload = _sample_memory_payload(uid=uid, conversation_id=conversation_id, content=content)
+
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.read_memory_v3_trusted_account_generation",
+        lambda **_: _trusted_account_generation(),
+    )
+    monkeypatch.setattr(
+        "utils.memory.canonical_memory_adapter.resolve_memory_system",
+        lambda uid, **_: MemorySystem.CANONICAL,
+    )
+    monkeypatch.setattr(
+        "database.vector_db.delete_pinecone_memory_vectors_by_id",
+        lambda vector_ids: 0,
+        raising=False,
+    )
+
+    write_canonical_extraction_memory(uid, payload, db_client=canonical_db)
+
+    with pytest.raises(RuntimeError, match="canonical vector purge only deleted 0/1 vectors"):
+        purge_canonical_derived_user_data(uid, db_client=canonical_db)
 
 
 def test_legacy_account_delete_purge_skips_canonical_path(monkeypatch):

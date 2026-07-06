@@ -3,8 +3,8 @@
 Neutral ``memory_read_api`` is the source of truth. Legacy ``memory_read_api`` remains an importable alias.
 """
 
-from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, cast
 
 from database.product_memory_items import filter_default_product_memory_items
 from utils.memory.canonical_visibility_filter import filter_canonical_default_visible_items
@@ -18,6 +18,8 @@ from models.memory_contracts import (
 )
 from models.product_memory import MemoryAccessPolicy, MemoryLayer, MemoryItem, is_archive_access_eligible
 
+MemoryResult = Dict[str, Any]
+
 
 def _tokens(query: str) -> set[str]:
     return {token.lower() for token in (query or "").replace(".", " ").replace(",", " ").split() if len(token) > 2}
@@ -29,6 +31,12 @@ def _matches(query: str, content: str) -> bool:
         return True
     content_lower = (content or "").lower()
     return any(token in content_lower for token in query_tokens)
+
+
+def _risk_flags(raw: Any) -> List[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(flag) for flag in cast(List[Any], raw)]
 
 
 def _agent_use_for_working(status: str, risk_flags: List[str]) -> str:
@@ -56,7 +64,7 @@ def _agent_use_for_durable(status: str, risk_flags: List[str]) -> str:
 
 
 def query_working_memory(query: str, records: Iterable[WorkingObservation | Dict[str, Any]]) -> List[Dict[str, Any]]:
-    results = []
+    results: List[MemoryResult] = []
     for record in records:
         if isinstance(record, WorkingObservation):
             data = record.model_dump(mode="json")
@@ -66,7 +74,7 @@ def query_working_memory(query: str, records: Iterable[WorkingObservation | Dict
         if not _matches(query, content):
             continue
         status = data.get("status") or LifecycleState.working.value
-        risk_flags = data.get("risk_flags") or []
+        risk_flags = _risk_flags(data.get("risk_flags"))
         results.append(
             {
                 "memory_id": data.get("observation_id"),
@@ -97,7 +105,7 @@ def _coerce_product_memory_item(record: MemoryItem | Dict[str, Any]) -> MemoryIt
 
 
 def _tier_value(item: MemoryItem) -> str:
-    return item.tier.value if isinstance(item.tier, MemoryLayer) else str(item.tier)
+    return item.tier.value
 
 
 def _product_memory_result(item: MemoryItem, *, agent_use: str, access_reason: str) -> Dict[str, Any]:
@@ -138,8 +146,9 @@ def query_default_product_memory_items(
 
     items = [_coerce_product_memory_item(record) for record in records]
     report = filter_default_product_memory_items(items, policy=policy, now=now)
-    visible_items = filter_canonical_default_visible_items(items, policy=policy, now=now)
-    results = []
+    current_time = now or datetime.now(timezone.utc)
+    visible_items = filter_canonical_default_visible_items(items, policy=policy, now=current_time)
+    results: List[MemoryResult] = []
     for item in visible_items:
         content = item.content or ""
         if not _matches(query, content):
@@ -159,7 +168,7 @@ def query_archive_product_memory_items(
 ) -> List[Dict[str, Any]]:
     """Search Archive product memory only for explicit archive-capable callers."""
 
-    results = []
+    results: List[MemoryResult] = []
     for item in [_coerce_product_memory_item(record) for record in records]:
         if item.tier != MemoryLayer.archive:
             continue
@@ -181,11 +190,9 @@ def query_l1_archive(
         items = [item for item in archive_items if _matches(query, item.text)]
     else:
         items = filter_l1_archive_for_normal_search(archive_items, query=query)
-    results = []
+    results: List[MemoryResult] = []
     for item in items:
-        archive_class = (
-            item.archive_class.value if isinstance(item.archive_class, L1MemoryArchiveClass) else item.archive_class
-        )
+        archive_class = item.archive_class.value
         if archive_class == L1MemoryArchiveClass.sensitive.value and not include_sensitive:
             continue
         results.append(
@@ -210,7 +217,7 @@ def query_l1_archive(
 def query_durable_memory(
     query: str, records: Iterable[Dict[str, Any]], *, include_superseded: bool = False
 ) -> List[Dict[str, Any]]:
-    results = []
+    results: List[MemoryResult] = []
     for record in records:
         status = record.get("status") or record.get("memory_state") or LifecycleState.active.value
         if status == LifecycleState.superseded.value and not include_superseded:
@@ -218,7 +225,7 @@ def query_durable_memory(
         content = record.get("content") or record.get("memory_text") or ""
         if not _matches(query, content):
             continue
-        risk_flags = record.get("risk_flags") or []
+        risk_flags = _risk_flags(record.get("risk_flags"))
         results.append(
             {
                 "memory_id": record.get("id") or record.get("memory_id") or record.get("card_id"),

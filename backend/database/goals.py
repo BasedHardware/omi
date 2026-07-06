@@ -4,7 +4,7 @@ Stores user goals in Firestore under users/{uid}/goals collection.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -16,9 +16,10 @@ goal_history_collection = 'goal_history'
 users_collection = 'users'
 
 
-def _goal_dict(doc) -> Dict[str, Any]:
+def _goal_dict(doc: Any) -> Dict[str, Any]:
     """Convert a Firestore document to a goal dict, ensuring 'id' is always present."""
-    data = doc.to_dict() or {}
+    raw: object = doc.to_dict()
+    data: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
     if not data.get('id'):
         data['id'] = doc.id
     return data
@@ -158,7 +159,11 @@ def get_goal_history(uid: str, goal_id: str, days: int = 30) -> List[Dict[str, A
     history_ref = goal_ref.collection(goal_history_collection)
 
     query = history_ref.order_by('date', direction=firestore.Query.DESCENDING).limit(days)
-    history = [doc.to_dict() for doc in query.stream()]
+    history: List[Dict[str, Any]] = []
+    for doc in query.stream():
+        raw_hist: object = doc.to_dict()
+        if isinstance(raw_hist, dict):
+            history.append(cast(Dict[str, Any], raw_hist))
 
     return history
 

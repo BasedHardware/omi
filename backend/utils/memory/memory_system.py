@@ -5,6 +5,7 @@ Replaces fragmented memory rollout flags with one explicit server-owned selector
 """
 
 from enum import Enum
+from typing import Any
 
 from config.memory_rollout import MemoryRolloutConfig
 
@@ -35,7 +36,7 @@ def list_canonical_cohort_uids() -> list[str]:
     return sorted(_canonical_cohort_uids())
 
 
-def resolve_memory_system(uid: str, *, db_client=None) -> MemorySystem:
+def resolve_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
     """Return the server-owned memory cohort for ``uid``.
 
     Precedence (authoritative):

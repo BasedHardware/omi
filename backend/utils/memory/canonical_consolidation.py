@@ -12,7 +12,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Literal, Optional, Set
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field
@@ -49,6 +49,26 @@ DEFAULT_CANDIDATES_PER_ITEM = 8
 CONSOLIDATION_DAILY_INTERVAL = timedelta(hours=24)
 
 MEMORY_CANONICAL_CONSOLIDATION_ENABLED_ENV = "MEMORY_CANONICAL_CONSOLIDATION_ENABLED"
+Payload = Dict[str, Any]
+
+
+def _empty_candidate_map() -> Dict[str, List["ConsolidationCandidate"]]:
+    return {}
+
+
+def _empty_str_list() -> List[str]:
+    return []
+
+
+def _empty_consolidation_decisions() -> List["ConsolidationAgentDecision"]:
+    return []
+
+
+def _snapshot_payload(snapshot: Any) -> Payload:
+    if not getattr(snapshot, "exists", False):
+        return {}
+    raw = snapshot.to_dict()
+    return cast(Payload, raw) if isinstance(raw, dict) else {}
 
 
 def _coerce_aware_utc(value: datetime) -> datetime:
@@ -57,24 +77,25 @@ def _coerce_aware_utc(value: datetime) -> datetime:
     return value.astimezone(timezone.utc)
 
 
-def _read_control_state(uid: str, *, db_client) -> MemoryControlState:
+def _read_control_state(uid: str, *, db_client: Any) -> MemoryControlState:
     collections = MemoryCollections(uid=uid)
     ref = db_client.document(collections.memory_apply_control_state)
     snapshot = ref.get()
-    if getattr(snapshot, "exists", False):
-        return MemoryControlState(**(snapshot.to_dict() or {}))
+    payload = _snapshot_payload(snapshot)
+    if payload:
+        return MemoryControlState(**payload)
     control = MemoryControlState(uid=uid, head_commit_id="head0", account_generation=1, source_generation=1)
     ref.set(control.model_dump(mode="json"))
     return control
 
 
-def _persist_control_state(control: MemoryControlState, *, db_client) -> None:
+def _persist_control_state(control: MemoryControlState, *, db_client: Any) -> None:
     db_client.document(MemoryCollections(uid=control.uid).memory_apply_control_state).set(
         {
             "last_consolidation_run_at": (
                 control.last_consolidation_run_at.isoformat() if control.last_consolidation_run_at is not None else None
             ),
-            "updated_at": control.updated_at.isoformat() if control.updated_at is not None else None,
+            "updated_at": control.updated_at.isoformat(),
         },
         merge=True,
     )
@@ -142,11 +163,11 @@ def _is_active_consolidation_item(item: MemoryItem) -> bool:
 def list_pending_consolidation_items(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
 ) -> List[MemoryItem]:
     """Active processed short_term items eligible for batched consolidation."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
     items = fetch_short_term_memory_items_firestore(uid=uid, db_client=client)
     pending = [
@@ -193,7 +214,7 @@ class ConsolidationCandidate:
 class ConsolidationContext:
     uid: str
     pending_items: List[MemoryItem]
-    candidates_by_anchor: Dict[str, List[ConsolidationCandidate]] = field(default_factory=dict)
+    candidates_by_anchor: Dict[str, List[ConsolidationCandidate]] = field(default_factory=_empty_candidate_map)
 
     @property
     def hydrated_memory_ids(self) -> Set[str]:
@@ -205,16 +226,16 @@ class ConsolidationContext:
 
 
 def _hydrate_memory_item(
-    uid: str, memory_id: str, *, db_client, cache: Dict[str, Optional[MemoryItem]]
+    uid: str, memory_id: str, *, db_client: Any, cache: Dict[str, Optional[MemoryItem]]
 ) -> Optional[MemoryItem]:
     if memory_id in cache:
         return cache[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = db_client.document(path).get()
-    if not getattr(snapshot, "exists", False):
+    payload = _snapshot_payload(db_client.document(path).get())
+    if not payload:
         cache[memory_id] = None
         return None
-    item = MemoryItem(**(snapshot.to_dict() or {}))
+    item = MemoryItem(**payload)
     if not _is_active_consolidation_item(item):
         cache[memory_id] = None
         return None
@@ -226,11 +247,11 @@ def gather_consolidation_candidates(
     uid: str,
     pending_items: List[MemoryItem],
     *,
-    db_client=None,
+    db_client: Any = None,
     candidate_limit: Optional[int] = None,
 ) -> ConsolidationContext:
     """Vector-search similar memories and hydrate active items (deterministic only)."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     per_item = candidate_limit if candidate_limit is not None else candidates_per_item_limit()
     context = ConsolidationContext(uid=uid, pending_items=list(pending_items))
     cache: Dict[str, Optional[MemoryItem]] = {item.memory_id: item for item in pending_items}
@@ -268,9 +289,11 @@ def gather_consolidation_candidates(
 
 def format_consolidation_llm_context(context: ConsolidationContext) -> str:
     """Serialize pending batch + vector candidates for the consolidation agent."""
-    payload: Dict[str, Any] = {"memories": [], "candidate_groups": []}
+    memories: List[Payload] = []
+    candidate_groups: List[Payload] = []
+    payload: Payload = {"memories": memories, "candidate_groups": candidate_groups}
     for item in context.pending_items:
-        payload["memories"].append(
+        memories.append(
             {
                 "memory_id": item.memory_id,
                 "content": item.content,
@@ -285,7 +308,7 @@ def format_consolidation_llm_context(context: ConsolidationContext) -> str:
     for anchor_id, candidates in context.candidates_by_anchor.items():
         if not candidates:
             continue
-        payload["candidate_groups"].append(
+        candidate_groups.append(
             {
                 "anchor_memory_id": anchor_id,
                 "candidates": [
@@ -326,7 +349,7 @@ class ConsolidationAgentDecision(BaseModel):
 
 
 class ConsolidationAgentBatch(BaseModel):
-    decisions: List[ConsolidationAgentDecision] = Field(default_factory=list)
+    decisions: List[ConsolidationAgentDecision] = Field(default_factory=_empty_consolidation_decisions)
     reasoning: str = ""
 
 
@@ -362,7 +385,7 @@ Batch JSON:
 
 def _invoke_consolidation_llm(prompt: str) -> str:
     response = get_llm("memory_conflict").invoke(prompt)
-    return getattr(response, "content", str(response))
+    return cast(str, getattr(response, "content", str(response)))
 
 
 def invoke_consolidation_agent(
@@ -453,7 +476,7 @@ def _consolidation_decision_identity(
     *,
     uid: str,
     decision: ConsolidationAgentDecision,
-) -> Dict[str, Any]:
+) -> Payload:
     """Stable consolidation identity for idempotency across maintenance passes."""
     return {
         "uid": uid,
@@ -482,10 +505,10 @@ def _ensure_consolidation_operation(
     control: MemoryControlState,
     run_id: str,
     evidence_ids: List[str],
-    db_client,
+    db_client: Any,
 ) -> MemoryOperation:
     apply_decision = _consolidation_apply_decision(decision)
-    logical_payload = {
+    logical_payload: Payload = {
         "decision": apply_decision,
         "target_memory_id": decision.survivor_memory_id,
         "memory_text": decision.memory_text,
@@ -521,7 +544,7 @@ def _apply_superseded_item(
     superseded_by: str,
     control: MemoryControlState,
     run_id: str,
-    db_client,
+    db_client: Any,
 ) -> None:
     idempotency_key = deterministic_contract_id(
         "canonical-consolidation-supersede",
@@ -548,7 +571,7 @@ def _apply_superseded_item(
     if not op_ref.get().exists:
         op_ref.set(operation.model_dump(mode="json"))
 
-    patch_payload = {
+    patch_payload: Payload = {
         "patch_id": f"patch_sup_{idempotency_key[:24]}",
         "packet_id": f"consolidation_{run_id}",
         "run_id": run_id,
@@ -575,9 +598,9 @@ def _apply_superseded_item(
 
     item = result.memory_items[0] if result.memory_items else None
     if item is None:
-        snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
-        if getattr(snapshot, "exists", False):
-            item = MemoryItem(**(snapshot.to_dict() or {}))
+        payload = _snapshot_payload(db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get())
+        if payload:
+            item = MemoryItem(**payload)
     if item is not None and item.tier == MemoryLayer.long_term:
         delete_atom_keyword_doc(uid, item.memory_id, db_client=db_client)
     delete_canonical_memory_vector(uid, memory_id)
@@ -590,7 +613,7 @@ def _escalate_to_review_queue(
     *,
     decision: ConsolidationAgentDecision,
     survivor: MemoryItem,
-    db_client,
+    db_client: Any,
 ) -> None:
     conflict_ids = decision.conflict_with or decision.supersedes
     fact = {
@@ -621,15 +644,15 @@ def _load_survivor_item(
     memory_id: str,
     *,
     pending_by_id: Dict[str, MemoryItem],
-    db_client,
+    db_client: Any,
 ) -> Optional[MemoryItem]:
     if memory_id in pending_by_id:
         return pending_by_id[memory_id]
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
-    snapshot = db_client.document(path).get()
-    if not getattr(snapshot, "exists", False):
+    payload = _snapshot_payload(db_client.document(path).get())
+    if not payload:
         return None
-    return MemoryItem(**(snapshot.to_dict() or {}))
+    return MemoryItem(**payload)
 
 
 def _validate_consolidation_survivor(survivor: Optional[MemoryItem], *, memory_id: str) -> None:
@@ -647,7 +670,7 @@ def _validate_supersede_targets(
     supersedes: List[str],
     survivor_memory_id: str,
     pending_by_id: Dict[str, MemoryItem],
-    db_client,
+    db_client: Any,
 ) -> None:
     """Fail-closed before survivor mutation when any supersede target is missing/inactive."""
     for memory_id in supersedes:
@@ -665,7 +688,7 @@ def apply_consolidation_decision(
     control: MemoryControlState,
     run_id: str,
     now: datetime,
-    db_client,
+    db_client: Any,
 ) -> List[str]:
     """Apply one agent decision via durable patch apply + supersede side effects."""
     if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
@@ -797,8 +820,8 @@ class ConsolidationReport:
     decisions_applied: int = 0
     decisions_skipped: int = 0
     decisions_partial: int = 0
-    batched_memory_ids: List[str] = field(default_factory=list)
-    superseded_memory_ids: List[str] = field(default_factory=list)
+    batched_memory_ids: List[str] = field(default_factory=_empty_str_list)
+    superseded_memory_ids: List[str] = field(default_factory=_empty_str_list)
     review_escalations: int = 0
     last_consolidation_run_at: Optional[datetime] = None
     watermark_blocked: bool = False
@@ -807,14 +830,14 @@ class ConsolidationReport:
 def run_canonical_consolidation(
     uid: str,
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: str,
     llm_invoke: Optional[Callable[[str], str]] = None,
     batch_threshold: Optional[int] = None,
 ) -> ConsolidationReport:
     """Batched consolidation entry point for one canonical user."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     current_time = _coerce_aware_utc(now or datetime.now(timezone.utc))
 
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:

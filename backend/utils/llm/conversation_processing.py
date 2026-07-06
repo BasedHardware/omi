@@ -4,7 +4,7 @@ import unicodedata
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from zoneinfo import ZoneInfo
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -19,7 +19,6 @@ from models.structured_extraction import ActionItemsExtraction, StructuredExtrac
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from utils.byok import has_byok_keys
 from utils.llm.gateway_client import record_chat_extraction_gateway_result
-from utils.llm.conversation_folder import FolderAssignment, assign_conversation_to_folder, build_folders_context
 from utils.llm.gateway_observability import record_gateway_shadow_comparison
 import logging
 
@@ -46,7 +45,7 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
-def _invoke_gateway_shadow_chain(chain, values: dict, *, feature: str) -> BaseModel | None:
+def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature: str) -> BaseModel | None:
     if has_byok_keys():
         record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
         return None
@@ -72,6 +71,11 @@ def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:
     return response.to_action_items()
 
 
+def _content_str(response: Any) -> str:
+    content = response.content
+    return content if isinstance(content, str) else str(content)
+
+
 def _coerce_structured(response: Structured | StructuredExtraction) -> Structured:
     if isinstance(response, StructuredExtraction):
         return response.to_structured()
@@ -81,7 +85,7 @@ def _coerce_structured(response: Structured | StructuredExtraction) -> Structure
 def _normalize_action_item_due_dates(
     action_items: List[ActionItem],
     *,
-    user_tz,
+    user_tz: Any,
     now: datetime,
     log_past_due_clears: bool,
 ) -> List[ActionItem]:
@@ -339,7 +343,7 @@ def _record_conversation_action_items_shadow_comparison(
     gateway_response: ActionItemsExtraction | None,
     legacy_response: List[ActionItem],
     *,
-    user_tz,
+    user_tz: Any,
     now: datetime,
 ) -> None:
     if gateway_response is None:
@@ -369,43 +373,61 @@ def _record_conversation_action_items_shadow_comparison(
     )
 
 
-def _run_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
-    gateway_chain = prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser
+def _run_conversation_structure_shadow(
+    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
+) -> None:
+    gateway_chain = cast(
+        Any,
+        prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser,
+    )
     gateway_response = _invoke_gateway_shadow_chain(
         gateway_chain,
         prompt_values,
         feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
     )
-    _record_conversation_structure_shadow_comparison(_coerce_structured(gateway_response), legacy_response)
+    if gateway_response is not None:
+        _record_conversation_structure_shadow_comparison(
+            _coerce_structured(cast(Structured | StructuredExtraction, gateway_response)), legacy_response
+        )
 
 
 def _run_conversation_action_items_shadow(
-    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
+    prompt: ChatPromptTemplate,
+    prompt_values: dict[str, Any],
+    legacy_response: List[ActionItem],
+    user_tz: Any,
+    now: datetime,
 ) -> None:
-    gateway_chain = (
+    gateway_chain = cast(
+        Any,
         prompt
         | get_llm_gateway_chat_structured(cache_key='omi-extract-actions')
-        | PydanticOutputParser(pydantic_object=ActionItemsExtraction)
+        | PydanticOutputParser(pydantic_object=ActionItemsExtraction),
     )
     gateway_response = _invoke_gateway_shadow_chain(
         gateway_chain,
         prompt_values,
         feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
     )
-    _record_conversation_action_items_shadow_comparison(gateway_response, legacy_response, user_tz=user_tz, now=now)
+    _record_conversation_action_items_shadow_comparison(
+        cast(Optional[ActionItemsExtraction], gateway_response),
+        legacy_response,
+        user_tz=user_tz,
+        now=now,
+    )
 
 
-def _submit_llm_background(fn, *args):
+def _submit_llm_background(fn: Any, *args: Any) -> Any:
     from utils.executors import llm_executor, submit_with_context
 
     return submit_with_context(llm_executor, fn, *args)
 
 
 def _submit_gateway_shadow(
-    worker_fn,
+    worker_fn: Any,
     feature: str,
     log_label: str,
-    *args,
+    *args: Any,
 ) -> None:
     try:
         future = _submit_llm_background(worker_fn, *args)
@@ -417,7 +439,7 @@ def _submit_gateway_shadow(
         )
         return
 
-    def _log_shadow_failure(completed_future):
+    def _log_shadow_failure(completed_future: Any) -> None:
         try:
             completed_future.result()
         except Exception:
@@ -426,7 +448,9 @@ def _submit_gateway_shadow(
     future.add_done_callback(_log_shadow_failure)
 
 
-def _submit_conversation_structure_shadow(prompt, prompt_values: dict, legacy_response: Structured) -> None:
+def _submit_conversation_structure_shadow(
+    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
+) -> None:
     _submit_gateway_shadow(
         _run_conversation_structure_shadow,
         CONVERSATION_STRUCTURE_SHADOW_FEATURE,
@@ -438,7 +462,11 @@ def _submit_conversation_structure_shadow(prompt, prompt_values: dict, legacy_re
 
 
 def _submit_conversation_action_items_shadow(
-    prompt, prompt_values: dict, legacy_response: List[ActionItem], user_tz, now: datetime
+    prompt: ChatPromptTemplate,
+    prompt_values: dict[str, Any],
+    legacy_response: List[ActionItem],
+    user_tz: Any,
+    now: datetime,
 ) -> None:
     _submit_gateway_shadow(
         _run_conversation_action_items_shadow,
@@ -453,7 +481,7 @@ def _submit_conversation_action_items_shadow(
 
 
 def should_discard_conversation(
-    transcript: str, photos: List[ConversationPhoto] = None, duration_seconds: Optional[float] = None
+    transcript: str, photos: Optional[List[ConversationPhoto]] = None, duration_seconds: Optional[float] = None
 ) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
@@ -462,12 +490,12 @@ def should_discard_conversation(
         return False
     has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
 
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
     if has_photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        photo_descriptions = ConversationPhoto.photos_as_string(photos) if photos else 'None'
         context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
     # If there is no content to process (e.g., empty transcript and no photo descriptions), discard.
@@ -526,7 +554,7 @@ Content:
         'format_instructions': custom_parser.get_format_instructions(),
     }
 
-    prompt = ChatPromptTemplate.from_messages([prompt_template])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([prompt_template])
     chain = prompt | get_llm('conv_discard') | custom_parser
     try:
         response: DiscardConversation = chain.invoke(prompt_values)
@@ -556,7 +584,7 @@ def _build_conversation_context(
     Returns:
         Formatted context string, or empty string if no content provided.
     """
-    context_parts = []
+    context_parts: List[str] = []
 
     if calendar_meeting_context:
         participants_str = ", ".join(
@@ -593,10 +621,10 @@ def extract_action_items(
     started_at: datetime,
     language_code: str,
     tz: str,
-    photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
-    calendar_meeting_context: 'CalendarMeetingContext' = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    existing_action_items: Optional[List[Dict[str, Any]]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    output_language_code: Optional[str] = None,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -621,7 +649,7 @@ def extract_action_items(
 
     existing_items_context = ""
     if existing_action_items:
-        items_list = []
+        items_list: List[str] = []
         for item in existing_action_items:
             # Defensive: the rendered section is "OPEN TASKS"; a completed item
             # leaking through (e.g. a future caller that doesn't pre-filter)
@@ -822,7 +850,7 @@ def extract_action_items(
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
-    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | get_llm('conv_action_items', cache_key='omi-extract-actions') | action_items_parser
 
     current_time = datetime.now(timezone.utc)
@@ -895,9 +923,9 @@ def get_transcript_structure(
     language_code: str,
     tz: str,
     uid: str,
-    photos: List[ConversationPhoto] = None,
-    calendar_meeting_context: 'CalendarMeetingContext' = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
     conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
     if not conversation_context:
@@ -953,7 +981,7 @@ def get_transcript_structure(
 
     # Second system message: conversation context (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
-    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
     legacy_prompt_values = {
         'conversation_context': conversation_context,
@@ -986,10 +1014,10 @@ def get_reprocess_transcript_structure(
     language_code: str,
     tz: str,
     title: str,
-    photos: List[ConversationPhoto] = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
@@ -1042,7 +1070,7 @@ def get_reprocess_transcript_structure(
         '    ', ''
     ).strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
 
     response = _coerce_structured(
@@ -1068,7 +1096,7 @@ def get_reprocess_transcript_structure(
 
 
 def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, language_code: str = 'en') -> str:
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
@@ -1095,7 +1123,7 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     '''
 
     response = get_llm('conv_app_result', cache_key='omi-app-result').invoke(prompt)
-    content = response.content.replace('```json', '').replace('```', '')
+    content = _content_str(response).replace('```json', '').replace('```', '')
     return content
 
 
@@ -1179,7 +1207,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
 
     try:
         with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
-        response: SuggestedAppsSelection = with_parser.invoke(prompt)
+        response: SuggestedAppsSelection = cast(SuggestedAppsSelection, with_parser.invoke(prompt))
 
         # Validate that suggested app IDs exist in the available apps
         valid_app_ids = {app.id for app in apps}
@@ -1250,7 +1278,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
 
     try:
         with_parser = get_llm('conv_app_select').with_structured_output(BestAppSelection)
-        response: BestAppSelection = with_parser.invoke(prompt)
+        response: BestAppSelection = cast(BestAppSelection, with_parser.invoke(prompt))
         selected_app_id = response.app_id
 
         if not selected_app_id or selected_app_id.strip() == "":
@@ -1279,4 +1307,4 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     {conversation_text}
     """
     response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(full_prompt)
-    return response.content
+    return _content_str(response)

@@ -97,7 +97,7 @@ class GeneratedMemoryDB {
   final String subjectAttribution;
   final String? subjectEntityId;
   final String? supersededBy;
-  final List<String> tags;
+  final List<String>? tags;
   final String uid;
   final List<String>? uncertaintyReasons;
   final DateTime updatedAt;
@@ -137,7 +137,7 @@ class GeneratedMemoryDB {
     this.subjectAttribution = "unknown",
     this.subjectEntityId,
     this.supersededBy,
-    this.tags = const [],
+    this.tags,
     required this.uid,
     this.uncertaintyReasons,
     required this.updatedAt,
@@ -179,7 +179,7 @@ class GeneratedMemoryDB {
       subjectAttribution: _required(_readFieldValue<String>(_readField(json, const ["subject_attribution"]), "subject_attribution", _readString, requiredField: false, nullable: false, defaultValue: "unknown"), "subject_attribution"),
       subjectEntityId: _readFieldValue<String>(_readField(json, const ["subject_entity_id"]), "subject_entity_id", _readString, requiredField: false, nullable: true),
       supersededBy: _readFieldValue<String>(_readField(json, const ["superseded_by"]), "superseded_by", _readString, requiredField: false, nullable: true),
-      tags: _required(_readFieldValue<List<String>>(_readField(json, const ["tags"]), "tags", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "tags"),
+      tags: _readFieldValue<List<String>>(_readField(json, const ["tags"]), "tags", _readStringList, requiredField: false, nullable: true),
       uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
       uncertaintyReasons: _readFieldValue<List<String>>(_readField(json, const ["uncertainty_reasons"]), "uncertainty_reasons", _readStringList, requiredField: false, nullable: true),
       updatedAt: _required(_readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: true, nullable: false), "updated_at"),

@@ -37,8 +37,6 @@ run_canonical_short_term_ttl_lifecycle = None
 
 
 def _load_ws_b_runtime_modules() -> None:
-    if write_canonical_extraction_memory is not None:
-        return
     ensure_utils_memory_packages_importable()
     canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
     short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
@@ -263,6 +261,7 @@ def _set_canonical_cohort(monkeypatch, *uids: str) -> None:
 def _clear_canonical_cohort_fixture(monkeypatch):
     from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort
 
+    _load_ws_b_runtime_modules()
     clear_canonical_cohort(monkeypatch)
     monkeypatch.setattr(
         "utils.memory.short_term_promotion.extract_kg_for_promoted_memory",
@@ -663,9 +662,8 @@ def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_r
     )
     short_id = write_canonical_extraction_memory(uid, required_payload, db_client=db)
 
-    import utils.memory.short_term_promotion as short_term_promotion_mod
-
-    real_apply = short_term_promotion_mod.apply_long_term_patch_firestore
+    promotion_globals = run_canonical_short_term_promotion.__globals__
+    real_apply = promotion_globals["apply_long_term_patch_firestore"]
     failed_once = False
 
     def flaky_apply(**kwargs):
@@ -680,7 +678,7 @@ def test_required_promotion_retry_after_supersede_failure_is_idempotent_across_r
             raise RuntimeError("injected supersede failure")
         return real_apply(**kwargs)
 
-    with patch("utils.memory.short_term_promotion.apply_long_term_patch_firestore", side_effect=flaky_apply):
+    with patch.dict(promotion_globals, {"apply_long_term_patch_firestore": flaky_apply}):
         with pytest.raises(RuntimeError, match="injected supersede failure"):
             run_canonical_short_term_promotion(uid, db_client=db, now=NOW, run_id="promo-required-retry-1")
 

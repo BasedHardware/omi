@@ -374,13 +374,13 @@ class _PlansSheetState extends State<PlansSheet> {
     Map<String, dynamic>? selectedPlanData;
     if (tierId != null) {
       selectedPlanData = plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-            (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
-          );
+        (plan) => plan['plan_id'] == tierId && plan['interval'] == (isYearly ? 'year' : 'month'),
+      );
     }
     // Fallback to old behavior (first plan matching interval) for backwards compat
     selectedPlanData ??= plans.cast<Map<String, dynamic>>().firstWhereOrNull(
-          (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
-        );
+      (plan) => plan['interval'] == (isYearly ? 'year' : 'month'),
+    );
 
     if (selectedPlanData == null) {
       AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
@@ -396,7 +396,8 @@ class _PlansSheetState extends State<PlansSheet> {
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
     final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier &&
         (currentSub?.plan == PlanType.unlimited ||
             currentSub?.plan == PlanType.operator ||
             currentSub?.plan == PlanType.architect) &&
@@ -964,7 +965,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             builder: (context) {
                               // Check if subscription period has ended
                               final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
+                              final periodEnded =
+                                  sub?.currentPeriodEnd != null &&
                                   DateTime.fromMillisecondsSinceEpoch(
                                     sub!.currentPeriodEnd! * 1000,
                                   ).isBefore(DateTime.now());
@@ -1033,7 +1035,8 @@ class _PlansSheetState extends State<PlansSheet> {
                         // Training Data Opt-in Option - only show after plans are loaded
                         Consumer2<UsageProvider, UserProvider>(
                           builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
+                            final shouldShowTrainingOption =
+                                _showTrainingDataOptIn &&
                                 !usageProvider.isLoadingPlans &&
                                 usageProvider.availablePlans != null;
 
@@ -1196,7 +1199,8 @@ class _PlansSheetState extends State<PlansSheet> {
                             final isOnAnnualPlan = currentPlan?['interval'] == 'year';
                             final hasScheduledUpgrade = _hasScheduledUpgrade();
                             final usageProvider = context.read<UsageProvider>();
-                            final shouldShowContinueButton = !isOnAnnualPlan &&
+                            final shouldShowContinueButton =
+                                !isOnAnnualPlan &&
                                 !hasScheduledUpgrade &&
                                 !isCancelled &&
                                 !usageProvider.isLoadingPlans &&
@@ -1272,10 +1276,14 @@ class _PlansSheetState extends State<PlansSheet> {
                               _buildLimitationItem(icon: FontAwesomeIcons.carBattery, text: '7x battery consumption'),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
-                                  icon: FontAwesomeIcons.triangleExclamation, text: '30% less transcription quality'),
+                                icon: FontAwesomeIcons.triangleExclamation,
+                                text: '30% less transcription quality',
+                              ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(
-                                  icon: FontAwesomeIcons.clock, text: '5-7 second delay (not real-time)'),
+                                icon: FontAwesomeIcons.clock,
+                                text: '5-7 second delay (not real-time)',
+                              ),
                               const SizedBox(height: 12),
                               _buildLimitationItem(icon: FontAwesomeIcons.userSlash, text: 'Cannot identify speakers'),
                             ],

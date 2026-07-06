@@ -5,10 +5,11 @@ import uuid
 from typing import List, Dict, Any, Union, Optional
 import hashlib
 import os
+import asyncio
 
 import pytz
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from database import (
@@ -21,8 +22,9 @@ from database import (
     llm_usage as llm_usage_db,
     users as users_db,
 )
+from database.sync_jobs import release_job_run_lock, try_acquire_job_run_lock
 from services.users.data_export import iter_user_data_export
-from services.users.account_deletion import start_account_deletion
+from services.users.account_deletion import background_wipe_user_data, start_account_deletion
 from database.app_review_config import should_hide_subscription_ui
 from database.webhook_health import record_dev_webhook_success
 from database.conversations import get_in_progress_conversation, get_conversation
@@ -44,6 +46,7 @@ from database.redis_db import (
 )
 
 from database.users import (
+    claim_deletion_wipe_for_task,
     get_user_transcription_preferences,
     set_user_transcription_preferences,
 )
@@ -93,6 +96,8 @@ from utils.subscription import (
 )
 from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
+from utils.cloud_tasks import get_account_deletion_tasks_max_attempts, verify_cloud_tasks_oidc
+from utils.executors import cleanup_executor, db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
 from utils.notifications import send_notification, send_training_data_submitted_notification
@@ -295,6 +300,56 @@ def delete_account(
     except Exception as e:
         logger.info(f'delete_account {sanitize(str(e))}')
         raise HTTPException(status_code=500, detail='Could not delete account. Please try again.')
+
+
+# response_model omitted: include_in_schema=False Cloud Tasks handler; JSONResponse
+# status codes drive queue retry/ack behavior.
+@router.post('/v1/users/account-deletion-wipes/run', include_in_schema=False)
+async def run_account_deletion_wipe(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
+    try:
+        payload = await request.json()
+        uid = payload['uid']
+        if not isinstance(uid, str) or not uid:
+            raise ValueError('uid must be a non-empty string')
+    except Exception as e:
+        logger.error(f'account_deletion handler: invalid payload, dropping task: {sanitize(str(e))}')
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
+
+    lock_key = f'account-deletion:{uid}'
+    lock_token = await run_blocking(db_executor, try_acquire_job_run_lock, lock_key)
+    if not lock_token:
+        logger.warning(f'account_deletion handler: run-lock held for {uid}, deferring')
+        return JSONResponse(status_code=409, content={'status': 'locked'})
+
+    release_lock = True
+    try:
+        claim_status = await run_blocking(db_executor, claim_deletion_wipe_for_task, uid)
+        if claim_status == 'completed':
+            return JSONResponse(status_code=200, content={'status': 'acked', 'job_status': 'completed'})
+        if claim_status == 'running':
+            return JSONResponse(status_code=409, content={'status': 'running'})
+        if claim_status != 'claimed':
+            logger.warning(f'account_deletion handler: non-actionable task for {uid}, claim_status={claim_status}')
+            return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': claim_status})
+
+        ok = await run_blocking(cleanup_executor, background_wipe_user_data, uid)
+        if ok:
+            return JSONResponse(status_code=200, content={'status': 'done'})
+
+        max_attempts = get_account_deletion_tasks_max_attempts()
+        if task_retry_count >= max_attempts - 1:
+            logger.error(f'account_deletion handler: final attempt {task_retry_count + 1} failed for {uid}')
+            return JSONResponse(status_code=200, content={'status': 'failed_final'})
+
+        logger.warning(f'account_deletion handler: attempt {task_retry_count + 1} failed for {uid}, will retry')
+        return JSONResponse(status_code=500, content={'status': 'retry'})
+    except asyncio.CancelledError:
+        release_lock = False
+        logger.warning(f'account_deletion handler cancelled for {uid}; preserving run-lock until TTL')
+        raise
+    finally:
+        if release_lock:
+            await run_blocking(db_executor, release_job_run_lock, lock_key, lock_token)
 
 
 @router.patch('/v1/users/geolocation', tags=['v1'], response_model=UserStatusResponse)

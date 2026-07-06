@@ -9,7 +9,6 @@ and leaves all readiness decisions BLOCKED/NO_GO.
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 from typing import Any, Callable

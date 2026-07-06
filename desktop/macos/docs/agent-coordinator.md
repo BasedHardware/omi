@@ -4,7 +4,7 @@ This document locks the Phase 0 boundary for the macOS Desktop Agent Coordinator
 
 ## Scope
 
-The first coordinator wave is macOS Desktop only. Backend canonical AgentRun APIs, mobile unification, AgentVM runtime-node work, cloud relay/directory work, public MCP coordinator controls, cross-device artifact sync, full artifact browsing, model-assisted routing, and full floating-pill replacement are deferred. Track follow-up work in repo issues or checked-in planning docs before implementation.
+The first coordinator wave is macOS Desktop only. Backend canonical AgentRun APIs, mobile unification, AgentVM runtime-node work, cloud relay/directory work, public MCP coordinator controls, cross-device artifact sync, full artifact browsing, and model-assisted routing remain deferred. Track follow-up work in repo issues or checked-in planning docs before implementation.
 
 The coordinator uses the existing TypeScript desktop runtime kernel as the execution substrate and `omi-agentd.sqlite3` as the only durable local agent/coordinator authority. Swift is a projection and control-client layer through `AgentRuntimeProcess` / `AgentBridge`; it may cache UI projections, but it must not own run success, failure, approval, grant, or artifact-delivery truth.
 
@@ -33,7 +33,16 @@ The coordinator uses the existing TypeScript desktop runtime kernel as the execu
 - Task chat should become a canonical task-chat session bound to `surfaceKind=task_chat`, `externalRefKind=task`, and the task id; legacy ACP resume IDs stay separate from Omi session IDs.
 - Main chat is the canonical user-facing conversation envelope for new typed routing. Typed main-chat turns may ask the coordinator for route context before the normal bridge call, but the bridge still produces the assistant response and child task/subagent runtime sessions remain isolated and auditable.
 - PTT/realtime turns are mirrored into main chat history after completion, but realtime reasoning still uses its warm voice path. True single-chat parity requires routing final PTT transcripts through the same parent-turn coordinator contract before removing separate voice/subagent affordances.
-- Floating pill replacement is deferred. Wave one may project legacy pill state into awareness/action-queue views and expose safe inspect/cancel/open actions, but `spawn_agent` / `manage_agent_pills` remain legacy workflows until a later replacement phase.
+- Floating pills are kernel run projections: `spawn_agent` is the only agent-facing spawn tool; pills render from `list_agent_sessions` / attention overrides. Use `list_agent_sessions`, `cancel_agent_run`, and `update_agent_artifact_lifecycle` for pill management.
 - `DesktopAutomationBridge` and `scripts/omi-ctl` are verification and development substrates, documented in [desktop e2e](../e2e/SKILL.md) and [harness](../e2e/harness.md). They are not production coordinator actuators unless a separate approval path is added.
 - Local Agent API expansion is deferred until scoped local credentials, Host/Origin checks, token rotation, and context-access logging are in place.
 - Tool-manifest risk/privacy/bundle metadata is a classification contract for the coordinator. Grant enforcement lands with the local policy module; until then, do not treat metadata alone as an approval membrane.
+
+## Maintenance — migration shim burn-down
+
+Temporary shims from the platonic refactor are scheduled for deletion **two desktop releases after** the release that ships the platonic branch. Track in `.cursor/plans/desktop-agent-platonic-gap-closure.plan.md` (G6):
+
+| Shim | Site | Delete in |
+|------|------|-----------|
+| `import_legacy_main_chat_sessions` | `agent/src/runtime/surface-session.ts`, `agent/src/index.ts`, `AgentRuntimeProcess.swift` | ship+2 releases |
+| sqlite `legacy_client_scope` / `legacy_session_key` columns | `agent/src/runtime/sqlite-store.ts` | ship+2 releases |

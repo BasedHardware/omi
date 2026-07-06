@@ -6,18 +6,23 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional
+from typing import Any, Callable, Dict, Mapping, Optional, cast
 
 try:
-    from fastapi import FastAPI
+    from fastapi import FastAPI  # pyright: ignore[reportAssignmentType]
 except (ModuleNotFoundError, ImportError):
 
     class FastAPI:
-        def __init__(self, *args, **kwargs):
+        # Minimal duck-typed stand-in used only when fastapi is unavailable.
+        routes_by_path: dict[str, Callable[..., Any]]
+
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
             self.routes_by_path = {}
 
-        def post(self, path, include_in_schema=False):
-            def decorator(func):
+        def post(
+            self, path: str, include_in_schema: bool = False
+        ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+            def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
                 self.routes_by_path[path] = func
                 return func
 
@@ -205,7 +210,7 @@ def make_authoritative_item_loader(*, db_client: Any) -> Callable[[Dict[str, Any
         snapshot = db_client.document(f"{MemoryCollections(uid=uid).memory_items}/{memory_id}").get()
         if not getattr(snapshot, "exists", False):
             return None
-        data = snapshot.to_dict() or {}
+        data = cast(Dict[str, Any], snapshot.to_dict() or {})
         return MemoryItem(**data)
 
     return load_authoritative_item
@@ -388,7 +393,7 @@ def _entrypoint_summary(
     enabled: bool = False,
     uid: Optional[str] = None,
     worker_id: Optional[str] = None,
-    errors: Optional[list] = None,
+    errors: Optional[list[Dict[str, str]]] = None,
 ) -> Dict[str, Any]:
     return {
         "enabled": enabled,
@@ -413,14 +418,6 @@ def _summary_has_failures(summary: Dict[str, Any]) -> bool:
     return bool(summary.get("errors")) or any(
         int(summary.get(key, 0) or 0) > 0 for key in ("failed_count", "ack_failed_count")
     )
-
-
-def _missing_production_dependency(record: Dict[str, Any]) -> None:
-    raise RuntimeError("production vector repair worker dependencies are not wired in this wrapper contract")
-
-
-def _missing_production_repair_dependency(record: Dict[str, Any], item: Any) -> None:
-    raise RuntimeError("production vector repair worker dependencies are not wired in this wrapper contract")
 
 
 app = create_vector_repair_outbox_worker_app()

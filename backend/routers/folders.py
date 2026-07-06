@@ -121,7 +121,7 @@ def get_folder_conversations(
     offset: int = Query(0, ge=0),
     include_discarded: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
-):
+) -> List[Conversation]:
     """Get all conversations in a folder with pagination."""
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
@@ -133,7 +133,7 @@ def get_folder_conversations(
     redact_conversations_for_list(conversations)
     # Validate each record individually so one malformed/legacy conversation doesn't fail the whole list
     # with a 500.
-    valid_conversations = []
+    valid_conversations: List[Conversation] = []
     for conv in conversations:
         try:
             valid_conversations.append(Conversation.model_validate(conv))

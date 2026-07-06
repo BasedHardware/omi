@@ -2,7 +2,7 @@
 Tools for answering questions about the Omi/Friend product.
 """
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.app_integrations import get_github_docs_content
 import logging
 

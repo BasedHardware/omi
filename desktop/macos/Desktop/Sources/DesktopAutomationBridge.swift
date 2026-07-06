@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Network
 
@@ -7,15 +8,21 @@ enum DesktopAutomationLaunchOptions {
   static let portPrefix = "--automation-port="
   static let captureRootPrefix = "--automation-capture-root="
   static let defaultPort: UInt16 = 47777
+  static let tokenEnvironmentKey = "OMI_AUTOMATION_TOKEN"
+  static let tokenFileEnvironmentKey = "OMI_AUTOMATION_TOKEN_FILE"
+
+  private static let generatedToken = "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
 
   static var isEnabled: Bool {
+    guard AppBuild.isNonProduction else {
+      return false
+    }
     // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
     if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
       return false
     }
     // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
-    // bundle) so agents can drive the app without remembering a launch flag. The
-    // listener only binds to 127.0.0.1 and is never enabled on the production bundle.
+    // bundle) so agents can drive the app without remembering a launch flag.
     return CommandLine.arguments.contains(enableFlag)
       || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
       || AppBuild.isNonProduction
@@ -37,6 +44,35 @@ enum DesktopAutomationLaunchOptions {
     }
 
     return defaultPort
+  }
+
+  static var token: String {
+    let env = ProcessInfo.processInfo.environment[tokenEnvironmentKey] ?? ""
+    let trimmed = env.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? generatedToken : trimmed
+  }
+
+  static var tokenFileURL: URL {
+    if let rawValue = ProcessInfo.processInfo.environment[tokenFileEnvironmentKey],
+      !rawValue.isEmpty
+    {
+      return URL(fileURLWithPath: rawValue).standardizedFileURL
+    }
+    return URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("omi-automation-\(port).token")
+      .standardizedFileURL
+  }
+
+  static func writeTokenFileIfNeeded() {
+    guard isEnabled else { return }
+    let url = tokenFileURL
+    do {
+      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try token.write(to: url, atomically: true, encoding: .utf8)
+      chmod(url.path, S_IRUSR | S_IWUSR)
+    } catch {
+      logError("DesktopAutomationBridge: failed to write automation token file", error: error)
+    }
   }
 
   static var captureRoot: URL {
@@ -141,6 +177,14 @@ struct DesktopAutomationCapabilities: Codable {
   let assertions: [String]
   let artifactTypes: [String]
   let actions: [DesktopAutomationActionDescriptor]
+}
+
+private struct DesktopAutomationHealth: Codable {
+  let ok: Bool
+  let name: String
+  let bundleIdentifier: String
+  let bridgePort: UInt16
+  let requiresAuth: Bool
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -466,8 +510,130 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.sendMessage(query)
+      let tracer = QueryTracer(query: query, inputMode: .text)
+      await QueryTracerContext.$current.withValue(tracer) {
+        _ = await provider.sendMessage(query)
+      }
       return ["sent": query]
+    }
+
+    // Gauntlet step 06: clear owner A kernel bindings, re-register synthetic owner B,
+    // and run one assembled-context probe turn. Non-production bundles only.
+    register(
+      name: "swap_test_owner",
+      summary: "Clear owner A kernel state, swap to synthetic owner B, and run one probe turn",
+      params: ["owner_b", "query"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "swap_test_owner is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      return await provider.automationSwapTestOwner(
+        ownerBId: params["owner_b"] ?? "",
+        probeQuery: params["query"] ?? ""
+      )
+    }
+
+    register(
+      name: "restore_test_owner",
+      summary: "Restore the real owner after swap_test_owner (harness cleanup; no-op if no swap active)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "restore_test_owner is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      return await provider.automationRestoreTestOwner()
+    }
+
+    register(
+      name: "main_chat_snapshot",
+      summary: "Export main-chat transcript, session ids, and stream state for continuity harnesses",
+      params: ["limit"]
+    ) { params in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let limit = max(1, intParam(params["limit"], default: 50))
+      return provider.automationMainChatSnapshot(limit: limit)
+    }
+
+    register(
+      name: "clear_owner_surface_state",
+      summary: "Clear kernel main_chat turns for the active owner (non-prod continuity harness hygiene)",
+      params: ["chatId"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "clear_owner_surface_state is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let chatId = params["chatId"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+      return await provider.automationClearOwnerSurfaceState(chatId: chatId?.isEmpty == false ? chatId! : "default")
+    }
+
+    register(
+      name: "kernel_turn_tail",
+      summary: "Return the last N kernel main_chat turns for continuity harness evidence",
+      params: ["limit"]
+    ) { params in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let limit = max(1, intParam(params["limit"], default: 8))
+      return await provider.automationKernelTurnTail(limit: limit)
+    }
+
+    register(
+      name: "wait_main_chat_idle",
+      summary: "Block until main chat is not sending or streaming (continuity harness)",
+      params: ["timeoutMs", "pollMs"]
+    ) { params in
+      let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
+      let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      while Date() < deadline {
+        if !provider.isSending && !provider.messages.contains(where: { $0.isStreaming }) {
+          var detail = provider.automationMainChatSnapshot(limit: 8)
+          detail["idle"] = "true"
+          return detail
+        }
+        try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+      }
+      var detail = provider.automationMainChatSnapshot(limit: 8)
+      detail["error"] = "timeout"
+      detail["timeout_ms"] = "\(timeoutMs)"
+      return detail
+    }
+
+    register(
+      name: "agent_runtime_evidence",
+      summary: "Return omi-agentd.sqlite3 path and SHA-256 for continuity harness evidence bundles"
+    ) { _ in
+      let stateDir = AgentRuntimeProcess.defaultStateDirectory()
+      let dbPath = (stateDir as NSString).appendingPathComponent("omi-agentd.sqlite3")
+      var detail: [String: String] = [
+        "state_dir": stateDir,
+        "database_path": dbPath,
+        "database_exists": FileManager.default.fileExists(atPath: dbPath) ? "true" : "false",
+        "bundle_id": Bundle.main.bundleIdentifier ?? "",
+      ]
+      if FileManager.default.fileExists(atPath: dbPath),
+        let data = try? Data(contentsOf: URL(fileURLWithPath: dbPath))
+      {
+        let digest = SHA256.hash(data: data)
+        detail["database_sha256"] = digest.map { String(format: "%02x", $0) }.joined()
+        detail["database_bytes"] = "\(data.count)"
+      }
+      return detail
     }
 
     register(
@@ -968,6 +1134,7 @@ final class DesktopAutomationBridge {
       }
       listener.start(queue: queue)
       self.listener = listener
+      DesktopAutomationLaunchOptions.writeTokenFileIfNeeded()
       Task { @MainActor in DesktopAutomationActionRegistry.shared.registerBuiltins() }
       log(
         "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
@@ -1033,12 +1200,16 @@ final class DesktopAutomationBridge {
     let method = String(requestParts[0])
     let path = String(requestParts[1])
 
+    var headers: [String: String] = [:]
     var contentLength = 0
     for line in lines.dropFirst() {
       let pieces = line.split(separator: ":", maxSplits: 1)
       guard pieces.count == 2 else { continue }
-      if pieces[0].lowercased() == "content-length" {
-        contentLength = Int(pieces[1].trimmingCharacters(in: .whitespaces)) ?? 0
+      let key = pieces[0].trimmingCharacters(in: .whitespaces).lowercased()
+      let value = pieces[1].trimmingCharacters(in: .whitespaces)
+      headers[key] = value
+      if key == "content-length" {
+        contentLength = Int(value) ?? 0
       }
     }
 
@@ -1049,7 +1220,7 @@ final class DesktopAutomationBridge {
     }
 
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
-    return HTTPRequest(method: method, path: path, body: body)
+    return HTTPRequest(method: method, path: path, headers: headers, body: body)
   }
 
   /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
@@ -1095,6 +1266,30 @@ final class DesktopAutomationBridge {
   }
 
   private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
+    guard acceptsLoopbackHostAndOrigin(request.headers) else {
+      return jsonResponse(
+        DesktopAutomationResponse<DesktopAutomationSnapshot>(
+          ok: false, result: nil, error: "invalid_host_or_origin"),
+        statusCode: 403)
+    }
+    if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      return jsonResponse(
+        DesktopAutomationHealth(
+          ok: true,
+          name: "omi-desktop-automation",
+          bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          bridgePort: DesktopAutomationLaunchOptions.port,
+          requiresAuth: true
+        )
+      )
+    }
+    guard authenticate(request.headers["authorization"]) else {
+      return jsonResponse(
+        DesktopAutomationResponse<DesktopAutomationSnapshot>(
+          ok: false, result: nil, error: "invalid_or_missing_automation_token"),
+        statusCode: 401)
+    }
+
     switch (request.method, request.path) {
     case ("GET", "/health"):
       let snapshot = await cachedAutomationSnapshot()
@@ -1401,6 +1596,59 @@ final class DesktopAutomationBridge {
     }
   }
 
+  private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
+    if let host = headers["host"], !isAllowedLoopbackHost(host) {
+      return false
+    }
+    if let origin = headers["origin"], !origin.isEmpty {
+      guard let url = URL(string: origin), let host = url.host, let port = url.port else {
+        return false
+      }
+      guard (url.scheme == "http" || url.scheme == "https"), port == Int(DesktopAutomationLaunchOptions.port) else {
+        return false
+      }
+      guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
+        return false
+      }
+    }
+    return true
+  }
+
+  private func isAllowedLoopbackHost(_ hostHeader: String) -> Bool {
+    let value = hostHeader.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let allowed = [
+      "127.0.0.1:\(DesktopAutomationLaunchOptions.port)",
+      "localhost:\(DesktopAutomationLaunchOptions.port)",
+      "[::1]:\(DesktopAutomationLaunchOptions.port)",
+    ]
+    return allowed.contains(value)
+  }
+
+  private func authenticate(_ authorization: String?) -> Bool {
+    guard let authorization else {
+      return false
+    }
+    let supplied: String
+    if authorization.lowercased().hasPrefix("bearer ") {
+      supplied = String(authorization.dropFirst(7))
+    } else {
+      supplied = authorization
+    }
+    return constantTimeEquals(supplied, DesktopAutomationLaunchOptions.token)
+  }
+
+  private func constantTimeEquals(_ lhs: String, _ rhs: String) -> Bool {
+    let left = Array(lhs.utf8)
+    let right = Array(rhs.utf8)
+    var diff = left.count ^ right.count
+    for index in 0..<max(left.count, right.count) {
+      let a = index < left.count ? left[index] : 0
+      let b = index < right.count ? right[index] : 0
+      diff |= Int(a ^ b)
+    }
+    return diff == 0
+  }
+
   private func jsonResponse<T: Codable>(_ payload: T, statusCode: Int = 200) -> HTTPResponse {
     do {
       let body = try JSONEncoder.pretty.encode(payload)
@@ -1432,6 +1680,8 @@ final class DesktopAutomationBridge {
     switch response.statusCode {
     case 200: statusText = "OK"
     case 400: statusText = "Bad Request"
+    case 401: statusText = "Unauthorized"
+    case 403: statusText = "Forbidden"
     case 404: statusText = "Not Found"
     default: statusText = "Internal Server Error"
     }
@@ -1461,6 +1711,7 @@ final class DesktopAutomationBridge {
 private struct HTTPRequest {
   let method: String
   let path: String
+  let headers: [String: String]
   let body: Data
 }
 

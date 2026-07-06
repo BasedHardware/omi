@@ -7,7 +7,7 @@ and for submitting feedback to LangSmith.
 """
 
 import os
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ def get_chat_tracer_callbacks(
     run_id: Optional[str] = None,
     run_name: Optional[str] = None,
     tags: Optional[List[str]] = None,
-    metadata: Optional[dict] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> List[Any]:
     """
     Create LangSmith tracer callbacks for per-request tracing.
@@ -179,7 +179,7 @@ def submit_langsmith_feedback(
 
         # Submit feedback to LangSmith
         # Note: feedback_source_type defaults to "api" which is valid
-        client.create_feedback(
+        client.create_feedback(  # type: ignore[reportUnknownMemberType]  # langsmith create_feedback partially typed
             run_id=run_id,
             key=key,
             score=score,

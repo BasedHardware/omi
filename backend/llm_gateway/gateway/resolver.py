@@ -38,14 +38,14 @@ class ResolvedRoute:
 
 
 def is_auto_lane_id(model: str) -> bool:
-    return isinstance(model, str) and model.startswith(AUTO_LANE_PREFIX)
+    return model.startswith(AUTO_LANE_PREFIX)
 
 
 def resolve_chat_completion_route(
     config: GatewayConfig,
     request: Mapping[str, Any],
 ) -> ResolvedRoute:
-    model = request.get('model') if isinstance(request, Mapping) else None
+    model = request.get('model')
     if not isinstance(model, str) or not model.strip():
         raise GatewayInvalidRequestError('model is required', param='model')
 

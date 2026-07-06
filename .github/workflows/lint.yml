@@ -37,7 +37,7 @@ jobs:
           echo "has_admin=$(echo "$FILES" | grep -q '^web/admin/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/validate-backend-runtime-env\.py$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          echo "has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/render-backend-runtime-env\.py$|^backend/scripts/validate-backend-runtime-env\.py$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
           echo "has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/' && echo true || echo false)" >> $GITHUB_OUTPUT
@@ -48,6 +48,9 @@ jobs:
           # UserDefaults key ratchet: run when desktop Swift sources, the ratchet
           # script, or this workflow change (so the gate dogfoods itself).
           echo "has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
+          # asyncAfter ratchet: run when floating-bar / PTT sources, the ratchet
+          # script, or this workflow change (so the gate dogfoods itself).
+          echo "has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
 
       # -- Universal source hygiene --
       - name: Check merge conflict markers
@@ -103,6 +106,10 @@ jobs:
       - name: Check desktop UserDefaults key ratchet
         if: steps.changed.outputs.has_desktop_defaults_ratchet == 'true'
         run: python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
+
+      - name: Check desktop asyncAfter ratchet
+        if: steps.changed.outputs.has_desktop_async_after_ratchet == 'true'
+        run: python3 desktop/macos/scripts/check-async-after-ratchet.py
 
       - name: Check GitHub Actions workflows
         if: steps.changed.outputs.has_workflows == 'true'
@@ -326,3 +333,53 @@ jobs:
         run: |
           npm ci
           npm run build
+
+  desktop-swift:
+    name: Desktop Swift Build & Tests
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_BASE="origin/${{ github.base_ref }}"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          FILES=$(git diff --name-only --diff-filter=ACMRD "$DIFF_BASE"...HEAD)
+          echo "$FILES"
+          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/swift-test-suites\.sh$|^\.github/workflows/lint\.yml$'; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache SwiftPM build products
+        if: steps.changed.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            desktop/macos/Desktop/.build
+          key: ${{ runner.os }}-desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-swift-
+
+      - name: Install Swift system dependencies
+        if: steps.changed.outputs.should_run == 'true'
+        run: brew install pkg-config webp
+
+      - name: Build desktop Swift app
+        if: steps.changed.outputs.should_run == 'true'
+        working-directory: desktop/macos
+        run: xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+
+      - name: Test desktop Swift app
+        if: steps.changed.outputs.should_run == 'true'
+        working-directory: desktop/macos
+        run: ./scripts/swift-test-suites.sh

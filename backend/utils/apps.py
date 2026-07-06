@@ -5,8 +5,7 @@ import os
 import secrets
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import List, Tuple, Dict, Any, Optional
-from urllib.parse import urlparse
+from typing import List, Tuple, Dict, Any, Optional, Set, cast
 
 import httpx
 from fastapi import HTTPException
@@ -87,8 +86,11 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+_reviewers_env: Optional[str] = os.getenv('MARKETPLACE_APP_REVIEWERS')
+MarketplaceAppReviewUIDs: List[str] = _reviewers_env.split(',') if _reviewers_env else []
 
-def _safe_build_app(app_dict: dict) -> Optional[App]:
+
+def _safe_build_app(app_dict: dict[str, Any]) -> Optional[App]:
     """Build an App from a raw marketplace record, skipping (not raising on) a malformed one.
 
     The marketplace list builders are shared and Redis/process-cached across all users, so one
@@ -106,38 +108,35 @@ def _safe_build_app(app_dict: dict) -> Optional[App]:
         return None
 
 
-MarketplaceAppReviewUIDs = (
-    os.getenv('MARKETPLACE_APP_REVIEWERS').split(',') if os.getenv('MARKETPLACE_APP_REVIEWERS') else []
-)
-
-
-def validate_app_endpoints_for_reenable(app_dict: dict, update_dict: dict, app_id: str):
+def validate_app_endpoints_for_reenable(app_dict: Dict[str, Any], update_dict: Dict[str, Any], app_id: str) -> None:
     """Validate all configured endpoints before allowing a disabled app to be re-enabled.
 
     Raises HTTPException(400) if any endpoint is unreachable or unhealthy.
     """
-    updated_ext = (
-        (update_dict.get('external_integration') or {})
-        if isinstance(update_dict.get('external_integration'), dict)
-        else {}
-    )
-    existing_ext = app_dict.get('external_integration') or {}
-    endpoints_to_check = []
-    seen_urls = set()
-    webhook_url = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
+    updated_ext_raw: object = update_dict.get('external_integration')
+    updated_ext: Dict[str, Any] = cast(Dict[str, Any], updated_ext_raw) if isinstance(updated_ext_raw, dict) else {}
+    existing_ext_raw: object = app_dict.get('external_integration')
+    existing_ext: Dict[str, Any] = cast(Dict[str, Any], existing_ext_raw) if isinstance(existing_ext_raw, dict) else {}
+    endpoints_to_check: List[Tuple[str, str, str, bool]] = []
+    seen_urls: Set[str] = set()
+    webhook_url: Any = updated_ext.get('webhook_url') or existing_ext.get('webhook_url', '')
     if webhook_url:
-        endpoints_to_check.append(('webhook', webhook_url, 'POST', True))
-        seen_urls.add(webhook_url)
-    mcp_url = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
+        endpoints_to_check.append(('webhook', str(webhook_url), 'POST', True))
+        seen_urls.add(str(webhook_url))
+    mcp_url: Any = updated_ext.get('mcp_server_url') or existing_ext.get('mcp_server_url', '')
     if mcp_url:
-        endpoints_to_check.append(('MCP server', mcp_url, 'POST', False))
-        seen_urls.add(mcp_url)
-    chat_tools = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
+        endpoints_to_check.append(('MCP server', str(mcp_url), 'POST', False))
+        seen_urls.add(str(mcp_url))
+    chat_tools_raw: object = update_dict.get('chat_tools') or app_dict.get('chat_tools') or []
+    chat_tools: List[Any] = list(cast(List[Any], chat_tools_raw)) if isinstance(chat_tools_raw, list) else []
     for tool in chat_tools:
-        ep = tool.get('endpoint', '') if isinstance(tool, dict) else getattr(tool, 'endpoint', '')
-        if ep and ep not in seen_urls:
-            endpoints_to_check.append(('chat tool', ep, 'HEAD', False))
-            seen_urls.add(ep)
+        if isinstance(tool, dict):
+            ep_raw: Any = cast(Dict[str, Any], tool).get('endpoint', '')
+        else:
+            ep_raw = getattr(tool, 'endpoint', '')
+        if ep_raw and str(ep_raw) not in seen_urls:
+            endpoints_to_check.append(('chat tool', str(ep_raw), 'HEAD', False))
+            seen_urls.add(str(ep_raw))
     if not endpoints_to_check:
         raise HTTPException(
             status_code=400,
@@ -181,7 +180,7 @@ def can_tester_access_app(uid: str, app_id: str) -> bool:
     return can_tester_access_app_db(app_id, uid)
 
 
-def _invalidate_tester_cache(uid: str):
+def _invalidate_tester_cache(uid: str) -> None:
     """Invalidate tester-related caches after mutation."""
     cache = get_memory_cache()
     cache.delete(f"is_tester:{uid}")
@@ -190,23 +189,24 @@ def _invalidate_tester_cache(uid: str):
     cache.delete(f"user_apps_slice:{uid}:1")
 
 
-def add_tester(data: dict):
+def add_tester(data: Dict[str, Any]) -> None:
     add_tester_db(data)
-    if uid := data.get('uid'):
-        _invalidate_tester_cache(uid)
+    uid = data.get('uid')
+    if uid:
+        _invalidate_tester_cache(cast(str, uid))
 
 
-def remove_tester(uid: str):
+def remove_tester(uid: str) -> None:
     remove_tester_db(uid)
     _invalidate_tester_cache(uid)
 
 
-def add_app_access_for_tester(app_id: str, uid: str):
+def add_app_access_for_tester(app_id: str, uid: str) -> None:
     add_app_access_for_tester_db(app_id, uid)
     _invalidate_tester_cache(uid)
 
 
-def remove_app_access_for_tester(app_id: str, uid: str):
+def remove_app_access_for_tester(app_id: str, uid: str) -> None:
     remove_app_access_for_tester_db(app_id, uid)
     _invalidate_tester_cache(uid)
 
@@ -214,7 +214,7 @@ def remove_app_access_for_tester(app_id: str, uid: str):
 # ********************************
 
 
-def weighted_rating(app):
+def weighted_rating(app: App) -> float:
     C = 3.0  # Assume 3.0 is the mean rating across all apps
     m = 5  # Minimum number of ratings required to be considered
     R = app.rating_avg or 0
@@ -242,7 +242,7 @@ def compute_app_score(app: App) -> float:
     return round(score, 4)
 
 
-def invalidate_popular_apps_cache():
+def invalidate_popular_apps_cache() -> None:
     """Invalidate the popular apps cache across all backend instances."""
     memory_cache = get_memory_cache()
     pubsub_manager = get_pubsub_manager()
@@ -263,12 +263,13 @@ def get_popular_apps() -> List[App]:
     cache_key = 'get_popular_apps_data'
     memory_cache = get_memory_cache()
 
-    def fetch_and_process():
+    def fetch_and_process() -> List[App]:
         """Fetch from Redis/DB and process apps (called only once with singleflight)."""
         # Check Redis cache
+        popular_apps: List[Dict[str, Any]]
         if cached_apps := get_generic_cache(cache_key):
             logger.info('get_popular_apps from Redis cache')
-            popular_apps = cached_apps
+            popular_apps = cast(List[Dict[str, Any]], cached_apps)
         else:
             # Database query
             logger.info('get_popular_apps from db')
@@ -283,7 +284,7 @@ def get_popular_apps() -> List[App]:
         apps_install = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids)
 
-        apps = []
+        apps: List[App] = []
         for app in popular_apps:
             app_dict = app
             app_dict['installs'] = apps_install.get(app['id'], 0)
@@ -309,11 +310,11 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
     # Cache tester flag per user (30s TTL) to avoid Firestore lookup every 1s (#5439 sub-task 3)
     tester = memory_cache.get_or_fetch(f"is_tester:{uid}", lambda: is_tester(uid), ttl=30)
 
-    def fetch_public_approved():
+    def fetch_public_approved() -> List[Dict[str, Any]]:
         """Fetch from Redis or DB (called only once with singleflight)."""
-        if data := get_generic_cache(cache_key):
+        if cached := get_generic_cache(cache_key):
             logger.info('get_public_approved_apps_data from Redis cache')
-            return data
+            return cast(List[Dict[str, Any]], cached)
         logger.info('get_public_approved_apps_data from db')
         data = get_public_approved_apps_db()
         # Reduce cache size by excluding large fields
@@ -322,24 +323,29 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         return reduced_data
 
     # Singleflight: only ONE request fetches, others wait
-    public_approved_data = memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30) or []
+    public_approved_data: List[Dict[str, Any]] = (
+        cast(List[Dict[str, Any]], memory_cache.get_or_fetch(cache_key, fetch_public_approved, ttl=30)) or []
+    )
 
     # Cache per-user app slice (private + unapproved + tester apps) with 30s TTL (#5439 sub-task 3)
-    def fetch_user_apps_slice():
+    def fetch_user_apps_slice() -> Dict[str, Any]:
         return {
             'private_data': get_private_apps(uid),
             'public_unapproved_data': get_public_unapproved_apps(uid),
             'tester_apps': get_apps_for_tester_db(uid) if tester else [],
         }
 
-    user_slice = memory_cache.get_or_fetch(f"user_apps_slice:{uid}:{int(tester)}", fetch_user_apps_slice, ttl=30) or {}
-    private_data = user_slice.get('private_data', [])
-    public_unapproved_data = user_slice.get('public_unapproved_data', [])
-    tester_apps = user_slice.get('tester_apps', [])
+    user_slice_raw = memory_cache.get_or_fetch(f"user_apps_slice:{uid}:{int(tester)}", fetch_user_apps_slice, ttl=30)
+    user_slice: Dict[str, Any] = cast(Dict[str, Any], user_slice_raw) if user_slice_raw else {}
+    private_data: List[Dict[str, Any]] = cast(List[Dict[str, Any]], user_slice.get('private_data', []))
+    public_unapproved_data: List[Dict[str, Any]] = cast(
+        List[Dict[str, Any]], user_slice.get('public_unapproved_data', [])
+    )
+    tester_apps: List[Dict[str, Any]] = cast(List[Dict[str, Any]], user_slice.get('tester_apps', []))
 
-    user_enabled = set(get_enabled_apps(uid))
-    all_apps = private_data + public_approved_data + public_unapproved_data + tester_apps
-    apps = []
+    user_enabled: Set[str] = set(get_enabled_apps(uid))
+    all_apps: List[Dict[str, Any]] = private_data + public_approved_data + public_unapproved_data + tester_apps
+    apps: List[App] = []
 
     app_ids = [app['id'] for app in all_apps]
     apps_install = get_apps_installs_count(app_ids)
@@ -365,11 +371,11 @@ def get_available_apps(uid: str, include_reviews: bool = False) -> List[App]:
         if built_app is not None:
             apps.append(built_app)
     if include_reviews:
-        apps = sorted(apps, key=weighted_rating, reverse=True)
+        apps.sort(key=weighted_rating, reverse=True)
     return apps
 
 
-def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
+def get_available_app_by_id(app_id: str, uid: str | None) -> Dict[str, Any] | None:
     cached_app = get_app_cache_by_id(app_id)
     if cached_app:
         logger.info('get_app_cache_by_id from cache')
@@ -385,7 +391,7 @@ def get_available_app_by_id(app_id: str, uid: str | None) -> dict | None:
     return app
 
 
-def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict | None:
+def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> Dict[str, Any] | None:
     app = get_app_by_id_db(app_id)
     if not app:
         return None
@@ -399,10 +405,10 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     app['reviews'] = [details for details in reviews.values() if details['review']]
     app['rating_avg'] = rating_avg
     app['rating_count'] = len(sorted_reviews)
-    app['user_review'] = reviews.get(uid)
+    app['user_review'] = reviews.get(uid) if uid else None
 
     # enabled
-    user_enabled = set(get_enabled_apps(uid))
+    user_enabled: Set[str] = set(get_enabled_apps(uid)) if uid else set()
     app['enabled'] = app['id'] in user_enabled
 
     # install
@@ -411,17 +417,17 @@ def get_available_app_by_id_with_reviews(app_id: str, uid: str | None) -> dict |
     return app
 
 
-def get_public_unapproved_apps(uid: str) -> List:
+def get_public_unapproved_apps(uid: str) -> List[Dict[str, Any]]:
     data = get_public_unapproved_apps_db(uid)
     return data
 
 
-def get_private_apps(uid: str) -> List:
+def get_private_apps(uid: str) -> List[Dict[str, Any]]:
     data = get_private_apps_db(uid)
     return data
 
 
-def invalidate_approved_apps_cache():
+def invalidate_approved_apps_cache() -> None:
     """
     Invalidate the approved apps cache across all backend instances.
 
@@ -454,12 +460,13 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
     redis_cache_key = 'get_public_approved_apps_data'
     memory_cache = get_memory_cache()
 
-    def fetch_and_process():
+    def fetch_and_process() -> List[App]:
         """Fetch from Redis/DB and process apps (called only once with singleflight)."""
         # Check Redis cache
+        all_apps: List[Dict[str, Any]]
         if cached_apps := get_generic_cache(redis_cache_key):
             logger.info('get_public_approved_apps_data from Redis cache')
-            all_apps = cached_apps
+            all_apps = cast(List[Dict[str, Any]], cached_apps)
         else:
             # Database query
             logger.info('get_public_approved_apps_data from db')
@@ -474,7 +481,7 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
         apps_installs = get_apps_installs_count(app_ids)
         apps_reviews = get_apps_reviews(app_ids) if include_reviews else {}
 
-        apps = []
+        apps: List[App] = []
         for app in all_apps:
             if app.get('disabled'):
                 continue
@@ -491,14 +498,14 @@ def get_approved_available_apps(include_reviews: bool = False) -> list[App]:
             if built_app is not None:
                 apps.append(built_app)
         if include_reviews:
-            apps = sorted(apps, key=weighted_rating, reverse=True)
+            apps.sort(key=weighted_rating, reverse=True)
         return apps
 
     # Singleflight: only ONE request fetches, others wait
     return memory_cache.get_or_fetch(cache_key, fetch_and_process, ttl=30) or []
 
 
-def set_app_review(app_id: str, uid: str, review: dict):
+def set_app_review(app_id: str, uid: str, review: Dict[str, Any]) -> Dict[str, str]:
     set_app_review_in_db(app_id, uid, review)
     set_app_review_cache(app_id, uid, review)
     return {'status': 'ok'}
@@ -531,20 +538,20 @@ def get_app_money_made_amount(app_id: str) -> float:
     return amount
 
 
-def get_app_usage_history(app_id: str) -> list:
+def get_app_usage_history(app_id: str) -> List[Dict[str, Any]]:
     cached_usage = get_app_usage_history_cache(app_id)
     if cached_usage:
         return cached_usage
     usage = get_app_usage_history_db(app_id)
     usage = [UsageHistoryItem(**x) for x in usage]
     # return usage by date grouped count
-    by_date = defaultdict(int)
+    by_date: 'defaultdict[Any, int]' = defaultdict(int)
     for item in usage:
         date = item.timestamp.date()
         if date > datetime(2024, 11, 1, tzinfo=timezone.utc).date():
             by_date[date] += 1
 
-    data = [{'date': k, 'count': v} for k, v in by_date.items()]
+    data: List[Dict[str, Any]] = [{'date': k, 'count': v} for k, v in by_date.items()]
     data = sorted(data, key=lambda x: x['date'])
     set_app_usage_history_cache(app_id, data)
     return data
@@ -559,13 +566,13 @@ def get_app_money_made(app_id: str) -> dict[str, int | float]:
     type1 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_external_integration, usage)))
     type2 = len(list(filter(lambda x: x.type == UsageHistoryType.memory_created_prompt, usage)))
     type3 = len(list(filter(lambda x: x.type == UsageHistoryType.chat_message_sent, usage)))
-    type4 = len(list(filter(lambda x: x.type == UsageHistoryType.transcript_processed_external_integration, usage)))
+    _type4 = len(list(filter(lambda x: x.type == UsageHistoryType.transcript_processed_external_integration, usage)))
 
     # tbd based on current prod stats
     t1multiplier = 0.02
     t2multiplier = 0.01
     t3multiplier = 0.005
-    t4multiplier = 0.00001  # This is for transcript processed triggered for every segment, so it should be very low
+    _t4multiplier = 0.00001  # This is for transcript processed triggered for every segment, so it should be very low
 
     money = {
         'money': round((type1 * t1multiplier) + (type2 * t2multiplier) + (type3 * t3multiplier), 2),
@@ -607,7 +614,7 @@ def upsert_app_payment_link(
 
     # create recurring payment link
     if payment_plan == 'monthly_recurring':
-        stripe_acc_id = get_stripe_connect_account_id(uid)
+        stripe_acc_id: str = get_stripe_connect_account_id(uid) or ''
 
         # product
         if not app.payment_product_id:
@@ -650,7 +657,7 @@ def set_user_app_sub_customer_id(app_id: str, uid: str, customer_id: str):
     set_user_app_subscription_customer_id(app_id, uid, customer_id)
 
 
-def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> dict | None:
+def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> Dict[str, Any] | None:
     """
     Find a user's subscription for a specific app using cached customer ID or metadata search.
 
@@ -680,7 +687,7 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
 
             # Cache the customer ID for future lookups
             if latest_subscription and latest_subscription.get('customer'):
-                set_user_app_subscription_customer_id(app_id, uid, latest_subscription.get('customer'))
+                set_user_app_subscription_customer_id(app_id, uid, str(latest_subscription.get('customer')))
 
         return latest_subscription
     except Exception as e:
@@ -714,7 +721,7 @@ def get_omi_personas_by_uid(uid: str):
     return None
 
 
-async def generate_persona_prompt(uid: str, persona: dict):
+async def generate_persona_prompt(uid: str, persona: Dict[str, Any]):
     """Generate a persona prompt based on user memories and conversations."""
 
     # Get user info — used as the persona's first-person identity.
@@ -761,6 +768,11 @@ async def generate_persona_prompt(uid: str, persona: dict):
         memories_text,
         per_memory_max_chars=500,
     )
+    # Condense memories
+    with track_usage(uid, Features.PERSONA):
+        memories_text = await run_blocking(
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name or ""
+        )
 
     # First-person framing — template lives in _render_persona_prompt_template
     # so generate_persona_prompt and update_persona_prompt cannot drift.
@@ -857,7 +869,7 @@ def update_personas_async(uid: str):
         logger.info(f"[PERSONAS] No personas found for uid={uid}")
 
 
-async def update_persona_prompt(persona: dict):
+async def update_persona_prompt(persona: Dict[str, Any]):
     """Update a persona's chat prompt with latest memories and conversations."""
     # Get user info — used as the persona's first-person identity.
     # P2 from cubic AI review (PR #8682 follow-up 4601668066): the
@@ -873,6 +885,12 @@ async def update_persona_prompt(persona: dict):
     # shape of dead fetch, different system. Removed here too so the
     # T-022 retrieval path is the only memory consumer.
     uid = persona['uid']
+    memory_system = pin_memory_system(uid, db_client=firestore_db)
+    if memory_system == MemorySystem.CANONICAL:
+        canonical_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
+        memories = [memory.dict() for memory in canonical_memories if memory.visibility == 'public']
+    else:
+        memories = await run_blocking(db_executor, get_user_public_memories, uid, limit=250)
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations
@@ -907,6 +925,11 @@ async def update_persona_prompt(persona: dict):
         memories_text,
         per_memory_max_chars=500,
     )
+    # Condense memories
+    with track_usage(uid, Features.PERSONA):
+        memories_text = await run_blocking(
+            llm_executor, condense_memories, [memory['content'] for memory in memories], user_name or ""
+        )
 
     persona_prompt = _render_persona_prompt_template(
         user_name=user_name,
@@ -922,7 +945,7 @@ async def update_persona_prompt(persona: dict):
     await run_blocking(db_executor, delete_app_cache_by_id, persona['id'])
 
 
-def increment_username(username: str):
+def increment_username(username: str) -> str:
     if is_username_taken(username):
         i = 1
         while is_username_taken(f"{username}{i}"):
@@ -991,15 +1014,18 @@ def verify_api_key_for_uid(app_id: str, uid: str, api_key: str) -> bool:
     return app.get("uid") == uid
 
 
-def app_has_action(app: dict, action_name: str) -> bool:
+def app_has_action(app: Optional[Dict[str, Any]], action_name: str) -> bool:
     """Check if an app has a specific action capability."""
-    if not app or not isinstance(app, dict):
+    if not app:
         return False
 
     if not app.get('external_integration'):
         return False
 
-    actions = app['external_integration'].get('actions', [])
+    ext_int_raw = app['external_integration']
+    ext_int: Dict[str, Any] = cast(Dict[str, Any], ext_int_raw) if isinstance(ext_int_raw, dict) else {}
+    actions_raw = ext_int.get('actions', [])
+    actions: List[Dict[str, Any]] = cast(List[Dict[str, Any]], actions_raw) if isinstance(actions_raw, list) else []
     for action in actions:
         if action.get('action') == action_name:
             return True
@@ -1007,22 +1033,22 @@ def app_has_action(app: dict, action_name: str) -> bool:
     return False
 
 
-def app_can_create_memories(app: dict) -> bool:
+def app_can_create_memories(app: Optional[Dict[str, Any]]) -> bool:
     """Check if an app can create memories (facts)."""
     return app_has_action(app, 'create_memories') or app_has_action(app, 'create_facts')
 
 
-def app_can_read_memories(app: dict) -> bool:
+def app_can_read_memories(app: Optional[Dict[str, Any]]) -> bool:
     """Check if an app can read memories (facts)."""
     return app_has_action(app, 'read_memories') or app_has_action(app, 'read_facts')
 
 
-def app_can_read_conversations(app: dict) -> bool:
+def app_can_read_conversations(app: Optional[Dict[str, Any]]) -> bool:
     """Check if an app can read conversations."""
     return app_has_action(app, 'read_conversations')
 
 
-def app_can_create_conversation(app: dict) -> bool:
+def app_can_create_conversation(app: Optional[Dict[str, Any]]) -> bool:
     """Check if an app can create a conversation."""
     return app_has_action(app, 'create_conversation')
 
@@ -1039,7 +1065,7 @@ def app_can_persona_chat(app: dict) -> bool:
 
 def is_user_app_enabled(uid: str, app_id: str) -> bool:
     """Check if a specific app is enabled for the user based on Redis cache."""
-    user_enabled_apps = set(get_enabled_apps(uid))
+    user_enabled_apps: Set[str] = set(get_enabled_apps(uid))
     return app_id in user_enabled_apps
 
 
@@ -1048,10 +1074,10 @@ def is_user_app_enabled(uid: str, app_id: str) -> bool:
 # ********************************
 
 
-def normalize_app_numeric_fields(app_dict: dict) -> dict:
+def normalize_app_numeric_fields(app_dict: Dict[str, Any]) -> Dict[str, Any]:
     """Ensure numeric fields that clients expect as float are emitted as float."""
 
-    def _to_float(value):
+    def _to_float(value: Any) -> Optional[float]:
         try:
             return float(value) if value is not None else None
         except (ValueError, TypeError):
@@ -1088,12 +1114,12 @@ def paginate_apps(apps: List[App], offset: int, limit: int) -> List[App]:
     return apps[offset : offset + limit]
 
 
-def build_pagination_metadata(total: int, offset: int, limit: int, category: str = None) -> dict:
+def build_pagination_metadata(total: int, offset: int, limit: int, category: Optional[str] = None) -> Dict[str, Any]:
     """Build pagination metadata for API response."""
     has_next = (offset + limit) < total
     has_previous = offset > 0
 
-    metadata = {
+    metadata: Dict[str, Any] = {
         'total': total,
         'count': max(0, min(limit, total - offset)),
         'offset': offset,
@@ -1113,7 +1139,7 @@ def build_pagination_metadata(total: int, offset: int, limit: int, category: str
     return metadata
 
 
-def get_capabilities_list() -> List[dict]:
+def get_capabilities_list() -> List[Dict[str, Any]]:
     """Get the list of app capabilities for grouping."""
     return [
         {'title': 'Featured', 'id': 'popular'},
@@ -1133,7 +1159,7 @@ def _app_has_auth_steps(app: App) -> bool:
     ext_int = app.external_integration
     if ext_int is None:
         return False
-    auth_steps = getattr(ext_int, 'auth_steps', None) or []
+    auth_steps: List[Any] = list(cast(List[Any], getattr(ext_int, 'auth_steps', None) or []))
     return len(auth_steps) > 0
 
 
@@ -1188,7 +1214,7 @@ def _get_app_capability(app: App) -> str | None:
     return None
 
 
-def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[str, List[App]]:
+def group_apps_by_capability(apps: List[App], capabilities: List[Dict[str, Any]]) -> Dict[str, List[App]]:
     """Group apps by capability with enhanced filtering rules.
 
     Groups:
@@ -1201,7 +1227,7 @@ def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[
     Popular apps are excluded from other sections.
     Notification/simple integration apps are excluded from other sections.
     """
-    grouped = defaultdict(list)
+    grouped: defaultdict[str, List[App]] = defaultdict(list)
 
     # First pass: collect popular apps
     popular_apps = [app for app in apps if getattr(app, 'is_popular', False)]
@@ -1210,7 +1236,7 @@ def group_apps_by_capability(apps: List[App], capabilities: List[dict]) -> Dict[
         grouped['popular'] = sort_apps_by_installs_only(popular_apps)
 
     # Second pass: collect notification apps (exclusive)
-    notification_app_ids = set()
+    notification_app_ids: Set[str] = set()
     for app in apps:
         if _is_notification_app(app):
             grouped['proactive_notification'].append(app)
@@ -1251,7 +1277,7 @@ def filter_apps_by_capability(apps: List[App], capability: str) -> List[App]:
     if capability == 'popular':
         return [app for app in apps if getattr(app, 'is_popular', False)]
 
-    filtered_apps = []
+    filtered_apps: List[App] = []
     for app in apps:
         # Skip notification apps in non-notification sections
         if capability != 'proactive_notification' and _is_notification_app(app):
@@ -1265,17 +1291,17 @@ def filter_apps_by_capability(apps: List[App], capability: str) -> List[App]:
 
 
 def build_capability_groups_response(
-    grouped_apps: Dict[str, List[App]], capabilities: List[dict], offset: int, limit: int
-) -> List[dict]:
+    grouped_apps: Dict[str, List[App]], capabilities: List[Dict[str, Any]], offset: int, limit: int
+) -> List[Dict[str, Any]]:
     """Build the groups response for v2/apps endpoint grouped by capability."""
-    id_to_title = {c['id']: c['title'] for c in capabilities}
+    id_to_title: Dict[Any, Any] = {c['id']: c['title'] for c in capabilities}
 
-    ordered_keys = [c['id'] for c in capabilities]
+    ordered_keys: List[Any] = [c['id'] for c in capabilities]
     for key in grouped_apps.keys():
         if key not in ordered_keys:
             ordered_keys.append(key)
 
-    groups = []
+    groups: List[Dict[str, Any]] = []
     for capability_id in ordered_keys:
         apps = grouped_apps.get(capability_id, [])
         if not apps:
@@ -1299,7 +1325,7 @@ def build_capability_groups_response(
 
 
 # Base category mapping (used for non-chat capabilities)
-_BASE_CATEGORY_MAPPING = {
+_BASE_CATEGORY_MAPPING: Dict[str, str] = {
     # Productivity & Tools
     'personality-emulation': 'productivity-tools',
     'education-and-learning': 'productivity-tools',
@@ -1322,7 +1348,7 @@ _BASE_CATEGORY_MAPPING = {
 }
 
 # Chat-specific overrides (remaps categories to chat-specific master categories)
-_CHAT_CATEGORY_OVERRIDES = {
+_CHAT_CATEGORY_OVERRIDES: Dict[str, str] = {
     # Personality Clone (unique to chat)
     'personality-emulation': 'personality-clone',
     # Productivity & Lifestyle (replaces productivity-tools and personal-wellness)
@@ -1348,7 +1374,7 @@ def get_master_category_mapping(capability_id: str) -> Dict[str, str]:
     return _BASE_CATEGORY_MAPPING
 
 
-def get_master_categories_list(capability_id: str) -> List[dict]:
+def get_master_categories_list(capability_id: str) -> List[Dict[str, str]]:
     """Get master categories list for a capability."""
     if capability_id == 'chat':
         return [
@@ -1370,7 +1396,7 @@ def group_capability_apps_by_category(apps: List[App], capability_id: str) -> Di
     category_mapping = get_master_category_mapping(capability_id)
     default_category = 'productivity-lifestyle' if capability_id == 'chat' else 'personal-wellness'
 
-    grouped = defaultdict(list)
+    grouped: defaultdict[str, List[App]] = defaultdict(list)
     for app in apps:
         original_category_id = app.category if app.category else 'other'
         master_category_id = category_mapping.get(original_category_id, default_category)
@@ -1383,17 +1409,19 @@ def group_capability_apps_by_category(apps: List[App], capability_id: str) -> Di
     return grouped
 
 
-def build_capability_category_groups_response(grouped_apps: Dict[str, List[App]], capability_id: str) -> List[dict]:
+def build_capability_category_groups_response(
+    grouped_apps: Dict[str, List[App]], capability_id: str
+) -> List[Dict[str, Any]]:
     """Build response for capability apps grouped by category."""
     master_categories = get_master_categories_list(capability_id)
-    id_to_title = {c['id']: c['title'] for c in master_categories}
+    id_to_title: Dict[str, str] = {c['id']: c['title'] for c in master_categories}
 
-    ordered_keys = [c['id'] for c in master_categories]
+    ordered_keys: List[str] = [c['id'] for c in master_categories]
     for key in grouped_apps.keys():
         if key not in ordered_keys:
             ordered_keys.append(key)
 
-    groups = []
+    groups: List[Dict[str, Any]] = []
     for category_id in ordered_keys:
         apps = grouped_apps.get(category_id, [])
         if not apps:
@@ -1490,42 +1518,49 @@ def fetch_app_chat_tools_from_manifest(
             logger.error(f"⚠️ Manifest fetch failed with status {response.status_code}: {manifest_url}")
             return None
 
-        data = response.json()
+        data_raw: object = response.json()
 
         # Validate response structure
-        if not isinstance(data, dict):
+        if not isinstance(data_raw, dict):
             logger.error(f"⚠️ Invalid manifest format (not a dict): {manifest_url}")
             return None
 
-        tools = data.get('tools', [])
+        data: Dict[str, Any] = cast(Dict[str, Any], data_raw)
+        tools_raw: object = data.get('tools', [])
 
-        if not isinstance(tools, list):
+        if not isinstance(tools_raw, list):
             logger.error(f"⚠️ Invalid manifest format ('tools' is not a list): {manifest_url}")
             return None
 
+        tools: List[Any] = cast(List[Any], tools_raw)
+
         # Validate and normalize each tool
-        validated_tools = []
+        validated_tools: List[Dict[str, Any]] = []
         for tool in tools:
             validated_tool = _validate_tool_definition(tool)
             if validated_tool:
                 validated_tools.append(validated_tool)
             else:
-                logger.error(f"⚠️ Skipping invalid tool in manifest: {tool.get('name', 'unknown')}")
+                typed_t: Dict[str, Any] = cast(Dict[str, Any], tool) if isinstance(tool, dict) else {}
+                tool_name: str = str(typed_t.get('name') or 'unknown')
+                logger.error(f"⚠️ Skipping invalid tool in manifest: {tool_name}")
 
         # Parse chat_messages configuration
-        chat_messages = data.get('chat_messages', {})
-        chat_messages_config = {}
-        if isinstance(chat_messages, dict) and chat_messages.get('enabled', False):
-            chat_messages_config = {
-                'enabled': True,
-                'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
-                'notify': chat_messages.get('notify', True),  # send push notification, default True
-            }
+        chat_messages_raw: object = data.get('chat_messages', {})
+        chat_messages_config: Dict[str, Any] = {}
+        if isinstance(chat_messages_raw, dict):
+            chat_messages: Dict[str, Any] = cast(Dict[str, Any], chat_messages_raw)
+            if chat_messages.get('enabled', False):
+                chat_messages_config = {
+                    'enabled': True,
+                    'target': chat_messages.get('target', 'app'),  # 'main' or 'app', default 'app'
+                    'notify': chat_messages.get('notify', True),  # send push notification, default True
+                }
 
         logger.info(
             f"✅ Fetched {len(validated_tools)} chat tools from manifest (chat_messages: {chat_messages_config})"
         )
-        result = {
+        result: Dict[str, Any] = {
             'tools': validated_tools if validated_tools else None,
             'chat_messages': chat_messages_config if chat_messages_config else None,
         }
@@ -1559,13 +1594,12 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
 
     Returns normalized tool dict or None if invalid.
     """
-    if not isinstance(tool, dict):
-        return None
+    typed_tool: Dict[str, Any] = tool
 
     # Check required fields
-    name = tool.get('name')
-    description = tool.get('description')
-    endpoint = tool.get('endpoint')
+    name = typed_tool.get('name')
+    description = typed_tool.get('description')
+    endpoint = typed_tool.get('endpoint')
 
     if not name or not isinstance(name, str):
         logger.warning(f"⚠️ Tool missing required 'name' field")
@@ -1580,31 +1614,37 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         return None
 
     # Build normalized tool definition
-    validated = {
+    validated: Dict[str, Any] = {
         'name': name.strip(),
         'description': description.strip(),
         'endpoint': endpoint.strip(),
-        'method': tool.get('method', 'POST').upper(),
-        'auth_required': tool.get('auth_required', True),
+        'method': typed_tool.get('method', 'POST').upper(),
+        'auth_required': typed_tool.get('auth_required', True),
     }
 
     # Optional: status_message
-    if tool.get('status_message'):
-        validated['status_message'] = str(tool['status_message']).strip()
+    if typed_tool.get('status_message'):
+        validated['status_message'] = str(typed_tool['status_message']).strip()
 
     # Optional: parameters (JSON schema format)
-    parameters = tool.get('parameters')
+    parameters = typed_tool.get('parameters')
     if parameters and isinstance(parameters, dict):
         # Validate parameters schema structure
-        if 'properties' in parameters and isinstance(parameters['properties'], dict):
+        typed_parameters: Dict[str, Any] = cast(Dict[str, Any], parameters)
+        properties_raw = typed_parameters.get('properties')
+        if 'properties' in typed_parameters and isinstance(properties_raw, dict):
             validated['parameters'] = {
-                'properties': parameters['properties'],
-                'required': parameters.get('required', []) if isinstance(parameters.get('required'), list) else [],
+                'properties': cast(Dict[str, Any], properties_raw),
+                'required': (
+                    cast(List[Any], typed_parameters.get('required'))
+                    if isinstance(typed_parameters.get('required'), list)
+                    else []
+                ),
             }
 
     return validated
 
 
-def app_can_read_tasks(app: dict) -> bool:
+def app_can_read_tasks(app: Optional[Dict[str, Any]]) -> bool:
     """Check if an app can read tasks."""
     return app_has_action(app, 'read_tasks')

@@ -5,4 +5,26 @@
 # legacy_unreviewed as the route inventory workstream is baselined.
 schema_version: 1
 service: backend-main
-routes: []
+routes:
+  - route_type: http
+    method: POST
+    path: /v1/users/account-deletion-wipes/run
+    policy:
+      review_status: reviewed
+      auth:
+        mechanisms:
+          - service_oidc
+        placement: dependency
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: account_deletion_wipe
+      surface: internal_task
+      visibility: internal
+      data_domain: user_profile
+      deprecation:
+        state: active

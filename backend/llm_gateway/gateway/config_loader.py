@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any
+from collections.abc import Mapping
+from typing import Any, TypeAlias, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict
@@ -19,6 +20,7 @@ from utils.llm.model_config import (
 
 DEFAULT_CONFIG_DIR = Path(__file__).resolve().parents[1] / 'config'
 PROD_ENV_VAR = 'OMI_LLM_GATEWAY_PROD'
+ConfigItem: TypeAlias = dict[str, Any]
 
 
 class ConfigValidationError(ValueError):
@@ -59,31 +61,34 @@ def _resolve_prod_mode(prod_mode: bool | None) -> bool:
     return os.getenv(PROD_ENV_VAR, '').strip().lower() in {'1', 'true', 'yes'}
 
 
-def _load_config_list(path: Path, top_level_key: str) -> list[dict[str, Any]]:
+def _load_config_list(path: Path, top_level_key: str) -> list[ConfigItem]:
     if not path.exists():
         raise ConfigValidationError(f'missing gateway config file: {path}')
 
     with path.open('r', encoding='utf-8') as handle:
-        loaded = yaml.safe_load(handle)
+        loaded = cast(object, yaml.safe_load(handle))
 
+    raw_items: object
     if loaded is None:
         return []
     if isinstance(loaded, list):
-        items = loaded
+        raw_items = cast(list[object], loaded)
     elif isinstance(loaded, dict) and top_level_key in loaded:
-        items = loaded[top_level_key]
+        loaded_mapping = cast(Mapping[str, object], loaded)
+        raw_items = loaded_mapping[top_level_key]
     else:
         raise ConfigValidationError(f'{path} must contain a list or top-level {top_level_key} list')
 
-    if not isinstance(items, list):
+    if not isinstance(raw_items, list):
         raise ConfigValidationError(f'{path} {top_level_key} must be a list')
+    items = cast(list[object], raw_items)
     for item in items:
-        if not isinstance(item, dict):
+        if not isinstance(item, Mapping):
             raise ConfigValidationError(f'{path} {top_level_key} entries must be mappings')
-    return items
+    return [dict(cast(Mapping[str, Any], item)) for item in items]
 
 
-def _parse_lanes(items: list[dict[str, Any]]) -> dict[str, LaneConfig]:
+def _parse_lanes(items: list[ConfigItem]) -> dict[str, LaneConfig]:
     lanes: dict[str, LaneConfig] = {}
     for item in items:
         lane = LaneConfig.model_validate(item)
@@ -93,7 +98,7 @@ def _parse_lanes(items: list[dict[str, Any]]) -> dict[str, LaneConfig]:
     return lanes
 
 
-def _parse_route_artifacts(items: list[dict[str, Any]], *, prod_mode: bool) -> dict[str, RouteArtifact]:
+def _parse_route_artifacts(items: list[ConfigItem], *, prod_mode: bool) -> dict[str, RouteArtifact]:
     route_artifacts: dict[str, RouteArtifact] = {}
     for item in items:
         artifact = RouteArtifact.model_validate(item)
@@ -110,7 +115,7 @@ def _parse_route_artifacts(items: list[dict[str, Any]], *, prod_mode: bool) -> d
     return route_artifacts
 
 
-def _parse_feature_bundles(items: list[dict[str, Any]]) -> dict[str, FeatureBundle]:
+def _parse_feature_bundles(items: list[ConfigItem]) -> dict[str, FeatureBundle]:
     feature_bundles: dict[str, FeatureBundle] = {}
     for item in items:
         bundle = FeatureBundle.model_validate(item)

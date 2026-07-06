@@ -117,14 +117,6 @@ jobs:
           fi
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
-      # - name: Deploy to Cloud Run
-      #   id: deploy
-      #   uses: google-github-actions/deploy-cloudrun@v2
-      #   with:
-      #     service: ${{ env.SERVICE }}
-      #     region: ${{ env.REGION }}
-      #     image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v2
         with:

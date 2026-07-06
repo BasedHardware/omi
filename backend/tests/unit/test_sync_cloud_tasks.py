@@ -10,6 +10,7 @@ handler in routers/sync.py.
 import os
 import sys
 import unittest
+import hashlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -238,6 +239,35 @@ class TestVerifyCloudTasksOidc:
             with pytest.raises(RuntimeError):
                 cloud_tasks.enqueue_sync_job({'job_id': 'j'})
 
+    def test_enqueue_account_deletion_task_is_named_by_uid(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_TASKS_PROJECT': 'proj',
+            'SYNC_TASKS_LOCATION': 'us-central1',
+            'ACCOUNT_DELETION_TASKS_QUEUE': 'account-delete',
+            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
+            'SYNC_TASKS_INVOKER_SA': 'invoker@proj.iam.gserviceaccount.com',
+        }
+        uid_hash = hashlib.sha256(b'uid1').hexdigest()[:32]
+        task_id = f'account-delete-{uid_hash}-abc123'
+        with patch.dict(os.environ, env):
+            client = MagicMock()
+            client.task_path.return_value = f'projects/proj/locations/us-central1/queues/account-delete/tasks/{task_id}'
+            with patch.object(cloud_tasks, '_get_tasks_client', return_value=client), patch.object(
+                cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
+            ):
+                cloud_tasks.enqueue_account_deletion_wipe('uid1')
+        client.task_path.assert_called_once_with('proj', 'us-central1', 'account-delete', task_id)
+        client.create_task.assert_called_once()
+
+    def test_account_deletion_dispatch_flag_default_inline(self):
+        cloud_tasks = _load_cloud_tasks()
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop('ACCOUNT_DELETION_DISPATCH_MODE', None)
+            assert cloud_tasks.is_account_deletion_dispatch_enabled() is False
+        with patch.dict(os.environ, {'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks'}):
+            assert cloud_tasks.is_account_deletion_dispatch_enabled() is True
+
 
 # ---------------------------------------------------------------------------
 # Structural contract of routers/sync.py and main.py wiring
@@ -276,8 +306,18 @@ class TestSyncRouterStructure:
         main_src = self._read('main.py')
         assert 'paths_timeout' in main_src
         assert 'HTTP_SYNC_JOBS_RUN_TIMEOUT' in main_src
+        assert 'HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT' in main_src
         timeout_src = self._read(os.path.join('utils', 'other', 'timeout.py'))
         assert 'paths_timeout' in timeout_src
+
+    def test_account_deletion_handler_exists_with_oidc(self):
+        source = self._read(os.path.join('routers', 'users.py'))
+        assert "'/v1/users/account-deletion-wipes/run'" in source
+        handler = source[source.index('async def run_account_deletion_wipe') :]
+        assert 'Depends(verify_cloud_tasks_oidc)' in handler[:200]
+        assert 'try_acquire_job_run_lock' in handler
+        assert 'claim_deletion_wipe_for_task' in handler
+        assert 'status_code=500' in handler
 
     def test_v1_endpoint_unchanged(self):
         source = self._read(os.path.join('routers', 'sync.py'))

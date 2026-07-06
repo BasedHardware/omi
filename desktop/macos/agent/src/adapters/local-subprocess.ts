@@ -17,7 +17,7 @@ import type {
 } from "./interface.js";
 import type { ArtifactRole } from "../runtime/types.js";
 import { normalizeRuntimeFailure, type RuntimeFailure } from "../runtime/failures.js";
-import type { OutboundMessage } from "../protocol.js";
+import type { OutboundMessageDraft } from "../protocol.js";
 
 type LocalSubprocessRequest = {
   type: "open" | "resume" | "execute" | "cancel" | "close";
@@ -477,7 +477,7 @@ export class LocalSubprocessRuntimeAdapter implements RuntimeAdapter {
     pending.eventSink?.(canonicalEvent);
   }
 
-  private canonicalEventFrom(event: Record<string, unknown>): OutboundMessage | null {
+  private canonicalEventFrom(event: Record<string, unknown>): OutboundMessageDraft | null {
     switch (event.type) {
       case "text_delta":
         return { type: "text_delta", text: stringValue(event.text) };

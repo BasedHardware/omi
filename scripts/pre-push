@@ -236,6 +236,7 @@ check_backend_runtime_env_if_needed() {
     'backend/deploy/runtime_env.yaml' \
     'backend/charts/backend-listen/*_values.yaml' \
     'backend/charts/backend-listen/**/*_values.yaml' \
+    'backend/scripts/render-backend-runtime-env.py' \
     'backend/scripts/validate-backend-runtime-env.py' \
     '.github/workflows/gcp_backend*.yml' \
     '.github/workflows/gcp_backend*.yaml' \
@@ -343,6 +344,32 @@ check_import_time_side_effects_if_needed() {
   "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
 }
 
+check_backend_typecheck_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_TYPECHECK:-}" = "1" ]; then
+    echo "Skipping backend type check because PRE_PUSH_SKIP_BACKEND_TYPECHECK=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/pyrightconfig.json' \
+    'backend/scripts/typecheck.sh' \
+    'backend/requirements.txt' \
+    'backend/pylock*.toml' \
+    '.github/workflows/backend-unit-tests.yml' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+
+  (
+    cd backend
+    bash scripts/typecheck.sh
+  )
+}
+
 check_backend_unit_tests_if_needed() {
   local selected_count
   local original_selected_count
@@ -355,7 +382,7 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
-  if ! changed_matches 'backend/*.py' 'backend/**/*.py'; then
+  if ! changed_matches 'backend/*.py' 'backend/**/*.py' 'backend/*.yaml' 'backend/**/*.yaml' 'backend/*.yml' 'backend/**/*.yml'; then
     return
   fi
 
@@ -506,6 +533,26 @@ check_desktop_userdefaults_ratchet_if_needed() {
   python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
 }
 
+check_desktop_async_after_ratchet_if_needed() {
+  # BL-005 / S-14b: fail if new fixed-delay asyncAfter calls are added to the
+  # floating-bar / PTT sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_ASYNC_AFTER_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop asyncAfter ratchet because PRE_PUSH_SKIP_DESKTOP_ASYNC_AFTER_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/FloatingControlBar/*.swift' \
+    'desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift' \
+    'desktop/macos/scripts/check-async-after-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-async-after-ratchet.py
+}
+
 check_desktop_rust_if_needed() {
   local -a rust_files=()
   local file
@@ -573,6 +620,15 @@ check_desktop_tool_surfaces_if_needed() {
   done
 }
 
+check_gauntlet_evidence_if_needed() {
+  if [ "${PRE_PUSH_SKIP_GAUNTLET_EVIDENCE:-}" = "1" ]; then
+    echo "Skipping gauntlet evidence check because PRE_PUSH_SKIP_GAUNTLET_EVIDENCE=1."
+    return
+  fi
+
+  desktop/macos/scripts/check-gauntlet-evidence-at-head.sh warn
+}
+
 run_step check_merge_conflicts
 run_step check_arch_guardrails
 run_step python3 .github/scripts/desktop-changelog.py validate
@@ -590,14 +646,17 @@ run_step check_backend_runtime_env_if_needed
 run_step check_backend_async_blockers_if_needed
 run_step check_module_stub_pollution_if_needed
 run_step check_import_time_side_effects_if_needed
+run_step check_backend_typecheck_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
 run_step check_desktop_swift_if_needed
 run_step check_desktop_userdefaults_ratchet_if_needed
+run_step check_desktop_async_after_ratchet_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
+run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
 echo "Fast pre-push checks passed."

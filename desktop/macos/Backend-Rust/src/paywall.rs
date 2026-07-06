@@ -256,6 +256,7 @@ fn is_trial_expired(plan: &str, byok_active: bool, creation_time_ms: Option<i64>
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

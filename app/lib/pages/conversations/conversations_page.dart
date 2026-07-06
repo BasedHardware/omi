@@ -165,10 +165,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: RadialGradient(
-                    colors: [
-                      Colors.deepPurple.withValues(alpha: 0.35),
-                      Colors.deepPurple.withValues(alpha: 0.0),
-                    ],
+                    colors: [Colors.deepPurple.withValues(alpha: 0.35), Colors.deepPurple.withValues(alpha: 0.0)],
                     stops: const [0.0, 1.0],
                   ),
                 ),
@@ -200,12 +197,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           const SizedBox(height: 28),
           const Text(
             'No conversations yet',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              letterSpacing: -0.3,
-            ),
+            style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
           ),
           const SizedBox(height: 10),
           ConstrainedBox(
@@ -213,11 +205,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             child: Text(
               'Conversations you record show up here. Tap a tile on the home tab to start your first one.',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
-                fontSize: 15,
-                height: 1.5,
-              ),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
             ),
           ),
         ],
@@ -259,7 +247,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
         final recordingsProvider = context.watch<LocalRecordingsProvider>();
-        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings =
+            convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
@@ -331,9 +320,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   }
                   return SliverToBoxAdapter(
                     child: Column(
-                      children: [
-                        if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals),
-                      ],
+                      children: [if (showGoals) GoalsWidget(key: _goalsWidgetKey, onRefresh: _refreshGoals)],
                     ),
                   );
                 },
@@ -404,10 +391,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !_hasActiveFilter(convoProvider))
                 // Friendly hero for brand-new users with zero conversations —
                 // matches the polished Tasks empty state.
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Center(child: _buildNoConversationsHero(context)),
-                )
+                SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildNoConversationsHero(context)))
               else if (convoProvider.groupedConversations.isEmpty &&
                   !hasRecordings &&
                   !convoProvider.isLoadingConversations &&
@@ -429,10 +413,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                 _buildLoadingShimmer()
               else
                 SliverList(
-                  delegate: SliverChildBuilderDelegate(childCount: mergedDates.length + 1, (
-                    context,
-                    index,
-                  ) {
+                  delegate: SliverChildBuilderDelegate(childCount: mergedDates.length + 1, (context, index) {
                     if (index == mergedDates.length) {
                       Logger.debug('loading more conversations');
                       if (convoProvider.isLoadingConversations) {

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
+from collections.abc import AsyncIterator, Callable
+from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
 import httpx
@@ -9,7 +10,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
-from llm_gateway.gateway.credentials import build_omi_managed_credential_context
+from llm_gateway.gateway.credentials import CredentialContext, build_omi_managed_credential_context
 from llm_gateway.gateway.errors import (
     GatewayError,
     GatewayErrorCode,
@@ -19,27 +20,28 @@ from llm_gateway.gateway.errors import (
 from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
-    _map_provider_failure,
+    _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
     provider_request_for,
     selected_serving_route,
     selected_serving_route_artifact_id,
 )
 from llm_gateway.gateway.metrics import observe_error, observe_success, time_request
 from llm_gateway.gateway.providers import ProviderFailure
-from llm_gateway.gateway.resolver import is_lkg_eligible, resolve_chat_completion_route
+from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
+from llm_gateway.gateway.schemas import RouteArtifact
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 
 router = APIRouter()
 _image_generation_client: httpx.AsyncClient | None = None
 
 
-@router.post('/v1/chat/completions')
+@router.post('/v1/chat/completions', response_model=None)
 async def create_chat_completion(
     request: Request,
     caller: ServiceAuthDependency,
     config: GatewayConfig = Depends(get_gateway_config),
     provider_registry: ProviderRegistry = Depends(get_provider_registry),
-):
+) -> JSONResponse | StreamingResponse:
     started_at = time_request()
     resolved_route = None
     try:
@@ -64,7 +66,7 @@ async def create_chat_completion(
         return _error_response(exc)
 
 
-def _safe_observe(fn: Any) -> None:
+def _safe_observe(fn: Callable[[], None]) -> None:
     """Emit metrics without risking request-handling failures."""
     try:
         fn()
@@ -79,20 +81,21 @@ async def _request_json(request: Request) -> dict[str, Any]:
         raise GatewayInvalidRequestError('request body must be valid JSON') from exc
     if not isinstance(body, dict):
         raise GatewayInvalidRequestError('request body must be an object')
-    return body
+    return cast(dict[str, Any], body)
 
 
 def _error_response(exc: GatewayError) -> JSONResponse:
+    content: dict[str, object] = {
+        'error': {
+            'message': exc.message,
+            'type': _error_type_for_code(exc.code),
+            'param': exc.param,
+            'code': exc.code.value,
+        }
+    }
     return JSONResponse(
         status_code=_status_code_for_error(exc),
-        content={
-            'error': {
-                'message': exc.message,
-                'type': _error_type_for_code(exc.code),
-                'param': exc.param,
-                'code': exc.code.value,
-            }
-        },
+        content=content,
     )
 
 
@@ -170,7 +173,9 @@ async def close_image_generation_client() -> None:
         _image_generation_client = None
 
 
-async def _streaming_response(resolved_route, credentials, provider_registry: ProviderRegistry) -> StreamingResponse:
+async def _streaming_response(
+    resolved_route: ResolvedRoute, credentials: CredentialContext, provider_registry: ProviderRegistry
+) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
 
     async_iterator = await _prepared_streaming_iterator(resolved_route, credentials, provider_registry, route)
@@ -178,7 +183,12 @@ async def _streaming_response(resolved_route, credentials, provider_registry: Pr
     return StreamingResponse(async_iterator, media_type='text/event-stream')
 
 
-async def _prepared_streaming_iterator(resolved_route, credentials, provider_registry: ProviderRegistry, route):
+async def _prepared_streaming_iterator(
+    resolved_route: ResolvedRoute,
+    credentials: CredentialContext,
+    provider_registry: ProviderRegistry,
+    route: RouteArtifact,
+) -> AsyncIterator[bytes]:
     last_error: GatewayError | None = None
     for provider_ref in [route.primary, *route.fallbacks]:
         provider = provider_registry.provider_for(provider_ref.provider)
@@ -208,12 +218,12 @@ async def _prepared_streaming_iterator(resolved_route, credentials, provider_reg
     raise GatewayInvalidRequestError('streaming provider adapter is not configured', param='stream')
 
 
-async def _stream_with_first_chunk(first_chunk: bytes, stream):
+async def _stream_with_first_chunk(first_chunk: bytes, stream: AsyncIterator[bytes]) -> AsyncIterator[bytes]:
     yield first_chunk
     async for chunk in stream:
         yield chunk
 
 
-async def _empty_stream():
+async def _empty_stream() -> AsyncIterator[bytes]:
     if False:
         yield b''

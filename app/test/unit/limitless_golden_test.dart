@@ -87,13 +87,17 @@ List<int> intField(int fieldNum, int value) => protoField(fieldNum, 0, varint(va
 
 List<int> bytesField(int fieldNum, List<int> data) => protoField(fieldNum, 2, [...varint(data.length), ...data]);
 
-List<int> bleWrapper(int index, int seq, int numFrags, List<int> payload) =>
-    [...intField(1, index), ...intField(2, seq), ...intField(3, numFrags), ...bytesField(4, payload)];
+List<int> bleWrapper(int index, int seq, int numFrags, List<int> payload) => [
+  ...intField(1, index),
+  ...intField(2, seq),
+  ...intField(3, numFrags),
+  ...bytesField(4, payload),
+];
 
 List<int> mirrorRequestData(int requestId) => bytesField(30, [
-      ...intField(1, requestId),
-      ...protoField(2, 0, [0x00]),
-    ]);
+  ...intField(1, requestId),
+  ...protoField(2, 0, [0x00]),
+]);
 
 List<int> mirrorSetCurrentTime(int messageIndex, int requestId, int timestampMs) =>
     bleWrapper(messageIndex, 0, 1, [...bytesField(6, intField(1, timestampMs)), ...mirrorRequestData(requestId)]);
@@ -268,11 +272,17 @@ List<int> audioBlobOfFrames(List<List<int>> frames) => [for (final f in frames) 
 List<int> audioWrapper(List<int> audioBlob, {int offset = 0}) =>
     bytesField(3, [...intField(1, offset), ...bytesField(2, audioBlob)]);
 
-List<int> flashPageBytes(int timestampMs, List<List<int>> wrappers) =>
-    [...intField(1, timestampMs), for (final w in wrappers) ...w];
+List<int> flashPageBytes(int timestampMs, List<List<int>> wrappers) => [
+  ...intField(1, timestampMs),
+  for (final w in wrappers) ...w,
+];
 
-List<int> storageBufferBytes({required int session, required int seq, required int index, required List<int> page}) =>
-    [...intField(2, session), ...intField(4, seq), ...intField(5, index), ...bytesField(6, page)];
+List<int> storageBufferBytes({required int session, required int seq, required int index, required List<int> page}) => [
+  ...intField(2, session),
+  ...intField(4, seq),
+  ...intField(5, index),
+  ...bytesField(6, page),
+];
 
 List<int> pendantMessage(List<int> storageBuffer) => bytesField(2, storageBuffer);
 
@@ -304,31 +314,31 @@ void checkGolden(Directory dir, String fileName, Map<String, dynamic> actual) {
   expect(
     normalizedActual,
     equals(expected),
-    reason: 'Golden fixture drift in $fileName: the Dart Limitless implementation no longer matches the pinned '
+    reason:
+        'Golden fixture drift in $fileName: the Dart Limitless implementation no longer matches the pinned '
         'behavior. If the protocol change is intentional, delete the fixture, re-run this test to regenerate it, '
         'and update the Kotlin port (LimitlessProtocol.kt) to match.',
   );
 }
 
 Map<String, dynamic> pageToJson(Map<String, dynamic> page) => {
-      'index': page['index'],
-      'session': page['session'],
-      'timestampMs': page['timestamp_ms'],
-      'frames': (page['opus_frames'] as List<List<int>>).map(toHex).toList(),
-    };
+  'index': page['index'],
+  'session': page['session'],
+  'timestampMs': page['timestamp_ms'],
+  'frames': (page['opus_frames'] as List<List<int>>).map(toHex).toList(),
+};
 
 Map<String, dynamic> caseFixture(
   String name,
   List<List<int>> packets,
   List<Map<String, dynamic>> pages,
   Map<String, int>? storageState,
-) =>
-    {
-      'name': name,
-      'packets': packets.map(toHex).toList(),
-      'expectedPages': pages.map(pageToJson).toList(),
-      'expectedStorageState': storageState,
-    };
+) => {
+  'name': name,
+  'packets': packets.map(toHex).toList(),
+  'expectedPages': pages.map(pageToJson).toList(),
+  'expectedStorageState': storageState,
+};
 
 Map<String, int>? mirrorStorageStateForPackets(List<List<int>> packets) {
   for (final packet in packets) {
@@ -367,11 +377,17 @@ void main() {
     expect(msg6Body[0], 0x08);
     final liveTimestamp = decodeVarint(msg6Body, 1)[0] as int;
     expect(liveTimestamp, inInclusiveRange(beforeConnectMs, afterConnectMs));
-    expect(msg6Write, equals(mirrorSetCurrentTime(0, 1, liveTimestamp)),
-        reason: 'local msg6 mirror encoder must reproduce the real _encodeSetCurrentTime bytes');
+    expect(
+      msg6Write,
+      equals(mirrorSetCurrentTime(0, 1, liveTimestamp)),
+      reason: 'local msg6 mirror encoder must reproduce the real _encodeSetCurrentTime bytes',
+    );
 
-    expect(transport.writes[1], equals(mirrorDownloadFlashPages(1, 2, false, true)),
-        reason: 'connect() enable-data-stream write must match msg8{batch=0,realTime=1} layout');
+    expect(
+      transport.writes[1],
+      equals(mirrorDownloadFlashPages(1, 2, false, true)),
+      reason: 'connect() enable-data-stream write must match msg8{batch=0,realTime=1} layout',
+    );
 
     await connection.enableBatchMode();
     expect(transport.writes.length, 3);
@@ -384,22 +400,26 @@ void main() {
         10,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 1,
-          index: 100,
-          page: flashPageBytes(timestampMs, [audioWrapper(audioBlobOfFrames(framesA))]),
-        )),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 1,
+            index: 100,
+            page: flashPageBytes(timestampMs, [audioWrapper(audioBlobOfFrames(framesA))]),
+          ),
+        ),
       ),
     ];
 
     final framesB = [for (var i = 0; i < 24; i++) opusFrame(0x78, i + 8, 40)];
-    final payloadB = pendantMessage(storageBufferBytes(
-      session: 7,
-      seq: 2,
-      index: 101,
-      page: flashPageBytes(timestampMs + 1600, [audioWrapper(audioBlobOfFrames(framesB))]),
-    ));
+    final payloadB = pendantMessage(
+      storageBufferBytes(
+        session: 7,
+        seq: 2,
+        index: 101,
+        page: flashPageBytes(timestampMs + 1600, [audioWrapper(audioBlobOfFrames(framesB))]),
+      ),
+    );
     final packetsB = [
       bleWrapper(11, 1, 3, payloadB.sublist(400, 800)),
       bleWrapper(11, 0, 3, payloadB.sublist(0, 400)),
@@ -411,14 +431,16 @@ void main() {
         12,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 3,
-          index: 102,
-          page: flashPageBytes(timestampMs + 3200, [
-            bytesField(3, bytesField(12, [0x08, 0x01, 0x10, 0x00])),
-          ]),
-        )),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 3,
+            index: 102,
+            page: flashPageBytes(timestampMs + 3200, [
+              bytesField(3, bytesField(12, [0x08, 0x01, 0x10, 0x00])),
+            ]),
+          ),
+        ),
       ),
     ];
 
@@ -429,14 +451,16 @@ void main() {
         13,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 4,
-          index: 103,
-          page: flashPageBytes(timestampMs + 4800, [
-            audioWrapper([...bytesField(1, directFrameD), ...bytesField(2, audioBlobOfFrames(nestedFramesD))]),
-          ]),
-        )),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 4,
+            index: 103,
+            page: flashPageBytes(timestampMs + 4800, [
+              audioWrapper([...bytesField(1, directFrameD), ...bytesField(2, audioBlobOfFrames(nestedFramesD))]),
+            ]),
+          ),
+        ),
       ),
     ];
 
@@ -448,20 +472,22 @@ void main() {
         14,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 5,
-          index: 104,
-          page: flashPageBytes(timestampMs + 6400, [
-            audioWrapper([
-              ...bytesField(1, validFramesE[0]),
-              ...bytesField(1, invalidZeroFrame),
-              ...bytesField(1, validFramesE[1]),
-              ...bytesField(1, invalidRuntFrame),
-              ...bytesField(1, validFramesE[2]),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 5,
+            index: 104,
+            page: flashPageBytes(timestampMs + 6400, [
+              audioWrapper([
+                ...bytesField(1, validFramesE[0]),
+                ...bytesField(1, invalidZeroFrame),
+                ...bytesField(1, validFramesE[1]),
+                ...bytesField(1, invalidRuntFrame),
+                ...bytesField(1, validFramesE[2]),
+              ]),
             ]),
-          ]),
-        )),
+          ),
+        ),
       ),
     ];
 
@@ -472,12 +498,14 @@ void main() {
           16,
           0,
           1,
-          pendantMessage(storageBufferBytes(
-            session: 7,
-            seq: 6,
-            index: 105,
-            page: flashPageBytes(timestampMs + 8000, [audioWrapper(audioBlobOfFrames(framesG))]),
-          )),
+          pendantMessage(
+            storageBufferBytes(
+              session: 7,
+              seq: 6,
+              index: 105,
+              page: flashPageBytes(timestampMs + 8000, [audioWrapper(audioBlobOfFrames(framesG))]),
+            ),
+          ),
         ),
         0x3a,
         0xff,
@@ -490,14 +518,16 @@ void main() {
         17,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 7,
-          index: 106,
-          page: flashPageBytes(timestampMs + 9600, [
-            audioWrapper([...bytesField(1, invalidZeroFrame), ...bytesField(1, invalidRuntFrame)]),
-          ]),
-        )),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 7,
+            index: 106,
+            page: flashPageBytes(timestampMs + 9600, [
+              audioWrapper([...bytesField(1, invalidZeroFrame), ...bytesField(1, invalidRuntFrame)]),
+            ]),
+          ),
+        ),
       ),
     ];
 
@@ -518,16 +548,18 @@ void main() {
         18,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 8,
-          index: 107,
-          page: [
-            ...intField(1, timestampMs + 11200),
-            0x1a, 0xfa, 0xff, 0xff, 0xff, 0x1f, // wrapper length varint 2^33-6: truncating to Int32 goes negative
-            0x00, 0x00, 0x00, 0x00,
-          ],
-        )),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 8,
+            index: 107,
+            page: [
+              ...intField(1, timestampMs + 11200),
+              0x1a, 0xfa, 0xff, 0xff, 0xff, 0x1f, // wrapper length varint 2^33-6: truncating to Int32 goes negative
+              0x00, 0x00, 0x00, 0x00,
+            ],
+          ),
+        ),
       ),
     ];
 
@@ -536,17 +568,19 @@ void main() {
         19,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 9,
-          index: 108,
-          page: flashPageBytes(timestampMs + 12800, [
-            bytesField(3, [
-              0x09, 0x0a, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fixed64 field before the audio subfield
-              ...bytesField(2, bytesField(1, invalidRuntFrame)),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 9,
+            index: 108,
+            page: flashPageBytes(timestampMs + 12800, [
+              bytesField(3, [
+                0x09, 0x0a, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // fixed64 field before the audio subfield
+                ...bytesField(2, bytesField(1, invalidRuntFrame)),
+              ]),
             ]),
-          ]),
-        )),
+          ),
+        ),
       ),
     ];
 
@@ -555,17 +589,19 @@ void main() {
         20,
         0,
         1,
-        pendantMessage(storageBufferBytes(
-          session: 7,
-          seq: 10,
-          index: 109,
-          page: flashPageBytes(timestampMs + 14400, [
-            bytesField(3, [
-              0x0b, 0x0a, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // unknown wire type (3) before the audio subfield
-              ...bytesField(2, bytesField(1, invalidRuntFrame)),
+        pendantMessage(
+          storageBufferBytes(
+            session: 7,
+            seq: 10,
+            index: 109,
+            page: flashPageBytes(timestampMs + 14400, [
+              bytesField(3, [
+                0x0b, 0x0a, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // unknown wire type (3) before the audio subfield
+                ...bytesField(2, bytesField(1, invalidRuntFrame)),
+              ]),
             ]),
-          ]),
-        )),
+          ),
+        ),
       ),
     ];
 
@@ -654,8 +690,11 @@ void main() {
         'total_capture_pages': 170000,
       }),
     );
-    expect(mirrorParseDeviceStatus(packetsF[0]), equals(storageStatus),
-        reason: 'local device-status mirror must agree with the real _tryParseDeviceStatus path');
+    expect(
+      mirrorParseDeviceStatus(packetsF[0]),
+      equals(storageStatus),
+      reason: 'local device-status mirror must agree with the real _tryParseDeviceStatus path',
+    );
 
     await connection.disableBatchMode();
     expect(transport.writes.length, 6);
@@ -741,8 +780,11 @@ void main() {
       'fixed64_fields_page.json',
       'unknown_wiretype_page.json',
     ]) {
-      expect(cases[name]!['expectedStorageState'], isNull,
-          reason: '$name must not accidentally parse as a device-status packet');
+      expect(
+        cases[name]!['expectedStorageState'],
+        isNull,
+        reason: '$name must not accidentally parse as a device-status packet',
+      );
     }
 
     for (final entry in cases.entries) {
@@ -750,7 +792,8 @@ void main() {
     }
 
     final encoderVectors = {
-      'note': 'Byte-exact TX vectors observed from a fresh LimitlessDeviceConnection driving connect(), '
+      'note':
+          'Byte-exact TX vectors observed from a fresh LimitlessDeviceConnection driving connect(), '
           'enableBatchMode(), acknowledgeProcessedData(12345), getStorageStatus(), disableBatchMode(), '
           'setRealtimeAudioSuppressed(true) in order. messageIndex starts at 0 and increments per write; '
           'requestId starts at 1 and increments per write. msg6 is pinned at a fixed timestamp after '
@@ -786,12 +829,7 @@ void main() {
           'upToIndex': 12345,
           'hex': toHex(transport.writes[3]),
         },
-        {
-          'name': 'msg21_get_device_status',
-          'messageIndex': 4,
-          'requestId': 5,
-          'hex': toHex(transport.writes[4]),
-        },
+        {'name': 'msg21_get_device_status', 'messageIndex': 4, 'requestId': 5, 'hex': toHex(transport.writes[4])},
         {
           'name': 'msg8_realtime_batch_off',
           'messageIndex': 5,

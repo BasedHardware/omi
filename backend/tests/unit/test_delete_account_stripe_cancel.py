@@ -2,7 +2,8 @@
 
 Before the fix, DELETE /v1/users/delete-account revoked Firebase auth and wiped Firestore but never
 canceled the user's Stripe subscription, so a paying user kept getting billed with no way to log back
-in and cancel. The handler now cancels the subscription (best-effort) before the wipe.
+in and cancel. The handler now cancels the subscription before Firebase auth deletion and blocks the
+deletion if billing cancellation cannot be confirmed.
 
 ``services.users.account_deletion`` binds its collaborators at import (``from database import users as
 users_db``, ``from utils import stripe as stripe_utils``, …) and those packages pull heavy chains with
@@ -40,6 +41,7 @@ def users_service():
         "database.screen_activity": AutoMockModule("database.screen_activity"),
         "database.vector_db": AutoMockModule("database.vector_db"),
         "utils": _pkg("utils"),
+        "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
@@ -93,13 +95,16 @@ def test_free_user_does_not_call_stripe(users_service):
     assert resp['status'] == 'ok'
 
 
-def test_stripe_error_does_not_block_deletion(users_service):
+def test_stripe_error_blocks_deletion_before_auth(users_service):
     with patch.object(users_service.users_db, 'get_user_subscription', return_value=_sub('sub_123')), patch.object(
         users_service.stripe_utils, 'cancel_subscription', side_effect=Exception('stripe down')
-    ), patch.object(users_service.auth, 'delete_account') as fb_delete, patch.object(
+    ), patch.object(users_service.users_db, 'mark_user_deletion_billing_failed') as mark_billing_failed, patch.object(
+        users_service.auth, 'delete_account'
+    ) as fb_delete, patch.object(
         users_service, 'submit_with_context'
     ) as submit:
-        resp = users_service.start_account_deletion(uid='uid1')
-    fb_delete.assert_called_once()  # best-effort: Stripe failure must not abort deletion
-    submit.assert_called_once_with(users_service.cleanup_executor, users_service.background_wipe_user_data, 'uid1')
-    assert resp['status'] == 'ok'
+        with pytest.raises(Exception, match='stripe down'):
+            users_service.start_account_deletion(uid='uid1')
+    mark_billing_failed.assert_called_once_with('uid1', 'sub_123', 'stripe down')
+    fb_delete.assert_not_called()
+    submit.assert_not_called()

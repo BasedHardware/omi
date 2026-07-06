@@ -1032,15 +1032,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       """
 
     do {
-      let bridge = AgentBridge(harnessMode: "piMono")
-      try await bridge.start()
-      defer { Task { await bridge.stop() } }
-
-      let result = try await bridge.query(
+      let result = try await AgentClient.run(
+        surface: .onboarding(),
         prompt: prompt,
+        model: ModelQoS.Claude.chat,
         systemPrompt:
           "You are a structured onboarding research assistant. Output only valid JSON.",
-        model: ModelQoS.Claude.chat,
         onTextDelta: { @Sendable _ in },
         onToolCall: { @Sendable _, _, _ in return "" },
         onToolActivity: { @Sendable _, _, _, _ in }

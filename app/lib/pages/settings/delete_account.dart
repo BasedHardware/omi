@@ -56,15 +56,15 @@ class _DeleteAccountState extends State<DeleteAccount> {
   ];
 
   String _label(String key) => switch (key) {
-        'privacy_concerns' => context.l10n.deleteReasonPrivacy,
-        'not_using_enough' => context.l10n.deleteReasonNotUsing,
-        'missing_features' => context.l10n.deleteReasonMissingFeatures,
-        'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
-        'found_alternative' => context.l10n.deleteReasonFoundAlternative,
-        'taking_break' => context.l10n.deleteReasonTakingBreak,
-        'other' => context.l10n.deleteReasonOther,
-        _ => key,
-      };
+    'privacy_concerns' => context.l10n.deleteReasonPrivacy,
+    'not_using_enough' => context.l10n.deleteReasonNotUsing,
+    'missing_features' => context.l10n.deleteReasonMissingFeatures,
+    'technical_issues' => context.l10n.deleteReasonTechnicalIssues,
+    'found_alternative' => context.l10n.deleteReasonFoundAlternative,
+    'taking_break' => context.l10n.deleteReasonTakingBreak,
+    'other' => context.l10n.deleteReasonOther,
+    _ => key,
+  };
 
   void _next() {
     if (_page < 2) {
@@ -254,8 +254,9 @@ class _DeleteAccountState extends State<DeleteAccount> {
                 color: selected ? Colors.grey.shade800 : Colors.grey.shade800.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child:
-                  Center(child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600)),
+              child: Center(
+                child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
+              ),
             ),
             const SizedBox(width: 14),
             Expanded(
