@@ -122,7 +122,7 @@ def build_genesis_ledger_backfill(
 ) -> dict[str, Any]:
     migration_time = migration_time or datetime.now(timezone.utc)
     mutations: list[dict[str, Any]] = []
-    migrated_facts = []
+    migrated_facts: list[dict[str, Any]] = []
     for memory in legacy_memories:
         if memory.get("deleted") is True:
             continue
@@ -140,14 +140,14 @@ def build_genesis_ledger_backfill(
         if superseded_by:
             mutations.append(
                 _supersede_fact(
-                    fact["id"],
+                    fact_id=str(fact["id"]),
                     by=str(superseded_by),
                     kind="legacy_superseded",
                     valid_interval={"valid_to": invalid_at or migration_time, "valid_time_status": "unknown"},
                 )
             )
         elif invalid_at:
-            mutations.append(_retract_fact(fact["id"], reason="legacy_invalidated"))
+            mutations.append(_retract_fact(str(fact["id"]), reason="legacy_invalidated"))
 
     commit = _build_commit(
         None,
@@ -170,11 +170,11 @@ def project_graph_head_to_legacy_view(
     head_facts: dict[str, dict[str, Any]] | list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     facts = head_facts.values() if isinstance(head_facts, dict) else head_facts
-    rows = []
+    rows: list[dict[str, Any]] = []
     for fact in facts:
         if fact.get("invalid_at") is not None:
             continue
-        row = {
+        row: dict[str, Any] = {
             "id": fact.get("id"),
             "content": fact.get("content"),
             "category": fact.get("category"),
@@ -200,7 +200,7 @@ def diff_legacy_vs_graph_projection(
     graph_by_id = {str(row.get("id")): row for row in graph_rows if row.get("id") is not None}
     missing_from_graph = sorted(set(legacy_by_id) - set(graph_by_id))
     extra_in_graph = sorted(set(graph_by_id) - set(legacy_by_id))
-    mismatched = []
+    mismatched: list[dict[str, Any]] = []
     for memory_id in sorted(set(legacy_by_id) & set(graph_by_id)):
         if _canonical_json(_legacy_comparable(legacy_by_id[memory_id])) != _canonical_json(graph_by_id[memory_id]):
             mismatched.append(
@@ -226,10 +226,10 @@ def benchmark_rows_from_pipeline_outputs(
     example_id_by_run_id: dict[str, str] | None = None,
 ) -> list[dict[str, Any]]:
     example_id_by_run_id = example_id_by_run_id or {}
-    rows = []
+    rows: list[dict[str, Any]] = []
     for output in outputs:
         run_id = output.get("run_id")
-        example_id = output.get("example_id") or example_id_by_run_id.get(run_id)
+        example_id = output.get("example_id") or (example_id_by_run_id.get(str(run_id)) if run_id is not None else None)
         if not example_id:
             raise ValueError(f"pipeline output {run_id or '<unknown>'} is missing example_id")
         row = copy.deepcopy(output)
@@ -245,7 +245,7 @@ def compare_benchmark_summaries(legacy_summary: dict[str, Any], graph_summary: d
     missing_metrics = [
         metric for metric in required_metrics if metric not in legacy_summary or metric not in graph_summary
     ]
-    regressions = []
+    regressions: list[dict[str, Any]] = []
     for metric in required_metrics:
         if metric in missing_metrics:
             continue

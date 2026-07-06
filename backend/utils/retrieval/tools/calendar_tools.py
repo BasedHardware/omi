@@ -3,17 +3,14 @@ Tools for accessing Google Calendar events.
 """
 
 import asyncio
-import os
-import contextvars
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
 
 import httpx
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.users as users_db
 import database.notifications as notification_db
 from models.calendar_mutation import (
     CalendarMutationResult,
@@ -22,7 +19,6 @@ from models.calendar_mutation import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
-from utils.executors import db_executor, run_blocking
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
     parse_iso_with_tz,
@@ -40,8 +36,13 @@ from utils.retrieval.tools.google_utils import google_api_request, GoogleAPIErro
 # Import shared Google utilities
 from utils.retrieval.tools.google_utils import refresh_google_token
 
+from utils.log_sanitizer import sanitize, sanitize_pii
+import logging
 
-def _resolve_display_tz(tz):
+logger = logging.getLogger(__name__)
+
+
+def _resolve_display_tz(tz: Optional[str]) -> Tuple[Any, str]:
     """Return ``(tzinfo, label)`` for rendering event times in the user's timezone,
     falling back to UTC on a missing or invalid zone (issue #4643)."""
     if tz:
@@ -52,7 +53,7 @@ def _resolve_display_tz(tz):
     return timezone.utc, "UTC"
 
 
-def _format_event_dt(dt: datetime, display_tz, tz_label: str) -> str:
+def _format_event_dt(dt: datetime, display_tz: Any, tz_label: str) -> str:
     """Render a calendar event datetime in the user's timezone with a label.
 
     Google event times are tz-aware; a naive value is treated as UTC so the chat
@@ -63,7 +64,7 @@ def _format_event_dt(dt: datetime, display_tz, tz_label: str) -> str:
     return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
 
 
-async def _get_user_display_tz(uid: str):
+async def _get_user_display_tz(uid: str) -> Tuple[Any, str]:
     """Return ``(tzinfo, label)`` for the user's timezone, read off the event loop.
 
     A timezone lookup failure must never abort the calendar tool, so fall back to
@@ -75,20 +76,6 @@ async def _get_user_display_tz(uid: str):
         logger.warning(f"get_calendar_events_tool - timezone lookup failed, formatting in UTC: {tz_error}")
         tz = None
     return _resolve_display_tz(tz)
-
-
-from utils.log_sanitizer import sanitize, sanitize_pii
-import logging
-
-logger = logging.getLogger(__name__)
-
-
-# Import the context variable from agentic module
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    # Fallback if import fails
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
 async def search_google_contacts(access_token: str, query: str) -> Optional[str]:
@@ -184,7 +171,7 @@ async def search_google_contacts(access_token: str, query: str) -> Optional[str]
 
                 if email_addresses:
                     email = email_addresses[0].get('value')
-                    names = person.get('names') or [{}]
+                    names: List[Dict[str, Any]] = person.get('names') or [{}]
                     name = names[0].get('displayName', query)
                     logger.info(f"✅ Found contact in Other Contacts: {sanitize_pii(name)} -> {sanitize_pii(email)}")
                     return email
@@ -242,8 +229,8 @@ async def create_google_calendar_event(
     end_time: datetime,
     description: Optional[str] = None,
     location: Optional[str] = None,
-    attendees: Optional[list] = None,
-) -> dict:
+    attendees: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """
     Create a new event in Google Calendar.
 
@@ -275,7 +262,7 @@ async def create_google_calendar_event(
     end_time_str = end_time_utc.strftime('%Y-%m-%dT%H:%M:%SZ')
 
     # Build event body
-    event_body = {
+    event_body: Dict[str, Any] = {
         'summary': summary,
         'start': {
             'dateTime': start_time_str,
@@ -307,7 +294,7 @@ async def create_google_calendar_event(
     return event
 
 
-async def get_google_calendar_event(access_token: str, event_id: str) -> dict:
+async def get_google_calendar_event(access_token: str, event_id: str) -> Dict[str, Any]:
     """
     Get a single calendar event by event ID.
 
@@ -336,8 +323,8 @@ async def update_google_calendar_event(
     end_time: Optional[datetime] = None,
     description: Optional[str] = None,
     location: Optional[str] = None,
-    attendees: Optional[list] = None,
-) -> dict:
+    attendees: Optional[List[str]] = None,
+) -> Dict[str, Any]:
     """
     Update an existing calendar event.
 
@@ -357,7 +344,7 @@ async def update_google_calendar_event(
     logger.info(f"📅 Updating Google Calendar event: {event_id}")
 
     # Build update body with only provided fields
-    event_body = {}
+    event_body: Dict[str, Any] = {}
 
     if summary is not None:
         event_body['summary'] = summary
@@ -435,7 +422,7 @@ async def get_google_calendar_events(
     time_max: Optional[datetime] = None,
     max_results: int = 10,
     search_query: Optional[str] = None,
-) -> list:
+) -> List[Dict[str, Any]]:
     """
     Fetch events from Google Calendar API.
 
@@ -457,7 +444,7 @@ async def get_google_calendar_events(
     time_min_str = time_min.strftime('%Y-%m-%dT%H:%M:%SZ')
     time_max_str = time_max.strftime('%Y-%m-%dT%H:%M:%SZ')
 
-    params = {
+    params: Dict[str, Any] = {
         'timeMin': time_min_str,
         'timeMax': time_max_str,
         'singleEvents': 'true',
@@ -467,7 +454,7 @@ async def get_google_calendar_events(
     if search_query:
         params['q'] = search_query
 
-    events = []
+    events: List[Dict[str, Any]] = []
     page = None
 
     while True:
@@ -498,7 +485,7 @@ async def get_calendar_events_tool(
     end_date: Optional[str] = None,
     max_results: int = 10,
     search_query: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve calendar events from the user's Google Calendar.
@@ -536,7 +523,7 @@ async def get_calendar_events_tool(
     uid, integration, access_token, access_err = await run_blocking(
         db_executor,
         prepare_access,
-        config,
+        cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
         'Google Calendar is not connected. Please connect your Google Calendar from settings to view your events.',
@@ -545,6 +532,8 @@ async def get_calendar_events_tool(
     )
     if access_err:
         return access_err
+    if uid is None or integration is None or access_token is None:
+        return "Google Calendar access token not found."
     telemetry_context = None
 
     try:
@@ -625,8 +614,11 @@ async def get_calendar_events_tool(
                     f"📅 Large date range ({days_range} days), using iterative search starting from most recent"
                 )
 
+                assert time_min is not None
+                assert time_max is not None
+
                 # Start with last 30 days, then expand backwards month by month
-                all_events = []
+                all_events: List[Dict[str, Any]] = []
                 search_end = time_max
                 months_back = 0
                 max_months = 6  # Don't search more than 6 months back
@@ -664,7 +656,7 @@ async def get_calendar_events_tool(
                     months_back += 1
 
                 # Sort all events by start time (most recent first) and take max_results
-                events_with_time = []
+                events_with_time: List[Tuple[datetime, Dict[str, Any]]] = []
                 for event in all_events:
                     start = event.get('start', {})
                     if 'dateTime' in start:
@@ -738,8 +730,6 @@ async def get_calendar_events_tool(
             emit_sync_failed(telemetry_context, e)
             return f"Error fetching calendar events: {e}"
 
-        events_count = len(events) if events else 0
-
         if not events:
             date_info = ""
             if time_min and time_max:
@@ -797,7 +787,7 @@ async def get_calendar_events_tool(
 
             result += "\n"
 
-        emit_sync_succeeded(telemetry_context, item_count=events_count)
+        emit_sync_succeeded(telemetry_context, item_count=len(events))
         return result.strip()
     except Exception as e:
         logger.error(f"❌ Unexpected error in get_calendar_events_tool: {e}")
@@ -814,7 +804,7 @@ async def create_calendar_event_tool(
     description: Optional[str] = None,
     location: Optional[str] = None,
     attendees: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Create a new calendar event in the user's Google Calendar.
@@ -856,7 +846,7 @@ async def create_calendar_event_tool(
     uid, integration, access_token, access_err = await run_blocking(
         db_executor,
         prepare_access,
-        config,
+        cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
         'Google Calendar is not connected. Please connect your Google Calendar from settings to create events.',
@@ -865,6 +855,9 @@ async def create_calendar_event_tool(
     )
     if access_err:
         return access_err
+    assert uid is not None
+    assert integration is not None
+    assert access_token is not None
 
     try:
 
@@ -890,14 +883,14 @@ async def create_calendar_event_tool(
             return f"Error: end_time must be after start_time. Start: {start_dt.strftime('%Y-%m-%d %H:%M:%S')}, End: {end_dt.strftime('%Y-%m-%d %H:%M:%S')}"
 
         # Parse and resolve attendees if provided
-        attendee_list = None
+        attendee_list: Optional[List[str]] = None
         if attendees:
             attendee_strings = [a.strip() for a in attendees.split(',') if a.strip()]
             logger.info(f"📅 Parsed {len(attendee_strings)} attendee(s)")
 
             # Resolve each attendee (name or email) to an email address
-            resolved_emails = []
-            unresolved_attendees = []
+            resolved_emails: List[str] = []
+            unresolved_attendees: List[str] = []
 
             for attendee in attendee_strings:
                 email = await resolve_attendee_to_email(access_token, attendee)
@@ -924,7 +917,6 @@ async def create_calendar_event_tool(
                 attendees=attendee_list,
             )
 
-            event_id = event.get('id', 'unknown')
             event_link = event.get('htmlLink', '')
 
             result = f"✅ Successfully created calendar event: {title}\n"
@@ -960,7 +952,6 @@ async def create_calendar_event_tool(
                             attendees=attendee_list,
                         )
 
-                        event_id = event.get('id', 'unknown')
                         event_link = event.get('htmlLink', '')
 
                         result = f"✅ Successfully created calendar event: {title}\n"
@@ -1004,7 +995,7 @@ async def delete_calendar_event_tool(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     event_id: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Delete calendar events from the user's Google Calendar.
@@ -1041,7 +1032,7 @@ async def delete_calendar_event_tool(
     )
 
     uid, integration, access_token, access_err = prepare_access(
-        config,
+        cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
         'Google Calendar is not connected. Please connect your Google Calendar from settings to delete events.',
@@ -1050,6 +1041,9 @@ async def delete_calendar_event_tool(
     )
     if access_err:
         return access_err
+    assert uid is not None
+    assert integration is not None
+    assert access_token is not None
 
     try:
 
@@ -1136,7 +1130,7 @@ async def delete_calendar_event_tool(
                 return f"No calendar events found{title_info}{date_info}."
 
             # Filter events by title if provided
-            matching_events = events
+            matching_events: List[Dict[str, Any]] = events
             if event_title:
                 matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
 
@@ -1156,15 +1150,15 @@ async def delete_calendar_event_tool(
             mutation_result = CalendarMutationResult()
 
             for event in matching_events:
-                event_id = event.get('id')
+                event_id_val = event.get('id')
                 event_title_found = event.get('summary', 'Untitled')
 
-                if not event_id:
+                if not event_id_val:
                     logger.warning(f"⚠️ Event missing ID, skipping: {event_title_found}")
                     continue
 
                 try:
-                    await delete_google_calendar_event(access_token, event_id)
+                    await delete_google_calendar_event(access_token, event_id_val)
                     mutation_result.succeeded.append(event)
                 except Exception as e:
                     error_msg = str(e)
@@ -1207,11 +1201,11 @@ async def delete_calendar_event_tool(
 
                         mutation_result = CalendarMutationResult()
                         for event in matching_events:
-                            event_id = event.get('id')
+                            event_id_val = event.get('id')
                             event_title_found = calendar_event_title(event)
-                            if event_id:
+                            if event_id_val:
                                 try:
-                                    await delete_google_calendar_event(new_token, event_id)
+                                    await delete_google_calendar_event(new_token, event_id_val)
                                     mutation_result.succeeded.append(event)
                                 except Exception as delete_error:
                                     mutation_result.failed.append((event_title_found, str(delete_error)))
@@ -1251,7 +1245,7 @@ async def update_calendar_event_tool(
     add_attendees: Optional[str] = None,
     remove_attendees: Optional[str] = None,
     set_attendees: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Update an existing calendar event in the user's Google Calendar.
@@ -1295,7 +1289,7 @@ async def update_calendar_event_tool(
     )
 
     uid, integration, access_token, access_err = prepare_access(
-        config,
+        cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
         'Google Calendar is not connected. Please connect your Google Calendar from settings to update events.',
@@ -1304,6 +1298,9 @@ async def update_calendar_event_tool(
     )
     if access_err:
         return access_err
+    assert uid is not None
+    assert integration is not None
+    assert access_token is not None
 
     try:
 
@@ -1396,12 +1393,12 @@ async def update_calendar_event_tool(
         update_location = location if location is not None else None
 
         # Handle attendees
-        update_attendees = None
+        update_attendees: Optional[List[str]] = None
         if set_attendees is not None:
             # Replace all attendees
             attendee_strings = [a.strip() for a in set_attendees.split(',') if a.strip()]
-            resolved_emails = []
-            unresolved_attendees = []
+            resolved_emails: List[str] = []
+            unresolved_attendees: List[str] = []
 
             for attendee in attendee_strings:
                 email = await resolve_attendee_to_email(access_token, attendee)
@@ -1417,7 +1414,7 @@ async def update_calendar_event_tool(
         elif add_attendees is not None or remove_attendees is not None:
             # Modify existing attendees
             current_attendees = current_event.get('attendees', [])
-            current_emails = [a.get('email') for a in current_attendees if a.get('email')]
+            current_emails: List[str] = [a.get('email') for a in current_attendees if a.get('email')]
 
             # Add attendees
             if add_attendees:
@@ -1432,7 +1429,7 @@ async def update_calendar_event_tool(
             # Remove attendees
             if remove_attendees:
                 attendee_strings = [a.strip() for a in remove_attendees.split(',') if a.strip()]
-                emails_to_remove = []
+                emails_to_remove: List[str] = []
                 for attendee in attendee_strings:
                     email = await resolve_attendee_to_email(access_token, attendee)
                     if email:

@@ -1,8 +1,12 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
 class UsageStats(BaseModel):
@@ -44,4 +48,4 @@ class HourlyUsage(UsageStats):
     month: int
     day: int
     hour: int
-    last_updated: datetime = Field(default_factory=datetime.utcnow)
+    last_updated: datetime = Field(default_factory=_utc_now)

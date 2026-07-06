@@ -4,9 +4,10 @@ Tools for performing web searches using Perplexity AI.
 
 import logging
 import os
+from typing import Any, cast
 
 import httpx
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.http_client import get_webhook_client
 from utils.llm.clients import get_model
 from utils.llm.gateway_client import feature_auto_lane_id, get_llm_gateway_base_url, llm_gateway_headers
@@ -131,9 +132,9 @@ async def _perplexity_legacy_search(query: str) -> str:
         return f"Error: An unexpected error occurred while searching: {str(e)}"
 
 
-def _format_perplexity_response(result: dict) -> str:
+def _format_perplexity_response(result: dict[str, Any]) -> str:
     if 'choices' in result and len(result['choices']) > 0:
-        content = result['choices'][0]['message']['content']
+        content: Any = result['choices'][0]['message']['content']
         formatted_result = f"Web Search Results:\n\n{content}\n\n"
 
         citations = _extract_citations(result)
@@ -141,8 +142,9 @@ def _format_perplexity_response(result: dict) -> str:
             formatted_result += "\nSources:\n"
             for i, citation in enumerate(citations[:10], 1):
                 if isinstance(citation, dict):
-                    url = citation.get('url', citation.get('citation', ''))
-                    title = citation.get('title', '')
+                    cit = cast(dict[str, Any], citation)
+                    url = cit.get('url', cit.get('citation', ''))
+                    title = cit.get('title', '')
                     if url:
                         formatted_result += f"{i}. {title}\n   {url}\n"
                 elif isinstance(citation, str):
@@ -155,8 +157,8 @@ def _format_perplexity_response(result: dict) -> str:
     return "Error: Unexpected response format from Perplexity API"
 
 
-def _extract_citations(result: dict) -> list:
-    citations = result.get('citations') or result.get('search_results')
+def _extract_citations(result: dict[str, Any]) -> list[Any]:
+    citations: Any = result.get('citations') or result.get('search_results')
     if citations:
         return citations
     return result.get('choices', [{}])[0].get('message', {}).get('citations', [])

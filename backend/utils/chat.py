@@ -363,7 +363,7 @@ async def process_voice_message_segment_stream(
                     converted_memories.append(deserialize_conversation(m))
                 else:
                     converted_memories.append(m)
-            memories_id = [m.id for m in converted_memories]
+            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,

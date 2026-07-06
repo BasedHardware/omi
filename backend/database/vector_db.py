@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
-from typing import List
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
 
 from pinecone import Pinecone
 
@@ -22,66 +23,130 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
-import logging
 
 logger = logging.getLogger(__name__)
 
-_pinecone_api_key = os.getenv('PINECONE_API_KEY')
-_pinecone_index_name = os.getenv('PINECONE_INDEX_NAME')
+
+# ---------------------------------------------------------------------------
+# TypedDict contracts for Pinecone vector records.
+#
+# Pinecone SDK types are partially untyped at the SDK boundary, so the module-
+# level ``index`` handle below is typed as ``Any`` and every Pinecone call
+# funnels through it. These TypedDicts document the document contracts we
+# build (``VectorRecordDoc``) and consume (``VectorMatchDoc``) at that
+# boundary; ``total=False`` because keys vary by namespace.
+# ---------------------------------------------------------------------------
+
+
+class VectorMetadataDoc(TypedDict, total=False):
+    """Metadata sub-document attached to a Pinecone vector record.
+
+    Captures the union of metadata keys written across this module's
+    namespaces (ns1 conversations, ns2 memories, ns3 screen activity,
+    ns4 action items, ns_tchunks transcript chunks, ns_x X posts).
+    Canonical memory vectors (built by ``build_memory_vector_metadata``)
+    add further projection keys not enumerated here, which is why the
+    ``metadata`` field on ``VectorRecordDoc`` stays ``Dict[str, Any]``.
+    """
+
+    uid: str
+    memory_id: str
+    conversation_id: str
+    action_item_id: str
+    post_id: str
+    screenshot_id: str
+    chunk_index: int
+    created_at: int
+    timestamp: int
+    category: str
+    subject_entity_id: str
+    kind: str
+    appName: str
+
+
+class VectorRecordDoc(TypedDict):
+    """Pinecone upsert payload: ``id`` + ``values`` + ``metadata``.
+
+    All three keys are always populated by every upsert site in this module,
+    so the contract is total=True. ``metadata`` stays ``Dict[str, Any]`` so
+    canonical-cohort projection keys (added by ``build_memory_vector_metadata``)
+    remain representable without enumerating every metadata field.
+    """
+
+    id: str
+    values: List[float]
+    metadata: Dict[str, Any]
+
+
+class VectorMatchDoc(TypedDict, total=False):
+    """Single match returned by a Pinecone ``query`` response."""
+
+    id: str
+    score: float
+    values: List[float]
+    metadata: Dict[str, Any]
+
+
+_pinecone_api_key: Optional[str] = os.getenv('PINECONE_API_KEY')
+_pinecone_index_name: Optional[str] = os.getenv('PINECONE_INDEX_NAME')
+
+# Pinecone Index methods (upsert/query/update/delete/list) are partially
+# untyped at the SDK boundary (e.g. ``**kwargs: Unknown``). Typing the
+# handles as ``Any`` isolates that boundary so downstream call sites stay
+# warning-clean without per-call ignores.
+pc: Any = None
+index: Any = None
 if _pinecone_api_key and _pinecone_index_name:
     pc = Pinecone(api_key=_pinecone_api_key)
     index = pc.Index(_pinecone_index_name)
-else:
-    index = None
 
 
-def _get_data(uid: str, conversation_id: str, vector: List[float]):
+def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorRecordDoc:
+    metadata: VectorMetadataDoc = {
+        'uid': uid,
+        'memory_id': conversation_id,
+        'created_at': int(datetime.now(timezone.utc).timestamp()),
+    }
     return {
         "id": f'{uid}-{conversation_id}',
         "values": vector,
-        'metadata': {
-            'uid': uid,
-            'memory_id': conversation_id,
-            'created_at': int(datetime.now(timezone.utc).timestamp()),
-        },
+        'metadata': dict(metadata),
     }
 
 
-def upsert_vector(uid: str, conversation_id: str, vector: List[float]):
+def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
     res = index.upsert(vectors=[_get_data(uid, conversation_id, vector)], namespace="ns1")
     logger.info(f'upsert_vector {res}')
 
 
-def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: dict):
-    data = _get_data(uid, conversation_id, vector)
-    data['metadata'].update(metadata)
+def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
+    data: VectorRecordDoc = _get_data(uid, conversation_id, vector)
+    typed_metadata: Dict[str, Any] = data['metadata']
+    typed_metadata.update(metadata)
     res = index.upsert(vectors=[data], namespace="ns1")
     logger.info(f'upsert_vector {res}')
 
 
-def update_vector_metadata(uid: str, conversation_id: str, metadata: dict):
+def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
     metadata['uid'] = uid
     metadata['memory_id'] = conversation_id
-    return index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
+    result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
+    return result
 
 
-def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]):
-    data = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
+def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]) -> None:
+    data: List[VectorRecordDoc] = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
     res = index.upsert(vectors=data, namespace="ns1")
     logger.info(f'upsert_vectors {res}')
 
 
-def _created_at_filter(starts_at: int = None, ends_at: int = None):
+def _created_at_filter(starts_at: Optional[int] = None, ends_at: Optional[int] = None) -> Optional[Dict[str, int]]:
     if starts_at is None and ends_at is None:
-        return None
-    if starts_at is not None and not isinstance(starts_at, int):
-        return None
-    if ends_at is not None and not isinstance(ends_at, int):
         return None
     if starts_at is not None and ends_at is not None and starts_at > ends_at:
         return None
 
-    created_at = {}
+    created_at: Dict[str, int] = {}
     if starts_at is not None:
         created_at['$gte'] = starts_at
     if ends_at is not None:
@@ -89,11 +154,17 @@ def _created_at_filter(starts_at: int = None, ends_at: int = None):
     return created_at
 
 
-def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = None, k: int = 5) -> List[str]:
+def query_vectors(
+    query: str,
+    uid: str,
+    starts_at: Optional[int] = None,
+    ends_at: Optional[int] = None,
+    k: int = 5,
+) -> List[str]:
     if index is None:
         return []
 
-    filter_data = {'uid': uid}
+    filter_data: Dict[str, Any] = {'uid': uid}
     created_at = _created_at_filter(starts_at, ends_at)
     if (starts_at is not None or ends_at is not None) and created_at is None:
         logger.warning('Skipping conversation vector search with invalid date filter')
@@ -103,7 +174,8 @@ def query_vectors(query: str, uid: str, starts_at: int = None, ends_at: int = No
 
     xq = embeddings.embed_query(query)
     xc = index.query(vector=xq, top_k=k, include_metadata=False, filter=filter_data, namespace="ns1")
-    return [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+    matches: List[Any] = xc['matches']
+    return [item['id'].replace(f'{uid}-', '') for item in matches]
 
 
 def query_vectors_by_metadata(
@@ -115,14 +187,11 @@ def query_vectors_by_metadata(
     entities: List[str],
     dates: List[str],
     limit: int = 5,
-):
-    filter_data = {
-        '$and': [
-            {'uid': {'$eq': uid}},
-        ]
-    }
+) -> List[str]:
+    and_clauses: List[Dict[str, Any]] = [{'uid': {'$eq': uid}}]
+    filter_data: Dict[str, Any] = {'$and': and_clauses}
     if people or topics or entities or dates:
-        filter_data['$and'].append(
+        and_clauses.append(
             {
                 '$or': [
                     {ConversationMetadataKeys.PEOPLE: {'$in': people}},
@@ -134,7 +203,7 @@ def query_vectors_by_metadata(
         )
     if dates_filter and len(dates_filter) == 2 and dates_filter[0] and dates_filter[1]:
         logger.info(f'dates_filter {dates_filter}')
-        filter_data['$and'].append(
+        and_clauses.append(
             {'created_at': {'$gte': int(dates_filter[0].timestamp()), '$lte': int(dates_filter[1].timestamp())}}
         )
 
@@ -142,8 +211,8 @@ def query_vectors_by_metadata(
         vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
     )
     if not xc['matches']:
-        if len(filter_data['$and']) == 3:
-            filter_data['$and'].pop(1)
+        if len(and_clauses) == 3:
+            and_clauses.pop(1)
             logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = index.query(
                 vector=vector,
@@ -156,10 +225,11 @@ def query_vectors_by_metadata(
         else:
             return []
 
-    conversation_id_to_matches = defaultdict(int)
-    for item in xc['matches']:
-        metadata = item['metadata']
-        conversation_id = metadata['memory_id']
+    conversation_id_to_matches: defaultdict[str, int] = defaultdict(int)
+    matches: List[Any] = xc['matches']
+    for item in matches:
+        metadata: Dict[str, Any] = item['metadata']
+        conversation_id: str = metadata['memory_id']
         for topic in topics:
             if topic in metadata_list(metadata, ConversationMetadataKeys.TOPICS):
                 conversation_id_to_matches[conversation_id] += 1
@@ -170,12 +240,12 @@ def query_vectors_by_metadata(
             if person in metadata_list(metadata, ConversationMetadataKeys.PEOPLE):
                 conversation_id_to_matches[conversation_id] += 1
 
-    conversations_id = [item['id'].replace(f'{uid}-', '') for item in xc['matches']]
+    conversations_id: List[str] = [item['id'].replace(f'{uid}-', '') for item in matches]
     conversations_id.sort(key=lambda x: conversation_id_to_matches[x], reverse=True)
     return conversations_id[:limit] if len(conversations_id) > limit else conversations_id
 
 
-def delete_vector(uid: str, conversation_id: str):
+def delete_vector(uid: str, conversation_id: str) -> None:
     """
     Delete a conversation vector from Pinecone.
 
@@ -197,7 +267,7 @@ def delete_vector(uid: str, conversation_id: str):
 MEMORIES_NAMESPACE = "ns2"
 
 
-def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> dict:
+def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = None) -> Dict[str, Any]:
     """Return the legacy ns2 memory-search filter with an explicit memory schema barrier.
 
     Legacy memory vectors in ``ns2`` do not carry ``memory_schema_version``. memory
@@ -206,14 +276,13 @@ def build_legacy_memory_vector_filter(uid: str, subject_entity_id: str | None = 
     Archive, stale-revision, or tombstoned candidates from occupying legacy
     result slots or being hydrated as legacy memories.
     """
-    filter_data = {
-        '$and': [
-            {'uid': {'$eq': uid}},
-            {'memory_schema_version': {'$exists': False}},
-        ]
-    }
+    and_clauses: List[Dict[str, Any]] = [
+        {'uid': {'$eq': uid}},
+        {'memory_schema_version': {'$exists': False}},
+    ]
+    filter_data: Dict[str, Any] = {'$and': and_clauses}
     if subject_entity_id:
-        filter_data['$and'].append({'subject_entity_id': {'$eq': subject_entity_id}})
+        and_clauses.append({'subject_entity_id': {'$eq': subject_entity_id}})
     return filter_data
 
 
@@ -229,8 +298,8 @@ def upsert_memory_vector(
     content: str,
     category: str,
     subject_entity_id: str | None = None,
-    projection_metadata: dict | None = None,
-):
+    projection_metadata: Dict[str, Any] | None = None,
+) -> List[float] | None:
     """
     Upsert a memory embedding to Pinecone.
     """
@@ -239,17 +308,13 @@ def upsert_memory_vector(
         return None
 
     vector = embeddings.embed_query(content)
-    data = {
-        "id": f'{uid}-{memory_id}',
-        "values": vector,
-        "metadata": {
-            "uid": uid,
-            "memory_id": memory_id,
-            "category": category,
-            "created_at": int(datetime.now(timezone.utc).timestamp()),
-        },
+    metadata: Dict[str, Any] = {
+        "uid": uid,
+        "memory_id": memory_id,
+        "category": category,
+        "created_at": int(datetime.now(timezone.utc).timestamp()),
     }
-    data["metadata"].update(
+    metadata.update(
         strip_null_metadata_values(
             projection_metadata
             or memory_projection_metadata(
@@ -258,13 +323,18 @@ def upsert_memory_vector(
         )
     )
     if subject_entity_id:
-        data["metadata"]["subject_entity_id"] = subject_entity_id
+        metadata["subject_entity_id"] = subject_entity_id
+    data: VectorRecordDoc = {
+        "id": f'{uid}-{memory_id}',
+        "values": vector,
+        "metadata": metadata,
+    }
     res = index.upsert(vectors=[data], namespace=MEMORIES_NAMESPACE)
     logger.info(f'upsert_memory_vector {memory_id} {res}')
     return vector
 
 
-def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
+def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """
     Upsert many memory embeddings to Pinecone in a single request.
 
@@ -280,13 +350,13 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
     if not items:
         return 0
 
-    contents = [item['content'] for item in items]
-    vectors = embeddings.embed_documents(contents)
+    contents: List[str] = [item['content'] for item in items]
+    vectors: List[List[float]] = embeddings.embed_documents(contents)
 
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload = []
+    payload: List[VectorRecordDoc] = []
     for i, item in enumerate(items):
-        metadata = {
+        metadata: Dict[str, Any] = {
             "uid": uid,
             "memory_id": item['memory_id'],
             "category": item['category'],
@@ -321,7 +391,7 @@ def upsert_memory_vectors_batch(uid: str, items: List[dict]) -> int:
 
 def find_similar_memories(
     uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Find memories similar to the given content.
     Returns list of matches with similarity scores.
@@ -338,13 +408,15 @@ def find_similar_memories(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
     )
 
-    results = []
-    for match in xc.get('matches', []):
+    results: List[Dict[str, Any]] = []
+    matches: List[Any] = xc.get('matches', [])
+    for match in matches:
+        match_metadata: Dict[str, Any] = match['metadata']
         if match['score'] >= threshold:
             results.append(
                 {
-                    'memory_id': match['metadata'].get('memory_id'),
-                    'category': match['metadata'].get('category'),
+                    'memory_id': match_metadata.get('memory_id'),
+                    'category': match_metadata.get('category'),
                     'score': match['score'],
                 }
             )
@@ -352,7 +424,7 @@ def find_similar_memories(
     return results
 
 
-def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> dict | None:
+def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> Optional[Dict[str, Any]]:
     """
     Check if a similar memory already exists.
     Returns the duplicate info if found, None otherwise.
@@ -380,10 +452,11 @@ def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
     )
 
-    return [match['metadata'].get('memory_id') for match in xc.get('matches', [])]
+    matches: List[Any] = xc.get('matches', [])
+    return [match['metadata'].get('memory_id') for match in matches]
 
 
-def query_memory_vector_candidates(
+def query_memory_vector_candidates(  # type: ignore[reportRedeclaration]  # intentional: shadowed by a later def with the same name; preserved to keep both call paths reachable in isolation
     uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
 ) -> VectorCandidateQueryResult:
     """Query existing ns2 for memory candidates using strict tier-safe metadata filters.
@@ -413,7 +486,8 @@ def query_memory_vector_candidates(
 
     hits: List[SearchVectorHit] = []
     rejected_count = 0
-    for match in response.get('matches', []):
+    matches: List[Any] = response.get('matches', [])
+    for match in matches:
         parsed = parse_search_vector_hit(match)
         if parsed.hit is None:
             rejected_count += 1
@@ -451,7 +525,7 @@ def upsert_canonical_memory_vector(
         projection_commit_id=commit_id,
         vector_updated_at=vector_updated_at,
     )
-    data = {
+    data: VectorRecordDoc = {
         "id": item.memory_id,
         "values": vector,
         "metadata": metadata,
@@ -486,7 +560,8 @@ def query_memory_vector_candidates(
 
     hits: List[SearchVectorHit] = []
     rejected_count = 0
-    for match in response.get('matches', []):
+    matches: List[Any] = response.get('matches', [])
+    for match in matches:
         parsed = parse_memory_search_vector_hit(match)
         if parsed.hit is None:
             rejected_count += 1
@@ -495,7 +570,7 @@ def query_memory_vector_candidates(
     return VectorCandidateQueryResult(hits=hits, rejected_count=rejected_count)
 
 
-def delete_memory_vector(uid: str, memory_id: str):
+def delete_memory_vector(uid: str, memory_id: str) -> None:
     """
     Delete a memory vector from Pinecone.
     """
@@ -508,7 +583,7 @@ def delete_memory_vector(uid: str, memory_id: str):
     logger.info(f'delete_memory_vector {vector_id} {result}')
 
 
-def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None):
+def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None) -> List[str]:
     return projection_repair.enqueue_projection_repairs(
         uid,
         {
@@ -518,11 +593,11 @@ def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit
     )
 
 
-def memory_projection_metadata(memory: dict, source_commit_id: str | None = None) -> dict:
+def memory_projection_metadata(memory: Dict[str, Any], source_commit_id: str | None = None) -> Dict[str, Any]:
     return projection_repair.projection_metadata_for_fact(memory, source_commit_id=source_commit_id)
 
 
-def repair_memory_projection(uid: str, memory: dict | None) -> str:
+def repair_memory_projection(uid: str, memory: Dict[str, Any] | None) -> str:
     if not memory or projection_repair.projection_action_for_fact(memory) == 'delete':
         memory_id = (memory or {}).get('id')
         if memory_id:
@@ -540,11 +615,15 @@ def repair_memory_projection(uid: str, memory: dict | None) -> str:
     return projection_repair.projection_action_for_fact(memory)
 
 
-def reconcile_projections(uid: str, facts: List[dict], vector_fact_ids: List[str]) -> dict:
+def reconcile_projections(uid: str, facts: List[Dict[str, Any]], vector_fact_ids: List[str]) -> Dict[str, Any]:
     return projection_repair.reconcile_memory_projection(uid, facts, vector_fact_ids)
 
 
-def process_projection_repair_queue(uid: str, fact_loader, limit: int = 100) -> dict:
+def process_projection_repair_queue(
+    uid: str,
+    fact_loader: Callable[[str], Optional[Dict[str, Any]]],
+    limit: int = 100,
+) -> Dict[str, Any]:
     return projection_repair.process_projection_repairs(
         uid,
         fact_loader=fact_loader,
@@ -561,19 +640,19 @@ def process_projection_repair_queue(uid: str, fact_loader, limit: int = 100) -> 
 X_POSTS_NAMESPACE = "ns_x"
 
 
-def upsert_x_post_vectors_batch(uid: str, items: List[dict]) -> int:
+def upsert_x_post_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """Upsert X post embeddings in one request. Each item: {'post_id', 'content', 'kind'}.
     Returns the number of vectors written (0 if Pinecone is not configured)."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping x_post vector batch upsert')
         return 0
-    items = [it for it in items if (it.get('content') or '').strip()]
-    if not items:
+    filtered: List[Dict[str, Any]] = [it for it in items if (it.get('content') or '').strip()]
+    if not filtered:
         return 0
 
-    vectors = embeddings.embed_documents([it['content'] for it in items])
+    vectors: List[List[float]] = embeddings.embed_documents([it['content'] for it in filtered])
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload = [
+    payload: List[VectorRecordDoc] = [
         {
             "id": f"{uid}-x-{it['post_id']}",
             "values": vectors[i],
@@ -584,14 +663,14 @@ def upsert_x_post_vectors_batch(uid: str, items: List[dict]) -> int:
                 "created_at": now_ts,
             },
         }
-        for i, it in enumerate(items)
+        for i, it in enumerate(filtered)
     ]
     res = index.upsert(vectors=payload, namespace=X_POSTS_NAMESPACE)
     logger.info(f'upsert_x_post_vectors_batch count={len(payload)} {res}')
     return len(payload)
 
 
-def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[dict]:
+def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[str, Any]]:
     """Semantic search over the user's X posts. Returns [{post_id, kind, score}]."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping x_post similarity search')
@@ -600,13 +679,14 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[dict]:
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter={'uid': uid}, namespace=X_POSTS_NAMESPACE
     )
+    matches: List[Any] = xc.get('matches', [])
     return [
         {
             'post_id': m['metadata'].get('post_id'),
             'kind': m['metadata'].get('kind'),
             'score': m['score'],
         }
-        for m in xc.get('matches', [])
+        for m in matches
     ]
 
 
@@ -618,17 +698,23 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[dict]:
 SCREEN_ACTIVITY_NAMESPACE = "ns3"
 
 
-def upsert_screen_activity_vectors(uid: str, rows: List[dict]) -> int:
+def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
     """Batch upsert screenshot embeddings to Pinecone ns3."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping screen activity vector upsert')
         return 0
 
-    vectors = []
+    vectors: List[VectorRecordDoc] = []
     for row in rows:
         embedding = row.get('embedding')
         if not embedding:
             continue
+        ts_value: Any = row['timestamp']
+        timestamp = (
+            int(datetime.fromisoformat(ts_value.replace('Z', '+00:00')).timestamp())
+            if isinstance(ts_value, str)
+            else int(ts_value)
+        )
         vectors.append(
             {
                 "id": f'{uid}-sa-{row["id"]}',
@@ -636,11 +722,7 @@ def upsert_screen_activity_vectors(uid: str, rows: List[dict]) -> int:
                 "metadata": {
                     "uid": uid,
                     "screenshot_id": str(row['id']),
-                    "timestamp": (
-                        int(datetime.fromisoformat(row['timestamp'].replace('Z', '+00:00')).timestamp())
-                        if isinstance(row['timestamp'], str)
-                        else int(row['timestamp'])
-                    ),
+                    "timestamp": timestamp,
                     "appName": row.get('appName', ''),
                 },
             }
@@ -663,17 +745,17 @@ def upsert_screen_activity_vectors(uid: str, rows: List[dict]) -> int:
 def search_screen_activity_vectors(
     uid: str,
     query_vector: List[float],
-    start_date: int = None,
-    end_date: int = None,
-    app_filter: str = None,
+    start_date: Optional[int] = None,
+    end_date: Optional[int] = None,
+    app_filter: Optional[str] = None,
     k: int = 10,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """Vector search across screenshot embeddings in ns3."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping screen activity search')
         return []
 
-    filter_data = {'uid': uid}
+    filter_data: Dict[str, Any] = {'uid': uid}
     if start_date and end_date:
         filter_data['timestamp'] = {'$gte': start_date, '$lte': end_date}
     elif start_date:
@@ -691,6 +773,7 @@ def search_screen_activity_vectors(
         namespace=SCREEN_ACTIVITY_NAMESPACE,
     )
 
+    matches: List[Any] = xc.get('matches', [])
     return [
         {
             'screenshot_id': match['metadata'].get('screenshot_id'),
@@ -698,11 +781,11 @@ def search_screen_activity_vectors(
             'appName': match['metadata'].get('appName'),
             'score': match['score'],
         }
-        for match in xc.get('matches', [])
+        for match in matches
     ]
 
 
-def delete_screen_activity_vectors(uid: str, ids: List[int]):
+def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     """Delete screen activity vectors by screenshot IDs."""
     if index is None:
         return
@@ -717,13 +800,13 @@ def delete_screen_activity_vectors(uid: str, ids: List[int]):
 ACTION_ITEMS_NAMESPACE = "ns4"
 
 
-def upsert_action_item_vector(uid: str, action_item_id: str, description: str):
+def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector upsert')
         return None
 
     vector = embeddings.embed_query(description)
-    data = {
+    data: VectorRecordDoc = {
         "id": f'{uid}-ai-{action_item_id}',
         "values": vector,
         "metadata": {
@@ -737,7 +820,7 @@ def upsert_action_item_vector(uid: str, action_item_id: str, description: str):
     return vector
 
 
-def upsert_action_item_vectors_batch(uid: str, items: List[dict]) -> int:
+def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector batch upsert')
         return 0
@@ -745,11 +828,11 @@ def upsert_action_item_vectors_batch(uid: str, items: List[dict]) -> int:
     if not items:
         return 0
 
-    descriptions = [item['description'] for item in items]
-    vectors = embeddings.embed_documents(descriptions)
+    descriptions: List[str] = [item['description'] for item in items]
+    vectors: List[List[float]] = embeddings.embed_documents(descriptions)
 
     now_ts = int(datetime.now(timezone.utc).timestamp())
-    payload = [
+    payload: List[VectorRecordDoc] = [
         {
             "id": f"{uid}-ai-{item['action_item_id']}",
             "values": vectors[i],
@@ -772,13 +855,13 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
         return []
 
     vector = embeddings.embed_query(query)
-    filter_data = {'uid': uid}
+    filter_data: Dict[str, Any] = {'uid': uid}
 
     xc = index.query(
         vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
     )
 
-    matches = xc.get('matches', [])
+    matches: List[Any] = xc.get('matches', [])
     top_score = matches[0]['score'] if matches else None
     kept = [m for m in matches if m.get('score', 0.0) >= min_score]
     logger.info(
@@ -788,7 +871,7 @@ def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_sco
     return [m['metadata'].get('action_item_id') for m in kept]
 
 
-def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[dict]:
+def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[Dict[str, Any]]:
     """
     Find action items semantically similar to the given query text. Used to
     feed the conversation extraction prompt with potentially-duplicate open
@@ -812,8 +895,8 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
             filter={'uid': uid},
             namespace=ACTION_ITEMS_NAMESPACE,
         )
-        matches = xc.get('matches', [])
-        kept = []
+        matches: List[Any] = xc.get('matches', [])
+        kept: List[Dict[str, Any]] = []
         dropped_no_id = 0
         for m in matches:
             if m.get('score', 0.0) < threshold:
@@ -835,7 +918,7 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
         return []
 
 
-def delete_action_item_vector(uid: str, action_item_id: str):
+def delete_action_item_vector(uid: str, action_item_id: str) -> None:
     if index is None:
         logger.warning('Pinecone index not initialized, skipping action item vector delete')
         return
@@ -845,7 +928,7 @@ def delete_action_item_vector(uid: str, action_item_id: str):
     logger.info(f'delete_action_item_vector {vector_id} {result}')
 
 
-def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]):
+def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]) -> None:
     if index is None:
         return
     if not action_item_ids:
@@ -855,7 +938,7 @@ def delete_action_item_vectors_batch(uid: str, action_item_ids: List[str]):
     logger.info(f'delete_action_item_vectors_batch count={len(vector_ids)}')
 
 
-def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]):
+def delete_conversation_vectors_batch(uid: str, conversation_ids: List[str]) -> None:
     """Delete a user's conversation vectors (ns1) in one batched, chunked call.
 
     Chunked so a single failure can't abandon the rest (and to stay under Pinecone's per-delete id
@@ -933,28 +1016,29 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
 TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
 
 
-def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[dict]) -> int:
+def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[Dict[str, Any]]) -> int:
     """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping transcript chunk upsert')
         return 0
-    chunks = [c for c in chunks if (c.get('text') or '').strip()]
-    if not chunks:
+    filtered: List[Dict[str, Any]] = [c for c in chunks if (c.get('text') or '').strip()]
+    if not filtered:
         return 0
 
-    vectors = embeddings.embed_documents([c['text'] for c in chunks])
-    payload = []
-    for c, v in zip(chunks, vectors):
+    vectors: List[List[float]] = embeddings.embed_documents([c['text'] for c in filtered])
+    payload: List[VectorRecordDoc] = []
+    for c, v in zip(filtered, vectors):
+        metadata: VectorMetadataDoc = {
+            'uid': uid,
+            'conversation_id': conversation_id,
+            'chunk_index': c['chunk_index'],
+            'created_at': int(c['created_at']),
+        }
         payload.append(
             {
                 'id': f"{uid}-{conversation_id}-c{c['chunk_index']}",
                 'values': v,
-                'metadata': {
-                    'uid': uid,
-                    'conversation_id': conversation_id,
-                    'chunk_index': c['chunk_index'],
-                    'created_at': int(c['created_at']),
-                },
+                'metadata': dict(metadata),
             }
         )
 
@@ -967,15 +1051,19 @@ def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List
 
 
 def search_transcript_chunks(
-    uid: str, query: str, limit: int = 20, starts_at: int = None, ends_at: int = None
-) -> List[dict]:
+    uid: str,
+    query: str,
+    limit: int = 20,
+    starts_at: Optional[int] = None,
+    ends_at: Optional[int] = None,
+) -> List[Dict[str, Any]]:
     """Semantic search over transcript chunks. Returns chunk references
     [{conversation_id, chunk_index, created_at, score}] — hydrate text from
     Firestore (utils.conversations.transcript_chunks.hydrate_chunk_texts)."""
     if index is None:
         return []
     vector = embeddings.embed_query(query)
-    filter_data = {'uid': uid}
+    filter_data: Dict[str, Any] = {'uid': uid}
     if starts_at is not None and ends_at is not None:
         filter_data['created_at'] = {'$gte': int(starts_at), '$lte': int(ends_at)}
     xc = index.query(
@@ -985,9 +1073,11 @@ def search_transcript_chunks(
         filter=filter_data,
         namespace=TRANSCRIPT_CHUNKS_NAMESPACE,
     )
-    results = []
-    for m in xc.get('matches', []):
-        md = m.get('metadata') or {}
+    results: List[Dict[str, Any]] = []
+    matches: List[Any] = xc.get('matches', [])
+    for m in matches:
+        raw_md: object = m.get('metadata')
+        md: Dict[str, Any] = cast(Dict[str, Any], raw_md) if isinstance(raw_md, dict) else {}
         results.append(
             {
                 'created_at': int(md['created_at']) if md.get('created_at') is not None else None,
@@ -999,15 +1089,15 @@ def search_transcript_chunks(
     return results
 
 
-def delete_transcript_chunk_vectors(uid: str, conversation_id: str):
+def delete_transcript_chunk_vectors(uid: str, conversation_id: str) -> None:
     """Delete all chunk vectors for one conversation (id-prefix listing on serverless)."""
     if index is None:
         return
     prefix = f'{uid}-{conversation_id}-c'
     try:
-        ids = []
+        ids: List[str] = []
         for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
-            ids.extend(page if isinstance(page, list) else [page])
+            ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
         for i in range(0, len(ids), 1000):
             index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
         if ids:
@@ -1031,9 +1121,9 @@ def delete_transcript_chunk_vectors_batch(
     for conversation_id in conversation_ids:
         prefix = f'{uid}-{conversation_id}-c'
         try:
-            ids = []
+            ids: List[str] = []
             for page in index.list(prefix=prefix, namespace=TRANSCRIPT_CHUNKS_NAMESPACE):
-                ids.extend(page if isinstance(page, list) else [page])
+                ids.extend(cast(List[str], page if isinstance(page, list) else [page]))
             for i in range(0, len(ids), 1000):
                 index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
             deleted += len(ids)

@@ -20,8 +20,8 @@ AUTH_REFRESH_FAILED = 'Integration Auth Refresh Failed'
 GOOGLE_CALENDAR = 'Google Calendar'
 X = 'X'
 
-_POSTHOG_CLIENT: Optional[Any] = None
-_POSTHOG_DISABLED = False
+_posthog_client: Optional[Any] = None
+_posthog_disabled = False
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ def emit_sync_succeeded(
     item_count: Optional[int] = None,
     memories_created: Optional[int] = None,
 ) -> None:
-    extra = {}
+    extra: dict[str, Any] = {}
     if item_count is not None:
         extra['item_count'] = _bucket_count(item_count)
     if memories_created is not None:
@@ -169,15 +169,15 @@ def _log_structured(event_name: str, uid: Optional[str], properties: Dict[str, A
 
 
 def _get_posthog_client() -> Optional[Any]:
-    global _POSTHOG_CLIENT, _POSTHOG_DISABLED
-    if _POSTHOG_DISABLED:
+    global _posthog_client, _posthog_disabled
+    if _posthog_disabled:
         return None
-    if _POSTHOG_CLIENT is not None:
-        return _POSTHOG_CLIENT
+    if _posthog_client is not None:
+        return _posthog_client
 
     api_key = os.getenv('POSTHOG_PROJECT_API_KEY') or os.getenv('POSTHOG_API_KEY')
     if not api_key:
-        _POSTHOG_DISABLED = True
+        _posthog_disabled = True
         return None
 
     host = os.getenv('POSTHOG_HOST', 'https://app.posthog.com')
@@ -186,11 +186,11 @@ def _get_posthog_client() -> Optional[Any]:
         posthog_client_cls = getattr(posthog_module, 'Posthog')
     except Exception as exc:
         logger.warning('integration telemetry posthog_import_failed error=%s', type(exc).__name__)
-        _POSTHOG_DISABLED = True
+        _posthog_disabled = True
         return None
 
-    _POSTHOG_CLIENT = posthog_client_cls(project_api_key=api_key, host=host)
-    return _POSTHOG_CLIENT
+    _posthog_client = posthog_client_cls(project_api_key=api_key, host=host)
+    return _posthog_client
 
 
 def _provider_status_code(error: Any, explicit_status_code: Any = None) -> Optional[int]:
@@ -259,6 +259,6 @@ def _bucket_count(value: int) -> str:
 
 
 def set_posthog_client_for_tests(client: Optional[Any]) -> None:
-    global _POSTHOG_CLIENT, _POSTHOG_DISABLED
-    _POSTHOG_CLIENT = client
-    _POSTHOG_DISABLED = client is None
+    global _posthog_client, _posthog_disabled
+    _posthog_client = client
+    _posthog_disabled = client is None

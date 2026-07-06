@@ -4,7 +4,7 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Any, Dict, List
 
 import database.action_items as action_items_db
 from utils.notifications import (
@@ -136,7 +136,7 @@ def create_action_item_text(
     if not description or not description.strip():
         return "Error: Description is required."
 
-    action_item_data = {
+    action_item_data: Dict[str, Any] = {
         'description': description.strip(),
         'completed': False,
         'conversation_id': conversation_id,
@@ -215,8 +215,8 @@ def update_action_item_text(
     if existing.get('is_locked', False):
         return "Error: A paid plan is required to modify this action item."
 
-    update_data = {}
-    changes = []
+    update_data: Dict[str, Any] = {}
+    changes: List[str] = []
 
     if completed is not None:
         update_data['completed'] = completed

@@ -6,7 +6,7 @@ Neutral ``v3_composed_get_service`` is the source of truth. Legacy ``v3_composed
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable, Literal, Sequence
+from typing import Any, Callable, Literal, cast
 
 from utils.memory.v3_archive_visibility_readiness import decide_default_visibility
 
@@ -39,6 +39,13 @@ _PUBLIC_ERROR_BY_REASON = {
 
 def _public_error(reason: str) -> str:
     return _PUBLIC_ERROR_BY_REASON.get(reason, 'infrastructure_failure')
+
+
+MemoryDbItem = dict[str, Any]
+
+
+def _empty_headers() -> dict[str, str]:
+    return {}
 
 
 @dataclass(frozen=True)
@@ -152,7 +159,7 @@ class V3ComposedRow:
     lifecycle_status: str
     source_freshness: str
     source_backed_projection: bool
-    memorydb_item: dict
+    memorydb_item: MemoryDbItem
     estimated_response_bytes: int = 0
 
 
@@ -177,7 +184,7 @@ class V3ComposedProjectionPage:
 @dataclass(frozen=True)
 class V3ComposedResponse:
     http_status: int
-    body: list[dict] | None
+    body: list[MemoryDbItem] | None
     public_error: str | None = None
     next_cursor: str | None = None
     source: str = 'memory_compatibility_projection'
@@ -185,19 +192,19 @@ class V3ComposedResponse:
     read_count: int = 0
     scanned_count: int = 0
     verified_empty: bool = False
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=_empty_headers)
 
     @staticmethod
     def success(
         *,
-        body: list[dict],
+        body: list[MemoryDbItem],
         next_cursor: str | None,
         source: str,
         read_count: int = 0,
         scanned_count: int = 0,
         verified_empty: bool = False,
     ) -> 'V3ComposedResponse':
-        headers = {'X-Omi-Memory-Read-Source': source, 'X-Omi-Memory-Read-Decision': 'ok'}
+        headers: dict[str, str] = {'X-Omi-Memory-Read-Source': source, 'X-Omi-Memory-Read-Decision': 'ok'}
         if next_cursor:
             headers['X-Omi-Memory-Next-Cursor'] = next_cursor
             headers['Link'] = f'<{next_cursor}>; rel="next"'
@@ -224,7 +231,7 @@ class V3ComposedResponse:
         )
 
 
-NormalizeRequest = Callable[[V3ComposedRequestParams], V3ComposedRequest]
+NormalizeRequest = Callable[[V3ComposedRequestParams], object]
 DecideDependency = Callable[[V3ComposedRequest, int], V3ComposedDependencyDecision]
 BuildSnapshot = Callable[[str, V3ComposedRequest, int], V3ComposedSnapshotDecision]
 DecodeCursor = Callable[[str | None, V3ComposedExecutionContext, int], V3ComposedCursor | None]
@@ -259,23 +266,6 @@ def _ensure_budget(params: V3ComposedRequestParams, adapters: V3ComposedAdapters
     if remaining < _MIN_STAGE_BUDGET_MS:
         return V3ComposedResponse.error(504, 'deadline_exhausted')
     return remaining
-
-
-def _valid_request(request: object) -> V3ComposedRequest | V3ComposedResponse:
-    if not isinstance(request, V3ComposedRequest):
-        return V3ComposedResponse.error(503, 'adapter_contract')
-    if request.limit < 1 or request.limit > _MAX_LIMIT:
-        return V3ComposedResponse.error(400, 'bad_request')
-    if request.offset not in (None, 0):
-        return V3ComposedResponse.error(400, 'offset_invalid')
-    if request.offset == 0:
-        return V3ComposedRequest(
-            limit=request.limit,
-            cursor=request.cursor,
-            include_archive=request.include_archive,
-            include_historical=request.include_historical,
-        )
-    return request
 
 
 def _valid_dependency(decision: object) -> V3ComposedDependencyDecision | V3ComposedResponse:
@@ -324,11 +314,8 @@ def _row_fence_valid(row: V3ComposedRow, context: V3ComposedExecutionContext) ->
         and row.account_generation == context.account_generation
         and row.projection_generation == context.projection_generation
         and row.projection_commit == context.projection_commit
-        and isinstance(row.item_revision, int)
         and row.item_revision > 0
-        and isinstance(row.source_version, str)
         and bool(row.source_version)
-        and isinstance(row.source_commit, str)
         and bool(row.source_commit)
     )
 
@@ -350,9 +337,14 @@ def _row_visible(row: V3ComposedRow, request: V3ComposedRequest) -> bool:
     return bool(decision.get('default_visible') or decision.get('opt_in_visible'))
 
 
-def _normalize_or_default(params: V3ComposedRequestParams, adapters: V3ComposedAdapters) -> V3ComposedRequest:
+def _normalize_or_default(
+    params: V3ComposedRequestParams, adapters: V3ComposedAdapters
+) -> V3ComposedRequest | V3ComposedResponse:
     normalized = adapters.normalize_request(params)
-    if normalized.limit is None:  # pragma: no cover - dataclass type guard for future adapters
+    if not isinstance(normalized, V3ComposedRequest):
+        return V3ComposedResponse.error(503, 'adapter_contract')
+    raw_limit = cast(int | None, normalized.limit)
+    if raw_limit is None:
         return V3ComposedRequest(
             limit=_DEFAULT_LIMIT,
             offset=normalized.offset,
@@ -374,8 +366,8 @@ def compose_v3_get(
         if isinstance(budget, V3ComposedResponse):
             return budget
         raw_request = _normalize_or_default(params, adapters)
-        if not isinstance(raw_request, V3ComposedRequest):
-            return V3ComposedResponse.error(503, 'adapter_contract')
+        if isinstance(raw_request, V3ComposedResponse):
+            return raw_request
         if raw_request.limit < 1 or raw_request.limit > _MAX_LIMIT:
             return V3ComposedResponse.error(400, 'bad_request')
         request = raw_request
@@ -395,8 +387,6 @@ def compose_v3_get(
             if isinstance(budget, V3ComposedResponse):
                 return budget
             legacy = adapters.read_legacy(request, budget)
-            if not isinstance(legacy, V3ComposedResponse):
-                return V3ComposedResponse.error(503, 'adapter_contract')
             return legacy
 
         if request.offset not in (None, 0):
@@ -431,12 +421,10 @@ def compose_v3_get(
                 after = adapters.decode_cursor(request.cursor, context, budget)
             except Exception:
                 return V3ComposedResponse.error(400, 'cursor_invalid')
-            if after is not None and not isinstance(after, V3ComposedCursor):
-                return V3ComposedResponse.error(400, 'cursor_invalid')
         else:
             after = None
 
-        body: list[dict] = []
+        body: list[MemoryDbItem] = []
         scans = 0
         read_count = 0
         last_scanned_cursor: V3ComposedCursor | None = after
@@ -455,8 +443,6 @@ def compose_v3_get(
             except Exception:
                 return V3ComposedResponse.error(503, 'adapter_exception')
             read_count += 1
-            if not isinstance(page, V3ComposedProjectionPage):
-                return V3ComposedResponse.error(503, 'adapter_contract')
             if page.partial:
                 return V3ComposedResponse.error(503, 'partial_projection')
             if not _page_matches_context(page, context):
@@ -467,8 +453,6 @@ def compose_v3_get(
                 last_scanned_cursor = None
                 break
             for candidate in page.rows:
-                if not isinstance(candidate, V3ComposedRow):
-                    return V3ComposedResponse.error(503, 'adapter_contract')
                 if not _row_fence_valid(candidate, context):
                     return V3ComposedResponse.error(409, 'row_fence_mismatch')
                 last_scanned_cursor = V3ComposedCursor(candidate.created_at_ms, candidate.memory_id)
@@ -492,7 +476,7 @@ def compose_v3_get(
                 next_cursor_token = adapters.encode_cursor(last_scanned_cursor, context, budget)
             except Exception:
                 return V3ComposedResponse.error(503, 'adapter_exception')
-            if not isinstance(next_cursor_token, str) or not next_cursor_token:
+            if not next_cursor_token:
                 return V3ComposedResponse.error(503, 'adapter_contract')
 
         return V3ComposedResponse.success(
@@ -505,17 +489,3 @@ def compose_v3_get(
         )
     except Exception:
         return V3ComposedResponse.error(503, 'adapter_exception')
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3ComposedRequestParams = V3ComposedRequestParams
-V3ComposedRequest = V3ComposedRequest
-V3ComposedCursor = V3ComposedCursor
-V3ComposedGrant = V3ComposedGrant
-V3ComposedExecutionContext = V3ComposedExecutionContext
-V3ComposedDependencyDecision = V3ComposedDependencyDecision
-V3ComposedSnapshotDecision = V3ComposedSnapshotDecision
-V3ComposedRow = V3ComposedRow
-V3ComposedProjectionPage = V3ComposedProjectionPage
-V3ComposedResponse = V3ComposedResponse
-V3ComposedAdapters = V3ComposedAdapters
