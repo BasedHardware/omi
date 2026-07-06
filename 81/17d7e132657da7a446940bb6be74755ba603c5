@@ -1,0 +1,165 @@
+mockup/index.html
+  s_751b5889fd7450::t_41e5c3cb8c6796 43-47
+  s_751b5889fd7450::t_00361290d9f5ec 127-153,161-162
+  s_751b5889fd7450::t_63b25b7854c76c 154-160,163-165
+  s_751b5889fd7450::t_8911b77b69996d 63,69
+  s_751b5889fd7450::t_ee2f8d393d583a 21-24
+  s_751b5889fd7450::t_e397e734fde027 59-60,80-83
+  s_751b5889fd7450::t_803ab97ec27923 84
+mockup/screens/notification.html
+  s_751b5889fd7450::t_5ebf4816051cbc 42
+  s_751b5889fd7450::t_c64cb574ac4e9e 40,43
+mockup/screens/insights.html
+  s_751b5889fd7450::t_81c289d7f85d60 1-41
+mockup/common.js
+  s_751b5889fd7450::t_47e1b3ba3cd025 79
+  s_751b5889fd7450::t_637fc9d2e70159 85-90,96
+  s_751b5889fd7450::t_d4ba959d9170c9 111
+  s_751b5889fd7450::t_5f9a45326f36a2 55-70,73,76,80
+mockup/ios/ios-ask.html
+  s_751b5889fd7450::t_1c52115b49bd87 27,32,34-35,39-40
+mockup/screens/ob-goal.html
+  s_751b5889fd7450::t_666619b6778449 47
+mockup/screens/ask.html
+  s_751b5889fd7450::t_842a94bb38eb94 30,41,44,46-51,54-56,59-60,67,70,72
+mockup/screens/share-card.html
+  s_751b5889fd7450::t_4afa6b179ed912 30,32-34,36
+mockup/screens/apps.html
+  s_751b5889fd7450::t_7acc6ec0d80985 56-57
+  s_751b5889fd7450::t_43e7e9939893f8 42
+mockup/screens/ob-welcome.html
+  s_751b5889fd7450::t_099746523ea1ad 60
+mockup/ios/ios-home.html
+  s_751b5889fd7450::t_2005eedc86fe41 18,21,27,29-30,32,37,42-43,45
+mockup/design-system.css
+  s_751b5889fd7450::t_7a67ad0edb93c1 565
+  s_751b5889fd7450::t_bdcf480277178b 462-463,466-467,470-472,474-476,479,481-494,496-551,553-564,566
+  s_751b5889fd7450::t_71587fefcc8f46 464-465,468-469,473,477-478,480
+  s_751b5889fd7450::t_7148a45aa0d84a 189-193
+  s_751b5889fd7450::t_34e81c6de420cc 552
+  s_751b5889fd7450::t_7ff757a216d3f3 495
+  s_751b5889fd7450::t_38288dde09ccf0 185
+  s_751b5889fd7450::t_adf42af4bda242 187-188
+mockup/ios/ios-frame.js
+  s_751b5889fd7450::t_d4e953cf2d1fd7 22-25,28,33-34
+  s_751b5889fd7450::t_117f2fa4b62ad1 35
+mockup/ios/ios-memory.html
+  s_751b5889fd7450::t_cc537371589886 34-37,42-46
+mockup/screens/rewind.html
+  s_751b5889fd7450::t_9127861cbb2456 93,98,104
+  s_751b5889fd7450::t_cca7fad28cc286 54
+  s_751b5889fd7450::t_2042eef365de89 70
+mockup/screens/ob-promise.html
+  s_751b5889fd7450::t_649d1f57e2078c 39
+mockup/screens/conversations.html
+  s_751b5889fd7450::t_57b8695dffa064 51-56,64-65,73,76-78,84-87
+mockup/screens/more.html
+  s_751b5889fd7450::t_c882b0f289a144 1-7,15-20,38-42,45,50-52,54-56
+  s_751b5889fd7450::t_2c0bc80b394394 8-14,21-37,43-44,46-49,53
+mockup/screens/memory-graph.html
+  s_751b5889fd7450::t_2831c81c8c5fca 1-44
+mockup/ios/ios-notification.html
+  s_751b5889fd7450::t_fbe0fb71d5fcf0 42,51-52
+mockup/screens/ob-import.html
+  s_751b5889fd7450::t_22ff629fd3f360 47
+mockup/screens/spotlight.html
+  s_751b5889fd7450::t_2ee6e9e68239c4 39
+  s_751b5889fd7450::t_f0236ca468ba57 54
+  s_751b5889fd7450::t_0efa9c1151bef2 33-36
+mockup/screens/home.html
+  s_751b5889fd7450::t_b947b34aeaf67d 43,53
+  s_751b5889fd7450::t_8ff9b98d703ef0 51-52,54
+  s_751b5889fd7450::t_cf925f688fc033 37
+  s_751b5889fd7450::t_ef7de4406da04c 18,21,28,30-31,33-34,38
+mockup/web/index.html
+  s_751b5889fd7450::t_cd3f3876c7f5b1 27-28
+  s_751b5889fd7450::t_836c48509aa1a2 161,165
+  s_751b5889fd7450::t_3a385c9573c6e9 268
+  s_751b5889fd7450::t_61a105ff088bf8 203,206-221
+  s_751b5889fd7450::t_7a1b91c5bcb18f 249
+  s_751b5889fd7450::t_ae11840a067b3a 189-192
+  s_751b5889fd7450::t_b5e171d79a7831 35-36,57
+  s_751b5889fd7450::t_f55579f6604055 177-178
+  s_751b5889fd7450::t_e79b793cf89d58 37-56
+  s_751b5889fd7450::t_454f2895dae713 272-279
+mockup/ios/ios-onboarding.html
+  s_751b5889fd7450::t_4e011022dfa766 5,9-21,31-38,40-44,46-51,53-63,65-85
+mockup/screens/ob-brainlive.html
+  s_751b5889fd7450::t_847a7451d9e3cb 53
+mockup/ios/ios-messages.html
+  s_751b5889fd7450::t_12087b60746f2c 31-32,37-40,44-45,47,55-56
+mockup/screens/help.html
+  s_751b5889fd7450::t_fc2472cc959aeb 1-40
+mockup/screens/messages-whatsapp.html
+  s_751b5889fd7450::t_c4949da8378c12 64,66,68,70,72-73,78-79,84-85,88,98
+mockup/screens/ob-ping.html
+  s_751b5889fd7450::t_ed12f382dc60c2 35
+  s_751b5889fd7450::t_556fb3ae14a72d 47
+mockup/screens/signin.html
+  s_751b5889fd7450::t_0b737f11090a30 29
+  s_751b5889fd7450::t_650ea24c63714d 33
+mockup/screens/messages-telegram.html
+  s_751b5889fd7450::t_84d2af412e39d1 65,67,69,71,73-74,79-80,85-86,90,97,108
+mockup/screens/settings.html
+  s_751b5889fd7450::t_04a95325904514 8-23,30-41,43-45,47-91,93-129,131-143
+mockup/screens/tasks.html
+  s_751b5889fd7450::t_1c430c2c7b1412 40,47-49,52-54,57-58
+mockup/screens/focus.html
+  s_751b5889fd7450::t_4b8cceffe73217 1-51
+mockup/screens/plan-usage.html
+  s_751b5889fd7450::t_262b11a77f2ee6 1-58
+mockup/screens/onboarding.html
+  s_751b5889fd7450::t_8cb0fc8e82163a 20-21
+  s_751b5889fd7450::t_dd3b8b38cbb6f4 1-7,31-36,42-43,48,51,57,81,95,156-158
+  s_751b5889fd7450::t_a07d9c570c4d0e 8-19,22-30,37-41,44-47,49-50,52-56,58-80,82-94,96-152
+  s_751b5889fd7450::t_68d3e3b9a69673 153-155
+mockup/screens/messages-imessage.html
+  s_751b5889fd7450::t_2bb27a7f591327 57,59,61,63,65-66,71-72,77-79,82-83,92-93
+mockup/screens/persona.html
+  s_751b5889fd7450::t_cc77b9bde4b6a7 1-44
+mockup/screens/ob-permissions.html
+  s_751b5889fd7450::t_959cd6ed6f489b 46
+mockup/screens/memory.html
+  s_751b5889fd7450::t_c968afca375ad2 55,63-65,67-70,80-85,89-93
+  s_751b5889fd7450::t_ffa3bca8a16d3c 95
+mockup/assets/logos/anthropic.svg
+  s_751b5889fd7450::t_6d24a3d0b3b36f 1
+mockup/assets/logos/apple.svg
+  s_751b5889fd7450::t_b1909df5d8b9df 1
+mockup/assets/logos/claude.svg
+  s_751b5889fd7450::t_93aeb14d9ee630 1
+mockup/assets/logos/gcal.svg
+  s_751b5889fd7450::t_c93f8400c56eed 1
+mockup/assets/logos/gemini.svg
+  s_751b5889fd7450::t_8a08b2492be523 1
+mockup/assets/logos/gmail2.svg
+  s_751b5889fd7450::t_d103a55d70a1eb 1
+mockup/assets/logos/notion.svg
+  s_751b5889fd7450::t_a828f7db4070d1 1
+mockup/assets/logos/obsidian.svg
+  s_751b5889fd7450::t_49af3c8a987c3b 1
+mockup/assets/logos/openai.svg
+  s_751b5889fd7450::t_9c50e40e9ce085 1
+mockup/assets/logos/telegram.svg
+  s_751b5889fd7450::t_6fac15cba2661b 1
+mockup/assets/logos/whatsapp.svg
+  s_751b5889fd7450::t_7c748ac59f646d 1
+mockup/assets/logos/x.svg
+  s_751b5889fd7450::t_4b3ff5e441f82f 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8117d7e132657da7a446940bb6be74755ba603c5",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
