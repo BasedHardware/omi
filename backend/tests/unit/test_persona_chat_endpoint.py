@@ -464,10 +464,10 @@ class TestPersonaChatEndpoint:
         async def _route(executor, fn, *args, **kwargs):
             if fn is verify_api_key_for_uid:
                 called["strict"] += 1
-                return True
+                return False
             if fn is verify_api_key:
                 called["loose"] += 1
-                return True
+                return False
             return True
 
         with patch("routers.integration.run_blocking", new=_route):
