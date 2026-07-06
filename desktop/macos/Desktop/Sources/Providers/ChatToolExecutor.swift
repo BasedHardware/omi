@@ -493,11 +493,22 @@ class ChatToolExecutor {
       preFetchedTitle: (title?.isEmpty == false) ? title : directedProvider?.displayName,
       bridgeHarnessOverride: directedProvider?.harnessMode
     )
+    // Startup-class failures (provider not running / not signed in) surface
+    // within ~1.5s — wait briefly so the model reports the truth instead of
+    // claiming a dead agent is running.
+    try? await Task.sleep(nanoseconds: 1_800_000_000)
+    if case .failed(let errorText) = pill.status {
+      return """
+      Error: agent FAILED to start: \(errorText)
+      Relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead.
+      """
+    }
     return """
     Agent started as a floating agent pill.
     id: \(pill.id.uuidString)
     title: \(pill.title)
     status: \(pill.status.displayLabel)
+    If the user later asks about this agent's status or results, check manage_agent_pills/get_task_agent_status first — never answer from memory.
     """
   }
 

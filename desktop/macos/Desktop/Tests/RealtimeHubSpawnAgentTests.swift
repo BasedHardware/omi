@@ -9,8 +9,20 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
     XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn else { return }"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    XCTAssertTrue(source.contains("output: \"Agent started.\""))
     XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
+  }
+
+  func testSpawnAgentToolResultReportsStartupTruth() throws {
+    // The spawn tool result must not blindly claim the agent started: it waits
+    // out the startup window and reports failure (with relay instructions) or
+    // success (with a no-guessing status rule). Fire-and-forget "Agent
+    // started." must stay gone.
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertFalse(source.contains("output: \"Agent started.\""))
+    XCTAssertTrue(source.contains("if case .failed(let errorText) = pill.status {"))
+    XCTAssertTrue(source.contains("Agent FAILED to start:"))
+    XCTAssertTrue(source.contains("call get_task_agent_status first"))
   }
 
   func testSpawnAgentProvidesLocalAckWhenModelDidNotSpeakBeforeToolCall() throws {

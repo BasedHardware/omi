@@ -1062,9 +1062,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate, AVSpeec
         speak(ack)
       }
       suppressAssistantOutputForCurrentTurn = true
-      sendToolResultIfCurrent(
-        source: source, callId: callId, name: name,
-        output: "Agent started.")
+      // Don't report "started" blind: startup-class failures (provider not
+      // running / not signed in) surface within ~1.5s. Watch the pill briefly
+      // so the model can announce a failure immediately instead of telling the
+      // user a dead agent is "running in the background".
+      Task { @MainActor [weak self] in
+        try? await Task.sleep(nanoseconds: 1_800_000_000)
+        let output: String
+        if case .failed(let errorText) = pill.status {
+          output =
+            "Agent FAILED to start: \(errorText) — relay this to the user (including any command verbatim) and offer next steps: fix the provider as instructed, or run the task with the default agent instead."
+        } else {
+          output =
+            "Agent started and is running in the background. If the user later asks about its status or results, call get_task_agent_status first — never answer from memory."
+        }
+        self?.sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: output)
+      }
     case .screenshot:
       // Gemini: the screen is already attached to every turn (see commitTurn), so the
       // tool is just an ack — pushing another image here is the broken path (mid-tool-call

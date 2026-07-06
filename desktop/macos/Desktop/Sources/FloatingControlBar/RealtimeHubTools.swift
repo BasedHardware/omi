@@ -610,7 +610,10 @@ enum RealtimeHubTools {
           "Hand a task to a background agent that CAN access the user's Omi data (tasks, to-dos, "
           + "calendar, notes, emails, messages, conversations, memories, files) and act in their apps "
           + "and browser. Use for ANYTHING about the user's own data, or to create/send/open/edit/search/"
-          + "schedule/automate something for them, or any multi-step work. Returns immediately; the agent works on its own.",
+          + "schedule/automate something for them, or any multi-step work. The tool result tells you whether "
+          + "the agent actually started or failed — if it failed, tell the user and do NOT claim it is running. "
+          + "For any later question about an agent's status or results, call get_task_agent_status first; "
+          + "never state agent status from memory.",
         "parameters": [
           "type": "object",
           "properties": spawnAgentProperties,
