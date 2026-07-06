@@ -23,8 +23,9 @@ cd "$MACOS_DIR"
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not
 # silently skipped (SwiftPM compiles the whole Tests target; this must match).
 suites=$(find Desktop/Tests -type f -name '*.swift' -print0 \
-  | xargs -0 grep -hE '^(final )?class [A-Za-z0-9_]+: XCTestCase' \
-  | sed -E 's/(final )?class ([A-Za-z0-9_]+):.*/\2/' | sort -u)
+  | xargs -0 grep -hE '^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) [A-Za-z0-9_]+:.*XCTestCase' \
+  | sed -E 's/^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) ([A-Za-z0-9_]+):.*/\5/' \
+  | sort -u)
 suite_log_dir="$(mktemp -d)"
 trap 'rm -rf "$suite_log_dir"' EXIT
 failed_suites=""
