@@ -27,10 +27,15 @@ description: "Contribute to Omi and earn rewards! Some tasks have paid bounties.
 
 Good PRs are easy to review and come with evidence that the change works.
 
-- **Bug fixes** should include tests that would have caught the bug or give high confidence it will not regress.
-- **Small features** can go straight to PR when they are well scoped, include useful automated tests, and describe any manual testing performed.
-- **Large or ambiguous features** should start as a GitHub issue so maintainers can discuss scope and direction before major implementation work begins.
-- Prefer unit, widget, provider, and hermetic tests that run reliably in CI. Live-service integration tests are useful for validation, but should not be the only proof that a PR works.
+- **Bug fixes** include the regression test that would have caught the bug.
+- **Small features** can go straight to PR when they are well scoped: test the core path and the main error path, and describe any manual verification you did.
+- **Large or ambiguous features** should start as a GitHub issue so maintainers can align on scope and direction before major implementation work begins.
+- **Show your verification.** List the commands you ran and what they showed in the PR description. "It compiles" is not evidence — exercising the real user-facing path is.
+- **Tests that run in CI must be hermetic** — no live services, no network. Validation against a live service is welcome as extra evidence, but it can never be the only proof a PR works.
+
+### Contributing with an AI agent
+
+Omi is built to be agent-friendly. If you use an AI coding agent, it will automatically pick up [`AGENTS.md`](https://github.com/BasedHardware/Omi/blob/main/AGENTS.md) at the repo root (plus per-component guides in `backend/`, `app/`, and `desktop/macos/`). The engineering standards there — especially the **Definition of Done** checklist — apply to your PR. Rules in that file about maintainer machines and landing on `main` directly don't apply to fork-based contributions.
 
 ---
 
