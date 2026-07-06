@@ -618,18 +618,27 @@ class AuthService {
     private func validateRestoredUserDefaultsSession() {
         Task { [weak self] in
             guard let self else { return }
+            guard self.storedIdToken != nil else {
+                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - no cached ID token")
+                return
+            }
+            guard !self.isTokenExpired else {
+                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - cached ID token expired")
+                return
+            }
             do {
-                _ = try await self.getIdToken(forceRefresh: true)
-                NSLog("OMI AUTH: Restored UserDefaults session validated by forced token refresh")
+                _ = try await self.getIdToken(forceRefresh: false)
+                NSLog("OMI AUTH: Restored UserDefaults session validated from cached ID token")
                 APIKeyService.shared.startFetchingKeys()
                 Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
             } catch AuthError.notSignedIn {
-                NSLog("OMI AUTH: Restored UserDefaults session failed validation - signed out")
-                self.clearTokens()
-                self.isSignedIn = false
-                AuthState.shared.userEmail = nil
-                AuthState.shared.isRestoringAuth = false
-                self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                if self.isSignedIn {
+                    NSLog("OMI AUTH: Restored UserDefaults session validation deferred - preserving restored session")
+                } else {
+                    NSLog("OMI AUTH: Restored UserDefaults session validation found signed-out state")
+                    AuthState.shared.userEmail = nil
+                    AuthState.shared.isRestoringAuth = false
+                }
             } catch {
                 NSLog("OMI AUTH: Restored UserDefaults session validation deferred: %@", error.localizedDescription)
             }
