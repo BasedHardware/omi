@@ -2688,15 +2688,26 @@ class FloatingControlBarManager {
         // as its own span instead of an anonymous gap before pre_llm.
         routerTracer?.begin("router_classify")
         let decision = await AgentPillsManager.classify(message)
-        routerTracer?.end("router_classify", metadata: ["route": decision.route == .agent ? "agent" : "chat"])
+        routerTracer?.end(
+            "router_classify",
+            metadata: [
+                "route": decision.route == .agent ? "agent" : "chat",
+                "provider": decision.rankedProviders.first?.rawValue ?? "omi",
+            ])
         if decision.route == .agent {
+            // Router-ranked best agent runs the task; the rest of the ranking
+            // becomes the startup-failure fallback chain (Omi's built-in agent
+            // is the implicit terminal fallback via nil override).
             let pill = AgentPillsManager.shared.spawnFromUserQuery(
                 message,
                 model: selectedFloatingModel,
                 fromVoice: presentation.fromVoice,
                 preFetchedTitle: decision.title,
-                preFetchedAck: decision.ack
+                preFetchedAck: decision.ack,
+                bridgeHarnessOverride: decision.rankedProviders.first?.harnessMode
             )
+            pill.wasRouterSelected = !decision.rankedProviders.isEmpty
+            pill.autoFallbackCandidates = Array(decision.rankedProviders.dropFirst())
             let title = decision.title?.trimmingCharacters(in: .whitespacesAndNewlines)
             let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
             let ack = decision.ack?.trimmingCharacters(in: .whitespacesAndNewlines)

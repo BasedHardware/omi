@@ -97,6 +97,46 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
   }
 
+  // MARK: - Best-agent selection + startup-failure fallback
+
+  func testStartupClassFailuresAreRetryableOnAnotherAgent() {
+    // Real strings produced by the pre-flight / activation / auth paths —
+    // all occur BEFORE the agent does any work, so auto-fallback is safe.
+    let startupFailures = [
+      "Codex is not available. Make sure Codex is installed first, then try again.",
+      "I don't see Hermes installed. Make sure Hermes is installed first, then try again.",
+      "Codex is installed but not signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again.",
+      "Codex isn't signed in. Run `codex login` in Terminal, or add an OpenAI API key in Omi Settings, then try again.",
+      "Not authenticated. Run `codex login` or set OPENAI_API_KEY.",
+      "codex adapter requires OMI_CODEX_ADAPTER_COMMAND",
+      "OpenClaw needs setup",
+    ]
+    for message in startupFailures {
+      XCTAssertTrue(AgentPillsManager.isStartupClassFailure(message), "should be startup-class: \(message)")
+    }
+  }
+
+  func testMidTaskFailuresNeverAutoFallback() {
+    // Mid-task/side-effect-capable failures must NOT be re-run on another
+    // agent — the task may already be partially executed.
+    let midTaskFailures = [
+      "Something went wrong. Please try again.",
+      "AI took too long to respond. Try again.",
+      "AI stopped unexpectedly. Try sending your message again.",
+      "Agent ended before reporting a final result",
+      "AI service is busy. Please try again in a moment.",
+      "tool execution failed: browser tab crashed",
+    ]
+    for message in midTaskFailures {
+      XCTAssertFalse(AgentPillsManager.isStartupClassFailure(message), "must not be startup-class: \(message)")
+    }
+  }
+
+  func testRouterDecisionDefaultsToNoExternalProviders() {
+    let decision = AgentPillsManager.RouterDecision(route: .agent, title: "T", ack: "A")
+    XCTAssertTrue(decision.rankedProviders.isEmpty)
+  }
+
   // MARK: - Codex auth pre-flight
 
   func testCodexInstalledWithoutAnyCredentialNeedsAuth() throws {
@@ -159,7 +199,12 @@ final class PiMonoWiringTests: XCTestCase {
       ).isAvailable)
   }
 
-  func testCodexMissingBinaryIsMissingNotNeedsAuth() {
+  func testCodexMissingBinaryIsMissingNotNeedsAuth() throws {
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+      try XCTSkipIf(
+        FileManager.default.isExecutableFile(atPath: "\(dir)/codex-acp"),
+        "codex-acp is actually installed in \(dir); missing-state is unobservable here")
+    }
     let availability = LocalAgentProviderDetector.availability(
       for: .codex,
       environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
