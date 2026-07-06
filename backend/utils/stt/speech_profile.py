@@ -51,7 +51,13 @@ def get_speech_profile_matching_predictions(
         if isinstance(result, list) and result and isinstance(result[0], bool):
             return [{'is_user': r, 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
 
-        return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response
+        if isinstance(result, list) and len(result) == len(segments):
+            return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response, validated against segments length
+
+        # Malformed/empty response shape: fall back to per-segment default so
+        # callers that index matches[i] do not crash conversation post-processing.
+        logger.info('get_speech_profile_matching_predictions malformed response shape, using default')
+        return default
     except Exception as e:
         logger.info(f'get_speech_profile_matching_predictions {str(e)}')
         return default
@@ -91,7 +97,14 @@ async def async_get_speech_profile_matching_predictions(
         logger.info(f'async_get_speech_profile_matching_predictions {sanitize(result)}')
         if isinstance(result, list) and result and isinstance(result[0], bool):
             return [{'is_user': r, 'person_id': None} for r in result]  # type: ignore[reportUnknownVariableType,reportUnknownArgumentType]  # untyped JSON list elements
-        return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response
+
+        if isinstance(result, list) and len(result) == len(segments):
+            return result  # type: ignore[reportUnknownVariableType]  # untyped external JSON response, validated against segments length
+
+        # Malformed/empty response shape: fall back to per-segment default so
+        # callers that index matches[i] do not crash conversation post-processing.
+        logger.info('async_get_speech_profile_matching_predictions malformed response shape, using default')
+        return default
     except Exception as e:
         logger.info(f'async_get_speech_profile_matching_predictions {str(e)}')
         return default
