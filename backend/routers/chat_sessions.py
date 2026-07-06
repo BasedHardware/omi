@@ -7,9 +7,7 @@ streams AI responses.
 """
 
 import logging
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Callable, List, cast
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -17,7 +15,7 @@ from pydantic import BaseModel, Field
 import database.chat as chat_db
 import database.llm_usage as llm_usage_db
 from database.users import set_chat_message_rating_score
-from utils.chat import initial_message_util
+from models.chat import Message
 from utils.llm.clients import get_llm
 from utils.other import endpoints as auth
 
@@ -25,7 +23,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-
+# `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
+# parameter; route access through a cast so this strict-checked file sees a
+# concrete callable type instead of `Unknown`.
+_auth_module = cast(Any, auth)
 # ============================================================================
 # MODELS
 # ============================================================================

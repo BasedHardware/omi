@@ -21,6 +21,8 @@ from utils.memory.v3_composed_get_service import (
 )
 from utils.memory.v3_production_runtime import build_v3_production_runtime
 
+pytestmark = pytest.mark.slow
+
 
 @dataclass
 class FakeSnapshot:
@@ -239,6 +241,7 @@ def _route_client(monkeypatch, db, legacy_calls):
     return TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.mark.slow
 def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_off(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')

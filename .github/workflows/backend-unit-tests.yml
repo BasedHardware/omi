@@ -70,6 +70,9 @@ jobs:
         working-directory: backend
         env:
           BACKEND_UNIT_TEST_FILE_LIST: /tmp/backend-unit-tests.txt
+          BACKEND_FAST_UNIT_MAX_SECONDS: "0.1"
+          BACKEND_PYTEST_FILE_ISOLATION: "1"
+          BACKEND_PYTEST_MARK_EXPR: "not integration and not slow"
           BACKEND_PYTEST_XDIST: auto
           BACKEND_PYTEST_WORKERS: auto
         run: |

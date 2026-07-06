@@ -165,9 +165,9 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
         if subscription_id:
             stripe_sub = stripe.Subscription.retrieve(subscription_id)
             if stripe_sub:
-                new_subscription = _build_subscription_from_stripe_object(stripe_sub.to_dict())
+                new_subscription = _build_subscription_from_stripe_object(dict(stripe_sub))
                 if new_subscription:
-                    users_db.update_user_subscription(uid, new_subscription.dict())
+                    users_db.update_user_subscription(uid, new_subscription.model_dump())
                     logger.info(f"Subscription for user {uid} updated from session {session.id}.")
     except FirestoreNotFound:
         logger.warning(
@@ -189,7 +189,7 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     try:
         # Retrieve current subscription from Stripe to check status
         stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id)
-        stripe_sub_dict = stripe_sub.to_dict()
+        stripe_sub_dict = dict(stripe_sub)
 
         # Check if subscription is active but scheduled to cancel
         if stripe_sub_dict['status'] == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
@@ -201,7 +201,7 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
 
                 # Update our database
                 current_subscription.cancel_at_period_end = False
-                users_db.update_user_subscription(uid, current_subscription.dict())
+                users_db.update_user_subscription(uid, current_subscription.model_dump())
 
                 # Calculate next billing date
                 next_billing = datetime.fromtimestamp(stripe_sub_dict['current_period_end'], tz=timezone.utc).strftime(
@@ -244,7 +244,7 @@ def get_available_plans_endpoint(
             and not current_subscription.cancel_at_period_end
         ):
             try:
-                stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+                stripe_sub = dict(stripe.Subscription.retrieve(current_subscription.stripe_subscription_id))
                 if stripe_sub and stripe_sub['items']['data']:
                     current_price_id = stripe_sub['items']['data'][0]['price']['id']
 
@@ -261,7 +261,7 @@ def get_available_plans_endpoint(
                                     if hasattr(schedule, 'phases') and schedule.phases and len(schedule.phases) > 1:
                                         phase = schedule.phases[1]
                                         if hasattr(phase, 'items') and phase.items:
-                                            phase_dict = phase.to_dict()
+                                            phase_dict = dict(phase)
                                             if phase_dict.get('items') and len(phase_dict['items']) > 0:
                                                 scheduled_price_id = phase_dict['items'][0]['price']
                                                 break
@@ -439,7 +439,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
             customer_id=existing_customer_id,
             promotion_code_id=resolved_checkout_promo_id,
         )
-    except stripe.error.InvalidRequestError as e:
+    except stripe.InvalidRequestError as e:
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
         raise HTTPException(status_code=400, detail=detail)
     if not session:
@@ -495,7 +495,7 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     try:
         # Retrieve current subscription to get current price ID
-        stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id).to_dict()
+        stripe_sub = dict(stripe.Subscription.retrieve(current_subscription.stripe_subscription_id))
         current_price_id = stripe_sub['items']['data'][0]['price']['id']
         current_item_id = stripe_sub['items']['data'][0]['id']
 
@@ -544,9 +544,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
 
             # Update our database immediately
-            new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
+            new_subscription = _build_subscription_from_stripe_object(dict(updated_sub))
             if new_subscription:
-                users_db.update_user_subscription(uid, new_subscription.dict())
+                users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
                 clear_trial_paywall_cache(uid)
                 if is_paid_plan(new_subscription.plan):
@@ -560,7 +560,9 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             return {
                 "status": "success",
                 "message": f"You've been upgraded to {target_plan.value.title()}! Your new plan is active now.",
-                "subscription": new_subscription.dict() if new_subscription else current_subscription.dict(),
+                "subscription": (
+                    new_subscription.model_dump() if new_subscription else current_subscription.model_dump()
+                ),
                 "days_remaining": 0,
                 "schedule_id": None,
             }
@@ -603,14 +605,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         return {
             "status": "success",
             "message": f"Upgrade scheduled! Your monthly plan continues for {remaining_days} more days, then automatically switches to annual.",
-            "subscription": current_subscription.dict(),
+            "subscription": current_subscription.model_dump(),
             "days_remaining": remaining_days,
             "schedule_id": schedule.id,
         }
 
     except HTTPException:
         raise
-    except stripe.error.InvalidRequestError as e:
+    except stripe.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
         raise HTTPException(status_code=400, detail=detail)
@@ -669,7 +671,7 @@ def cancel_subscription_endpoint(
 
             # Update our database to reflect the scheduled cancellation
             subscription.cancel_at_period_end = True
-            users_db.update_user_subscription(uid, subscription.dict())
+            users_db.update_user_subscription(uid, subscription.model_dump())
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
         else:
@@ -679,11 +681,11 @@ def cancel_subscription_endpoint(
                 raise HTTPException(status_code=500, detail="Could not cancel subscription with Stripe.")
 
             subscription.cancel_at_period_end = updated_sub.cancel_at_period_end
-            users_db.update_user_subscription(uid, subscription.dict())
+            users_db.update_user_subscription(uid, subscription.model_dump())
 
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         logger.error(f"Stripe error canceling subscription: {e}")
         raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
     except Exception as e:
@@ -699,7 +701,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
         event = stripe_utils.parse_event(payload, stripe_signature)
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event['type'] == 'checkout.session.completed':
@@ -798,7 +800,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
                     )
                     if stripe_sub:
-                        subscription_obj = stripe_sub.to_dict()
+                        subscription_obj = dict(stripe_sub)
                         if subscription_obj and subscription_obj['items']['data']:
                             price_id = subscription_obj['items']['data'][0]['price']['id']
                     sub_type = get_plan_type_from_price_id(price_id).value if price_id else "unknown"
@@ -817,7 +819,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
                     )
                     if stripe_sub:
-                        subscription_obj = stripe_sub.to_dict()
+                        subscription_obj = dict(stripe_sub)
                         if subscription_obj and subscription_obj['items']['data']:
                             price_id = subscription_obj['items']['data'][0]['price']['id']
                             try:
@@ -893,7 +895,9 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         await run_blocking(db_executor, conversations_db.unlock_all_conversations, uid)
                         await run_blocking(db_executor, memories_db.unlock_all_memories, uid)
                         await run_blocking(db_executor, action_items_db.unlock_all_action_items, uid)
-                    await run_blocking(db_executor, users_db.update_user_subscription, uid, new_subscription.dict())
+                    await run_blocking(
+                        db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
+                    )
                     await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                     await run_blocking(db_executor, clear_trial_paywall_cache, uid)
                     if new_subscription.status == SubscriptionStatus.active and is_paid_plan(new_subscription.plan):
@@ -931,7 +935,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         new_stripe_sub = await run_blocking(
                             stripe_executor, lambda: stripe.Subscription.retrieve(new_subscription_id)
                         )
-                        new_subscription = _build_subscription_from_stripe_object(new_stripe_sub.to_dict())
+                        new_subscription = _build_subscription_from_stripe_object(dict(new_stripe_sub))
                         if not new_subscription:
                             logger.warning(
                                 f"Could not build subscription from scheduled upgrade for user {uid}, "
@@ -939,7 +943,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                             )
                         else:
                             await run_blocking(
-                                db_executor, users_db.update_user_subscription, uid, new_subscription.dict()
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
@@ -961,7 +965,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         stripe_sub = await run_blocking(
                             stripe_executor, lambda: stripe.Subscription.retrieve(subscription_id)
                         )
-                        subscription_obj = stripe_sub.to_dict()
+                        subscription_obj = dict(stripe_sub)
 
                         new_subscription = _build_subscription_from_stripe_object(subscription_obj)
                         if not new_subscription:
@@ -972,7 +976,7 @@ async def stripe_webhook(request: Request, stripe_signature: str = Header(None))
                         else:
                             new_subscription.cancel_at_period_end = True
                             await run_blocking(
-                                db_executor, users_db.update_user_subscription, uid, new_subscription.dict()
+                                db_executor, users_db.update_user_subscription, uid, new_subscription.model_dump()
                             )
                             await run_blocking(db_executor, set_credits_invalidation_signal, uid)
                             await run_blocking(db_executor, clear_trial_paywall_cache, uid)
@@ -997,7 +1001,7 @@ async def stripe_connect_webhook(request: Request, stripe_signature: str = Heade
         event = stripe_utils.parse_connect_event(payload, stripe_signature)
     except ValueError as e:
         raise HTTPException(status_code=400, detail="Invalid payload")
-    except stripe.error.SignatureVerificationError as e:
+    except stripe.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     if event['type'] == 'account.updated':
@@ -1040,7 +1044,7 @@ def create_connect_account_endpoint(
             set_stripe_connect_account_id(uid, account['account_id'])
 
         return account
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1059,7 +1063,7 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
         if not account_id:
             return {"onboarding_complete": False}
         return {"onboarding_complete": is_onboarding_complete(account_id)}
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1071,7 +1075,7 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
     try:
         account = refresh_connect_account_link(account_id)
         return account
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -1328,7 +1332,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             cancel_at_period_end=True,
         )
 
-        updated_sub_dict = updated_sub.to_dict()
+        updated_sub_dict = dict(updated_sub)
 
         return {
             "status": "success",
@@ -1336,7 +1340,7 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             "cancel_at_period_end": updated_sub_dict.get('cancel_at_period_end'),
             "current_period_end": updated_sub_dict.get('current_period_end'),
         }
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         logger.error(f"Stripe error canceling app subscription: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

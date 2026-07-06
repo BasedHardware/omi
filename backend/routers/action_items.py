@@ -6,7 +6,7 @@ import uuid
 from utils.executors import db_executor
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from typing import Optional, List
+from typing import Any, Optional, List
 from datetime import datetime, timezone
 
 import database.action_items as action_items_db
@@ -93,7 +93,9 @@ class ActionItemResponse(BaseModel):
     indent_level: int = 0
 
 
-def _safe_action_item_responses(items, *, uid: str = '', context: str = '') -> List[ActionItemResponse]:
+def _safe_action_item_responses(
+    items: list[dict[str, Any]], *, uid: str = '', context: str = ''
+) -> List[ActionItemResponse]:
     """Build ActionItemResponse objects from raw records, skipping any that fail
     validation so one malformed or legacy item cannot 500 a whole list endpoint."""
     responses: List[ActionItemResponse] = []

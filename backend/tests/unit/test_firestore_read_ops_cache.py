@@ -112,6 +112,7 @@ class TestMentorFrequencyCache:
         cached = cache.get("mentor_frequency:user_disabled")
         assert cached == 0
 
+@pytest.mark.integration
     def test_cache_ttl_expiry(self):
         """Cache should expire and re-fetch after TTL."""
         cache = self.cache
@@ -910,6 +911,7 @@ def _redis_available():
         return False
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not _redis_available(), reason="Local Redis not available")
 class TestRedisPubSubIntegration:
     """Integration tests using real local Redis to prove cross-pod pub/sub delivery."""

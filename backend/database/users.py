@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Dict, List, Optional, TypedDict, cast
 
 from google.cloud import firestore
-from google.cloud.firestore_v1 import FieldFilter, transactional
+from google.cloud.firestore_v1 import FieldFilter, transactional  # type: ignore[reportUnknownMemberType]  # firestore transactional is untyped
 
 from ._client import db, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
-from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
+from models.users import Subscription, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
 
@@ -18,6 +18,84 @@ logger = logging.getLogger(__name__)
 _USER_LANGUAGE_CACHE = CachePolicy(namespace='user_language', version=1, ttl_seconds=300)
 _USER_TRANSCRIPTION_PREFS_CACHE = CachePolicy(namespace='user_transcription_prefs', version=1, ttl_seconds=120)
 _USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl_seconds=300)
+
+
+class UserDoc(TypedDict, total=False):
+    """Typed contract for the users/{uid} Firestore document.
+
+    All keys are optional (``total=False``) because the document is patched
+    incrementally across many features. Field types reflect what the app writes;
+    Firestore-side scalar datetimes are typed as ``Any`` since the SDK returns
+    ``DatetimeWithNanoseconds`` which is not statically exported.
+    """
+
+    # Identity / lifecycle
+    uid: str
+    id: str
+    created_at: Any  # datetime from firestore
+    deleted_at: Any  # datetime from firestore
+
+    # Telemetry (record_user_platform)
+    signup_platform: str
+    signup_os: str
+    signup_platform_at: Any  # datetime
+    last_active_platform: str
+    last_active_os: str
+    last_active_at: Any  # datetime
+    platforms_used: List[str]
+
+    # Privacy / permissions
+    store_recording_permission: bool
+    private_cloud_sync_enabled: bool
+    training_data_opt_in: Dict[str, Any]
+    data_protection_level: str
+    migration_status: Dict[str, Any]
+
+    # BYOK
+    byok: Dict[str, Any]
+
+    # Audio / speaker
+    speaker_embedding: List[Any]
+    speaker_embedding_updated_at: Any  # datetime
+
+    # Payments
+    stripe_account_id: Optional[str]
+    stripe_customer_id: Optional[str]
+    paypal_details: Optional[Dict[str, Any]]
+    default_payment_method: Optional[str]
+    subscription: Dict[str, Any]
+    cancellation_feedback: Dict[str, Any]
+
+    # Onboarding / preferences
+    onboarding: Dict[str, Any]
+    language: str
+    transcription_preferences: Dict[str, Any]
+    default_task_integration: Optional[str]
+    agentVm: Optional[Dict[str, Any]]
+
+    # Desktop settings
+    notifications_enabled: bool
+    notification_frequency: int
+    assistant_settings: Dict[str, Any]
+    update_channel: Optional[str]
+    ai_user_profile: Dict[str, Any]
+
+
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    """Typed adapter for Firestore ``DocumentSnapshot.to_dict()``.
+
+    Coerces the untyped SDK return into ``Dict[str, Any]`` so call sites can
+    read fields without each one re-narrowing. Returns ``{}`` for missing or
+    malformed payloads.
+    """
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+def _typed_doc_or_none(doc: Any) -> Optional[Dict[str, Any]]:
+    """Typed adapter for ``to_dict()`` callers that should preserve a None result."""
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 # Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
