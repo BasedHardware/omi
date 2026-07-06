@@ -274,6 +274,7 @@ pub fn rate_limit_error_json(message: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 

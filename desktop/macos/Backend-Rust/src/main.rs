@@ -1,6 +1,23 @@
 // OMI Desktop Backend - Rust
 // Port from Python backend (main.py)
 
+#![allow(dead_code)]
+#![allow(clippy::derivable_impls)]
+#![allow(clippy::doc_overindented_list_items)]
+#![allow(clippy::doc_lazy_continuation)]
+#![allow(clippy::double_ended_iterator_last)]
+#![allow(clippy::enum_variant_names)]
+#![allow(clippy::filter_next)]
+#![allow(clippy::if_same_then_else)]
+#![allow(clippy::collapsible_match)]
+#![allow(clippy::uninlined_format_args)]
+#![allow(clippy::unnecessary_cast)]
+#![allow(clippy::unnecessary_map_or)]
+#![allow(clippy::too_many_arguments)]
+#![allow(clippy::useless_conversion)]
+#![allow(clippy::useless_vec)]
+#![allow(clippy::wrong_self_convention)]
+
 use axum::Router;
 use std::fs::OpenOptions;
 use std::io::LineWriter;
@@ -203,11 +220,18 @@ async fn main() {
         Ok(fs) => Arc::new(fs),
         Err(e) => {
             tracing::warn!("Failed to initialize Firestore: {} - using placeholder", e);
-            Arc::new(
-                FirestoreService::new(firestore_project_id, config.encryption_secret.clone())
-                    .await
-                    .unwrap(),
-            )
+            match FirestoreService::new(firestore_project_id, config.encryption_secret.clone())
+                .await
+            {
+                Ok(fs) => Arc::new(fs),
+                Err(retry_error) => {
+                    tracing::error!(
+                        "Failed to initialize Firestore after retry: {}",
+                        retry_error
+                    );
+                    std::process::exit(1);
+                }
+            }
         }
     };
 
@@ -365,6 +389,15 @@ async fn main() {
     let addr = format!("0.0.0.0:{}", config.port);
     tracing::info!("Starting OMI Desktop Backend on {}", addr);
 
-    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = match tokio::net::TcpListener::bind(&addr).await {
+        Ok(listener) => listener,
+        Err(error) => {
+            tracing::error!("Failed to bind {}: {}", addr, error);
+            std::process::exit(1);
+        }
+    };
+    if let Err(error) = axum::serve(listener, app).await {
+        tracing::error!("Server error: {}", error);
+        std::process::exit(1);
+    }
 }

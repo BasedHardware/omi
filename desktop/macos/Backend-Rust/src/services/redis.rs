@@ -444,12 +444,21 @@ fn parse_python_reviews(raw: &str) -> Vec<RedisReview> {
 
     // Fallback: parse Python dict format using regex
     // Looking for 'score': <number> patterns
-    let score_regex = regex::Regex::new(r"'score':\s*(\d+)").unwrap();
-    for cap in score_regex.captures_iter(raw) {
-        if let Some(score_match) = cap.get(1) {
-            if let Ok(score) = score_match.as_str().parse::<i32>() {
-                reviews.push(RedisReview { score });
+    match regex::Regex::new(r"'score':\s*(\d+)") {
+        Ok(score_regex) => {
+            for cap in score_regex.captures_iter(raw) {
+                if let Some(score_match) = cap.get(1) {
+                    if let Ok(score) = score_match.as_str().parse::<i32>() {
+                        reviews.push(RedisReview { score });
+                    }
+                }
             }
+        }
+        Err(error) => {
+            tracing::error!(
+                "Failed to compile Redis review score fallback regex: {}",
+                error
+            );
         }
     }
 

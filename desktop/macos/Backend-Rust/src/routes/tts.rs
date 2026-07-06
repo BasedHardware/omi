@@ -16,6 +16,16 @@ use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
 use crate::AppState;
 
+fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
+    match builder.body(body) {
+        Ok(response) => response,
+        Err(error) => {
+            tracing::error!("tts_synthesize: failed to build response: {}", error);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 const OPENAI_TTS_MODEL_ID: &str = "gpt-4o-mini-tts";
 const OPENAI_SPEECH_URL: &str = "https://api.openai.com/v1/audio/speech";
 const MAX_TTS_CHARS: usize = 4096;
@@ -205,11 +215,12 @@ async fn tts_synthesize(
         return Err(TtsProxyError::Upstream(status, body));
     }
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "audio/mpeg")
-        .body(Body::from(bytes))
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "audio/mpeg"),
+        Body::from(bytes),
+    ))
 }
 
 fn openai_key_for_request<'a>(
