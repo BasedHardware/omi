@@ -12,8 +12,8 @@ import Foundation
 ///
 /// This is the auth slice of the migration. New keys should be added here and
 /// read/written through the typed `UserDefaults` accessors below rather than as
-/// inline literals. `scripts/check-userdefaults-key-ratchet.py` is a CI/pre-push
-/// gate that prevents new raw inline `forKey:` string literals from being
+/// inline literals. `desktop/macos/scripts/check-userdefaults-key-ratchet.py` is
+/// a CI/pre-push gate that prevents new raw inline `forKey:` string literals from being
 /// introduced elsewhere (the count may only shrink).
 enum DefaultsKey: String {
     case authIsSignedIn = "auth_isSignedIn"
