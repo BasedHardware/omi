@@ -1,0 +1,3 @@
+{
+  "change": "Chat now asks you to sign in again when the AI session token is rejected instead of showing a generic error"
+}
