@@ -35,6 +35,7 @@ except ModuleNotFoundError:  # Direct CLI execution via scripts/openapi_runner.s
 ROOT_DIR = Path(__file__).resolve().parents[2]
 BACKEND_DIR = ROOT_DIR / 'backend'
 DEFAULT_MANIFEST_PATH = BACKEND_DIR / 'route_policy_manifest.yaml'
+DEFAULT_MISSING_BASELINE_PATH = BACKEND_DIR / 'route_policy_legacy_missing_routes.txt'
 
 SERVICE = 'backend-main'
 SCHEMA_VERSION = 1
@@ -468,6 +469,95 @@ def manifest_policy_by_key(manifest: dict) -> dict[str, dict]:
     return policies
 
 
+def missing_manifest_route_keys(entries: Iterable[dict], manifest: dict) -> list[str]:
+    policies = manifest_policy_by_key(manifest)
+    live_keys = {entry['route_key'] for entry in entries}
+    return sorted(live_keys - set(policies))
+
+
+def load_route_key_baseline(path: Path) -> set[str]:
+    if not path.exists():
+        raise RoutePolicyError(f'missing route policy baseline: {path}')
+    route_keys: set[str] = set()
+    duplicates: list[str] = []
+    invalid: list[str] = []
+    for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith('#'):
+            continue
+        parts = line.split(':', 3)
+        if len(parts) != 4 or parts[0] != SERVICE or parts[1] not in ROUTE_TYPES:
+            invalid.append(f'line {line_number}: {line}')
+            continue
+        if line in route_keys:
+            duplicates.append(f'line {line_number}: {line}')
+            continue
+        route_keys.add(line)
+    if invalid or duplicates:
+        problems = []
+        if invalid:
+            problems.append('invalid route policy baseline entries:\n' + '\n'.join(f'  - {item}' for item in invalid))
+        if duplicates:
+            problems.append(
+                'duplicate route policy baseline entries:\n' + '\n'.join(f'  - {item}' for item in duplicates)
+            )
+        raise RoutePolicyError('\n'.join(problems))
+    return route_keys
+
+
+def render_route_key_baseline(route_keys: Iterable[str]) -> str:
+    return (
+        '# Legacy backend routes missing route-policy manifest entries.\n'
+        '#\n'
+        '# This file is a ratchet for issue #8959. CI allows these pre-existing\n'
+        '# missing entries while failing when a new registered backend route is\n'
+        '# added without a matching backend/route_policy_manifest.yaml entry.\n'
+        '# Remove keys from this file as routes get reviewed and added to the manifest.\n'
+        + '\n'.join(sorted(route_keys))
+        + '\n'
+    )
+
+
+def validate_missing_baseline(
+    *, missing: list[str], baseline_keys: set[str], base_baseline_keys: set[str] | None = None
+) -> tuple[list[str], dict]:
+    missing_keys = set(missing)
+    new_missing = sorted(missing_keys - baseline_keys)
+    stale_baseline = sorted(baseline_keys - missing_keys)
+    baseline_additions = sorted(baseline_keys - base_baseline_keys) if base_baseline_keys is not None else []
+
+    problems = []
+    if new_missing:
+        problems.append(
+            'new routes missing manifest entries:\n'
+            + '\n'.join(f'  - {key}' for key in new_missing)
+            + '\n\nAdd policy for these routes to backend/route_policy_manifest.yaml, or regenerate the legacy '
+            + 'baseline only for pre-existing routes.'
+        )
+    if stale_baseline:
+        problems.append(
+            'stale legacy missing-route baseline entries:\n'
+            + '\n'.join(f'  - {key}' for key in stale_baseline)
+            + '\n\nRemove these keys from the baseline; they are no longer missing from the live route inventory.'
+        )
+    if baseline_additions:
+        problems.append(
+            'legacy missing-route baseline grew relative to the base branch:\n'
+            + '\n'.join(f'  - {key}' for key in baseline_additions)
+            + '\n\nNew routes require backend/route_policy_manifest.yaml policy entries; do not add them to the '
+            + 'legacy baseline.'
+        )
+
+    return problems, {
+        'baseline_missing_entries': len(baseline_keys),
+        'base_baseline_missing_entries': len(base_baseline_keys) if base_baseline_keys is not None else None,
+        'current_missing_manifest_entries': len(missing),
+        'baseline_additions': len(baseline_additions),
+        'new_missing_manifest_entries': len(new_missing),
+        'stale_missing_baseline_entries': len(stale_baseline),
+    }
+
+
 def find_duplicate_registered_routes(entries: Iterable[dict]) -> list[str]:
     by_key: dict[str, list[dict]] = defaultdict(list)
     by_shape_key: dict[str, list[dict]] = defaultdict(list)
@@ -758,12 +848,32 @@ def write_inventory(path: Path, inventory: dict) -> None:
     path.write_text(stable_json(inventory))
 
 
+def write_missing_baseline(path: Path, route_keys: Iterable[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(render_route_key_baseline(route_keys))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Inventory backend routes and check route-policy manifest coverage.')
     parser.add_argument('--manifest', default=str(DEFAULT_MANIFEST_PATH), help='route policy manifest path')
+    parser.add_argument(
+        '--missing-baseline',
+        default=str(DEFAULT_MISSING_BASELINE_PATH),
+        help='legacy missing-route baseline used by --enforce-missing-baseline',
+    )
+    parser.add_argument(
+        '--base-missing-baseline',
+        help='optional base-branch baseline; rejects additions to the legacy missing-route baseline',
+    )
     parser.add_argument('--print', action='store_true', help='print deterministic JSON inventory')
     parser.add_argument('--write-inventory', metavar='PATH', help='write deterministic JSON inventory to PATH')
+    parser.add_argument('--write-missing-baseline', metavar='PATH', help='write current missing route keys to PATH')
     parser.add_argument('--check', action='store_true', help='validate manifest coverage against registered routes')
+    parser.add_argument(
+        '--enforce-missing-baseline',
+        action='store_true',
+        help='fail if missing manifest entries are not in the legacy baseline, or baseline keys are stale',
+    )
     parser.add_argument('--report-only', action='store_true', help='print check problems but exit zero')
     parser.add_argument('--max-problem-lines', type=int, default=80, help='maximum lines to print per problem group')
     return parser.parse_args()
@@ -781,6 +891,10 @@ def main() -> int:
         if args.write_inventory:
             write_inventory(Path(args.write_inventory), enriched_inventory)
             print(f'wrote {args.write_inventory}')
+        missing_keys = missing_manifest_route_keys(inventory['routes'], manifest)
+        if args.write_missing_baseline:
+            write_missing_baseline(Path(args.write_missing_baseline), missing_keys)
+            print(f'wrote {args.write_missing_baseline}')
         if args.check:
             problems, summary = validate_inventory(
                 entries=inventory['routes'],
@@ -799,7 +913,35 @@ def main() -> int:
                 )
                 return 0 if args.report_only else 1
             print('route policy manifest covers registered backend routes')
-        if not (args.print or args.write_inventory or args.check):
+        if args.enforce_missing_baseline:
+            baseline_keys = load_route_key_baseline(Path(args.missing_baseline))
+            base_baseline_keys = (
+                load_route_key_baseline(Path(args.base_missing_baseline)) if args.base_missing_baseline else None
+            )
+            problems, summary = validate_missing_baseline(
+                missing=missing_keys,
+                baseline_keys=baseline_keys,
+                base_baseline_keys=base_baseline_keys,
+            )
+            print('Backend route policy missing-baseline summary:')
+            print(stable_json(summary).rstrip())
+            if problems:
+                print('Route policy missing-baseline check found issues:', file=sys.stderr)
+                print(
+                    '\n\n'.join(
+                        limit_problem_details(problem, max_lines=args.max_problem_lines) for problem in problems
+                    ),
+                    file=sys.stderr,
+                )
+                return 0 if args.report_only else 1
+            print('route policy missing-route baseline is current')
+        if not (
+            args.print
+            or args.write_inventory
+            or args.write_missing_baseline
+            or args.check
+            or args.enforce_missing_baseline
+        ):
             print('No action requested; use --print, --write-inventory, or --check.', file=sys.stderr)
             return 2
         return 0
