@@ -21,6 +21,15 @@ on:
       confirm:
         description: 'Type promote-stable to deploy prod and mark the release stable'
         required: true
+      override_unblessed:
+        description: 'DANGER: allow promotion without bless metadata'
+        required: false
+        default: false
+        type: boolean
+      override_confirm:
+        description: 'Type I-ACCEPT-UNBLESSED-PROD-RISK with override_unblessed'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -57,6 +66,8 @@ jobs:
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
+          OVERRIDE_UNBLESSED: ${{ inputs.override_unblessed }}
+          OVERRIDE_CONFIRM: ${{ inputs.override_confirm }}
         run: |
           set -euo pipefail
 
@@ -78,12 +89,25 @@ jobs:
             --json tagName,body,isDraft,isPrerelease,assets \
             > /tmp/desktop-release.json
 
+          OVERRIDE_ARGS=()
+          if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
+            OVERRIDE_ARGS=(--override-unblessed --override-confirm "$OVERRIDE_CONFIRM")
+            echo "::warning::Prod promotion override_unblessed enabled for $RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
           python3 .github/scripts/check-desktop-release-promotion.py \
             --release-json /tmp/desktop-release.json \
             --release-tag "$RELEASE_TAG" \
-            --github-output "$GITHUB_OUTPUT"
+            --github-output "$GITHUB_OUTPUT" \
+            "${OVERRIDE_ARGS[@]}"
 
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          BLESSED_SHA=$(grep '^blessed_sha=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2- || true)
+          BLESSED_OVERRIDE=$(grep '^blessed_override=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2- || true)
+          if [ "$BLESSED_OVERRIDE" != "true" ] && [ -n "$BLESSED_SHA" ] && [ "$BLESSED_SHA" != "$TARGET_SHA" ]; then
+            echo "blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA)" >&2
+            exit 1
+          fi
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
 
           if ! git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA" -- desktop/macos/Backend-Rust/src \

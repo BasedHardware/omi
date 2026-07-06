@@ -56,6 +56,7 @@ Confirm:
 - GitHub Release exists and is not draft;
 - assets include `Omi.zip` and `omi.dmg`;
 - release body has `isLive: true`, `channel: beta`, and an `edSignature`;
+- for prod promotion, release metadata includes `blessed: true`, `blessedSha` matching the tag commit, and `blessedAt` (or run `desktop/macos/scripts/bless-release.sh <tag>` first);
 - live appcast beta/dev item points to the same build.
 
 ## 3. Build the curated stable release log
