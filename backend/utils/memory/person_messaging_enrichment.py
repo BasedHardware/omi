@@ -60,7 +60,9 @@ def _source_value(conversation) -> Optional[str]:
 
 
 def _person_ids_for(conversation) -> List[str]:
-    person_ids = list(getattr(conversation, 'person_ids', None) or [])
+    # Dedupe (preserving order) so a duplicated id in conversation.person_ids can't
+    # inflate the participant count and wrongly trip the 1:1 cost cap.
+    person_ids = list(dict.fromkeys(pid for pid in (getattr(conversation, 'person_ids', None) or []) if pid))
     if person_ids:
         return person_ids
     segments = getattr(conversation, 'transcript_segments', None) or []
