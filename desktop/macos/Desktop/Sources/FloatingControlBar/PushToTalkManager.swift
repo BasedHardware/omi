@@ -10,7 +10,7 @@ struct PTTSilentMicRecoveryPolicy {
 
   private(set) var consecutiveDeadMicTurns = 0
 
-  mutating func recordDiscardedHubTurn(totalSec: TimeInterval, peak: Int) -> Bool {
+  mutating func recordDiscardedTurn(totalSec: TimeInterval, peak: Int) -> Bool {
     if totalSec >= Self.minDeadTurnSeconds && peak <= Self.deadMicPeakThreshold {
       consecutiveDeadMicTurns += 1
     } else {
@@ -19,7 +19,7 @@ struct PTTSilentMicRecoveryPolicy {
     return consecutiveDeadMicTurns >= Self.consecutiveDeadTurnThreshold
   }
 
-  mutating func recordSuccessfulHubTurn() {
+  mutating func recordSuccessfulTurn() {
     consecutiveDeadMicTurns = 0
   }
 
@@ -106,6 +106,13 @@ class PushToTalkManager: ObservableObject {
   // Batch mode: accumulate raw audio for post-recording transcription
   private var batchAudioBuffer = Data()
   private let batchAudioLock = NSLock()
+  /// Hard cap on a single turn's buffered PCM (16 kHz mono int16) so a runaway
+  /// (>~4.5 min) dictation can't grow RSS without bound. Kept just under the
+  /// backend's ~5-min limit (HTTP 413) so we surface a client-side warning before
+  /// buffering forever and failing at submit. 4.5 min × 16000 Hz × 2 bytes.
+  nonisolated static let maxBatchAudioBytes = Int(4.5 * 60) * 16_000 * 2
+  /// Set once per turn when the buffer hits the cap, so the warning fires once.
+  private var batchAudioOverflowSignaled = false
 
   // Live mode: timeout for waiting on final transcript after CloseStream
   private var liveFinalizationTimeout: DispatchWorkItem?
@@ -292,7 +299,12 @@ class PushToTalkManager: ObservableObject {
       return
     }
     if isBlockedByUsageLimit() { return }
-    barState?.pttHintText = ""  // clear any lingering too-short hint from a prior tap
+    // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
+    // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
+    batchAudioLock.lock()
+    batchAudioOverflowSignaled = false
+    batchAudioLock.unlock()
+    barState?.pttHintText = ""  // clear any lingering too-short/too-long hint from a prior tap
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()
@@ -674,6 +686,7 @@ class PushToTalkManager: ObservableObject {
       if !Self.hubTurnHasSpeech(pcm16k: turnAudio) {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
         let dev = audioCaptureService?.currentDeviceDescription ?? "?"
+        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: "hub",
           mode: finalizedMode,
@@ -683,13 +696,15 @@ class PushToTalkManager: ObservableObject {
           rms: rms,
           deviceDescription: dev,
           micPermissionGranted: hasMicPermission,
-          hubActive: true)
+          hubActive: true,
+          recoveryAction: attemptRecovery ? "capture_rebuild" : "none",
+          recoveryResult: attemptRecovery ? "attempted" : "not_attempted")
         log(
           "PushToTalkManager: discarding hub turn — audio \(String(format: "%.2f", totalSec))s "
             + "peak=\(peak)/32767 rms=\(rms) device=[\(dev)] "
             + "(peak≈0 ⇒ dead mic; high peak ⇒ classifier misfire; low ⇒ quiet/far mic) — not committing"
         )
-        if silentMicRecoveryPolicy.recordDiscardedHubTurn(totalSec: totalSec, peak: peak) {
+        if attemptRecovery {
           requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: false)
         }
         RealtimeHubController.shared.cancelTurn()
@@ -716,7 +731,7 @@ class PushToTalkManager: ObservableObject {
         transcribeBufferedWarmWaitAudio()
         return
       }
-      silentMicRecoveryPolicy.recordSuccessfulHubTurn()
+      silentMicRecoveryPolicy.recordSuccessfulTurn()
       DesktopDiagnosticsManager.shared.recordPTTCommitted(mode: finalizedMode, hubActive: true)
       barState?.beginVoiceResponseWaiting()
       // Show the "thinking" indicator in the notch during the release→first-audio
@@ -743,6 +758,10 @@ class PushToTalkManager: ObservableObject {
       let (totalSec, voicedSec) = Self.voicedAudioSeconds(pcm16k: turnAudio)
       if totalSec < Self.minTurnAudioSeconds || voicedSec < Self.minVoicedSeconds {
         let (peak, rms) = Self.audioEnergy(pcm16k: turnAudio)
+        // A dead mic (peak≈0 for a real hold) leaves omni/batch users stuck on
+        // repeated silent turns with no recovery. Mirror the hub path: rebuild the
+        // CoreAudio capture after consecutive dead-mic turns.
+        let attemptRecovery = silentMicRecoveryPolicy.recordDiscardedTurn(totalSec: totalSec, peak: peak)
         DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
           source: isOmniSTT ? "omni_stt" : "batch_stt",
           mode: finalizedMode,
@@ -752,12 +771,17 @@ class PushToTalkManager: ObservableObject {
           rms: rms,
           deviceDescription: audioCaptureService?.currentDeviceDescription,
           micPermissionGranted: hasMicPermission,
-          hubActive: false)
+          hubActive: false,
+          recoveryAction: attemptRecovery ? "capture_rebuild" : "none",
+          recoveryResult: attemptRecovery ? "attempted" : "not_attempted")
         log(
           "PushToTalkManager: discarding silent turn (audio \(String(format: "%.2f", totalSec))s, voiced \(String(format: "%.2f", voicedSec))s) — not transcribing"
         )
         AnalyticsManager.shared.floatingBarPTTEnded(
           mode: finalizedMode, hadTranscript: false, transcriptLength: 0)
+        if attemptRecovery {
+          requestCoreAudioCaptureRecovery(reason: "repeated dead-mic PTT turns", restartPTT: false, batchMode: isBatch)
+        }
         // A too-short turn means the release beat capture (or the user tapped
         // instead of holding). Give visible feedback instead of a silent clear;
         // longer holds that were merely quiet keep the quiet reset.
@@ -773,6 +797,7 @@ class PushToTalkManager: ObservableObject {
     // Past the silence gate — a real turn will be transcribed and answered. Show
     // the "thinking" indicator through the transcription/first-token gap; it hands
     // off to the conversation surface (or voice glow) the moment output arrives.
+    silentMicRecoveryPolicy.recordSuccessfulTurn()
     barState?.isThinking = true
     updateBarState()
 
@@ -915,6 +940,52 @@ class PushToTalkManager: ObservableObject {
       if self.barState?.pttHintText == "Hold longer to record" {
         self.barState?.pttHintText = ""
         self.stopListening()  // collapses the bar (pttHintText now empty)
+      }
+    }
+  }
+
+  /// Append a mic chunk to the per-turn buffer under the lock, capped at
+  /// `maxBatchAudioBytes`. Called from the audio thread. Once the cap is hit the
+  /// buffer stops growing (bounded RSS) and the user is warned once; the buffered
+  /// (~4.5 min) audio still transcribes normally when the turn is released.
+  private func appendBatchAudioBounded(_ audioData: Data, turn: UInt64) {
+    batchAudioLock.lock()
+    // Append while under the cap (the chunk that reaches it is kept, so the warning
+    // fires exactly at the crossing). Set the once-flag atomically under the lock so
+    // the warning is enqueued exactly once, not on every subsequent chunk.
+    var justHitCap = false
+    if batchAudioBuffer.count < Self.maxBatchAudioBytes {
+      batchAudioBuffer.append(audioData)
+      if batchAudioBuffer.count >= Self.maxBatchAudioBytes && !batchAudioOverflowSignaled {
+        batchAudioOverflowSignaled = true
+        justHitCap = true
+      }
+    }
+    batchAudioLock.unlock()
+    if justHitCap { showBatchAudioOverflowWarning(turn: turn) }
+  }
+
+  /// Surface the one-time "recording too long" warning when the turn buffer is
+  /// capped. Hops to main (called from the audio thread) and reuses the rendered
+  /// `pttHintText` surface (the legacy `voiceTranscript` error field is unrendered).
+  /// `turn` guards against a stale warning painting a *newer* turn if this turn
+  /// ended before the block ran. Self-clears after a beat (like the too-short hint)
+  /// so it doesn't linger on the bar after the capped turn is submitted.
+  private func showBatchAudioOverflowWarning(turn: UInt64) {
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.micCaptureGeneration == turn else { return }
+      log("PushToTalkManager: turn audio hit \(Self.maxBatchAudioBytes)-byte cap — bounding buffer, warning user")
+      self.barState?.pttHintText = "Recording too long — keep it under 5 min"
+      self.updateBarState()
+      self.pttHintGeneration &+= 1
+      let generation = self.pttHintGeneration
+      Task { @MainActor [weak self] in
+        try? await Task.sleep(nanoseconds: 4_000_000_000)
+        guard let self, self.pttHintGeneration == generation else { return }
+        if self.barState?.pttHintText == "Recording too long — keep it under 5 min" {
+          self.barState?.pttHintText = ""
+          self.updateBarState()
+        }
       }
     }
   }
@@ -1289,9 +1360,7 @@ class PushToTalkManager: ObservableObject {
               // Realtime hub owns this turn — stream mic PCM straight to it, and
               // retain it so finalize() can silence-gate the turn.
               RealtimeHubController.shared.feedAudio(audioData)
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData, turn: generation)
               return
             }
             if self.isOmniSTT {
@@ -1303,14 +1372,10 @@ class PushToTalkManager: ObservableObject {
                 self.omniPreconnectBuffer.append(audioData)
               }
               // Also retain the raw turn for a Deepgram fallback if omni fails.
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData, turn: generation)
             } else if batchMode {
               // Batch mode: accumulate audio in buffer
-              self.batchAudioLock.lock()
-              self.batchAudioBuffer.append(audioData)
-              self.batchAudioLock.unlock()
+              self.appendBatchAudioBounded(audioData, turn: generation)
             } else {
               // Live mode: stream to Deepgram
               self.transcriptionService?.sendAudio(audioData)
