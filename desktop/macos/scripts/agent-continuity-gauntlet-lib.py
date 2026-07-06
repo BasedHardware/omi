@@ -11,6 +11,7 @@ import os
 import re
 import secrets
 import shutil
+import socket
 import sqlite3
 import struct
 import subprocess
@@ -46,8 +47,10 @@ def bridge_action_timeout_sec(
     params = params or {}
     turn_sec = max(190.0, (turn_timeout_ms / 1000.0) + 10.0)
     if name == "ptt_test_turn":
+        # The controller may redrive the turn once after a mid-turn session swap,
+        # so the worst case is two full turn deadlines plus warm-up slack.
         action_sec = float(params.get("timeout", "0"))
-        return max(turn_sec, action_sec + 10.0)
+        return max(turn_sec, 2.0 * action_sec + 40.0)
     if name == "wait_main_chat_idle":
         wait_ms = int(params.get("timeoutMs", "2000"))
         if wait_ms >= 30_000:
@@ -89,6 +92,9 @@ def bridge_request(
         return parsed
     except urllib.error.URLError as exc:
         return {"ok": False, "error": f"connection_failed: {exc.reason}"}
+    except (TimeoutError, socket.timeout) as exc:
+        # Surface as a step failure, never a harness crash.
+        return {"ok": False, "error": f"bridge_http_timeout after {timeout_sec:.0f}s: {exc}"}
 
 
 def bridge_action(
@@ -501,8 +507,28 @@ class GauntletRunner:
             record["extra"] = extra
         self.steps.append(record)
 
+    def restore_test_owner(self, context: str) -> None:
+        """Undo a swap_test_owner (this run's, or one leaked by a crashed prior run).
+
+        A leaked synthetic owner persists in UserDefaults across relaunches and breaks
+        every backend-auth path (realtime mint, kernel persist), so the owner suite must
+        always restore, and pre-run hygiene restores defensively.
+        """
+        restored = self.bridge_act("restore_test_owner")
+        detail = restored.get("result", {}).get("detail", {})
+        if restored.get("ok") is False or detail.get("error"):
+            message = str(detail.get("error", restored.get("error", restored)))
+            if "unknown action" in message.lower():
+                self.warn(f"{context}: restore_test_owner action unavailable (older app build)")
+                return
+            self.fail(f"{context}: restore_test_owner failed: {message}")
+            return
+        if detail.get("restored") == "true":
+            self.warn(f"{context}: restored owner {detail.get('owner_id', '?')} after test-owner swap")
+
     def clear_kernel_hygiene_if_available(self) -> None:
         """Clear kernel main_chat turns on non-prod bundles before continuity assertions."""
+        self.restore_test_owner("pre-run hygiene")
         cleared = self.bridge_act("clear_owner_surface_state")
         detail = cleared.get("result", {}).get("detail", {})
         if cleared.get("ok") is False or detail.get("error"):
@@ -713,6 +739,9 @@ class GauntletRunner:
                 "pcm": str(self.pcm_path),
                 "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
                 "force_transcript": ptt_user,
+                # No competing fixture audio: the model must answer the forced
+                # transcript, not a hallucinated ASR of the sine tone.
+                "text_only": "1",
             },
         )
         ptt_detail = ptt.get("result", {}).get("detail", {})
@@ -924,21 +953,45 @@ class GauntletRunner:
         if self.markers["floating_spawn"] in recency_probe or spawn_title in recency_probe:
             self.fail("spawn-recall probe must not contain the spawn marker or title (R8)")
 
+        # Let floating spawn handoff and hub state settle before the voice probe.
+        self.bridge_act("wait_main_chat_idle", {"timeoutMs": "30000", "pollMs": "250"})
+        time.sleep(1.0)
+
         # PTT blind recall — seed-first; must not call get_conversations.
-        trace_start = trace_line_count()
-        ptt = self.bridge_act(
-            "ptt_test_turn",
-            {
-                "pcm": str(self.pcm_path),
-                "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
-                "force_transcript": recency_probe,
-            },
-        )
-        ptt_detail = ptt.get("result", {}).get("detail", {})
-        if ptt.get("ok") is False or ptt_detail.get("error"):
-            self.fail(f"spawn-recall PTT probe failed: {ptt_detail.get('error', ptt.get('error', ptt))}")
-        ptt_traces = read_new_traces(trace_start)
-        ptt_assistant = str(ptt_detail.get("assistant_reply") or "")
+        ptt: dict[str, Any] = {}
+        ptt_detail: dict[str, Any] = {}
+        ptt_traces: list[dict[str, Any]] = []
+        ptt_assistant = ""
+        ptt_get_convos: list[dict[str, Any]] = []
+        for attempt in range(3):
+            trace_start = trace_line_count()
+            ptt = self.bridge_act(
+                "ptt_test_turn",
+                {
+                    "pcm": str(self.pcm_path),
+                    "timeout": str(max(30, self.args.turn_timeout_ms // 1000)),
+                    "force_transcript": recency_probe,
+                    "text_only": "1",
+                },
+            )
+            ptt_detail = ptt.get("result", {}).get("detail", {})
+            if ptt.get("ok") is False or ptt_detail.get("error"):
+                self.fail(f"spawn-recall PTT probe failed: {ptt_detail.get('error', ptt.get('error', ptt))}")
+            ptt_traces = read_new_traces(trace_start)
+            ptt_assistant = str(ptt_detail.get("assistant_reply") or "")
+            saved_user = ptt_detail.get("saved_user_text") or ptt_detail.get("provider_transcript") or ""
+            if recency_probe.strip() not in str(saved_user):
+                self.warn(
+                    f"spawn-recall PTT attempt {attempt + 1}: saved transcript mismatch "
+                    f"({str(saved_user)[:120]!r})"
+                )
+            if ptt_assistant and "didn't catch" not in ptt_assistant.lower():
+                break
+            self.warn(
+                f"spawn-recall PTT attempt {attempt + 1}: hub returned empty catch-all "
+                f"({ptt_assistant[:120]!r}); retrying after settle"
+            )
+            time.sleep(2.0)
         ptt_evidence = strip_probe_text(
             ptt_assistant + "\n" + "\n".join(flatten_trace_text(trace) for trace in ptt_traces),
             [recency_probe],
@@ -1111,6 +1164,10 @@ class GauntletRunner:
             },
             skip_identity_drift=True,
         )
+
+        # Always undo the swap — a leaked synthetic owner breaks backend auth for
+        # every subsequent turn and survives app relaunch.
+        self.restore_test_owner("owner suite")
 
         self.manifest["owner_switch_note"] = (
             "Step 06 swaps to synthetic owner B in-process, captures owner-B QueryTracer "
