@@ -102,10 +102,15 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("!bridgeOutputTracker.hasOutput"))
     XCTAssertTrue(bridgeSource.contains("private final class BridgeOutputTracker: @unchecked Sendable"))
     XCTAssertTrue(bridgeSource.contains("refreshing token and retrying once"))
-    // The refresh guard must collapse thrown failures into authMissing so ChatProvider
-    // still routes to the sign-in recovery CTA (a propagating AuthError would bypass it).
-    XCTAssertTrue(bridgeSource.contains("(try? await refreshAuthToken()) == true"))
+    // The refresh must convert real auth failures to authMissing so ChatProvider
+    // routes to the sign-in recovery CTA, while propagating CancellationError so a
+    // cancelled request is not misrouted to auth recovery.
+    XCTAssertTrue(bridgeSource.contains("catch is CancellationError"))
+    XCTAssertTrue(bridgeSource.contains("throw CancellationError()"))
+    XCTAssertTrue(bridgeSource.contains("catch {"))
+    XCTAssertTrue(bridgeSource.contains("throw BridgeError.authMissing"))
     XCTAssertFalse(bridgeSource.contains("guard try await refreshAuthToken()"))
+    XCTAssertFalse(bridgeSource.contains("(try? await refreshAuthToken()) == true"))
     XCTAssertTrue(bridgeSource.contains("let retryRequestId = UUID().uuidString"))
   }
 

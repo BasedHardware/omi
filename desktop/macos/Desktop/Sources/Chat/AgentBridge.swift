@@ -299,9 +299,17 @@ actor AgentBridge {
       log("AgentBridge: session token rejected before output; refreshing token and retrying once")
       // A thrown refresh failure (e.g. AuthError.notSignedIn from an expired refresh
       // token) must surface as BridgeError.authMissing so ChatProvider maps it to the
-      // sign-in recovery CTA. (try?) collapses both the throw and a `false` return into
-      // a single failed guard, avoiding propagation of the underlying AuthError.
-      guard (try? await refreshAuthToken()) == true else {
+      // sign-in recovery CTA. CancellationError must propagate untouched so a
+      // cancelled request does not get misrouted to the auth recovery UI.
+      let refreshed: Bool
+      do {
+        refreshed = try await refreshAuthToken()
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        throw BridgeError.authMissing
+      }
+      guard refreshed else {
         throw BridgeError.authMissing
       }
       let retryRequestId = UUID().uuidString
