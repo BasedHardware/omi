@@ -2,6 +2,22 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.31",
+      "date": "2026-07-06",
+      "changes": [
+        "Improved chat memory reliability by keeping agent session identity in the local runtime kernel instead of app-side caches",
+        "Floating agent pills now project from canonical kernel runs (spawn_agent, list_agent_sessions, attention overrides) instead of a separate pill lifecycle",
+        "Push-to-talk and typed chat now share one kernel conversation history, so follow-up questions stay in context after voice turns",
+        "Fixed voice push-to-talk missing recent floating-bar typed messages by sharing one main chat transcript",
+        "Fixed typed chat not seeing recent voice turns when continuing in the same session",
+        "Agent artifact cards in chat now survive app restarts and show when the file was deleted or moved",
+        "Hide agent tooling folders like .claude from artifact pills so only real outputs appear",
+        "Dismiss failed or stopped floating agent pills from the status badge, and attach files to pill chats by dragging them onto the input",
+        "Fixed push-to-talk and main chat so they remember what you just asked in the floating Omi pill, including background agent spawns",
+        "Fixed push-to-talk going silent after a typed message when the voice session reconnects for updated context"
+      ]
+    },
+    {
       "version": "0.12.30",
       "date": "2026-07-06",
       "changes": [
