@@ -171,6 +171,8 @@ def _timeout_class_for_path(path: str, paths_timeout: dict[str, Any]) -> str:
         return 'sync_job'
     if path == '/v2/audio-merge-jobs/run':
         return 'audio_merge'
+    if path == '/v1/users/account-deletion-wipes/run':
+        return 'account_deletion_wipe'
     if path in paths_timeout:
         return 'unknown'
     return 'default_method'

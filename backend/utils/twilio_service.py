@@ -178,6 +178,40 @@ def delete_user_caller_ids(uid: str) -> int:
     return deleted
 
 
+def delete_user_caller_ids_strict(uid: str) -> int:
+    """Delete every verified Twilio caller ID owned by ``uid``.
+
+    Unlike ``delete_user_caller_ids``, this account-deletion variant raises if
+    listing or deleting any caller ID fails. The account deletion worker must
+    keep Firestore metadata until Twilio cleanup has either succeeded or can be
+    retried with the phone-number documents still present.
+    """
+    try:
+        numbers = phone_calls_db.get_phone_numbers(uid)
+    except Exception as e:
+        logger.error(f'delete_user_caller_ids_strict: list phone_numbers failed: {e}')
+        raise
+
+    deleted = 0
+    failures = []
+    for number in numbers:
+        sid = number.get('twilio_sid')
+        if not sid:
+            continue
+        try:
+            if delete_caller_id(sid):
+                deleted += 1
+            else:
+                failures.append(sid)
+                logger.warning(f'delete_user_caller_ids_strict: twilio reported failure for sid={sid}')
+        except Exception as e:
+            failures.append(sid)
+            logger.error(f'delete_user_caller_ids_strict: twilio client unavailable for sid={sid}: {e}')
+    if failures:
+        raise RuntimeError(f'twilio caller-id delete failed for {len(failures)} caller id(s)')
+    return deleted
+
+
 def list_caller_ids() -> list:
     """
     List all verified outgoing caller IDs for the account.

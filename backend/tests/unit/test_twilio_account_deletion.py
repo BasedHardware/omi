@@ -100,3 +100,26 @@ def test_delete_user_caller_ids_swallows_phone_list_error():
         deleted = twilio_service.delete_user_caller_ids('uid-1')
     assert deleted == 0
     assert mock_delete.call_count == 0
+
+
+def test_delete_user_caller_ids_strict_raises_on_delete_failure():
+    numbers = [{'id': 'a', 'twilio_sid': 'PNaaaa'}]
+    with patch.object(twilio_service, 'delete_caller_id', return_value=False), patch.object(
+        phone_calls_db, 'get_phone_numbers', return_value=numbers
+    ):
+        try:
+            twilio_service.delete_user_caller_ids_strict('uid-1')
+        except RuntimeError as exc:
+            assert 'caller id' in str(exc)
+        else:
+            raise AssertionError('expected strict caller-id deletion to raise')
+
+
+def test_delete_user_caller_ids_strict_raises_on_phone_list_error():
+    with patch.object(phone_calls_db, 'get_phone_numbers', side_effect=RuntimeError('firestore down')):
+        try:
+            twilio_service.delete_user_caller_ids_strict('uid-1')
+        except RuntimeError as exc:
+            assert str(exc) == 'firestore down'
+        else:
+            raise AssertionError('expected strict caller-id list failure to raise')

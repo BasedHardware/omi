@@ -1,10 +1,21 @@
 import asyncio
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi import HTTPException
 
 from routers import users as users_router
+
+
+class _FakeRequest:
+    def __init__(self, payload):
+        self._payload = payload
+
+    async def json(self):
+        if isinstance(self._payload, Exception):
+            raise self._payload
+        return self._payload
 
 
 def test_delete_account_delegates_to_service():
@@ -26,6 +37,140 @@ def test_delete_account_maps_unexpected_service_error_to_500():
 
     assert exc.value.status_code == 500
     assert exc.value.detail == 'Could not delete account. Please try again.'
+
+
+def test_run_account_deletion_wipe_retries_failed_wipe(monkeypatch):
+    calls = []
+
+    async def run_blocking(_executor, fn, *args):
+        calls.append((fn, args))
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'claimed'
+        if fn is users_router.background_wipe_user_data:
+            return False
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 3)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 500
+    assert json.loads(response.body) == {'status': 'retry'}
+    assert calls == [
+        (users_router.try_acquire_job_run_lock, ('account-deletion:uid1',)),
+        (users_router.claim_deletion_wipe_for_task, ('uid1',)),
+        (users_router.background_wipe_user_data, ('uid1',)),
+        (users_router.release_job_run_lock, ('account-deletion:uid1', 'lock-token')),
+    ]
+
+
+def test_run_account_deletion_wipe_consumes_final_failed_attempt(monkeypatch):
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'claimed'
+        if fn is users_router.background_wipe_user_data:
+            return False
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+    monkeypatch.setattr(users_router, 'get_account_deletion_tasks_max_attempts', lambda: 2)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=1))
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'failed_final'}
+
+
+def test_run_account_deletion_wipe_defers_when_locked(monkeypatch):
+    release = MagicMock()
+
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return None
+        if fn is users_router.release_job_run_lock:
+            release(*args)
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 409
+    assert json.loads(response.body) == {'status': 'locked'}
+    release.assert_not_called()
+
+
+def test_run_account_deletion_wipe_acks_completed_job(monkeypatch):
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'completed'
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'acked', 'job_status': 'completed'}
+
+
+def test_run_account_deletion_wipe_drops_non_actionable_job(monkeypatch):
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'not_actionable'
+        if fn is users_router.release_job_run_lock:
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    response = asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'dropped', 'reason': 'not_actionable'}
+
+
+def test_run_account_deletion_wipe_preserves_lock_on_cancel(monkeypatch):
+    released = []
+
+    async def run_blocking(_executor, fn, *args):
+        if fn is users_router.try_acquire_job_run_lock:
+            return 'lock-token'
+        if fn is users_router.claim_deletion_wipe_for_task:
+            return 'claimed'
+        if fn is users_router.background_wipe_user_data:
+            raise asyncio.CancelledError()
+        if fn is users_router.release_job_run_lock:
+            released.append(args)
+            return None
+        raise AssertionError(f'unexpected function {fn}')
+
+    monkeypatch.setattr(users_router, 'run_blocking', run_blocking)
+
+    try:
+        asyncio.run(users_router.run_account_deletion_wipe(_FakeRequest({'uid': 'uid1'}), task_retry_count=0))
+    except asyncio.CancelledError:
+        pass
+    else:
+        raise AssertionError('expected cancellation to propagate')
+
+    assert released == []
 
 
 def test_export_all_user_data_keeps_streaming_headers():

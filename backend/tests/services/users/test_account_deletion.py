@@ -118,6 +118,49 @@ def test_start_account_deletion_preserves_order_and_enqueues_background_wipe(mon
     ]
 
 
+def test_start_account_deletion_enqueues_cloud_task_when_enabled(monkeypatch):
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', MagicMock(return_value=True))
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', enqueue)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.start_account_deletion('uid1')
+
+    assert result == {'status': 'ok', 'message': 'Account deletion started'}
+    enqueue.assert_called_once_with('uid1')
+    submit.assert_not_called()
+
+
+def test_start_account_deletion_raises_when_cloud_task_enqueue_fails(monkeypatch):
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_intent', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_started', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    monkeypatch.setattr(account_deletion.users_db, 'get_user_subscription', MagicMock(return_value=None))
+    monkeypatch.setattr(account_deletion.auth, 'delete_account', MagicMock())
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', MagicMock(return_value=True))
+    monkeypatch.setattr(
+        account_deletion, 'enqueue_account_deletion_wipe', MagicMock(side_effect=Exception('tasks down'))
+    )
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    try:
+        account_deletion.start_account_deletion('uid1')
+    except Exception as exc:
+        assert str(exc) == 'tasks down'
+    else:
+        raise AssertionError('expected enqueue failure to raise')
+
+    account_deletion.users_db.mark_user_deletion_wipe_started.assert_called_once_with('uid1')
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    submit.assert_not_called()
+
+
 def test_start_account_deletion_tolerates_best_effort_failures_and_missing_firebase_user(monkeypatch):
     """Stripe/feedback failures are tolerated, but marker write must succeed."""
     monkeypatch.setattr(
@@ -305,7 +348,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
     monkeypatch.setattr(
         account_deletion,
         'delete_transcript_chunk_vectors_batch',
-        lambda uid, ids: calls.append(('delete_transcript_vectors', uid, ids)),
+        lambda uid, ids, **kwargs: calls.append(('delete_transcript_vectors', uid, ids, kwargs)),
     )
     monkeypatch.setattr(
         account_deletion,
@@ -332,7 +375,7 @@ def test_purge_derived_user_data_isolates_backends_and_reloads_conversation_ids(
         ('get_conversations', 'uid1'),
         ('delete_conversation_vectors', 'uid1', ['c1']),
         ('get_conversations', 'uid1'),
-        ('delete_transcript_vectors', 'uid1', ['c2']),
+        ('delete_transcript_vectors', 'uid1', ['c2'], {'raise_on_failure': True}),
         ('get_memories', 'uid1'),
         ('delete_memory_vectors', 'uid1', ['m1']),
         ('get_actions', 'uid1'),
@@ -373,8 +416,38 @@ def test_purge_derived_user_data_continues_after_each_failure(monkeypatch):
         'conversation_vectors',
         'transcript_chunk_vectors',
         'memory_vectors',
+        'conversation_recordings',
     ]
-    assert [failure['operation'] for failure in result['best_effort_failures']] == ['conversation_recordings']
+    assert result['best_effort_failures'] == []
+
+
+def test_purge_derived_user_data_fails_required_vectors_when_index_missing(monkeypatch):
+    monkeypatch.setattr(account_deletion.vector_db, 'index', None)
+    monkeypatch.setattr(account_deletion, 'get_conversation_ids', MagicMock(return_value=['c1']))
+    monkeypatch.setattr(account_deletion, 'get_memory_ids', MagicMock(return_value=['m1']))
+    monkeypatch.setattr(account_deletion, 'get_action_item_ids', MagicMock(return_value=['a1']))
+    monkeypatch.setattr(account_deletion, 'get_screen_activity_ids', MagicMock(return_value=['s1']))
+    monkeypatch.setattr(account_deletion, 'delete_conversation_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_transcript_chunk_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_memory_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_action_item_vectors_batch', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_screen_activity_vectors', MagicMock())
+    monkeypatch.setattr(account_deletion, 'delete_all_conversation_recordings', MagicMock())
+
+    result = account_deletion.purge_derived_user_data('uid1')
+
+    assert [failure['operation'] for failure in result['required_failures']] == [
+        'conversation_vectors',
+        'transcript_chunk_vectors',
+        'memory_vectors',
+        'action_item_vectors',
+        'screen_activity_vectors',
+    ]
+    account_deletion.delete_conversation_vectors_batch.assert_not_called()
+    account_deletion.delete_transcript_chunk_vectors_batch.assert_not_called()
+    account_deletion.delete_memory_vectors_batch.assert_not_called()
+    account_deletion.delete_action_item_vectors_batch.assert_not_called()
+    account_deletion.delete_screen_activity_vectors.assert_not_called()
 
 
 def test_background_wipe_user_data_does_not_complete_when_required_derived_purge_fails(monkeypatch):
@@ -413,6 +486,42 @@ def test_reconcile_pending_deletion_wipes_re_enqueues(monkeypatch):
     assert len(enqueued) == 2
     assert enqueued[0] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid1')
     assert enqueued[1] == (account_deletion.cleanup_executor, account_deletion.background_wipe_user_data, 'uid2')
+
+
+def test_reconcile_pending_deletion_wipes_enqueues_cloud_tasks(monkeypatch):
+    pending = [{'uid': 'uid1', 'wipe_status': 'failed'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', MagicMock(return_value=True))
+    enqueue = MagicMock()
+    monkeypatch.setattr(account_deletion, 'enqueue_account_deletion_wipe', enqueue)
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 1, 'skipped': 0}
+    enqueue.assert_called_once_with('uid1')
+    submit.assert_not_called()
+
+
+def test_reconcile_pending_deletion_wipes_skips_cloud_enqueue_failure(monkeypatch):
+    pending = [{'uid': 'uid1', 'wipe_status': 'failed'}]
+    monkeypatch.setattr(account_deletion.users_db, 'get_pending_deletion_wipes', lambda limit=100: pending)
+    monkeypatch.setattr(account_deletion.users_db, 'claim_deletion_wipe', lambda uid: uid)
+    monkeypatch.setattr(account_deletion, 'is_account_deletion_dispatch_enabled', MagicMock(return_value=True))
+    monkeypatch.setattr(
+        account_deletion, 'enqueue_account_deletion_wipe', MagicMock(side_effect=Exception('tasks down'))
+    )
+    monkeypatch.setattr(account_deletion.users_db, 'mark_user_deletion_wipe_failed', MagicMock())
+    submit = MagicMock()
+    monkeypatch.setattr(account_deletion, 'submit_with_context', submit)
+
+    result = account_deletion.reconcile_pending_deletion_wipes()
+
+    assert result == {'requeued': 0, 'skipped': 1}
+    account_deletion.users_db.mark_user_deletion_wipe_failed.assert_called_once_with('uid1')
+    submit.assert_not_called()
 
 
 def test_reconcile_pending_deletion_wipes_skips_already_claimed(monkeypatch):

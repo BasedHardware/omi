@@ -407,7 +407,7 @@ def test_get_pending_deletion_wipes_respects_limit_with_over_fetch():
 def test_get_pending_deletion_wipes_includes_stale_running():
     """Stale ``running`` records (worker crashed mid-execution) are recovered.
 
-    A ``running`` marker older than ``running_stale_after`` (default 30 min)
+    A ``running`` marker older than ``running_stale_after`` (default 6 hours)
     is included so the reconciler can re-enqueue a wipe whose worker died.
     """
     now = datetime.now(timezone.utc)
@@ -419,7 +419,7 @@ def test_get_pending_deletion_wipes_includes_stale_running():
             # Fresh running — worker is live, should NOT be recovered.
             {'uid': 'live1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=12)},
             # Stale running — worker probably crashed, SHOULD be recovered.
-            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(minutes=45)},
+            {'uid': 'crashed1', 'wipe_status': 'running', 'wipe_running_at': now - timedelta(hours=7)},
         ],
         'retrying': [],
     }

@@ -1016,11 +1016,18 @@ def delete_transcript_chunk_vectors(uid: str, conversation_id: str):
         logger.warning(f'delete_transcript_chunk_vectors failed uid={uid} conversation={conversation_id}')
 
 
-def delete_transcript_chunk_vectors_batch(uid: str, conversation_ids: List[str]) -> int:
+def delete_transcript_chunk_vectors_batch(
+    uid: str, conversation_ids: List[str], *, raise_on_failure: bool = False
+) -> int:
     """Account-deletion purge: drop all transcript-chunk vectors for the user's conversations."""
-    if index is None or not conversation_ids:
+    if index is None:
+        if raise_on_failure and conversation_ids:
+            raise RuntimeError('Pinecone index not initialized for transcript chunk vector delete')
+        return 0
+    if not conversation_ids:
         return 0
     deleted = 0
+    failures = 0
     for conversation_id in conversation_ids:
         prefix = f'{uid}-{conversation_id}-c'
         try:
@@ -1031,6 +1038,9 @@ def delete_transcript_chunk_vectors_batch(uid: str, conversation_ids: List[str])
                 index.delete(ids=ids[i : i + 1000], namespace=TRANSCRIPT_CHUNKS_NAMESPACE)
             deleted += len(ids)
         except Exception:
+            failures += 1
             logger.warning(f'delete_transcript_chunk_vectors_batch failed uid={uid} conversation={conversation_id}')
+    if failures and raise_on_failure:
+        raise RuntimeError(f'transcript chunk vector delete failed for {failures} conversation(s)')
     logger.info(f'delete_transcript_chunk_vectors_batch uid={uid} total_deleted={deleted}')
     return deleted

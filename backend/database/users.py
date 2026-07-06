@@ -12,6 +12,7 @@ from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
+DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
 
 # Conservative low-risk user projections. Do NOT use these policies for
 # entitlement, BYOK, data-protection, privacy-consent, or full user-doc caching.
@@ -283,8 +284,7 @@ def mark_user_deletion_wipe_started(uid: str):
 
     Persisted in the top-level ``account_deletions`` collection so it survives a
     deploy or pod restart. A reconciliation worker can query for documents where
-    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes, ensuring the
-    in-process ``cleanup_executor`` backlog is not silently lost.
+    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes.
 
     The worker transitions the marker to ``'running'`` (via
     ``mark_user_deletion_wipe_running``) as soon as it actually starts
@@ -300,9 +300,9 @@ def mark_user_deletion_wipe_started(uid: str):
 def mark_user_deletion_wipe_running(uid: str):
     """Transition a queued wipe marker to ``running`` once the worker starts.
 
-    Called by ``background_wipe_user_data`` at the top of the executor future.
+    Called by ``background_wipe_user_data`` at the top of the wipe worker.
     This lets the reconciler distinguish a genuinely orphaned ``pending`` wipe
-    (queued in the executor backlog but never picked up — safe to re-enqueue)
+    (queued but never picked up — safe to re-enqueue)
     from a ``running`` wipe (actively executing — only recovered if the claim
     is stale, i.e. the worker probably crashed).
 
@@ -366,7 +366,7 @@ def cancel_user_deletion_wipe(uid: str):
 def get_pending_deletion_wipes(
     limit: int = 100,
     stale_after: timedelta = timedelta(minutes=10),
-    running_stale_after: timedelta = timedelta(minutes=30),
+    running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
 ) -> list[dict]:
     """Return account_deletions documents whose wipe needs retry.
 
@@ -449,7 +449,7 @@ def get_pending_deletion_wipes(
             claimed_at = data.get('wipe_claimed_at')
             # Use the longer ``running_stale_after`` window so a queued-but-
             # not-yet-running retrying claim is not returned as a candidate
-            # before the executor future has had a chance to start.
+            # before the worker has had a chance to start.
             if claimed_at and claimed_at < running_cutoff:
                 result.append(data | {'uid': doc.id})
 
@@ -513,7 +513,7 @@ def _claim_deletion_wipe_txn(
         claimed_at = data.get('wipe_claimed_at')
         # Use the longer ``running_stale_after`` window (not ``stale_after``)
         # because a retrying wipe was just claimed by the reconciler and
-        # enqueued. If the executor backlog is full, the future may sit queued
+        # enqueued. If the worker queue is delayed, the task may sit queued
         # beyond ``stale_after`` (10 min) without transitioning to ``running``.
         # Using the short window would let the periodic reconciler enqueue
         # another copy every pass, causing duplicate wipes to race.
@@ -527,7 +527,7 @@ def _claim_deletion_wipe_txn(
 def claim_deletion_wipe(
     uid: str,
     stale_after: timedelta = timedelta(minutes=10),
-    running_stale_after: timedelta = timedelta(minutes=30),
+    running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
 ) -> str | None:
     """Attempt to claim a pending/failed/stale wipe for re-enqueueing.
 
@@ -538,6 +538,44 @@ def claim_deletion_wipe(
     doc_ref = db.collection('account_deletions').document(uid)
     transaction = db.transaction()
     return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+
+
+@transactional
+def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
+    """Claim a Cloud Tasks delivery before running an account-deletion wipe."""
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return 'missing'
+
+    data = snapshot.to_dict()
+    status = data.get('wipe_status')
+    now = datetime.now(timezone.utc)
+
+    if status == 'completed':
+        return 'completed'
+    if status in ('cancelled', 'deleting_auth'):
+        return 'not_actionable'
+    if status == 'running':
+        running_at = data.get('wipe_running_at')
+        if running_at and running_at >= now - running_stale_after:
+            return 'running'
+
+    if status in ('pending', 'retrying', 'failed', 'running'):
+        transaction.update(doc_ref, {'wipe_status': 'running', 'wipe_running_at': now})
+        return 'claimed'
+
+    return 'not_actionable'
+
+
+def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER) -> str:
+    """Claim an account-deletion wipe for a Cloud Tasks worker.
+
+    Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
+    ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
 def create_person(uid: str, data: dict):
