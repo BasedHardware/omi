@@ -17,7 +17,7 @@ steps:
         reset: "true"
         wait: "true"
     expect:
-      result.detail.askOmiOpen: "true"
+      result.detail.focused: "true"
 
   - id: S2
     name: Send stubbed floating-bar query
