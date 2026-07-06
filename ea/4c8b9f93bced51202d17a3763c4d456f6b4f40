@@ -1,0 +1,58 @@
+backend/utils/llm/person_profile.py
+  s_edfd59e96df44b::t_b1aebc0b1c2749 43-50
+  s_edfd59e96df44b::t_5702060663f90e 162-168
+  s_edfd59e96df44b::t_65cc52277831f6 198-214
+backend/tests/unit/test_person_profile.py
+  s_edfd59e96df44b::t_35325ee5f0906c 121-204
+backend/tests/unit/test_person_service_search.py
+  s_edfd59e96df44b::t_b13ae6f4773868 1-275
+backend/utils/telegram_connector.py
+  s_edfd59e96df44b::t_e9a8a7abf75c68 61
+  s_edfd59e96df44b::t_2de94697f09f9d 267-275
+backend/models/other.py
+  s_edfd59e96df44b::t_212cc45ccaecbb 40-47
+backend/utils/retrieval/tool_services/person_service.py
+  s_edfd59e96df44b::t_e441c44b1dc63b 150-166
+  s_edfd59e96df44b::t_b2be1cf0b08200 85-126
+  s_edfd59e96df44b::t_e5aa433a00740f 16
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_14fd542d69ca46 1-141
+backend/utils/whatsapp_connector.py
+  s_edfd59e96df44b::t_e4b17862a17a78 267-275
+  s_edfd59e96df44b::t_77b97a49fff20d 61
+backend/tests/unit/test_person_messaging_extractor.py
+  s_edfd59e96df44b::t_9f39256c088f30 1-102
+backend/tests/unit/test_subject_memory_writer.py
+  s_edfd59e96df44b::t_66d03641620470 1-195
+  s_edfd59e96df44b::t_cd5745fbe63fe6 196-201
+backend/tests/unit/test_person_messaging_enrichment.py
+  s_edfd59e96df44b::t_a2f41a439db707 1-141
+backend/utils/llm/person_messaging.py
+  s_edfd59e96df44b::t_da760a47c903d4 1-103
+backend/utils/prompts.py
+  s_edfd59e96df44b::t_a550323a57187f 574-637
+backend/routers/mcp.py
+  s_edfd59e96df44b::t_3dc3282188faf7 739-756
+  s_edfd59e96df44b::t_d0ad28df83152f 53
+backend/utils/imessage_connector.py
+  s_edfd59e96df44b::t_142be150c0f50f 387-395
+  s_edfd59e96df44b::t_4a4f5a7ce337e8 54
+backend/utils/memory/subject_memory_writer.py
+  s_edfd59e96df44b::t_2d831f639b8ec9 1-219
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "ea4c8b9f93bced51202d17a3763c4d456f6b4f40",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
