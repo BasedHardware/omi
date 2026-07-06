@@ -17,6 +17,10 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
   /// Marks a discovered device as the labeled audio-only fallback.
   static const String audioOnlyExtraKey = 'audioOnly';
 
+  /// Placeholder entry shown before Meta AI authorization so the user can
+  /// start registration from the device list; never connectable directly.
+  static const String setupPlaceholderId = 'rayban-meta-setup';
+
   @override
   String get name => 'Ray-Ban Meta';
 
@@ -32,7 +36,14 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
       if (mode == 'full') {
         final registration = await host.getRegistrationState();
         if (registration != 'registered') {
-          return const DeviceDiscoveryResult(devices: []);
+          final setupEntry = BtDevice(
+            name: 'Ray-Ban Meta',
+            id: setupPlaceholderId,
+            type: DeviceType.raybanMeta,
+            rssi: 0,
+            locator: DeviceLocator.metaDat(),
+          );
+          return DeviceDiscoveryResult(devices: [setupEntry]);
         }
         final glasses = await host.getAvailableGlasses();
         final devices = glasses

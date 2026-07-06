@@ -24,6 +24,14 @@ const String rayBanMetaPhotoDataCharacteristicUuid = 'rayban-meta-photo-data';
 class RayBanMetaDeviceConnection extends DeviceConnection {
   RayBanMetaDeviceConnection(super.device, super.transport);
 
+  /// Interval between automatic photo captures while the photo controller is
+  /// active — mirrors OmiGlass's periodic visual-context capture. The glasses'
+  /// hardware capture LED stays on for the whole session, so capture state is
+  /// always visible to bystanders.
+  static const Duration autoCaptureInterval = Duration(seconds: 30);
+
+  Timer? _autoCaptureTimer;
+
   RayBanMetaTransport get _metaTransport => transport as RayBanMetaTransport;
 
   bool get isAudioOnly => device.locator?.extras[RayBanMetaDiscoverer.audioOnlyExtraKey] == true;
@@ -40,6 +48,8 @@ class RayBanMetaDeviceConnection extends DeviceConnection {
 
   @override
   Future<void> disconnect() async {
+    _autoCaptureTimer?.cancel();
+    _autoCaptureTimer = null;
     await transport.disconnect();
     connectionState = DeviceConnectionState.disconnected;
   }
@@ -109,6 +119,14 @@ class RayBanMetaDeviceConnection extends DeviceConnection {
     if (isAudioOnly) return null;
     try {
       await _metaTransport.startCamera();
+      _autoCaptureTimer?.cancel();
+      _autoCaptureTimer = Timer.periodic(autoCaptureInterval, (_) async {
+        try {
+          await _metaTransport.capturePhoto();
+        } catch (e) {
+          Logger.debug('Ray-Ban Meta: periodic photo capture failed: $e');
+        }
+      });
     } catch (e) {
       Logger.debug('Ray-Ban Meta: failed to start camera: $e');
     }
@@ -118,6 +136,8 @@ class RayBanMetaDeviceConnection extends DeviceConnection {
   @override
   Future performCameraStopPhotoController() async {
     if (isAudioOnly) return null;
+    _autoCaptureTimer?.cancel();
+    _autoCaptureTimer = null;
     await _metaTransport.stopCamera();
     return null;
   }
