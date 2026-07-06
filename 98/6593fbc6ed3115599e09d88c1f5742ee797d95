@@ -1,0 +1,21 @@
+mockup/screens/onboarding.html
+  s_751b5889fd7450::t_341554241ea25f 97,99-104,107-108
+mockup/screens/apps.html
+  s_751b5889fd7450::t_cfa79cb2e684b0 9,13,16-21,28-35,37-38,43-66,69,73,77-78,82-83
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "986593fbc6ed3115599e09d88c1f5742ee797d95",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
