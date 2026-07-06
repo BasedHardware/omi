@@ -1,3 +1,0 @@
-{
-  "change": "Fixed recordings being lost when conversation finalization repeatedly failed with a network/backend error — the app now recovers the conversation from saved local transcript segments instead of dropping it"
-}
