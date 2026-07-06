@@ -207,7 +207,8 @@ enum RealtimeHubTools {
     - When you need to see what's on screen, call screenshot first. Use point_click only \
     when the user clearly asks you to click something.
     - For canonical Omi agent/subagent management, call list_agent_sessions first, then use \
-    its agentRef values internally for get_agent_run, cancel_agent_run, or artifact inspection. \
+    its agentRef values internally for get_agent_run, cancel_agent_run, run_agent_and_wait, \
+    or artifact inspection. \
     For follow-ups about work you spawned, current subagent status, or what a subagent finished, \
     call list_agent_sessions first; it includes task agents and floating-bar pill projections. \
 
