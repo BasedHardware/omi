@@ -109,6 +109,7 @@ pytest tests/unit/test_default_read_rollout_decision.py -v
 pytest tests/unit/test_rollout_schema_readiness.py -v
 pytest tests/unit/test_chat_memory_adapter.py -v
 pytest tests/unit/test_chat_memory_tool_caller.py -v
+pytest tests/unit/test_chat_session_response_model.py -v
 pytest tests/unit/test_tools_agent_route_response_shape.py -v
 pytest tests/unit/test_tools_rest_memory_runtime_adapter.py -v
 pytest tests/unit/test_p1_5_tools_fastapi_testclient_readiness.py -v
