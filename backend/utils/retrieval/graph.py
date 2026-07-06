@@ -8,6 +8,7 @@ the requires_context() LLM classification call.
 
 from __future__ import annotations
 
+import uuid
 import asyncio
 from typing import List, Optional, AsyncGenerator, Tuple, Any, Dict, cast, TYPE_CHECKING
 
@@ -131,18 +132,59 @@ async def execute_persona_chat_stream(
 
     full_response: List[str] = []
 
+    # LangSmith tracing — only generate a run_id when the API key
+    # is configured so callback_data doesn't carry a phantom UUID
+    # that submit_langsmith_feedback() would 404 against.
+    from utils.observability.langsmith import has_langsmith_api_key, get_chat_tracer_callbacks
+
+    langsmith_run_id = str(uuid.uuid4()) if has_langsmith_api_key() else None
+
+    tracer_callbacks = (
+        get_chat_tracer_callbacks(
+            run_id=langsmith_run_id,
+            run_name="chat.persona.stream",
+            tags=["chat", "persona", "streaming"],
+            metadata={
+                "uid": uid,
+                "app_id": app.id if app else None,
+                "app_name": app.name if app else None,
+                "cited": cited,
+            },
+        )
+        if langsmith_run_id is not None
+        else []
+    )
+
+    # Pass a RunnableConfig to astream() so LangSmith traces get
+    # stamped with the run_id. The config dict carries 'callbacks'
+    # (tracer wiring) and 'run_id' (trace UUID stamping).
+    runnable_kwargs = {
+        "config": {
+            "callbacks": tracer_callbacks,
+            "run_id": langsmith_run_id,
+            "tags": ["chat", "persona", "streaming"],
+            "metadata": {
+                "uid": uid,
+                "app_id": app.id if app else None,
+                "app_name": app.name if app else None,
+                "cited": cited,
+            },
+        }
+    }
+
+    if callback_data is not None and langsmith_run_id is not None:
+        callback_data['langsmith_run_id'] = langsmith_run_id
+
     try:
         llm = get_llm('persona_chat', streaming=True)
 
-        # Use astream() directly instead of agenerate(callbacks=).
-        # The old agenerate pattern required AsyncStreamingCallback to
-        # implement the full langchain callback protocol (run_inline,
-        # on_llm_new_token, ...) — which it didn't. After the upstream
-        # langchain_core bump, passing a non-conforming callback crashes
-        # with AttributeError: 'AsyncStreamingCallback' object has no
-        # attribute 'run_inline'. astream() yields AIMessageChunk objects
-        # directly, no callback needed.
-        async for chunk in llm.astream(formatted_messages):
+        # Use astream() with a RunnableConfig so LangSmith traces get
+        # stamped with the run_id. The old agenerate(callbacks=) pattern
+        # required AsyncStreamingCallback to implement the full langchain
+        # callback protocol (run_inline, on_llm_new_token, ...) — which it
+        # didn't. After the upstream langchain_core bump, passing a
+        # non-conforming callback crashes. astream() yields chunks directly.
+        async for chunk in llm.astream(formatted_messages, **runnable_kwargs):
             raw = chunk.content if hasattr(chunk, 'content') else str(chunk)
             # LangChain AIMessageChunk.content can be str or list[str|dict]
             token = raw if isinstance(raw, str) else str(raw)
