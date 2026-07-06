@@ -11,6 +11,7 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+import pytest
 
 
 def _read_source(rel_path):
@@ -252,6 +253,7 @@ class TestNotificationsFanOut:
         assert '_BATCH_SIZE' in func_body
 
 
+@pytest.mark.slow
 class TestSlidingWindowBehavior:
     """Behavioral tests verifying the sliding-window + semaphore pattern at runtime."""
 

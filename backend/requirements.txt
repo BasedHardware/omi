@@ -168,6 +168,7 @@ pyparsing==3.1.2
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.2
 pytest-asyncio==1.4.0
+pytest-xdist==3.8.0
 python-multipart==0.0.27
 python-slugify==8.0.4
 python-ulid==3.0.0
