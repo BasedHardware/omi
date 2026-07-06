@@ -35,27 +35,56 @@ describe("LegacyPermissionPolicy", () => {
     expect(policy.resolveAcpPermission({ options: [] }).optionId).toBe("allow");
   });
 
-  it("keeps external ACP adapters off permanent auto-approval", () => {
+  it("auto-approves autonomous external adapters (hermes/openclaw) even when a deny option is offered", () => {
     const policy = new LegacyPermissionPolicy();
 
-    const once = policy.resolveExternalAcpPermission({
-      adapterId: "hermes",
+    // Real-world tool-call options include a reject variant; autonomous adapters
+    // must still pick the allow option (never the deny) so their tools execute.
+    for (const adapterId of ["hermes", "openclaw"]) {
+      const decision = policy.resolveExternalAcpPermission({
+        adapterId,
+        requestId: 7,
+        options: [
+          { kind: "allow_once", optionId: "once" },
+          { kind: "reject_once", optionId: "deny" },
+        ],
+      });
+      expect("acpResult" in decision ? decision.acpResult.outcome.optionId : "").toBe("once");
+      expect(decision.auditEvent).toMatchObject({
+        type: "approval.resolved",
+        policy: "external_autonomous",
+        adapterId,
+        requestId: 7,
+        optionId: "once",
+        automatic: true,
+      });
+    }
+  });
+
+  it("keeps unknown external ACP adapters on the conservative constrained path", () => {
+    const policy = new LegacyPermissionPolicy();
+
+    // A deny option is taken when present.
+    const denied = policy.resolveExternalAcpPermission({
+      adapterId: "someexternal",
       options: [
-        { kind: "allow_always", optionId: "always" },
         { kind: "allow_once", optionId: "once" },
+        { kind: "reject_once", optionId: "deny" },
       ],
     });
-    expect("acpResult" in once ? once.acpResult.outcome.optionId : "").toBe("once");
+    expect("acpResult" in denied ? denied.acpResult.outcome.optionId : "").toBe("deny");
+    expect(denied.auditEvent).toMatchObject({ policy: "external_constrained" });
 
+    // Only a permanent-allow option => explicit rejection (no permanent auto-grant).
     const rejected = policy.resolveExternalAcpPermission({
-      adapterId: "openclaw",
+      adapterId: "someexternal",
       requestId: 9,
       options: [{ kind: "allow_always", optionId: "always" }],
     });
     expect("acpError" in rejected ? rejected.acpError.code : 0).toBe(-32001);
     expect(rejected.auditEvent).toMatchObject({
       policy: "external_constrained",
-      adapterId: "openclaw",
+      adapterId: "someexternal",
       requestId: 9,
     });
   });

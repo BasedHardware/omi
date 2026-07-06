@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Hermes connected agent so it completes tasks out of the box — it now runs on a free Nous model (no paid credits needed) and its tool calls execute instead of being blocked"
+}

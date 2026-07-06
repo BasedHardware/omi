@@ -444,6 +444,9 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       let availability = LocalAgentProviderDetector.availability(for: .hermes)
       let service = HermesConnectService.shared
+      // Reflect current auth (and, when connected, ensure the free-model default
+      // is provisioned) before reporting state.
+      service.refreshConnectionState()
       var result: [String: String] = [
         "installed": LocalAgentProviderDetector.executablePath(for: .hermes) == nil ? "false" : "true",
         "availability": availability.isAvailable

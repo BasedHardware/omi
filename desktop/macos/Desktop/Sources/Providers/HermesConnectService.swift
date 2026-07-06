@@ -288,7 +288,13 @@ final class HermesConnectService: ObservableObject {
     func refreshConnectionState() {
         guard !phase.isBusy else { return }
         if case .failed = phase { return }
-        phase = isNousAuthenticated ? .connected : .idle
+        let authenticated = isNousAuthenticated
+        // Migrate already-connected installs onto the free model too — the paid
+        // default only surfaces at first inference, long after sign-in.
+        if authenticated {
+            HermesModelProvisioner.ensureFreeDefaultModel()
+        }
+        phase = authenticated ? .connected : .idle
     }
 
     private func handleOutput(line: String, parser: inout HermesDeviceCodeOutputParser) {
@@ -313,6 +319,9 @@ final class HermesConnectService: ObservableObject {
 
         if status == 0, isNousAuthenticated {
             log("HermesConnect: connected (CLI exit 0, nous refresh token present)")
+            // Pin the default to a free model so the very first inference after
+            // sign-in doesn't 404 on the paid-model credit wall.
+            HermesModelProvisioner.ensureFreeDefaultModel()
             phase = .connected
             return
         }
