@@ -184,7 +184,7 @@ async def execute_persona_chat_stream(
         # callback protocol (run_inline, on_llm_new_token, ...) — which it
         # didn't. After the upstream langchain_core bump, passing a
         # non-conforming callback crashes. astream() yields chunks directly.
-        async for chunk in llm.astream(formatted_messages, **runnable_kwargs):
+        async for chunk in llm.astream(formatted_messages, **runnable_kwargs):  # type: ignore[arg-type]
             raw = chunk.content if hasattr(chunk, 'content') else str(chunk)
             # LangChain AIMessageChunk.content can be str or list[str|dict]
             token = raw if isinstance(raw, str) else str(raw)
