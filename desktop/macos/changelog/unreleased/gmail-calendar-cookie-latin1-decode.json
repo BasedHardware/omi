@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Gmail and Calendar import failing for some browser profiles by reading cookie values correctly"
+}
