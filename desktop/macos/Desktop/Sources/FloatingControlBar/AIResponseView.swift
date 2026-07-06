@@ -543,6 +543,18 @@ private struct AgentInstallHelpPromptView: View {
                 .lineLimit(3)
                 .textSelection(.enabled)
 
+            if case .waitingForApproval(let userCode?) = prompt.status, !userCode.isEmpty {
+                Text(userCode)
+                    .font(.system(size: 18, weight: .bold, design: .monospaced))
+                    .foregroundColor(.white)
+                    .textSelection(.enabled)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(Color.white.opacity(0.12))
+                    .cornerRadius(6)
+                    .accessibilityLabel("Sign-in code \(userCode)")
+            }
+
             if let command = prompt.plan.installCommand {
                 Text(command)
                     .font(.system(size: 11, design: .monospaced))

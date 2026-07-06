@@ -187,6 +187,10 @@ extension SettingsContentView {
         }
       }
 
+      settingsCard(settingId: "aichat.hermes") {
+        HermesConnectionCardContent()
+      }
+
       settingsCard(settingId: "aichat.workspace") {
         VStack(alignment: .leading, spacing: 12) {
           HStack {

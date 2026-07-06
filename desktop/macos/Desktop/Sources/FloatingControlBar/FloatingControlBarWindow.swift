@@ -1830,6 +1830,12 @@ class FloatingControlBarManager {
         case .openDocs:
             openAgentInstallDocs(messageId: messageId, plan: prompt.plan)
         case .beginConnection:
+            // Sign-in plans open a browser (safe, reversible) — no
+            // confirmation step like the shell installer needs.
+            if prompt.plan.kind == .authenticate {
+                runAgentAuthentication(messageId: messageId, plan: prompt.plan)
+                return
+            }
             let confirmingSince = Date()
             window.state.updateAgentInstallPrompt(for: messageId) {
                 $0.status = .confirming
@@ -1883,8 +1889,11 @@ class FloatingControlBarManager {
             ack: directive.ack,
             fromVoice: fromVoice
         )
+        let plan = availability.needsAuthentication
+            ? directive.provider.authenticationPlan
+            : directive.provider.installPlan
         window.state.setAgentInstallPrompt(
-            AgentInstallPromptState(plan: directive.provider.installPlan, retryContext: retryContext),
+            AgentInstallPromptState(plan: plan, retryContext: retryContext),
             for: assistantMessage.id
         )
         completeVisibleAgentResponse(
@@ -1946,6 +1955,57 @@ class FloatingControlBarManager {
         }
     }
 
+    /// Drives the Hermes → Nous device-code sign-in from the install-help
+    /// prompt: opens the verification URL in the browser and mirrors the
+    /// service's phase into the prompt until the CLI reports approval.
+    private func runAgentAuthentication(
+        messageId: String,
+        plan: LocalAgentInstallPlan
+    ) {
+        guard let window else { return }
+        window.state.updateAgentInstallPrompt(for: messageId) {
+            $0.status = .installing
+            $0.confirmingSince = nil
+        }
+        window.resizeToResponseHeightPublic(animated: true)
+
+        // connect() synchronously moves the phase to .starting (or .failed),
+        // so subscribing after it never replays a stale terminal phase from
+        // an earlier attempt.
+        let service = HermesConnectService.shared
+        service.connect()
+        agentAuthCancellables[messageId] = service.$phase
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] phase in
+                guard let self, let window = self.window else { return }
+                switch phase {
+                case .idle, .starting:
+                    break
+                case .waitingForApproval(_, let userCode):
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .waitingForApproval(userCode: userCode)
+                    }
+                    window.resizeToResponseHeightPublic(animated: true)
+                case .connected:
+                    self.agentAuthCancellables[messageId] = nil
+                    let retryContext = window.state.agentInstallPrompt(for: messageId)?.retryContext
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .connected
+                    }
+                    window.resizeToResponseHeightPublic(animated: true)
+                    if let retryContext {
+                        self.retryAgentInstallPrompt(retryContext, provider: plan.provider)
+                    }
+                case .failed(let message):
+                    self.agentAuthCancellables[messageId] = nil
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .authFailed(message: message)
+                    }
+                    window.resizeToResponseHeightPublic(animated: true)
+                }
+            }
+    }
+
     private func retryAgentInstallPrompt(
         _ retryContext: AgentInstallRetryContext,
         provider: AgentPillsManager.DirectedProvider
@@ -1959,6 +2019,7 @@ class FloatingControlBarManager {
             bridgeHarnessOverride: provider.harnessMode
         )
     }
+    private var agentAuthCancellables: [String: AnyCancellable] = [:]
     private var pendingNotifications: [FloatingBarNotification] = []
     private var notificationDismissWorkItem: DispatchWorkItem?
     private var notificationWasTemporarilyShown = false
@@ -2258,7 +2319,22 @@ class FloatingControlBarManager {
             "busy": prompt.status.isBusy ? "true" : "false",
             "status": prompt.status.automationValue,
             "retry": prompt.retryContext == nil ? "false" : "true",
+            "kind": prompt.plan.kind == .authenticate ? "authenticate" : "install",
+            "messageId": message.id,
         ]
+    }
+
+    /// Automation-only: press the current install prompt's primary action
+    /// (same code path as clicking the button in the floating bar).
+    func triggerAgentInstallPromptPrimaryAction() -> [String: String] {
+        guard let window,
+              let message = window.state.currentAIMessage,
+              let prompt = window.state.agentInstallPrompt(for: message.id)
+        else {
+            return ["error": "no_install_prompt"]
+        }
+        handleAgentInstallPromptAction(messageId: message.id, action: prompt.primaryAction)
+        return ["triggered": prompt.primaryAction == .runSetup ? "runSetup" : "beginConnection"]
     }
 
     func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {

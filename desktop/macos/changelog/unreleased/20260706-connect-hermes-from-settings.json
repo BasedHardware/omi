@@ -1,0 +1,3 @@
+{
+  "change": "Added a Connect Hermes sign-in flow in Settings and in chat — when Hermes is installed but not signed in, Omi now opens the Nous sign-in page and waits for approval instead of failing with an internal error"
+}

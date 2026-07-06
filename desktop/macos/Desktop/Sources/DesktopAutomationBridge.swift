@@ -432,6 +432,52 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "agent_install_prompt_trigger",
+      summary: "Press the current install prompt's primary action (install or sign-in)"
+    ) { _ in
+      FloatingControlBarManager.shared.triggerAgentInstallPromptPrimaryAction()
+    }
+
+    register(
+      name: "hermes_connect_state",
+      summary: "Return Hermes install/auth state and the connect flow phase"
+    ) { _ in
+      let availability = LocalAgentProviderDetector.availability(for: .hermes)
+      let service = HermesConnectService.shared
+      var result: [String: String] = [
+        "installed": LocalAgentProviderDetector.executablePath(for: .hermes) == nil ? "false" : "true",
+        "availability": availability.isAvailable
+          ? "available" : (availability.needsAuthentication ? "needsAuthentication" : "missing"),
+        "nousAuthenticated": HermesAuthProbe.isNousAuthenticated() ? "true" : "false",
+        "phase": service.phase.automationValue,
+      ]
+      if case .waitingForApproval(let url, let code) = service.phase {
+        result["verificationURL"] = url.absoluteString
+        result["userCode"] = code ?? ""
+      }
+      if case .failed(let message) = service.phase {
+        result["failureMessage"] = message
+      }
+      return result
+    }
+
+    register(
+      name: "hermes_connect_start",
+      summary: "Start the Hermes → Nous device-code sign-in (opens browser)"
+    ) { _ in
+      HermesConnectService.shared.connect()
+      return ["phase": HermesConnectService.shared.phase.automationValue]
+    }
+
+    register(
+      name: "hermes_connect_cancel",
+      summary: "Cancel an in-flight Hermes sign-in"
+    ) { _ in
+      HermesConnectService.shared.cancel()
+      return ["phase": HermesConnectService.shared.phase.automationValue]
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]

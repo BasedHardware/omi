@@ -74,6 +74,10 @@ struct LocalAgentProviderAvailability: Equatable {
     enum Status: Equatable {
         case available(command: String)
         case missing
+        /// Installed on disk, but with no usable inference credential — the
+        /// runtime would fail with an opaque provider error, so route the
+        /// user to sign-in instead of the installer.
+        case needsAuthentication(command: String)
     }
 
     let provider: AgentPillsManager.DirectedProvider
@@ -84,7 +88,15 @@ struct LocalAgentProviderAvailability: Equatable {
         return false
     }
 
+    var needsAuthentication: Bool {
+        if case .needsAuthentication = status { return true }
+        return false
+    }
+
     var setupPrompt: String {
+        if needsAuthentication, provider == .hermes {
+            return "Hermes is installed but isn't signed in yet. I can open the Nous sign-in page in your browser to connect it."
+        }
         switch provider {
         case .hermes:
             return "I don't see Hermes connected. I can run the official Hermes installer or open setup docs."
@@ -127,10 +139,34 @@ enum LocalAgentProviderDetector {
             fileManager: fileManager,
             homeDirectory: homeDirectory
         ) {
+            if provider == .hermes,
+               !HermesAuthProbe.hasAnyInferenceCredential(
+                   environment: environment,
+                   fileManager: fileManager,
+                   homeDirectory: homeDirectory
+               ) {
+                return LocalAgentProviderAvailability(provider: provider, status: .needsAuthentication(command: path))
+            }
             return LocalAgentProviderAvailability(provider: provider, status: .available(command: path))
         }
 
         return LocalAgentProviderAvailability(provider: provider, status: .missing)
+    }
+
+    /// Resolved executable path for a provider's CLI, ignoring any
+    /// `OMI_*_ADAPTER_COMMAND` override (those may embed adapter arguments).
+    static func executablePath(
+        for provider: AgentPillsManager.DirectedProvider,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        homeDirectory: String = NSHomeDirectory()
+    ) -> String? {
+        firstExecutable(
+            named: provider.executableName,
+            environment: environment,
+            fileManager: fileManager,
+            homeDirectory: homeDirectory
+        )
     }
 
     static func isAvailable(

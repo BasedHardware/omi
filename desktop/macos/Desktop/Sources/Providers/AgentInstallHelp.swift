@@ -1,13 +1,24 @@
 import Foundation
 
 struct LocalAgentInstallPlan: Equatable {
+    enum Kind: Equatable {
+        /// Provider binary is missing — run the official installer.
+        case install
+        /// Provider is installed but signed out — run its sign-in flow.
+        case authenticate
+    }
+
     let provider: AgentPillsManager.DirectedProvider
     let installCommand: String?
     let documentationURL: URL
     let postInstallInstruction: String
+    var kind: Kind = .install
 
     var commandDisplay: String {
-        installCommand ?? "Open setup documentation"
+        if kind == .authenticate {
+            return "Opens the sign-in page in your browser"
+        }
+        return installCommand ?? "Open setup documentation"
     }
 
     var docsActionTitle: String {
@@ -33,15 +44,19 @@ enum AgentInstallStatus: Equatable {
     case ready
     case confirming
     case installing
+    case waitingForApproval(userCode: String?)
     case cancelled
     case docsOpened
     case connected
     case commandFailed(exitCode: Int32, output: String)
+    case authFailed(message: String)
     case finishedButMissing(output: String)
 
     var isBusy: Bool {
-        if case .installing = self { return true }
-        return false
+        switch self {
+        case .installing, .waitingForApproval: return true
+        default: return false
+        }
     }
 
     var automationValue: String {
@@ -49,10 +64,12 @@ enum AgentInstallStatus: Equatable {
         case .ready: return "ready"
         case .confirming: return "confirming"
         case .installing: return "installing"
+        case .waitingForApproval: return "waitingForApproval"
         case .cancelled: return "cancelled"
         case .docsOpened: return "docsOpened"
         case .connected: return "connected"
         case .commandFailed: return "commandFailed"
+        case .authFailed: return "authFailed"
         case .finishedButMissing: return "finishedButMissing"
         }
     }
@@ -81,6 +98,9 @@ struct AgentInstallPromptState: Equatable {
     var detailText: String {
         switch status {
         case .ready:
+            if plan.kind == .authenticate {
+                return "Omi will open the sign-in page in your browser, then wait for your approval."
+            }
             if plan.installCommand != nil {
                 return "Omi will run the official setup command, then check the connection."
             }
@@ -89,6 +109,11 @@ struct AgentInstallPromptState: Equatable {
             return "Ready to run the setup command shown below."
         case .installing:
             return "Connecting \(plan.provider.displayName)…"
+        case .waitingForApproval(let userCode):
+            if let userCode, !userCode.isEmpty {
+                return "Waiting for approval in your browser… If the page asks for a code, enter the one below."
+            }
+            return "Waiting for approval in your browser…"
         case .cancelled:
             return "Connection cancelled."
         case .docsOpened:
@@ -101,6 +126,9 @@ struct AgentInstallPromptState: Equatable {
         case .commandFailed(let exitCode, let output):
             let suffix = output.isEmpty ? "" : " \(output)"
             return "Setup failed with exit code \(exitCode).\(suffix)"
+        case .authFailed(let message):
+            let suffix = message.isEmpty ? "" : " \(message)"
+            return "Sign-in didn't finish.\(suffix) You can retry below."
         case .finishedButMissing(let output):
             let suffix = output.isEmpty ? "" : " \(output)"
             return "Setup finished, but Omi still can't find \(plan.provider.displayName). \(plan.postInstallInstruction)\(suffix)"
@@ -111,6 +139,8 @@ struct AgentInstallPromptState: Equatable {
         switch status {
         case .confirming:
             return "Run setup"
+        case .authFailed:
+            return "Retry sign-in"
         default:
             return "Connect \(plan.provider.displayName)"
         }
@@ -185,6 +215,19 @@ enum AgentInstallCommandRunner {
 }
 
 extension AgentPillsManager.DirectedProvider {
+    /// Sign-in plan for a provider that is installed but has no usable
+    /// credentials. Only Hermes has an app-driven flow today (Nous Portal
+    /// device-code OAuth); other providers fall back to their install plan.
+    var authenticationPlan: LocalAgentInstallPlan {
+        guard self == .hermes else { return installPlan }
+        return LocalAgentInstallPlan(
+            provider: self,
+            installCommand: nil,
+            documentationURL: URL(string: "https://hermes-agent.nousresearch.com/docs/integrations/nous-portal")!,
+            postInstallInstruction: "Approve the sign-in in your browser, then try your request again.",
+            kind: .authenticate)
+    }
+
     var installPlan: LocalAgentInstallPlan {
         switch self {
         case .hermes:

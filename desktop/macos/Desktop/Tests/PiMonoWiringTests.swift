@@ -111,7 +111,15 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
-  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {
+  func testLocalAgentProviderDetectorMissingPromptIsUserFacing() throws {
+    // The detector also searches fixed system dirs (/opt/homebrew/bin, ...)
+    // that tests can't redirect; a real global install makes "missing"
+    // untestable on this machine.
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+      if FileManager.default.isExecutableFile(atPath: "\(dir)/openclaw") {
+        throw XCTSkip("openclaw is installed at \(dir); missing-state is not reproducible here")
+      }
+    }
     let availability = LocalAgentProviderDetector.availability(
       for: .openclaw,
       environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
@@ -126,7 +134,12 @@ final class PiMonoWiringTests: XCTestCase {
       "Error: I don't see OpenClaw connected. I can run the official OpenClaw installer or open setup docs.")
   }
 
-  func testLocalAgentProviderDetectorCodexMissingPromptIsUserFacing() {
+  func testLocalAgentProviderDetectorCodexMissingPromptIsUserFacing() throws {
+    for dir in ["/opt/homebrew/bin", "/usr/local/bin"] {
+      if FileManager.default.isExecutableFile(atPath: "\(dir)/codex") {
+        throw XCTSkip("codex is installed at \(dir); missing-state is not reproducible here")
+      }
+    }
     let availability = LocalAgentProviderDetector.availability(
       for: .codex,
       environment: ["PATH": "/tmp/definitely-missing-\(UUID().uuidString)"],
