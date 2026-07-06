@@ -3116,5 +3116,24 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan."
+    "pendantStorageAlmostFull": "Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan.",
+    "connectRayBanMeta": "Sambungkan Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Gunakan cermin mata Ray-Ban Meta anda sebagai peranti tangkapan Omi untuk perbualan dan konteks visual. Omi akan membuka aplikasi Meta AI untuk memautkan cermin mata anda.",
+    "raybanMetaOpenMetaAI": "Sambung melalui Meta AI",
+    "raybanMetaWaitingForMetaAI": "Selesaikan penyambungan dalam aplikasi Meta AI, kemudian kembali ke sini.",
+    "raybanMetaCheckAgain": "Semak Semula",
+    "raybanMetaAllowCamera": "Benarkan Kamera pada Cermin Mata",
+    "raybanMetaCameraExplanation": "Omi menggunakan kamera cermin mata anda untuk menambah foto pada perbualan anda. Anda boleh melangkau ini dan menggunakan audio sahaja.",
+    "raybanMetaSkipForNow": "Langkau Buat Masa Ini",
+    "raybanMetaAudioOnlyTitle": "Mod audio sahaja Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Versi Omi ini boleh menggunakan mikrofon cermin mata anda melalui Bluetooth. Tangkapan foto memerlukan binaan pembangun Meta bagi Omi.",
+    "raybanMetaMusicPauseNote": "Muzik pada telefon anda dijeda semasa mikrofon cermin mata sedang digunakan.",
+    "raybanMetaContinue": "Teruskan",
+    "raybanMetaCapturePhoto": "Tangkap Foto",
+    "raybanMetaPhotoRequested": "Foto diminta — ia akan muncul dalam perbualan anda.",
+    "raybanMetaMicrophoneReady": "Mikrofon sedia",
+    "raybanMetaImageCaptureReady": "Tangkapan imej sedia",
+    "raybanMetaImageCaptureUnavailable": "Tidak tersedia dalam mod audio sahaja",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Ralat semasa menyambung ke Ray-Ban Meta: {error}"
 }

@@ -3151,5 +3151,24 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Память кулона почти заполнена — держите приложение открытым для синхронизации."
+    "pendantStorageAlmostFull": "Память кулона почти заполнена — держите приложение открытым для синхронизации.",
+    "connectRayBanMeta": "Подключить Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Используйте очки Ray-Ban Meta в качестве устройства записи Omi для разговоров и визуального контекста. Omi откроет приложение Meta AI, чтобы связать ваши очки.",
+    "raybanMetaOpenMetaAI": "Подключить через Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завершите подключение в приложении Meta AI, а затем вернитесь сюда.",
+    "raybanMetaCheckAgain": "Проверить снова",
+    "raybanMetaAllowCamera": "Разрешить камеру на очках",
+    "raybanMetaCameraExplanation": "Omi использует камеру ваших очков, чтобы добавлять фотографии в ваши разговоры. Вы можете пропустить этот шаг и использовать только аудио.",
+    "raybanMetaSkipForNow": "Пропустить пока",
+    "raybanMetaAudioOnlyTitle": "Режим Ray-Ban Meta только со звуком",
+    "raybanMetaAudioOnlyExplanation": "Эта версия Omi может использовать микрофон ваших очков через Bluetooth. Для съёмки фотографий требуется версия Omi для разработчиков Meta.",
+    "raybanMetaMusicPauseNote": "Музыка на вашем телефоне ставится на паузу, пока используется микрофон очков.",
+    "raybanMetaContinue": "Продолжить",
+    "raybanMetaCapturePhoto": "Сделать фото",
+    "raybanMetaPhotoRequested": "Фото запрошено — оно появится в вашем разговоре.",
+    "raybanMetaMicrophoneReady": "Микрофон готов",
+    "raybanMetaImageCaptureReady": "Съёмка изображений готова",
+    "raybanMetaImageCaptureUnavailable": "Недоступно в режиме только со звуком",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Ошибка подключения к Ray-Ban Meta: {error}"
 }

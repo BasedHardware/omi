@@ -9525,4 +9525,66 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas.';
+
+  @override
+  String get connectRayBanMeta => 'Prijungti Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Naudokite savo Ray-Ban Meta akinius kaip Omi įrašymo įrenginį pokalbiams ir vaizdiniam kontekstui. Omi atidarys Meta AI programėlę, kad susietų jūsų akinius.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Prisijungti per Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Užbaikite prisijungimą Meta AI programėlėje ir grįžkite čia.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tikrinti dar kartą';
+
+  @override
+  String get raybanMetaAllowCamera => 'Leisti naudoti akinių kamerą';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi naudoja jūsų akinių kamerą, kad pridėtų nuotraukas prie jūsų pokalbių. Galite tai praleisti ir naudoti tik garsą.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Praleisti kol kas';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta tik garso režimas';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Ši Omi versija gali naudoti jūsų akinių mikrofoną per Bluetooth. Nuotraukoms fiksuoti reikia Meta kūrėjų Omi versijos.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Muzika jūsų telefone pristabdoma, kol naudojamas akinių mikrofonas.';
+
+  @override
+  String get raybanMetaContinue => 'Tęsti';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fotografuoti';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Nuotrauka užsakyta — ji pasirodys jūsų pokalbyje.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofonas paruoštas';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Vaizdų fiksavimas paruoštas';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Negalima tik garso režimu';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Klaida jungiantis prie Ray-Ban Meta: $error';
+  }
 }

@@ -3117,5 +3117,24 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "El almacenamiento del colgante está casi lleno: mantén la app abierta para sincronizar."
+    "pendantStorageAlmostFull": "El almacenamiento del colgante está casi lleno: mantén la app abierta para sincronizar.",
+    "connectRayBanMeta": "Conectar Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Usa tus gafas Ray-Ban Meta como tu dispositivo de captura de Omi para conversaciones y contexto visual. Omi abrirá la app Meta AI para vincular tus gafas.",
+    "raybanMetaOpenMetaAI": "Conectar a través de Meta AI",
+    "raybanMetaWaitingForMetaAI": "Termina de conectar en la app Meta AI y luego vuelve aquí.",
+    "raybanMetaCheckAgain": "Comprobar de nuevo",
+    "raybanMetaAllowCamera": "Permitir la cámara en las gafas",
+    "raybanMetaCameraExplanation": "Omi usa la cámara de tus gafas para añadir fotos a tus conversaciones. Puedes omitir esto y usar solo audio.",
+    "raybanMetaSkipForNow": "Omitir por ahora",
+    "raybanMetaAudioOnlyTitle": "Modo solo audio de Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Esta versión de Omi puede usar el micrófono de tus gafas por Bluetooth. La captura de fotos requiere la versión para desarrolladores de Meta de Omi.",
+    "raybanMetaMusicPauseNote": "La música de tu teléfono se pausa mientras se usa el micrófono de las gafas.",
+    "raybanMetaContinue": "Continuar",
+    "raybanMetaCapturePhoto": "Capturar foto",
+    "raybanMetaPhotoRequested": "Foto solicitada: aparecerá en tu conversación.",
+    "raybanMetaMicrophoneReady": "Micrófono listo",
+    "raybanMetaImageCaptureReady": "Captura de imagen lista",
+    "raybanMetaImageCaptureUnavailable": "No disponible en modo solo audio",
+    "raybanMetaCamera": "Cámara",
+    "errorConnectingRayBanMeta": "Error al conectar con Ray-Ban Meta: {error}"
 }

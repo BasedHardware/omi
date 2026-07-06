@@ -3083,5 +3083,24 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "مساحة تخزين القلادة ممتلئة تقريبًا — أبقِ التطبيق مفتوحًا للمزامنة."
+    "pendantStorageAlmostFull": "مساحة تخزين القلادة ممتلئة تقريبًا — أبقِ التطبيق مفتوحًا للمزامنة.",
+    "connectRayBanMeta": "توصيل Ray-Ban Meta",
+    "raybanMetaSetupDescription": "استخدم نظارة Ray-Ban Meta كجهاز التقاط Omi للمحادثات والسياق المرئي. سيفتح Omi تطبيق Meta AI لربط نظارتك.",
+    "raybanMetaOpenMetaAI": "الاتصال عبر Meta AI",
+    "raybanMetaWaitingForMetaAI": "أكمل الاتصال في تطبيق Meta AI، ثم عد إلى هنا.",
+    "raybanMetaCheckAgain": "التحقق مرة أخرى",
+    "raybanMetaAllowCamera": "السماح للكاميرا في النظارة",
+    "raybanMetaCameraExplanation": "يستخدم Omi كاميرا نظارتك لإضافة الصور إلى محادثاتك. يمكنك تخطي هذا واستخدام الصوت فقط.",
+    "raybanMetaSkipForNow": "التخطي الآن",
+    "raybanMetaAudioOnlyTitle": "وضع الصوت فقط لـ Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "يمكن لهذا الإصدار من Omi استخدام ميكروفون نظارتك عبر Bluetooth. يتطلب التقاط الصور إصدار المطوّر من Omi الخاص بـ Meta.",
+    "raybanMetaMusicPauseNote": "يتم إيقاف الموسيقى مؤقتًا على هاتفك أثناء استخدام ميكروفون النظارة.",
+    "raybanMetaContinue": "متابعة",
+    "raybanMetaCapturePhoto": "التقاط صورة",
+    "raybanMetaPhotoRequested": "تم طلب الصورة — ستظهر في محادثتك.",
+    "raybanMetaMicrophoneReady": "الميكروفون جاهز",
+    "raybanMetaImageCaptureReady": "التقاط الصورة جاهز",
+    "raybanMetaImageCaptureUnavailable": "غير متاح في وضع الصوت فقط",
+    "raybanMetaCamera": "الكاميرا",
+    "errorConnectingRayBanMeta": "خطأ في الاتصال بـ Ray-Ban Meta: {error}"
 }

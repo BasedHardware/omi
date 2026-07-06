@@ -9587,4 +9587,68 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Der Speicher des Pendants ist fast voll — lass die App geöffnet, um zu synchronisieren.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta verbinden';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Verwenden Sie Ihre Ray-Ban Meta Brille als Omi-Aufnahmegerät für Gespräche und visuellen Kontext. Omi öffnet die Meta AI App, um Ihre Brille zu verknüpfen.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Über Meta AI verbinden';
+
+  @override
+  String get raybanMetaWaitingForMetaAI =>
+      'Schließen Sie die Verbindung in der Meta AI App ab und kehren Sie dann hierher zurück.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Erneut prüfen';
+
+  @override
+  String get raybanMetaAllowCamera => 'Kamera der Brille erlauben';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi verwendet die Kamera Ihrer Brille, um Fotos zu Ihren Gesprächen hinzuzufügen. Sie können dies überspringen und nur Audio verwenden.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Vorerst überspringen';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta Nur-Audio-Modus';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Diese Version von Omi kann das Mikrofon Ihrer Brille über Bluetooth verwenden. Die Fotoaufnahme erfordert den Meta-Entwickler-Build von Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Die Musik auf Ihrem Telefon pausiert, während das Mikrofon der Brille verwendet wird.';
+
+  @override
+  String get raybanMetaContinue => 'Fortfahren';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Foto aufnehmen';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto angefordert – es wird in Ihrem Gespräch erscheinen.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon bereit';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Bildaufnahme bereit';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Im Nur-Audio-Modus nicht verfügbar';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Fehler beim Verbinden mit Ray-Ban Meta: $error';
+  }
 }

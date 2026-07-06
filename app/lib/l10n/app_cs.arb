@@ -3085,5 +3085,24 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Úložiště přívěsku je téměř plné — nechte aplikaci otevřenou, aby proběhla synchronizace."
+    "pendantStorageAlmostFull": "Úložiště přívěsku je téměř plné — nechte aplikaci otevřenou, aby proběhla synchronizace.",
+    "connectRayBanMeta": "Připojit Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Použijte své brýle Ray-Ban Meta jako záznamové zařízení Omi pro konverzace a vizuální kontext. Omi otevře aplikaci Meta AI pro propojení vašich brýlí.",
+    "raybanMetaOpenMetaAI": "Připojit přes Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dokončete připojení v aplikaci Meta AI a poté se vraťte sem.",
+    "raybanMetaCheckAgain": "Zkontrolovat znovu",
+    "raybanMetaAllowCamera": "Povolit fotoaparát na brýlích",
+    "raybanMetaCameraExplanation": "Omi používá fotoaparát vašich brýlí k přidávání fotek do vašich konverzací. Toto můžete přeskočit a používat pouze zvuk.",
+    "raybanMetaSkipForNow": "Zatím přeskočit",
+    "raybanMetaAudioOnlyTitle": "Režim pouze zvuk pro Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Tato verze Omi umí používat mikrofon vašich brýlí přes Bluetooth. Pořizování fotek vyžaduje vývojářskou verzi Omi od Meta.",
+    "raybanMetaMusicPauseNote": "Hudba ve vašem telefonu se pozastaví, když se používá mikrofon brýlí.",
+    "raybanMetaContinue": "Pokračovat",
+    "raybanMetaCapturePhoto": "Pořídit fotku",
+    "raybanMetaPhotoRequested": "Fotka vyžádána — objeví se ve vaší konverzaci.",
+    "raybanMetaMicrophoneReady": "Mikrofon připraven",
+    "raybanMetaImageCaptureReady": "Zachytávání obrazu připraveno",
+    "raybanMetaImageCaptureUnavailable": "Nedostupné v režimu pouze zvuk",
+    "raybanMetaCamera": "Fotoaparát",
+    "errorConnectingRayBanMeta": "Chyba při připojování k Ray-Ban Meta: {error}"
 }
