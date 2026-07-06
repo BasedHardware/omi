@@ -16,6 +16,10 @@ EXEMPT_DESKTOP_PATHS = {
     "desktop/macos/CHANGELOG.json",
     "desktop/macos/AGENTS.md",
 }
+# Server-side Rust backend changes are internal reliability work, not user-facing app notes.
+EXEMPT_DESKTOP_PATH_PREFIXES = (
+    "desktop/macos/Backend-Rust/",
+)
 
 
 def run_git(args: list[str]) -> str:
@@ -38,6 +42,8 @@ def is_desktop_change_requiring_changelog(path: str) -> bool:
     if path in EXEMPT_DESKTOP_PATHS:
         return False
     if path.startswith(CHANGELOG_PREFIX):
+        return False
+    if any(path.startswith(prefix) for prefix in EXEMPT_DESKTOP_PATH_PREFIXES):
         return False
     return True
 
