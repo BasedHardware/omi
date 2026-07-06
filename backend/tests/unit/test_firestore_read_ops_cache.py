@@ -112,7 +112,7 @@ class TestMentorFrequencyCache:
         cached = cache.get("mentor_frequency:user_disabled")
         assert cached == 0
 
-@pytest.mark.integration
+    @pytest.mark.integration
     def test_cache_ttl_expiry(self):
         """Cache should expire and re-fetch after TTL."""
         cache = self.cache

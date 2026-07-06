@@ -227,8 +227,10 @@ def read_wav_duration_ms(file_path: str) -> int | None:
                 return None
             stream = container.streams.audio[0]
             # Prefer container-level duration; fall back to stream-level
-                duration_s = float(container.duration) / cast(int, getattr(av, 'time_base'))  # av.time_base is AV_TIME_BASE (1_000_000), not in stubs
-                duration_s = float(container.duration) / av.time_base
+            if container.duration is not None:
+                duration_s = float(container.duration) / cast(
+                    int, getattr(av, 'time_base')
+                )  # av.time_base is AV_TIME_BASE (1_000_000), not in stubs
             elif stream.duration is not None and stream.time_base is not None:
                 duration_s = float(stream.duration * stream.time_base)
             else:

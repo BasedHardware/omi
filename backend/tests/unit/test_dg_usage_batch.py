@@ -90,7 +90,7 @@ class TestDgUsageBatchingBehavior:
         os.environ.setdefault('FAIR_USE_ENABLED', 'true')
         os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret-key-that-is-long-enough-for-encryption-32ch')
 
-@pytest.mark.integration
+    @pytest.mark.integration
     def test_batched_60s_single_redis_write(self):
         """60s of accumulated chunks should produce a single Redis pipeline."""
         from unittest.mock import MagicMock, patch
