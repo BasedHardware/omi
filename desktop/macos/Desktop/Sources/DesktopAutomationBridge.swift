@@ -368,7 +368,7 @@ final class DesktopAutomationActionRegistry {
       case "start":
         return await appState.automationStartCaptureTestSession()
       case "inject":
-        return appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
+        return await appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
       case "stop":
         return await appState.automationStopCaptureTestSession()
       case "lifecycle":
@@ -377,7 +377,7 @@ final class DesktopAutomationActionRegistry {
         if startResult["error"] != nil {
           return startResult
         }
-        _ = appState.automationInjectCaptureTestTranscript(text: marker)
+        _ = await appState.automationInjectCaptureTestTranscript(text: marker)
         return await appState.automationStopCaptureTestSession()
       default:
         return ["error": "phase must be start, inject, stop, or lifecycle"]
@@ -579,6 +579,19 @@ final class DesktopAutomationActionRegistry {
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
+    register(
+      name: "reset_main_chat",
+      summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
+      params: []
+    ) { _ in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      await provider.clearChat()
+      return ["reset": "true"]
+    }
+
     // Send a message through the real main-window chat pipeline (ChatPage),
     // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
     // or keyboard input, so it never touches the user's actual cursor.
@@ -669,6 +682,42 @@ final class DesktopAutomationActionRegistry {
       }
       let limit = max(1, intParam(params["limit"], default: 8))
       return await provider.automationKernelTurnTail(limit: limit)
+    }
+
+    register(
+      name: "floating_bar_chat_snapshot",
+      summary: "Export floating-bar chat transcript and stream state for harness assertions",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, intParam(params["limit"], default: 50))
+      return FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: limit)
+    }
+
+    register(
+      name: "wait_floating_bar_chat_idle",
+      summary: "Block until floating-bar chat is not sending or streaming",
+      params: ["timeoutMs", "pollMs"]
+    ) { params in
+      let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
+      let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      while Date() < deadline {
+        var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
+        if detail["error"] == nil,
+           detail["is_sending"] == "false",
+           detail["is_streaming"] == "false",
+           let lastAssistant = detail["last_assistant_text"],
+           !lastAssistant.isEmpty
+        {
+          detail["idle"] = "true"
+          return detail
+        }
+        try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+      }
+      var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
+      detail["error"] = "timeout"
+      detail["timeout_ms"] = "\(timeoutMs)"
+      return detail
     }
 
     register(

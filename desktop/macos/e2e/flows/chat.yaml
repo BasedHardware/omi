@@ -10,6 +10,13 @@ preconditions:
   - automation_bridge_ready
 
 steps:
+  - id: S0
+    name: Reset main chat for flow isolation
+    bridge.action:
+      name: reset_main_chat
+    expect:
+      result.detail.reset: "true"
+
   - id: S1
     name: Navigate to Chat
     bridge.navigate:
