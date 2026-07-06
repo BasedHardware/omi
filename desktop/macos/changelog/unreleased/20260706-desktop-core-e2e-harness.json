@@ -1,5 +1,3 @@
 {
-  "type": "feature",
-  "title": "Desktop core E2E harness and T0 CI gate",
-  "description": "Adds desktop-core-harness.sh tier dispatcher, flow lint, CORE_E2E.md, and Linux self-check CI for the desktop confidence ladder."
+  "change": "Add desktop core E2E harness with tiered flows, flow lint, T0 CI self-check, and hermetic LLM stub for offline testing."
 }

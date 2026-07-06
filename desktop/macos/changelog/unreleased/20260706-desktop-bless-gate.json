@@ -1,5 +1,3 @@
 {
-  "type": "feature",
-  "title": "Desktop release blessing and prod promotion gate",
-  "description": "Adds bless-release.sh, blessed metadata gate on desktop_promote_prod, and admin Releases blessed column."
+  "change": "Gate desktop prod promotion on blessed release metadata, with bless-release.sh orchestration and admin Releases blessed column."
 }
