@@ -263,6 +263,27 @@ class TelethonClient:
             "date": sent.date.isoformat() if sent.date else None,
         }
 
+    def register_incoming_message_handler(self, callback) -> None:
+        """Register a callback for incoming NewMessage events.
+
+        The callback receives a Telethon ``NewMessage.Event``. The
+        handler is filtered to ``incoming=True`` so our own sends
+        don't trigger it.
+
+        Must be called after ``connect()``.
+        """
+        from telethon import events
+
+        self._client.add_event_handler(callback, events.NewMessage(incoming=True))
+
+    async def get_entity(self, entity_id: int):
+        """Fetch a Telethon entity (user/chat) by ID.
+
+        Used by the auto-reply handler to resolve sender metadata
+        (name, username) for the persona context.
+        """
+        return await self._client.get_entity(entity_id)
+
     # -- No session-string accessor ---------------------------------------
 
     # The session string lives in Telethon's StringSession. We do NOT

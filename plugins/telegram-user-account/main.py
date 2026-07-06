@@ -50,6 +50,12 @@ import flood_control  # noqa: E402  (plan §8: rate limit + FLOOD_WAIT detection
 import redact  # noqa: E402
 
 logger = logging.getLogger("omi-telegram-user-account")
+# Ensure the logger emits at INFO even when uvicorn doesn't propagate it.
+if not logger.handlers:
+    _h = logging.StreamHandler()
+    _h.setFormatter(logging.Formatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s"))
+    logger.addHandler(_h)
+    logger.setLevel(logging.INFO)
 
 # Bearer auth (same config as the WhatsApp / Telegram bot plugins):
 # AI_CLONE_PLUGIN_TOKEN env var is checked; OMI_DEV_MODE=1 bypasses
@@ -128,6 +134,13 @@ async def _plugin_lifespan(app: FastAPI):
                     "Connected to Telegram as %s",
                     _account_meta.get("name") or "(unknown)",
                 )
+
+                # Register the incoming-message handler so DMs
+                # are auto-replied. This is the core "reply as me"
+                # functionality — without this, the plugin only
+                # replies when /persona_chat is called manually.
+                _client.register_incoming_message_handler(_on_incoming_message)
+                logger.info("auto-reply listener registered")
             except Exception as e:
                 logger.error(
                     "Telethon connect failed: %s",
@@ -148,6 +161,153 @@ async def _plugin_lifespan(app: FastAPI):
                 await _client.disconnect()
             except Exception as e:
                 logger.warning("shutdown disconnect raised: %s", type(e).__name__)
+
+
+# ---------------------------------------------------------------------------
+# Incoming-message auto-reply handler
+# ---------------------------------------------------------------------------
+
+
+async def _on_incoming_message(event):
+    """Auto-reply handler for incoming DMs.
+
+    Registered as a Telethon ``NewMessage(incoming=True)`` handler
+    in ``_plugin_lifespan``. When a contact DMs the user's
+    personal account, this:
+
+    1. Skips non-private (group/channel) messages.
+    2. Skips messages without text (stickers, media-only).
+    3. Records the incoming message in the ring buffer.
+    4. Checks auto_reply_enabled + rate limit.
+    5. Calls the persona API to generate a reply.
+    6. Sends the reply via Telethon.
+    7. Records the reply in the ring buffer.
+
+    All exceptions are caught and logged — a handler exception
+    must NOT crash the Telethon event loop (which would kill all
+    future message processing).
+    """
+    try:
+        # Only reply to private (1:1) chats, not groups/channels.
+        if not event.is_private:
+            return
+
+        # Skip messages without text (stickers, photos, voice, etc.)
+        msg_text = (event.message.text or "") if event.message else ""
+        if not msg_text.strip():
+            return
+
+        chat_id = str(event.chat_id)
+
+        # Resolve sender info for the persona context.
+        sender_name = ""
+        sender_username = ""
+        try:
+            sender = await event.get_sender()
+            if sender is not None:
+                first = getattr(sender, "first_name", None) or ""
+                last = getattr(sender, "last_name", None) or ""
+                sender_name = " ".join(filter(None, [first, last])).strip()
+                sender_username = getattr(sender, "username", None) or ""
+        except Exception:
+            pass  # Non-fatal — we can still reply without the sender name
+
+        logger.info(
+            "incoming DM from chat_id=%s sender=%s (@%s): %s",
+            chat_id,
+            sender_name,
+            sender_username,
+            msg_text[:100],
+        )
+
+        # Record the incoming message in the ring buffer.
+        simple_storage.append_message(chat_id, "human", msg_text)
+
+        # Find the user record. For the user-account plugin, there's
+        # typically one owner. If no user has auto_reply enabled, skip.
+        user = None
+        for u in simple_storage.users.values():
+            if u.get("auto_reply_enabled", False):
+                user = u
+                break
+
+        if user is None:
+            logger.info("no user with auto_reply enabled; skipping")
+            return
+
+        # Rate-limit check (plan §8).
+        if not flood_control.default_rate_limit.can_send():
+            retry_after = flood_control.default_rate_limit.seconds_until_next_slot()
+            logger.warning(
+                "rate limit hit: %d sends in last hour, blocking for %ds (chat=%s)",
+                flood_control.default_rate_limit.in_window_count(),
+                retry_after,
+                chat_id,
+            )
+            return
+
+        # Build context from recent messages for the persona API.
+        recent = simple_storage.get_recent_messages(chat_id)
+        previous_messages = [{"role": m["role"], "text": m["text"]} for m in recent[-20:]]
+
+        # If the ring buffer is thin, fetch real Telegram history
+        # for language-aware context (same logic as /persona_chat).
+        if len(previous_messages) < 5 and _client is not None:
+            try:
+                tg_msgs = await _client.get_chat_history(chat_id, limit=20)
+                tg_history = [{"role": m["role"], "text": m["text"]} for m in tg_msgs if m.get("text", "").strip()]
+                if tg_history:
+                    previous_messages = tg_history[-20:]
+            except Exception as e:
+                logger.warning("could not fetch Telegram history: %s", type(e).__name__)
+
+        # Call the persona API.
+        reply = await _persona_chat(
+            app_id=user["persona_id"],
+            api_key=user["omi_dev_api_key"],
+            omi_base=OMI_BASE_URL,
+            text=msg_text,
+            uid=user["omi_uid"],
+            timeout_seconds=30.0,
+            previous_messages=previous_messages,
+        )
+
+        if not reply:
+            logger.warning("persona API returned empty reply for chat=%s", chat_id)
+            return
+
+        # Send the reply via Telethon.
+        try:
+            await _client.send_message(chat_id, reply)
+        except Exception as e:
+            flood_seconds = flood_control.detect_flood_wait(e)
+            if flood_seconds is not None:
+                flood_control.default_rate_limit.block_for_seconds(flood_seconds)
+                logger.warning(
+                    "FLOOD_WAIT from Telegram for chat=%s: wait %ds",
+                    chat_id,
+                    flood_seconds,
+                )
+            else:
+                logger.error("send_message failed for chat=%s: %s", chat_id, type(e).__name__)
+            return
+
+        flood_control.default_rate_limit.record_send()
+        simple_storage.append_message(chat_id, "ai", reply)
+        logger.info(
+            "auto-reply sent to chat=%s (%d chars)",
+            chat_id,
+            len(reply),
+        )
+    except Exception as e:
+        # Catch-all: a handler exception must NOT crash the event
+        # loop. Log and continue — the next message should still
+        # be processed.
+        logger.error(
+            "auto-reply handler error: %s",
+            type(e).__name__,
+            exc_info=True,
+        )
 
 
 app = FastAPI(
