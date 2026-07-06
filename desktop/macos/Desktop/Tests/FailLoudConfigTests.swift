@@ -97,12 +97,10 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertFalse(src.contains("UserDefaults.standard.set(token, forKey: tokenKey)"))
   }
 
-  func testDesktopKeychainStoreUsesDataProtectionKeychain() throws {
-    let src = try source(relativePath: "Sources/DesktopKeychainStore.swift")
-
-    XCTAssertTrue(src.contains("kSecUseDataProtectionKeychain"))
-    XCTAssertTrue(src.contains("useDataProtectionKeychain: true"))
-  }
+  // The data-protection keychain assertion was inverted by the file-based-keychain fix:
+  // a non-sandboxed Developer ID app has no keychain-access-groups entitlement, so the
+  // data-protection keychain failed with errSecMissingEntitlement and blocked sign-in.
+  // The correct invariant now lives in AuthTokenStorageTests.testKeychainStoreDoesNotUseDataProtectionKeychain.
 
   func testDesktopAutomationBridgeIsNonProductionAndAuthenticated() throws {
     let src = try source(relativePath: "Sources/DesktopAutomationBridge.swift")

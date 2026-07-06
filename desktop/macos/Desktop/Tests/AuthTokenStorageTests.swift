@@ -116,6 +116,29 @@ final class AuthTokenStorageTests: XCTestCase {
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-keychain")
   }
 
+  /// Regression: the token Keychain store must NOT opt into the data-protection keychain
+  /// (`kSecUseDataProtectionKeychain`). That requires a `keychain-access-groups` entitlement
+  /// this non-sandboxed Developer ID app doesn't have, so on the signed/notarized build every
+  /// SecItem write failed with errSecMissingEntitlement and sign-in broke with "Could not
+  /// securely store sign-in tokens". Dev builds use UserDefaults, so this only ever failed on
+  /// prod/beta and is invisible to the behavioral tests — hence a source-level guard.
+  func testKeychainStoreDoesNotUseDataProtectionKeychain() throws {
+    let source = try sourceFile("DesktopKeychainStore.swift")
+    XCTAssertFalse(
+      source.contains("kSecUseDataProtectionKeychain"),
+      "DesktopKeychainStore must use the file-based login keychain (no keychain-access-groups "
+        + "entitlement); the data-protection keychain breaks sign-in on signed builds.")
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
   private func clearAuthDefaults() {
     UserDefaults.standard.removeObject(forKey: .authIdToken)
     UserDefaults.standard.removeObject(forKey: .authRefreshToken)
