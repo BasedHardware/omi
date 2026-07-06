@@ -1719,7 +1719,12 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'PERANTI', one: 'PERANTI');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'PERANTI',
+      one: 'PERANTI',
+    );
     return '$count $_temp0 DIJUMPAI BERDEKATAN';
   }
 
@@ -9212,7 +9217,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rakaman sedia untuk disegerakkan');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman sedia untuk disegerakkan',
+    );
     return '$_temp0';
   }
 
@@ -9224,7 +9233,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count rakaman memerlukan perhatian');
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakaman memerlukan perhatian',
+    );
     return '$_temp0';
   }
 
