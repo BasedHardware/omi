@@ -135,6 +135,27 @@ final class PiMonoWiringTests: XCTestCase {
     }
   }
 
+  func testStructuredFailureTaxonomyDrivesFallbackClassification() {
+    func failure(code: String, source: String? = nil) -> AgentRuntimeFailure {
+      AgentRuntimeFailure(
+        code: code, userMessage: "x", technicalMessage: nil,
+        source: source, adapterId: "codex", provider: nil, retryable: nil)
+    }
+    // Runtime's own taxonomy wins over the display text:
+    // process-level + pre-execution codes → safe to retry on another agent…
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_process_error", source: "adapter_process")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_process_exited", source: "adapter_process")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "binding_failed")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_not_registered", source: "runtime")))
+    XCTAssertTrue(AgentPillsManager.isStartupClassFailure("anything", failure: failure(code: "adapter_config_invalid", source: "adapter_process")))
+    // …but a failure during execution must never re-run, even if the display
+    // text happens to contain a startup marker.
+    XCTAssertFalse(
+      AgentPillsManager.isStartupClassFailure(
+        "OpenClaw is not available. Make sure OpenClaw is installed first, then try again.",
+        failure: failure(code: "adapter_execution_failed", source: "adapter_execution")))
+  }
+
   func testRouterDecisionDefaultsToNoExternalProviders() {
     let decision = AgentPillsManager.RouterDecision(route: .agent, title: "T", ack: "A")
     XCTAssertTrue(decision.rankedProviders.isEmpty)

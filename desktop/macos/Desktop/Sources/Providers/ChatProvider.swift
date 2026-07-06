@@ -797,6 +797,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var isStopping = false
     @Published var isClearing = false
     @Published var errorMessage: String?
+    /// Structured failure from the last failed agent run, when the bridge
+    /// provided one. Lets consumers (e.g. pill auto-fallback) classify by the
+    /// runtime's own taxonomy (code/source/retryable) instead of string
+    /// matching on the display message.
+    private(set) var lastAgentRuntimeFailure: AgentRuntimeFailure?
     /// Monotonic token that increments each time the local user sends a message.
     /// ChatMessagesView observes this to anchor the viewport on send, rather than
     /// inferring solely from messages.count changes (which can also come from
@@ -3868,6 +3873,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
 
             logError("Failed to get AI response", error: error)
+            // Keep the structured runtime failure (when present) alongside the
+            // display string so pill auto-fallback can classify by the
+            // runtime's own code/source taxonomy.
+            if let bridgeError = error as? BridgeError, case .agentRuntimeFailure(let failure) = bridgeError {
+                lastAgentRuntimeFailure = failure
+            } else {
+                lastAgentRuntimeFailure = nil
+            }
             // Send both user-friendly and raw error to analytics for remote debugging
             let rawError: String
             if let bridgeError = error as? BridgeError {

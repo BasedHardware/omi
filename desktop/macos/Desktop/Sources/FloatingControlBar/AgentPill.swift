@@ -290,7 +290,31 @@ final class AgentPillsManager: ObservableObject {
         "acp bridge failed",
     ]
 
-    nonisolated static func isStartupClassFailure(_ errorText: String) -> Bool {
+    nonisolated static func isStartupClassFailure(
+        _ errorText: String,
+        failure: AgentRuntimeFailure? = nil
+    ) -> Bool {
+        // Prefer the runtime's own failure taxonomy when the bridge provided a
+        // structured failure (failures.ts / kernel failAttemptBeforeExecution):
+        // - source "adapter_process": the adapter subprocess errored/exited
+        //   (spawn failure, backend unreachable) — no prompt was completed.
+        // - binding/registration/config codes: the kernel failed the attempt
+        //   before execution started.
+        // - adapter_execution_failed: the prompt was already running — may
+        //   have side effects, never re-run elsewhere.
+        if let failure {
+            if failure.source == "adapter_process" { return true }
+            switch failure.code {
+            case "binding_failed", "adapter_not_registered", "adapter_config_invalid", "stale_binding":
+                return true
+            case "adapter_execution_failed":
+                return false
+            default:
+                break
+            }
+        }
+        // Unstructured errors (plain bridge `type:"error"` messages) fall back
+        // to marker matching on the display text.
         let lower = errorText.lowercased()
         return startupFailureMarkers.contains { lower.contains($0) }
     }
@@ -298,8 +322,16 @@ final class AgentPillsManager: ObservableObject {
     /// If a router-selected pill failed before doing any work, retry the same
     /// task on the next ranked candidate (terminal fallback: Omi's built-in
     /// agent via nil override). User-directed pills never auto-fallback.
-    private func maybeAutoFallback(for pill: AgentPill, errorText: String) {
-        guard Self.isStartupClassFailure(errorText) else { return }
+    private func maybeAutoFallback(
+        for pill: AgentPill,
+        errorText: String,
+        failure: AgentRuntimeFailure? = nil,
+        hadProgress: Bool = false
+    ) {
+        guard Self.isStartupClassFailure(errorText, failure: failure) else { return }
+        // Extra safety: if the pill already streamed content or produced a
+        // response, work happened — never silently re-run it elsewhere.
+        guard !hadProgress else { return }
 
         if !pill.autoFallbackCandidates.isEmpty {
             var candidates = pill.autoFallbackCandidates
@@ -1321,12 +1353,19 @@ final class AgentPillsManager: ObservableObject {
             }
         }
         if let errorText = provider.errorMessage, !errorText.isEmpty {
+            // Captured before ensureFailureMessage, which itself sets aiMessage.
+            let hadProgress = !pill.transcript.isEmpty || pill.aiMessage != nil
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()
             Self.ensureFailureMessage(errorText, for: pill)
             pill.markContentChanged()
-            maybeAutoFallback(for: pill, errorText: errorText)
+            maybeAutoFallback(
+                for: pill,
+                errorText: errorText,
+                failure: provider.lastAgentRuntimeFailure,
+                hadProgress: hadProgress
+            )
         } else if let trimmedFinalText, !trimmedFinalText.isEmpty {
             pill.status = .done
             pill.completedAt = Date()
