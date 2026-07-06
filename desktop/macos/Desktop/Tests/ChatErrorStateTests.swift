@@ -243,18 +243,22 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(source.contains("validateRestoredUserDefaultsSession()"))
     XCTAssertTrue(source.contains("getIdToken(forceRefresh: true)"))
     XCTAssertTrue(source.contains("Restored UserDefaults session validated by forced token refresh"))
-    XCTAssertTrue(source.contains("Restored UserDefaults session failed validation - signed out"))
+    // A validation failure is now non-destructive (deferred) — see the regression test below.
+    XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred"))
   }
 
-  func testRestoredSessionFailureClearsPersistedTokens() throws {
-    // Regression: a failed restored-session validation must clear tokens, not just flip
-    // isSignedIn, otherwise the UI shows signed-out while API auth still succeeds.
+  func testRestoredSessionValidationFailureDoesNotClobberSession() throws {
+    // Regression (v0.12.31 / #9125): a launch-time restored-session validation failure must
+    // NOT clear tokens or force sign-out. Definitive auth failures (expired/revoked refresh
+    // token, USER_NOT_FOUND, USER_DISABLED, HTTP 400) are already handled inside
+    // refreshIdToken(); a transient/race failure here (e.g. the Firebase SDK user not yet
+    // restored) must leave the persisted session intact so on-demand refresh recovers it —
+    // otherwise users get signed out on launch.
     let source = try sourceFile("AuthService.swift")
-    let validationBlockRange = source.range(of: "Restored UserDefaults session failed validation - signed out")
-    XCTAssertNotNil(validationBlockRange)
-    let snippet = String(source[validationBlockRange!.lowerBound...])
-      .prefix(500)
-    XCTAssertTrue(snippet.contains("clearTokens()"))
+    // The destructive "signed out" branch (clearTokens + isSignedIn=false on validation
+    // failure) is gone; the failure path only defers.
+    XCTAssertFalse(source.contains("Restored UserDefaults session failed validation - signed out"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred"))
   }
 
   func testChatSignInRecoveryDoesNotDuplicatePlanRefresh() throws {

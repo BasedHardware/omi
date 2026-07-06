@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the app signing you out on launch after a temporary connection hiccup or startup timing race, instead of keeping your session and retrying"
+}

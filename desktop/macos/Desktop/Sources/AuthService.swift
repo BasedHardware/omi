@@ -623,14 +623,16 @@ class AuthService {
                 NSLog("OMI AUTH: Restored UserDefaults session validated by forced token refresh")
                 APIKeyService.shared.startFetchingKeys()
                 Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
-            } catch AuthError.notSignedIn {
-                NSLog("OMI AUTH: Restored UserDefaults session failed validation - signed out")
-                self.clearTokens()
-                self.isSignedIn = false
-                AuthState.shared.userEmail = nil
-                AuthState.shared.isRestoringAuth = false
-                self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
             } catch {
+                // Do NOT tear down a restored session on a launch-time validation failure.
+                // A *definitive* auth failure (expired/revoked refresh token, USER_NOT_FOUND,
+                // USER_DISABLED, HTTP 400) is already handled inside refreshIdToken(): it
+                // clears tokens and flips isSignedIn before throwing. Every *other* reason
+                // getIdToken can throw notSignedIn on launch — the Firebase SDK user not yet
+                // restored (async race), a missing refresh token, or a transient network/5xx
+                // error — must NOT wipe the persisted session; on-demand refresh recovers it.
+                // Clearing here signed users out (and could block re-sign-in) on launch after
+                // v0.12.31 (regression from #9125).
                 NSLog("OMI AUTH: Restored UserDefaults session validation deferred: %@", error.localizedDescription)
             }
         }
