@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -55,7 +56,7 @@ def bridge_action_timeout_sec(
         wait_ms = int(params.get("timeoutMs", "2000"))
         if wait_ms >= 30_000:
             return max(turn_sec, (wait_ms / 1000.0) + 10.0)
-    if name in {"ask_main_chat", "swap_test_owner"}:
+    if name in {"ask_main_chat", "swap_test_owner", "kernel_turn_tail"}:
         return turn_sec
     return 60.0
 
@@ -95,6 +96,8 @@ def bridge_request(
     except (TimeoutError, socket.timeout) as exc:
         # Surface as a step failure, never a harness crash.
         return {"ok": False, "error": f"bridge_http_timeout after {timeout_sec:.0f}s: {exc}"}
+    except http.client.RemoteDisconnected as exc:
+        return {"ok": False, "error": f"bridge_http_disconnected: {exc}"}
 
 
 def bridge_action(
@@ -817,18 +820,27 @@ class GauntletRunner:
             f"Objective: track marker {self.markers['spawn']} and wait silently. "
             "Do not ask follow-up questions."
         )
+        trace_start = trace_line_count()
         send, snapshot, traces = self.send_and_wait(spawn_query, self.args.turn_timeout_ms)
         # R8: only a real spawn_agent execution carrying the objective marker
         # counts. list_agent_sessions and coordinator awareness are evidence,
         # never a pass path — a verbal refusal must fail this step.
-        spawn_tools = [
-            tool
-            for trace in traces
-            for tool in (trace.get("tool_executions") or [])
-            if isinstance(tool, dict)
-            and tool.get("name") == "spawn_agent"
-            and self.markers["spawn"] in str(tool.get("input", ""))
-        ]
+        # Tool executions often land after main_chat idle; poll traces before asserting.
+        spawn_tools: list[dict[str, Any]] = []
+        settle_deadline = time.monotonic() + 10.0
+        while time.monotonic() < settle_deadline:
+            traces = read_new_traces(trace_start)
+            spawn_tools = [
+                tool
+                for trace in traces
+                for tool in (trace.get("tool_executions") or [])
+                if isinstance(tool, dict)
+                and tool.get("name") == "spawn_agent"
+                and self.markers["spawn"] in str(tool.get("input", ""))
+            ]
+            if spawn_tools:
+                break
+            time.sleep(0.25)
         coordinator = self.bridge_act( "coordinator_awareness_snapshot")
         self.record_step(
             "04-spawn-agent",

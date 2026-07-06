@@ -288,27 +288,34 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
-  func sendTestTextInput(_ text: String) {
-    q.async { [weak self] in
-      guard let self, self.isOpen else { return }
-      switch self.provider {
-      case .gemini:
-        guard self.activityOpen else {
-          log("\(self.tag): test text input dropped — no open activity window")
+  func sendTestTextInput(_ text: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.isOpen else {
+          continuation.resume(returning: false)
           return
         }
-        self.send(json: ["realtimeInput": ["text": text]])
-      case .openai:
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": [
-            "type": "message",
-            "role": "user",
-            "content": [["type": "input_text", "text": text]],
-          ],
-        ])
+        switch self.provider {
+        case .gemini:
+          guard self.activityOpen else {
+            log("\(self.tag): test text input dropped — no open activity window")
+            continuation.resume(returning: false)
+            return
+          }
+          self.send(json: ["realtimeInput": ["text": text]])
+        case .openai:
+          self.send(json: [
+            "type": "conversation.item.create",
+            "item": [
+              "type": "message",
+              "role": "user",
+              "content": [["type": "input_text", "text": text]],
+            ],
+          ])
+        }
+        log("\(self.tag): test text input sent (\(text.count) chars)")
+        continuation.resume(returning: true)
       }
-      log("\(self.tag): test text input sent (\(text.count) chars)")
     }
   }
 

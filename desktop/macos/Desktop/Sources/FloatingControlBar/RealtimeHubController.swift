@@ -439,14 +439,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       guard await waitUntilActive(timeout: 15) else {
         return ["error": "hub session did not become active (check sign-in / provider keys)"]
       }
+      prefetchVoiceSeedContextIfNeeded()
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      ensureWarm()
+      guard await waitUntilActive(timeout: 15) else {
+        return ["error": "hub session did not become active after voice seed prefetch"]
+      }
       lastTurnDiagnostics = [:]
-      let turnSession = session
       beginTurn()
       testProviderTranscriptOverride = forceTranscript
+      let chunkBytes = 3_200  // 100 ms @ 16 kHz s16le
       if !textOnly {
         // Pace the audio like real speech (100 ms chunks) so the mid-hold early language ID
         // triggers on the same timeline as a real hold.
-        let chunkBytes = 3_200  // 100 ms @ 16 kHz s16le
         var offset = 0
         while offset < pcm16k.count {
           let end = min(offset + chunkBytes, pcm16k.count)
@@ -462,12 +467,25 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         if let live = session, await live.activityWindowOpen() { break }
         try? await Task.sleep(nanoseconds: 100_000_000)
       }
+      if textOnly {
+        // Gemini rejects pure-text activity windows (1007 precondition); a brief silence
+        // frame keeps the window "real" without the sine hallucination flake.
+        let silenceChunk = Data(count: chunkBytes)
+        for _ in 0..<2 {
+          feedAudio(silenceChunk)
+          try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+      }
+      // beginTurn's seed refresh can reconnect the warm socket; capture the live session
+      // only after the activity window (and any textOnly silence) is ready so we don't
+      // false-positive redrive on the expected post-beginTurn reconnect.
+      let turnSession = session
       // Without injecting the forced transcript as real model input, the provider answers
       // whatever it hallucinates from the fixture audio (unrelated-reply flake). Harness
       // probes pass text_only=1 so no competing audio is fed at all; the language-ID
       // harness keeps feeding real speech PCM alongside the forced transcript.
       if let forceTranscript, !forceTranscript.isEmpty {
-        session?.sendTestTextInput(forceTranscript)
+        _ = await session?.sendTestTextInput(forceTranscript)
       }
       commitTurn()
       let deadline = Date().addingTimeInterval(timeout)
