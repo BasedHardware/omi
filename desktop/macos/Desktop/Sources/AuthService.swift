@@ -386,9 +386,7 @@ class AuthService {
 
         static let live = TokenStorageHooks(
             usesKeychainTokenStorage: { !AppBuild.isNonProduction },
-            // Beta release users need auth continuity when the production bundle's
-            // Keychain access is unavailable; stable keeps fail-closed storage.
-            allowsUserDefaultsFallback: { AppBuild.currentUpdateChannel == "beta" },
+            allowsUserDefaultsFallback: { true },
             readKeychainString: { service, account in
                 DesktopKeychainStore.string(service: service, account: account)
             },
@@ -1689,17 +1687,8 @@ class AuthService {
                 clearUserDefaultsTokens()
             } else if allowsUserDefaultsTokenFallback {
                 saveUserDefaultsTokens(idToken: idToken, refreshToken: refreshToken, expiryTime: expiryTime, userId: userId)
-                log("AuthService: Keychain token storage failed; falling back to UserDefaults for beta auth continuity")
-                if tokenStorageHooks.recordsFallbackTelemetry {
-                    AnalyticsManager.shared.desktopHealthEvent(
-                        name: "auth_token_storage_fallback",
-                        properties: [
-                            "storage": "user_defaults",
-                            "reason": "keychain_write_failed",
-                            "update_channel": AppBuild.currentUpdateChannel,
-                        ]
-                    )
-                }
+                log("AuthService: Keychain token storage failed; falling back to UserDefaults for desktop auth continuity")
+                recordTokenStorageFallback(reason: "keychain_write_failed")
             } else {
                 clearUserDefaultsTokens()
                 throw AuthError.keychainTokenStorageUnavailable
@@ -1739,6 +1728,18 @@ class AuthService {
 
     private var allowsUserDefaultsTokenFallback: Bool {
         tokenStorageHooks.allowsUserDefaultsFallback()
+    }
+
+    private func recordTokenStorageFallback(reason: String) {
+        guard tokenStorageHooks.recordsFallbackTelemetry else { return }
+        AnalyticsManager.shared.desktopHealthEvent(
+            name: "auth_token_storage_fallback",
+            properties: [
+                "storage": "user_defaults",
+                "reason": reason,
+                "update_channel": AppBuild.currentUpdateChannel,
+            ]
+        )
     }
 
     private func saveKeychainTokens(_ tokens: StoredAuthTokens) -> Bool {
@@ -1809,7 +1810,8 @@ class AuthService {
                     log("AuthService: migrated production auth tokens from UserDefaults to Keychain")
                     tokens = defaultsTokens
                 } else if allowsUserDefaultsTokenFallback {
-                    log("AuthService: keeping UserDefaults auth tokens after Keychain migration failed on beta channel")
+                    log("AuthService: keeping UserDefaults auth tokens after Keychain migration failed")
+                    recordTokenStorageFallback(reason: "keychain_migration_write_failed")
                     tokens = defaultsTokens
                 } else {
                     clearUserDefaultsTokens()

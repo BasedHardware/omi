@@ -14,7 +14,7 @@ final class AuthTokenStorageTests: XCTestCase {
     super.tearDown()
   }
 
-  func testBetaTokenSaveFallsBackToUserDefaultsWhenKeychainWriteFails() async throws {
+  func testProductionTokenSaveFallsBackToUserDefaultsWhenKeychainWriteFails() async throws {
     let auth = AuthService()
     auth.tokenStorageHooks = AuthService.TokenStorageHooks(
       usesKeychainTokenStorage: { true },
@@ -26,18 +26,18 @@ final class AuthTokenStorageTests: XCTestCase {
     )
 
     XCTAssertNoThrow(
-      try auth.saveTokens(idToken: "id-token-beta", refreshToken: "refresh-token-beta", expiresIn: 3600, userId: "user-beta")
+      try auth.saveTokens(idToken: "id-token-stable", refreshToken: "refresh-token-stable", expiresIn: 3600, userId: "user-stable")
     )
-    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-token-beta")
-    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "refresh-token-beta")
-    XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), "user-beta")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-token-stable")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "refresh-token-stable")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), "user-stable")
 
     let idToken = try await auth.getIdToken()
-    XCTAssertEqual(idToken, "id-token-beta")
-    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-beta")
+    XCTAssertEqual(idToken, "id-token-stable")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-stable")
   }
 
-  func testStableTokenSaveStillFailsWhenKeychainWriteFails() {
+  func testKeychainWriteFailureThrowsOnlyWhenFallbackDisabled() {
     let auth = AuthService()
     auth.tokenStorageHooks = AuthService.TokenStorageHooks(
       usesKeychainTokenStorage: { true },
@@ -58,6 +58,31 @@ final class AuthTokenStorageTests: XCTestCase {
     XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
     XCTAssertNil(UserDefaults.standard.string(forKey: .authRefreshToken))
     XCTAssertNil(UserDefaults.standard.string(forKey: .authTokenUserId))
+  }
+
+  func testUserDefaultsMigrationKeepsAuthContinuityWhenKeychainWriteFails() async throws {
+    let auth = AuthService()
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { true },
+      allowsUserDefaultsFallback: { true },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in false },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+
+    UserDefaults.standard.set("existing-default-id-token", forKey: .authIdToken)
+    UserDefaults.standard.set("existing-default-refresh-token", forKey: .authRefreshToken)
+    UserDefaults.standard.set(Date().addingTimeInterval(3600).timeIntervalSince1970, forKey: .authTokenExpiry)
+    UserDefaults.standard.set("existing-default-user", forKey: .authTokenUserId)
+
+    let idToken = try await auth.getIdToken()
+
+    XCTAssertEqual(idToken, "existing-default-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "existing-default-id-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "existing-default-refresh-token")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authTokenUserId), "existing-default-user")
+    XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "existing-default-user")
   }
 
   func testKeychainSuccessClearsUserDefaultsFallbackTokensAndRetrievesFromKeychain() async throws {
