@@ -158,10 +158,7 @@ enum RealtimeHubTools {
       ?? []
     let uncommittedCount = statusLines.count
 
-    let todoCount = countMatchingLines(
-      in: projectPath,
-      pattern: #"^[+].*TODO|^[+].*FIXME"#
-    )
+    let todoCount = countTodoFixme(in: projectPath)
 
     var parts: [String] = ["git branch: \(cappedBranch)"]
     if !cappedCommits.isEmpty { parts.append("recent commits: \(cappedCommits)") }
@@ -269,15 +266,36 @@ enum RealtimeHubTools {
     return result.output.count > 500 ? String(result.output.prefix(500)) : result.output
   }
 
-  /// Runs git diff through grep -c so only the count (a single integer) is
-  /// returned to Swift, never the full diff output. Avoids unbounded memory.
-  private static func countMatchingLines(in cwd: String, pattern: String) -> Int {
+  /// Counts TODO/FIXME markers in uncommitted changes (staged + unstaged).
+  /// Runs `git diff HEAD --unified=0` directly through `runBounded` (no shell
+  /// pipeline — keeps the timeout and byte-limit guarantees intact and avoids
+  /// orphaned child processes from `process.terminate()` not cascading to
+  /// pipeline children). Counts added lines in Swift so there is no unbounded
+  /// `grep` output to collect.
+  private static func countTodoFixme(in cwd: String) -> Int {
     let result = runBounded(
-      executable: "/bin/bash",
-      args: ["-c", "git diff --unified=0 | grep -cE '\(pattern)' 2>/dev/null || true"],
-      in: cwd
+      executable: "/usr/bin/git",
+      args: ["diff", "HEAD", "--unified=0"],
+      in: cwd,
+      timeout: 3.0,
+      maxBytes: 65_536
     )
-    return Int(result.output.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    guard result.status == 0 || result.status == 128 else { return 0 }
+    // `git diff` returns 128 when HEAD doesn't exist (fresh repo with no
+    // commits). In that case there's nothing to diff against, so return 0.
+    if result.status == 128 { return 0 }
+
+    var count = 0
+    for line in result.output.split(separator: "\n") {
+      // Added lines in diff start with "+", but file headers start with "+++".
+      // Skip the "+++" header lines; only count actual content additions.
+      guard line.hasPrefix("+"), !line.hasPrefix("+++") else { continue }
+      let lower = line.lowercased()
+      if lower.contains("todo") || lower.contains("fixme") {
+        count += 1
+      }
+    }
+    return count
   }
 
   static func systemInstruction(
