@@ -80,6 +80,14 @@ def repo_root(explicit: str | None) -> Path:
 def scan(root: Path) -> list[tuple[str, int, str]]:
     """Return (relative_path, line_number, line_text) for each asyncAfter call."""
     sources = root / SCAN_ROOT
+    if not sources.is_dir():
+        # Fail loud: a missing scan root (renamed/moved/wrong path) would make
+        # rglob return zero matches, drop the count below baseline, and pass —
+        # silently disabling the ratchet. Refuse to run instead.
+        raise SystemExit(
+            f"FAIL: scan root not found: {sources}. Fix SCAN_ROOT in "
+            "check-async-after-ratchet.py or the repository layout."
+        )
     offenders: list[tuple[str, int, str]] = []
     for path in sorted(sources.rglob("*.swift")):
         relative = path.relative_to(root).as_posix()

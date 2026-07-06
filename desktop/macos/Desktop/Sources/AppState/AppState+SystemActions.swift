@@ -494,11 +494,12 @@ enum SystemCommand {
 /// bounded snippet safe to log. The privileged system tools used here don't emit
 /// user secrets, so this bounds noise rather than scrubbing PII.
 func sanitizedCommandOutput(_ raw: String, maxLength: Int = 200) -> String {
+  // Replace every control character (not just \r\n\t) with a space so a tool's
+  // stderr can't inject terminal/log escape sequences into our logs or Sentry.
   let collapsed =
-    raw
-    .replacingOccurrences(of: "\r", with: " ")
-    .replacingOccurrences(of: "\n", with: " ")
-    .replacingOccurrences(of: "\t", with: " ")
+    raw.unicodeScalars
+    .map { CharacterSet.controlCharacters.contains($0) ? " " : String($0) }
+    .joined()
     .trimmingCharacters(in: .whitespacesAndNewlines)
   if collapsed.count <= maxLength { return collapsed }
   return String(collapsed.prefix(maxLength)) + "…"

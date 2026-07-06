@@ -54,4 +54,14 @@ final class SystemCommandTests: XCTestCase {
     XCTAssertEqual(bounded.count, 201)  // 200 chars + the single ellipsis
     XCTAssertTrue(bounded.hasSuffix("…"))
   }
+
+  func testSanitizerStripsAllControlCharactersNotJustWhitespace() {
+    // ESC (0x1B) + a bell (0x07) + a NUL — none may survive into a log line.
+    let injected = "ok\u{1B}[31mred\u{07}\u{00}done"
+    let cleaned = sanitizedCommandOutput(injected)
+    XCTAssertFalse(cleaned.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) })
+    XCTAssertTrue(cleaned.contains("ok"))
+    XCTAssertTrue(cleaned.contains("done"))
+    XCTAssertFalse(cleaned.contains("\u{1B}"))
+  }
 }

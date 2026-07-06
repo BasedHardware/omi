@@ -986,21 +986,30 @@ struct FloatingControlBarView: View {
     /// create/activate the window (BL-005); the window-key event is the real signal.
     private func runWhenMainAppWindowKey(_ action: @escaping () -> Void) {
         if let key = NSApp.keyWindow, Self.isRealMainAppWindow(key) {
-            action()
+            // One runloop hop, same as the observer path below, so a freshly-keyed
+            // window's content (e.g. the navigate receiver) is mounted before we act.
+            DispatchQueue.main.async { action() }
             return
         }
         var token: NSObjectProtocol?
+        let removeObserver = {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
         token = NotificationCenter.default.addObserver(
             forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
         ) { note in
             guard let window = note.object as? NSWindow, Self.isRealMainAppWindow(window) else {
                 return
             }
-            if let token { NotificationCenter.default.removeObserver(token) }
+            removeObserver()
             // One runloop hop so SwiftUI can mount the freshly-opened window's
             // content (e.g. the navigate receiver) before we act.
             DispatchQueue.main.async { action() }
         }
+        // Safety net: if no real main window ever becomes key (e.g. openMainWindow
+        // was nil, or the view went away), drop the observer after a bounded delay
+        // so it can't linger on the default center indefinitely.
+        Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in removeObserver() }
     }
 
     @discardableResult
