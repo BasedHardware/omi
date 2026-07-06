@@ -8,15 +8,21 @@ enum DesktopAutomationLaunchOptions {
   static let portPrefix = "--automation-port="
   static let captureRootPrefix = "--automation-capture-root="
   static let defaultPort: UInt16 = 47777
+  static let tokenEnvironmentKey = "OMI_AUTOMATION_TOKEN"
+  static let tokenFileEnvironmentKey = "OMI_AUTOMATION_TOKEN_FILE"
+
+  private static let generatedToken = "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
 
   static var isEnabled: Bool {
+    guard AppBuild.isNonProduction else {
+      return false
+    }
     // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
     if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
       return false
     }
     // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
-    // bundle) so agents can drive the app without remembering a launch flag. The
-    // listener only binds to 127.0.0.1 and is never enabled on the production bundle.
+    // bundle) so agents can drive the app without remembering a launch flag.
     return CommandLine.arguments.contains(enableFlag)
       || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
       || AppBuild.isNonProduction
@@ -38,6 +44,35 @@ enum DesktopAutomationLaunchOptions {
     }
 
     return defaultPort
+  }
+
+  static var token: String {
+    let env = ProcessInfo.processInfo.environment[tokenEnvironmentKey] ?? ""
+    let trimmed = env.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? generatedToken : trimmed
+  }
+
+  static var tokenFileURL: URL {
+    if let rawValue = ProcessInfo.processInfo.environment[tokenFileEnvironmentKey],
+      !rawValue.isEmpty
+    {
+      return URL(fileURLWithPath: rawValue).standardizedFileURL
+    }
+    return URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("omi-automation-\(port).token")
+      .standardizedFileURL
+  }
+
+  static func writeTokenFileIfNeeded() {
+    guard isEnabled else { return }
+    let url = tokenFileURL
+    do {
+      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try token.write(to: url, atomically: true, encoding: .utf8)
+      chmod(url.path, S_IRUSR | S_IWUSR)
+    } catch {
+      logError("DesktopAutomationBridge: failed to write automation token file", error: error)
+    }
   }
 
   static var captureRoot: URL {
@@ -142,6 +177,14 @@ struct DesktopAutomationCapabilities: Codable {
   let assertions: [String]
   let artifactTypes: [String]
   let actions: [DesktopAutomationActionDescriptor]
+}
+
+private struct DesktopAutomationHealth: Codable {
+  let ok: Bool
+  let name: String
+  let bundleIdentifier: String
+  let bridgePort: UInt16
+  let requiresAuth: Bool
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -1091,6 +1134,7 @@ final class DesktopAutomationBridge {
       }
       listener.start(queue: queue)
       self.listener = listener
+      DesktopAutomationLaunchOptions.writeTokenFileIfNeeded()
       Task { @MainActor in DesktopAutomationActionRegistry.shared.registerBuiltins() }
       log(
         "DesktopAutomationBridge: listening on http://127.0.0.1:\(DesktopAutomationLaunchOptions.port)"
@@ -1156,12 +1200,16 @@ final class DesktopAutomationBridge {
     let method = String(requestParts[0])
     let path = String(requestParts[1])
 
+    var headers: [String: String] = [:]
     var contentLength = 0
     for line in lines.dropFirst() {
       let pieces = line.split(separator: ":", maxSplits: 1)
       guard pieces.count == 2 else { continue }
-      if pieces[0].lowercased() == "content-length" {
-        contentLength = Int(pieces[1].trimmingCharacters(in: .whitespaces)) ?? 0
+      let key = pieces[0].trimmingCharacters(in: .whitespaces).lowercased()
+      let value = pieces[1].trimmingCharacters(in: .whitespaces)
+      headers[key] = value
+      if key == "content-length" {
+        contentLength = Int(value) ?? 0
       }
     }
 
@@ -1172,7 +1220,7 @@ final class DesktopAutomationBridge {
     }
 
     let body = Data(data[bodyStart..<data.index(bodyStart, offsetBy: contentLength)])
-    return HTTPRequest(method: method, path: path, body: body)
+    return HTTPRequest(method: method, path: path, headers: headers, body: body)
   }
 
   /// Parse a `POST /action` body: `{ "name": "...", "params": { "k": "v", ... } }`.
@@ -1218,6 +1266,30 @@ final class DesktopAutomationBridge {
   }
 
   private func routeUntimed(request: HTTPRequest) async -> HTTPResponse {
+    guard acceptsLoopbackHostAndOrigin(request.headers) else {
+      return jsonResponse(
+        DesktopAutomationResponse<DesktopAutomationSnapshot>(
+          ok: false, result: nil, error: "invalid_host_or_origin"),
+        statusCode: 403)
+    }
+    if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      return jsonResponse(
+        DesktopAutomationHealth(
+          ok: true,
+          name: "omi-desktop-automation",
+          bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          bridgePort: DesktopAutomationLaunchOptions.port,
+          requiresAuth: true
+        )
+      )
+    }
+    guard authenticate(request.headers["authorization"]) else {
+      return jsonResponse(
+        DesktopAutomationResponse<DesktopAutomationSnapshot>(
+          ok: false, result: nil, error: "invalid_or_missing_automation_token"),
+        statusCode: 401)
+    }
+
     switch (request.method, request.path) {
     case ("GET", "/health"):
       let snapshot = await cachedAutomationSnapshot()
@@ -1524,6 +1596,59 @@ final class DesktopAutomationBridge {
     }
   }
 
+  private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
+    if let host = headers["host"], !isAllowedLoopbackHost(host) {
+      return false
+    }
+    if let origin = headers["origin"], !origin.isEmpty {
+      guard let url = URL(string: origin), let host = url.host, let port = url.port else {
+        return false
+      }
+      guard (url.scheme == "http" || url.scheme == "https"), port == Int(DesktopAutomationLaunchOptions.port) else {
+        return false
+      }
+      guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
+        return false
+      }
+    }
+    return true
+  }
+
+  private func isAllowedLoopbackHost(_ hostHeader: String) -> Bool {
+    let value = hostHeader.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let allowed = [
+      "127.0.0.1:\(DesktopAutomationLaunchOptions.port)",
+      "localhost:\(DesktopAutomationLaunchOptions.port)",
+      "[::1]:\(DesktopAutomationLaunchOptions.port)",
+    ]
+    return allowed.contains(value)
+  }
+
+  private func authenticate(_ authorization: String?) -> Bool {
+    guard let authorization else {
+      return false
+    }
+    let supplied: String
+    if authorization.lowercased().hasPrefix("bearer ") {
+      supplied = String(authorization.dropFirst(7))
+    } else {
+      supplied = authorization
+    }
+    return constantTimeEquals(supplied, DesktopAutomationLaunchOptions.token)
+  }
+
+  private func constantTimeEquals(_ lhs: String, _ rhs: String) -> Bool {
+    let left = Array(lhs.utf8)
+    let right = Array(rhs.utf8)
+    var diff = left.count ^ right.count
+    for index in 0..<max(left.count, right.count) {
+      let a = index < left.count ? left[index] : 0
+      let b = index < right.count ? right[index] : 0
+      diff |= Int(a ^ b)
+    }
+    return diff == 0
+  }
+
   private func jsonResponse<T: Codable>(_ payload: T, statusCode: Int = 200) -> HTTPResponse {
     do {
       let body = try JSONEncoder.pretty.encode(payload)
@@ -1555,6 +1680,8 @@ final class DesktopAutomationBridge {
     switch response.statusCode {
     case 200: statusText = "OK"
     case 400: statusText = "Bad Request"
+    case 401: statusText = "Unauthorized"
+    case 403: statusText = "Forbidden"
     case 404: statusText = "Not Found"
     default: statusText = "Internal Server Error"
     }
@@ -1584,6 +1711,7 @@ final class DesktopAutomationBridge {
 private struct HTTPRequest {
   let method: String
   let path: String
+  let headers: [String: String]
   let body: Data
 }
 
