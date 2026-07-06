@@ -4824,6 +4824,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // MARK: - Local automation (continuity gauntlet)
 
   private static let automationAuthUserIdKey = "auth_userId"
+  /// Owner A's real uid, stashed by automationSwapTestOwner so restore_test_owner can
+  /// undo the swap. Without this the synthetic owner persists in UserDefaults across
+  /// relaunches and every backend-auth path breaks (mint, kernel persist, goals).
+  private static let automationOwnerABackupKey = "automation_swap_owner_a_backup"
 
   /// Test-bundle-only owner swap: clear kernel state for owner A, register synthetic
   /// owner B, and run one main-chat probe turn under a QueryTracer context.
@@ -4847,6 +4851,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
       await resolvedAgentClient().clearOwnerState()
     }
 
+    UserDefaults.standard.set(ownerA, forKey: Self.automationOwnerABackupKey)
     UserDefaults.standard.set(trimmedOwnerB, forKey: Self.automationAuthUserIdKey)
     resetSessionStateForAuthChange()
 
@@ -4860,6 +4865,31 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     detail["owner_b"] = trimmedOwnerB
     detail["probe_query"] = trimmedQuery
     return detail
+  }
+
+  /// Undo automationSwapTestOwner: restore the stashed real owner and reset session
+  /// state. Safe no-op when no swap is active. Harnesses must call this after the
+  /// owner suite (and may call it defensively pre-run).
+  func automationRestoreTestOwner() async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "restore_test_owner is disabled on production bundles"]
+    }
+    let defaults = UserDefaults.standard
+    guard let ownerA = defaults.string(forKey: Self.automationOwnerABackupKey),
+          !ownerA.isEmpty
+    else {
+      return ["restored": "false", "note": "no owner swap active"]
+    }
+
+    _ = await ensureBridgeStarted()
+    if agentBridgeStarted {
+      await resolvedAgentClient().clearOwnerState()
+    }
+
+    defaults.set(ownerA, forKey: Self.automationAuthUserIdKey)
+    defaults.removeObject(forKey: Self.automationOwnerABackupKey)
+    resetSessionStateForAuthChange()
+    return ["restored": "true", "owner_id": ownerA]
   }
 
     /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.

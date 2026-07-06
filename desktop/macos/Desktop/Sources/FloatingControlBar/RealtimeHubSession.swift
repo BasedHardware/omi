@@ -268,6 +268,50 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  /// TEST SEAM (ptt_test_turn only, bridge is non-prod-only): inject the probe text as
+  /// realtime user input so the model answers the forced transcript instead of the
+  /// fixture audio — the harness feeds a sine tone, and without this the model replies
+  /// to a beep in whatever language it hallucinates. Gemini: text rides the open
+  /// activity window (same rule as video frames). OpenAI: a user message item is
+  /// appended before the audio commit.
+  /// TEST SEAM (ptt_test_turn only): queue-synced snapshot of whether this session can
+  /// accept in-turn input right now. Gemini needs the speech-activity window open;
+  /// OpenAI only needs the socket. The headless turn waits on this before injecting
+  /// text/committing — beginTurn may defer activityStart during a seed-stale reconnect,
+  /// and an activityEnd without a window is a Gemini policy-close (1008).
+  func activityWindowOpen() async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async {
+        continuation.resume(
+          returning: self.isOpen && (self.provider == .openai || self.activityOpen))
+      }
+    }
+  }
+
+  func sendTestTextInput(_ text: String) {
+    q.async { [weak self] in
+      guard let self, self.isOpen else { return }
+      switch self.provider {
+      case .gemini:
+        guard self.activityOpen else {
+          log("\(self.tag): test text input dropped — no open activity window")
+          return
+        }
+        self.send(json: ["realtimeInput": ["text": text]])
+      case .openai:
+        self.send(json: [
+          "type": "conversation.item.create",
+          "item": [
+            "type": "message",
+            "role": "user",
+            "content": [["type": "input_text", "text": text]],
+          ],
+        ])
+      }
+      log("\(self.tag): test text input sent (\(text.count) chars)")
+    }
+  }
+
   /// End the user's PTT turn and ask the model to respond.
   /// Start a new PTT turn. Gemini: open a fresh speech-activity window (must be
   /// done EVERY turn on a warm session). OpenAI: no-op (input_audio_buffer based).

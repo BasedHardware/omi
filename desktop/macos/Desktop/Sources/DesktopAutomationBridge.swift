@@ -476,6 +476,20 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "restore_test_owner",
+      summary: "Restore the real owner after swap_test_owner (harness cleanup; no-op if no swap active)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "restore_test_owner is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      return await provider.automationRestoreTestOwner()
+    }
+
+    register(
       name: "main_chat_snapshot",
       summary: "Export main-chat transcript, session ids, and stream state for continuity harnesses",
       params: ["limit"]

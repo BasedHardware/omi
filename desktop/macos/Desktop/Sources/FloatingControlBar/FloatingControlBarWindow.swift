@@ -3377,7 +3377,7 @@ class FloatingControlBarManager {
     ) async {
         let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedAssistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedUser.isEmpty, !trimmedAssistant.isEmpty else { return }
+        guard !trimmedAssistant.isEmpty else { return }
 
         let idempotencyKey: String
         if let runId, !runId.isEmpty {
@@ -3388,11 +3388,20 @@ class FloatingControlBarManager {
         guard !projectedPillCompletionKeys.contains(idempotencyKey) else { return }
         projectedPillCompletionKeys.insert(idempotencyKey)
 
+        // Assistant-only projection: the spawn handoff (Fix A) already recorded the user's
+        // request on main_chat; repeating it here would double-spend the voice seed budget.
+        let requestSnippet = trimmedUser.count > 120
+            ? String(trimmedUser.prefix(120)) + "…"
+            : trimmedUser
+        let summary = requestSnippet.isEmpty
+            ? trimmedAssistant
+            : "[Background agent — \(requestSnippet)] \(trimmedAssistant)"
+
         guard let provider = historyChatProvider else { return }
         await provider.kernelTurnProjection.projectCrossSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
-            userText: trimmedUser,
-            assistantText: trimmedAssistant,
+            userText: "",
+            assistantText: summary,
             origin: "pill_completion",
             idempotencyKey: idempotencyKey
         )

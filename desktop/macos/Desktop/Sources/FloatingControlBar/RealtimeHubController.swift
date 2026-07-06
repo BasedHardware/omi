@@ -413,37 +413,76 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         let data = try? Data(contentsOf: URL(fileURLWithPath: path)), !data.isEmpty
       else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
       let timeout = Double(params["timeout"] ?? "") ?? 30
+      let textOnly = params["text_only"] == "1"
       guard let self else { return ["error": "hub controller unavailable"] }
       return await self.runHeadlessPTTTurn(
-        pcm16k: data, timeout: timeout, forceTranscript: params["force_transcript"])
+        pcm16k: data, timeout: timeout, forceTranscript: params["force_transcript"],
+        textOnly: textOnly)
     }
   }
 
   private func runHeadlessPTTTurn(
-    pcm16k: Data, timeout: Double, forceTranscript: String? = nil
+    pcm16k: Data, timeout: Double, forceTranscript: String? = nil, textOnly: Bool = false
   ) async -> [String: String] {
-    ensureWarm()
-    guard await waitUntilActive(timeout: 15) else {
-      return ["error": "hub session did not become active (check sign-in / provider keys)"]
-    }
-    lastTurnDiagnostics = [:]
-    beginTurn()
-    testProviderTranscriptOverride = forceTranscript
-    // Pace the audio like real speech (100 ms chunks) so the mid-hold early language ID
-    // triggers on the same timeline as a real hold.
-    let chunkBytes = 3_200  // 100 ms @ 16 kHz s16le
-    var offset = 0
-    while offset < pcm16k.count {
-      let end = min(offset + chunkBytes, pcm16k.count)
-      feedAudio(pcm16k.subdata(in: offset..<end))
-      offset = end
-      try? await Task.sleep(nanoseconds: 100_000_000)
-    }
-    commitTurn()
-    let deadline = Date().addingTimeInterval(timeout)
-    while Date() < deadline {
-      if !lastTurnDiagnostics.isEmpty { return lastTurnDiagnostics }
-      try? await Task.sleep(nanoseconds: 200_000_000)
+    // A voice-seed reconnect (triggered by the previous turn's kernel write) can replace
+    // the warm session mid-turn; the fed audio/text/commit then land on the dead socket
+    // and the turn never completes. Detect the swap and redrive the turn once.
+    for attempt in 0..<2 {
+      if attempt > 0 {
+        // Attempt 0's turn died with its session. Clear stale reply-in-flight state so
+        // the fresh beginTurn isn't misread as a barge-in — that would capture a bogus
+        // interrupted turn, mark turnRecorded, and skip diagnostics on the real reply.
+        responding = false
+        realtimePlaybackActive = false
+      }
+      ensureWarm()
+      guard await waitUntilActive(timeout: 15) else {
+        return ["error": "hub session did not become active (check sign-in / provider keys)"]
+      }
+      lastTurnDiagnostics = [:]
+      let turnSession = session
+      beginTurn()
+      testProviderTranscriptOverride = forceTranscript
+      if !textOnly {
+        // Pace the audio like real speech (100 ms chunks) so the mid-hold early language ID
+        // triggers on the same timeline as a real hold.
+        let chunkBytes = 3_200  // 100 ms @ 16 kHz s16le
+        var offset = 0
+        while offset < pcm16k.count {
+          let end = min(offset + chunkBytes, pcm16k.count)
+          feedAudio(pcm16k.subdata(in: offset..<end))
+          offset = end
+          try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+      }
+      // beginTurn can defer activityStart while a seed-stale reconnect finishes; text or
+      // commit sent before the window opens orphans the turn and Gemini closes 1008.
+      let windowDeadline = Date().addingTimeInterval(10)
+      while Date() < windowDeadline {
+        if let live = session, await live.activityWindowOpen() { break }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      // Without injecting the forced transcript as real model input, the provider answers
+      // whatever it hallucinates from the fixture audio (unrelated-reply flake). Harness
+      // probes pass text_only=1 so no competing audio is fed at all; the language-ID
+      // harness keeps feeding real speech PCM alongside the forced transcript.
+      if let forceTranscript, !forceTranscript.isEmpty {
+        session?.sendTestTextInput(forceTranscript)
+      }
+      commitTurn()
+      let deadline = Date().addingTimeInterval(timeout)
+      var redrive = false
+      while Date() < deadline {
+        if !lastTurnDiagnostics.isEmpty { return lastTurnDiagnostics }
+        if attempt == 0, session !== turnSession {
+          redrive = true
+          break
+        }
+        try? await Task.sleep(nanoseconds: 200_000_000)
+      }
+      guard redrive else { break }
+      log("RealtimeHub: headless PTT turn lost to a mid-turn session swap — redriving once")
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
     }
     return ["error": "turn did not complete within \(Int(timeout))s"]
   }
