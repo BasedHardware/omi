@@ -76,13 +76,14 @@ enum RealtimeHubTools {
     let unavailable = availability.filter { !$0.isAvailable }
 
     if unavailable.isEmpty {
-      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect."
+      return "If the user asks to use/ask OpenClaw, Hermes, or Codex, call spawn_agent with provider set to \"openclaw\", \"hermes\", or \"codex\". Treat those as available local providers, not as sessions to inspect. \(bestProviderSelectionInstruction(for: providers))"
     }
 
     var parts: [String] = []
     if !available.isEmpty {
       let names = available.map { "\"\($0.rawValue)\"" }.joined(separator: " or ")
       parts.append("If the user asks to use/ask \(available.map(\.displayName).joined(separator: " or ")), call spawn_agent with provider set to \(names).")
+      parts.append(bestProviderSelectionInstruction(for: available))
     }
     let missingText = unavailable
       .map { "\($0.provider.displayName): \"\($0.setupPrompt)\"" }
@@ -90,6 +91,20 @@ enum RealtimeHubTools {
     parts.append(
       "IMPORTANT — not-connected agents: \(unavailable.map(\.provider.displayName).joined(separator: ", ")) \(unavailable.count == 1 ? "is" : "are") NOT connected right now. If the user names one of them: (1) do NOT call spawn_agent for it and do NOT silently substitute another agent; (2) tell the user it isn't connected and read them the exact setup instructions below, including any command verbatim; (3) offer two choices — Omi can install/set it up for them, or run the task with the built-in Omi agent instead; (4) if they choose install, call spawn_agent with NO provider and a brief of exactly: 'Run this install command in the terminal and report the result: <the command from the setup instructions>'; (5) only proceed with either choice after they agree. Setup instructions — \(missingText)")
     return parts.joined(separator: " ")
+  }
+
+  /// Task→provider selection guidance for connected external agents: even when
+  /// the user does NOT name an agent, spawn_agent should run through the one
+  /// whose strengths clearly match the task. Mirrors the Haiku router's
+  /// selection rules so voice-hub tasks get the same best-agent behavior.
+  private static func bestProviderSelectionInstruction(
+    for providers: [AgentPillsManager.DirectedProvider]
+  ) -> String {
+    guard !providers.isEmpty else { return "" }
+    let strengths = providers
+      .map { "\($0.rawValue): \($0.routerBlurb)" }
+      .joined(separator: " ")
+    return "Even when the user does not name an agent: if the task clearly matches a connected agent's strength, set provider to it — e.g. background coding, writing/refactoring code, building scripts, or fixing a repo -> \"codex\" (when connected). Strengths: \(strengths) Omit provider for general computer/app/browser/data tasks or whenever unsure — the built-in Omi agent is the safe default."
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
