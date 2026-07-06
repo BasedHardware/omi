@@ -36,7 +36,7 @@ from utils.llm.style_fingerprint import (
 )
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import MemoryService
-from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous
+from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous, search_person_memories
 
 logger = logging.getLogger(__name__)
 
@@ -617,7 +617,15 @@ def draft_reply(
     facts = []
     if person:
         try:
-            facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
+            # Prefer topic-relevant per-person facts (semantic search scoped to this
+            # person) when there's an inbound query to rank against; otherwise — or if
+            # the search returns nothing — fall back to the flat subject-keyed read so
+            # the no-new-data path stays identical to before.
+            query = _thread_query(thread)
+            if query:
+                facts = search_person_memories(uid, person['id'], query, limit=15)
+            if not facts:
+                facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
         except Exception as e:
             logger.warning(f"reply_draft: facts lookup failed uid={uid}: {e}")
     facts_text = "\n".join(f"- {_fence(f.get('content'))}" for f in facts if f.get('content'))
@@ -644,6 +652,27 @@ def draft_reply(
         context_bits.append(_fence(summary))
     if tone:
         context_bits.append(f"How the user usually texts {name}: {_fence(tone)}")
+
+    # Structured profile slots (Phase 2) — come from the LLM-built person profile
+    # (untrusted transcripts), so fence every value. Only surface non-empty ones.
+    location = (person or {}).get('location')
+    title = (person or {}).get('title')
+    company = (person or {}).get('company')
+    goals = [g for g in ((person or {}).get('goals') or []) if g]
+    interests = [i for i in ((person or {}).get('interests') or []) if i]
+    if title and company:
+        context_bits.append(f"{name} is a {_fence(title)} at {_fence(company)}.")
+    elif title:
+        context_bits.append(f"{name} is a {_fence(title)}.")
+    elif company:
+        context_bits.append(f"{name} works at {_fence(company)}.")
+    if location:
+        context_bits.append(f"{name} is based in {_fence(location)}.")
+    if goals:
+        context_bits.append(f"{name}'s goals: " + ", ".join(_fence(g) for g in goals))
+    if interests:
+        context_bits.append(f"{name}'s interests: " + ", ".join(_fence(i) for i in interests))
+
     if facts_text:
         context_bits.append(f"Facts about {name}:\n{facts_text}")
     context_text = "\n".join(context_bits) or "(no extra context)"

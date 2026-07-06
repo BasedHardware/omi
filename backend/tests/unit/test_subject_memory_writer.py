@@ -199,3 +199,32 @@ def test_cross_subject_candidate_is_ignored():
     # No same-subject candidates survived, so no conflict resolution / supersession ran.
     resolve.assert_not_called()
     invalidate.assert_not_called()
+
+
+def test_none_subject_candidate_is_ignored():
+    """A person-keyed write must NEVER supersede a None-subject (whole-conversation /
+    subject-unknown) memory. find_similar_memories with a subject filter shouldn't return
+    these, but the strict same-subject guard is the real protection (regression test for
+    cross-subject clobbering in the person→general direction)."""
+    memories = [_mem('Alice lives in Austin')]
+    similar = [{'memory_id': 'general_1', 'category': 'system', 'score': 0.9}]
+    with patch.object(w, 'find_similar_memories', return_value=similar), patch.object(
+        w.memories_db,
+        'get_memory',
+        return_value={'content': 'lives in NYC', 'invalid_at': None, 'subject_entity_id': None},
+    ), patch.object(w, 'resolve_memory_conflict') as resolve, patch.object(
+        w, 'memory_system_request_scope', _scope(w.MemorySystem.LEGACY)
+    ), patch.object(
+        w, 'canonical_write_enabled', return_value=False
+    ), patch.object(
+        w.memories_db, 'save_memories'
+    ), patch.object(
+        w, 'upsert_memory_vector'
+    ), patch.object(
+        w.memories_db, 'invalidate_memory'
+    ) as invalidate:
+        count = w.write_subject_memories('uid1', memories, **_write())
+
+    assert count == 1
+    resolve.assert_not_called()
+    invalidate.assert_not_called()

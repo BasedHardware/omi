@@ -553,6 +553,135 @@ def test_profile_fallback_text_is_length_capped():
     assert out.count('x') == rd.PROFILE_TEXT_CHAR_CAP
 
 
+# ---------------------------------------------------------------------------
+# Phase 4: per-person structured profile + relevance-ranked person facts
+# ---------------------------------------------------------------------------
+def test_draft_includes_structured_person_fields_when_present():
+    """When the resolved person carries the Phase-2 structured slots
+    (location/title/company/goals/interests), they surface in the assembled
+    <person_context> block (fenced, human-readable)."""
+    person = {
+        'id': 'p1',
+        'name': 'Alice',
+        'relationship': 'friend',
+        'location': 'San Francisco',
+        'title': 'designer',
+        'company': 'Figma',
+        'goals': ['ship the redesign', 'learn Rust'],
+        'interests': ['climbing', 'jazz'],
+    }
+    captured = {}
+
+    def fake_invoke(prompt):
+        captured['prompt'] = _as_text(prompt)
+        return SimpleNamespace(content='"sounds good"')
+
+    with patch.object(rd, 'resolve_person', return_value=person), patch.object(
+        rd, 'search_person_memories', return_value=[]
+    ), patch.object(rd.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        rd.draft_reply('uid', 'Alice', [{'text': 'hey whats up', 'is_from_me': False}])
+
+    p = captured['prompt']
+    assert 'Alice is a designer at Figma.' in p
+    assert 'Alice is based in San Francisco.' in p
+    assert "Alice's goals: ship the redesign, learn Rust" in p
+    assert "Alice's interests: climbing, jazz" in p
+
+
+def test_draft_uses_search_person_memories_when_query_present():
+    """With an inbound message (non-empty thread query), the relevance-ranked
+    person-scoped search supplies the facts block, and the flat subject read is
+    NOT consulted."""
+    person = {'id': 'p1', 'name': 'Alice'}
+    captured = {}
+
+    def fake_invoke(prompt):
+        captured['prompt'] = _as_text(prompt)
+        return SimpleNamespace(content='"ok"')
+
+    def fake_flat(*a, **k):
+        raise AssertionError('flat subject read should not be called when search returns hits')
+
+    with patch.object(rd, 'resolve_person', return_value=person), patch.object(
+        rd, 'search_person_memories', return_value=[{'content': 'Alice just got engaged'}]
+    ) as mock_search, patch.object(
+        rd.memories_db, 'get_memories_by_subject_entity', side_effect=fake_flat
+    ), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        rd.draft_reply('uid', 'Alice', [{'text': 'any news?', 'is_from_me': False}])
+
+    mock_search.assert_called_once()
+    args, kwargs = mock_search.call_args
+    # Called with the person id and the inbound-derived query.
+    assert args[0] == 'uid'
+    assert args[1] == 'p1'
+    assert 'any news?' in args[2]
+    assert 'Alice just got engaged' in captured['prompt']
+
+
+def test_draft_falls_back_to_subject_read_when_search_empty():
+    """When the person-scoped search returns nothing, the facts block falls back
+    cleanly to the existing get_memories_by_subject_entity read."""
+    person = {'id': 'p1', 'name': 'Alice'}
+    captured = {}
+
+    def fake_invoke(prompt):
+        captured['prompt'] = _as_text(prompt)
+        return SimpleNamespace(content='"ok"')
+
+    with patch.object(rd, 'resolve_person', return_value=person), patch.object(
+        rd, 'search_person_memories', return_value=[]
+    ), patch.object(
+        rd.memories_db, 'get_memories_by_subject_entity', return_value=[{'content': 'Alice loves sushi'}]
+    ) as mock_flat, patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        rd.draft_reply('uid', 'Alice', [{'text': 'any news?', 'is_from_me': False}])
+
+    mock_flat.assert_called_once()
+    assert 'Alice loves sushi' in captured['prompt']
+
+
+def test_draft_no_structured_fields_is_unchanged():
+    """The no-new-data path: a person with none of the Phase-4 fields and an empty
+    person search must behave exactly like before (flat subject read, no structured
+    lines)."""
+    person = {'id': 'p1', 'name': 'Alice', 'relationship': 'friend'}
+    captured = {}
+
+    def fake_invoke(prompt):
+        captured['prompt'] = _as_text(prompt)
+        return SimpleNamespace(content='"ok"')
+
+    with patch.object(rd, 'resolve_person', return_value=person), patch.object(
+        rd, 'search_person_memories', return_value=[]
+    ), patch.object(
+        rd.memories_db, 'get_memories_by_subject_entity', return_value=[{'content': 'Alice loves sushi'}]
+    ), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        rd.draft_reply('uid', 'Alice', [{'text': 'any news?', 'is_from_me': False}])
+
+    p = captured['prompt']
+    assert "Alice is the user's friend." in p
+    assert 'Alice loves sushi' in p
+    # No structured lines leak in when the fields are absent.
+    assert 'is based in' not in p
+    assert "Alice's goals" not in p
+    assert "Alice's interests" not in p
+
+
 def test_parse_selection_index():
     assert rd._parse_selection_index("2", 5) == 2
     assert rd._parse_selection_index("#3 is best", 5) == 3

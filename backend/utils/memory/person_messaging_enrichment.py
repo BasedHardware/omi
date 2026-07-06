@@ -13,6 +13,7 @@ Fully guarded — it NEVER raises into the caller (the connector's background en
 """
 
 import logging
+import os
 from typing import Dict, List, Optional
 
 from database import memories as memories_db
@@ -37,6 +38,20 @@ _TEXTING_SOURCES = frozenset(
 
 # Bound how many of the person's existing facts we feed the extractor as dedup context.
 _EXISTING_FACTS_LIMIT = 100
+
+# Only enrich true 1:1 threads by default. A group window would otherwise fire one
+# full-transcript extraction PER participant (an M-person, N-window backfill = N*M LLM
+# calls, largely redundant), so we cap the participant count. Groups still get the
+# existing whole-conversation (subject=unknown) extraction from process_conversation.
+_MAX_PERSONS_PER_CONVERSATION = int(os.getenv('PERSON_MESSAGING_MAX_PERSONS', '1'))
+
+# Kill-switch: set PERSON_MESSAGING_ENRICHMENT_ENABLED=false to disable per-person
+# messaging extraction independently of the rest of the ingest pipeline (cost control).
+_ENRICHMENT_ENABLED = os.getenv('PERSON_MESSAGING_ENRICHMENT_ENABLED', 'true').strip().lower() not in (
+    '0',
+    'false',
+    'no',
+)
 
 
 def _source_value(conversation) -> Optional[str]:
@@ -66,6 +81,13 @@ def _existing_facts_str(uid: str, subject_entity_id: str) -> str:
     return '\n'.join(lines)
 
 
+def _last_contact_at(conversation):
+    """Wall-clock time of the most recent message in this window. Messaging connectors set
+    finished_at to the newest message time (they extend it on append), so it is exactly
+    'last contacted'; fall back to created_at."""
+    return getattr(conversation, 'finished_at', None) or getattr(conversation, 'created_at', None)
+
+
 def _transcript_artifact_ref(conversation) -> dict:
     segments = getattr(conversation, 'transcript_segments', None) or []
     return {
@@ -83,6 +105,8 @@ def enrich_persons_from_conversation(uid: str, conversation, language: Optional[
     Returns {person_id: memories_written}. Never raises."""
     results: Dict[str, int] = {}
     try:
+        if not _ENRICHMENT_ENABLED:
+            return results
         if _source_value(conversation) not in _TEXTING_SOURCES:
             return results
 
@@ -94,11 +118,23 @@ def enrich_persons_from_conversation(uid: str, conversation, language: Optional[
         if not person_ids:
             return results
 
+        # Cost guard: only enrich threads at/under the participant cap (1:1 by default).
+        # Larger group windows would re-extract the full transcript once per participant;
+        # they are left to the existing whole-conversation extraction. Bounded, not skipped
+        # silently for 1:1 — this only trims the expensive many-participant case.
+        if len(person_ids) > _MAX_PERSONS_PER_CONVERSATION:
+            logger.info(
+                f'person_messaging: skipping {len(person_ids)}-participant conversation '
+                f'(cap={_MAX_PERSONS_PER_CONVERSATION}) uid={uid} conv={getattr(conversation, "id", "?")}'
+            )
+            return results
+
         # The user's name is needed only to render the transcript readably; person-specific
         # dedup context is fetched per person below.
         user_name, _ = get_prompt_memories(uid)
         artifact_ref = _transcript_artifact_ref(conversation)
         source_id = getattr(conversation, 'id', None)
+        last_contact_at = _last_contact_at(conversation)
 
         for person_id in person_ids:
             try:
@@ -106,6 +142,17 @@ def enrich_persons_from_conversation(uid: str, conversation, language: Optional[
                 if not person:
                     continue
                 person_name = person.get('name') or 'Contact'
+
+                # Record recency of contact (PIL-style last_contacted_at). Guarded and
+                # best-effort — a failure here must not block fact extraction. Only advance
+                # it forward so an out-of-order backfill window can't move it backwards.
+                if last_contact_at is not None:
+                    try:
+                        existing_contact = person.get('last_contacted_at')
+                        if existing_contact is None or last_contact_at > existing_contact:
+                            users_db.update_person_profile(uid, person_id, {'last_contacted_at': last_contact_at})
+                    except Exception as e:
+                        logger.warning(f'person_messaging: last_contacted_at update failed person={person_id}: {e}')
                 subject_entity_id = person_entity_id(person_id)
                 memories_str = _existing_facts_str(uid, subject_entity_id)
 

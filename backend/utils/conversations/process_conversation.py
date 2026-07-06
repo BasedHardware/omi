@@ -46,6 +46,7 @@ from models.conversation import (
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
+from database.entities import USER_ENTITY_ID
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -571,7 +572,16 @@ def _extract_memories_legacy(uid: str, conversation: Conversation):
             memory_data = memories_db.get_memory(uid, match['memory_id'])
             if memory_data and memory_data.get('invalid_at') is None:
                 existing_subject = memory_data.get('subject_entity_id')
+                # Cross-subject isolation. (1) Two set-but-different subjects are different
+                # entities — never merge/supersede across them. (2) Even when THIS extraction
+                # has no subject (a mixed whole-conversation window → subject_entity_id is
+                # None/unknown), it must never supersede a fact attributed to a SPECIFIC person
+                # — those belong to the per-person brain (person_messaging_enrichment). Without
+                # this, find_similar_memories(subject=None) is unfiltered and a None-subject
+                # fact could invalidate a person-keyed one.
                 if subject_entity_id and existing_subject and subject_entity_id != existing_subject:
+                    continue
+                if not subject_entity_id and existing_subject not in (None, USER_ENTITY_ID):
                     continue
                 similar_memories.append(
                     {

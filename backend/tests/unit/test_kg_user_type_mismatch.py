@@ -561,3 +561,72 @@ class TestKnowledgeGraphLockedMemorySkip:
 
         llm_kg.extract_knowledge_from_memory.assert_called_once_with(uid, "Public content", "mem-ok", "User")
         memories_mod.set_memory_kg_extracted.assert_called_once_with(uid, "mem-ok")
+
+
+class TestSubjectIsolationGuard:
+    """A whole-conversation (subject-unknown) extraction must never conflict-resolve against a
+    person-keyed memory. `find_similar_memories(subject=None)` is unfiltered, so without the
+    guard a None-subject fact could invalidate a `person:X` fact (the per-person brain)."""
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_none_subject_extraction_ignores_person_keyed_candidate(self, mock_from_memory):
+        uid = "uid-subj-guard"
+        conv = _make_conversation_mock()  # empty segments → infer_subject → (None, unknown)
+        mem_db = _make_memory_mock("mem-x", "Alice lives in Denver")
+        mock_from_memory.return_value = mem_db
+
+        llm_memories.new_memories_extractor.return_value = [_make_raw_memory("Alice lives in Denver")]
+        # Unfiltered vector search (subject=None) surfaces a PERSON-keyed candidate.
+        vector_db_mod.find_similar_memories.return_value = [
+            {"memory_id": "person_mem", "category": "core", "score": 0.9}
+        ]
+        memories_mod.get_memory.return_value = {
+            "content": "Alice lives in Austin",
+            "invalid_at": None,
+            "subject_entity_id": entities_mod.person_entity_id("p_alice"),
+        }
+        memories_mod.get_memory_ids_for_conversation.return_value = []
+        memories_mod.save_memories.reset_mock()
+        memories_mod.invalidate_memory = MagicMock()
+        llm_memories.resolve_memory_conflict.reset_mock()
+        auth_mod.get_user_name.return_value = "User"
+        llm_kg.extract_knowledge_from_memory.reset_mock()
+        llm_kg.extract_knowledge_from_memory.side_effect = None
+        llm_kg.extract_knowledge_from_memory.return_value = {"nodes": [], "edges": []}
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        # Person-keyed candidate filtered out → no conflict resolution, no supersession.
+        llm_memories.resolve_memory_conflict.assert_not_called()
+        memories_mod.invalidate_memory.assert_not_called()
+
+    @patch("models.memories.MemoryDB.from_memory")
+    def test_none_subject_extraction_still_resolves_general_candidate(self, mock_from_memory):
+        """Guard is surgical: a None-subject fact STILL dedups against other general
+        (None-subject) facts — existing user-memory updating is preserved."""
+        uid = "uid-subj-guard-2"
+        conv = _make_conversation_mock()
+        mem_db = _make_memory_mock("mem-y", "Lives in Denver")
+        mock_from_memory.return_value = mem_db
+
+        llm_memories.new_memories_extractor.return_value = [_make_raw_memory("Lives in Denver")]
+        vector_db_mod.find_similar_memories.return_value = [
+            {"memory_id": "general_mem", "category": "core", "score": 0.9}
+        ]
+        memories_mod.get_memory.return_value = {
+            "content": "Lives in Austin",
+            "invalid_at": None,
+            "subject_entity_id": None,  # general / whole-conversation fact
+        }
+        memories_mod.get_memory_ids_for_conversation.return_value = []
+        memories_mod.save_memories.reset_mock()
+        llm_memories.resolve_memory_conflict.reset_mock()
+        llm_memories.resolve_memory_conflict.return_value = MagicMock(
+            action="skip", supersedes=[], merged_content=None
+        )
+        auth_mod.get_user_name.return_value = "User"
+
+        process_conversation._extract_memories_inner(uid, conv)
+
+        # Same-bucket (None vs None) candidate survives → conflict resolution runs.
+        llm_memories.resolve_memory_conflict.assert_called_once()

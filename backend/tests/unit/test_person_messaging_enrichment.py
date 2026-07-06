@@ -139,3 +139,63 @@ def test_never_raises_into_caller():
     with patch.object(e, 'get_prompt_memories', side_effect=RuntimeError('boom')):
         out = e.enrich_persons_from_conversation('uid1', conv, language='en')
     assert out == {}
+
+
+def test_group_conversation_over_cap_is_skipped():
+    """Cost guard: a multi-participant window would fire one full-transcript extraction per
+    person, so above the participant cap (1 by default) we skip and leave it to the existing
+    whole-conversation extraction."""
+    conv = _conv(ConversationSource.imessage, ['p_alice', 'p_bob', 'p_carol'])
+    with patch.object(e, 'get_prompt_memories', return_value=('Me', '')), patch.object(
+        e, 'extract_person_messaging_memories'
+    ) as extract, patch.object(e, 'write_subject_memories') as write:
+        out = e.enrich_persons_from_conversation('uid1', conv, language='en')
+    assert out == {}
+    extract.assert_not_called()
+    write.assert_not_called()
+
+
+def test_kill_switch_disables_enrichment():
+    conv = _conv(ConversationSource.imessage, ['p_alice'])
+    with patch.object(e, '_ENRICHMENT_ENABLED', False), patch.object(
+        e, 'extract_person_messaging_memories'
+    ) as extract, patch.object(e, 'write_subject_memories') as write:
+        out = e.enrich_persons_from_conversation('uid1', conv, language='en')
+    assert out == {}
+    extract.assert_not_called()
+    write.assert_not_called()
+
+
+def test_last_contacted_at_set_when_newer():
+    from datetime import datetime, timezone
+
+    when = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    conv = _conv(ConversationSource.imessage, ['p_alice'])
+    conv.finished_at = when
+    with patch.object(e, 'get_prompt_memories', return_value=('Me', '')), patch.object(
+        e.users_db, 'get_person', return_value={'id': 'p_alice', 'name': 'Alice', 'last_contacted_at': None}
+    ), patch.object(e.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        e, 'extract_person_messaging_memories', return_value=[]
+    ), patch.object(
+        e.users_db, 'update_person_profile'
+    ) as upd:
+        e.enrich_persons_from_conversation('uid1', conv, language='en')
+    upd.assert_called_once_with('uid1', 'p_alice', {'last_contacted_at': when})
+
+
+def test_last_contacted_at_not_moved_backward():
+    from datetime import datetime, timezone
+
+    older = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    newer = datetime(2026, 7, 1, tzinfo=timezone.utc)
+    conv = _conv(ConversationSource.imessage, ['p_alice'])
+    conv.finished_at = older  # an out-of-order backfill window
+    with patch.object(e, 'get_prompt_memories', return_value=('Me', '')), patch.object(
+        e.users_db, 'get_person', return_value={'id': 'p_alice', 'name': 'Alice', 'last_contacted_at': newer}
+    ), patch.object(e.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        e, 'extract_person_messaging_memories', return_value=[]
+    ), patch.object(
+        e.users_db, 'update_person_profile'
+    ) as upd:
+        e.enrich_persons_from_conversation('uid1', conv, language='en')
+    upd.assert_not_called()

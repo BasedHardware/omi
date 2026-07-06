@@ -26,6 +26,7 @@ import database.memories as memories_db
 from database.vector_db import delete_memory_vector, find_similar_memories, upsert_memory_vector
 from models.memories import Memory, MemoryDB, SubjectAttribution, render_memory
 from models.product_memory import MemoryTier
+from utils.analytics import record_usage
 from utils.llm.memories import resolve_memory_conflict
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.canonical_memory_adapter import extraction_memory_id
@@ -77,7 +78,12 @@ def _resolve_subject_memories(
             memory_data = memories_db.get_memory(uid, match['memory_id'])
             if memory_data and memory_data.get('invalid_at') is None:
                 existing_subject = memory_data.get('subject_entity_id')
-                if existing_subject and existing_subject != subject_entity_id:
+                # Strict same-subject isolation: only dedup/supersede within THIS subject's
+                # own facts. A candidate with any other subject — including a None
+                # (whole-conversation, subject-unknown) memory — must never be superseded by
+                # this person-keyed write. find_similar_memories is subject-filtered, but a
+                # None-subject vector filter is unfiltered, so this guard is load-bearing.
+                if existing_subject != subject_entity_id:
                     continue
                 similar_memories.append(
                     {
@@ -214,6 +220,16 @@ def write_subject_memories(
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
         if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
-            return _write_canonical(uid, parsed_memories, source_id=source_id, db_client=db_client)
+            written = _write_canonical(uid, parsed_memories, source_id=source_id, db_client=db_client)
+        else:
+            written = _write_legacy(uid, parsed_memories, invalidations)
 
-        return _write_legacy(uid, parsed_memories, invalidations)
+    # Parity with process_conversation's extraction paths: count person-keyed memory
+    # creation in the user's usage stats (the writer previously omitted this). Best-effort:
+    # analytics must never break or roll back an already-persisted memory write.
+    if written:
+        try:
+            record_usage(uid, memories_created=written)
+        except Exception as e:
+            logger.warning(f'subject_memory_writer: usage tracking failed uid={uid}: {e}')
+    return written
