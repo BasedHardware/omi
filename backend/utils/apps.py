@@ -879,12 +879,6 @@ async def update_persona_prompt(persona: Dict[str, Any]):
     # shape of dead fetch, different system. Removed here too so the
     # T-022 retrieval path is the only memory consumer.
     uid = persona['uid']
-    memory_system = pin_memory_system(uid, db_client=firestore_db)
-    if memory_system == MemorySystem.CANONICAL:
-        canonical_memories = MemoryService(db_client=firestore_db).read(uid, limit=250, offset=0)
-        memories = [memory.dict() for memory in canonical_memories if memory.visibility == 'public']
-    else:
-        memories = await run_blocking(db_executor, get_user_public_memories, uid, limit=250)
     user_name = await run_blocking(db_executor, get_user_name, uid)
 
     # Get and condense recent conversations
