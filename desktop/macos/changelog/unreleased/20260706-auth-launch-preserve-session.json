@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop launch sign-in recovery so a startup token refresh check no longer signs you out unnecessarily"
+}
