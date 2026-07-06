@@ -473,6 +473,31 @@ class PushToTalkManager: ObservableObject {
     stopListening()
   }
 
+  // MARK: - Automation (headless PTT for the desktop bridge)
+
+  /// Begin a push-to-talk capture exactly as the shortcut key-down does
+  /// (`handleShortcutDown` → `startListening`), so the automation bridge can drive
+  /// MIC-01 without synthetic key events. `startListening()`'s own guard makes this a
+  /// no-op when PTT is busy; the returned state lets the caller confirm. Pairs with
+  /// `endPushToTalkForAutomation()`.
+  @discardableResult
+  func beginPushToTalkForAutomation() -> [String: String] {
+    startListening()
+    return ["state": "\(state)", "listening": state == .listening ? "true" : "false"]
+  }
+
+  /// Release an in-progress push-to-talk capture the same way a long-hold key-up does
+  /// (`handleShortcutUp` .listening branch → `finalize`), producing the final
+  /// transcript. Releasing with no captured audio exercises the empty-batch path,
+  /// which must end the turn with a hint rather than hang. No-op unless a capture is
+  /// active.
+  @discardableResult
+  func endPushToTalkForAutomation() -> [String: String] {
+    let wasActive = state == .listening || state == .lockedListening
+    if wasActive { finalize() }
+    return ["state": "\(state)", "finalized": wasActive ? "true" : "false"]
+  }
+
   private var finalizedMode: String = "hold"
 
   private func currentPTTMode() -> String {
