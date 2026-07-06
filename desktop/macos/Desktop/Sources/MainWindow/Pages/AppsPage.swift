@@ -1186,121 +1186,77 @@ struct ConnectionModalActionButton: View {
 }
 
 @MainActor
-private final class ImportConnectorSheetModel: ObservableObject {
+/// Connector-specific import work, extracted from the connector sheet so runs
+/// can be owned by `ConnectorImportRunner` and outlive the sheet. Operations
+/// report live progress through the sink and return a terminal outcome;
+/// status-store side effects happen at the call site.
+private enum ConnectorImportOperations {
     struct SyncResult {
         let sourceCount: Int?
         let memoryCount: Int?
         let newItems: Int?
     }
 
-    @Published var isRunning = false
-    @Published var progressTitle: String?
-    @Published var progressDetail: String?
-    @Published var statusMessage: String?
-    @Published var errorMessage: String?
-    @Published var draftText = ""
-
-    private func beginRun(title: String, detail: String) {
-        errorMessage = nil
-        statusMessage = nil
-        progressTitle = title
-        progressDetail = detail
-        isRunning = true
+    enum Outcome {
+        case success(SyncResult, message: String)
+        case failure(message: String)
     }
 
-    private func updateProgress(title: String, detail: String) {
-        progressTitle = title
-        progressDetail = detail
-    }
-
-    private func finishRun() {
-        isRunning = false
-        progressTitle = nil
-        progressDetail = nil
-    }
-
-    func openAndCopyPrompt(for source: OnboardingMemoryLogSource) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(source.prompt, forType: .string)
-        NSWorkspace.shared.open(source.prefilledBrowserURL)
-    }
-
-    func importMemoryLog(source: OnboardingMemoryLogSource) async -> SyncResult? {
-        let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            errorMessage = "Paste the full response first."
-            return nil
-        }
-
-        beginRun(
-            title: "Importing \(source.displayName)",
-            detail: "Extracting durable memories from the pasted conversation."
-        )
-        defer { finishRun() }
-
-        let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(trimmed, source: source)
+    @MainActor
+    static func importMemoryLog(text: String, source: OnboardingMemoryLogSource) async -> Outcome {
+        let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(text, source: source)
         guard result.memories > 0 else {
-            errorMessage = "No durable memories could be extracted from that import."
-            return nil
+            return .failure(message: "No durable memories could be extracted from that import.")
         }
-
-        draftText = ""
-        statusMessage = "Imported \(result.memories.formatted()) memories from \(source.displayName)."
-        return SyncResult(sourceCount: nil, memoryCount: result.memories, newItems: result.memories)
+        return .success(
+            SyncResult(sourceCount: nil, memoryCount: result.memories, newItems: result.memories),
+            message: "Imported \(result.memories.formatted()) memories from \(source.displayName)."
+        )
     }
 
-    func importGmail() async -> SyncResult? {
-        beginRun(
-            title: "Connecting to Gmail",
-            detail: "Reading recent email history and follow-ups from the last year."
-        )
-        defer { finishRun() }
-
+    @MainActor
+    static func importGmail(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
         do {
             let emails = try await GmailReaderService.shared.readRecentEmails(
                 maxResults: 300,
                 query: "newer_than:365d"
             )
-            updateProgress(
+            progress.update(
                 title: "Importing Gmail history",
                 detail: "Saving raw emails as memories and generating follow-up insights."
             )
             let rawImport = await GmailReaderService.shared.saveAsMemories(emails: emails)
             let synthesis = await GmailReaderService.shared.synthesizeFromEmails(emails: emails)
             let memoryCount = rawImport.saved + synthesis.memories
-            statusMessage =
-                "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
-            return SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count)
+            return .success(
+                SyncResult(sourceCount: emails.count, memoryCount: memoryCount, newItems: emails.count),
+                message: "Imported \(emails.count.formatted()) emails and saved \(memoryCount.formatted()) memories."
+            )
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return .failure(message: error.localizedDescription)
         }
     }
 
     /// Connect X via backend-mediated OAuth: open the authorize URL in the
     /// browser, then poll the backend until the account is linked. The backend
     /// kicks off the first ingest, so once connected we surface the synced count.
-    func connectX() async -> SyncResult? {
-        beginRun(
-            title: "Connecting to X",
-            detail: "Opening x.com to authorize access to your posts and bookmarks."
-        )
-        defer { finishRun() }
-
+    @MainActor
+    static func connectX(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
         // Deep link back to THIS build (dev vs prod URL schemes differ).
-        let scheme = Self.appURLScheme()
+        let scheme = appURLScheme()
         let redirect = "\(scheme)://x/callback"
 
         do {
             let resp = try await APIClient.shared.xOAuthURL(successRedirectURL: redirect)
             guard resp.success, let authUrl = resp.authUrl, let url = URL(string: authUrl) else {
-                errorMessage = resp.error == "x_oauth_not_configured"
-                    ? "X connector isn't configured on the server yet."
-                    : "Couldn't start the X connection."
-                return nil
+                return .failure(
+                    message: resp.error == "x_oauth_not_configured"
+                        ? "X connector isn't configured on the server yet."
+                        : "Couldn't start the X connection."
+                )
             }
             NSWorkspace.shared.open(url)
-            updateProgress(
+            progress.update(
                 title: "Waiting for X authorization",
                 detail: "Approve access in your browser. This window updates automatically."
             )
@@ -1315,8 +1271,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 }
             }
             guard let linked else {
-                errorMessage = "Didn't hear back from X. If you approved access, try again."
-                return nil
+                return .failure(message: "Didn't hear back from X. If you approved access, try again.")
             }
 
             let handle = linked.handle ?? "you"
@@ -1330,7 +1285,7 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 let status = try? await APIClient.shared.xConnectionStatus()
                 posts = status?.postCount ?? posts
                 memories = status?.memoryCount ?? memories
-                updateProgress(
+                progress.update(
                     title: "Importing your X data",
                     detail: "Saved \(posts.formatted()) posts · \(memories.formatted()) memories so far…"
                 )
@@ -1339,22 +1294,25 @@ private final class ImportConnectorSheetModel: ObservableObject {
                 try? await Task.sleep(for: .seconds(2))
             }
 
+            let message: String
             if posts > 0 {
                 let memClause = memories > 0
                     ? " — \(memories.formatted()) memories added. View them in Memories."
                     : ". Extracted memories appear in Memories."
-                statusMessage = "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
+                message = "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
             } else {
-                statusMessage = "Connected to X as @\(handle). Import is still running; check back shortly."
+                message = "Connected to X as @\(handle). Import is still running; check back shortly."
             }
-            return SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts)
+            return .success(
+                SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts),
+                message: message
+            )
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return .failure(message: error.localizedDescription)
         }
     }
 
-    static func appURLScheme() -> String {
+    private static func appURLScheme() -> String {
         if let urlTypes = Bundle.main.infoDictionary?["CFBundleURLTypes"] as? [[String: Any]],
             let first = urlTypes.first,
             let schemes = first["CFBundleURLSchemes"] as? [String],
@@ -1365,71 +1323,56 @@ private final class ImportConnectorSheetModel: ObservableObject {
         return "omi-computer"
     }
 
-    func importCalendar() async -> SyncResult? {
-        beginRun(
-            title: "Connecting to Calendar",
-            detail: "Reading past events and upcoming commitments for memory extraction."
-        )
-        defer { finishRun() }
-
+    @MainActor
+    static func importCalendar(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
         do {
             let events = try await CalendarReaderService.shared.readEvents(
                 daysBack: 365,
                 daysForward: 30,
                 maxResults: 500
             )
-            updateProgress(
+            progress.update(
                 title: "Importing calendar events",
                 detail: "Saving events as memories and generating action-oriented summaries."
             )
             let rawImport = await CalendarReaderService.shared.saveAsMemories(events: events, limit: 200)
             let synthesis = await CalendarReaderService.shared.synthesizeFromEvents(events: events)
             let memoryCount = rawImport.saved + synthesis.memories
-            statusMessage =
-                "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
-            return SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count)
+            return .success(
+                SyncResult(sourceCount: events.count, memoryCount: memoryCount, newItems: events.count),
+                message: "Read \(events.count.formatted()) calendar events and saved \(memoryCount.formatted()) memories."
+            )
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return .failure(message: error.localizedDescription)
         }
     }
 
-    func importAppleNotes() async -> SyncResult? {
-        beginRun(
-            title: "Connecting to Apple Notes",
-            detail: "Checking access and preparing to import recent notes."
-        )
-        defer { finishRun() }
-
+    @MainActor
+    static func importAppleNotes(progress: ConnectorImportRunner.ProgressSink) async -> Outcome {
         do {
-            return try await runAppleNotesImport()
+            return try await runAppleNotesImport(progress: progress)
         } catch let error as AppleNotesReaderError {
             guard error.shouldPromptForFolderSelection else {
-                errorMessage = error.localizedDescription
-                return nil
+                return .failure(message: error.localizedDescription)
             }
-            let granted = await selectAppleNotesFolder()
-            guard granted else {
-                if errorMessage == nil {
-                    errorMessage = error.localizedDescription
+            switch await selectAppleNotesFolder() {
+            case .denied(let message):
+                return .failure(message: message ?? error.localizedDescription)
+            case .granted:
+                do {
+                    return try await runAppleNotesImport(progress: progress)
+                } catch {
+                    return .failure(message: error.localizedDescription)
                 }
-                return nil
-            }
-
-            do {
-                return try await runAppleNotesImport()
-            } catch {
-                errorMessage = error.localizedDescription
-                return nil
             }
         } catch {
-            errorMessage = error.localizedDescription
-            return nil
+            return .failure(message: error.localizedDescription)
         }
     }
 
-    private func runAppleNotesImport() async throws -> SyncResult {
-        updateProgress(
+    @MainActor
+    private static func runAppleNotesImport(progress: ConnectorImportRunner.ProgressSink) async throws -> Outcome {
+        progress.update(
             title: "Importing Apple Notes",
             detail: "Reading recent notes and turning useful content into memories."
         )
@@ -1437,18 +1380,14 @@ private final class ImportConnectorSheetModel: ObservableObject {
         let rawImport = await AppleNotesReaderService.shared.saveAsMemories(notes: notes, limit: 200)
         let synthesis = await AppleNotesReaderService.shared.synthesizeFromNotes(notes: notes)
         let memoryCount = rawImport.saved + synthesis.memories
-        statusMessage =
-            "Imported \(notes.count.formatted()) notes and saved \(memoryCount.formatted()) memories."
-        return SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count)
+        return .success(
+            SyncResult(sourceCount: notes.count, memoryCount: memoryCount, newItems: notes.count),
+            message: "Imported \(notes.count.formatted()) notes and saved \(memoryCount.formatted()) memories."
+        )
     }
 
-    func rescanLocalFiles() async -> SyncResult? {
-        beginRun(
-            title: "Indexing local files",
-            detail: "Scanning your on-device files so Omi can use them in memory search."
-        )
-        defer { finishRun() }
-
+    @MainActor
+    static func rescanLocalFiles() async -> Outcome {
         let previousCount = await currentIndexedFileCount()
         AnalyticsManager.shared.onboardingChatToolUsed(
             tool: "scan_files",
@@ -1456,23 +1395,27 @@ private final class ImportConnectorSheetModel: ObservableObject {
         )
         let result = await ChatToolExecutor.scanLocalFiles()
 
-        if !result.didCompleteSuccessfully {
-            errorMessage = result.summaryText
-            return nil
+        guard result.didCompleteSuccessfully, result.hasReadableUserFileTarget else {
+            return .failure(message: result.summaryText)
         }
 
-        if !result.hasReadableUserFileTarget {
-            errorMessage = result.summaryText
-            return nil
-        } else {
-            statusMessage = result.summaryText
-            let updatedCount = await currentIndexedFileCount()
-            let newItems = max(updatedCount - previousCount, 0)
-            return SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems)
-        }
+        let updatedCount = await currentIndexedFileCount()
+        let newItems = max(updatedCount - previousCount, 0)
+        return .success(
+            SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems),
+            message: result.summaryText
+        )
     }
 
-    func selectAppleNotesFolder() async -> Bool {
+    private enum FolderSelection {
+        case granted
+        /// nil message means the user cancelled the panel; the caller falls
+        /// back to the error that prompted the selection.
+        case denied(message: String?)
+    }
+
+    @MainActor
+    private static func selectAppleNotesFolder() async -> FolderSelection {
         let fileManager = FileManager.default
         let home = fileManager.homeDirectoryForCurrentUser
         let notesContainerURL = home
@@ -1491,30 +1434,25 @@ private final class ImportConnectorSheetModel: ObservableObject {
             : groupContainersURL
 
         guard panel.runModal() == .OK, let selectedURL = panel.url else {
-            return false
+            return .denied(message: nil)
         }
 
         do {
             _ = try await AppleNotesReaderService.shared.validateSelectedFolder(path: selectedURL.path)
-            errorMessage = nil
-            return true
-        } catch let error as AppleNotesReaderError {
-            errorMessage = error.localizedDescription
-            return false
+            return .granted
         } catch {
-            errorMessage = error.localizedDescription
-            return false
+            return .denied(message: error.localizedDescription)
         }
     }
 
-    private func currentIndexedFileCount() async -> Int {
+    private static func currentIndexedFileCount() async -> Int {
         guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return 0 }
         do {
             return try await dbQueue.read { db in
                 try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM indexed_files") ?? 0
             }
         } catch {
-            log("ImportConnectorSheetModel: Failed to read indexed file count: \(error)")
+            log("ConnectorImportOperations: Failed to read indexed file count: \(error)")
             return 0
         }
     }
@@ -1526,10 +1464,20 @@ struct ImportConnectorSheet: View {
     @ObservedObject var statusStore: ImportConnectorStatusStore
     let onDismiss: () -> Void
 
-    @StateObject private var model = ImportConnectorSheetModel()
+    @ObservedObject private var runner = ConnectorImportRunner.shared
+    @State private var draftText = ""
+    @State private var validationError: String?
 
     private var snapshot: ImportConnectorStatusStore.Snapshot {
         statusStore.snapshot(for: connector)
+    }
+
+    private var runState: ConnectorImportRunner.RunState? {
+        runner.runs[connector.id]
+    }
+
+    private var isRunning: Bool {
+        runState?.phase == .running
     }
 
     var body: some View {
@@ -1572,6 +1520,13 @@ struct ImportConnectorSheet: View {
         }
         .padding(24)
         .background(OmiColors.backgroundPrimary)
+        .onChange(of: runState?.phase) { _, newPhase in
+            // A successful import consumed the pasted draft; a failed one
+            // keeps it so the user can retry without re-pasting.
+            if newPhase == .succeeded {
+                draftText = ""
+            }
+        }
     }
 
     private var connectorActionContent: some View {
@@ -1583,60 +1538,7 @@ struct ImportConnectorSheet: View {
             }
 
             Button {
-                Task {
-                    switch connector.id {
-                    case "calendar":
-                        if let result = await model.importCalendar() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems
-                            )
-                        }
-                    case "email":
-                        if let result = await model.importGmail() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems
-                            )
-                        }
-                    case "x":
-                        if let result = await model.connectX() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems,
-                                availabilityText: "Posts & bookmarks"
-                            )
-                        }
-                    case "apple-notes":
-                        if let result = await model.importAppleNotes() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems,
-                                availabilityText: "Private notes accessible"
-                            )
-                        }
-                    case "local-files":
-                        if let result = await model.rescanLocalFiles() {
-                            statusStore.markSynced(
-                                connectorID: connector.id,
-                                sourceCount: result.sourceCount,
-                                memoryCount: result.memoryCount,
-                                lastDeltaCount: result.newItems,
-                                availabilityText: "On-device index"
-                            )
-                        }
-                    default:
-                        break
-                    }
-                }
+                startConnectorImport()
             } label: {
                 ConnectionModalActionButton(
                     title: primaryActionTitle,
@@ -1644,7 +1546,7 @@ struct ImportConnectorSheet: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(model.isRunning)
+            .disabled(isRunning)
 
             if connector.id == "local-files" {
                 Text("Local files are indexed on-device and used to build your memory graph.")
@@ -1661,7 +1563,7 @@ struct ImportConnectorSheet: View {
                 .foregroundColor(OmiColors.textSecondary)
 
             Button {
-                model.openAndCopyPrompt(for: memorySource)
+                openAndCopyPrompt(for: memorySource)
             } label: {
                 ConnectionModalActionButton(title: "Open \(connector.title) and Copy Prompt")
             }
@@ -1675,7 +1577,7 @@ struct ImportConnectorSheet: View {
                             .stroke(Color.white.opacity(0.08), lineWidth: 1)
                     )
 
-                if model.draftText.isEmpty {
+                if draftText.isEmpty {
                     Text("Paste the full \(connector.title) response here…")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
@@ -1683,7 +1585,7 @@ struct ImportConnectorSheet: View {
                         .padding(.vertical, 14)
                 }
 
-                TextEditor(text: $model.draftText)
+                TextEditor(text: $draftText)
                     .scrollContentBackground(.hidden)
                     .font(.system(size: 13))
                     .foregroundColor(OmiColors.textPrimary)
@@ -1692,24 +1594,14 @@ struct ImportConnectorSheet: View {
             }
 
             Button {
-                Task {
-                    if let result = await model.importMemoryLog(source: memorySource) {
-                        statusStore.markSynced(
-                            connectorID: connector.id,
-                            sourceCount: result.sourceCount,
-                            memoryCount: result.memoryCount,
-                            lastDeltaCount: result.newItems,
-                            availabilityText: "Imported manually"
-                        )
-                    }
-                }
+                startMemoryLogImport()
             } label: {
                 ConnectionModalActionButton(
-                    title: model.isRunning ? "Importing…" : "Import \(connector.title)"
+                    title: isRunning ? "Importing…" : "Import \(connector.title)"
                 )
             }
             .buttonStyle(.plain)
-            .disabled(model.isRunning)
+            .disabled(isRunning)
         }
     }
 
@@ -1720,23 +1612,123 @@ struct ImportConnectorSheet: View {
     private var primaryActionTitle: String {
         switch connector.id {
         case "calendar":
-            return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
+            return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Calendar")
         case "email":
-            return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
+            return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Gmail")
         case "apple-notes":
-            return model.isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Apple Notes")
+            return isRunning ? "Importing…" : (snapshot.isConnected ? "Sync now" : "Connect Apple Notes")
         case "x":
-            return model.isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
+            return isRunning ? "Connecting…" : (snapshot.isConnected ? "Sync now" : "Connect X")
         case "local-files":
-            return model.isRunning ? "Reindexing…" : (snapshot.isConnected ? "Reindex Local Files" : "Index Local Files")
+            return isRunning ? "Reindexing…" : (snapshot.isConnected ? "Reindex Local Files" : "Index Local Files")
         default:
-            return model.isRunning ? "Working…" : connector.actionTitle
+            return isRunning ? "Working…" : connector.actionTitle
         }
+    }
+
+    private func startConnectorImport() {
+        switch connector.id {
+        case "calendar":
+            startRun(
+                title: "Connecting to Calendar",
+                detail: "Reading past events and upcoming commitments for memory extraction."
+            ) { progress in
+                await ConnectorImportOperations.importCalendar(progress: progress)
+            }
+        case "email":
+            startRun(
+                title: "Connecting to Gmail",
+                detail: "Reading recent email history and follow-ups from the last year."
+            ) { progress in
+                await ConnectorImportOperations.importGmail(progress: progress)
+            }
+        case "x":
+            startRun(
+                title: "Connecting to X",
+                detail: "Opening x.com to authorize access to your posts and bookmarks.",
+                availabilityText: "Posts & bookmarks"
+            ) { progress in
+                await ConnectorImportOperations.connectX(progress: progress)
+            }
+        case "apple-notes":
+            startRun(
+                title: "Connecting to Apple Notes",
+                detail: "Checking access and preparing to import recent notes.",
+                availabilityText: "Private notes accessible"
+            ) { progress in
+                await ConnectorImportOperations.importAppleNotes(progress: progress)
+            }
+        case "local-files":
+            startRun(
+                title: "Indexing local files",
+                detail: "Scanning your on-device files so Omi can use them in memory search.",
+                availabilityText: "On-device index"
+            ) { _ in
+                await ConnectorImportOperations.rescanLocalFiles()
+            }
+        default:
+            break
+        }
+    }
+
+    private func startMemoryLogImport() {
+        let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            validationError = "Paste the full response first."
+            return
+        }
+        let source = memorySource
+        startRun(
+            title: "Importing \(source.displayName)",
+            detail: "Extracting durable memories from the pasted conversation.",
+            availabilityText: "Imported manually"
+        ) { _ in
+            await ConnectorImportOperations.importMemoryLog(text: trimmed, source: source)
+        }
+    }
+
+    /// Hands the run to the shared runner so it survives this sheet closing.
+    /// Marking the connector synced happens inside the runner-owned task,
+    /// not in a button closure tied to this sheet's lifetime.
+    private func startRun(
+        title: String,
+        detail: String,
+        availabilityText: String? = nil,
+        operation: @escaping @MainActor (ConnectorImportRunner.ProgressSink) async -> ConnectorImportOperations.Outcome
+    ) {
+        validationError = nil
+        let connectorID = connector.id
+        let statusStore = statusStore
+        ConnectorImportRunner.shared.start(
+            connectorID: connectorID,
+            progressTitle: title,
+            progressDetail: detail
+        ) { progress in
+            switch await operation(progress) {
+            case .success(let result, let message):
+                statusStore.markSynced(
+                    connectorID: connectorID,
+                    sourceCount: result.sourceCount,
+                    memoryCount: result.memoryCount,
+                    lastDeltaCount: result.newItems,
+                    availabilityText: availabilityText
+                )
+                return .success(message: message)
+            case .failure(let message):
+                return .failure(message: message)
+            }
+        }
+    }
+
+    private func openAndCopyPrompt(for source: OnboardingMemoryLogSource) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(source.prompt, forType: .string)
+        NSWorkspace.shared.open(source.prefilledBrowserURL)
     }
 
     @ViewBuilder
     private var statusSection: some View {
-        if model.isRunning, let title = model.progressTitle {
+        if let run = runState, run.phase == .running {
             statusCard {
                 HStack(alignment: .top, spacing: 12) {
                     ProgressView()
@@ -1744,16 +1736,14 @@ struct ImportConnectorSheet: View {
                         .padding(.top, 2)
 
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(title)
+                        Text(run.progressTitle)
                             .scaledFont(size: 12, weight: .semibold)
                             .foregroundColor(OmiColors.textPrimary)
 
-                        if let detail = model.progressDetail {
-                            Text(detail)
-                                .scaledFont(size: 12)
-                                .foregroundColor(OmiColors.textSecondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
+                        Text(run.progressDetail)
+                            .scaledFont(size: 12)
+                            .foregroundColor(OmiColors.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         Text("You can close this window now. Omi keeps importing in the background.")
                             .scaledFont(size: 11)
@@ -1762,11 +1752,15 @@ struct ImportConnectorSheet: View {
                     }
                 }
             }
-        } else if let statusMessage = model.statusMessage {
+        } else if let validationError {
+            Text(validationError)
+                .scaledFont(size: 12, weight: .medium)
+                .foregroundColor(OmiColors.warning)
+        } else if let statusMessage = runState?.statusMessage {
             Text(statusMessage)
                 .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.success)
-        } else if let errorMessage = model.errorMessage {
+        } else if let errorMessage = runState?.errorMessage {
             Text(errorMessage)
                 .scaledFont(size: 12, weight: .medium)
                 .foregroundColor(OmiColors.warning)
