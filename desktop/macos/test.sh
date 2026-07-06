@@ -48,10 +48,6 @@ cd "$SCRIPT_DIR"
 #       — macOS 26 system SQLite rejects `DELETE FROM sqlite_master` even with
 #         writable_schema=ON, blocking the test's corruption setup.
 #         https://github.com/BasedHardware/omi/issues/9032
-#   PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing
-#       — the detector does not fully honor the injected environment/home, so the
-#         result depends on whether OpenClaw is installed on the runner.
-#         https://github.com/BasedHardware/omi/issues/9033
 "$SCRIPT_DIR/scripts/swift-test-suites.sh"
 echo ""
 

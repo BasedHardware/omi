@@ -13,8 +13,6 @@ skip_for_suite() {
       echo "--skip APIClientRoutingTests/testDeleteConversationRoutesToPython" ;;
     ActionItemsFTSRepairTests)
       echo "--skip ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable" ;;
-    PiMonoWiringTests)
-      echo "--skip PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing" ;;
   esac
 }
 
