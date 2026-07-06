@@ -91,7 +91,9 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         fi
       fi
     done
+    set +u
     active_pids=("${still_active[@]}")
+    set -u
   }
 
   for test_path in "${selected_tests[@]}"; do
@@ -124,11 +126,13 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   done
 
   reap_finished_children
+  set +u
   for pid in "${active_pids[@]}"; do
     if ! wait "$pid"; then
       failed=1
     fi
   done
+  set -u
 
   exit "$failed"
 fi
