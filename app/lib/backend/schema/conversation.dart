@@ -50,6 +50,7 @@ enum ConversationSource {
   phone,
   desktop,
   limitless,
+  rayban_meta,
 }
 
 class ConversationExternalData {
@@ -460,6 +461,7 @@ class ServerConversation {
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
+    if (source == ConversationSource.rayban_meta) return 'Ray-Ban Meta';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     if (structured.category.isEmpty) return 'Other';

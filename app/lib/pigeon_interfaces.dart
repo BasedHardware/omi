@@ -253,3 +253,116 @@ abstract class BleFlutterApi {
   /// Dart can rescan the recordings dir without waiting for a disconnect.
   void onBatchRecordingFinalized(String fileName);
 }
+
+// =============================================================================
+// Ray-Ban Meta (Meta Wearables Device Access Toolkit) APIs
+// =============================================================================
+
+/// A pair of Ray-Ban Meta glasses reported by the Meta Wearables toolkit.
+class RayBanMetaGlasses {
+  final String id;
+  final String name;
+
+  RayBanMetaGlasses({required this.id, required this.name});
+}
+
+/// Dart → native. Camera/photo capture goes through the Meta Wearables Device
+/// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
+/// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
+/// are safe to call on builds without the DAT SDK — isAvailable() reports
+/// which mode this build supports.
+@HostApi()
+abstract class RayBanMetaHostAPI {
+  /// 'full' (DAT SDK linked + Meta app credentials configured),
+  /// 'audio_only' (no DAT — platform Bluetooth audio route only), or 'none'.
+  @SwiftFunction('getAvailabilityMode()')
+  String getAvailabilityMode();
+
+  @SwiftFunction('initialize()')
+  void initialize();
+
+  /// 'unregistered' | 'registering' | 'registered' ('unavailable' without DAT).
+  @SwiftFunction('getRegistrationState()')
+  String getRegistrationState();
+
+  /// Launches the Meta AI companion app to authorize this app for the glasses.
+  @SwiftFunction('startRegistration()')
+  void startRegistration();
+
+  @SwiftFunction('unregister()')
+  void unregister();
+
+  @async
+  @SwiftFunction('getAvailableGlasses()')
+  List<RayBanMetaGlasses> getAvailableGlasses();
+
+  @SwiftFunction('connect(deviceId:)')
+  void connect(String deviceId);
+
+  @SwiftFunction('disconnect()')
+  void disconnect();
+
+  /// 'disconnected' | 'connecting' | 'connected'.
+  @SwiftFunction('getConnectionState()')
+  String getConnectionState();
+
+  /// DAT camera permission for the glasses: resolves 'granted' | 'denied'.
+  @async
+  @SwiftFunction('requestCameraPermission()')
+  String requestCameraPermission();
+
+  /// 'granted' | 'denied' | 'not_determined' | 'unavailable'.
+  @SwiftFunction('getCameraPermissionStatus()')
+  String getCameraPermissionStatus();
+
+  /// Starts capturing the glasses microphone over the Bluetooth HFP route and
+  /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
+  @SwiftFunction('startAudioCapture()')
+  void startAudioCapture();
+
+  @SwiftFunction('stopAudioCapture()')
+  void stopAudioCapture();
+
+  /// True when the active audio input route is the glasses' Bluetooth HFP mic.
+  @SwiftFunction('isGlassesAudioRouteActive()')
+  bool isGlassesAudioRouteActive();
+
+  /// Bluetooth HFP input port names currently available, for the audio-only
+  /// fallback when the DAT SDK is not part of this build.
+  @SwiftFunction('getBluetoothHfpInputNames()')
+  List<String> getBluetoothHfpInputNames();
+
+  /// Starts the DAT camera stream session so photo capture is ready. While
+  /// active the glasses' capture LED is on (hardware-enforced by Meta).
+  @SwiftFunction('startCamera()')
+  void startCamera();
+
+  @SwiftFunction('stopCamera()')
+  void stopCamera();
+
+  /// Captures one photo; result arrives via RayBanMetaFlutterAPI.onPhotoCaptured.
+  @SwiftFunction('capturePhoto()')
+  void capturePhoto();
+}
+
+/// Native → Dart events for Ray-Ban Meta.
+@FlutterApi()
+abstract class RayBanMetaFlutterAPI {
+  void onRegistrationStateChanged(String state);
+  void onGlassesDiscovered(RayBanMetaGlasses glasses);
+  void onConnectionStateChanged(String deviceId, String state);
+
+  /// PCM16 little-endian mono audio at [sampleRate] Hz from the glasses mic.
+  void onAudioFrame(Uint8List pcm16Frame, double sampleRate);
+
+  /// Whether the glasses' HFP mic is the active input route right now.
+  void onAudioRouteChanged(bool glassesRouteActive);
+
+  /// JPEG bytes plus clockwise orientation in degrees (0/90/180/270).
+  void onPhotoCaptured(Uint8List jpegBytes, int orientationDegrees);
+
+  /// 'stopped' | 'starting' | 'streaming' | 'paused'.
+  void onCameraStateChanged(String state);
+  void onCameraPermissionChanged(String status);
+  void onError(String code, String message);
+}

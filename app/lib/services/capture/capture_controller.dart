@@ -305,6 +305,8 @@ class CaptureController extends ChangeNotifier
         return 'apple_watch';
       case DeviceType.limitless:
         return 'limitless';
+      case DeviceType.raybanMeta:
+        return 'rayban_meta';
     }
   }
 
@@ -1127,6 +1129,9 @@ class CaptureController extends ChangeNotifier
       case DeviceType.bee:
       case DeviceType.fieldy:
       case DeviceType.plaud:
+      // Ray-Ban Meta audio is bridged from the platform HFP route, so there is
+      // no native BLE GATT target; capture runs on the foreground Dart path.
+      case DeviceType.raybanMeta:
         return null;
     }
   }
