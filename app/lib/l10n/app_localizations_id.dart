@@ -9348,7 +9348,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Untuk saat ini hanya berfungsi dengan perangkat Omi. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
+      'Untuk saat ini berfungsi dengan perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9499,4 +9499,23 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flash Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Merekam di liontin';
+
+  @override
+  String get pendantRecordingNote =>
+      'Liontin Anda merekam secara mandiri. Rekaman disinkronkan ke ponsel Anda selama aplikasi terbuka.';
+
+  @override
+  String get pendantSyncingRecordings => 'Menyinkronkan rekaman dari liontin Anda…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes mnt tersimpan';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Penyimpanan liontin hampir penuh — biarkan aplikasi tetap terbuka untuk menyinkronkan.';
 }

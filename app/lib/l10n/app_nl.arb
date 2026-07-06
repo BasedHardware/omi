@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement.",
     "transcribeLaterTitle": "Later transcriberen",
     "transcribeLaterDescription": "Neem nu audio op en transcribeer die later wanneer je wilt, in plaats van live. Opnames worden op je telefoon bewaard, daarna upload je ze om gesprekken te maken.",
-    "transcribeLaterNote": "Werkt voorlopig met Omi-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.",
+    "transcribeLaterNote": "Werkt voorlopig met Omi- en Limitless-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.",
     "transcribeLaterStorageFull": "Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.",
     "unmute": "Dempen opheffen",
     "newRecording": "Nieuwe opname",
@@ -3104,5 +3104,17 @@
     "deviceOnboardingIntroDuration": "Ongeveer 1 minuut",
     "jumpToLatestMessage": "Naar nieuwste bericht springen",
     "latest": "Nieuwste",
-    "flashFirmware": "Firmware flashen"
+    "flashFirmware": "Firmware flashen",
+    "pendantRecordingTitle": "Opnemen op de hanger",
+    "pendantRecordingNote": "Je hanger neemt zelfstandig op. Opnames worden met je telefoon gesynchroniseerd zolang de app open staat.",
+    "pendantSyncingRecordings": "Opnames van je hanger synchroniseren…",
+    "pendantMinutesStored": "~{minutes} min opgeslagen",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "De opslag van de hanger is bijna vol — houd de app open om te synchroniseren."
 }

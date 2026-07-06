@@ -9354,7 +9354,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'فی الحال صرف Omi ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔';
+      'فی الحال Omi اور Limitless ڈیوائسز کے ساتھ کام کرتا ہے۔ آڈیو آپ کے فون ہی پر رہتا ہے جب تک آپ اسے اپ لوڈ کرنے کا فیصلہ نہ کریں۔';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9504,4 +9504,22 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'فرم ویئر فلیش کریں';
+
+  @override
+  String get pendantRecordingTitle => 'پینڈنٹ پر ریکارڈنگ جاری ہے';
+
+  @override
+  String get pendantRecordingNote =>
+      'آپ کا پینڈنٹ خود بخود ریکارڈ کر رہا ہے۔ ایپ کھلی ہونے کے دوران ریکارڈنگز آپ کے فون سے سنک ہوتی ہیں۔';
+
+  @override
+  String get pendantSyncingRecordings => 'آپ کے پینڈنٹ سے ریکارڈنگز سنک ہو رہی ہیں…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes منٹ محفوظ';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔';
 }

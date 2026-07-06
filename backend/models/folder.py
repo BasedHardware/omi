@@ -72,3 +72,15 @@ class ReorderFoldersRequest(BaseModel):
         if len(folder_ids) != len(set(folder_ids)):
             raise ValueError('folder_ids must not contain duplicates')
         return folder_ids
+
+
+class FolderMutationResponse(BaseModel):
+    """Status response for folder mutation endpoints."""
+
+    status: str
+
+
+class BulkMoveConversationsResponse(FolderMutationResponse):
+    """Response for bulk folder conversation moves."""
+
+    moved_count: int = 0

@@ -42,6 +42,10 @@ class RebuildResponse(BaseModel):
     edges_count: int
 
 
+class DeleteKnowledgeGraphResponse(BaseModel):
+    status: str
+
+
 @router.get('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=KnowledgeGraphResponse)
 def get_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     graph = kg_db.get_knowledge_graph(uid)
@@ -77,7 +81,7 @@ def rebuild_graph(
     return RebuildResponse(status="rebuilding", nodes_count=0, edges_count=0)
 
 
-@router.delete('/v1/knowledge-graph', tags=['knowledge_graph'])
+@router.delete('/v1/knowledge-graph', tags=['knowledge_graph'], response_model=DeleteKnowledgeGraphResponse)
 def delete_knowledge_graph(uid: str = Depends(auth.get_current_user_uid)):
     kg_db.delete_knowledge_graph(uid)
     return {"status": "deleted"}

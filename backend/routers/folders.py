@@ -13,6 +13,8 @@ from models.folder import (
     MoveConversationRequest,
     BulkMoveConversationsRequest,
     ReorderFoldersRequest,
+    FolderMutationResponse,
+    BulkMoveConversationsResponse,
 )
 from models.conversation import Conversation
 from utils.conversations.render import redact_conversations_for_list
@@ -100,7 +102,7 @@ def delete_folder(
     folders_db.delete_folder(uid, folder_id, move_to_folder_id)
 
 
-@router.post('/v1/folders/reorder', tags=['folders'])
+@router.post('/v1/folders/reorder', response_model=FolderMutationResponse, tags=['folders'])
 def reorder_folders(request: ReorderFoldersRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Reorder folders by providing an ordered list of folder IDs."""
     existing_ids = {folder['id'] for folder in folders_db.get_folders(uid)}
@@ -142,7 +144,7 @@ def get_folder_conversations(
     return valid_conversations
 
 
-@router.patch('/v1/conversations/{conversation_id}/folder', tags=['folders'])
+@router.patch('/v1/conversations/{conversation_id}/folder', response_model=FolderMutationResponse, tags=['folders'])
 def move_conversation_to_folder(
     conversation_id: str, request: MoveConversationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -162,7 +164,11 @@ def move_conversation_to_folder(
     return {"status": "ok"}
 
 
-@router.post('/v1/folders/{folder_id}/conversations/bulk-move', tags=['folders'])
+@router.post(
+    '/v1/folders/{folder_id}/conversations/bulk-move',
+    response_model=BulkMoveConversationsResponse,
+    tags=['folders'],
+)
 def bulk_move_conversations(
     folder_id: str, request: BulkMoveConversationsRequest, uid: str = Depends(auth.get_current_user_uid)
 ):

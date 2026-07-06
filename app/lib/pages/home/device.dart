@@ -14,6 +14,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -72,7 +73,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     super.dispose();
   }
 
-  IconData _getBatteryIcon(int batteryLevel) {
+  FaIconData _getBatteryIcon(int batteryLevel) {
     if (batteryLevel > 75) {
       return FontAwesomeIcons.batteryFull;
     } else if (batteryLevel > 50) {
@@ -102,7 +103,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
   }
 
   Widget _buildProfileStyleItem({
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     String? chipValue,
     String? copyValue,
@@ -175,7 +176,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, top: 1),
                 child: charging
-                    ? const FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
+                    ? FaIcon(FontAwesomeIcons.chargingStation, color: Color.fromARGB(255, 0, 255, 8), size: 20)
                     : FaIcon(
                         _getBatteryIcon(provider.batteryLevel),
                         color: _getBatteryColor(provider.batteryLevel),
@@ -212,15 +213,21 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
       child: Column(
         children: [
-          // How to Use Your Omi (interactive tutorial) — Omi devices only, while connected
-          if (provider.connectedDevice?.type == DeviceType.omi) ...[
+          // How to Use Your Omi (interactive tutorial) — consumer CV1 pendant only.
+          // Other omi-enumerated variants (DevKit, Glass, Neo) share DeviceType.omi
+          // but the tutorial teaches CV1 button behaviour, so gate on the GATT model.
+          if (provider.connectedDevice?.type == DeviceType.omi &&
+              DeviceUtils.isOmiCv1(
+                modelNumber: provider.pairedDevice?.modelNumber,
+                deviceName: provider.connectedDevice?.name,
+              )) ...[
             _buildProfileStyleItem(
               icon: FontAwesomeIcons.graduationCap,
               title: context.l10n.deviceTutorial,
               onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)),
-                );
+                Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const InteractiveDeviceOnboardingWrapper(allowExit: true)));
               },
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -338,7 +345,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
               child: Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 24,
                     height: 24,
                     child: Padding(
@@ -392,7 +399,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
               child: Row(
                 children: [
-                  const SizedBox(
+                  SizedBox(
                     width: 24,
                     height: 24,
                     child: Padding(
@@ -451,7 +458,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
                 child: Row(
                   children: [
-                    const SizedBox(
+                    SizedBox(
                       width: 24,
                       height: 24,
                       child: Padding(
@@ -562,7 +569,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+              icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
           ),
@@ -643,14 +650,14 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const FaIcon(FontAwesomeIcons.bluetooth, color: Colors.grey, size: 14),
+                      FaIcon(FontAwesomeIcons.bluetooth, color: Colors.grey, size: 14),
                       const SizedBox(width: 6),
                       Text(
                         '${captureProvider.bleReceiveRateKbps.toStringAsFixed(1)} kbps',
                         style: const TextStyle(color: Colors.grey, fontSize: 14),
                       ),
                       const SizedBox(width: 24),
-                      const FaIcon(FontAwesomeIcons.signal, color: Colors.grey, size: 14),
+                      FaIcon(FontAwesomeIcons.signal, color: Colors.grey, size: 14),
                       const SizedBox(width: 6),
                       Text(
                         '${captureProvider.wsSendRateKbps.toStringAsFixed(1)} kbps',

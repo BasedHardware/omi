@@ -1,92 +1,78 @@
-// Placeholder types based on common REST patterns for /apps
-// Adjust according to the actual Omi API documentation
+// Backend REST schema authority lives in ./omiApi.generated.ts, generated from
+// docs/api-reference/app-client-openapi.json. This file re-exports those
+// generated types under the names admin consumers import, plus behavior-only
+// adapters (request-body builders, client-narrowed unions) that are not backend
+// schema.
 
-export type OmiAppStatus = "approved" | "pending" | "rejected" | "under-review" | string; // Add known statuses
-export type OmiPaymentPlan = "free" | "one-time" | "monthly" | "yearly" | string; // Example plans
+import type { App } from './omiApi.generated';
 
-// Based on the provided API response structure
-export interface OmiApp {
-  id: string;
-  name: string;
-  uid: string; // User ID of the creator?
-  private: boolean;
-  approved: boolean;
-  status: OmiAppStatus;
-  category: string;
-  email: string; // Contact email?
-  author: string;
-  description: string;
-  image: string; // URL to main image?
-  capabilities: OmiAppCapability[]; // Use the existing capability type
-  memory_prompt?: string;
-  chat_prompt?: string;
-  persona_prompt?: string;
-  username?: string; // Associated username?
-  // connected_accounts: any[]; // Define more strictly if structure is known
-  // twitter: any; // Define more strictly if structure is known
-  external_integration?: {
-    triggers_on?: string;
-    webhook_url?: string;
-    setup_completed_url?: string;
-    setup_instructions_file_path?: string;
-    is_instructions_url?: boolean;
-    auth_steps?: any[]; // Define steps structure if known
-    app_home_url?: string;
-    actions?: any[]; // Define actions structure if known
-  };
-  // reviews: any[]; // Define review structure if needed
-  user_review?: { // Define user review structure if needed
-    uid: string;
-    rated_at: string; // ISO Date string
-    score: number;
-    review: string;
-    username: string;
-    response?: string;
-    responded_at?: string; // ISO Date string
-  };
-  rating_avg: number;
-  rating_count: number;
-  enabled: boolean;
-  deleted: boolean;
-  trigger_workflow_memories?: boolean;
-  installs: number;
-  proactive_notification?: {
-    scopes?: string[];
-  };
-  created_at: string; // ISO Date string (renamed from createdAt)
-  is_paid: boolean;
-  price: number;
-  payment_plan?: OmiPaymentPlan;
-  payment_product_id?: string;
-  payment_price_id?: string;
-  payment_link_id?: string;
-  payment_link?: string;
-  is_user_paid?: boolean;
-  thumbnails?: any[]; // Define thumbnail structure if known
-  thumbnail_urls?: string[];
-  is_influencer?: boolean;
-  is_popular?: boolean;
-}
+/**
+ * `OmiApp` is the legacy alias for the generated `App` schema — the backend
+ * REST authority for `/v1/apps`. The hand-written mirror is retired in favor
+ * of the generated DTO.
+ */
+export type OmiApp = App;
 
-// Update Input type to exclude new read-only/generated fields
-// Keep fields that are likely user-settable during creation/update
-export type OmiAppInput = Partial<Omit<OmiApp, 
-  'id' | 'uid' | 'approved' | 'status' | 'reviews' | 'user_review' | 
-  'rating_avg' | 'rating_count' | 'deleted' | 'installs' | 'created_at' | 
-  'payment_product_id' | 'payment_price_id' | 'payment_link_id' | 'payment_link' | 
-  'is_user_paid' | 'thumbnail_urls' | 'is_popular' | 'is_influencer'
->>;
-
-// Placeholder for capability type - adjust based on actual API spec
-export type OmiAppCapability = 
+/**
+ * App capability. The backend `App.capabilities` is typed as `Array<string>`;
+ * this union narrows to the known values the admin UI renders, while still
+ * accepting other strings the API may return.
+ */
+export type OmiAppCapability =
   | 'memories'
   | 'chat'
   | 'proactive_notification'
   | 'external_integration'
   | 'persona'
-  | string; // Allow other string values if the API uses them 
+  | (string & {});
 
-// Payout-related types
+/**
+ * App status. The backend `App.status` is typed as `string`; this union
+ * narrows to the known values the admin UI renders.
+ */
+export type OmiAppStatus = 'approved' | 'pending' | 'rejected' | 'under-review' | (string & {});
+
+/**
+ * App payment plan. The backend `App.payment_plan` is typed as `string`;
+ * this union narrows to the known values the admin UI renders.
+ */
+export type OmiPaymentPlan = 'free' | 'one-time' | 'monthly' | 'yearly' | (string & {});
+
+/**
+ * Request-body builder for create/update app. Client-side shape derived from
+ * the generated `App` response schema; the backend accepts a subset of fields.
+ */
+export type OmiAppInput = Partial<
+  Omit<
+    OmiApp,
+    | 'id'
+    | 'uid'
+    | 'approved'
+    | 'status'
+    | 'reviews'
+    | 'user_review'
+    | 'rating_avg'
+    | 'rating_count'
+    | 'deleted'
+    | 'installs'
+    | 'created_at'
+    | 'payment_product_id'
+    | 'payment_price_id'
+    | 'payment_link_id'
+    | 'payment_link'
+    | 'is_user_paid'
+    | 'thumbnail_urls'
+    | 'is_popular'
+    | 'is_influencer'
+  >
+>;
+
+// ---------------------------------------------------------------------------
+// Payout-related types. These describe Stripe payout data returned by the
+// admin backend, not the Omi App API. They remain hand-written because they
+// are not part of the Omi REST OpenAPI surface.
+// ---------------------------------------------------------------------------
+
 export interface StripePayout {
   id: string;
   object: 'payout';
@@ -128,5 +114,5 @@ export interface UserWithStripeAccount {
 export interface PayoutWithAppInfo {
   payout: StripePayout;
   appName: string;
-  uid: string; // Changed from userName and userId to just uid
-} 
+  uid: string;
+}

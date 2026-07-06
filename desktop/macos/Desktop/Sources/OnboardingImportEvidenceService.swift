@@ -144,7 +144,10 @@ enum OnboardingImportEvidenceService {
 
   private static func isLegacyMemorySystemError(_ error: Error) -> Bool {
     guard case let APIError.httpError(statusCode, detail) = error else { return false }
-    return statusCode == 403 && detail == "memory_import_requires_canonical"
+    if statusCode == 403 && detail == "memory_import_requires_canonical" { return true }
+    // Deployments without the canonical import router (prod today) 404 this
+    // endpoint; without falling back the whole scan context is silently lost.
+    return statusCode == 404
   }
 
   private static func newImportRunId(sourceType: String) -> String {

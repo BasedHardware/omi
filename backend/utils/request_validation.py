@@ -1,3 +1,17 @@
+"""Edge-case request validation helpers (multipart form-JSON, calendar dates,
+sync filenames, image chunks, and reusable Query parameter aliases).
+
+Body validation convention: JSON request bodies are validated by FastAPI's
+native mechanism — declare the body param as a Pydantic model
+(``data: YourRequestModel``) and FastAPI + Pydantic handle parsing, type
+checking, and 422-on-malformed. Do NOT hand-parse with ``data: dict`` +
+``data.get()`` + manual HTTPException; that pattern is being phased out (see
+Phase 1.2 of the schema SSOT plan). This module does NOT centralize body
+validation — it only holds helpers for the cases FastAPI's native mechanism
+does not cover (multipart/form-data JSON-string fields, multi-field calendar
+date validation, filename timestamp parsing, chunked-upload envelopes).
+"""
+
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, TypeVar

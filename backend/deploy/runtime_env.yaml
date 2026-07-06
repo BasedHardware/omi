@@ -38,13 +38,13 @@ environments:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_MODE:
-            value: write
+            value: read
             category: memory_rollout
           MEMORY_ENABLED_USERS:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: memory_rollout
           MEMORY_V3_GET_ENABLED:
-            value: "false"
+            value: "true"
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
             value: "false"
@@ -93,14 +93,17 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
-              value: write
+              value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "false"
+              value: "true"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
               value: "false"
@@ -126,6 +129,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-sync:
           env:
@@ -155,14 +161,17 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
-              value: write
+              value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "false"
+              value: "true"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
               value: "false"
@@ -188,6 +197,9 @@ environments:
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+              version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-integration:
           env:
@@ -217,14 +229,17 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
               category: rollout
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
-              value: write
+              value: read
               category: memory_rollout
             MEMORY_ENABLED_USERS:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "false"
+              value: "true"
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
               value: "false"
@@ -251,6 +266,9 @@ environments:
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
+              version: latest
 
   prod:
     gcp_project: based-hardware
@@ -260,16 +278,9 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
         env:
-          OMI_LLM_GATEWAY_URL:
-            value: http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080
-            category: service_discovery
           OMI_ENV_STAGE:
             value: prod
             category: runtime_identity
-          OMI_LLM_GATEWAY_SERVICE_TOKEN:
-            secret:
-              name: prod-omi-backend-secrets
-              key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           SERVICE_ACCOUNT_JSON:
             secret:
               name: prod-omi-backend-secrets
@@ -308,10 +319,9 @@ environments:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              category: service_discovery
-              provisional: true
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -343,18 +353,17 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-sync:
           env:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              category: service_discovery
-              provisional: true
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -386,18 +395,17 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest
         backend-integration:
           env:
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity
-            OMI_LLM_GATEWAY_URL:
-              env_var: OMI_LLM_GATEWAY_URL
-              category: service_discovery
-              provisional: true
+            POSTHOG_HOST:
+              value: https://app.posthog.com
+              category: telemetry
             MEMORY_MODE:
               value: "off"
               category: memory_rollout
@@ -429,6 +437,6 @@ environments:
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
               version: latest
-            OMI_LLM_GATEWAY_SERVICE_TOKEN:
-              secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
+            POSTHOG_PROJECT_API_KEY:
+              secret: POSTHOG_PROJECT_API_KEY
               version: latest

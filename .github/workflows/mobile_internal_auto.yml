@@ -13,6 +13,7 @@ permissions:
 jobs:
   trigger-codemagic:
     runs-on: ubuntu-latest
+    environment: prod
     concurrency:
       group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}
       cancel-in-progress: true

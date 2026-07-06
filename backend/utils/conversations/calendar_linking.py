@@ -18,6 +18,13 @@ from utils.retrieval.tools.calendar_tools import (
 )
 from utils.retrieval.tools.google_utils import refresh_google_token
 from utils.executors import run_blocking, db_executor
+from utils.integration_telemetry import (
+    GOOGLE_CALENDAR,
+    IntegrationTelemetryContext,
+    emit_sync_attempted,
+    emit_sync_failed,
+    emit_sync_succeeded,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,6 +66,12 @@ async def get_overlapping_calendar_event(
 
     search_start = conversation_start - timedelta(minutes=30)
     search_end = conversation_end + timedelta(minutes=30)
+    telemetry_context = IntegrationTelemetryContext(
+        integration_name=GOOGLE_CALENDAR,
+        operation='fetch_events_for_auto_link',
+        uid=uid,
+    )
+    emit_sync_attempted(telemetry_context)
 
     try:
         events = await get_google_calendar_events(
@@ -79,12 +92,16 @@ async def get_overlapping_calendar_event(
                         time_max=search_end,
                         max_results=20,
                     )
-                except Exception:
+                except Exception as retry_error:
+                    emit_sync_failed(telemetry_context, retry_error)
                     return None
             else:
+                emit_sync_failed(telemetry_context, e)
                 return None
         else:
+            emit_sync_failed(telemetry_context, e)
             return None
+    emit_sync_succeeded(telemetry_context, item_count=len(events))
 
     if not events:
         return None
@@ -160,6 +177,11 @@ async def write_conversation_link_to_calendar_event(
         return
 
     conversation_link = f"https://h.omi.me/conversations/{conversation_id}"
+    telemetry_context = IntegrationTelemetryContext(
+        integration_name=GOOGLE_CALENDAR,
+        operation='write_conversation_link',
+        uid=uid,
+    )
 
     async def _write(token: str) -> None:
         existing = await get_google_calendar_event(token, event_id)
@@ -170,7 +192,9 @@ async def write_conversation_link_to_calendar_event(
         await update_google_calendar_event(access_token=token, event_id=event_id, description=new_description)
 
     try:
+        emit_sync_attempted(telemetry_context)
         await _write(access_token)
+        emit_sync_succeeded(telemetry_context, item_count=1)
     except Exception as e:
         error_msg = str(e)
         if "error 401" in error_msg.lower() or "authentication failed" in error_msg.lower():
@@ -178,11 +202,16 @@ async def write_conversation_link_to_calendar_event(
             if new_token:
                 try:
                     await _write(new_token)
+                    emit_sync_succeeded(telemetry_context, item_count=1)
                 except Exception as retry_error:
                     logger.warning(
                         f"write_conversation_link_to_calendar_event failed after token refresh: {retry_error}"
                     )
+                    emit_sync_failed(telemetry_context, retry_error)
+            else:
+                emit_sync_failed(telemetry_context, e)
         else:
             logger.warning(
                 f"write_conversation_link_to_calendar_event failed for conversation {conversation_id}: {error_msg}"
             )
+            emit_sync_failed(telemetry_context, e)

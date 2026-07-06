@@ -11039,7 +11039,7 @@
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "transcribeLaterNote": "Works with Omi devices for now. Audio stays on your phone until you choose to upload it.",
+    "transcribeLaterNote": "Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.",
     "@transcribeLaterNote": {
         "description": "Caveat note shown in the Transcribe Later sheet"
     },
@@ -11238,5 +11238,17 @@
     "flashFirmware": "Flash Firmware",
     "@flashFirmware": {
         "description": "Button on the manual firmware flash page (developer settings)"
-    }
+    },
+    "pendantRecordingTitle": "Recording on Pendant",
+    "pendantRecordingNote": "Your pendant is recording on its own. Recordings sync to your phone while the app is open.",
+    "pendantSyncingRecordings": "Syncing recordings from your pendant…",
+    "pendantMinutesStored": "~{minutes} min stored",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pendant storage is almost full — keep the app open to sync."
 }

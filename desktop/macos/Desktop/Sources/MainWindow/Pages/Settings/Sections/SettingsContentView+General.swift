@@ -16,7 +16,7 @@ extension SettingsContentView {
 
           Image(systemName: "rectangle.dashed.badge.record")
             .scaledFont(size: 16)
-            .foregroundColor(OmiColors.purplePrimary)
+            .foregroundColor(OmiColors.info)
 
           VStack(alignment: .leading, spacing: 4) {
             Text("Screen Capture")
@@ -70,7 +70,7 @@ extension SettingsContentView {
 
           Image(systemName: "mic.fill")
             .scaledFont(size: 16)
-            .foregroundColor(OmiColors.purplePrimary)
+            .foregroundColor(OmiColors.info)
 
           VStack(alignment: .leading, spacing: 4) {
             Text("Audio Recording")
@@ -117,7 +117,7 @@ extension SettingsContentView {
             HStack(spacing: 16) {
               Image(systemName: "speaker.wave.2.fill")
                 .scaledFont(size: 16)
-                .foregroundColor(OmiColors.purplePrimary)
+                .foregroundColor(OmiColors.info)
 
               VStack(alignment: .leading, spacing: 4) {
                 Text("System Audio")
@@ -229,7 +229,7 @@ extension SettingsContentView {
                     RoundedRectangle(cornerRadius: 6)
                       .fill(
                         appState.isNotificationBannerDisabled
-                          ? OmiColors.warning : OmiColors.purplePrimary)
+                          ? OmiColors.warning : OmiColors.info)
                   )
               }
               .buttonStyle(.plain)
@@ -266,7 +266,7 @@ extension SettingsContentView {
           HStack(spacing: 16) {
             Image(systemName: "textformat.size")
               .scaledFont(size: 16, weight: .medium)
-              .foregroundColor(OmiColors.purplePrimary)
+              .foregroundColor(OmiColors.info)
               .frame(width: 12)
 
             VStack(alignment: .leading, spacing: 4) {
@@ -286,7 +286,7 @@ extension SettingsContentView {
                 fontScaleSettings.resetToDefault()
               }
               .scaledFont(size: 12, weight: .medium)
-              .foregroundColor(OmiColors.purplePrimary)
+              .foregroundColor(OmiColors.info)
               .buttonStyle(.plain)
             }
           }
@@ -297,7 +297,7 @@ extension SettingsContentView {
               .foregroundColor(OmiColors.textTertiary)
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
-              .tint(OmiColors.purplePrimary)
+              .tint(OmiColors.info)
 
             Text("A")
               .scaledFont(size: 18, weight: .medium)

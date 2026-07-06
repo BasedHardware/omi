@@ -204,4 +204,25 @@ final class ChatErrorStateTests: XCTestCase {
     let mapped = ChatErrorState.from(.authMissing)
     XCTAssertEqual(mapped, .authRequired)
   }
+
+  func testFromBridgeErrorMapsInvalidTokenAgentErrorToAuthRequired() {
+    let mapped = ChatErrorState.from(.agentError("401 \"invalid_token\""))
+    XCTAssertEqual(mapped, .authRequired)
+  }
+
+  func testFromBridgeErrorMapsUnauthorizedAgentErrorToAuthRequired() {
+    let mapped = ChatErrorState.from(.agentError("Unauthorized - please sign in again"))
+    XCTAssertEqual(mapped, .authRequired)
+  }
+
+  func testFromBridgeErrorMapsTokenAgentErrorToAuthRequired() {
+    let mapped = ChatErrorState.from(.agentError("401 auth token rejected"))
+    XCTAssertEqual(mapped, .authRequired)
+  }
+
+  func testFromBridgeErrorDoesNotMapProviderAuthFailuresToAuthRequired() {
+    XCTAssertNil(ChatErrorState.from(.agentError("AI service authentication failed")))
+    XCTAssertNil(ChatErrorState.from(.agentError("Anthropic provider unauthorized")))
+    XCTAssertNil(ChatErrorState.from(.agentError("invalid key")))
+  }
 }

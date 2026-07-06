@@ -1,6 +1,7 @@
 import SwiftUI
 import Combine
 import GRDB
+import UniformTypeIdentifiers
 
 // MARK: - UserDefaults Extension for KVO
 
@@ -139,6 +140,31 @@ enum ChatContentBlock: Identifiable {
         case "WebFetch": return "Fetching page"
         default: return "Using \(cleanName)"
         }
+    }
+
+    /// Tools whose runs are legitimately long — shell commands, file
+    /// generation/edits, web fetches, database queries, and delegated
+    /// agents. The stall banner ("This is taking longer than usual") is
+    /// suppressed for these so normal long work doesn't read as stuck.
+    static func isSlowExpectedTool(_ toolName: String) -> Bool {
+        let cleaned: String
+        if toolName.hasPrefix("mcp__") {
+            cleaned = String(toolName.split(separator: "__").last ?? Substring(toolName))
+        } else {
+            cleaned = toolName
+        }
+        // Any MCP tool is an out-of-process call we don't time-bound.
+        if toolName.hasPrefix("mcp__") { return true }
+        let lower = cleaned.lowercased()
+        let slowPrefixes = ["bash", "write", "edit", "multiedit", "webfetch", "websearch", "task", "notebookedit"]
+        if slowPrefixes.contains(where: { lower.hasPrefix($0) }) { return true }
+        let slowExact: Set<String> = [
+            "execute_sql", "semantic_search", "spawn_agent", "manage_agent_pills",
+            "search_tasks", "run_attempt", "delegate_agent", "send_agent_message",
+        ]
+        // Strip any embedded summary suffix ("Bash: cmd" style) before matching.
+        let head = lower.split(separator: ":").first.map(String.init) ?? lower
+        return slowExact.contains(head.trimmingCharacters(in: .whitespaces))
     }
 
     /// Extracts a short summary from tool input for inline display
@@ -612,6 +638,7 @@ struct MessageMetadata {
 /// A single chat message
 struct ChatMessage: Identifiable {
     var id: String  // Mutable to sync with server-generated ID
+    let clientTurnId: String?
     var text: String
     let createdAt: Date
     let sender: ChatSender
@@ -632,9 +659,14 @@ struct ChatMessage: Identifiable {
     var notificationScreenshot: Data?
     /// User-attached files (screenshots, images, documents) — populated for user messages.
     var attachments: [ChatAttachment]
+    /// Surface-neutral resources associated with this message. Assistant messages
+    /// use this for generated artifacts; user messages derive resources from
+    /// `attachments` for backwards compatibility.
+    var resources: [ChatResource]
 
-    init(id: String = UUID().uuidString, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = []) {
+    init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [], resources: [ChatResource] = []) {
         self.id = id
+        self.clientTurnId = clientTurnId
         self.text = text
         self.createdAt = createdAt
         self.sender = sender
@@ -647,6 +679,7 @@ struct ChatMessage: Identifiable {
         self.notificationContext = notificationContext
         self.notificationScreenshot = notificationScreenshot
         self.attachments = attachments
+        self.resources = resources
     }
 }
 
@@ -660,6 +693,13 @@ extension ChatMessage {
             return structuredText
         }
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var displayResources: [ChatResource] {
+        if !resources.isEmpty {
+            return resources
+        }
+        return attachments.map(ChatResource.attachment)
     }
 }
 
@@ -684,6 +724,30 @@ extension ChatContentBlock {
 enum ChatSender {
     case user
     case ai
+}
+
+enum ChatTurnOwner: Equatable {
+    case mainChat
+    case floatingDefault
+    case floatingVoice
+    case taskChat(String)
+    case agentPill(UUID)
+
+    func canInterrupt(_ activeOwner: ChatTurnOwner) -> Bool {
+        switch (self, activeOwner) {
+        case (.floatingDefault, .floatingDefault),
+             (.floatingDefault, .floatingVoice),
+             (.floatingVoice, .floatingDefault),
+             (.floatingVoice, .floatingVoice):
+            return true
+        case (.taskChat(let lhs), .taskChat(let rhs)):
+            return lhs == rhs
+        case (.agentPill(let lhs), .agentPill(let rhs)):
+            return lhs == rhs
+        default:
+            return self == activeOwner
+        }
+    }
 }
 
 extension ChatMessage {
@@ -765,6 +829,12 @@ enum ChatSystemPromptStyle {
 @MainActor
 class ChatProvider: ObservableObject {
 
+    /// Weak reference to the app-root main-window instance (set by
+    /// ViewModelContainer.init()), so the local automation bridge can drive
+    /// the real main chat surface in-process — no synthetic mouse/keyboard
+    /// input, so it never touches the user's actual cursor.
+    static weak var mainInstance: ChatProvider?
+
     // MARK: - Floating Bar System Prompt Prefix
     /// Static prefix injected at the top of the system prompt for floating bar sessions.
     /// Defined here so it can be referenced both at warmup time and at query time.
@@ -795,6 +865,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @Published var isLoadingSessions = true  // Start true since we load sessions on init
     @Published var isSending = false
     @Published var isStopping = false
+    @Published private(set) var activeTurnOwner: ChatTurnOwner?
     @Published var isClearing = false
     @Published var errorMessage: String?
     /// Monotonic token that increments each time the local user sends a message.
@@ -820,12 +891,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// action can re-issue the user's last prompt. Cleared after a
     /// successful re-send or on dismiss to avoid stale retries.
     private var lastFailedPrompt: String?
+    private var pendingErrorRecoveryPrompt: String?
 
     /// Monotonically-incremented id for each sendMessage / stopAgent cycle.
     /// Watchdog tasks capture their gen and only reset state if it still
     /// matches — so a watchdog fired by a stuck send #N won't cancel a
     /// later, healthy send #N+1. See sendMessage() and stopAgent().
     private var sendGeneration: Int = 0
+    private var activeBridgeSendGeneration: Int?
 
     /// Set to true during onboarding so the ACP session ID is persisted for restart recovery.
     var isOnboarding = false
@@ -1321,7 +1394,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             let usesNativeModelChoice = activeBridgeHarness == "hermes" || activeBridgeHarness == "openclaw"
             let mainWarmupModel = usesNativeModelChoice ? nil : ModelQoS.Claude.chat
             let floatingWarmupModel = usesNativeModelChoice ? nil : floatingModel
-            await agentBridge.warmupSession(cwd: workingDirectory, sessions: [
+            await agentBridge.warmupSession(cwd: effectiveAgentWorkingDirectory(), sessions: [
                 .init(key: "main", model: mainWarmupModel, systemPrompt: mainSystemPrompt),
                 .init(key: "floating", model: floatingWarmupModel, systemPrompt: floatingSystemPrompt)
             ])
@@ -2478,7 +2551,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
+    /// Peeks the completed-agent delta for the coordinator surface consuming this
+    /// turn, returning both the delta and the surface it was peeked from so the
+    /// caller can acknowledge against the exact same surface. Runs for the main
+    /// chat and the notch/floating "Omi Chat" (independent consumers), so a
+    /// finished sub-agent's artifacts surface on whichever the user next uses.
     private func buildMainChatCoordinatorCompletionDeltaIfNeeded(
+        for userText: String,
         systemPromptStyle: ChatSystemPromptStyle,
         surfaceRef: AgentSurfaceReference?,
         sessionKey: String?,
@@ -2486,18 +2565,48 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         legacyClientScope: String?,
         imageData: Data?,
         attachmentMetadataJSON: String?
-    ) async -> DesktopCoordinatorCompletionDelta? {
-        guard systemPromptStyle == .main,
-              !isOnboarding,
+    ) async -> (delta: DesktopCoordinatorCompletionDelta, surface: AgentSurfaceReference)? {
+        guard !isOnboarding,
               surfaceRef == nil,
-              sessionKey == nil,
               legacyClientScope == nil,
               imageData == nil,
               attachmentMetadataJSON == nil
         else { return nil }
+        guard shouldInjectCompletedAgentDelta(for: userText) else { return nil }
 
-        let consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
-        return await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)
+        let consumerSurface: AgentSurfaceReference
+        switch systemPromptStyle {
+        case .main:
+            // Only the plain main chat (no explicit session key) consumes the delta.
+            guard sessionKey == nil else { return nil }
+            consumerSurface = AgentSurfaceReference.mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+        case .floating:
+            consumerSurface = AgentSurfaceReference.floatingChat()
+        }
+
+        guard let delta = await DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface) else {
+            return nil
+        }
+        return (delta, consumerSurface)
+    }
+
+    private func shouldInjectCompletedAgentDelta(for userText: String) -> Bool {
+        let normalized = userText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalized.isEmpty else { return false }
+        let explicitNewWorkPatterns = [
+            #"ask\s+((an?|the)\s+)?agent\s+to\s+"#,
+            #"\b(have|spawn|start)\s+((an?|the)\s+)?agent\s+to\s+"#,
+            #"\b(build|create|generate|write|make)\b.*\b(file|html|page|artifact|app|site)\b"#,
+        ]
+        if explicitNewWorkPatterns.contains(where: { normalized.range(of: $0, options: .regularExpression) != nil }) {
+            return false
+        }
+        let completionFollowUpPatterns = [
+            #"\b(done|ready|finished|complete|completed|saved|file|artifact)\b"#,
+            #"\b(where|open|show|find)\b.*\b(file|artifact|agent|subagent|background)\b"#,
+            #"\b(agent|subagent|background)\b.*\b(status|result|output|finished|done|ready)\b"#,
+        ]
+        return completionFollowUpPatterns.contains { normalized.range(of: $0, options: .regularExpression) != nil }
     }
 
     private func routeIntentJSONWithFailOpenTimeout(intent: String, surfaceKind: String) async throws -> String? {
@@ -2621,6 +2730,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if workingDirectory == nil, !aiChatWorkingDirectory.isEmpty {
             workingDirectory = aiChatWorkingDirectory
         }
+    }
+
+    private func effectiveAgentWorkingDirectory() -> String {
+        if let workingDirectory, !workingDirectory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return workingDirectory
+        }
+        let artifactsDirectory = AgentRuntimeProcess.defaultArtifactsDirectory()
+        try? FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: artifactsDirectory),
+            withIntermediateDirectories: true
+        )
+        return artifactsDirectory
     }
 
     /// Reinitialize after settings change
@@ -3024,6 +3145,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let omiSessionId: String?
         let surfaceRef: AgentSurfaceReference?
         let legacyClientScope: String?
+        let turnOwner: ChatTurnOwner
     }
 
     /// Follow-ups queued while the current query is being interrupted.
@@ -3032,19 +3154,39 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var activeFollowUpContext: PendingFollowUpRequest?
 
     /// Stop the running agent, keeping partial response
-    func stopAgent() {
-        guard isSending else { return }
+    func canInterruptActiveTurn(owner: ChatTurnOwner) -> Bool {
+        guard isSending else { return true }
+        guard let activeTurnOwner else { return false }
+        return owner.canInterrupt(activeTurnOwner)
+    }
+
+    @discardableResult
+    func stopAgent(owner: ChatTurnOwner) -> Bool {
+        guard isSending else { return false }
+        guard let activeTurnOwner, owner.canInterrupt(activeTurnOwner) else {
+            log("ChatProvider: ignoring stop from non-owner turn")
+            return false
+        }
         isStopping = true
+        let stoppedGen = sendGeneration
+        sendGeneration += 1
         let myGen = sendGeneration
         Task {
-            await agentBridge.interrupt()
-            // Normal path: interrupt → bridge emits final result or .stopped →
-            // sendMessage's do/catch resets isSending via its finally (line 2631).
-            // Fallback: if the bridge drops the turn_end as "stray" (known
-            // sleep/wake flake — see PR where this watchdog was added), the
-            // for-await in sendMessage hangs forever and isSending stays true.
-            // After a short grace, force-release so the user's next query isn't
-            // silently swallowed by the guard at sendMessage:start.
+            let shouldInterruptBridge = await MainActor.run { () -> Bool in
+                guard self.isSending,
+                      self.sendGeneration == myGen,
+                      self.activeBridgeSendGeneration == stoppedGen else {
+                    return false
+                }
+                self.activeBridgeSendGeneration = nil
+                return true
+            }
+            if shouldInterruptBridge {
+                await agentBridge.interrupt()
+            }
+            // Normal path: interrupt → bridge emits final result or .stopped.
+            // Fallback: if the bridge drops the turn_end as "stray", force-release
+            // after a short grace so the user's next query is not silently swallowed.
             try? await Task.sleep(nanoseconds: 3_000_000_000)
             await MainActor.run {
                 if self.isSending && self.sendGeneration == myGen {
@@ -3054,6 +3196,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
         // Result flows back normally through the bridge with partial text
+        return true
     }
 
     /// Send a follow-up message while the agent is still running.
@@ -3116,7 +3259,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sessionKey: nil,
             omiSessionId: nil,
             surfaceRef: nil,
-            legacyClientScope: nil
+            legacyClientScope: nil,
+            turnOwner: activeTurnOwner ?? .mainChat
         )
         pendingFollowUps.append(PendingFollowUpRequest(
             text: trimmedText,
@@ -3127,18 +3271,33 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sessionKey: context.sessionKey,
             omiSessionId: context.omiSessionId,
             surfaceRef: context.surfaceRef,
-            legacyClientScope: context.legacyClientScope
+            legacyClientScope: context.legacyClientScope,
+            turnOwner: context.turnOwner
         ))
         await agentBridge.interrupt()
         log("ChatProvider: follow-up queued, interrupt sent")
     }
 
     @discardableResult
-    func appendAssistantMessage(_ text: String, notificationContext: String? = nil, notificationScreenshot: Data? = nil) -> ChatMessage? {
+    func appendAssistantMessage(
+        _ text: String,
+        clientTurnId: String? = nil,
+        notificationContext: String? = nil,
+        notificationScreenshot: Data? = nil,
+        resources: [ChatResource] = []
+    ) -> ChatMessage? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty else { return nil }
+        guard !trimmedText.isEmpty || !resources.isEmpty else { return nil }
 
-        let aiMessage = ChatMessage(text: trimmedText, sender: .ai, notificationContext: notificationContext, notificationScreenshot: notificationScreenshot)
+        let messageText = trimmedText.isEmpty ? "Done." : trimmedText
+        let aiMessage = ChatMessage(
+            clientTurnId: clientTurnId,
+            text: messageText,
+            sender: .ai,
+            notificationContext: notificationContext,
+            notificationScreenshot: notificationScreenshot,
+            resources: resources
+        )
         let localId = aiMessage.id
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -3152,7 +3311,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         Task { [weak self] in
             do {
                 let response = try await APIClient.shared.saveMessage(
-                    text: trimmedText,
+                    text: messageText,
                     sender: "ai",
                     appId: capturedAppId,
                     sessionId: capturedSessionId,
@@ -3175,21 +3334,51 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return aiMessage
     }
 
+    /// Local ID of a voice/PTT user message shown optimistically the instant its
+    /// transcript is known — before the assistant reply exists — via
+    /// `beginVoiceUserMessage`. `recordCompletedTurn` reconciles the completed turn
+    /// against this bubble (updating its text if the transcript was corrected) instead
+    /// Show the user's spoken question on the main chat page the moment its transcript
+    /// is known, before the assistant reply is generated — so a voice/PTT question
+    /// appears instantly, matching how a typed message shows up immediately. Returns the
+    /// created message; the caller keeps its `id` for THIS turn and hands it back to
+    /// `recordCompletedTurn(earlyUserMessageId:)` so the completed turn reconciles against
+    /// its own bubble. Keyed per-turn (not a shared field) on purpose: voice completions
+    /// run from async tasks and can arrive out of order relative to the next turn's start,
+    /// so a shared id would let an old completion rewrite a newer turn's bubble.
+    /// UI-only: persistence happens once, at turn completion, with the final text.
+    @discardableResult
+    func beginVoiceUserMessage(userText: String) -> ChatMessage? {
+        let text = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return nil }
+        let message = ChatMessage(text: text, sender: .user)
+        messages.append(message)
+        log("ChatProvider: showing voice user message early (\(text.count) chars)")
+        return message
+    }
+
     /// Record a completed turn that did not stream through `sendMessage`.
     /// Appends both messages to the in-memory provider session immediately, then
     /// persists them sequentially in the background so later follow-ups retain context.
+    /// - Parameter earlyUserMessageId: id of the bubble `beginVoiceUserMessage` created
+    ///   for THIS turn (nil if none). Reconciled in place instead of appending a
+    ///   duplicate. Passed explicitly per turn so an out-of-order async completion can
+    ///   never touch a different turn's bubble.
     @discardableResult
     func recordCompletedTurn(
         userText: String,
         assistantText: String,
         logLabel: String = "completed",
-        messageSource: String = "desktop_chat"
+        messageSource: String = "desktop_chat",
+        earlyUserMessageId: String? = nil
     ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !user.isEmpty || !assistant.isEmpty else { return (nil, nil) }
+        guard !user.isEmpty || !assistant.isEmpty else {
+            return (nil, nil)
+        }
 
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
@@ -3197,9 +3386,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var userMessage: ChatMessage?
         var aiMessage: ChatMessage?
         if !user.isEmpty {
-            let m = ChatMessage(text: user, sender: .user)
-            messages.append(m)
-            userMessage = m
+            if let earlyId = earlyUserMessageId,
+                let idx = messages.firstIndex(where: { $0.id == earlyId }) {
+                // This turn's early bubble (shown by beginVoiceUserMessage): reconcile its
+                // text (in case the final transcript was language-corrected) and reuse it —
+                // persisted once, below — instead of appending a duplicate.
+                if messages[idx].text != user { messages[idx].text = user }
+                userMessage = messages[idx]
+            } else {
+                let m = ChatMessage(text: user, sender: .user)
+                messages.append(m)
+                userMessage = m
+            }
         }
         if !assistant.isEmpty {
             let m = ChatMessage(text: assistant, sender: .ai)
@@ -3234,12 +3432,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// normal query path, so without this the turn would never appear in chat history
     /// or sync to the backend. Empty sides are skipped (a tool-only turn with no
     /// spoken reply still records the user's request).
-    func recordVoiceTurn(userText: String, assistantText: String) {
+    func recordVoiceTurn(userText: String, assistantText: String, earlyUserMessageId: String? = nil) {
         recordCompletedTurn(
             userText: userText,
             assistantText: assistantText,
             logLabel: "voice",
-            messageSource: "realtime_voice"
+            messageSource: "realtime_voice",
+            earlyUserMessageId: earlyUserMessageId
         )
     }
 
@@ -3311,9 +3510,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // For non-image files we still need bytes — load them lazily here
             // (we skipped this at add-time to keep the UI responsive).
             let data: Data? = attachment.data
+                ?? attachment.localFileURL.flatMap { try? Data(contentsOf: $0) }
             guard let bytes = data else {
                 await MainActor.run {
-                    self.setAttachmentState(id: id, state: .failed("File could not be read"))
+                    if attachment.isSendableLocalResource {
+                        self.setAttachmentState(id: id, state: .localOnly)
+                    } else {
+                        self.setAttachmentState(id: id, state: .failed("File could not be read"))
+                    }
                 }
                 return
             }
@@ -3337,7 +3541,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } catch {
                 logError("ChatProvider: attachment upload failed", error: error)
                 await MainActor.run {
-                    self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
+                    if attachment.isSendableLocalResource {
+                        self.setAttachmentState(id: id, state: .localOnly)
+                    } else {
+                        self.setAttachmentState(id: id, state: .failed(error.localizedDescription))
+                    }
                 }
             }
         }
@@ -3384,9 +3592,41 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         return !pendingAttachments.contains(where: {
-            if case .failed = $0.state { return true }
+            if case .failed = $0.state { return !$0.isSendableLocalResource }
             return false
         })
+    }
+
+    nonisolated static func attachmentContextPrompt(for attachments: [ChatAttachment]) -> String? {
+        guard !attachments.isEmpty else { return nil }
+        let plural = attachments.count == 1 ? "file" : "files"
+        var lines: [String] = [
+            "[Attached Files]",
+            "The user attached \(attachments.count) \(plural) to this exact message. Treat references like \"this\", \"the file\", \"the attachment\", or \"what do you think of this\" as referring to these attachment(s). If the answer depends on file contents, inspect the local_path with file-reading tools before asking for clarification.",
+        ]
+        for (index, attachment) in attachments.enumerated() {
+            lines.append("")
+            lines.append("\(index + 1). \(attachment.fileName)")
+            lines.append("   mime_type: \(attachment.mimeType)")
+            if let localFileURL = attachment.localFileURL {
+                lines.append("   local_path: \(localFileURL.path)")
+                if let attrs = try? FileManager.default.attributesOfItem(atPath: localFileURL.path),
+                   let size = attrs[.size] as? NSNumber {
+                    lines.append(
+                        "   size: \(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file))"
+                    )
+                }
+            } else {
+                lines.append("   local_path: unavailable")
+            }
+            if let serverId = attachment.serverId {
+                lines.append("   uploaded_file_id: \(serverId)")
+            }
+            if attachment.isImage {
+                lines.append("   image_payload: included separately when available")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - Send Message
@@ -3409,7 +3649,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         surfaceRef: AgentSurfaceReference? = nil,
         legacyClientScope: String? = nil,
         resume: String? = nil,
-        imageData: Data? = nil
+        imageData: Data? = nil,
+        turnOwner: ChatTurnOwner = .mainChat,
+        clientTurnId: String = UUID().uuidString
     ) async -> String? {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return nil }
@@ -3443,6 +3685,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let tracer = QueryTracerContext.current
 
         isSending = true
+        isStopping = false
+        activeTurnOwner = turnOwner
         errorMessage = nil
         currentError = nil
         sendGeneration += 1
@@ -3456,7 +3700,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             sessionKey: sessionKey,
             omiSessionId: omiSessionId,
             surfaceRef: surfaceRef,
-            legacyClientScope: legacyClientScope
+            legacyClientScope: legacyClientScope,
+            turnOwner: turnOwner
         )
 
         // Ensure bridge is running
@@ -3471,6 +3716,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return nil
         }
         tracer?.end("bridge_ensure", metadata: ["status": "ok"])
+        guard sendGeneration == sendGen else {
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            clearSendLockState()
+            return nil
+        }
 
         // Show upgrade prompt if over threshold but don't block the message.
         // Never for paid/BYOK users — they aren't subject to the free Omi spend cap.
@@ -3496,6 +3746,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             sessionId = sid
         }
+        guard sendGeneration == sendGen else {
+            tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+            clearSendLockState()
+            return nil
+        }
 
         // Safety-net watchdog: if this specific send is still "in flight"
         // 3 minutes from now, something in the bridge / stream pipeline has
@@ -3505,11 +3760,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // by the "already sending" guard. The generation check means the
         // watchdog only fires if no later send has replaced this one.
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 180_000_000_000)
-            await MainActor.run {
-                guard let self = self, self.isSending, self.sendGeneration == sendGen else { return }
+            do {
+                try await Task.sleep(nanoseconds: 180_000_000_000)
+            } catch {
+                return
+            }
+            guard let self else { return }
+            let stillStuck = await MainActor.run { () -> Bool in
+                guard self.isSending, self.sendGeneration == sendGen else { return false }
                 log("ChatProvider: send watchdog fired at 180s — bridge is stuck; force-resetting")
-                self.releaseSendLock(sendGeneration: sendGen)
+                return true
+            }
+            guard stillStuck else { return }
+            await self.agentBridge.interrupt()
+            await MainActor.run {
+                guard self.isSending, self.sendGeneration == sendGen else { return }
+                _ = self.releaseSendLock(sendGeneration: sendGen)
                 self.errorMessage = "Response took too long. Try again."
             }
         }
@@ -3521,6 +3787,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var attachmentsForMessage: [ChatAttachment] = []
         if !pendingAttachments.isEmpty {
             let ok = await awaitPendingUploads()
+            guard sendGeneration == sendGen else {
+                tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
+                clearSendLockState()
+                return nil
+            }
             if !ok {
                 releaseSendLock(sendGeneration: sendGen)
                 errorMessage = "Some attachments failed to upload. Remove them and try again."
@@ -3587,6 +3858,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             let userMessage = ChatMessage(
                 id: userMessageId,
+                clientTurnId: clientTurnId,
                 text: trimmedText,
                 sender: .user,
                 attachments: attachmentsForMessage
@@ -3614,6 +3886,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             attachmentMetadataJSON: attachmentMetadataJSON
         )
         let coordinatorCompletionDeltaContext = await buildMainChatCoordinatorCompletionDeltaIfNeeded(
+            for: trimmedText,
             systemPromptStyle: systemPromptStyle,
             surfaceRef: surfaceRef,
             sessionKey: sessionKey,
@@ -3631,6 +3904,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let aiMessageId = UUID().uuidString
         let aiMessage = ChatMessage(
             id: aiMessageId,
+            clientTurnId: clientTurnId,
             text: "",
             sender: .ai,
             isStreaming: true
@@ -3656,6 +3930,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             startedAtMs: turnStartMs
         )
 
+        var stoppedByUser = false
         do {
             // Use the system prompt built at warmup. The agent bridge applies it only
             // at session/new; for the normal reused-session path it is ignored.
@@ -3809,7 +4084,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                             if token.isEmpty {
                                 log("ChatProvider: Browser tool \(name) called without extension token — aborting query and prompting setup")
                                 self?.needsBrowserExtensionSetup = true
-                                self?.stopAgent()
+                                self?.stopAgent(owner: turnOwner)
                                 // Keep floating-bar sessions non-intrusive: do not foreground
                                 // the main window when the query originated from the floating bar.
                                 if sessionKey != "floating" {
@@ -3926,12 +4201,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 bridgePromptContexts.append("[Desktop Coordinator Route Context]\n\(coordinatorRouteContext)")
             }
             if let coordinatorCompletionDeltaContext {
-                bridgePromptContexts.append("[Desktop Completed Agent Delta]\n\(coordinatorCompletionDeltaContext.prompt)")
+                bridgePromptContexts.append("[Desktop Completed Agent Delta]\n\(coordinatorCompletionDeltaContext.delta.prompt)")
+            }
+            if let attachmentContext = Self.attachmentContextPrompt(for: attachmentsForMessage) {
+                bridgePromptContexts.append(attachmentContext)
             }
             let promptForBridge = bridgePromptContexts.isEmpty
                 ? basePromptForBridge
                 : "\(bridgePromptContexts.joined(separator: "\n\n"))\n\n\(basePromptForBridge)"
 
+            activeBridgeSendGeneration = sendGen
             let queryResult = try await agentBridge.query(
                 prompt: promptForBridge,
                 systemPrompt: systemPrompt,
@@ -3941,7 +4220,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 externalRefKind: resolvedSurface?.externalRefKind,
                 externalRefId: resolvedSurface?.externalRefId,
                 legacyClientScope: resolvedLegacyClientScope,
-                cwd: workingDirectory,
+                cwd: effectiveAgentWorkingDirectory(),
                 mode: chatMode.rawValue,
                 model: effectiveRequestModel,
                 resume: resume,
@@ -3965,12 +4244,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             )
+            activeBridgeSendGeneration = nil
             if let coordinatorCompletionDeltaContext {
-                let consumerSurface = resolvedSurface ?? AgentSurfaceReference.mainChat(chatId: resolvedMainChatRuntimeChatId)
+                // Acknowledge against the exact surface the delta was peeked from,
+                // so main chat and notch stay independent consumers.
                 DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
-                    surface: consumerSurface,
-                    ids: coordinatorCompletionDeltaContext.ids,
-                    completedAtHighWaterMs: coordinatorCompletionDeltaContext.completedAtHighWaterMs
+                    surface: coordinatorCompletionDeltaContext.surface,
+                    ids: coordinatorCompletionDeltaContext.delta.ids,
+                    completedAtHighWaterMs: coordinatorCompletionDeltaContext.delta.completedAtHighWaterMs
                 )
             }
 
@@ -3987,6 +4268,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let metricsSnapshot = responseMetrics.snapshot()
                 messages[index].text = messageText
                 messages[index].isStreaming = false
+                // Merge the parent agent's own artifacts with any produced by
+                // sub-agents that completed since the last coordinator check, so
+                // a finished sub-agent's file surfaces as a card on this response.
+                let deltaResources = coordinatorCompletionDeltaContext?.delta.artifacts.map(ChatResource.artifact) ?? []
+                messages[index].resources = mergedResources(
+                    existing: messages[index].resources,
+                    adding: queryResult.artifacts.map(ChatResource.artifact) + deltaResources
+                )
                 messages[index].metadata = MessageMetadata(
                     model: effectiveRequestModel,
                     inputTokens: queryResult.inputTokens,
@@ -4172,6 +4461,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
             completedResponseText = messageText
         } catch {
+            activeBridgeSendGeneration = nil
             // QueryTracer: error path — close spans and write the (partial) trace
             // so failed/timed-out queries still show up in benchmarks.
             tracer?.end("ttft")
@@ -4263,6 +4553,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Both surfaces coexist — only one is active at a time per
             // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
+                stoppedByUser = true
                 // User stopped — no error to show, but the card system
                 // still surfaces .interrupted so users can resume.
                 if let card = ChatErrorState.from(bridgeError) {
@@ -4281,7 +4572,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
 
-        let releasedCurrentGeneration = releaseSendLock(sendGeneration: sendGen)
+        let releasedCurrentGeneration: Bool
+        if stoppedByUser, isStopping, sendGeneration != sendGen {
+            clearSendLockState()
+            releasedCurrentGeneration = false
+        } else {
+            releasedCurrentGeneration = releaseSendLock(sendGeneration: sendGen)
+        }
 
         // If follow-ups were queued while we were running, chain the oldest as a new full query.
         // Each chained query drains one item; this preserves user barge-in order without
@@ -4299,7 +4596,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 sessionKey: followUp.sessionKey,
                 omiSessionId: followUp.omiSessionId,
                 surfaceRef: followUp.surfaceRef,
-                legacyClientScope: followUp.legacyClientScope
+                legacyClientScope: followUp.legacyClientScope,
+                turnOwner: followUp.turnOwner
             )
         }
         return completedResponseText
@@ -4308,10 +4606,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     @discardableResult
     private func releaseSendLock(sendGeneration generation: Int) -> Bool {
         guard sendGeneration == generation else { return false }
+        clearSendLockState()
+        return true
+    }
+
+    private func clearSendLockState() {
         isSending = false
         isStopping = false
+        activeBridgeSendGeneration = nil
+        activeTurnOwner = nil
         activeFollowUpContext = nil
-        return true
+        if let prompt = pendingErrorRecoveryPrompt {
+            pendingErrorRecoveryPrompt = nil
+            Task { [weak self] in
+                await self?.sendMessage(prompt)
+            }
+        }
     }
 
     /// Generate a title for the session using LLM
@@ -4460,6 +4770,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             toolUseId: toolUseId,
             input: input
         )
+        if status == .completed {
+            attachGeneratedFileResources(
+                messageIndex: index,
+                toolName: toolName,
+                toolUseId: toolUseId,
+                extraTexts: []
+            )
+        }
     }
 
     /// Add tool result output to an existing tool call block
@@ -4471,6 +4789,144 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             name: name,
             output: output
         )
+        attachGeneratedFileResources(
+            messageIndex: index,
+            toolName: name,
+            toolUseId: toolUseId,
+            extraTexts: [output]
+        )
+    }
+
+    private func attachGeneratedFileResources(
+        messageIndex index: Int,
+        toolName: String,
+        toolUseId: String?,
+        extraTexts: [String]
+    ) {
+        let discoveredResources = localFileResources(
+            fromToolName: toolName,
+            texts: toolResourceCandidateTexts(
+                in: messages[index].contentBlocks,
+                toolName: toolName,
+                toolUseId: toolUseId,
+                extraTexts: extraTexts
+            )
+        )
+        if !discoveredResources.isEmpty {
+            messages[index].resources = mergedResources(
+                existing: messages[index].resources,
+                adding: discoveredResources
+            )
+        }
+    }
+
+    private func mergedResources(existing: [ChatResource], adding newResources: [ChatResource]) -> [ChatResource] {
+        guard !newResources.isEmpty else { return existing }
+        var seen = Set(existing.map(\.id))
+        var merged = existing
+        for resource in newResources where !seen.contains(resource.id) {
+            seen.insert(resource.id)
+            merged.append(resource)
+        }
+        return merged
+    }
+
+    private func toolResourceCandidateTexts(
+        in blocks: [ChatContentBlock],
+        toolName: String,
+        toolUseId: String?,
+        extraTexts: [String]
+    ) -> [String] {
+        let normalizedToolUseId = toolUseId?.isEmpty == false ? toolUseId : nil
+        var texts = extraTexts
+        for block in blocks {
+            guard case .toolCall(_, let blockName, _, let blockToolUseId, let input, let output) = block else {
+                continue
+            }
+            let idsMatch = normalizedToolUseId != nil && blockToolUseId == normalizedToolUseId
+            let namesMatch = Self.normalizedToolNameHead(blockName) == Self.normalizedToolNameHead(toolName)
+            guard idsMatch || (normalizedToolUseId == nil && namesMatch) else {
+                continue
+            }
+            if let summary = input?.summary {
+                texts.append(summary)
+            }
+            if let details = input?.details {
+                texts.append(details)
+            }
+            if let output {
+                texts.append(output)
+            }
+        }
+        return texts
+    }
+
+    private func localFileResources(fromToolName name: String, texts: [String]) -> [ChatResource] {
+        let normalizedName = Self.normalizedToolNameHead(name)
+        guard ["write", "edit", "multiedit"].contains(normalizedName) else { return [] }
+        return localFileURLs(from: texts.joined(separator: "\n")).map { url in
+            let mimeType = mimeType(forLocalFile: url)
+            return ChatResource(
+                id: "generated-file:\(url.path)",
+                origin: .generatedArtifact,
+                title: url.lastPathComponent,
+                subtitle: localFileSubtitle(url: url, mimeType: mimeType),
+                mimeType: mimeType,
+                thumbnailURL: nil,
+                imageData: nil,
+                uri: url.absoluteString,
+                artifactId: nil,
+                omiSessionId: nil,
+                runId: nil,
+                state: .ready
+            )
+        }
+    }
+
+    private func localFileURLs(from output: String) -> [URL] {
+        let pattern = #"(?:"file://)?(/[^\n"`]+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
+        let nsRange = NSRange(output.startIndex..<output.endIndex, in: output)
+        var urls: [URL] = []
+        var seen = Set<String>()
+        for match in regex.matches(in: output, range: nsRange) {
+            guard match.numberOfRanges > 1,
+                  let range = Range(match.range(at: 1), in: output)
+            else { continue }
+            let rawPath = String(output[range])
+                .trimmingCharacters(in: CharacterSet(charactersIn: " \t\r\n.。,:;)'\"]"))
+            let url = URL(fileURLWithPath: rawPath)
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  !isDirectory.boolValue,
+                  !seen.contains(url.path)
+            else { continue }
+            seen.insert(url.path)
+            urls.append(url)
+        }
+        return urls
+    }
+
+    private static func normalizedToolNameHead(_ name: String) -> String {
+        let normalized = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.split(separator: ":", maxSplits: 1).first.map(String.init) ?? normalized
+    }
+
+    private func mimeType(forLocalFile url: URL) -> String {
+        if let type = UTType(filenameExtension: url.pathExtension),
+           let mime = type.preferredMIMEType {
+            return mime
+        }
+        return "application/octet-stream"
+    }
+
+    private func localFileSubtitle(url: URL, mimeType: String) -> String {
+        var parts = [mimeType]
+        if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+           let size = attrs[.size] as? NSNumber {
+            parts.append(ByteCountFormatter.string(fromByteCount: size.int64Value, countStyle: .file))
+        }
+        return parts.joined(separator: " • ")
     }
 
     /// Append thinking text to the streaming message via the shared buffer.
@@ -4662,6 +5118,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         switch action {
         case .retry:
             if let prompt = promptToRetry, !prompt.isEmpty {
+                if isSending {
+                    if isStopping {
+                        pendingErrorRecoveryPrompt = prompt
+                        return
+                    }
+                    currentError = error
+                    lastFailedPrompt = prompt
+                    return
+                }
                 await sendMessage(prompt)
             }
         case .dismiss:

@@ -9338,7 +9338,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Hiện chỉ hoạt động với thiết bị Omi. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
+      'Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9487,4 +9487,22 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Nạp firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Đang ghi âm trên mặt dây chuyền';
+
+  @override
+  String get pendantRecordingNote =>
+      'Mặt dây chuyền của bạn đang tự ghi âm. Các bản ghi được đồng bộ về điện thoại khi ứng dụng đang mở.';
+
+  @override
+  String get pendantSyncingRecordings => 'Đang đồng bộ các bản ghi từ mặt dây chuyền của bạn…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes phút đã lưu';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ.';
 }

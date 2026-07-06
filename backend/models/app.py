@@ -38,7 +38,7 @@ class AppReview(BaseModel):
     def from_json(cls, json_data: dict):
         return cls(
             uid=json_data['uid'],
-            ratedAt=datetime.fromisoformat(json_data['rated_at']),
+            rated_at=datetime.fromisoformat(json_data['rated_at']),
             score=json_data['score'],
             review=json_data['review'],
             username=json_data.get('username'),

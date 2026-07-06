@@ -17406,7 +17406,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with Omi devices for now. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17702,6 +17702,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Flash Firmware'**
   String get flashFirmware;
+
+  /// No description provided for @pendantRecordingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording on Pendant'**
+  String get pendantRecordingTitle;
+
+  /// No description provided for @pendantRecordingNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is recording on its own. Recordings sync to your phone while the app is open.'**
+  String get pendantRecordingNote;
+
+  /// No description provided for @pendantSyncingRecordings.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing recordings from your pendant…'**
+  String get pendantSyncingRecordings;
+
+  /// No description provided for @pendantMinutesStored.
+  ///
+  /// In en, this message translates to:
+  /// **'~{minutes} min stored'**
+  String pendantMinutesStored(int minutes);
+
+  /// No description provided for @pendantStorageAlmostFull.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant storage is almost full — keep the app open to sync.'**
+  String get pendantStorageAlmostFull;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

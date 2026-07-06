@@ -9373,7 +9373,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Пока работает с устройствами Omi. Звук остаётся на вашем телефоне, пока вы сами не решите его загрузить.';
+      'Пока работает с устройствами Omi и Limitless. Звук остаётся на вашем телефоне, пока вы сами не решите его загрузить.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9524,4 +9524,23 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Установить прошивку';
+
+  @override
+  String get pendantRecordingTitle => 'Запись на кулоне';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ваш кулон записывает самостоятельно. Записи синхронизируются с телефоном, пока приложение открыто.';
+
+  @override
+  String get pendantSyncingRecordings => 'Синхронизация записей с вашего кулона…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes мин сохранено';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Память кулона почти заполнена — держите приложение открытым для синхронизации.';
 }

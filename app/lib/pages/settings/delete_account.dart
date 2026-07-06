@@ -45,7 +45,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     super.dispose();
   }
 
-  static const _reasons = [
+  static final _reasons = [
     _Reason('privacy_concerns', FontAwesomeIcons.shield),
     _Reason('not_using_enough', FontAwesomeIcons.clock),
     _Reason('missing_features', FontAwesomeIcons.puzzlePiece),
@@ -254,9 +254,8 @@ class _DeleteAccountState extends State<DeleteAccount> {
                 color: selected ? Colors.grey.shade800 : Colors.grey.shade800.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: Center(
-                child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600),
-              ),
+              child:
+                  Center(child: FaIcon(reason.icon, size: 14, color: selected ? Colors.white : Colors.grey.shade600)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -530,7 +529,7 @@ class _DeleteAccountState extends State<DeleteAccount> {
     );
   }
 
-  Widget _featureRow(IconData icon, String text) {
+  Widget _featureRow(FaIconData icon, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Container(
@@ -564,6 +563,6 @@ class _DeleteAccountState extends State<DeleteAccount> {
 
 class _Reason {
   final String key;
-  final IconData icon;
+  final FaIconData icon;
   const _Reason(this.key, this.icon);
 }

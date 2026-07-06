@@ -391,10 +391,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // field, so the two never double-handle. Latest start/finish/getDraft are read
   // through refs so the once-registered listeners never call a stale closure.
   const startRecordingRef = useRef(startRecording)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   startRecordingRef.current = startRecording
   const finishRecordingRef = useRef(finishRecording)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   finishRecordingRef.current = finishRecording
   const getDraftRef = useRef(opts.getDraft)
+  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   getDraftRef.current = opts.getDraft
 
   useEffect(() => {

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from datetime import datetime, timezone
@@ -61,8 +61,8 @@ class ExternalIntegrationCreateMemory(BaseModel):
     )
 
 
-class EmptyResponse(BaseModel):
-    pass
+class IntegrationNotificationResponse(BaseModel):
+    status: str
 
 
 class PersonaChatRequest(BaseModel):
@@ -155,8 +155,7 @@ class MemoryItem(MemoryDB):
     Memory item model that extends MemoryDB for API responses
     """
 
-    class Config:
-        exclude_none = True
+    model_config = ConfigDict(exclude_none=True)
 
 
 class MemoriesResponse(BaseModel):
@@ -179,7 +178,7 @@ class Event(BaseModel):
     created: bool = False
 
     def as_dict_cleaned_dates(self):
-        event_dict = self.dict()
+        event_dict = self.model_dump()
         start_time = event_dict['start']
         if start_time.tzinfo is None:
             event_dict['start'] = start_time.isoformat() + 'Z'
@@ -229,14 +228,13 @@ class ConversationItem(BaseModel):
     geolocation: Optional[ConversationItemGeolocation] = None
     status: Optional[str] = None
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: (
-                v.isoformat() + 'Z'
-                if v.tzinfo is None
-                else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-            )
-        }
+    @field_serializer('created_at', 'started_at', 'finished_at')
+    def _serialize_dt(self, v: Optional[datetime]):
+        if v is None:
+            return None
+        return (
+            v.isoformat() + 'Z' if v.tzinfo is None else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+        )
 
 
 class ConversationsResponse(BaseModel):
@@ -262,14 +260,13 @@ class TaskItem(BaseModel):
     completed_at: Optional[datetime] = None
     conversation_id: Optional[str] = None
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: (
-                v.isoformat() + 'Z'
-                if v.tzinfo is None
-                else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
-            )
-        }
+    @field_serializer('created_at', 'updated_at', 'due_at', 'completed_at')
+    def _serialize_dt(self, v: Optional[datetime]):
+        if v is None:
+            return None
+        return (
+            v.isoformat() + 'Z' if v.tzinfo is None else v.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
+        )
 
 
 class TasksResponse(BaseModel):

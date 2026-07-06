@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Du använder din egen transkriberingsleverantör. Att synkronisera dessa inspelningar transkriberar dem på Omis servrar i stället, och de räknas mot din plans transkriberingsgräns.",
     "transcribeLaterTitle": "Transkribera senare",
     "transcribeLaterDescription": "Spela in ljud nu och transkribera det när du vill i stället för direkt. Inspelningarna sparas på din telefon, och sedan laddar du upp dem för att skapa konversationer.",
-    "transcribeLaterNote": "Fungerar med Omi-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
+    "transcribeLaterNote": "Fungerar med Omi- och Limitless-enheter tills vidare. Ljudet stannar på din telefon tills du väljer att ladda upp det.",
     "transcribeLaterStorageFull": "Din telefon har ont om lagringsutrymme, så inspelningen är pausad. Frigör utrymme eller ladda upp dina inspelningar, så återupptas den automatiskt.",
     "unmute": "Slå på ljud",
     "newRecording": "Ny inspelning",
@@ -3104,5 +3104,17 @@
     "deviceOnboardingIntroDuration": "Cirka 1 minut",
     "jumpToLatestMessage": "Hoppa till senaste meddelandet",
     "latest": "Senaste",
-    "flashFirmware": "Installera firmware"
+    "flashFirmware": "Installera firmware",
+    "pendantRecordingTitle": "Spelar in på hänget",
+    "pendantRecordingNote": "Ditt hänge spelar in på egen hand. Inspelningar synkroniseras till din telefon medan appen är öppen.",
+    "pendantSyncingRecordings": "Synkroniserar inspelningar från ditt hänge…",
+    "pendantMinutesStored": "~{minutes} min lagrat",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera."
 }

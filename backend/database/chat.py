@@ -86,7 +86,7 @@ def add_app_message(text: str, app_id: str, uid: str, conversation_id: Optional[
         type='text',
         memories_id=[conversation_id] if conversation_id else [],
     )
-    add_message(uid, ai_message.dict())
+    add_message(uid, ai_message.model_dump())
     return ai_message
 
 
@@ -106,7 +106,7 @@ def add_integration_chat_message(text: str, app_id: Optional[str], uid: str) -> 
         type='text',
         chat_session_id=chat_session_id,
     )
-    add_message(uid, ai_message.dict())
+    add_message(uid, ai_message.model_dump())
     if chat_session_id:
         add_message_to_chat_session(uid, chat_session_id, ai_message.id)
     return ai_message
@@ -123,7 +123,7 @@ def add_summary_message(text: str, uid: str) -> Message:
         type='day_summary',
         memories_id=[],
     )
-    add_message(uid, ai_message.dict())
+    add_message(uid, ai_message.model_dump())
     return ai_message
 
 
@@ -469,7 +469,9 @@ def get_chat_session_by_id(uid: str, chat_session_id: str):
     session_doc = session_ref.get()
 
     if session_doc.exists:
-        return session_doc.to_dict()
+        data = session_doc.to_dict()
+        data['id'] = chat_session_id
+        return _normalize_chat_session(data)
 
     return None
 
@@ -593,6 +595,30 @@ def migrate_chats_level_batch(uid: str, message_doc_ids: List[str], target_level
 # ============================================================================
 
 
+def _normalize_chat_session(data: Optional[dict]) -> Optional[dict]:
+    """Guarantee a v2 chat-session dict satisfies ``ChatSessionResponse``.
+
+    Firestore holds sessions written by several code paths (Python v2, the Rust
+    desktop backend, legacy docs). Some rows are missing fields the response
+    model requires (``title``, ``created_at``, ``message_count``, ``starred``),
+    which makes FastAPI raise ``ResponseValidationError`` (HTTP 500). Fill safe
+    defaults so listing/reading sessions never 500 on an incomplete doc.
+    """
+    if data is None:
+        return None
+    data.setdefault('title', 'New Chat')
+    data.setdefault('preview', None)
+    data.setdefault('message_count', 0)
+    data.setdefault('starred', False)
+    # created_at/updated_at are required datetimes; fall back to each other when
+    # one is missing (the list query orders by updated_at, so it is present there).
+    if data.get('created_at') is None:
+        data['created_at'] = data.get('updated_at') or datetime.now(timezone.utc)
+    if data.get('updated_at') is None:
+        data['updated_at'] = data.get('created_at') or datetime.now(timezone.utc)
+    return data
+
+
 def create_chat_session(uid: str, title: str = None, app_id: str = None) -> dict:
     session_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -645,7 +671,7 @@ def get_chat_sessions(
     for doc in query.stream():
         data = doc.to_dict()
         data['id'] = doc.id
-        items.append(data)
+        items.append(_normalize_chat_session(data))
     return items
 
 
@@ -661,7 +687,7 @@ def update_chat_session(uid: str, session_id: str, title: str = None, starred: b
     ref.update(updates)
     result = ref.get().to_dict()
     result['id'] = session_id
-    return result
+    return _normalize_chat_session(result)
 
 
 # ============================================================================

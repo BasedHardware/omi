@@ -287,7 +287,13 @@ async fn gemini_proxy(
     // Vertex AI requires our service account — can't mix with user's API key.
     // Skip Vertex-specific transforms (embedContent→predict) since AI Studio
     // handles embedContent natively.
-    let byok_key = byok_gemini_key.unwrap();
+    // `is_byok` guarantees this is `Some`, but return 500 instead of panicking if
+    // the invariant ever breaks (e.g. under refactor) so a request can't drop the
+    // connection with no response.
+    let Some(byok_key) = byok_gemini_key else {
+        tracing::error!("gemini_proxy: BYOK key unexpectedly missing on BYOK path");
+        return Err(ProxyError::Status(StatusCode::INTERNAL_SERVER_ERROR));
+    };
     tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
     let url = build_gemini_url(&path, byok_key);
@@ -599,7 +605,12 @@ async fn gemini_stream_proxy(
     }
 
     // BYOK path: always use AI Studio with user's key, skip Vertex AI.
-    let byok_key = byok_gemini_key.unwrap();
+    // `is_byok` guarantees this is `Some`; return 500 rather than panic if the
+    // invariant ever breaks under refactor.
+    let Some(byok_key) = byok_gemini_key else {
+        tracing::error!("gemini_stream_proxy: BYOK key unexpectedly missing on BYOK path");
+        return Err(ProxyError::Status(StatusCode::INTERNAL_SERVER_ERROR));
+    };
     tracing::info!(
         "gemini_stream_proxy: using BYOK Gemini key for uid={}",
         user.uid

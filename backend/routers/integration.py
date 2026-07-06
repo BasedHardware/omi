@@ -25,6 +25,7 @@ import models.integrations as integration_models
 import models.conversation as conversation_models
 from models.chat import Message, MessageSender, MessageType
 from langchain_core.messages import HumanMessage
+from models.shared import EmptyResponse
 from models.conversation import SearchRequest
 from models.app import App
 from utils.app_integrations import send_app_notification, trigger_external_integrations
@@ -81,7 +82,7 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
 
 @router.post(
     '/v2/integrations/{app_id}/user/conversations',
-    response_model=integration_models.EmptyResponse,
+    response_model=EmptyResponse,
     tags=['integration', 'conversations'],
 )
 async def create_conversation_via_integration(
@@ -163,7 +164,7 @@ async def create_conversation_via_integration(
 
 @router.post(
     '/v2/integrations/{app_id}/user/memories',
-    response_model=integration_models.EmptyResponse,
+    response_model=EmptyResponse,
     tags=['integration', 'memories'],
 )
 def create_memories_via_integration(
@@ -403,7 +404,7 @@ def get_conversations_via_integration(
 
     # Create response with exclude_none=True
     response = integration_models.ConversationsResponse(conversations=conversation_items)
-    return response.dict(exclude_none=True)
+    return response.model_dump(exclude_none=True)
 
 
 @router.post(
@@ -532,12 +533,12 @@ def search_conversations_via_integration(
         per_page=search_results['per_page'],
     )
 
-    return response.dict(exclude_none=True)
+    return response.model_dump(exclude_none=True)
 
 
 @router.post(
     '/v2/integrations/{app_id}/notification',
-    response_model=integration_models.EmptyResponse,
+    response_model=integration_models.IntegrationNotificationResponse,
     tags=['integration', 'notifications'],
 )
 def send_notification_via_integration(
@@ -723,7 +724,6 @@ def get_tasks_via_integration(
 
     response = integration_models.TasksResponse(tasks=task_items)
     return response.dict(exclude_none=True)
-
 
 # ---------------------------------------------------------------------------
 # Persona chat (T-001): single-turn persona chat driven by a 3rd-party
