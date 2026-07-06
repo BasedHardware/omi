@@ -307,6 +307,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  private func recordRealtimeMintFailure(
+    _ error: RealtimeTokenMintError,
+    provider providerParam: String,
+    phase: String,
+    context: String
+  ) {
+    CredentialHealthManager.shared.record(error.healthError, context: context)
+    DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+      provider: providerParam,
+      reason: error.payload?.reason ?? error.healthError.failureClass.logValue,
+      phase: phase,
+      httpStatusCode: error.statusCode,
+      backendRoute: error.payload?.backendRoute,
+      upstreamStatusCode: error.payload?.upstreamStatusCode,
+      providerCode: error.payload?.code,
+      retryable: error.payload?.retryable)
+  }
+
   /// True when the hub should drive this PTT turn. Read by PushToTalkManager at PTT
   /// start. The hub is the default voice path (no opt-in toggle).
   var isActive: Bool {
@@ -513,6 +531,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let token: String
       do {
         token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as RealtimeTokenMintError {
+        self.minting = false
+        self.recordRealtimeMintFailure(error, provider: providerParam, phase: "warm", context: "realtime_mint")
+        if error.healthError.failureClass.isAccountWide {
+          log("RealtimeHub: account credential failure during mint — staying on cascade")
+        } else if !self.failoverToAlternateProvider() {
+          log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
+        }
+        return
       } catch let error as CredentialHealthError {
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
@@ -636,6 +663,20 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let token: String
       do {
         token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)
+      } catch let error as RealtimeTokenMintError {
+        self.minting = false
+        self.recordRealtimeMintFailure(
+          error,
+          provider: providerParam,
+          phase: "barge_in_replacement",
+          context: "realtime_barge_in_mint")
+        self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
+        if self.shouldFailoverToAlternate(for: error.healthError.failureClass), self.failoverToAlternateProvider() {
+          return
+        } else if !error.healthError.failureClass.isAccountWide {
+          log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
+        }
+        return
       } catch let error as CredentialHealthError {
         self.minting = false
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
