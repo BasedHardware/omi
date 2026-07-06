@@ -320,8 +320,9 @@ final class DesktopDiagnosticsManager {
       ("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+", "[redacted-jwt]"),
       // Authorization: Bearer <token>
       ("(?i)(bearer)\\s+[A-Za-z0-9._~+/=-]{8,}", "$1 [redacted]"),
-      // Authorization: Basic <base64 credentials>
-      ("(?i)(basic)\\s+[A-Za-z0-9+/=]{8,}", "$1 [redacted]"),
+      // Authorization: Basic <base64 credentials>. Anchored to the header prefix
+      // so benign phrases like "basic settings" aren't over-redacted.
+      ("(?i)(authorization:\\s*basic)\\s+[A-Za-z0-9+/=]{8,}", "$1 [redacted]"),
       // Bare OpenAI-style API keys.
       ("sk-[A-Za-z0-9_-]{20,}", "sk-[redacted]"),
       // key=..., token: ..., password="..." in query strings, JSON, or kv logs.

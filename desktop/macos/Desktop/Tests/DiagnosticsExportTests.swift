@@ -33,6 +33,7 @@ final class DiagnosticsExportTests: XCTestCase {
       "[10:00:03.500] [app] Authorization: Basic dXNlcjpwYXNzd29yZA==",
       "[10:00:03.750] [app] openai_key=sk-proj-1234567890abcdef1234567890abcdef",
       "[10:00:03.900] [app] raw key sk-1234567890abcdef1234567890abcdef",
+      "[10:00:03.950] [app] applied basic settings for the user",
       "[10:00:04.000] [app] user tapped Report Issue",
     ].joined(separator: "\n")
     try logContents.write(toFile: logPath, atomically: true, encoding: .utf8)
@@ -48,9 +49,11 @@ final class DiagnosticsExportTests: XCTestCase {
     XCTAssertFalse(text.contains("sk-1234567890abcdef1234567890abcdef"), "bare OpenAI key leaked")
     XCTAssertTrue(text.contains("[redacted"), "expected redaction markers")
 
-    // Benign operational lines survive so the report stays useful.
+    // Benign operational lines survive so the report stays useful — including
+    // "basic settings", which the Basic-auth pattern must not over-redact.
     XCTAssertTrue(text.contains("launched cleanly"))
     XCTAssertTrue(text.contains("user tapped Report Issue"))
+    XCTAssertTrue(text.contains("applied basic settings for the user"), "over-redacted benign 'basic'")
 
     // Metadata header is present and offline-safe.
     XCTAssertTrue(text.contains("# Omi Desktop Diagnostics"))
