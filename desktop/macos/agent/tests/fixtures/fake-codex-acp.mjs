@@ -42,6 +42,17 @@ rl.on("line", (line) => {
       send({ jsonrpc: "2.0", id, result: {} });
       break;
     case "session/prompt": {
+      // Model the "no key AND no stored login" case: real codex-acp fails when
+      // it tries to reach OpenAI with no credentials. (This stub can't see a
+      // real ~/.codex login, so absence-of-key stands in for fully-unauthed.)
+      if (!process.env.OPENAI_API_KEY && !process.env.CODEX_API_KEY) {
+        send({
+          jsonrpc: "2.0",
+          id,
+          error: { code: -32603, message: "Not authenticated. Run `codex login` or set OPENAI_API_KEY." },
+        });
+        break;
+      }
       const auth = process.env.OPENAI_API_KEY ? "auth=1" : "auth=0";
       const mode = process.env.INITIAL_AGENT_MODE ?? "mode=unset";
       const noBrowser = process.env.NO_BROWSER ?? "nb=unset";

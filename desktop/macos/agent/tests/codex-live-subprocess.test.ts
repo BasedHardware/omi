@@ -75,4 +75,22 @@ describe("Codex adapter — live real subprocess (no mocks)", () => {
 
     await adapter.stop();
   });
+
+  it("surfaces a clear failure when codex-acp has no auth (no key, no login)", async () => {
+    // No key + no stored login.
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.CODEX_API_KEY;
+
+    const adapter = new CodexRuntimeAdapter();
+    await adapter.start();
+    const binding = await adapter.openBinding({ sessionId: "omi-session", cwd: "/tmp/work" });
+
+    // The prompt errors out; the adapter propagates it (kernel maps this to a
+    // failed attempt shown on the pill). It does NOT hang or silently succeed.
+    await expect(
+      adapter.executeAttempt(makeContext(binding), () => {}, new AbortController().signal)
+    ).rejects.toThrow(/Not authenticated|codex login|OPENAI_API_KEY/);
+
+    await adapter.stop();
+  });
 });
