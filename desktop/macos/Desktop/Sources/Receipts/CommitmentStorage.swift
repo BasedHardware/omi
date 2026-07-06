@@ -191,11 +191,19 @@ actor CommitmentStorage {
   }
 
   /// Mark a session as processed (no commitments found), so it won't be re-scanned.
+  /// Idempotent — safe to call multiple times for the same session (INSERT OR IGNORE
+  /// on the unique sessionId column). Retries, duplicate completion hooks, and
+  /// overlapping backfill/finalization paths must not turn "already processed" into an error.
   func markSessionProcessed(_ sessionId: Int64) async throws {
     let db = try await ensureInitialized()
-    let record = ProcessedSessionRecord(sessionId: sessionId, processedAt: Date())
     _ = try await db.write { database in
-      try record.insert(database)
+      try database.execute(
+        sql: """
+          INSERT OR IGNORE INTO processed_sessions (sessionId, processedAt)
+          VALUES (?, ?)
+          """,
+        arguments: [sessionId, Date()]
+      )
     }
   }
 

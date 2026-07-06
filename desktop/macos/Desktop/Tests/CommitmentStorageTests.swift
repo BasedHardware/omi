@@ -246,14 +246,14 @@ final class CommitmentStorageTests: XCTestCase {
     guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
       throw CommitmentStorageError.databaseNotInitialized
     }
-    return try await db.write { database in
-      var session = TranscriptionSessionRecord(
-        source: "desktop",
-        status: .completed,
-        backendSynced: true
-      )
-      try session.insert(database)
-      return session.id!
+    let session = TranscriptionSessionRecord(
+      source: "desktop",
+      status: .completed,
+      backendSynced: true
+    )
+    let inserted = try await db.write { database in
+      try session.inserted(database)
     }
+    return inserted.id!
   }
 }
