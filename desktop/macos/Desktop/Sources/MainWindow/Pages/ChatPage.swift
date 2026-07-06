@@ -1,6 +1,7 @@
 import AppKit
 import MarkdownUI
 import SwiftUI
+import OmiTheme
 
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider

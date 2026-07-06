@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct ShortcutsSettingsSection: View {
   @ObservedObject private var settings = ShortcutSettings.shared

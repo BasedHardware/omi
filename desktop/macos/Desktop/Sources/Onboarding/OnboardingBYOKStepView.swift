@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Final step before Tasks: offer a free-forever plan if the user supplies their
 /// own API keys for OpenAI, Anthropic, Gemini, and Deepgram. Keys live on the

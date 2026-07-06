@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Modal overlay shown when the user hits a free-tier usage cap
 /// (transcription minutes, monthly chat/floating-bar messages, etc).

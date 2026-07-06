@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Self-contained panel that observes LiveTranscriptMonitor internally,
 /// so the parent view does NOT need to observe transcript changes.

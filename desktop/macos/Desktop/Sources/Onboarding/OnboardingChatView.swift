@@ -1,6 +1,7 @@
 import GRDB
 import MarkdownUI
 import SwiftUI
+import OmiTheme
 
 // MARK: - Onboarding Chat Persistence
 

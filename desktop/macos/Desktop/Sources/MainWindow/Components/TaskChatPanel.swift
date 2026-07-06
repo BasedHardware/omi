@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Compact chat panel for the task sidebar.
 /// Displays task-scoped chat using an independent TaskChatState per task.

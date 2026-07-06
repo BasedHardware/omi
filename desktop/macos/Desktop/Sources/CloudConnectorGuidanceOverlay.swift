@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 /// One copy row on the assisted cloud-connector card. `id` must be unique across
 /// the card — never derive it from `label` alone (duplicate labels crash SwiftUI).

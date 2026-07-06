@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Onboarding step that shows what proactive notifications look like.
 /// Uses a static example insight — no Gemini call needed.

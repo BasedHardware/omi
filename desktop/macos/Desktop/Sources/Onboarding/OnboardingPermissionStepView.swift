@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct OnboardingPermissionStepView: View {
   @Environment(\.scenePhase) private var scenePhase

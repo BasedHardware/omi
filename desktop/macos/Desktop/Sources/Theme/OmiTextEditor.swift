@@ -42,7 +42,7 @@ private class OmiNSTextView: NSTextView {
 }
 
 /// Unified NSTextView wrapper used by both the main chat input and the floating control bar.
-struct OmiTextEditor: NSViewRepresentable {
+package struct OmiTextEditor: NSViewRepresentable {
     @Binding var text: String
 
     // Appearance
@@ -61,7 +61,33 @@ struct OmiTextEditor: NSViewRepresentable {
     var maxHeight: CGFloat? = nil
     var onHeightChange: ((CGFloat) -> Void)? = nil
 
-    func makeNSView(context: Context) -> NSScrollView {
+    package init(
+        text: Binding<String>,
+        fontSize: CGFloat = 13,
+        textColor: NSColor = .white,
+        lineFragmentPadding: CGFloat = 0,
+        textContainerInset: NSSize = NSSize(width: 0, height: 8),
+        onSubmit: (() -> Void)? = nil,
+        focusOnAppear: Bool = true,
+        onMarkedTextChange: ((Bool) -> Void)? = nil,
+        minHeight: CGFloat? = nil,
+        maxHeight: CGFloat? = nil,
+        onHeightChange: ((CGFloat) -> Void)? = nil
+    ) {
+        self._text = text
+        self.fontSize = fontSize
+        self.textColor = textColor
+        self.lineFragmentPadding = lineFragmentPadding
+        self.textContainerInset = textContainerInset
+        self.onSubmit = onSubmit
+        self.focusOnAppear = focusOnAppear
+        self.onMarkedTextChange = onMarkedTextChange
+        self.minHeight = minHeight
+        self.maxHeight = maxHeight
+        self.onHeightChange = onHeightChange
+    }
+
+    package func makeNSView(context: Context) -> NSScrollView {
         let textView = OmiNSTextView()
         textView.font = .systemFont(ofSize: fontSize)
         textView.textColor = textColor
@@ -108,7 +134,7 @@ struct OmiTextEditor: NSViewRepresentable {
         return scrollView
     }
 
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    package func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NSTextView else { return }
 
         // Keep the coordinator's binding fresh so textDidChange writes to the
@@ -167,7 +193,7 @@ struct OmiTextEditor: NSViewRepresentable {
     /// Without this, NSViewRepresentable reports no intrinsic size and SwiftUI
     /// keeps propagating unconstrained proposals upward, contributing to the
     /// recursive StackLayout sizing loop seen in the task chat panel.
-    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
+    package func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSScrollView, context: Context) -> CGSize? {
         guard let minH = minHeight, let maxH = maxHeight else {
             return nil  // no height tracking — let SwiftUI use default NSView sizing
         }
@@ -183,7 +209,7 @@ struct OmiTextEditor: NSViewRepresentable {
         return CGSize(width: proposal.width ?? nsView.bounds.width, height: constrainedHeight)
     }
 
-    func makeCoordinator() -> Coordinator {
+    package func makeCoordinator() -> Coordinator {
         Coordinator(
             text: $text,
             onSubmit: onSubmit,
@@ -194,7 +220,7 @@ struct OmiTextEditor: NSViewRepresentable {
         )
     }
 
-    class Coordinator: NSObject, NSTextViewDelegate {
+    package class Coordinator: NSObject, NSTextViewDelegate {
         @Binding var text: String
         var onSubmit: (() -> Void)?
         var onMarkedTextChange: ((Bool) -> Void)?
@@ -227,7 +253,7 @@ struct OmiTextEditor: NSViewRepresentable {
             self.onHeightChange = onHeightChange
         }
 
-        func textDidChange(_ notification: Notification) {
+        package func textDidChange(_ notification: Notification) {
             guard !isUpdating, let textView = notification.object as? NSTextView else { return }
             self.text = textView.string
 
@@ -238,7 +264,7 @@ struct OmiTextEditor: NSViewRepresentable {
             updateMarkedTextState(textView.hasMarkedText())
         }
 
-        func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
+        package func textView(_ textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
             if textView.hasMarkedText() {
                 return false
             }

@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 // MARK: - NSHostingView sizingOptions access
 

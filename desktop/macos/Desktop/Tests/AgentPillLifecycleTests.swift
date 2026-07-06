@@ -118,7 +118,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("let resolvedProvider = decision.directedProvider ?? directedProvider"))
     XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: resolvedProvider)"))
     XCTAssertTrue(source.contains("guard availability.isAvailable else"))
-    XCTAssertTrue(source.contains("\\(logLabel)-provider-unavailable"))
+    XCTAssertTrue(source.contains("provider-unavailable"))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
     XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
     XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)"))

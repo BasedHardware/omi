@@ -2,6 +2,7 @@ import AppKit
 import Cocoa
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 /// Reusable chat input field with send button, extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).

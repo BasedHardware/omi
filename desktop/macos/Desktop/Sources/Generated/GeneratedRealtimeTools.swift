@@ -72,7 +72,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "list_agent_sessions",
-    "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+    "description": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
     "parameters": {
       "type": "object",
       "properties": {
@@ -279,6 +279,10 @@ enum GeneratedRealtimeTools {
         "title": {
           "type": "string",
           "description": "Optional visible session title."
+        },
+        "brief": {
+          "type": "string",
+          "description": "Optional short user-visible summary for the floating pill."
         }
       },
       "required": [

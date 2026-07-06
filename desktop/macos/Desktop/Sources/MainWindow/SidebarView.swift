@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Navigation Item Model
 enum SidebarNavItem: Int, CaseIterable {

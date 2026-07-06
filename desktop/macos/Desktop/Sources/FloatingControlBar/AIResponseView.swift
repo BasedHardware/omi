@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 /// Streaming markdown response view for the floating control bar.
 struct AIResponseView: View {

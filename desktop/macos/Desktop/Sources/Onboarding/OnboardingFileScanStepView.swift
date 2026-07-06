@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct OnboardingFileScanStepView: View {
   @ObservedObject var appState: AppState

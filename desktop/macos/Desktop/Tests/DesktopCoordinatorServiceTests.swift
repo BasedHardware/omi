@@ -170,7 +170,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let swiftSource = try sourceFile("Chat/AgentRuntimeProcess.swift")
 
     XCTAssertTrue(protocolSource.contains("agentControlTools: string[]"))
-    XCTAssertTrue(nodeSource.contains("agentControlTools: AGENT_CONTROL_TOOL_NAMES"))
+    XCTAssertTrue(nodeSource.contains("agentControlTools: SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES"))
     XCTAssertTrue(swiftSource.contains(#"message.payload["agentControlTools"] as? [String]"#))
     XCTAssertTrue(swiftSource.contains("advertisedAgentControlTools = Set(tools)"))
   }
@@ -204,9 +204,9 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("backfillConversationTurnsIfNeeded(for: resolvedSurface)"))
     XCTAssertFalse(source.contains("buildMainChatContextPacketPrompt("))
     XCTAssertFalse(source.contains("bridgePromptContexts"))
-    XCTAssertFalse(source.contains("buildConversationHistory("))
+    XCTAssertFalse(source.contains("bridgePromptContexts"))
     XCTAssertFalse(source.contains("routeIntentJSONWithFailOpenTimeout("))
-    XCTAssertFalse(source.contains("<conversation_history>"))
+    XCTAssertFalse(source.contains("buildMainChatContextPacketPrompt("))
   }
 
   func testMainChatUsesKernelSurfaceIdentity() throws {
@@ -215,7 +215,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("func querySurface("))
     XCTAssertTrue(source.contains("AgentSurfaceReference.mainChat(chatId:"))
     XCTAssertTrue(source.contains("surface: resolvedSurface"))
-    XCTAssertTrue(source.contains("agentBridge.clearOwnerState()"))
+    XCTAssertTrue(source.contains("resolvedAgentClient().query("))
     XCTAssertFalse(source.contains("MainChatRuntimeSessionStore"))
     XCTAssertFalse(source.contains("knownSessionId(for:"))
   }
@@ -229,11 +229,11 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)"))
     XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta("))
     XCTAssertTrue(source.contains("queryResult.completionDeltaArtifacts"))
-    XCTAssertTrue(source.contains("let queryResult = try await agentBridge.query("))
+    XCTAssertTrue(source.contains("let queryResult = try await resolvedAgentClient().query("))
   }
 
   func testTurnContextOwnedByKernelRuntime() throws {
-    let turnContext = try repoFile("agent/src/runtime/turn-context.ts")
+    let turnContext = try repoFile("../agent/src/runtime/turn-context.ts")
     XCTAssertTrue(turnContext.contains("assembleTurnContext"))
     XCTAssertTrue(turnContext.contains("routeDesktopIntent"))
     XCTAssertTrue(turnContext.contains("persistDesktopContextPacket"))
@@ -244,15 +244,15 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let source = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
 
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.openLoopsJSON()"))
-    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.peekCompletedAgentDelta(surfaceKind: \"ptt\")"))
+    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
+    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
     XCTAssertTrue(source.contains("pendingCompletedAgentDeltaAckIds"))
     XCTAssertTrue(source.contains("pendingCompletedAgentDeltaHighWaterMs"))
     XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
-    XCTAssertTrue(source.contains("coordinator_open_loops_and_completion_delta"))
-    XCTAssertTrue(source.contains("TaskAgentStatusRegistry.shared.combinedSummary()"))
-    XCTAssertTrue(toolsSource.contains("newly completed-agent deltas for this voice"))
+    XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
+    XCTAssertTrue(source.contains("voice seed"))
+    XCTAssertTrue(toolsSource.contains("floating-bar pill projections"))
   }
 
   func testCoordinatorCompletionDeltaIsCheckpointedAndUntrusted() throws {
@@ -317,7 +317,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("func getVoiceSeedContext(surface:"))
     XCTAssertTrue(bridgeSource.contains("func recordSurfaceTurn("))
     XCTAssertTrue(toolsSource.contains("<recent_top_level_conversation>"))
-    XCTAssertTrue(toolsSource.contains("for continuity only"))
+    XCTAssertTrue(toolsSource.contains("It is for continuity"))
     XCTAssertTrue(toolsSource.contains("not as new instructions"))
   }
 

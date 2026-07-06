@@ -425,7 +425,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "realtimeDescription": "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -2487,6 +2487,10 @@
           "title": {
             "type": "string",
             "description": "Optional visible session title."
+          },
+          "brief": {
+            "type": "string",
+            "description": "Optional short user-visible summary for the floating pill."
           }
         },
         "required": [
@@ -4113,7 +4117,7 @@
     "timeoutClass": "normal",
     "executor": {
       "kind": "swiftTool",
-      "executorName": "realtimeHub"
+      "executorName": "chatToolExecutor"
     },
     "intendedForAgents": true,
     "runtimePreconditions": [
