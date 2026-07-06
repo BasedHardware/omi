@@ -340,16 +340,16 @@ class LocalRecordingsProvider extends ChangeNotifier {
   /// playback). Never stored anywhere. `filePath` is the relative name, which
   /// `Wal.getFilePath` resolves against the app documents dir (== batchAudioDir).
   Wal _walFor(LocalRecording r) => Wal(
-    timerStart: r.timerStart,
-    codec: r.codec,
-    seconds: r.seconds,
-    sampleRate: 16000,
-    channel: 1,
-    status: WalStatus.miss,
-    storage: WalStorage.disk,
-    filePath: r.fileName,
-    device: batchRecordingDevice,
-  );
+        timerStart: r.timerStart,
+        codec: r.codec,
+        seconds: r.seconds,
+        sampleRate: 16000,
+        channel: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        filePath: r.fileName,
+        device: batchRecordingDevice,
+      );
 
   String? get currentPlayingId => _audio.currentPlayingId;
   bool get isProcessingAudio => _audio.isProcessingAudio;

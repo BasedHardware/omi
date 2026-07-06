@@ -247,8 +247,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
         final recordingsProvider = context.watch<LocalRecordingsProvider>();
-        final bool showRecordings =
-            convoProvider.previousQuery.isEmpty &&
+        final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly &&
             !convoProvider.showDailySummaries;
