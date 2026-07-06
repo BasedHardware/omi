@@ -1,7 +1,7 @@
 """Shared httpx.AsyncClient instances for outbound HTTP.
 
 Implements Lane 1 of the 3-lane async architecture (issue #6369):
-- Connection pooling per service (4 clients)
+- Connection pooling per service
 - Bounded concurrency via asyncio.Semaphore
 - Per-target circuit breakers for webhooks
 - Latest-wins dropping for audio-byte-level calls
@@ -217,6 +217,10 @@ def get_stt_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('stt', 8)
 
 
+def get_stt_proxy_semaphore() -> asyncio.Semaphore:
+    return _get_semaphore('stt_proxy', 4)
+
+
 def get_tts_semaphore() -> asyncio.Semaphore:
     return _get_semaphore('tts', 32)
 
@@ -229,6 +233,7 @@ _webhook_client: httpx.AsyncClient | None = None
 _maps_client: httpx.AsyncClient | None = None
 _auth_client: httpx.AsyncClient | None = None
 _stt_client: httpx.AsyncClient | None = None
+_stt_proxy_client: httpx.AsyncClient | None = None
 _tts_client: httpx.AsyncClient | None = None
 _web_fetch_client: httpx.AsyncClient | None = None
 
@@ -292,6 +297,29 @@ def get_stt_client() -> httpx.AsyncClient:
     return _stt_client
 
 
+def get_stt_proxy_client() -> httpx.AsyncClient:
+    """Return a shared async HTTP client for the client-facing STT proxy route.
+
+    Isolated from `get_stt_client()` on purpose: proxy uploads can hold a
+    connection for minutes each, and the listen pipeline's latency-sensitive
+    internal callers (VAD, speaker embedding, speech profile) share that pool
+    without a semaphore — bulk user traffic must never starve them.
+
+    Keep-alive is disabled for the same reason as `get_auth_client()` /
+    `get_tts_client()`: volume is low and idle gaps are long, so a silently
+    dropped keep-alive socket would surface as a RuntimeError (500) instead
+    of a clean 502. A TLS handshake per request is noise next to GPU
+    transcription time.
+    """
+    global _stt_proxy_client
+    if _stt_proxy_client is None:
+        _stt_proxy_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=5.0),
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=0),
+        )
+    return _stt_proxy_client
+
+
 def get_tts_client() -> httpx.AsyncClient:
     """Return a shared async HTTP client for TTS streaming (ElevenLabs).
 
@@ -328,8 +356,16 @@ def get_web_fetch_client() -> httpx.AsyncClient:
 
 async def close_all_clients():
     """Close all shared HTTP clients. Call at app shutdown."""
-    global _webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client
-    for client in (_webhook_client, _maps_client, _auth_client, _stt_client, _tts_client, _web_fetch_client):
+    global _webhook_client, _maps_client, _auth_client, _stt_client, _stt_proxy_client, _tts_client, _web_fetch_client
+    for client in (
+        _webhook_client,
+        _maps_client,
+        _auth_client,
+        _stt_client,
+        _stt_proxy_client,
+        _tts_client,
+        _web_fetch_client,
+    ):
         if client is not None:
             try:
                 await client.aclose()
@@ -340,6 +376,7 @@ async def close_all_clients():
     _auth_client = None
     _tts_client = None
     _stt_client = None
+    _stt_proxy_client = None
     _web_fetch_client = None
     # Reset stateful registries
     _semaphores.clear()

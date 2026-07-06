@@ -64,6 +64,7 @@ from routers import (
     advice,
     chat_sessions,
     scores,
+    stt,
     tts,
     memory_admin,
     memory_product,
@@ -164,6 +165,7 @@ app.include_router(focus_sessions.router)
 app.include_router(advice.router)
 app.include_router(chat_sessions.router)
 app.include_router(scores.router)
+app.include_router(stt.router)
 app.include_router(tts.router)
 app.include_router(memory_admin.router)
 app.include_router(memory_product.router)
@@ -183,6 +185,10 @@ methods_timeout = {
 paths_timeout = {
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
+    # STT proxy: 30s slot wait + 300s parakeet client budget (get_stt_proxy_client)
+    # + headroom for auth and the multipart spool read; the default POST timeout
+    # would cut long files off mid-transcription.
+    "/v1/stt/transcribe": os.environ.get('HTTP_STT_TRANSCRIBE_TIMEOUT', 350),
 }
 
 app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout, paths_timeout=paths_timeout)

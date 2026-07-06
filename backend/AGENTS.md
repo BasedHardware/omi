@@ -163,7 +163,7 @@ black --line-length 120 --skip-string-normalization <files>
 Never block the event loop — it freezes health checks, HPA scaling, and all concurrent connections.
 
 - **Lane 1 — Async HTTP** (`utils/http_client.py`): Shared `httpx.AsyncClient` pools with semaphore-bounded concurrency. Never `requests.*` or sync `httpx.*` in async code.
-  - Clients: `get_webhook_client()`, `get_maps_client()`, `get_auth_client()`, `get_stt_client()`
+  - Clients: `get_webhook_client()`, `get_maps_client()`, `get_auth_client()`, `get_stt_client()`, `get_stt_proxy_client()`, `get_tts_client()`, `get_web_fetch_client()`
   - Semaphores: always wrap calls — `async with get_webhook_semaphore(): await client.post(...)`
   - Circuit breakers: `get_webhook_circuit_breaker(url)` for external targets — call `cb.record_success()`/`cb.record_failure()`
   - Lifecycle: lazy singletons, closed at shutdown via `close_all_clients()`

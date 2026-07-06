@@ -165,6 +165,33 @@ flowchart TD
 |----------|-----------|-------|----------|
 | **Deepgram Nova-3** | 50+ | `nova-3` | All supported languages |
 
+## Batch Transcription Proxy
+
+For one-shot (non-streaming) transcription of an audio file, the backend exposes an authenticated proxy in front of the parakeet GPU service — clients must never call parakeet directly:
+
+```
+POST https://api.omi.me/v1/stt/transcribe
+Authorization: Bearer {firebase_id_token}
+Content-Type: multipart/form-data
+```
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `file` | file upload | required | Audio file (WAV recommended; max 200MB) |
+| `diarize` | bool | `true` | Attach `speaker` labels to segments |
+
+Response (mirrors parakeet `/v2/transcribe`):
+
+```json
+{
+  "text": "full transcript",
+  "segments": [{"start": 0.0, "end": 1.5, "text": "…", "speaker": "SPEAKER_00"}],
+  "detected_language": "en"
+}
+```
+
+Errors: `400` empty file, `401` missing/invalid bearer token, `413` audio exceeds the duration/size limits, `429` per-user rate limit exceeded (`stt:transcribe` policy — honor `Retry-After`), `503` model loading or service busy (retry later), `502` upstream failure. Implementation: `backend/routers/stt.py`.
+
 ## Deepgram Configuration
 
 When using Deepgram, the following options are configured:
