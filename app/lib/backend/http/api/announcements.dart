@@ -55,8 +55,7 @@ Future<List<Announcement>> getPendingAnnouncements({
   String? deviceModel,
 }) async {
   final encodedAppVersion = Uri.encodeComponent(appVersion);
-  var url =
-      "${Env.apiBaseUrl}v1/announcements/pending"
+  var url = "${Env.apiBaseUrl}v1/announcements/pending"
       "?app_version=$encodedAppVersion"
       "&platform=$platform"
       "&trigger=$trigger";

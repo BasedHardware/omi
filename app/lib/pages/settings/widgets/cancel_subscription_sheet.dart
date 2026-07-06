@@ -45,15 +45,15 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   ];
 
   String _label(String key) => switch (key) {
-    'too_expensive' => context.l10n.cancelReasonTooExpensive,
-    'not_using_enough' => context.l10n.cancelReasonNotUsing,
-    'missing_features' => context.l10n.cancelReasonMissingFeatures,
-    'audio_quality' => context.l10n.cancelReasonAudioQuality,
-    'battery_drain' => context.l10n.cancelReasonBatteryDrain,
-    'found_alternative' => context.l10n.cancelReasonFoundAlternative,
-    'other' => context.l10n.cancelReasonOther,
-    _ => key,
-  };
+        'too_expensive' => context.l10n.cancelReasonTooExpensive,
+        'not_using_enough' => context.l10n.cancelReasonNotUsing,
+        'missing_features' => context.l10n.cancelReasonMissingFeatures,
+        'audio_quality' => context.l10n.cancelReasonAudioQuality,
+        'battery_drain' => context.l10n.cancelReasonBatteryDrain,
+        'found_alternative' => context.l10n.cancelReasonFoundAlternative,
+        'other' => context.l10n.cancelReasonOther,
+        _ => key,
+      };
 
   @override
   void dispose() {
@@ -262,24 +262,24 @@ class _CancelSubscriptionFlowState extends State<CancelSubscriptionFlow> {
   // ─── Step 2: Feedback (dynamic based on reason) ───
 
   String _feedbackTitle() => switch (_selectedReason) {
-    'too_expensive' => context.l10n.feedbackTitleTooExpensive,
-    'missing_features' => context.l10n.feedbackTitleMissingFeatures,
-    'audio_quality' => context.l10n.feedbackTitleAudioQuality,
-    'battery_drain' => context.l10n.feedbackTitleBatteryDrain,
-    'found_alternative' => context.l10n.feedbackTitleFoundAlternative,
-    'not_using_enough' => context.l10n.feedbackTitleNotUsing,
-    _ => context.l10n.tellUsMore,
-  };
+        'too_expensive' => context.l10n.feedbackTitleTooExpensive,
+        'missing_features' => context.l10n.feedbackTitleMissingFeatures,
+        'audio_quality' => context.l10n.feedbackTitleAudioQuality,
+        'battery_drain' => context.l10n.feedbackTitleBatteryDrain,
+        'found_alternative' => context.l10n.feedbackTitleFoundAlternative,
+        'not_using_enough' => context.l10n.feedbackTitleNotUsing,
+        _ => context.l10n.tellUsMore,
+      };
 
   String _feedbackSubtitle() => switch (_selectedReason) {
-    'too_expensive' => context.l10n.feedbackSubtitleTooExpensive,
-    'missing_features' => context.l10n.feedbackSubtitleMissingFeatures,
-    'audio_quality' => context.l10n.feedbackSubtitleAudioQuality,
-    'battery_drain' => context.l10n.feedbackSubtitleBatteryDrain,
-    'found_alternative' => context.l10n.feedbackSubtitleFoundAlternative,
-    'not_using_enough' => context.l10n.feedbackSubtitleNotUsing,
-    _ => context.l10n.cancelReasonDetailHint,
-  };
+        'too_expensive' => context.l10n.feedbackSubtitleTooExpensive,
+        'missing_features' => context.l10n.feedbackSubtitleMissingFeatures,
+        'audio_quality' => context.l10n.feedbackSubtitleAudioQuality,
+        'battery_drain' => context.l10n.feedbackSubtitleBatteryDrain,
+        'found_alternative' => context.l10n.feedbackSubtitleFoundAlternative,
+        'not_using_enough' => context.l10n.feedbackSubtitleNotUsing,
+        _ => context.l10n.cancelReasonDetailHint,
+      };
 
   Widget _stepFeedback() {
     return Column(
