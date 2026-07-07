@@ -647,7 +647,9 @@ def test_draft_falls_back_to_subject_read_when_search_empty():
     ):
         rd.draft_reply('uid', 'Alice', [{'text': 'any news?', 'is_from_me': False}])
 
-    mock_flat.assert_called_once()
+    # Two subject-entity reads for a resolved 1:1: the person's facts (fallback when semantic
+    # search is empty) AND the user's own self-facts (identity-safe grounding for the user's life).
+    assert mock_flat.call_count == 2
     assert 'Alice loves sushi' in captured['prompt']
 
 
