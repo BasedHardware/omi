@@ -399,7 +399,7 @@ class App {
       capabilities: generated.capabilities.toSet(),
       chatPrompt: generated.chatPrompt,
       conversationPrompt: generated.memoryPrompt,
-      reviews: generated.reviews.map(AppReview.fromGenerated).toList(),
+      reviews: generated.reviews?.map(AppReview.fromGenerated).toList() ?? [],
       userReview: generated.userReview == null ? null : AppReview.fromGenerated(generated.userReview!),
       deleted: false,
       enabled: generated.enabled,
