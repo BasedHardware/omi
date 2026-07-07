@@ -597,22 +597,35 @@ def delete_conversation(uid, conversation_id):
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def get_conversations_by_id(uid, conversation_ids):
+def get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+
+
+@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+def get_conversations_by_id_without_photos(uid, conversation_ids, include_discarded: bool = False):
+    return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded)
+
+
+def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = False):
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection(conversations_collection)
 
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     docs = db.get_all(doc_refs)
 
-    conversations = []
+    conversations_by_id = {}
     for doc in docs:
         if doc.exists:
             data = doc.to_dict()
-            if data.get('discarded'):
+            if data.get('discarded') and not include_discarded:
                 continue
-            conversations.append(data)
+            conversations_by_id[str(data.get('id', doc.id))] = data
 
-    return conversations
+    return [
+        conversations_by_id[str(conversation_id)]
+        for conversation_id in conversation_ids
+        if str(conversation_id) in conversations_by_id
+    ]
 
 
 # **************************************

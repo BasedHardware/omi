@@ -3835,7 +3835,7 @@ struct OmiAppDetails: Codable, Identifiable {
     price = try container.decodeIfPresent(Double.self, forKey: .price)
     paymentPlan = try container.decodeIfPresent(String.self, forKey: .paymentPlan)
     username = try container.decodeIfPresent(String.self, forKey: .username)
-    twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
+    twitter = (try? container.decodeIfPresent(String.self, forKey: .twitter)) ?? nil
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
     externalIntegration = try container.decodeIfPresent(
@@ -5079,9 +5079,63 @@ struct MemorySettingsResponse: Codable {
 
 struct FloatingBarSettingsResponse: Codable {
   var voiceAnswersEnabled: Bool?
+  var elevenlabsVoiceId: String?
 
   enum CodingKeys: String, CodingKey {
     case voiceAnswersEnabled = "voice_answers_enabled"
+    case elevenlabsVoiceId = "elevenlabs_voice_id"
+  }
+}
+
+enum AssistantSettingsJSONValue: Codable, Equatable {
+  case null
+  case bool(Bool)
+  case int(Int)
+  case double(Double)
+  case string(String)
+  case array([AssistantSettingsJSONValue])
+  case object([String: AssistantSettingsJSONValue])
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    if container.decodeNil() {
+      self = .null
+    } else if let value = try? container.decode(Bool.self) {
+      self = .bool(value)
+    } else if let value = try? container.decode(Int.self) {
+      self = .int(value)
+    } else if let value = try? container.decode(Double.self) {
+      self = .double(value)
+    } else if let value = try? container.decode(String.self) {
+      self = .string(value)
+    } else if let value = try? container.decode([AssistantSettingsJSONValue].self) {
+      self = .array(value)
+    } else if let value = try? container.decode([String: AssistantSettingsJSONValue].self) {
+      self = .object(value)
+    } else {
+      throw DecodingError.dataCorruptedError(
+        in: container, debugDescription: "Unsupported assistant settings JSON value")
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch self {
+    case .null:
+      try container.encodeNil()
+    case .bool(let value):
+      try container.encode(value)
+    case .int(let value):
+      try container.encode(value)
+    case .double(let value):
+      try container.encode(value)
+    case .string(let value):
+      try container.encode(value)
+    case .array(let value):
+      try container.encode(value)
+    case .object(let value):
+      try container.encode(value)
+    }
   }
 }
 
@@ -5093,13 +5147,99 @@ struct AssistantSettingsResponse: Codable {
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
+  var unknownSections: [String: AssistantSettingsJSONValue]
 
-  enum CodingKeys: String, CodingKey {
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case shared, focus, task
     case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
+  }
+
+  init(
+    shared: SharedAssistantSettingsResponse? = nil,
+    focus: FocusSettingsResponse? = nil,
+    task: TaskSettingsResponse? = nil,
+    insight: InsightSettingsResponse? = nil,
+    memory: MemorySettingsResponse? = nil,
+    floatingBar: FloatingBarSettingsResponse? = nil,
+    updateChannel: String? = nil,
+    unknownSections: [String: AssistantSettingsJSONValue] = [:]
+  ) {
+    self.shared = shared
+    self.focus = focus
+    self.task = task
+    self.insight = insight
+    self.memory = memory
+    self.floatingBar = floatingBar
+    self.updateChannel = updateChannel
+    self.unknownSections = unknownSections
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
+    focus = Self.decodeLossy(FocusSettingsResponse.self, from: container, forKey: .focus)
+    task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
+    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
+    memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
+    floatingBar = Self.decodeLossy(
+      FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
+    updateChannel = Self.decodeLossy(String.self, from: container, forKey: .updateChannel)
+
+    let rawContainer = try decoder.container(keyedBy: AssistantSettingsDynamicCodingKey.self)
+    let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+    unknownSections = rawContainer.allKeys.reduce(into: [:]) { result, key in
+      guard !knownKeys.contains(key.stringValue),
+        let value = try? rawContainer.decode(AssistantSettingsJSONValue.self, forKey: key)
+      else { return }
+      result[key.stringValue] = value
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encodeIfPresent(shared, forKey: .shared)
+    try container.encodeIfPresent(focus, forKey: .focus)
+    try container.encodeIfPresent(task, forKey: .task)
+    try container.encodeIfPresent(insight, forKey: .insight)
+    try container.encodeIfPresent(memory, forKey: .memory)
+    try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
+    try container.encodeIfPresent(updateChannel, forKey: .updateChannel)
+
+    var rawContainer = encoder.container(keyedBy: AssistantSettingsDynamicCodingKey.self)
+    let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+    for (key, value) in unknownSections where !knownKeys.contains(key) {
+      try rawContainer.encode(value, forKey: AssistantSettingsDynamicCodingKey(stringValue: key))
+    }
+  }
+
+  private static func decodeLossy<T: Decodable>(
+    _ type: T.Type,
+    from container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) -> T? {
+    do {
+      return try container.decodeIfPresent(type, forKey: key)
+    } catch {
+      return nil
+    }
+  }
+}
+
+struct AssistantSettingsDynamicCodingKey: CodingKey {
+  let stringValue: String
+  let intValue: Int?
+
+  init(stringValue: String) {
+    self.stringValue = stringValue
+    intValue = nil
+  }
+
+  init(intValue: Int) {
+    stringValue = String(intValue)
+    self.intValue = intValue
   }
 }
 
@@ -5577,13 +5717,49 @@ extension APIClient {
 struct Person: Codable, Identifiable {
   let id: String
   let name: String
-  let createdAt: Date
-  let updatedAt: Date
+  let createdAt: Date?
+  let updatedAt: Date?
+  let speechSamples: [String]
+  let speechSampleTranscripts: [String]?
+  let speechSamplesVersion: Int
 
   enum CodingKeys: String, CodingKey {
     case id, name
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+    case speechSamples = "speech_samples"
+    case speechSampleTranscripts = "speech_sample_transcripts"
+    case speechSamplesVersion = "speech_samples_version"
+  }
+
+  init(
+    id: String,
+    name: String,
+    createdAt: Date? = nil,
+    updatedAt: Date? = nil,
+    speechSamples: [String] = [],
+    speechSampleTranscripts: [String]? = nil,
+    speechSamplesVersion: Int = 3
+  ) {
+    self.id = id
+    self.name = name
+    self.createdAt = createdAt
+    self.updatedAt = updatedAt
+    self.speechSamples = speechSamples
+    self.speechSampleTranscripts = speechSampleTranscripts
+    self.speechSamplesVersion = speechSamplesVersion
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(String.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    speechSamples = try container.decodeIfPresent([String].self, forKey: .speechSamples) ?? []
+    speechSampleTranscripts = try container.decodeIfPresent(
+      [String].self, forKey: .speechSampleTranscripts)
+    speechSamplesVersion = try container.decodeIfPresent(Int.self, forKey: .speechSamplesVersion) ?? 3
   }
 }
 

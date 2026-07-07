@@ -120,7 +120,7 @@ class ProcessConversationRequest(BaseModel):
 
 
 class SearchConversationsResponse(BaseModel):
-    items: List[Dict[str, Any]]
+    items: List[Conversation]
     total_pages: int
     current_page: int
     per_page: int
@@ -1074,7 +1074,7 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
-    return search_conversations(
+    search_results = search_conversations(
         query=search_request.query,
         page=search_request.page,
         per_page=search_request.per_page,
@@ -1084,6 +1084,18 @@ def search_conversations_endpoint(
         end_date=end_timestamp,
         speaker_id=search_request.speaker_id,
     )
+    conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    conversations = conversations_db.get_conversations_by_id_without_photos(
+        uid,
+        conversation_ids,
+        include_discarded=bool(search_request.include_discarded),
+    )
+    # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
+    # so search never leaks that a locked conversation matched a query.
+    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    redact_conversations_for_list(conversations)
+    search_results['items'] = conversations
+    return search_results
 
 
 @router.get(

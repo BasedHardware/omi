@@ -166,6 +166,26 @@ class AppBaseModel(BaseModel):
     disabled_reason: Optional[str] = None
 
 
+class AppCatalogItem(BaseModel):
+    """Desktop app catalog response item for list/search views."""
+
+    id: str
+    name: str = ''
+    description: str = ''
+    image: str = ''
+    category: str = 'other'
+    author: str = ''
+    capabilities: List[str] = Field(default_factory=list)
+    approved: bool = False
+    private: bool = False
+    installs: int = 0
+    rating_avg: Optional[float] = None
+    rating_count: int = 0
+    is_paid: bool = False
+    price: Optional[float] = None
+    enabled: bool = False
+
+
 class App(AppBaseModel):
     """Full App model - includes large/internal fields for detail views."""
 
