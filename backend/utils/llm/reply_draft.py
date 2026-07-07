@@ -26,7 +26,7 @@ from database import conversations as conversations_db
 from database import memories as memories_db
 from database import users as users_db
 from database._client import db as firestore_db
-from database.entities import USER_ENTITY_ID, person_entity_id
+from database.entities import person_entity_id
 from models.conversation_enums import ConversationSource
 from utils.llm.clients import get_llm
 from utils.llm.style_fingerprint import (
@@ -445,30 +445,16 @@ def build_reply_prompt(
         f"the conversation above. Opening message after message the same way, or leaning on one filler word, "
         f"is a dead AI giveaway; real people start each message differently.\n"
         f"HOW THIS USER TEXTS (measured from their real messages — match it):\n{fingerprint_lines}\n\n"
-        f"GROUNDING — when the context/memory in the user message or the user's own messages establish the "
-        f"answer, ANSWER what {name} asks: directly, specifically, in the user's voice. Using what Omi knows "
-        f"about the user to answer questions is the whole point — never withhold, hedge, or sit on an answer "
-        f"you actually have, and never answer a question with a question or ask {name} why they're asking. "
-        f"What you must NOT do is CONFIRM or DENY things with no basis: facts about the user's life; their "
-        f"opinions, feelings, preferences and stances; actions they took; and REASONS for their own behavior. "
-        f"This includes the STATE, wellbeing, or whereabouts of OTHER people the message asks about (their "
-        f"partner/'girl', family, a friend): if you have no information about that person, NEVER say how they are "
-        f"(not 'she's good', not 'he's fine') — you don't know who they are or how they are. Answer the rest of the "
-        f"message and leave the unknown person out, or keep that part playfully non-committal. "
-        f"NEVER INVENT A SPECIFIC to sound natural — a named person ('Jeff'), a specific reason or cause ('since Jeff "
-        f"left', 'because of the move'), a specific place, time, event, number, or activity — unless it's in what you "
-        f"actually know above or in what {name} just said. If you don't have the specific, answer naturally WITHOUT one; "
-        f"vague is completely fine ('still figuring it out', 'been busy', 'nothing crazy'). A smooth, natural-sounding "
-        f"invented detail is still a lie you're putting in the user's mouth. "
-        f"A made-up \"no\" is as wrong as a made-up \"yes\", and a made-up reason is a fabrication. When "
-        f"NOTHING above establishes it, give a short, natural reply in the user's voice and move on — but "
-        f"still NEVER interrogate them back, and NEVER say the user forgot or doesn't remember. Answer what "
-        f"you know; just don't put words, opinions, actions, or reasons in their mouth for what you don't.\n\n"
-        f"TIME & STALENESS — facts about {name} are tagged with when they were last known true (\"as of "
-        f"<date>\"). Information can be old: a fact from many months or years ago may no longer hold (a job, "
-        f"a city, a plan, who they were dating, what they were training for). NEVER assert a stale fact as a "
-        f"current certainty. If an old fact is relevant, either leave it out or reference it tentatively as "
-        f"something that WAS true — do not state it as if it's happening now.\n\n"
+        f"THE ONE RULE — ONLY SAY WHAT YOU ACTUALLY KNOW. You may state a specific ONLY if it is written in WHAT "
+        f"YOU KNOW (the facts/context above) or in THIS CONVERSATION. If it's there: answer directly and "
+        f"specifically, in the user's voice — that's the whole point. If it is NOT there: you do NOT know it, so "
+        f"keep that part short and vague and NEVER fill in a specific to sound natural — not a name, a place, a "
+        f"time, an event, an activity, a number, a reason/cause, or a yes/no about something that supposedly "
+        f"happened ('sold it', 'met the band', 'the AI ethics talk'). A smooth made-up detail is a lie put in the "
+        f"user's mouth. This one rule also covers: OTHER people (don't say how {name}'s partner/family/friend is "
+        f"if you don't know) and TIME (a fact tagged 'as of' long ago may be false now — don't state an old fact "
+        f"as current). When you don't know, a plain reply is correct and enough: 'not sure', 'honestly been a "
+        f"blur', 'nothing crazy', 'i forget lol'. Never invent to fill the gap.\n\n"
         f"COMMITMENTS — don't agree to plans, invites, times, or obligations on the user's behalf unless the "
         f"user's own recent messages or the stated intent clearly support it. When it's a yes/no or an invite "
         f"and you're not sure what the user wants, keep the reply non-committal — in the user's own voice — "
@@ -716,27 +702,13 @@ def draft_reply(
         )
     context_text = "\n".join(context_bits) or "(no extra context)"
 
-    # Identity safety: when replying to a SPECIFIC resolved person, do NOT run the general
-    # topic search — it is matched across ALL the user's data and pulls in conversations about
-    # OTHER people, mis-attributing them to this contact ("met Mila at the times market" when
-    # that was someone else). BUT still ground on the user's OWN self-facts (subject = 'user'),
-    # so a question about the user's own life is answered truthfully instead of invented. This
-    # is identity-safe: user-subject facts are about the user, never a third party, and never a
-    # topic-matched conversation. Unknown contacts and group threads use the full grounding.
-    if person and not is_group:
-        omi_context = ''
-        try:
-            self_facts = memories_db.get_memories_by_subject_entity(uid, USER_ENTITY_ID, limit=DURABLE_FACTS_CAP)
-            self_lines = [f.get('content') for f in self_facts if f.get('content')][:DURABLE_FACTS_CAP]
-            if self_lines:
-                omi_context = (
-                    "FACTS ABOUT YOU (the user — use these to answer about YOUR life; never attribute them to "
-                    f"{name}):\n" + "\n".join(f"- {_fence(c)}" for c in self_lines)
-                )
-        except Exception as e:
-            logger.warning(f"reply_draft: self-facts lookup failed uid={uid}: {e}")
-    else:
-        omi_context = _relevant_context(uid, thread)
+    # Simple, safe grounding: when replying to a specific person, ground ONLY on that person's
+    # own facts + this conversation (assembled above). No general/self-fact search — it pulled
+    # the user's own life or other people's details into replies and got mis-applied ("hung out
+    # at Brooklyn Bridge" as an answer to "how's your girl?"). If the answer isn't in the
+    # person's facts or the conversation, the one rule applies: stay vague, never invent.
+    # Unknown contacts and group threads still use the general grounding.
+    omi_context = '' if (person and not is_group) else _relevant_context(uid, thread)
 
     system_prompt, user_prompt = build_reply_prompt(
         name=name,

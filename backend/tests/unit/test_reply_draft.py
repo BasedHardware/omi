@@ -279,8 +279,8 @@ def test_build_reply_prompt_has_no_hardcoded_example_slang():
     assert 'never copy their' in low
     # Brevity / anti-AI-polish directive.
     assert 'not an ai' in low
-    # Guardrails present.
-    assert 'grounding' in low
+    # Guardrails present: the single anti-fabrication rule + commitments.
+    assert 'only say what you actually know' in low
     assert 'commitments' in low
 
 
@@ -647,9 +647,8 @@ def test_draft_falls_back_to_subject_read_when_search_empty():
     ):
         rd.draft_reply('uid', 'Alice', [{'text': 'any news?', 'is_from_me': False}])
 
-    # Two subject-entity reads for a resolved 1:1: the person's facts (fallback when semantic
-    # search is empty) AND the user's own self-facts (identity-safe grounding for the user's life).
-    assert mock_flat.call_count == 2
+    # Person facts fallback (semantic search empty) — grounded only on the person's own facts.
+    mock_flat.assert_called_once()
     assert 'Alice loves sushi' in captured['prompt']
 
 
