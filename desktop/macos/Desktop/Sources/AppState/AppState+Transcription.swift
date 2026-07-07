@@ -21,6 +21,7 @@ extension AppState {
       sttCloudFallbackTried = false
       forceLocalSTTForSession = false
     }
+    meetingEndFinalizationInProgress = false
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
@@ -449,9 +450,14 @@ extension AppState {
     // The meeting detector runs only in "Only during meetings" mode.
     if mode == .onlyDuringMeetings {
       if meetingDetector == nil {
-        let detector = MeetingDetector(onChange: { [weak self] _ in
-          Task { @MainActor in await self?.reconcileCapture() }
-        })
+        let detector = MeetingDetector(
+          onInitialStateObserved: { [weak self] in
+            Task { @MainActor in await self?.reconcileCapture() }
+          },
+          onChange: { [weak self] _ in
+            Task { @MainActor in await self?.reconcileCapture() }
+          }
+        )
         meetingDetector = detector
         detector.start()
       }
@@ -460,11 +466,17 @@ extension AppState {
       meetingDetector = nil
     }
 
+    let meetingStateReady = mode != .onlyDuringMeetings || meetingDetector?.hasObservedState == true
     let meetingActive = meetingDetector?.isMeetingActive ?? false
     // Only during meetings → capture (mic + system) only while in a call. Always/Never → the mic
     // runs continuously (system audio still respects the mode below).
     let shouldCapture = mode != .onlyDuringMeetings || meetingActive
     isAwaitingMeeting = mode == .onlyDuringMeetings && !meetingActive
+
+    guard meetingStateReady else {
+      log("Transcription: waiting for meeting detector before changing capture state")
+      return
+    }
 
     captureGateInFlight = true
 
@@ -502,6 +514,33 @@ extension AppState {
           AudioLevelMonitor.shared.updateSystemLevel(0)
           log("Transcription: System audio capture paused")
         }
+      }
+    }
+
+    if !meetingEndFinalizationInProgress,
+      MeetingConversationBoundaryPolicy.shouldFinishConversation(
+        mode: mode,
+        meetingStateReady: meetingStateReady,
+        shouldCapture: shouldCapture,
+        segmentCount: totalSegmentCount,
+        hasSpeakerSegments: !speakerSegments.isEmpty
+      )
+    {
+      meetingEndFinalizationInProgress = true
+      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
+      Task { @MainActor in
+        defer { self.meetingEndFinalizationInProgress = false }
+        guard MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: self.effectiveSystemAudioMode,
+          meetingStateReady: self.meetingDetector?.hasObservedState == true,
+          shouldCapture: self.meetingDetector?.isMeetingActive == true,
+          segmentCount: self.totalSegmentCount,
+          hasSpeakerSegments: !self.speakerSegments.isEmpty
+        ) else {
+          log("Transcription: skipped meeting-ended finalization because meeting state changed")
+          return
+        }
+        _ = await self.finishConversation(finalizationReason: .meetingEnded)
       }
     }
 
@@ -801,13 +840,15 @@ extension AppState {
 
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
-  func finishConversation() async -> FinishConversationResult {
+  func finishConversation(
+    finalizationReason: TranscriptionFinalizationReason = .finishAndContinue
+  ) async -> FinishConversationResult {
     guard totalSegmentCount > 0 || !speakerSegments.isEmpty else {
       log("Transcription: No segments to finish")
       return .discarded
     }
 
-    log("Transcription: Finishing conversation — disconnecting WebSocket to trigger backend processing")
+    log("Transcription: Finishing conversation — reason=\(finalizationReason.rawValue)")
 
     // Capture state before rotation — memory_created event for this conversation
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
@@ -834,7 +875,7 @@ extension AppState {
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
     if let sessionId = sessionToFinalize {
       do {
-        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .finishAndContinue)
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
         log("Transcription: Finished DB session \(sessionId) before reconnect")
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
@@ -871,7 +912,7 @@ extension AppState {
       Task {
         await ConversationFinalizationService.shared.finalizeSession(
           id: sessionId,
-          reason: .finishAndContinue,
+          reason: finalizationReason,
           allowCloudForceProcess: !finishedUsesLocalSTT
         )
       }
@@ -1040,6 +1081,7 @@ extension AppState {
     captureReconcilePending = false
     pendingCoreAudioCaptureRecoveryReason = nil
     isAwaitingMeeting = false
+    meetingEndFinalizationInProgress = false
 
     // Stop system audio capture first (if available)
     if #available(macOS 14.4, *) {
@@ -1114,6 +1156,7 @@ extension AppState {
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
     currentSessionId = nil
+    meetingEndFinalizationInProgress = false
 
     // Track transcription stopped
     AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)

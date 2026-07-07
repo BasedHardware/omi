@@ -552,27 +552,11 @@ class AuthService {
             throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let idToken = json["idToken"] as? String,
-              let refreshToken = json["refreshToken"] as? String else {
-            throw AuthError.invalidResponse
-        }
-        let expiresIn = Int(json["expiresIn"] as? String ?? "3600") ?? 3600
-        let localId = json["localId"] as? String ?? selectedLocalUserId(from: idToken) ?? ""
-        guard !localId.isEmpty else {
-            throw AuthError.invalidResponse
-        }
-        return FirebaseTokenResult(
-            idToken: idToken,
-            refreshToken: refreshToken,
-            expiresIn: expiresIn,
-            localId: localId
-        )
+        return try Self.decodeFirebaseTokenResult(from: data, requireLocalId: true)
     }
 
     private func selectedLocalUserId(from idToken: String) -> String? {
-        guard let payload = decodeJWT(idToken) else { return nil }
-        return payload["user_id"] as? String ?? payload["sub"] as? String
+        Self.localUserId(fromIDToken: idToken)
     }
 
     // MARK: - Auth Persistence (UserDefaults for dev builds)
@@ -1585,8 +1569,13 @@ class AuthService {
         return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? ""
     }
 
+    nonisolated static func localUserId(fromIDToken idToken: String) -> String? {
+        guard let payload = decodeJWTPayload(idToken) else { return nil }
+        return payload["user_id"] as? String ?? payload["sub"] as? String
+    }
+
     /// Decode a JWT and return the payload as a dictionary
-    private func decodeJWT(_ jwt: String) -> [String: Any]? {
+    nonisolated static func decodeJWTPayload(_ jwt: String) -> [String: Any]? {
         let parts = jwt.split(separator: ".")
         guard parts.count >= 2 else { return nil }
 
@@ -1606,6 +1595,10 @@ class AuthService {
         }
 
         return json
+    }
+
+    private func decodeJWT(_ jwt: String) -> [String: Any]? {
+        Self.decodeJWTPayload(jwt)
     }
 
     // MARK: - User Name Management
@@ -1882,6 +1875,38 @@ class AuthService {
         let localId: String
     }
 
+    nonisolated static func decodeFirebaseTokenResult(
+        from data: Data,
+        requireLocalId: Bool = false
+    ) throws -> FirebaseTokenResult {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let idToken = json["idToken"] as? String,
+              let refreshToken = json["refreshToken"] as? String else {
+            throw AuthError.invalidResponse
+        }
+
+        let expiresIn: Int
+        if let expiresInStr = json["expiresIn"] as? String {
+            expiresIn = Int(expiresInStr) ?? 3600
+        } else if let expiresInInt = json["expiresIn"] as? Int {
+            expiresIn = expiresInInt
+        } else {
+            expiresIn = 3600
+        }
+
+        let localId = json["localId"] as? String ?? localUserId(fromIDToken: idToken) ?? ""
+        if requireLocalId && localId.isEmpty {
+            throw AuthError.invalidResponse
+        }
+
+        return FirebaseTokenResult(
+            idToken: idToken,
+            refreshToken: refreshToken,
+            expiresIn: expiresIn,
+            localId: localId
+        )
+    }
+
     /// Exchange custom token for ID token using Firebase REST API
     private func exchangeCustomTokenForIdToken(customToken: String) async throws -> FirebaseTokenResult {
         let apiKey = try requireFirebaseApiKey()
@@ -1909,40 +1934,23 @@ class AuthService {
             throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let idToken = json["idToken"] as? String,
-              let refreshToken = json["refreshToken"] as? String else {
-            NSLog("OMI AUTH: Failed to parse Firebase response: %@", String(data: data, encoding: .utf8) ?? "nil")
-            throw AuthError.invalidResponse
-        }
-
-        // expiresIn can be String or Int
-        let expiresIn: Int
-        if let expiresInStr = json["expiresIn"] as? String {
-            expiresIn = Int(expiresInStr) ?? 3600
-        } else if let expiresInInt = json["expiresIn"] as? Int {
-            expiresIn = expiresInInt
-        } else {
-            expiresIn = 3600
-        }
-
-        // localId might be missing from REST API response - extract from JWT if needed
-        var localId = json["localId"] as? String ?? ""
-        if localId.isEmpty {
-            // Extract user_id from the JWT token payload
-            if let payload = decodeJWT(idToken),
-               let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
-                localId = userId
-                NSLog("OMI AUTH: Extracted user_id from JWT: %@", localId)
+        do {
+            let tokens = try Self.decodeFirebaseTokenResult(from: data)
+            if !tokens.localId.isEmpty, jsonLocalIdMissing(in: data) {
+                NSLog("OMI AUTH: Extracted user_id from JWT: %@", tokens.localId)
             }
+            return tokens
+        } catch {
+            NSLog("OMI AUTH: Failed to parse Firebase response: %@", String(data: data, encoding: .utf8) ?? "nil")
+            throw error
         }
+    }
 
-        return FirebaseTokenResult(
-            idToken: idToken,
-            refreshToken: refreshToken,
-            expiresIn: expiresIn,
-            localId: localId
-        )
+    private func jsonLocalIdMissing(in data: Data) -> Bool {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return false
+        }
+        return (json["localId"] as? String ?? "").isEmpty
     }
 
     /// Refresh the ID token using the refresh token
@@ -2349,28 +2357,17 @@ class AuthService {
             throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
         }
 
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let idToken = json["idToken"] as? String,
-              let refreshToken = json["refreshToken"] as? String else {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             NSLog("OMI AUTH: Failed to parse Firebase signInWithIdp response")
             throw AuthError.invalidResponse
         }
 
-        let expiresIn: Int
-        if let expiresInStr = json["expiresIn"] as? String {
-            expiresIn = Int(expiresInStr) ?? 3600
-        } else if let expiresInInt = json["expiresIn"] as? Int {
-            expiresIn = expiresInInt
-        } else {
-            expiresIn = 3600
-        }
-
-        var localId = json["localId"] as? String ?? ""
-        if localId.isEmpty {
-            if let payload = decodeJWT(idToken),
-               let userId = payload["user_id"] as? String ?? payload["sub"] as? String {
-                localId = userId
-            }
+        let tokens: FirebaseTokenResult
+        do {
+            tokens = try Self.decodeFirebaseTokenResult(from: data)
+        } catch {
+            NSLog("OMI AUTH: Failed to parse Firebase signInWithIdp response: %@", String(data: data, encoding: .utf8) ?? "nil")
+            throw error
         }
 
         // Get email from response if not already set
@@ -2380,12 +2377,7 @@ class AuthService {
             }
         }
 
-        return FirebaseTokenResult(
-            idToken: idToken,
-            refreshToken: refreshToken,
-            expiresIn: expiresIn,
-            localId: localId
-        )
+        return tokens
     }
 
     /// Generate a random nonce string for Apple Sign In
