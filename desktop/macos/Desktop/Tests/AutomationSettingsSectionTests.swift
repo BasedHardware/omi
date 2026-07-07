@@ -82,7 +82,10 @@ final class AutomationSettingsSectionTests: XCTestCase {
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
-    XCTAssertTrue(source.contains("SettingsContentView.SettingsSection.automationMatch(sectionRaw)"))
-    XCTAssertFalse(source.contains("SettingsContentView.SettingsSection(rawValue: sectionRaw)"))
+    // Identifier-independent: assert the handler resolves via the tolerant matcher and
+    // never via the strict rawValue init (renaming a local or reformatting must not
+    // break or bypass this invariant).
+    XCTAssertTrue(source.contains("SettingsSection.automationMatch("))
+    XCTAssertFalse(source.contains("SettingsSection(rawValue:"))
   }
 }
