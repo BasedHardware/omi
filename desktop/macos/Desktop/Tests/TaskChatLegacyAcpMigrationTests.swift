@@ -63,7 +63,39 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
 
     XCTAssertEqual(message.text, "Failed: OpenClaw failed")
-    XCTAssertFalse(message.contentBlocks.isEmpty)
+    XCTAssertEqual(message.contentBlocks.count, 2)
+    guard case .text(_, "Failed: OpenClaw failed") = message.contentBlocks[1] else {
+      return XCTFail("Expected failure text to be visible in structured chat blocks")
+    }
+  }
+
+  @MainActor
+  func testTaskChatFailureKeepsPlainPartialTextVisible() {
+    var message = ChatMessage(
+      id: "assistant-1",
+      text: "Partial answer",
+      sender: .ai,
+      isStreaming: true
+    )
+
+    TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
+
+    XCTAssertEqual(message.text, "Partial answer\n\nFailed: OpenClaw failed")
+    XCTAssertTrue(message.contentBlocks.isEmpty)
+  }
+
+  func testTaskChatUserStopDoesNotAppendFailureText() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("if !failedByUserStop {\n                        Self.applyFailureTextIfNeeded"))
+    XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
+  }
+
+  func testTaskChatFollowUpSignalsLocalSendWhenUserRowIsAppended() throws {
+    let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
+
+    XCTAssertTrue(source.contains("if !isFollowUp {\n            localSendToken = LocalSendToken"))
+    XCTAssertTrue(source.contains("messages.append(userMessage)\n        localSendToken = LocalSendToken"))
   }
 
   func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {
@@ -150,7 +182,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       source.contains("private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
     )
     XCTAssertTrue(
-      source.contains("ToolCallBlockUpdater.completeRemainingToolCalls(\n            in: &messages[index].contentBlocks,\n            terminalStatus: terminalStatus\n        )")
+      source.contains("streamingBuffer.completeRemainingToolCalls(")
     )
     XCTAssertTrue(source.contains("completeRemainingToolCalls(messageId: aiMessageId, terminalStatus: .failed)"))
     XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))

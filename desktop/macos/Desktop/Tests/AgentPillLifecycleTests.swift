@@ -62,6 +62,21 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
   }
 
+  func testTypingIndicatorUsesSharedNotchThinkingMarkInsteadOfBounce() throws {
+    let typingSource = try typingIndicatorSource()
+    let notchSource = try floatingControlBarViewSource()
+
+    XCTAssertTrue(typingSource.contains("struct OmiThinkingMark: View"))
+    XCTAssertTrue(typingSource.contains("struct TypingIndicator: View"))
+    XCTAssertTrue(typingSource.contains("OmiThinkingMark()"))
+    XCTAssertTrue(typingSource.contains(".linear(duration: 0.9).repeatForever(autoreverses: false)"))
+    XCTAssertTrue(notchSource.contains("private struct NotchThinkingMark: View"))
+    XCTAssertTrue(notchSource.contains("OmiThinkingMark()"))
+    XCTAssertFalse(typingSource.contains("animationPhase"))
+    XCTAssertFalse(typingSource.contains("scaleEffect(animationPhase"))
+    XCTAssertFalse(typingSource.contains(".delay(Double(index) * 0.15)"))
+  }
+
   func testVoiceAgentKickoffUsesCachedPhrasePack() throws {
     let agentPillSource = try agentPillSource()
     let voiceServiceSource = try floatingBarVoicePlaybackServiceSource()
@@ -1164,6 +1179,14 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func typingIndicatorSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/TypingIndicator.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

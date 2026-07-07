@@ -55,11 +55,16 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("failed"), .failed)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("cancelled"), .failed)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("interrupted"), .failed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("failed"), .failed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("cancelled"), .failed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("interrupted"), .failed)
   }
 
   func testBridgeStartedAndCompletedStatusesMapToExpectedStates() {
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("started"), .running)
     XCTAssertEqual(ChatProvider.mapBridgeToolStatus("completed"), .completed)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("started"), .running)
+    XCTAssertEqual(ToolCallStatus.fromBridgeStatus("completed"), .completed)
   }
 
   func testIntentionalStoppedErrorCompletesRemainingToolsWithoutFailureUI() {
@@ -77,6 +82,63 @@ final class ToolCallStatusTests: XCTestCase {
   }
 
   // MARK: - Tool-call content block lifecycle
+
+  func testStreamingBufferPreservesTextBeforeToolOrder() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {})
+    buffer.applyToolActivity(
+      messageId: messageId,
+      toolName: "Bash",
+      status: .running,
+      toolUseId: "tool-1",
+      input: ["command": "pwd"],
+      messages: &messages
+    )
+
+    XCTAssertEqual(messages[0].contentBlocks.count, 2)
+    guard case .text(_, "Before tool.") = messages[0].contentBlocks[0],
+          case .toolCall(_, "Bash", .running, "tool-1", _, _) = messages[0].contentBlocks[1] else {
+      return XCTFail("Expected text before the tool call")
+    }
+  }
+
+  func testStreamingBufferPreservesThinkingBeforeTextOrder() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendThinking(messageId: messageId, text: "Thinking.", scheduleFlush: {})
+    buffer.appendText(messageId: messageId, text: "Answer.", scheduleFlush: {})
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].contentBlocks.count, 2)
+    guard case .thinking(_, "Thinking.") = messages[0].contentBlocks[0],
+          case .text(_, "Answer.") = messages[0].contentBlocks[1] else {
+      return XCTFail("Expected thinking before answer text")
+    }
+  }
+
+  func testStreamingBufferPreservesTextThinkingTextOrder() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.1)
+
+    buffer.appendText(messageId: messageId, text: "A", scheduleFlush: {})
+    buffer.appendThinking(messageId: messageId, text: "B", scheduleFlush: {})
+    buffer.appendText(messageId: messageId, text: "C", scheduleFlush: {})
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].text, "AC")
+    XCTAssertEqual(messages[0].contentBlocks.count, 3)
+    guard case .text(_, "A") = messages[0].contentBlocks[0],
+          case .thinking(_, "B") = messages[0].contentBlocks[1],
+          case .text(_, "C") = messages[0].contentBlocks[2] else {
+      return XCTFail("Expected text, thinking, text block order")
+    }
+  }
 
   func testDuplicateStartForSameToolUseIdUpdatesExistingBlock() {
     var blocks: [ChatContentBlock] = []

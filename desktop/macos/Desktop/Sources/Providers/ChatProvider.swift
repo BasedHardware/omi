@@ -258,166 +258,16 @@ enum ToolCallStatus: CaseIterable {
             return false
         }
     }
-}
 
-/// Canonical mutation rules for visible tool-call blocks.
-/// Adapter streams may emit multiple lifecycle events for one invocation;
-/// the chat transcript keeps exactly one block per `toolUseId`.
-enum ToolCallBlockUpdater {
-    static func applyToolActivity(
-        to blocks: inout [ChatContentBlock],
-        toolName: String,
-        status: ToolCallStatus,
-        toolUseId: String?,
-        input: [String: Any]?
-    ) {
-        let normalizedToolUseId = toolUseId?.isEmpty == false ? toolUseId : nil
-        let toolInput = input.flatMap { ChatContentBlock.toolInputSummary(for: toolName, input: $0) }
-
-        if status == .running {
-            if let existingIndex = existingToolIndexForStart(
-                in: blocks,
-                toolName: toolName,
-                toolUseId: normalizedToolUseId
-            ) {
-                if case .toolCall(let id, let name, let existingStatus, let existingToolUseId, let existingInput, let output) =
-                    blocks[existingIndex] {
-                    blocks[existingIndex] = .toolCall(
-                        id: id,
-                        name: name,
-                        status: existingStatus,
-                        toolUseId: normalizedToolUseId ?? existingToolUseId,
-                        input: toolInput ?? existingInput,
-                        output: output
-                    )
-                }
-                return
-            }
-
-            blocks.append(
-                .toolCall(
-                    id: UUID().uuidString,
-                    name: toolName,
-                    status: .running,
-                    toolUseId: normalizedToolUseId,
-                    input: toolInput
-                )
-            )
-            return
+    static func fromBridgeStatus(_ status: String) -> ToolCallStatus {
+        switch status {
+        case "started":
+            return .running
+        case "failed", "cancelled", "interrupted":
+            return .failed
+        default:
+            return .completed
         }
-
-        for index in blocks.indices {
-            guard case .toolCall(let id, let name, let existingStatus, let existingToolUseId, let existingInput, let output) =
-                blocks[index],
-                  existingStatus.isInFlight,
-                  toolMatches(
-                    name: name,
-                    toolUseId: existingToolUseId,
-                    requestedName: toolName,
-                    requestedToolUseId: normalizedToolUseId
-                  ) else {
-                continue
-            }
-
-            blocks[index] = .toolCall(
-                id: id,
-                name: name,
-                status: status,
-                toolUseId: normalizedToolUseId ?? existingToolUseId,
-                input: toolInput ?? existingInput,
-                output: output
-            )
-        }
-    }
-
-    static func completeRemainingToolCalls(
-        in blocks: inout [ChatContentBlock],
-        terminalStatus: ToolCallStatus = .completed
-    ) {
-        for index in blocks.indices {
-            if case .toolCall(let id, let name, let status, let toolUseId, let input, let output) = blocks[index],
-               status.isInFlight {
-                blocks[index] = .toolCall(
-                    id: id,
-                    name: name,
-                    status: terminalStatus,
-                    toolUseId: toolUseId,
-                    input: input,
-                    output: output
-                )
-            }
-        }
-    }
-
-    static func applyToolOutput(
-        to blocks: inout [ChatContentBlock],
-        toolUseId: String,
-        name: String,
-        output: String
-    ) {
-        let normalizedToolUseId = toolUseId.isEmpty ? nil : toolUseId
-        for index in blocks.indices {
-            guard case .toolCall(let id, let blockName, let status, let existingToolUseId, let input, _) =
-                blocks[index],
-                  toolMatches(
-                    name: blockName,
-                    toolUseId: existingToolUseId,
-                    requestedName: name,
-                    requestedToolUseId: normalizedToolUseId
-                  ) else {
-                continue
-            }
-
-            blocks[index] = .toolCall(
-                id: id,
-                name: blockName,
-                status: status,
-                toolUseId: normalizedToolUseId ?? existingToolUseId,
-                input: input,
-                output: output
-            )
-        }
-    }
-
-    private static func existingToolIndexForStart(
-        in blocks: [ChatContentBlock],
-        toolName: String,
-        toolUseId: String?
-    ) -> Int? {
-        if let toolUseId {
-            for index in stride(from: blocks.count - 1, through: 0, by: -1) {
-                guard case .toolCall(_, _, _, let existingToolUseId, _, _) = blocks[index] else {
-                    continue
-                }
-                if existingToolUseId == toolUseId {
-                    return index
-                }
-            }
-        }
-
-        for index in stride(from: blocks.count - 1, through: 0, by: -1) {
-            guard case .toolCall(_, let name, let status, let existingToolUseId, _, _) = blocks[index],
-                  status.isInFlight else {
-                continue
-            }
-
-            if existingToolUseId == nil && name == toolName {
-                return index
-            }
-        }
-        return nil
-    }
-
-    private static func toolMatches(
-        name: String,
-        toolUseId: String?,
-        requestedName: String,
-        requestedToolUseId: String?
-    ) -> Bool {
-        if let requestedToolUseId {
-            return toolUseId == requestedToolUseId || (toolUseId == nil && name == requestedName)
-        }
-        return name == requestedName
     }
 }
 
@@ -1037,13 +887,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var refreshAllObserver: AnyCancellable?
 
     // MARK: - Streaming Buffer
-    /// Accumulates text deltas during streaming and flushes them to the published
-    /// messages array at most once per ~100ms, reducing SwiftUI re-render frequency.
-    private var streamingTextBuffer: String = ""
-    private var streamingThinkingBuffer: String = ""
-    private var streamingBufferMessageId: String?
-    private var streamingFlushWorkItem: DispatchWorkItem?
-    private let streamingFlushInterval: TimeInterval = 0.035
+    /// Accumulates text and thinking deltas during streaming and flushes them to
+    /// the published messages array in batches, reducing SwiftUI re-render frequency.
+    private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
 
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
@@ -2862,7 +2708,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Follow-ups queued while the current query is being interrupted.
     /// Drained FIFO at the end of `sendMessage` so rapid barge-ins do not overwrite each other.
-    private var pendingFollowUps: [PendingFollowUpRequest] = []
+    private var pendingFollowUps = ChatFollowUpQueue<PendingFollowUpRequest>()
     private var activeFollowUpContext: PendingFollowUpRequest?
 
     /// Stop the running agent, keeping partial response
@@ -3841,8 +3687,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             )
             activeBridgeSendGeneration = nil
             // Flush any remaining buffered streaming text before finalizing
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             // Determine the final text to display and save
@@ -4046,8 +3891,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
 
             // Flush any remaining buffered streaming text before handling the error
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             // Only remove the AI message if it's still empty (no streamed text yet).
@@ -4153,8 +3997,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // If follow-ups were queued while we were running, chain the oldest as a new full query.
         // Each chained query drains one item; this preserves user barge-in order without
         // recursively starting overlapping bridge queries.
-        if releasedCurrentGeneration, !pendingFollowUps.isEmpty {
-            let followUp = pendingFollowUps.removeFirst()
+        if releasedCurrentGeneration, let followUp = pendingFollowUps.popFirst() {
             log("ChatProvider: chaining follow-up query")
             await sendMessage(
                 followUp.text,
@@ -4260,62 +4103,18 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
     /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
     private func appendToMessage(id: String, text: String) {
-        streamingBufferMessageId = id
-        streamingTextBuffer += text
-
-        // Schedule a flush if one isn't already pending
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
     /// Flush accumulated text and thinking deltas to the published messages array.
     private func flushStreamingBuffer() {
-        streamingFlushWorkItem = nil
-
-        guard let id = streamingBufferMessageId,
-              let index = messages.firstIndex(where: { $0.id == id }) else {
-            streamingTextBuffer = ""
-            streamingThinkingBuffer = ""
-            return
-        }
-
-        // Flush text buffer
-        if !streamingTextBuffer.isEmpty {
-            let buffered = streamingTextBuffer
-            streamingTextBuffer = ""
-
-            messages[index].text += buffered
-            if messages[index].sender == .ai {
-                messages[index].text = normalizeAssistantSentenceSpacing(messages[index].text)
+        streamingBuffer.flush(messages: &messages) { message, text in
+            if message.sender == .ai {
+                return self.normalizeAssistantSentenceSpacing(text)
             }
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                let merged = existing + buffered
-                let blockText = messages[index].sender == .ai ? normalizeAssistantSentenceSpacing(merged) : merged
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: blockText)
-            } else {
-                let blockText = messages[index].sender == .ai ? normalizeAssistantSentenceSpacing(buffered) : buffered
-                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: blockText))
-            }
-        }
-
-        // Flush thinking buffer
-        if !streamingThinkingBuffer.isEmpty {
-            let buffered = streamingThinkingBuffer
-            streamingThinkingBuffer = ""
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
-            }
+            return text
         }
     }
 
@@ -4329,14 +4128,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolActivity(
-            to: &messages[index].contentBlocks,
+        guard let index = streamingBuffer.applyToolActivity(
+            messageId: messageId,
             toolName: toolName,
             status: status,
             toolUseId: toolUseId,
-            input: input
-        )
+            input: input,
+            messages: &messages,
+            normalizeText: { message, text in
+            if message.sender == .ai {
+                return self.normalizeAssistantSentenceSpacing(text)
+            }
+            return text
+            }
+        ) else { return }
         if status == .completed {
             attachGeneratedFileResources(
                 messageIndex: index,
@@ -4349,13 +4154,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Add tool result output to an existing tool call block
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolOutput(
-            to: &messages[index].contentBlocks,
+        guard let index = streamingBuffer.applyToolResult(
+            messageId: messageId,
             toolUseId: toolUseId,
             name: name,
-            output: output
-        )
+            output: output,
+            messages: &messages,
+            normalizeText: { message, text in
+            if message.sender == .ai {
+                return self.normalizeAssistantSentenceSpacing(text)
+            }
+            return text
+            }
+        ) else { return }
         attachGeneratedFileResources(
             messageIndex: index,
             toolName: name,
@@ -4491,16 +4302,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Append thinking text to the streaming message via the shared buffer.
     private func appendThinking(messageId: String, text: String) {
-        streamingBufferMessageId = messageId
-        streamingThinkingBuffer += text
-
-        // Schedule a flush if one isn't already pending
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
@@ -4509,10 +4312,16 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Matches `.running`, `.slow`, and `.stalled` (any state where `isInFlight` is true)
     /// so detector-promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.completeRemainingToolCalls(
-            in: &messages[index].contentBlocks,
-            terminalStatus: terminalStatus
+        streamingBuffer.completeRemainingToolCalls(
+            messageId: messageId,
+            terminalStatus: terminalStatus,
+            messages: &messages,
+            normalizeText: { message, text in
+            if message.sender == .ai {
+                return self.normalizeAssistantSentenceSpacing(text)
+            }
+            return text
+            }
         )
     }
 
@@ -4535,14 +4344,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     nonisolated static func mapBridgeToolStatus(_ status: String) -> ToolCallStatus {
-        switch status {
-        case "started":
-            return .running
-        case "failed", "cancelled", "interrupted":
-            return .failed
-        default:
-            return .completed
-        }
+        ToolCallStatus.fromBridgeStatus(status)
     }
 
     /// Intentional user stops should not make in-flight tool rows look
