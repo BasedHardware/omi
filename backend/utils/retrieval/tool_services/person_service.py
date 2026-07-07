@@ -79,6 +79,20 @@ def resolve_person(uid: str, name_or_id: str) -> Union[dict, AmbiguousPerson, No
         return matches[0]
     if len(matches) > 1:
         return AmbiguousPerson(name_or_id, len(matches))
+
+    # Case-insensitive fallback: a display name typed with different casing ("mila finch"
+    # vs the stored "Mila Finch") won't match Firestore's case-sensitive '==', so scan the
+    # roster once and match on lowercased name. Still disambiguates on multiple hits.
+    try:
+        lowered = name_or_id.strip().lower()
+        ci = [p for p in (users_db.get_people(uid) or []) if (p.get("name") or "").strip().lower() == lowered]
+    except Exception as e:
+        logger.warning(f"person_service: case-insensitive name resolve failed uid={uid}: {e}")
+        ci = []
+    if len(ci) == 1:
+        return ci[0]
+    if len(ci) > 1:
+        return AmbiguousPerson(name_or_id, len(ci))
     return None
 
 
