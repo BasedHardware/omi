@@ -1,0 +1,87 @@
+backend/routers/telegram.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 29,66-67,70-75
+backend/utils/llm/reply_scheduling.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-536
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 5587-5593
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 25-26,992-1008
+  s_edfd59e96df44b::t_5dc1e4742a20e6 1009
+desktop/macos/Desktop/Sources/TelegramInboxStore.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 39-46,123-137,171-172,248-249,307,332-344,379-393,395-396
+backend/routers/whatsapp.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 33-34,71-72,75-80
+desktop/macos/Desktop/Sources/IMessageModels.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 207-216,218-222,232-234
+desktop/macos/Desktop/Sources/TelegramModels.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 212-221,223-227,237-239
+backend/models/whatsapp.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 6,93-103
+desktop/macos/Desktop/Sources/MainWindow/Pages/TelegramInboxPage.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 118-130,148,206-215
+desktop/macos/changelog/unreleased/20260705-telegram-refresh-button.json
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingNeedsInput.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-92
+backend/models/telegram.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 6,93-103
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 81,170-179
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingInboxKit.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 121-123,148-152,182-257,260-261
+  s_edfd59e96df44b::t_4525718f29d62f 258-259,262
+backend/routers/imessage.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 30-31,70-73,76-81
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 546,551-553,571-591,729,746,998-1075,1085,1154,1186-1203
+desktop/macos/Desktop/Sources/IMessageInboxStore.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 31-40,223-224,254,305-319,367-381,385-386
+backend/routers/google_calendar.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 17,121-149
+backend/tests/unit/test_reply_scheduling.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-318
+backend/models/imessage.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 6,95-105
+backend/tests/unit/test_reply_draft_escalation.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-225
+desktop/macos/changelog/unreleased/20260706-auto-reply-needs-input.json
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-3
+backend/.gitignore
+  s_edfd59e96df44b::t_1ef287c2267e9d 7
+backend/utils/retrieval/tools/calendar_tools.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 239,252-253,295-296
+  s_edfd59e96df44b::t_e6593d75cb7e24 297
+desktop/macos/changelog/unreleased/20260706-messaging-availability-holds.json
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-3
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 192-199,257-258,325-326,331-334,339-341
+desktop/macos/Desktop/Sources/WhatsAppInboxStore.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 33-40,215-216,245,287-299,352-366,399-400
+desktop/macos/Desktop/Sources/WhatsAppModels.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 243-252,254-258,269-271
+desktop/macos/Desktop/Sources/DraftHold.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 1-32
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 81-83,136,173,289-311
+  s_edfd59e96df44b::t_ee0ccfe788ec2a 312-313
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_edfd59e96df44b::t_1ef287c2267e9d 86,209-218
+backend/models/draft_common.py
+  s_edfd59e96df44b::t_1ef287c2267e9d 10-13,38-49
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "0e140063fd1b0af2824f8f11dc679135a5e50d99",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
