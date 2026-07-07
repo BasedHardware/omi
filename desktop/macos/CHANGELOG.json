@@ -2,6 +2,71 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.39",
+      "date": "2026-07-07",
+      "changes": [
+        "Added signed desktop artifact smoke checks before beta release publication"
+      ]
+    },
+    {
+      "version": "0.12.38",
+      "date": "2026-07-06",
+      "changes": [
+        "Fixed a rare case where a stale/mismatched saved session could leave the app showing signed-in with no working credentials, instead of returning you to sign-in",
+        "Improved desktop auth continuity when macOS Keychain token storage is unavailable",
+        "Fixed beta sign-in failing with \"Could not securely store sign-in tokens\" — credentials now save to the login keychain reliably on signed builds"
+      ]
+    },
+    {
+      "version": "0.12.37",
+      "date": "2026-07-06",
+      "changes": [
+        "Fixed desktop launch sign-in recovery so a startup token refresh check no longer signs you out unnecessarily"
+      ]
+    },
+    {
+      "version": "0.12.36",
+      "date": "2026-07-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.35",
+      "date": "2026-07-06",
+      "changes": [
+        "Improved desktop reliability by modularizing shared theme, support, and sync code"
+      ]
+    },
+    {
+      "version": "0.12.34",
+      "date": "2026-07-06",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.33",
+      "date": "2026-07-06",
+      "changes": [
+        "Fixed a startup notification-permission repair that could re-run on every launch, repeatedly restarting macOS Notification Center",
+        "Fixed recordings being lost when conversation finalization repeatedly failed with a network/backend error — the app now recovers the conversation from saved local transcript segments instead of dropping it",
+        "Local diagnostics export now also redacts bare OpenAI-style keys and Authorization Basic headers",
+        "Fixed Gmail and Calendar import failing for some browser profiles by reading cookie values correctly"
+      ]
+    },
+    {
+      "version": "0.12.32",
+      "date": "2026-07-06",
+      "changes": [
+        "Screen capture now starts within seconds of launch instead of staying paused for 30-60 seconds",
+        "Fixed the macOS app repeatedly requesting Screen Recording permission on launch when it has not been granted",
+        "Improved desktop credential protection by storing production sign-in tokens and local agent tokens in Keychain and requiring authentication for local automation controls",
+        "Made opening settings from the floating bar and focusing the follow-up input more reliable",
+        "Fixed chat sign-in recovery so expired desktop sessions refresh or reopen the real Google sign-in flow instead of only visiting the Omi home page."
+      ]
+    },
+    {
       "version": "0.12.31",
       "date": "2026-07-06",
       "changes": [

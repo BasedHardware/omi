@@ -5,13 +5,12 @@ Provides endpoints for listing Google Calendar events for the event picker UI.
 """
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 import database.users as users_db
-from models.conversation import CalendarEventLink
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.integration_telemetry import (
     GOOGLE_CALENDAR,
@@ -39,7 +38,7 @@ class GoogleCalendarEvent(BaseModel):
     html_link: Optional[str] = Field(default=None, description="Link to open event in Google Calendar")
 
 
-def _get_google_calendar_token(uid: str) -> tuple[str, dict]:
+def _get_google_calendar_token(uid: str) -> tuple[str, Dict[str, Any]]:
     """Get and validate Google Calendar access token for a user.
 
     Returns (access_token, integration_dict).
@@ -54,7 +53,7 @@ def _get_google_calendar_token(uid: str) -> tuple[str, dict]:
     return access_token, integration
 
 
-def _event_to_response(event: dict) -> Optional[GoogleCalendarEvent]:
+def _event_to_response(event: Dict[str, Any]) -> Optional[GoogleCalendarEvent]:
     """Convert a raw Google Calendar event to our response model."""
     start_time, end_time = parse_event_times(event)
     if start_time is None or end_time is None:

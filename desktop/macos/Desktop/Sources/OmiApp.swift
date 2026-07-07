@@ -1,8 +1,10 @@
 import FirebaseAuth
 import FirebaseCore
+import OmiSupport
 import Sentry
 import Sparkle
 import SwiftUI
+import OmiTheme
 
 // MARK: - Launch Mode
 /// Determines which UI to show based on command-line arguments
@@ -716,16 +718,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func stripProvenanceXattrs() {
     let bundlePath = Bundle.main.bundlePath
     DispatchQueue.global(qos: .utility).async {
-      let process = Process()
-      process.launchPath = "/usr/bin/xattr"
-      process.arguments = ["-cr", bundlePath]
-      process.standardOutput = nil
-      process.standardError = nil
-      try? process.run()
-      process.waitUntilExit()
-      if process.terminationStatus == 0 {
-        log("AppDelegate: Stripped provenance xattrs from bundle")
-      }
+      // A silent failure here breaks the code-signature seal and causes future
+      // Sparkle updates to fail, so surface it (BL-022) instead of dropping it.
+      SystemCommand.runLogging(
+        "AppDelegate: strip provenance xattrs",
+        executable: "/usr/bin/xattr", arguments: ["-cr", bundlePath])
     }
   }
 
@@ -743,54 +740,34 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
     DispatchQueue.global(qos: .utility).async {
-      // Unregister to clear stale icon entries
-      let unregister = Process()
-      unregister.executableURL = URL(fileURLWithPath: lsregister)
-      unregister.arguments = ["-u", appPath]
-      unregister.standardOutput = FileHandle.nullDevice
-      unregister.standardError = FileHandle.nullDevice
-      try? unregister.run()
-      unregister.waitUntilExit()
-
-      // Force re-register with updated icon
-      let register = Process()
-      register.executableURL = URL(fileURLWithPath: lsregister)
-      register.arguments = ["-f", appPath]
-      register.standardOutput = FileHandle.nullDevice
-      register.standardError = FileHandle.nullDevice
-      try? register.run()
-      register.waitUntilExit()
-
-      // Kill iconservicesagent to flush the icon cache (auto-restarts in <1s)
-      let killIcons = Process()
-      killIcons.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-      killIcons.arguments = ["iconservicesagent"]
-      killIcons.standardOutput = FileHandle.nullDevice
-      killIcons.standardError = FileHandle.nullDevice
-      try? killIcons.run()
-      killIcons.waitUntilExit()
+      // Best-effort cosmetic maintenance. Capture each step's outcome instead of
+      // dropping it with `try?`, but keep it at info level — some steps exit
+      // non-zero benignly (e.g. killall when the agent isn't running), so this is
+      // not routed through the failure path (BL-022).
+      log(
+        "Icon cache: lsregister unregister \(SystemCommand.run(executable: lsregister, arguments: ["-u", appPath]).summary)"
+      )
+      log(
+        "Icon cache: lsregister register \(SystemCommand.run(executable: lsregister, arguments: ["-f", appPath]).summary)"
+      )
+      log(
+        "Icon cache: kill iconservicesagent \(SystemCommand.run(executable: "/usr/bin/killall", arguments: ["iconservicesagent"]).summary)"
+      )
 
       // Safety net: verify the Dock is still running after 2 seconds.
-      // iconservicesagent restart can occasionally crash the Dock.
+      // iconservicesagent restart can occasionally crash the Dock. pgrep exits
+      // non-zero when Dock isn't found, which is the signal we branch on.
       Thread.sleep(forTimeInterval: 2.0)
-      let dockCheck = Process()
-      dockCheck.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-      dockCheck.arguments = ["-x", "Dock"]
-      dockCheck.standardOutput = FileHandle.nullDevice
-      dockCheck.standardError = FileHandle.nullDevice
-      try? dockCheck.run()
-      dockCheck.waitUntilExit()
+      let dockRunning = SystemCommand.run(
+        executable: "/usr/bin/pgrep", arguments: ["-x", "Dock"]
+      ).isSuccess
 
-      if dockCheck.terminationStatus != 0 {
+      if !dockRunning {
         // Dock is not running — restart it
         log("AppDelegate: Dock not running after icon cache reset, restarting")
-        let restartDock = Process()
-        restartDock.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        restartDock.arguments = ["-a", "Dock"]
-        restartDock.standardOutput = FileHandle.nullDevice
-        restartDock.standardError = FileHandle.nullDevice
-        try? restartDock.run()
-        restartDock.waitUntilExit()
+        log(
+          "Icon cache: restart Dock \(SystemCommand.run(executable: "/usr/bin/open", arguments: ["-a", "Dock"]).summary)"
+        )
       }
 
       log("AppDelegate: Icon cache reset complete")

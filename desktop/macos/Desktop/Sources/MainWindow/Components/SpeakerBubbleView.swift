@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Chat bubble view for a transcript segment
 struct SpeakerBubbleView: View {

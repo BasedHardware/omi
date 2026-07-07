@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 struct ExportsSection: View {
   let statuses: [MemoryExportDestination: MemoryExportStatus]
@@ -211,7 +212,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.createNewMCPKey()
-      _ = LocalAgentAPISettings.createNewToken()
+      _ = try LocalAgentAPISettings.createNewToken()
       mcpKey = key
       statusMessage = "New key created. Copy the prompt again when you're ready."
     } catch {
@@ -227,7 +228,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.ensureMCPKey()
-      let localToken = LocalAgentAPISettings.enable()
+      let localToken = try LocalAgentAPISettings.enable()
       mcpKey = key
       let result = try await MemoryExportService.shared.testAgentConnections(
         hostedKey: key,
@@ -252,7 +253,7 @@ final class MemoryExportDestinationSheetModel: ObservableObject {
 
     do {
       let key = try await MemoryExportService.shared.ensureMCPKey()
-      let localToken = LocalAgentAPISettings.enable()
+      let localToken = try LocalAgentAPISettings.enable()
       mcpKey = key
       copyToPasteboard(
         MemoryExportService.omiAgentSetupPrompt(

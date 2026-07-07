@@ -50,7 +50,7 @@ class GeneratedTranscriptSegment {
     required this.start,
     this.sttProvider,
     required this.text,
-    this.translations = const [],
+    this.translations,
   });
 
   factory GeneratedTranscriptSegment.fromJson(Map<String, dynamic> json) {
@@ -65,7 +65,7 @@ class GeneratedTranscriptSegment {
       start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
       sttProvider: _readFieldValue<String>(_readField(json, const ["stt_provider"]), "stt_provider", _readString, requiredField: false, nullable: true),
       text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
-      translations: _readFieldValue<List<GeneratedTranslation>>(_readField(json, const ["translations"]), "translations", (value) => _readObjectList(value, GeneratedTranslation.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      translations: _readFieldValue<List<GeneratedTranslation>>(_readField(json, const ["translations"]), "translations", (value) => _readObjectList(value, GeneratedTranslation.fromJson), requiredField: false, nullable: true),
     );
   }
 

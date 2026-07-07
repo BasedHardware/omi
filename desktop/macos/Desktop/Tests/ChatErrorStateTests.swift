@@ -208,6 +208,7 @@ final class ChatErrorStateTests: XCTestCase {
   func testFromBridgeErrorMapsInvalidTokenAgentErrorToAuthRequired() {
     let mapped = ChatErrorState.from(.agentError("401 \"invalid_token\""))
     XCTAssertEqual(mapped, .authRequired)
+    XCTAssertTrue(BridgeError.agentError("401 \"invalid_token\"").isSessionAuthenticationFailure)
   }
 
   func testFromBridgeErrorMapsUnauthorizedAgentErrorToAuthRequired() {
@@ -224,5 +225,103 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertNil(ChatErrorState.from(.agentError("AI service authentication failed")))
     XCTAssertNil(ChatErrorState.from(.agentError("Anthropic provider unauthorized")))
     XCTAssertNil(ChatErrorState.from(.agentError("invalid key")))
+    XCTAssertFalse(BridgeError.agentError("Anthropic provider unauthorized").isSessionAuthenticationFailure)
+  }
+
+  func testChatSignInRecoveryUsesDesktopOAuthInsteadOfHomepage() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+
+    XCTAssertTrue(source.contains("try await AuthService.shared.signInWithGoogle()"))
+    XCTAssertTrue(source.contains("ChatErrorCard: .signIn recovery — starting desktop OAuth"))
+    XCTAssertFalse(source.contains("ChatErrorCard: .signIn recovery — opening omi.me sign-in URL"))
+    XCTAssertFalse(source.contains(#"URL(string: "https://omi.me/")"#))
+  }
+
+  func testSavedUserDefaultsSessionIsValidatedBeforeUse() throws {
+    let source = try sourceFile("AuthService.swift")
+
+    XCTAssertTrue(source.contains("validateRestoredUserDefaultsSession()"))
+    XCTAssertTrue(source.contains("getIdToken(forceRefresh: false)"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validated from cached ID token"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred - cached ID token expired"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred - preserving restored session"))
+  }
+
+  func testRestoredSessionValidationDoesNotClearPersistedTokens() throws {
+    // Regression: launch-time validation must not wipe restored UserDefaults tokens.
+    // refreshIdToken() still clears definitive invalid/revoked refresh tokens when a
+    // real token request occurs; this validation path only probes a cached token.
+    let source = try sourceFile("AuthService.swift")
+    let validationBlockRange = source.range(of: "Restored UserDefaults session validation deferred - preserving restored session")
+    XCTAssertNotNil(validationBlockRange)
+    let snippet = String(source[validationBlockRange!.lowerBound...])
+    let catchBlock = String(snippet[..<(snippet.range(of: "} catch {")?.lowerBound ?? snippet.endIndex)])
+    XCTAssertFalse(catchBlock.contains("clearTokens()"))
+    XCTAssertTrue(source.contains("Definitive auth failure - clearing tokens and session"))
+  }
+
+  func testRestoredSessionSignsOutWhenValidationClearedTokens() throws {
+    // Follow-up to #9161 (Copilot): getIdToken(forceRefresh: false) can clear tokens
+    // internally on a stored token/user mismatch and then surface notSignedIn. Preserving
+    // isSignedIn there would leave a ghost signed-in UI with no credentials, so the catch
+    // must sign out when the tokens are gone — gated on the tokens actually being cleared,
+    // so the transient/race case (tokens intact) is still preserved.
+    let source = try sourceFile("AuthService.swift")
+    let range = source.range(of: "Restored UserDefaults session validation cleared tokens - signing out")
+    XCTAssertNotNil(range)
+    let snippet = String(source[range!.lowerBound...]).prefix(320)
+    XCTAssertTrue(snippet.contains("self.isSignedIn = false"))
+    XCTAssertTrue(snippet.contains("saveAuthState(isSignedIn: false"))
+    // The sign-out branch is gated on the tokens actually being gone (not a blanket clear).
+    let methodStart = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    XCTAssertNotNil(methodStart)
+    let method = String(source[methodStart!.lowerBound...]).prefix(1700)
+    XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
+  }
+
+  func testRestoredSessionValidationClearsInMemoryEmailIfAlreadySignedOut() throws {
+    let source = try sourceFile("AuthService.swift")
+    let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    XCTAssertNotNil(validationRange)
+    let snippet = String(source[validationRange!.lowerBound...])
+      .prefix(2600)
+
+    XCTAssertTrue(snippet.contains("if self.isSignedIn"))
+    XCTAssertTrue(snippet.contains("Restored UserDefaults session validation found signed-out state"))
+    XCTAssertTrue(snippet.contains("AuthState.shared.userEmail = nil"))
+  }
+
+  func testRestoredSessionValidationDoesNotForceRefreshOnLaunch() throws {
+    let source = try sourceFile("AuthService.swift")
+    let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    XCTAssertNotNil(validationRange)
+    let snippet = String(source[validationRange!.lowerBound...])
+      .prefix(900)
+
+    XCTAssertTrue(snippet.contains("storedIdToken != nil"))
+    XCTAssertTrue(snippet.contains("!self.isTokenExpired"))
+    XCTAssertTrue(snippet.contains("getIdToken(forceRefresh: false)"))
+    XCTAssertFalse(snippet.contains("getIdToken(forceRefresh: true)"))
+  }
+
+  func testChatSignInRecoveryDoesNotDuplicatePlanRefresh() throws {
+    // signInWithGoogle() already schedules fetchPlan() on success (twice, in
+    // the OAuth completion path); the recovery path must not duplicate it.
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let recoveryRange = source.range(of: "ChatErrorCard: .signIn recovery — starting desktop OAuth")
+    XCTAssertNotNil(recoveryRange)
+    let snippet = String(source[recoveryRange!.lowerBound...])
+      .prefix(400)
+    XCTAssertTrue(snippet.contains("try await AuthService.shared.signInWithGoogle()"))
+    XCTAssertFalse(snippet.contains("FloatingBarUsageLimiter.shared.fetchPlan()"))
+  }
+
+  private func sourceFile(_ relativePath: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources")
+      .appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

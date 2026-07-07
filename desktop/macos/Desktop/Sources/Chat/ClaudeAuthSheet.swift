@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Sheet shown when chat access requires a paid upgrade.
 struct ClaudeAuthSheet: View {

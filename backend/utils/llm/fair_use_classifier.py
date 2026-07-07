@@ -8,8 +8,8 @@ patterns (audiobook transcription, podcast transcription, pre-recorded content).
 import json
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, cast
 
 import database.conversations as conversations_db
 from utils.executors import db_executor, run_blocking
@@ -115,15 +115,14 @@ Look specifically for:
 """
 
 
-def _select_recipes(conversation_summaries: list) -> str:
+def _select_recipes(conversation_summaries: List[Dict[str, Any]]) -> str:
     """Select which additional detection recipes to apply based on conversation patterns."""
-    recipes = []
+    recipes: List[str] = []
 
     if not conversation_summaries:
         return ""
 
     # Check for signs that suggest specific recipes
-    titles = [c.get('title', '') for c in conversation_summaries]
     durations = [c.get('duration_minutes', 0) for c in conversation_summaries]
     categories = [c.get('category', '') for c in conversation_summaries]
 
@@ -155,9 +154,9 @@ def _select_recipes(conversation_summaries: list) -> str:
     return '\n'.join(recipes)
 
 
-def _prepare_conversation_summaries(uid: str) -> list:
+def _prepare_conversation_summaries(uid: str) -> List[Dict[str, Any]]:
     """Fetch recent conversations and extract metadata for classification."""
-    start_date = datetime.utcnow() - timedelta(days=CLASSIFIER_LOOKBACK_DAYS)
+    start_date = datetime.now(timezone.utc) - timedelta(days=CLASSIFIER_LOOKBACK_DAYS)
 
     conversations = conversations_db.get_conversations(
         uid,
@@ -165,9 +164,9 @@ def _prepare_conversation_summaries(uid: str) -> list:
         start_date=start_date,
     )
 
-    summaries = []
+    summaries: List[Dict[str, Any]] = []
     for conv in conversations:
-        structured = conv.get('structured', {}) or {}
+        structured = cast(Dict[str, Any], conv.get('structured') or {})
         started = conv.get('started_at')
         ended = conv.get('finished_at') or conv.get('ended_at')
 
@@ -194,13 +193,13 @@ def _prepare_conversation_summaries(uid: str) -> list:
     return summaries
 
 
-async def classify_user_purpose(uid: str) -> dict:
+async def classify_user_purpose(uid: str) -> Dict[str, Any]:
     """Run LLM classification on a user's recent conversations.
 
     Returns a dict matching the ClassifierResult model:
       {misuse_score, usage_type, confidence, evidence, model, prompt_version}
     """
-    default_result = {
+    default_result: Dict[str, Any] = {
         'misuse_score': 0.0,
         'usage_type': 'none',
         'confidence': 0.0,
@@ -234,7 +233,7 @@ Respond with ONLY the JSON output, no other text."""
             ]
         )
 
-        content = response.content if hasattr(response, 'content') else str(response)
+        content = cast(str, cast(Any, response).content) if hasattr(response, 'content') else str(response)
 
         # Parse JSON from response
         # Handle potential markdown code blocks

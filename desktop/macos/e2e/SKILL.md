@@ -57,6 +57,28 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+### 2c. Inject backend faults (failure-path testing)
+The hermetic E2E harness is backend-only, so desktop failure paths (backend 5xx →
+structured `ChatErrorState`, task sortOrder sync failure surfaced/retried not silent,
+transcription transport truthfulness) can't be driven end-to-end. `scripts/omi-fault-inject.sh`
+stands up a local endpoint that fails on purpose; point a **named test bundle** (never
+prod) at it via the documented backend overrides — `OMI_PYTHON_API_URL` (chat / action-item
+sync / transcription relay), `OMI_DESKTOP_API_URL` (Rust backend), `OMI_AUTH_API_URL` (auth):
+```bash
+cd desktop/macos
+eval "$(./scripts/omi-fault-inject.sh start error)"      # modes: error | status:CODE | latency | reset | refuse
+OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
+  OMI_PYTHON_API_URL="$OMI_FAULT_URL" OMI_DESKTOP_API_URL="$OMI_FAULT_URL" \
+  OMI_APP_NAME="omi-fault" ./run.sh &
+./scripts/omi-ctl wait-ready
+./scripts/omi-ctl action ask query="hi"                  # exercise the path; assert a surfaced error, not a crash/silent no-op
+./scripts/omi-fault-inject.sh stop
+```
+`status:CODE` returns an HTTP status code in 100-599 (e.g. `status:503`, `status:429`, `status:401`);
+`latency` sleeps `--latency-ms` (default 30 000) before replying (watchdog/timeout paths);
+`reset` RSTs the connection; `refuse` leaves the port closed (connection refused). Verify a
+mode with `curl` before launching the app: `curl -s -o /dev/null -w '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
+
 ### The full loop
 ```bash
 cd desktop/macos

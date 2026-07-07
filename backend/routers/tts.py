@@ -12,6 +12,7 @@ Rate limits per user (Redis-backed sliding-window + daily counter):
 
 import logging
 import os
+from typing import Any, Callable, Dict, cast
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,6 +28,11 @@ from utils.executors import run_blocking, critical_executor
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
+# parameter; route access through a cast so this strict-checked file sees a
+# concrete callable type instead of `Unknown`.
+_auth_module = cast(Any, auth)
 
 # Limits mirror desktop/macos/Backend-Rust/src/routes/tts.rs
 _TTS_BURST_PER_MINUTE = 50
@@ -57,7 +63,9 @@ def _is_valid_voice_id(voice_id: str) -> bool:
 )
 async def tts_synthesize(
     req: TtsSynthesizeRequest,
-    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "tts:synthesize")),
+    uid: str = Depends(
+        cast(Callable[..., str], _auth_module.with_rate_limit(auth.get_current_user_uid, "tts:synthesize"))
+    ),
 ):
     """Proxy a TTS request to ElevenLabs. Per-user rate limited."""
     api_key = os.getenv('ELEVENLABS_API_KEY')
@@ -104,7 +112,7 @@ async def tts_synthesize(
         )
     # status == -1 (Redis error): fail-open intentionally — TTS is best-effort.
 
-    body: dict = {
+    body: Dict[str, Any] = {
         "text": text,
         "model_id": req.model_id,
         "output_format": req.output_format,

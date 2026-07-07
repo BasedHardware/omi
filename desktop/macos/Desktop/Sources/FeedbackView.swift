@@ -1,6 +1,7 @@
 import Sentry
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 /// Window controller for the feedback dialog
 @MainActor

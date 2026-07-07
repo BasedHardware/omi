@@ -29,6 +29,14 @@ class ViewModelContainer: ObservableObject {
         chatProvider = provider
         taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
         ChatProvider.mainInstance = provider
+
+        // Bind the headless task automation actions (create/toggle/delete/reorder/dump)
+        // to this canonical, long-lived TasksViewModel so omi-ctl can drive TASK-01/02/03
+        // without the Tasks page being on screen. Gated to the automation bridge, which
+        // only runs on non-prod bundles.
+        if DesktopAutomationLaunchOptions.isEnabled {
+            tasksViewModel.registerAutomationActions()
+        }
     }
 
     // Loading state

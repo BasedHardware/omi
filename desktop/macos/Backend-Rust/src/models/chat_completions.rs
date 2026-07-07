@@ -241,6 +241,7 @@ pub struct AnthropicTool {
 }
 
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // wire-format DTO: several fields are deserialized but not read
 pub struct AnthropicResponse {
     pub id: String,
     #[serde(rename = "type")]
@@ -266,7 +267,11 @@ pub enum AnthropicContentBlock {
     /// Server-side tool invocation (e.g. web_search) — executed by Anthropic
     /// during generation. Never surfaced to the OpenAI client.
     #[serde(rename = "server_tool_use")]
-    ServerToolUse { id: String, name: String },
+    ServerToolUse {
+        #[allow(dead_code)] // deserialized but not surfaced to the OpenAI client
+        id: String,
+        name: String,
+    },
     /// Result of a server-side web search — consumed by the model upstream.
     /// Never surfaced to the OpenAI client.
     #[serde(rename = "web_search_tool_result")]
@@ -310,7 +315,10 @@ pub enum AnthropicStreamEvent {
     #[serde(rename = "content_block_delta")]
     ContentBlockDelta { index: usize, delta: AnthropicDelta },
     #[serde(rename = "content_block_stop")]
-    ContentBlockStop { index: usize },
+    ContentBlockStop {
+        #[allow(dead_code)] // deserialized but not read
+        index: usize,
+    },
     #[serde(rename = "message_delta")]
     MessageDelta {
         delta: AnthropicMessageDelta,
@@ -327,6 +335,7 @@ pub enum AnthropicStreamEvent {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AnthropicStreamMessage {
     pub id: String,
+    #[allow(dead_code)] // deserialized but not read
     pub model: String,
     #[serde(default)]
     pub usage: AnthropicUsage,

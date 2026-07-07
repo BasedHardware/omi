@@ -14,7 +14,7 @@ date validation, filename timestamp parsing, chunked-upload envelopes).
 
 from datetime import date, datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Annotated, Any, TypeVar
+from typing import Annotated, Any, TypeVar, cast
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field, TypeAdapter, ValidationError, model_validator
@@ -27,7 +27,9 @@ HistoryDays = Annotated[int, Query(ge=1, le=365)]
 ModelT = TypeVar('ModelT', bound=BaseModel)
 
 
-def parse_form_json(model_type: type[ModelT] | type[dict], raw_value: str, field_name: str) -> ModelT | dict[str, Any]:
+def parse_form_json(
+    model_type: type[ModelT] | type[dict[str, Any]], raw_value: str, field_name: str
+) -> ModelT | dict[str, Any]:
     """Validate a JSON string submitted in a multipart/form-data field.
 
     FastAPI cannot apply normal JSON body validation to string form fields. Keep
@@ -35,7 +37,7 @@ def parse_form_json(model_type: type[ModelT] | type[dict], raw_value: str, field
     non-object payloads consistently fail with 422 before any I/O work.
     """
     try:
-        if isinstance(model_type, type) and issubclass(model_type, BaseModel):
+        if issubclass(model_type, BaseModel):
             return model_type.model_validate_json(raw_value)
         return TypeAdapter(dict[str, Any]).validate_json(raw_value)
     except (ValidationError, ValueError) as e:
@@ -57,12 +59,16 @@ def backfill_app_home_url_from_auth_steps(external_integration: dict[str, Any]) 
         return
     if not isinstance(auth_steps, list):
         raise HTTPException(status_code=422, detail='external_integration.auth_steps must be a list')
-    if len(auth_steps) != 1:
+    auth_steps_list: list[Any] = cast(list[Any], auth_steps)
+    if len(auth_steps_list) != 1:
         return
-    auth_step = auth_steps[0]
-    if not isinstance(auth_step, dict) or not auth_step.get('url'):
+    auth_step = auth_steps_list[0]
+    if not isinstance(auth_step, dict):
         raise HTTPException(status_code=422, detail='external_integration.auth_steps[0].url is required')
-    external_integration['app_home_url'] = auth_step['url']
+    step_dict: dict[str, Any] = cast(dict[str, Any], auth_step)
+    if not step_dict.get('url'):
+        raise HTTPException(status_code=422, detail='external_integration.auth_steps[0].url is required')
+    external_integration['app_home_url'] = step_dict['url']
 
 
 def validate_calendar_date(value: str | None, field_name: str = 'date') -> str | None:

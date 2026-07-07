@@ -146,31 +146,9 @@ extension ChatErrorState {
     case .authMissing:
       return .authRequired
     case .agentError(let message):
-      return isAuthenticationAgentError(message) ? .authRequired : nil
+      return BridgeError.agentError(message).isSessionAuthenticationFailure ? .authRequired : nil
     case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive:
       return nil
     }
-  }
-
-  private static func isAuthenticationAgentError(_ message: String) -> Bool {
-    let normalized = message.lowercased()
-    if normalized.contains("invalid_token") || normalized.contains("please sign in") {
-      return true
-    }
-
-    let looksLikeAuthFailure =
-      normalized.contains("401")
-        || normalized.contains("unauthorized")
-        || normalized.contains("authentication")
-
-    guard looksLikeAuthFailure else {
-      return false
-    }
-
-    return normalized.contains("token")
-      || normalized.contains("session")
-      || normalized.contains("sign in")
-      || normalized.contains("signed in")
-      || normalized.contains("firebase")
   }
 }

@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import FirebaseAuth
+import OmiSupport
 import CryptoKit
 import AppKit
 import AuthenticationServices
@@ -357,6 +358,49 @@ class AuthService {
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing).
     // Keys are defined once in `DefaultsKey` and read/written through the typed
     // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
+    private let authTokenKeychainService = "com.omi.desktop.firebase-rest-session"
+    private let authTokenKeychainAccount = "firebase-rest-tokens"
+
+    private struct StoredAuthTokens: Codable {
+        let idToken: String
+        let refreshToken: String
+        let expiryTime: TimeInterval
+        let tokenUserId: String
+    }
+
+    private var cachedStoredTokens: StoredAuthTokens?
+    private var cachedStoredTokensLoaded = false
+
+    private func invalidateStoredTokensCache() {
+        cachedStoredTokens = nil
+        cachedStoredTokensLoaded = false
+    }
+
+    struct TokenStorageHooks {
+        var usesKeychainTokenStorage: () -> Bool
+        var allowsUserDefaultsFallback: () -> Bool
+        var readKeychainString: (_ service: String, _ account: String) -> String?
+        var writeKeychainString: (_ value: String, _ service: String, _ account: String) -> Bool
+        var deleteKeychainString: (_ service: String, _ account: String) -> Void
+        var recordsFallbackTelemetry: Bool
+
+        static let live = TokenStorageHooks(
+            usesKeychainTokenStorage: { !AppBuild.isNonProduction },
+            allowsUserDefaultsFallback: { true },
+            readKeychainString: { service, account in
+                DesktopKeychainStore.string(service: service, account: account)
+            },
+            writeKeychainString: { value, service, account in
+                DesktopKeychainStore.setString(value, service: service, account: account)
+            },
+            deleteKeychainString: { service, account in
+                DesktopKeychainStore.delete(service: service, account: account)
+            },
+            recordsFallbackTelemetry: true
+        )
+    }
+
+    var tokenStorageHooks = TokenStorageHooks.live
 
     // Firebase Web API key — fetched from backend via APIKeyService, set as env var.
     // No hardcoded fallback — if the key isn't available, auth operations will fail
@@ -454,7 +498,7 @@ class AuthService {
 
         do {
             let tokens = try await signInWithPasswordViaAuthEmulator(email: email, password: password)
-            saveTokens(
+            try saveTokens(
                 idToken: tokens.idToken,
                 refreshToken: tokens.refreshToken,
                 expiresIn: tokens.expiresIn,
@@ -589,10 +633,55 @@ class AuthService {
                 self.isSignedIn = true
                 AuthState.shared.userEmail = savedEmail
                 AuthState.shared.isRestoringAuth = false
+                validateRestoredUserDefaultsSession()
             }
         } else {
             NSLog("OMI AUTH: No saved auth state found")
             AuthState.shared.isRestoringAuth = false
+        }
+    }
+
+    private func validateRestoredUserDefaultsSession() {
+        Task { [weak self] in
+            guard let self else { return }
+            guard self.storedIdToken != nil else {
+                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - no cached ID token")
+                return
+            }
+            guard !self.isTokenExpired else {
+                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - cached ID token expired")
+                return
+            }
+            do {
+                _ = try await self.getIdToken(forceRefresh: false)
+                NSLog("OMI AUTH: Restored UserDefaults session validated from cached ID token")
+                APIKeyService.shared.startFetchingKeys()
+                Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
+            } catch AuthError.notSignedIn {
+                if self.storedIdToken == nil || self.storedRefreshToken == nil {
+                    // getIdToken() can clear tokens internally before surfacing notSignedIn —
+                    // e.g. a stored token/user mismatch after an account switch (it clears the
+                    // stale token, then the refresh path has no token). The entry guard proved
+                    // a cached ID token existed, so if it's gone now the session is genuinely
+                    // dead; preserving isSignedIn would leave a ghost signed-in UI with no
+                    // credentials. Sign out cleanly so the UI shows sign-in.
+                    NSLog("OMI AUTH: Restored UserDefaults session validation cleared tokens - signing out")
+                    self.isSignedIn = false
+                    AuthState.shared.userEmail = nil
+                    AuthState.shared.isRestoringAuth = false
+                    self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                } else if self.isSignedIn {
+                    // Tokens survived — a transient/race failure (e.g. Firebase SDK user not
+                    // yet restored). Keep the restored session; on-demand refresh recovers it.
+                    NSLog("OMI AUTH: Restored UserDefaults session validation deferred - preserving restored session")
+                } else {
+                    NSLog("OMI AUTH: Restored UserDefaults session validation found signed-out state")
+                    AuthState.shared.userEmail = nil
+                    AuthState.shared.isRestoringAuth = false
+                }
+            } catch {
+                NSLog("OMI AUTH: Restored UserDefaults session validation deferred: %@", error.localizedDescription)
+            }
         }
     }
 
@@ -705,7 +794,7 @@ class AuthService {
             let refreshToken = authResult.user.refreshToken ?? ""
             let expiresIn = Int(tokenResult.expirationDate.timeIntervalSinceNow)
 
-            saveTokens(idToken: idToken, refreshToken: refreshToken, expiresIn: expiresIn, userId: userId)
+            try saveTokens(idToken: idToken, refreshToken: refreshToken, expiresIn: expiresIn, userId: userId)
         } catch {
             // Fall back to REST API (works when Firebase SDK has keychain issues)
             let nsError = error as NSError
@@ -714,7 +803,7 @@ class AuthService {
             NSLog("OMI AUTH: Falling back to REST API for Apple sign-in...")
             let firebaseTokens = try await signInWithAppleIdentityToken(identityToken: identityToken, nonce: nonce)
             userId = firebaseTokens.localId
-            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: userId)
+            try saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: userId)
         }
 
         isSignedIn = true
@@ -975,7 +1064,7 @@ class AuthService {
             NSLog("OMI AUTH: Got Firebase ID token via REST API")
 
             // Store tokens for API calls (include userId to validate token ownership on retrieval)
-            saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
+            try saveTokens(idToken: firebaseTokens.idToken, refreshToken: firebaseTokens.refreshToken, expiresIn: firebaseTokens.expiresIn, userId: firebaseTokens.localId)
 
             // Also try Firebase SDK sign-in (best effort for other Firebase features)
             do {
@@ -1215,6 +1304,7 @@ class AuthService {
         case .invalidResponse: return "invalid_response"
         case .tokenExchangeFailed(let code): return "token_exchange_http_\(code)"
         case .missingCustomToken: return "missing_custom_token"
+        case .keychainTokenStorageUnavailable: return "keychain_token_storage_unavailable"
         case .cancelled: return "cancelled"
         case .invalidConfiguration: return "invalid_configuration"
         }
@@ -1607,39 +1697,178 @@ class AuthService {
 
     // MARK: - Token Storage
 
-    private func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) {
-        UserDefaults.standard.set(idToken, forKey: .authIdToken)
-        UserDefaults.standard.set(refreshToken, forKey: .authRefreshToken)
+    func saveTokens(idToken: String, refreshToken: String, expiresIn: Int, userId: String) throws {
         // Store expiry time (current time + expiresIn seconds, minus 5 min buffer)
         let expiryTime = Date().addingTimeInterval(TimeInterval(expiresIn - 300))
-        UserDefaults.standard.set(expiryTime.timeIntervalSince1970, forKey: .authTokenExpiry)
-        // Store the user ID that owns these tokens (for validation on retrieval)
-        UserDefaults.standard.set(userId, forKey: .authTokenUserId)
+        let tokens = StoredAuthTokens(
+            idToken: idToken,
+            refreshToken: refreshToken,
+            expiryTime: expiryTime.timeIntervalSince1970,
+            tokenUserId: userId
+        )
+        if usesKeychainTokenStorage {
+            if saveKeychainTokens(tokens) {
+                clearUserDefaultsTokens()
+            } else if allowsUserDefaultsTokenFallback {
+                saveUserDefaultsTokens(idToken: idToken, refreshToken: refreshToken, expiryTime: expiryTime, userId: userId)
+                log("AuthService: Keychain token storage failed; falling back to UserDefaults for desktop auth continuity")
+                recordTokenStorageFallback(reason: "keychain_write_failed")
+            } else {
+                clearUserDefaultsTokens()
+                throw AuthError.keychainTokenStorageUnavailable
+            }
+        } else {
+            saveUserDefaultsTokens(idToken: idToken, refreshToken: refreshToken, expiryTime: expiryTime, userId: userId)
+        }
+        invalidateStoredTokensCache()
         NSLog("OMI AUTH: Saved tokens for user %@, expires at %@", userId, expiryTime.description)
     }
 
     private func clearTokens() {
+        tokenStorageHooks.deleteKeychainString(authTokenKeychainService, authTokenKeychainAccount)
+        clearUserDefaultsTokens()
+        invalidateStoredTokensCache()
+        NSLog("OMI AUTH: Cleared all tokens")
+    }
+
+    private func saveUserDefaultsTokens(idToken: String, refreshToken: String, expiryTime: Date, userId: String) {
+        UserDefaults.standard.set(idToken, forKey: .authIdToken)
+        UserDefaults.standard.set(refreshToken, forKey: .authRefreshToken)
+        UserDefaults.standard.set(expiryTime.timeIntervalSince1970, forKey: .authTokenExpiry)
+        // Store the user ID that owns these tokens (for validation on retrieval)
+        UserDefaults.standard.set(userId, forKey: .authTokenUserId)
+    }
+
+    private func clearUserDefaultsTokens() {
         UserDefaults.standard.removeObject(forKey: .authIdToken)
         UserDefaults.standard.removeObject(forKey: .authRefreshToken)
         UserDefaults.standard.removeObject(forKey: .authTokenExpiry)
         UserDefaults.standard.removeObject(forKey: .authTokenUserId)
-        NSLog("OMI AUTH: Cleared all tokens")
+    }
+
+    private var usesKeychainTokenStorage: Bool {
+        tokenStorageHooks.usesKeychainTokenStorage()
+    }
+
+    private var allowsUserDefaultsTokenFallback: Bool {
+        tokenStorageHooks.allowsUserDefaultsFallback()
+    }
+
+    private func recordTokenStorageFallback(reason: String) {
+        guard tokenStorageHooks.recordsFallbackTelemetry else { return }
+        AnalyticsManager.shared.desktopHealthEvent(
+            name: "auth_token_storage_fallback",
+            properties: [
+                "storage": "user_defaults",
+                "reason": reason,
+                "update_channel": AppBuild.currentUpdateChannel,
+            ]
+        )
+    }
+
+    private func saveKeychainTokens(_ tokens: StoredAuthTokens) -> Bool {
+        do {
+            let data = try JSONEncoder().encode(tokens)
+            guard let payload = String(data: data, encoding: .utf8) else {
+                log("AuthService: failed to encode Keychain token payload")
+                return false
+            }
+            return tokenStorageHooks.writeKeychainString(
+                payload,
+                authTokenKeychainService,
+                authTokenKeychainAccount
+            )
+        } catch {
+            logError("AuthService: failed to encode Keychain token payload", error: error)
+            return false
+        }
+    }
+
+    private func loadKeychainTokens() -> StoredAuthTokens? {
+        guard let payload = tokenStorageHooks.readKeychainString(authTokenKeychainService, authTokenKeychainAccount) else {
+            return nil
+        }
+        guard let data = payload.data(using: .utf8) else {
+            return nil
+        }
+        do {
+            return try JSONDecoder().decode(StoredAuthTokens.self, from: data)
+        } catch {
+            logError("AuthService: failed to decode Keychain token payload", error: error)
+            tokenStorageHooks.deleteKeychainString(authTokenKeychainService, authTokenKeychainAccount)
+            return nil
+        }
+    }
+
+    private func loadUserDefaultsTokens() -> StoredAuthTokens? {
+        guard
+            let idToken = UserDefaults.standard.string(forKey: .authIdToken),
+            let refreshToken = UserDefaults.standard.string(forKey: .authRefreshToken),
+            !idToken.isEmpty,
+            !refreshToken.isEmpty
+        else {
+            return nil
+        }
+        let expiryTime = UserDefaults.standard.double(forKey: .authTokenExpiry)
+        let tokenUserId = UserDefaults.standard.string(forKey: .authTokenUserId) ?? ""
+        return StoredAuthTokens(
+            idToken: idToken,
+            refreshToken: refreshToken,
+            expiryTime: expiryTime,
+            tokenUserId: tokenUserId
+        )
+    }
+
+    private func storedTokens() -> StoredAuthTokens? {
+        if cachedStoredTokensLoaded {
+            return cachedStoredTokens
+        }
+
+        let tokens: StoredAuthTokens?
+        if usesKeychainTokenStorage {
+            if let keychainTokens = loadKeychainTokens() {
+                tokens = keychainTokens
+            } else if let defaultsTokens = loadUserDefaultsTokens() {
+                if saveKeychainTokens(defaultsTokens) {
+                    clearUserDefaultsTokens()
+                    log("AuthService: migrated production auth tokens from UserDefaults to Keychain")
+                    tokens = defaultsTokens
+                } else if allowsUserDefaultsTokenFallback {
+                    log("AuthService: keeping UserDefaults auth tokens after Keychain migration failed")
+                    recordTokenStorageFallback(reason: "keychain_migration_write_failed")
+                    tokens = defaultsTokens
+                } else {
+                    clearUserDefaultsTokens()
+                    log("AuthService: failed to migrate production auth tokens from UserDefaults to Keychain")
+                    tokens = nil
+                }
+            } else {
+                tokens = nil
+            }
+        } else {
+            tokens = loadUserDefaultsTokens()
+        }
+
+        cachedStoredTokens = tokens
+        cachedStoredTokensLoaded = true
+        return tokens
     }
 
     private var storedIdToken: String? {
-        UserDefaults.standard.string(forKey: .authIdToken)
+        storedTokens()?.idToken
     }
 
     private var storedRefreshToken: String? {
-        UserDefaults.standard.string(forKey: .authRefreshToken)
+        storedTokens()?.refreshToken
     }
 
     private var storedTokenUserId: String? {
-        UserDefaults.standard.string(forKey: .authTokenUserId)
+        let userId = storedTokens()?.tokenUserId ?? ""
+        return userId.isEmpty ? nil : userId
     }
 
     private var isTokenExpired: Bool {
-        let expiryTime = UserDefaults.standard.double(forKey: .authTokenExpiry)
+        let expiryTime = storedTokens()?.expiryTime ?? 0
         guard expiryTime > 0 else { return true }
         return Date().timeIntervalSince1970 > expiryTime
     }
@@ -1790,7 +2019,7 @@ class AuthService {
         let userId = (json["user_id"] as? String) ?? storedTokenUserId ?? ""
 
         // Save new tokens with user ID
-        saveTokens(idToken: newIdToken, refreshToken: newRefreshToken, expiresIn: Int(expiresIn) ?? 3600, userId: userId)
+        try saveTokens(idToken: newIdToken, refreshToken: newRefreshToken, expiresIn: Int(expiresIn) ?? 3600, userId: userId)
         NSLog("OMI AUTH: Refreshed ID token successfully for user %@", userId)
 
         return newIdToken
@@ -2222,6 +2451,7 @@ enum AuthError: LocalizedError {
     case invalidResponse
     case tokenExchangeFailed(Int)
     case missingCustomToken
+    case keychainTokenStorageUnavailable
     case cancelled
     case invalidConfiguration
 
@@ -2255,6 +2485,8 @@ enum AuthError: LocalizedError {
             return "Token exchange failed with status \(code)"
         case .missingCustomToken:
             return "Server did not return authentication token"
+        case .keychainTokenStorageUnavailable:
+            return "Could not securely store sign-in tokens. Please try again."
         case .cancelled:
             return "Sign in cancelled"
         case .invalidConfiguration:

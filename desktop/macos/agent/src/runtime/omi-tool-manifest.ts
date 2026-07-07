@@ -439,7 +439,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Use spawn_agent for multi-step calendar work such as finding availability or coordinating with people.",
       ],
     ),
-    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    executor: { kind: "swiftTool" },
     voice: {
       realtimeDescription:
         "Create a Google Calendar event for the user. Use for simple calendar requests like 'put this on my calendar', 'schedule lunch tomorrow', or 'create an event'. Requires start_time and end_time as ISO-8601 strings with timezone. Use spawn_agent instead for multi-step scheduling, finding availability, rescheduling, deleting, or coordinating with people.",
@@ -1155,7 +1155,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     ),
     annotations: localWrite,
     timeoutClass: "normal",
-    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires authenticated backend calendar access."],
     adapters: {},
@@ -1276,13 +1276,14 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
         parent_run_id: { type: "string", description: "Optional parent run to link via delegation." },
         visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
         title: { type: "string", description: "Optional visible session title." },
+        brief: { type: "string", description: "Optional short user-visible summary for the floating pill." },
       },
       ["objective"],
     ),
   },
   list_agent_sessions: {
     realtimeDescription:
-      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
+      "List canonical Omi-managed agent sessions/runs across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. Use when the user asks what canonical agents or subagents are active, recent, failed, or manageable.",
     schemaOverride: schema(
       {
         status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },

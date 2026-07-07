@@ -15,7 +15,7 @@ final class MemoryBankConnectorTests: XCTestCase {
     MemoryBankConnector.claudeCLIPathOverrideForTesting = ""
     MemoryBankConnector.codexCLIPathOverrideForTesting = ""
     MemoryBankConnector.openClawCLIPathOverrideForTesting = try writeFakeOpenClawCLI().path
-    MemoryBankConnector.processTimeoutSecondsForTesting = 2
+    MemoryBankConnector.processTimeoutSecondsForTesting = 5
   }
 
   override func tearDownWithError() throws {

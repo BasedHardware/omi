@@ -71,6 +71,53 @@ final class FailLoudConfigTests: XCTestCase {
       "it must query the real TCC preflight the rest of the app relies on")
   }
 
+  func testProductionAuthTokensUseKeychainStorage() throws {
+    let src = try source(relativePath: "Sources/AuthService.swift")
+
+    XCTAssertTrue(src.contains("private var usesKeychainTokenStorage: Bool"))
+    XCTAssertTrue(src.contains("!AppBuild.isNonProduction"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.setString("))
+    XCTAssertTrue(src.contains("migrated production auth tokens from UserDefaults to Keychain"))
+    XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
+    XCTAssertTrue(src.contains("allowsUserDefaultsTokenFallback"))
+    XCTAssertTrue(src.contains("AuthService: Keychain token storage failed; falling back to UserDefaults for desktop auth continuity"))
+    XCTAssertTrue(src.contains("\"update_channel\": AppBuild.currentUpdateChannel"))
+    XCTAssertTrue(src.contains("failed to migrate production auth tokens from UserDefaults to Keychain"))
+    XCTAssertTrue(src.contains("cachedStoredTokens"))
+  }
+
+  func testLocalAgentTokenUsesKeychainStorage() throws {
+    let src = try source(relativePath: "Sources/LocalAgentAPIServer.swift")
+
+    XCTAssertTrue(src.contains("tokenKeychainService"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.string(service: tokenKeychainService"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.setString(token, service: tokenKeychainService"))
+    XCTAssertTrue(src.contains("enum LocalAgentAPIError"))
+    XCTAssertTrue(src.contains("throw LocalAgentAPIError.tokenStorageUnavailable"))
+    XCTAssertFalse(src.contains("UserDefaults.standard.set(token, forKey: tokenKey)"))
+  }
+
+  // The data-protection keychain assertion was inverted by the file-based-keychain fix:
+  // a non-sandboxed Developer ID app has no keychain-access-groups entitlement, so the
+  // data-protection keychain failed with errSecMissingEntitlement and blocked sign-in.
+  // The correct invariant now lives in AuthTokenStorageTests.testKeychainStoreDoesNotUseDataProtectionKeychain.
+
+  func testDesktopAutomationBridgeIsNonProductionAndAuthenticated() throws {
+    let src = try source(relativePath: "Sources/DesktopAutomationBridge.swift")
+
+    XCTAssertTrue(src.contains("guard AppBuild.isNonProduction else"))
+    XCTAssertTrue(src.contains("OMI_AUTOMATION_TOKEN"))
+    XCTAssertTrue(src.contains("writeTokenFileIfNeeded()"))
+    XCTAssertTrue(src.contains("acceptsLoopbackHostAndOrigin"))
+    XCTAssertTrue(src.contains("invalid_host_or_origin"))
+    XCTAssertTrue(src.contains("authenticate(request.headers[\"authorization\"])"))
+    XCTAssertTrue(src.contains("invalid_or_missing_automation_token"))
+    XCTAssertTrue(src.contains("constantTimeEquals"))
+    XCTAssertTrue(src.contains("authorization.lowercased().hasPrefix(\"bearer \")"))
+    XCTAssertTrue(src.contains("DesktopAutomationHealth"))
+    XCTAssertTrue(src.contains("requiresAuth: true"))
+  }
+
   // MARK: Helper
 
   private func source(relativePath: String) throws -> String {

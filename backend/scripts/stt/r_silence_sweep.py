@@ -15,9 +15,9 @@ import os
 import re
 import subprocess
 import sys
-import time
 import urllib.parse
 from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 import websockets
 
@@ -32,17 +32,17 @@ PUNCT_RE = re.compile(r'[^\w\s]', re.UNICODE)
 SWEEP_DURATIONS = [0, 0.5, 1, 2, 3, 5, 7, 10, 15]
 
 
-def normalize(text):
+def normalize(text: str) -> str:
     text = PUNCT_RE.sub(' ', text).upper()
     return ' '.join(text.split())
 
 
-def compute_wer(ref, hyp):
+def compute_wer(ref: str, hyp: str) -> float:
     ref_words = ref.split()
     hyp_words = hyp.split()
     if not ref_words:
         return 0.0 if not hyp_words else 1.0
-    d = [[0] * (len(hyp_words) + 1) for _ in range(len(ref_words) + 1)]
+    d: List[List[int]] = [[0] * (len(hyp_words) + 1) for _ in range(len(ref_words) + 1)]
     for i in range(len(ref_words) + 1):
         d[i][0] = i
     for j in range(len(hyp_words) + 1):
@@ -56,9 +56,9 @@ def compute_wer(ref, hyp):
     return d[len(ref_words)][len(hyp_words)] / len(ref_words)
 
 
-def build_playlist(target_s):
-    playlist = []
-    total_s = 0
+def build_playlist(target_s: float) -> tuple[List[Dict[str, Any]], float]:
+    playlist: List[Dict[str, Any]] = []
+    total_s = 0.0
     for reader_dir in sorted(LIBRISPEECH_DIR.iterdir()):
         if not reader_dir.is_dir():
             continue
@@ -68,7 +68,7 @@ def build_playlist(target_s):
             trans_file = list(chapter_dir.glob('*.trans.txt'))
             if not trans_file:
                 continue
-            transcripts = {}
+            transcripts: Dict[str, str] = {}
             for line in trans_file[0].read_text().strip().split('\n'):
                 parts = line.strip().split(' ', 1)
                 if len(parts) == 2:
@@ -98,7 +98,7 @@ def build_playlist(target_s):
     return playlist, total_s
 
 
-def convert_to_pcm16(flac_path):
+def convert_to_pcm16(flac_path: str) -> Optional[bytes]:
     result = subprocess.run(
         ['ffmpeg', '-y', '-i', flac_path, '-f', 's16le', '-ar', str(SAMPLE_RATE), '-ac', '1', 'pipe:1'],
         capture_output=True,
@@ -106,18 +106,17 @@ def convert_to_pcm16(flac_path):
     return result.stdout if result.returncode == 0 else None
 
 
-_pcm_cache = {}
+_pcm_cache: Dict[str, Optional[bytes]] = {}
 
 
-def get_pcm(flac_path):
+def get_pcm(flac_path: str) -> Optional[bytes]:
     if flac_path not in _pcm_cache:
         _pcm_cache[flac_path] = convert_to_pcm16(flac_path)
     return _pcm_cache[flac_path]
 
 
-async def run_test(playlist, silence_s):
-    """Send audio to Modulate with specified silence between utterances."""
-    params = {
+async def run_test(playlist: List[Dict[str, Any]], silence_s: float) -> Dict[str, Any]:
+    params: Dict[str, str] = {
         'api_key': MODULATE_API_KEY,
         'speaker_diarization': 'true',
         'partial_results': 'true',
@@ -128,13 +127,12 @@ async def run_test(playlist, silence_s):
     }
     uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
-    ws = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
-
-    utterances = []
+    ws: Any = await websockets.connect(uri, ping_timeout=30, ping_interval=10, max_size=None)
+    utterances: List[Dict[str, Any]] = []
     last_partial_text = ''
     done_event = asyncio.Event()
 
-    async def recv():
+    async def recv() -> None:
         nonlocal last_partial_text
         try:
             async for raw in ws:
@@ -146,7 +144,7 @@ async def run_test(playlist, silence_s):
                     last_partial_text = ''
                 elif mt == 'partial_utterance':
                     pu = msg.get('partial_utterance', msg)
-                    last_partial_text = pu.get('text', '').strip()
+                    last_partial_text = str(pu.get('text', '')).strip()
                 elif mt in ('done', 'error'):
                     done_event.set()
                     break
@@ -162,7 +160,7 @@ async def run_test(playlist, silence_s):
     silence_pcm = b'\x00' * int(SAMPLE_RATE * 2 * silence_s) if silence_s > 0 else b''
 
     for i, sample in enumerate(playlist):
-        pcm = get_pcm(sample['flac'])
+        pcm = get_pcm(str(sample['flac']))
         if not pcm:
             continue
         offset = 0
@@ -197,7 +195,7 @@ async def run_test(playlist, silence_s):
     except Exception:
         pass
 
-    utt_text = ' '.join(u.get('text', '') for u in utterances).strip()
+    utt_text = ' '.join(str(u.get('text', '')) for u in utterances).strip()
     full_text = utt_text
     if last_partial_text and not utt_text.endswith(last_partial_text):
         full_text = (utt_text + ' ' + last_partial_text).strip() if utt_text else last_partial_text
@@ -211,47 +209,47 @@ async def run_test(playlist, silence_s):
     }
 
 
-async def main():
+async def main() -> None:
     print('Building playlist (target: 30s of speech)...')
     playlist, total_s = build_playlist(30)
     if not playlist:
         print('ERROR: No LibriSpeech data. Run the download first.')
         sys.exit(1)
 
-    ref_text = ' '.join(s['ref'] for s in playlist)
+    ref_text = ' '.join(str(s['ref']) for s in playlist)
     ref_norm = normalize(ref_text)
     ref_words = ref_norm.split()
     print(f'  {len(playlist)} utterances, {total_s:.1f}s speech, {len(ref_words)} ref words\n')
 
     for s in playlist:
-        get_pcm(s['flac'])
+        get_pcm(str(s['flac']))
 
     # Run baseline first (15s = no-VAD equivalent)
     print('=' * 70)
     print('BASELINE: 15s silence (no-VAD equivalent)')
     print('=' * 70)
     baseline = await run_test(playlist, 15)
-    b_norm = normalize(baseline['full_text'])
+    b_norm = normalize(str(baseline['full_text']))
     b_wer = compute_wer(ref_norm, b_norm)
     b_words = len(b_norm.split()) if b_norm else 0
     print(f'  WER:   {b_wer * 100:.1f}%')
     print(f'  Words: {b_words}/{len(ref_words)}')
     print(f'  UTTs:  {baseline["utterance_count"]}')
-    print(f'  Bytes: {baseline["total_bytes"] / 1024:.0f} KB')
-    print(f'  Text:  {baseline["full_text"][:120]}...')
+    print(f'  Bytes: {int(baseline["total_bytes"]) / 1024:.0f} KB')
+    print(f'  Text:  {str(baseline["full_text"])[:120]}...')
 
     # Sweep
-    rows = []
+    rows: List[Dict[str, Any]] = []
     rows.append(
         {
             'silence_s': 15,
             'wer': b_wer,
             'words': b_words,
-            'utts': baseline['utterance_count'],
-            'total_kb': baseline['total_bytes'] / 1024,
-            'silence_kb': baseline['silence_bytes'] / 1024,
+            'utts': int(baseline['utterance_count']),
+            'total_kb': int(baseline['total_bytes']) / 1024,
+            'silence_kb': int(baseline['silence_bytes']) / 1024,
             'delta_wer': 0,
-            'text': baseline['full_text'][:100],
+            'text': str(baseline['full_text'])[:100],
         }
     )
 
@@ -259,7 +257,7 @@ async def main():
         label = f'{s}s' if s > 0 else '0s'
         print(f'\n--- Testing {label} silence ---')
         result = await run_test(playlist, s)
-        hyp_norm = normalize(result['full_text'])
+        hyp_norm = normalize(str(result['full_text']))
         wer = compute_wer(ref_norm, hyp_norm)
         words = len(hyp_norm.split()) if hyp_norm else 0
         delta = wer - b_wer
@@ -269,21 +267,23 @@ async def main():
                 'silence_s': s,
                 'wer': wer,
                 'words': words,
-                'utts': result['utterance_count'],
-                'total_kb': result['total_bytes'] / 1024,
-                'silence_kb': result['silence_bytes'] / 1024,
+                'utts': int(result['utterance_count']),
+                'total_kb': int(result['total_bytes']) / 1024,
+                'silence_kb': int(result['silence_bytes']) / 1024,
                 'delta_wer': delta,
-                'text': result['full_text'][:100],
+                'text': str(result['full_text'])[:100],
             }
         )
 
         status = 'MATCH' if abs(delta) < 0.03 else ('CLOSE' if abs(delta) < 0.08 else 'MISS')
         print(f'  WER: {wer * 100:.1f}% (delta: {delta * 100:+.1f}%) [{status}]')
         print(f'  Words: {words}/{len(ref_words)}, UTTs: {result["utterance_count"]}')
-        print(f'  Total: {result["total_bytes"] / 1024:.0f} KB, Silence: {result["silence_bytes"] / 1024:.0f} KB')
+        print(
+            f'  Total: {int(result["total_bytes"]) / 1024:.0f} KB, Silence: {int(result["silence_bytes"]) / 1024:.0f} KB'
+        )
 
     # Sort by silence duration for table
-    rows.sort(key=lambda r: r['silence_s'])
+    rows.sort(key=lambda r: float(r['silence_s']))
 
     print(f'\n{"=" * 70}')
     print(f'RESULTS (baseline = 15s silence, WER = {b_wer * 100:.1f}%)')
@@ -294,36 +294,36 @@ async def main():
     print('-' * 75)
 
     for r in rows:
-        savings = (1 - r['total_kb'] / rows[-1]['total_kb']) * 100 if rows[-1]['total_kb'] > 0 else 0
-        # Compare to 15s baseline total bytes
-        baseline_kb = [x for x in rows if x['silence_s'] == 15][0]['total_kb']
-        savings = (1 - r['total_kb'] / baseline_kb) * 100 if baseline_kb > 0 else 0
+        baseline_kb = float([x for x in rows if float(x['silence_s']) == 15][0]['total_kb'])
+        savings = (1 - float(r['total_kb']) / baseline_kb) * 100 if baseline_kb > 0 else 0
 
-        status = 'MATCH' if abs(r['delta_wer']) < 0.03 else ('CLOSE' if abs(r['delta_wer']) < 0.08 else 'MISS')
-        arrow = '<<<' if status == 'MATCH' and r['silence_s'] != 15 else ''
+        status = (
+            'MATCH' if abs(float(r['delta_wer'])) < 0.03 else ('CLOSE' if abs(float(r['delta_wer'])) < 0.08 else 'MISS')
+        )
+        arrow = '<<<' if status == 'MATCH' and float(r['silence_s']) != 15 else ''
         print(
-            f'{r["silence_s"]:>7}s {r["wer"] * 100:>6.1f}% {r["delta_wer"] * 100:>+7.1f}%'
-            f' {r["words"]:>5}/{len(ref_words):<3} {r["utts"]:>4}'
-            f' {r["total_kb"]:>8.0f} {r["silence_kb"]:>6.0f} {savings:>7.1f}%'
+            f'{float(r["silence_s"]):>7}s {float(r["wer"]) * 100:>6.1f}% {float(r["delta_wer"]) * 100:>+7.1f}%'
+            f' {int(r["words"]):>5}/{len(ref_words):<3} {int(r["utts"]):>4}'
+            f' {float(r["total_kb"]):>8.0f} {float(r["silence_kb"]):>6.0f} {savings:>7.1f}%'
             f' {status:>6} {arrow}'
         )
 
     # Find best match
-    non_baseline = [r for r in rows if r['silence_s'] != 15]
-    matches = [r for r in non_baseline if abs(r['delta_wer']) < 0.03]
-    close = [r for r in non_baseline if 0.03 <= abs(r['delta_wer']) < 0.08]
+    non_baseline = [r for r in rows if float(r['silence_s']) != 15]
+    matches = [r for r in non_baseline if abs(float(r['delta_wer'])) < 0.03]
+    close = [r for r in non_baseline if 0.03 <= abs(float(r['delta_wer'])) < 0.08]
 
     print(f'\nBaseline WER (no-VAD): {b_wer * 100:.1f}%')
     if matches:
-        best = min(matches, key=lambda r: r['silence_s'])
-        baseline_kb = [x for x in rows if x['silence_s'] == 15][0]['total_kb']
-        savings = (1 - best['total_kb'] / baseline_kb) * 100
-        print(f'ANSWER: {best["silence_s"]}s silence MATCHES baseline WER ({best["wer"] * 100:.1f}%)')
+        best = min(matches, key=lambda r: float(r['silence_s']))
+        baseline_kb = float([x for x in rows if float(x['silence_s']) == 15][0]['total_kb'])
+        savings = (1 - float(best['total_kb']) / baseline_kb) * 100
+        print(f'ANSWER: {float(best["silence_s"])}s silence MATCHES baseline WER ({float(best["wer"]) * 100:.1f}%)')
         print(f'  Bandwidth savings vs no-VAD: {savings:.1f}%')
     elif close:
-        best = min(close, key=lambda r: abs(r['delta_wer']))
+        best = min(close, key=lambda r: abs(float(r['delta_wer'])))
         print(
-            f'CLOSEST: {best["silence_s"]}s silence ({best["wer"] * 100:.1f}%, delta {best["delta_wer"] * 100:+.1f}%)'
+            f'CLOSEST: {float(best["silence_s"])}s silence ({float(best["wer"]) * 100:.1f}%, delta {float(best["delta_wer"]) * 100:+.1f}%)'
         )
     else:
         print('No silence duration matched baseline WER within 3%.')

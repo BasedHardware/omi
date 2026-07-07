@@ -1,13 +1,20 @@
-from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 from fastapi import Request
 import asyncio
 import os
 import time
+from typing import Dict, Mapping, Optional
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app, methods_timeout: dict = None, paths_timeout: dict = None):
+    def __init__(
+        self,
+        app: ASGIApp,
+        methods_timeout: Optional[Mapping[str, object]] = None,
+        paths_timeout: Optional[Mapping[str, object]] = None,
+    ) -> None:
         super().__init__(app)
 
         self.default_timeout = self._get_timeout_from_env("HTTP_DEFAULT_TIMEOUT", default=2 * 60)
@@ -22,34 +29,34 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
         timeout = os.environ.get(env_var, default)
         try:
             return float(timeout)
-        except ValueError:
+        except (TypeError, ValueError):
             raise ValueError(f"Invalid timeout value in env {env_var}: {timeout}")
 
     @staticmethod
-    def _parse_methods_timeout(methods_timeout: dict) -> dict:
-        result = {}
+    def _parse_methods_timeout(methods_timeout: Mapping[str, object]) -> Dict[str, float]:
+        result: Dict[str, float] = {}
         for method, timeout in methods_timeout.items():
             if timeout is None:
                 continue
             try:
-                result[method.upper()] = float(timeout)
-            except ValueError:
+                result[method.upper()] = float(timeout)  # type: ignore[arg-type]  # guarded by try/except
+            except (TypeError, ValueError):
                 raise ValueError(f"Invalid timeout value for method {method}: {timeout}")
         return result
 
     @staticmethod
-    def _parse_paths_timeout(paths_timeout: dict) -> dict:
-        result = {}
+    def _parse_paths_timeout(paths_timeout: Mapping[str, object]) -> Dict[str, float]:
+        result: Dict[str, float] = {}
         for path, timeout in paths_timeout.items():
             if timeout is None:
                 continue
             try:
-                result[path] = float(timeout)
-            except ValueError:
+                result[path] = float(timeout)  # type: ignore[arg-type]  # guarded by try/except
+            except (TypeError, ValueError):
                 raise ValueError(f"Invalid timeout value for path {path}: {timeout}")
         return result
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         # Check for stale request header first
         # Uses clock_skew_allowance to tolerate client/server clock drift (#5929)
         request_start_header = request.headers.get("x-request-start-time")

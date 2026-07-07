@@ -3,6 +3,7 @@ import Combine
 import MarkdownUI
 import SwiftUI
 import UniformTypeIdentifiers
+import OmiTheme
 
 enum ShortcutHintLayout {
     static func visibleTokens(for keys: [String]) -> [String] {
@@ -949,7 +950,10 @@ struct FloatingControlBarView: View {
 
     private func openFloatingBarSettings() {
         activateMainAppWindow()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+        // Post the navigate request once the main window is key (its
+        // `navigateToFloatingBarSettings` receiver is mounted by then) rather than
+        // guessing a fixed delay for the window to appear (BL-005).
+        runWhenMainAppWindowKey {
             NotificationCenter.default.post(name: .navigateToFloatingBarSettings, object: nil)
         }
     }
@@ -957,13 +961,56 @@ struct FloatingControlBarView: View {
     private func activateMainAppWindow() {
         NSApp.activate()
 
-        if !revealMainAppWindow() {
-            AppDelegate.openMainWindow?()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-                NSApp.activate()
-                _ = revealMainAppWindow()
-            }
+        if revealMainAppWindow() { return }
+
+        // No existing window — open one and reveal it the moment it becomes key,
+        // instead of guessing a fixed delay for openWindow(id:) to create it (BL-005).
+        AppDelegate.openMainWindow?()
+        runWhenMainAppWindowKey {
+            NSApp.activate()
+            _ = revealMainAppWindow()
         }
+    }
+
+    /// True for the app's real main window (not the floating panel or the
+    /// menu-bar popover).
+    private static func isRealMainAppWindow(_ window: NSWindow) -> Bool {
+        !(window is NSPanel)
+            && window.frame.width > 300
+            && window.frame.height > 200
+            && !window.title.hasPrefix("Item-")
+    }
+
+    /// Run `action` once the app's main window is key — immediately if one already
+    /// is, otherwise on the next `didBecomeKeyNotification` for a real main window.
+    /// Replaces fixed `asyncAfter` guesses that waited for `openWindow(id:)` to
+    /// create/activate the window (BL-005); the window-key event is the real signal.
+    private func runWhenMainAppWindowKey(_ action: @escaping () -> Void) {
+        if let key = NSApp.keyWindow, Self.isRealMainAppWindow(key) {
+            // One runloop hop, same as the observer path below, so a freshly-keyed
+            // window's content (e.g. the navigate receiver) is mounted before we act.
+            DispatchQueue.main.async { action() }
+            return
+        }
+        var token: NSObjectProtocol?
+        let removeObserver = {
+            if let token { NotificationCenter.default.removeObserver(token) }
+        }
+        token = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+        ) { note in
+            guard let window = note.object as? NSWindow, Self.isRealMainAppWindow(window) else {
+                return
+            }
+            removeObserver()
+            // One runloop hop so SwiftUI can mount the freshly-opened window's
+            // content (e.g. the navigate receiver) before we act.
+            DispatchQueue.main.async { action() }
+        }
+        // Safety net: if no real main window ever becomes key (e.g. openMainWindow
+        // was nil, or the view went away), drop the observer after a bounded delay
+        // so it can't linger on the default center indefinitely.
+        Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in removeObserver() }
     }
 
     @discardableResult
@@ -1664,9 +1711,11 @@ private struct AgentMainChatView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear {
             manager.markViewed(pillID: pill.id)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                isFollowUpFocused = true
-            }
+        }
+        .task {
+            // Focus the follow-up field once the view is on screen (view-lifecycle
+            // signal) instead of guessing a fixed delay for it to mount (BL-005).
+            isFollowUpFocused = true
         }
         .onExitCommand {
             onEscape()

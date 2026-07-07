@@ -1486,6 +1486,7 @@ class TestNoPerSessionCap:
             _cleanup_chat_client(saved)
 
 
+@pytest.mark.slow
 class TestWsIdleTimeout:
     """Test that WS idle timeout is based on audio frames, not all messages."""
 
@@ -1627,6 +1628,7 @@ class TestMultipartBudgetAggregation:
             _cleanup_chat_client(saved)
 
 
+@pytest.mark.slow
 class TestWsMidSessionBudgetEnforcement:
     """Test that WS closes mid-session when cumulative audio exceeds remaining budget."""
 

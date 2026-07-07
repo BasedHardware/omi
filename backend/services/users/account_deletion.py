@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 
 import time
+from typing import Literal, TypedDict, cast
+
 from database import vector_db
 from database import users as users_db
 from database.action_items import get_action_item_ids
@@ -28,16 +30,28 @@ from utils.twilio_service import delete_user_caller_ids_strict as delete_user_ca
 logger = logging.getLogger(__name__)
 
 
-def purge_derived_user_data(uid: str):
+class PurgeFailure(TypedDict):
+    operation: str
+    error: str
+
+
+class PurgeResult(TypedDict):
+    required_failures: list[PurgeFailure]
+    best_effort_failures: list[PurgeFailure]
+
+
+def purge_derived_user_data(uid: str) -> PurgeResult:
     """Purge a user's derived data outside Firestore.
 
     Required failures must block the Firestore wipe because those IDs are
     stored in Firestore and may become unrecoverable after ``delete_user_data``.
     Best-effort failures are safe to retry independently or leave behind.
     """
-    result = {'required_failures': [], 'best_effort_failures': []}
+    result: PurgeResult = {'required_failures': [], 'best_effort_failures': []}
 
-    def record_failure(kind: str, operation: str, error: Exception):
+    def record_failure(
+        kind: Literal['required_failures', 'best_effort_failures'], operation: str, error: Exception
+    ) -> None:
         result[kind].append({'operation': operation, 'error': sanitize(str(error))})
 
     def require_deleted_count(operation: str, expected: int, deleted: int | None):
@@ -109,6 +123,25 @@ def purge_derived_user_data(uid: str):
     return result
 
 
+def _required_failures_from_purge_result(purge_result: object) -> list[PurgeFailure]:
+    if not isinstance(purge_result, dict):
+        return []
+    purge_result_dict = cast(dict[str, object], purge_result)
+    required_failures_value = purge_result_dict.get('required_failures', [])
+    if not isinstance(required_failures_value, list):
+        return []
+    required_failure_items = cast(list[object], required_failures_value)
+    failures: list[PurgeFailure] = []
+    for failure in required_failure_items:
+        if not isinstance(failure, dict):
+            continue
+        failure_dict = cast(dict[str, object], failure)
+        failures.append(
+            {'operation': str(failure_dict.get('operation', 'unknown')), 'error': str(failure_dict.get('error', ''))}
+        )
+    return failures
+
+
 def background_wipe_user_data(uid: str) -> bool:
     try:
         # Transition to ``running`` so the reconciler can distinguish a
@@ -122,7 +155,7 @@ def background_wipe_user_data(uid: str) -> bool:
         # Twilio caller IDs first, while the phone_numbers subcollection still carries twilio_sid metadata.
         delete_user_caller_ids(uid)
         purge_result = purge_derived_user_data(uid)
-        required_failures = purge_result.get('required_failures', []) if isinstance(purge_result, dict) else []
+        required_failures = _required_failures_from_purge_result(purge_result)
         if required_failures:
             failed_operations = ', '.join(failure['operation'] for failure in required_failures)
             raise RuntimeError(f'required derived purge failed: {failed_operations}')
@@ -163,7 +196,7 @@ def _mark_wipe_failed_after_enqueue_error(uid: str, error: Exception):
         )
 
 
-def _persist_wipe_intent_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+def _persist_wipe_intent_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5) -> None:
     """Persist the non-actionable deletion intent, retrying transient Firestore failures.
 
     Writes ``wipe_status='deleting_auth'`` which the reconciler only recovers
@@ -190,7 +223,7 @@ def _persist_wipe_intent_with_retry(uid: str, max_attempts: int = 3, retry_delay
     )
 
 
-def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5) -> None:
     """Transition the marker to the actionable ``'pending'`` state after auth deletion is confirmed.
 
     Called only after ``auth.delete_account()`` has succeeded (or the user was
@@ -216,11 +249,13 @@ def _persist_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay
 
 def _mark_billing_failed_with_retry(
     uid: str, subscription_id: str | None, error: Exception, max_attempts: int = 3, retry_delay: float = 0.5
-):
+) -> None:
     last_err = None
     raw_error = str(error)
     sanitized_error = sanitize(raw_error)
-    if not isinstance(sanitized_error, str):
+    if not isinstance(
+        sanitized_error, str
+    ):  # pyright: ignore[reportUnnecessaryIsInstance]  # tests stub sanitize with MagicMock
         sanitized_error = raw_error
     for attempt in range(max_attempts):
         try:
@@ -236,7 +271,7 @@ def _mark_billing_failed_with_retry(
     )
 
 
-def _cancel_subscription_for_account_deletion(uid: str):
+def _cancel_subscription_for_account_deletion(uid: str) -> None:
     subscription_id = None
     try:
         sub = users_db.get_user_subscription(uid)
@@ -252,7 +287,7 @@ def _cancel_subscription_for_account_deletion(uid: str):
         raise
 
 
-def _cancel_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5):
+def _cancel_wipe_marker_with_retry(uid: str, max_attempts: int = 3, retry_delay: float = 0.5) -> None:
     """Cancel the pending-deletion marker, retrying transient Firestore failures.
 
     Used when auth.delete_account() fails after the marker was already persisted.
@@ -372,6 +407,9 @@ def reconcile_pending_deletion_wipes(limit: int = 100) -> dict[str, int]:
 
     for record in pending:
         uid = record.get('uid')
+        if uid is not None and not isinstance(uid, str):
+            skipped += 1
+            continue
         if not uid:
             skipped += 1
             continue

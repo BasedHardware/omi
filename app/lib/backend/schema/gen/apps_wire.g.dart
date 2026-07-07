@@ -483,9 +483,9 @@ class GeneratedExternalIntegration {
   final String? webhookUrl;
 
   const GeneratedExternalIntegration({
-    this.actions = const [],
+    this.actions,
     this.appHomeUrl,
-    this.authSteps = const [],
+    this.authSteps,
     this.chatMessagesEnabled = false,
     this.chatMessagesNotify = false,
     this.chatMessagesTarget = "app",
@@ -501,9 +501,9 @@ class GeneratedExternalIntegration {
 
   factory GeneratedExternalIntegration.fromJson(Map<String, dynamic> json) {
     return GeneratedExternalIntegration(
-      actions: _readFieldValue<List<GeneratedAction>>(_readField(json, const ["actions"]), "actions", (value) => _readObjectList(value, GeneratedAction.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      actions: _readFieldValue<List<GeneratedAction>>(_readField(json, const ["actions"]), "actions", (value) => _readObjectList(value, GeneratedAction.fromJson), requiredField: false, nullable: true),
       appHomeUrl: _readFieldValue<String>(_readField(json, const ["app_home_url"]), "app_home_url", _readString, requiredField: false, nullable: true),
-      authSteps: _readFieldValue<List<GeneratedAuthStep>>(_readField(json, const ["auth_steps"]), "auth_steps", (value) => _readObjectList(value, GeneratedAuthStep.fromJson), requiredField: false, nullable: true, defaultValue: const []),
+      authSteps: _readFieldValue<List<GeneratedAuthStep>>(_readField(json, const ["auth_steps"]), "auth_steps", (value) => _readObjectList(value, GeneratedAuthStep.fromJson), requiredField: false, nullable: true),
       chatMessagesEnabled: _required(_readFieldValue<bool>(_readField(json, const ["chat_messages_enabled"]), "chat_messages_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "chat_messages_enabled"),
       chatMessagesNotify: _required(_readFieldValue<bool>(_readField(json, const ["chat_messages_notify"]), "chat_messages_notify", _readBool, requiredField: false, nullable: false, defaultValue: false), "chat_messages_notify"),
       chatMessagesTarget: _required(_readFieldValue<String>(_readField(json, const ["chat_messages_target"]), "chat_messages_target", _readString, requiredField: false, nullable: false, defaultValue: "app"), "chat_messages_target"),
@@ -616,7 +616,7 @@ class GeneratedAppBaseModel {
   final List<String> capabilities;
   final String category;
   final List<GeneratedChatTool>? chatTools;
-  final List<String> connectedAccounts;
+  final List<String>? connectedAccounts;
   final DateTime? createdAt;
   final String description;
   final bool? disabled;
@@ -653,8 +653,8 @@ class GeneratedAppBaseModel {
     required this.author,
     required this.capabilities,
     required this.category,
-    this.chatTools = const [],
-    this.connectedAccounts = const [],
+    this.chatTools,
+    this.connectedAccounts,
     this.createdAt,
     required this.description,
     this.disabled = false,
@@ -680,8 +680,8 @@ class GeneratedAppBaseModel {
     this.score,
     this.sourceCodeUrl,
     this.status = "approved",
-    this.thumbnailUrls = const [],
-    this.thumbnails = const [],
+    this.thumbnailUrls,
+    this.thumbnails,
     this.triggerWorkflowMemories = true,
     this.uid,
     this.username,
@@ -693,8 +693,8 @@ class GeneratedAppBaseModel {
       author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: true, nullable: false), "author"),
       capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
-      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true, defaultValue: const []),
-      connectedAccounts: _required(_readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "connected_accounts"),
+      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true),
+      connectedAccounts: _readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
@@ -720,8 +720,8 @@ class GeneratedAppBaseModel {
       score: _readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: false, nullable: true),
       sourceCodeUrl: _readFieldValue<String>(_readField(json, const ["source_code_url"]), "source_code_url", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
-      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
-      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true),
+      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true),
       triggerWorkflowMemories: _required(_readFieldValue<bool>(_readField(json, const ["trigger_workflow_memories"]), "trigger_workflow_memories", _readBool, requiredField: false, nullable: false, defaultValue: true), "trigger_workflow_memories"),
       uid: _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: false, nullable: true),
       username: _readFieldValue<String>(_readField(json, const ["username"]), "username", _readString, requiredField: false, nullable: true),
@@ -777,7 +777,7 @@ class GeneratedApp {
   final String category;
   final String? chatPrompt;
   final List<GeneratedChatTool>? chatTools;
-  final List<String> connectedAccounts;
+  final List<String>? connectedAccounts;
   final DateTime? createdAt;
   final String description;
   final bool? disabled;
@@ -807,7 +807,7 @@ class GeneratedApp {
   final GeneratedProactiveNotification? proactiveNotification;
   final double? ratingAvg;
   final int ratingCount;
-  final List<GeneratedAppReview> reviews;
+  final List<GeneratedAppReview>? reviews;
   final double? score;
   final String? sourceCodeUrl;
   final String status;
@@ -826,8 +826,8 @@ class GeneratedApp {
     required this.capabilities,
     required this.category,
     this.chatPrompt,
-    this.chatTools = const [],
-    this.connectedAccounts = const [],
+    this.chatTools,
+    this.connectedAccounts,
     this.createdAt,
     required this.description,
     this.disabled = false,
@@ -857,12 +857,12 @@ class GeneratedApp {
     this.proactiveNotification,
     this.ratingAvg = 0,
     this.ratingCount = 0,
-    this.reviews = const [],
+    this.reviews,
     this.score,
     this.sourceCodeUrl,
     this.status = "approved",
-    this.thumbnailUrls = const [],
-    this.thumbnails = const [],
+    this.thumbnailUrls,
+    this.thumbnails,
     this.triggerWorkflowMemories = true,
     this.twitter,
     this.uid,
@@ -878,8 +878,8 @@ class GeneratedApp {
       capabilities: _required(_readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: true, nullable: false), "capabilities"),
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: true, nullable: false), "category"),
       chatPrompt: _readFieldValue<String>(_readField(json, const ["chat_prompt"]), "chat_prompt", _readString, requiredField: false, nullable: true),
-      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true, defaultValue: const []),
-      connectedAccounts: _required(_readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "connected_accounts"),
+      chatTools: _readFieldValue<List<GeneratedChatTool>>(_readField(json, const ["chat_tools"]), "chat_tools", (value) => _readObjectList(value, GeneratedChatTool.fromJson), requiredField: false, nullable: true),
+      connectedAccounts: _readFieldValue<List<String>>(_readField(json, const ["connected_accounts"]), "connected_accounts", _readStringList, requiredField: false, nullable: true),
       createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: true, nullable: false), "description"),
       disabled: _readFieldValue<bool>(_readField(json, const ["disabled"]), "disabled", _readBool, requiredField: false, nullable: true, defaultValue: false),
@@ -909,12 +909,12 @@ class GeneratedApp {
       proactiveNotification: _readFieldValue<GeneratedProactiveNotification>(_readField(json, const ["proactive_notification"]), "proactive_notification", (value) => _readObject(value, GeneratedProactiveNotification.fromJson), requiredField: false, nullable: true),
       ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true, defaultValue: 0),
       ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
-      reviews: _required(_readFieldValue<List<GeneratedAppReview>>(_readField(json, const ["reviews"]), "reviews", (value) => _readObjectList(value, GeneratedAppReview.fromJson), requiredField: false, nullable: false, defaultValue: const []), "reviews"),
+      reviews: _readFieldValue<List<GeneratedAppReview>>(_readField(json, const ["reviews"]), "reviews", (value) => _readObjectList(value, GeneratedAppReview.fromJson), requiredField: false, nullable: true),
       score: _readFieldValue<double>(_readField(json, const ["score"]), "score", _readDouble, requiredField: false, nullable: true),
       sourceCodeUrl: _readFieldValue<String>(_readField(json, const ["source_code_url"]), "source_code_url", _readString, requiredField: false, nullable: true),
       status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
-      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
-      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true, defaultValue: const []),
+      thumbnailUrls: _readFieldValue<List<String>>(_readField(json, const ["thumbnail_urls"]), "thumbnail_urls", _readStringList, requiredField: false, nullable: true),
+      thumbnails: _readFieldValue<List<String>>(_readField(json, const ["thumbnails"]), "thumbnails", _readStringList, requiredField: false, nullable: true),
       triggerWorkflowMemories: _required(_readFieldValue<bool>(_readField(json, const ["trigger_workflow_memories"]), "trigger_workflow_memories", _readBool, requiredField: false, nullable: false, defaultValue: true), "trigger_workflow_memories"),
       twitter: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["twitter"]), "twitter", _readMap, requiredField: false, nullable: true),
       uid: _readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: false, nullable: true),
@@ -962,7 +962,7 @@ class GeneratedApp {
       'proactive_notification': proactiveNotification?.toJson(),
       'rating_avg': ratingAvg,
       'rating_count': ratingCount,
-      'reviews': reviews.map((value) => value.toJson()).toList(),
+      'reviews': reviews?.map((value) => value.toJson()).toList(),
       'score': score,
       'source_code_url': sourceCodeUrl,
       'status': status,

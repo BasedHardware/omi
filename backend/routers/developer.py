@@ -932,7 +932,7 @@ class BatchActionItemsResponse(BaseModel):
     operation_id="listActionItems",
 )
 def get_action_items(
-    uid: str = Depends(with_rate_limit(get_uid_with_action_items_read, "dev:action_items_read")),
+    uid: str = Depends(get_uid_with_action_items_read),
     conversation_id: Optional[str] = None,
     completed: Optional[bool] = None,
     start_date: Optional[datetime] = None,
@@ -1344,7 +1344,7 @@ class DeveloperFolder(BaseModel):
 
 
 @router.get("/v1/dev/user/folders", response_model=List[DeveloperFolder], tags=["Folders"], operation_id="listFolders")
-def get_user_folders(uid: str = Depends(with_rate_limit(get_uid_with_conversations_read, "dev:conversations_read"))):
+def get_user_folders(uid: str = Depends(get_uid_with_conversations_read)):
     """
     Get all folders for the authenticated user.
 
@@ -2032,7 +2032,7 @@ def _serialize_goal_datetimes(goal: dict) -> dict:
 
 @router.get("/v1/dev/user/goals", tags=["Goals"], response_model=List[GoalResponse], operation_id="listGoals")
 def get_goals(
-    uid: str = Depends(with_rate_limit(get_uid_with_goals_read, "dev:goals_read")),
+    uid: str = Depends(get_uid_with_goals_read),
     limit: int = 10,
     include_inactive: bool = False,
 ):
@@ -2053,7 +2053,7 @@ def get_goals(
 @router.get("/v1/dev/user/goals/{goal_id}", tags=["Goals"], response_model=GoalResponse, operation_id="getGoal")
 def get_goal(
     goal_id: str,
-    uid: str = Depends(with_rate_limit(get_uid_with_goals_read, "dev:goals_read")),
+    uid: str = Depends(get_uid_with_goals_read),
 ):
     """
     Get a single goal by ID.
@@ -2170,7 +2170,7 @@ def update_goal_progress(
 def get_goal_history(
     goal_id: str,
     days: HistoryDays = 30,
-    uid: str = Depends(with_rate_limit(get_uid_with_goals_read, "dev:goals_read")),
+    uid: str = Depends(get_uid_with_goals_read),
 ) -> List[dict]:
     """
     Get progress history for a goal.

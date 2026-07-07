@@ -63,6 +63,23 @@ actor AgentBridge {
     let systemPrompt: String?
   }
 
+  private final class BridgeOutputTracker: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _hasOutput = false
+
+    var hasOutput: Bool {
+      lock.lock()
+      defer { lock.unlock() }
+      return _hasOutput
+    }
+
+    func markOutput() {
+      lock.lock()
+      _hasOutput = true
+      lock.unlock()
+    }
+  }
+
   let harnessMode: String
 
   private let clientId = UUID().uuidString
@@ -110,10 +127,10 @@ actor AgentBridge {
         while !Task.isCancelled {
           try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
           guard !Task.isCancelled else { break }
-          await self?.refreshAuthToken()
+          _ = try? await self?.refreshAuthToken()
         }
       }
-      await refreshAuthToken()
+      _ = try? await refreshAuthToken()
     }
   }
 
@@ -325,9 +342,68 @@ actor AgentBridge {
     activeRequestId = requestId
     defer { activeRequestId = nil }
 
-    return try await runtime.query(
+    let bridgeOutputTracker = BridgeOutputTracker()
+    let trackedTextDelta: TextDeltaHandler = { delta in
+      if !delta.isEmpty { bridgeOutputTracker.markOutput() }
+      onTextDelta(delta)
+    }
+    let trackedToolActivity: ToolActivityHandler = { name, status, toolUseId, input in
+      bridgeOutputTracker.markOutput()
+      onToolActivity(name, status, toolUseId, input)
+    }
+    let trackedThinkingDelta: ThinkingDeltaHandler = { delta in
+      if !delta.isEmpty { bridgeOutputTracker.markOutput() }
+      onThinkingDelta(delta)
+    }
+    let trackedToolResultDisplay: ToolResultDisplayHandler = { callId, name, output in
+      bridgeOutputTracker.markOutput()
+      onToolResultDisplay(callId, name, output)
+    }
+
+    do {
+      return try await runtime.query(
+        clientId: clientId,
+        requestId: requestId,
+        harnessMode: harnessMode,
+        prompt: prompt,
+        systemPrompt: systemPrompt,
+        surface: surface,
+        cwd: cwd,
+        mode: mode,
+        model: model,
+        imageData: imageData,
+        attachmentMetadataJson: attachmentMetadataJson,
+        surfaceContextJson: surfaceContextJson,
+        onTextDelta: trackedTextDelta,
+        onToolCall: onToolCall,
+        onToolActivity: trackedToolActivity,
+        onThinkingDelta: trackedThinkingDelta,
+        onToolResultDisplay: trackedToolResultDisplay,
+        onAuthRequired: onAuthRequired,
+        onAuthSuccess: onAuthSuccess
+      )
+    } catch let error as BridgeError where isPiMonoHarness && !bridgeOutputTracker.hasOutput && error.isSessionAuthenticationFailure {
+      log("AgentBridge: session token rejected before output; refreshing token and retrying once")
+      // A thrown refresh failure (e.g. AuthError.notSignedIn from an expired refresh
+      // token) must surface as BridgeError.authMissing so ChatProvider maps it to the
+      // sign-in recovery CTA. CancellationError must propagate untouched so a
+      // cancelled request does not get misrouted to the auth recovery UI.
+      let refreshed: Bool
+      do {
+        refreshed = try await refreshAuthToken()
+      } catch is CancellationError {
+        throw CancellationError()
+      } catch {
+        throw BridgeError.authMissing
+      }
+      guard refreshed else {
+        throw BridgeError.authMissing
+      }
+      let retryRequestId = UUID().uuidString
+      activeRequestId = retryRequestId
+      return try await runtime.query(
       clientId: clientId,
-      requestId: requestId,
+      requestId: retryRequestId,
       harnessMode: harnessMode,
       prompt: prompt,
       systemPrompt: systemPrompt,
@@ -346,6 +422,7 @@ actor AgentBridge {
       onAuthRequired: onAuthRequired,
       onAuthSuccess: onAuthSuccess
     )
+    }
   }
 
   func interrupt() {
@@ -355,21 +432,23 @@ actor AgentBridge {
     }
   }
 
-  func refreshAuthToken() async {
-    guard isPiMonoHarness else { return }
+  @discardableResult
+  func refreshAuthToken() async throws -> Bool {
+    guard isPiMonoHarness else { return false }
     let authService = await MainActor.run { AuthService.shared }
     let token: String
     do {
       token = try await authService.getIdToken(forceRefresh: true)
     } catch {
       log("AgentBridge: refreshAuthToken failed: \(error.localizedDescription)")
-      return
+      throw error
     }
     guard !token.isEmpty else {
       log("AgentBridge: refreshAuthToken got empty token; skipping push")
-      return
+      return false
     }
     await runtime.refreshAuthToken(token)
+    return true
   }
 
   func testPlaywrightConnection() async throws -> Bool {
@@ -455,6 +534,44 @@ enum BridgeError: LocalizedError {
   case agentRuntimeFailure(AgentRuntimeFailure)
   case quotaExceeded(plan: String, unit: String, used: Double, limit: Double?, resetAtUnix: Int?)
   case authMissing
+
+  var isSessionAuthenticationFailure: Bool {
+    switch self {
+    case .authMissing:
+      return true
+    case .agentError(let message):
+      return Self.isSessionAuthenticationFailureMessage(message)
+    case .agentRuntimeFailure(let failure):
+      return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
+        || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)
+    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError, .timeout,
+         .processExited, .outOfMemory, .stopped, .restarting, .requestAlreadyActive,
+         .quotaExceeded:
+      return false
+    }
+  }
+
+  private static func isSessionAuthenticationFailureMessage(_ message: String) -> Bool {
+    let normalized = message.lowercased()
+    if normalized.contains("invalid_token") || normalized.contains("please sign in") {
+      return true
+    }
+
+    let looksLikeAuthFailure =
+      normalized.contains("401")
+        || normalized.contains("unauthorized")
+        || normalized.contains("authentication")
+
+    guard looksLikeAuthFailure else {
+      return false
+    }
+
+    return normalized.contains("token")
+      || normalized.contains("session")
+      || normalized.contains("sign in")
+      || normalized.contains("signed in")
+      || normalized.contains("firebase")
+  }
 
   var errorDescription: String? {
     switch self {

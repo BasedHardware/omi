@@ -8,14 +8,13 @@ Usage:
     cd backend && python scripts/stt/l_benchmark_prerecorded.py
 """
 
-import asyncio
 import json
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple, cast
 
 from dotenv import load_dotenv
 
@@ -31,7 +30,7 @@ from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes, modulate_pre
 AUDIO_DIR = Path('/tmp/stt_benchmark_audio')
 RESULTS_DIR = Path('/tmp/stt_benchmark_results')
 
-BENCHMARK_CASES: List[dict] = [
+BENCHMARK_CASES: List[Dict[str, Any]] = [
     {
         'id': 'short_greeting',
         'text': 'Hello, how are you doing today?',
@@ -120,7 +119,7 @@ BENCHMARK_CASES: List[dict] = [
 ]
 
 
-def generate_audio(case: dict, output_path: Path) -> None:
+def generate_audio(case: Dict[str, Any], output_path: Path) -> None:
     tmp_raw = output_path.with_suffix('.raw.wav')
     subprocess.run(
         ['espeak-ng', '-v', case['lang'], '-w', str(tmp_raw), '--', case['text']],
@@ -137,7 +136,7 @@ def generate_audio(case: dict, output_path: Path) -> None:
 
 def run_deepgram(audio_bytes: bytes) -> Tuple[str, float, int]:
     t0 = time.monotonic()
-    result = deepgram_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True)
+    result = cast(List[Dict[str, Any]], deepgram_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True))
     elapsed = time.monotonic() - t0
     text = ' '.join(w.get('text', '') or w.get('word', '') for w in result).strip()
     return text, elapsed, len(result)
@@ -145,13 +144,13 @@ def run_deepgram(audio_bytes: bytes) -> Tuple[str, float, int]:
 
 def run_modulate(audio_bytes: bytes) -> Tuple[str, float, int]:
     t0 = time.monotonic()
-    result = modulate_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True)
+    result = cast(List[Dict[str, Any]], modulate_prerecorded_from_bytes(audio_bytes, sample_rate=16000, diarize=True))
     elapsed = time.monotonic() - t0
     text = ' '.join(w.get('text', '') for w in result).strip()
     return text, elapsed, len(result)
 
 
-def main():
+def main() -> None:
     AUDIO_DIR.mkdir(parents=True, exist_ok=True)
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -175,13 +174,13 @@ def main():
 
     print(f'\nRunning pre-recorded benchmarks ({len(BENCHMARK_CASES)} cases x 2 providers)...\n')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     for case in BENCHMARK_CASES:
         wav_path = AUDIO_DIR / f"{case['id']}.wav"
         audio_bytes = wav_path.read_bytes()
         ref_text = case['text'].lower()
 
-        row = {
+        row: Dict[str, Any] = {
             'id': case['id'],
             'description': case['description'],
             'ref_words': len(case['text'].split()),
@@ -230,7 +229,7 @@ def main():
     print('PRE-RECORDED BENCHMARK RESULTS')
     print('=' * 100)
 
-    table_data = []
+    table_data: List[List[Any]] = []
     for r in results:
         table_data.append(
             [

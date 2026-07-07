@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import OmiTheme
 
 /// Window for editing the memory extraction prompt
 class MemoryPromptEditorWindow: NSWindow {

@@ -3,11 +3,11 @@ Tools for accessing screen/computer activity data from the desktop app.
 """
 
 import contextvars
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime, timezone, tzinfo
+from typing import Any, Dict, List, Optional, Tuple, cast
 from zoneinfo import ZoneInfo
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
 import database.screen_activity as screen_activity_db
@@ -25,16 +25,26 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
 def _get_uid(config: RunnableConfig) -> Optional[str]:
-    if config is None:
-        try:
-            config = agent_config_context.get()
-        except LookupError:
-            return None
-    if config is None:
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+    if cfg is None:
         return None
     try:
-        return config['configurable'].get('user_id')
+        configurable = cfg.get('configurable')
+        if isinstance(configurable, dict):
+            conf: Dict[str, Any] = cast(Dict[str, Any], configurable)
+            return conf.get('user_id')
+        return None
     except (KeyError, TypeError):
         return None
 
@@ -49,7 +59,7 @@ MAX_APPS_FOR_LLM = 50
 MAX_RESULT_CHARS = 60000
 
 
-def _cap_apps_for_llm(apps: list):
+def _cap_apps_for_llm(apps: List[Tuple[str, Dict[str, Any]]]) -> Tuple[List[Tuple[str, Dict[str, Any]]], bool]:
     """Keep at most ``MAX_APPS_FOR_LLM`` apps for the chat model.
 
     Apps arrive sorted most-used first, so this keeps the ones that matter. Returns
@@ -69,6 +79,9 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
     record-boundary clipping the conversations tool uses). If the first (or only) record is itself
     larger than the budget, keep the hard-clipped text so its data is still returned truncated rather
     than dropping every app down to just the summary header.
+
+    The note deliberately does not state a total count: callers may pass an already-paginated
+    page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
     if len(result) > MAX_RESULT_CHARS:
         clipped = result[:MAX_RESULT_CHARS]
@@ -91,7 +104,7 @@ def _bounded_screen_activity_result(result: str, truncated: bool) -> str:
     return result
 
 
-def _resolve_display_tz(uid: str):
+def _resolve_display_tz(uid: str) -> tzinfo:
     # Render timestamps in the user's timezone so a chat answer shows screen-activity matches in the
     # same timezone as conversation matches (conversation_tools renders in the user's timezone too).
     # Fall back to UTC on any failure: no timezone set, an invalid IANA name, or a Firestore error
@@ -110,31 +123,23 @@ def get_screen_activity_tool(
     start_date: str,
     end_date: str,
     app_filter: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
-    Get screen/computer activity for a date range — shows which apps were used, for how long, and what the user was working on.
+    Get a summary of the user's screen/computer activity for a date range.
 
-    Use this tool when the user asks about their computer usage, screen time, or what they were doing on their computer.
+    Use this for questions like "what did I do on my computer today/this week?" or
+    "which apps did I use?". Shows per-app usage time and top window titles.
 
-    **When to use:**
-    - "What did I do on my computer yesterday?"
-    - "What apps did I use today?"
-    - "How much time did I spend in Chrome?"
-    - "Show me my screen activity for last week"
-
-    **When NOT to use:**
-    - Questions about conversations or what they said (use get_conversations_tool)
-    - Questions about memories/facts (use get_memories_tool)
-    - Specific content search like "when was I looking at spreadsheets" (use search_screen_activity_tool)
+    Requires the Omi desktop app to be installed and running.
 
     Args:
-        start_date: Start of date range (ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM)
-        end_date: End of date range (ISO format with timezone: YYYY-MM-DDTHH:MM:SS+HH:MM)
-        app_filter: Optional app name to filter by (exact match, e.g. "Google Chrome", "Slack")
+        start_date: Start of the range (ISO format with timezone, e.g. "2025-01-15T00:00:00+00:00")
+        end_date: End of the range (ISO format with timezone)
+        app_filter: Optional app name to filter to a single application
 
     Returns:
-        Formatted markdown summary of app usage with time estimates and window titles.
+        Formatted summary of screen activity by app.
     """
     logger.info(
         f"get_screen_activity_tool called - start_date={start_date}, end_date={end_date}, app_filter={app_filter}"
@@ -152,7 +157,8 @@ def get_screen_activity_tool(
 
     summary = screen_activity_db.get_screen_activity_summary(uid, start_date=start_dt, end_date=end_dt)
 
-    if not summary['apps']:
+    apps_dict: Dict[str, Dict[str, Any]] = cast(Dict[str, Dict[str, Any]], summary['apps'])
+    if not apps_dict:
         return (
             "No screen activity data available for this date range. "
             "The user may not have the Omi desktop app installed, or it wasn't running during this period."
@@ -166,7 +172,7 @@ def get_screen_activity_tool(
     result = f"Screen Activity Summary ({total} screenshots, ~{total_minutes} min total):\n\n"
 
     # Sort apps by count descending
-    sorted_apps = sorted(summary['apps'].items(), key=lambda x: x[1]['count'], reverse=True)
+    sorted_apps: List[Tuple[str, Dict[str, Any]]] = sorted(apps_dict.items(), key=lambda x: x[1]['count'], reverse=True)
 
     if app_filter:
         sorted_apps = [(name, data) for name, data in sorted_apps if name.lower() == app_filter.lower()]
@@ -203,7 +209,7 @@ def search_screen_activity_tool(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     limit: int = 10,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Semantic search across the user's screen/computer activity using AI embeddings.
@@ -291,7 +297,7 @@ def search_screen_activity_tool(
         try:
             doc = firestore_db.collection('users').document(uid).collection('screen_activity').document(str(sid)).get()
             if doc.exists:
-                doc_data = doc.to_dict()
+                doc_data = cast(Dict[str, Any], doc.to_dict())
                 ocr_text = doc_data.get('ocrText', '')[:200]
         except Exception:
             pass

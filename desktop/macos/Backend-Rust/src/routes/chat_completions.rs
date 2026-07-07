@@ -6,7 +6,7 @@
 // Issue #6594: Pi-mono harness with Omi API proxy for server-side cost control.
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -24,6 +24,10 @@ use crate::AppState;
 
 use super::llm_stub::{llm_stub_enabled, stub_chat_completions_response};
 use super::rate_limit::RateDecision;
+
+fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
+    crate::routes::response_or_500("chat_completions", builder, body)
+}
 
 /// Default max_tokens when client doesn't specify one.
 const DEFAULT_MAX_TOKENS: u64 = 8192;
@@ -643,14 +647,16 @@ async fn chat_completions(
             .check_and_record(&user.uid, state.redis.as_ref())
             .await;
         if decision == RateDecision::Reject {
-            return Ok(Response::builder()
-                .status(StatusCode::TOO_MANY_REQUESTS)
-                .header("content-type", "application/json")
-                .header("retry-after", "60")
-                .body(axum::body::Body::from(
-                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}}).to_string()
-                ))
-                .unwrap());
+            return Ok(response_or_500(
+                Response::builder()
+                    .status(StatusCode::TOO_MANY_REQUESTS)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "60"),
+                Body::from(
+                    json!({"error": {"message": "Rate limit exceeded", "type": "rate_limit_error", "code": 429}})
+                        .to_string(),
+                ),
+            ));
         }
     }
 
@@ -805,11 +811,12 @@ async fn handle_non_streaming(
             user.uid,
             &body[..body.len().min(500)]
         );
-        return Ok(Response::builder()
-            .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(body))
-            .unwrap());
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
+                .header("content-type", "application/json"),
+            Body::from(body),
+        ));
     }
 
     let anthropic_resp: AnthropicResponse = upstream_resp.json().await.map_err(|e| {
@@ -852,11 +859,12 @@ async fn handle_streaming(
             user.uid,
             &body[..body.len().min(500)]
         );
-        return Ok(Response::builder()
-            .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
-            .header("content-type", "application/json")
-            .body(axum::body::Body::from(body))
-            .unwrap());
+        return Ok(response_or_500(
+            Response::builder()
+                .status(StatusCode::from_u16(status.as_u16()).unwrap_or(StatusCode::BAD_GATEWAY))
+                .header("content-type", "application/json"),
+            Body::from(body),
+        ));
     }
 
     // State for stream translation
@@ -1128,15 +1136,16 @@ async fn handle_streaming(
         }
     };
 
-    let body = axum::body::Body::from_stream(translated_stream);
+    let body = Body::from_stream(translated_stream);
 
-    Ok(Response::builder()
-        .status(StatusCode::OK)
-        .header("content-type", "text/event-stream")
-        .header("cache-control", "no-cache")
-        .header("connection", "keep-alive")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(StatusCode::OK)
+            .header("content-type", "text/event-stream")
+            .header("cache-control", "no-cache")
+            .header("connection", "keep-alive"),
+        body,
+    ))
 }
 
 async fn log_usage(state: &AppState, user: &AuthUser, usage: &AnthropicUsage, cost: f64) {

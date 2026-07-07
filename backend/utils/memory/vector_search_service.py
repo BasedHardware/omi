@@ -7,7 +7,7 @@ Neutral ``vector_search_service`` is the source of truth. Canonical vector searc
 
 
 import time
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, cast
 
 try:
     from database.vector_db import query_memory_vector_candidates
@@ -35,7 +35,7 @@ def fetch_default_vector_memory_search(
     uid: str,
     query: str,
     *,
-    db_client,
+    db_client: Any,
     policy: MemoryAccessPolicy,
     vector_query: Optional[Callable[..., Any]] = None,
     repair_purge_callback: Optional[Callable[[List[Dict[str, Any]]], Any]] = None,
@@ -241,7 +241,7 @@ def _validate_limit(limit: int) -> int:
     return limit
 
 
-def _validate_overfetch_factor(overfetch_factor: int) -> int:
+def _validate_overfetch_factor(overfetch_factor: Any) -> int:
     if (
         not isinstance(overfetch_factor, int)
         or overfetch_factor < 1
@@ -251,7 +251,7 @@ def _validate_overfetch_factor(overfetch_factor: int) -> int:
     return overfetch_factor
 
 
-def _validate_max_candidates(*, max_candidates: int, bounded_limit: int) -> int:
+def _validate_max_candidates(*, max_candidates: Any, bounded_limit: int) -> int:
     if (
         not isinstance(max_candidates, int)
         or max_candidates < bounded_limit
@@ -261,7 +261,7 @@ def _validate_max_candidates(*, max_candidates: int, bounded_limit: int) -> int:
     return max_candidates
 
 
-def _validate_max_vector_queries(max_vector_queries: int) -> int:
+def _validate_max_vector_queries(max_vector_queries: Any) -> int:
     if (
         not isinstance(max_vector_queries, int)
         or max_vector_queries < 1
@@ -271,9 +271,7 @@ def _validate_max_vector_queries(max_vector_queries: int) -> int:
     return max_vector_queries
 
 
-def _validate_max_candidate_hydration_reads(
-    *, max_candidate_hydration_reads: Optional[int], candidate_budget: int
-) -> int:
+def _validate_max_candidate_hydration_reads(*, max_candidate_hydration_reads: Any, candidate_budget: int) -> int:
     if max_candidate_hydration_reads is None:
         return candidate_budget
     if (
@@ -285,7 +283,7 @@ def _validate_max_candidate_hydration_reads(
     return max_candidate_hydration_reads
 
 
-def _validate_timeout_seconds(timeout_seconds: Optional[float]) -> Optional[float]:
+def _validate_timeout_seconds(timeout_seconds: Any) -> Optional[float]:
     if timeout_seconds is None:
         return None
     if not isinstance(timeout_seconds, (int, float)) or timeout_seconds < 0:
@@ -293,7 +291,7 @@ def _validate_timeout_seconds(timeout_seconds: Optional[float]) -> Optional[floa
     return float(timeout_seconds)
 
 
-def _validate_freshness_fence(*, required_projection_commit_id: str, required_account_generation: int) -> None:
+def _validate_freshness_fence(*, required_projection_commit_id: Any, required_account_generation: Any) -> None:
     if not isinstance(required_projection_commit_id, str) or not required_projection_commit_id.strip():
         raise ValueError('required_projection_commit_id is required')
     if not isinstance(required_account_generation, int) or required_account_generation < 0:
@@ -303,7 +301,7 @@ def _validate_freshness_fence(*, required_projection_commit_id: str, required_ac
 def _hydrate_vector_candidate_items_by_id(
     *,
     uid: str,
-    db_client,
+    db_client: Any,
     hits: List[SearchVectorHit],
     hydrated_items: Dict[str, MemoryItem],
     missing_authoritative_memory_ids: Set[str],
@@ -325,7 +323,8 @@ def _hydrate_vector_candidate_items_by_id(
             break
         snapshot = db_client.document(f'users/{uid}/memory_items/{hit.memory_id}').get()
         candidate_hydration_read_count += 1
-        payload = snapshot.to_dict() or {}
+        raw_payload: object = snapshot.to_dict()
+        payload = cast(Dict[str, Any], raw_payload) if isinstance(raw_payload, dict) else {}
         if not payload:
             missing_authoritative_memory_ids.add(hit.memory_id)
             continue

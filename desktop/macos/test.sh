@@ -11,6 +11,7 @@ bash tests/test-app-config.sh
 bash tests/test-settings-seed.sh
 bash tests/test-cleanup-omi-tcc.sh
 bash tests/test-omi-harness.sh
+bash tests/test-signed-artifact-smoke.sh
 echo ""
 
 echo "=== Rust Backend Tests ==="
@@ -32,8 +33,8 @@ cd "$SCRIPT_DIR"
 # Tracking: https://github.com/BasedHardware/omi/issues/9029
 # (durable fix is singleton dependency injection; see the same issue).
 #
-# Method-level skips are the only remaining known-red tests; each needs a
-# product/policy decision, not a test change:
+# Method-level skips in scripts/swift-test-suites.sh are the only remaining
+# known-red tests; each needs a product/policy decision, not a test change:
 #   ChatDiscoverabilityTests/{testAgentControlCapabilitiesMatchCanonicalManifest,
 #     testDesktopCapabilitiesExistInAgentToolDeclarations,
 #     testDesktopPromptDistinguishesDelegationFromFloatingPills}
@@ -52,45 +53,7 @@ cd "$SCRIPT_DIR"
 #       — the detector does not fully honor the injected environment/home, so the
 #         result depends on whether OpenClaw is installed on the runner.
 #         https://github.com/BasedHardware/omi/issues/9033
-skip_for_suite() {
-  case "$1" in
-    ChatDiscoverabilityTests)
-      echo "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest --skip ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations --skip ChatDiscoverabilityTests/testDesktopPromptDistinguishesDelegationFromFloatingPills" ;;
-    APIClientRoutingTests)
-      echo "--skip APIClientRoutingTests/testDeleteConversationRoutesToPython" ;;
-    ActionItemsFTSRepairTests)
-      echo "--skip ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable" ;;
-    PiMonoWiringTests)
-      echo "--skip PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing" ;;
-  esac
-}
-
-# Discover suites recursively so tests in subfolders of Desktop/Tests are not
-# silently skipped (SwiftPM compiles the whole Tests target; this must match).
-suites=$(find Desktop/Tests -type f -name '*.swift' -print0 \
-  | xargs -0 grep -hE '^(final )?class [A-Za-z0-9_]+: XCTestCase' \
-  | sed -E 's/(final )?class ([A-Za-z0-9_]+):.*/\2/' | sort -u)
-suite_log_dir="$(mktemp -d)"
-trap 'rm -rf "$suite_log_dir"' EXIT
-failed_suites=""
-suite_count=0
-while read -r suite; do
-  [ -z "$suite" ] && continue
-  suite_count=$((suite_count + 1))
-  # shellcheck disable=SC2046
-  if ! xcrun swift test --package-path Desktop --filter "${suite}/" $(skip_for_suite "$suite") \
-      >"$suite_log_dir/$suite.log" 2>&1; then
-    failed_suites="$failed_suites $suite"
-    echo "--- FAILED: $suite ---"
-    cat "$suite_log_dir/$suite.log"
-  fi
-done <<< "$suites"
-echo "Ran $suite_count Swift suites in isolation."
-
-if [ -n "$failed_suites" ]; then
-  echo "FAILED Swift suites:$failed_suites"
-  exit 1
-fi
+"$SCRIPT_DIR/scripts/swift-test-suites.sh"
 echo ""
 
 echo "All desktop tests passed."
