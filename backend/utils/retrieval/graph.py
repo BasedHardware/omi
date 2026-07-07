@@ -137,7 +137,7 @@ async def execute_persona_chat_stream(
     # that submit_langsmith_feedback() would 404 against.
     from utils.observability.langsmith import has_langsmith_api_key, get_chat_tracer_callbacks
 
-    langsmith_run_id = str(uuid.uuid4()) if has_langsmith_api_key() else None
+    langsmith_run_id = uuid.uuid4() if has_langsmith_api_key() else None
 
     tracer_callbacks = (
         get_chat_tracer_callbacks(
@@ -173,7 +173,7 @@ async def execute_persona_chat_stream(
     }
 
     if callback_data is not None and langsmith_run_id is not None:
-        callback_data['langsmith_run_id'] = langsmith_run_id
+        callback_data['langsmith_run_id'] = str(langsmith_run_id)
 
     try:
         llm = get_llm('persona_chat', streaming=True)

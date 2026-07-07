@@ -119,7 +119,7 @@ class TestExecutePersonaChatStreamLangSmithContract:
 
         # The langsmith_run_id should be None when has_langsmith_api_key() is False
         assert re.search(
-            r"langsmith_run_id\s*=\s*str\(uuid\.uuid4\(\)\)\s+if\s+has_langsmith_api_key\(\)\s+else\s+None",
+            r"langsmith_run_id\s*=\s*uuid\.uuid4\(\)\s+if\s+has_langsmith_api_key\(\)\s+else\s+None",
             fn,
         ), "langsmith_run_id must be conditional on has_langsmith_api_key()"
 

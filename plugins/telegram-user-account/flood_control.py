@@ -101,6 +101,11 @@ class RateLimit:
         # bounded undercounting source from simple_storage.
         self._daily_count: int = 0
         self._daily_date: Optional[date] = None
+        # In-flight reservations: incremented by reserve_slot(),
+        # decremented by commit_slot()/release_slot(). Prevents
+        # concurrent DMs from all passing can_send() during the
+        # ~15s LLM call and exceeding the cap.
+        self._reserved_count: int = 0
         self._lock = Lock()
 
     def _trim(self, now: float) -> None:
@@ -134,7 +139,58 @@ class RateLimit:
             self._trim(now)
             if self._blocked_until > now:
                 return False
-            return len(self._send_times) < self.max_per_hour
+            effective_count = len(self._send_times) + self._reserved_count
+            return effective_count < self.max_per_hour
+
+    def reserve_slot(self) -> bool:
+        """Reserve a send slot BEFORE the LLM call (check-then-reserve).
+
+        Returns True if a slot was reserved, False if the cap is hit.
+        The reservation counts against the cap so concurrent DMs
+        can't all pass can_send() and exceed max_per_hour during
+        the ~15s persona API call.
+
+        Must be paired with either commit_slot() (on success) or
+        release_slot() (on failure). Failure to release leaks
+        a slot until the process restarts.
+        """
+        with self._lock:
+            now = self._now()
+            self._trim(now)
+            if self._blocked_until > now:
+                return False
+            effective_count = len(self._send_times) + self._reserved_count
+            if effective_count >= self.max_per_hour:
+                return False
+            self._reserved_count += 1
+            return True
+
+    def commit_slot(self, now: Optional[float] = None) -> None:
+        """Commit a reserved slot to the rolling window.
+
+        Called AFTER send success. Converts the reservation into
+        a permanent entry in _send_times and bumps the daily
+        counter. If no slot was reserved, this is a no-op
+        (falls back to record_send behaviour).
+        """
+        with self._lock:
+            now = self._now() if now is None else now
+            self._trim(now)
+            if self._reserved_count > 0:
+                self._reserved_count -= 1
+            self._send_times.append(now)
+            self._bump_daily_locked()
+
+    def release_slot(self) -> None:
+        """Release a reserved slot without recording a send.
+
+        Called when the persona API fails, the reply is empty,
+        or send_message raises. Releases the reservation so the
+        budget isn't consumed by a failed attempt.
+        """
+        with self._lock:
+            if self._reserved_count > 0:
+                self._reserved_count -= 1
 
     def record_send(self, now: Optional[float] = None) -> None:
         """Record a successful outbound send. Called AFTER send

@@ -108,6 +108,7 @@ async def _plugin_lifespan(app: FastAPI):
     for the duration of the startup call, then is GC'd.
     """
     global _client, _account_meta
+    _handler_registered = False
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         logger.error(
@@ -134,19 +135,28 @@ async def _plugin_lifespan(app: FastAPI):
                     "Connected to Telegram as %s",
                     _account_meta.get("name") or "(unknown)",
                 )
-
-                # Register the incoming-message handler so DMs
-                # are auto-replied. This is the core "reply as me"
-                # functionality — without this, the plugin only
-                # replies when /persona_chat is called manually.
-                _client.register_incoming_message_handler(_on_incoming_message)
-                logger.info("auto-reply listener registered")
             except Exception as e:
                 logger.error(
                     "Telethon connect failed: %s",
                     type(e).__name__,
                 )
                 # Leave _client set; is_connected() returns False.
+
+            # Register the incoming-message handler in a SEPARATE
+            # try/except so a handler-registration failure doesn't
+            # masquerade as a connect failure. Without this, /status
+            # would report connected=True while the auto-reply
+            # listener was never installed.
+            if _client is not None:
+                try:
+                    _client.register_incoming_message_handler(_on_incoming_message)
+                    _handler_registered = True
+                    logger.info("auto-reply listener registered")
+                except Exception as e:
+                    logger.error(
+                        "auto-reply listener registration failed: %s " "(plugin is connected but will NOT auto-reply)",
+                        type(e).__name__,
+                    )
         except Exception as e:
             logger.error(
                 "Failed to read session from stdin: %s",
@@ -171,21 +181,16 @@ async def _plugin_lifespan(app: FastAPI):
 async def _on_incoming_message(event):
     """Auto-reply handler for incoming DMs.
 
-    Registered as a Telethon ``NewMessage(incoming=True)`` handler
-    in ``_plugin_lifespan``. When a contact DMs the user's
-    personal account, this:
-
-    1. Skips non-private (group/channel) messages.
-    2. Skips messages without text (stickers, media-only).
-    3. Records the incoming message in the ring buffer.
-    4. Checks auto_reply_enabled + rate limit.
-    5. Calls the persona API to generate a reply.
-    6. Sends the reply via Telethon.
-    7. Records the reply in the ring buffer.
+    Privacy/security contract (cubic review #4642229045):
+    - NO message text or sender PII is logged or persisted until
+      after the auto_reply_enabled gate is passed. Before opt-in,
+      the handler returns silently — the message is not written to
+      logs, ring buffer, or storage.
+    - Rate-limit uses reserve/release so concurrent DMs can't all
+      pass can_send() and exceed the cap during the ~15s LLM call.
 
     All exceptions are caught and logged — a handler exception
-    must NOT crash the Telethon event loop (which would kill all
-    future message processing).
+    must NOT crash the Telethon event loop.
     """
     try:
         # Only reply to private (1:1) chats, not groups/channels.
@@ -199,7 +204,20 @@ async def _on_incoming_message(event):
 
         chat_id = str(event.chat_id)
 
-        # Resolve sender info for the persona context.
+        # PRIVACY GATE: check auto_reply_enabled BEFORE any logging
+        # or persistence. If no user has opted in, the handler exits
+        # silently — no message content or sender PII touches logs
+        # or storage.
+        user = None
+        for u in simple_storage.users.values():
+            if u.get("auto_reply_enabled", False):
+                user = u
+                break
+
+        if user is None:
+            return
+
+        # Resolve sender info for the persona context (after opt-in).
         sender_name = ""
         sender_username = ""
         try:
@@ -213,30 +231,18 @@ async def _on_incoming_message(event):
             pass  # Non-fatal — we can still reply without the sender name
 
         logger.info(
-            "incoming DM from chat_id=%s sender=%s (@%s): %s",
+            "incoming DM from chat_id=%s (auto-reply enabled, processing)",
             chat_id,
-            sender_name,
-            sender_username,
-            msg_text[:100],
         )
 
-        # Record the incoming message in the ring buffer.
+        # Record the incoming message in the ring buffer (after opt-in).
         simple_storage.append_message(chat_id, "human", msg_text)
 
-        # Find the user record. For the user-account plugin, there's
-        # typically one owner. If no user has auto_reply enabled, skip.
-        user = None
-        for u in simple_storage.users.values():
-            if u.get("auto_reply_enabled", False):
-                user = u
-                break
-
-        if user is None:
-            logger.info("no user with auto_reply enabled; skipping")
-            return
-
-        # Rate-limit check (plan §8).
-        if not flood_control.default_rate_limit.can_send():
+        # Rate-limit reservation: reserve a slot BEFORE the LLM call
+        # so concurrent DMs can't all pass can_send() and exceed the
+        # cap. If the persona call fails, release the reservation.
+        # If send succeeds, commit it to the rolling window.
+        if not flood_control.default_rate_limit.reserve_slot():
             retry_after = flood_control.default_rate_limit.seconds_until_next_slot()
             logger.warning(
                 "rate limit hit: %d sends in last hour, blocking for %ds (chat=%s)",
@@ -262,24 +268,32 @@ async def _on_incoming_message(event):
                 logger.warning("could not fetch Telegram history: %s", type(e).__name__)
 
         # Call the persona API.
-        reply = await _persona_chat(
-            app_id=user["persona_id"],
-            api_key=user["omi_dev_api_key"],
-            omi_base=OMI_BASE_URL,
-            text=msg_text,
-            uid=user["omi_uid"],
-            timeout_seconds=60.0,
-            previous_messages=previous_messages,
-        )
+        try:
+            reply = await _persona_chat(
+                app_id=user["persona_id"],
+                api_key=user["omi_dev_api_key"],
+                omi_base=OMI_BASE_URL,
+                text=msg_text,
+                uid=user["omi_uid"],
+                timeout_seconds=60.0,
+                previous_messages=previous_messages,
+            )
+        except Exception:
+            # Release the reservation on failure so the budget
+            # isn't consumed by a failed LLM call.
+            flood_control.default_rate_limit.release_slot()
+            raise
 
         if not reply:
             logger.warning("persona API returned empty reply for chat=%s", chat_id)
+            flood_control.default_rate_limit.release_slot()
             return
 
         # Send the reply via Telethon.
         try:
             await _client.send_message(chat_id, reply)
         except Exception as e:
+            flood_control.default_rate_limit.release_slot()
             flood_seconds = flood_control.detect_flood_wait(e)
             if flood_seconds is not None:
                 flood_control.default_rate_limit.block_for_seconds(flood_seconds)
@@ -292,7 +306,7 @@ async def _on_incoming_message(event):
                 logger.error("send_message failed for chat=%s: %s", chat_id, type(e).__name__)
             return
 
-        flood_control.default_rate_limit.record_send()
+        flood_control.default_rate_limit.commit_slot()
         simple_storage.append_message(chat_id, "ai", reply)
         logger.info(
             "auto-reply sent to chat=%s (%d chars)",
