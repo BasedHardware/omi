@@ -1,0 +1,3 @@
+{
+  "change": "Fixed WAL periodic flush marking recordings as on-disk before frame files were persisted"
+}

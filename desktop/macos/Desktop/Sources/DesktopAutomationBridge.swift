@@ -610,6 +610,36 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "wal_snapshot",
+      summary: "Return WAL pending count and storage/filePath per entry for harness assertions",
+      params: []
+    ) { _ in
+      let walService = WALService.shared
+      let entries: [[String: String]] = walService.wals.map { wal in
+        [
+          "id": wal.id,
+          "storage": wal.storage.rawValue,
+          "file_path": wal.filePath ?? "",
+          "status": wal.status.rawValue,
+          "total_frames": "\(wal.totalFrames)",
+        ]
+      }
+      let entriesJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: entries),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        entriesJSON = encoded
+      } else {
+        entriesJSON = "[]"
+      }
+      return [
+        "pending_count": "\(walService.pendingWals.count)",
+        "wal_count": "\(walService.wals.count)",
+        "entries_json": entriesJSON,
+      ]
+    }
+
+    register(
       name: "memories_snapshot",
       summary: "Return memories page load state for harness assertions",
       params: []

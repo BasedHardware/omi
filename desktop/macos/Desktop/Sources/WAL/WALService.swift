@@ -73,9 +73,30 @@ final class WALService: ObservableObject {
         try await uploadWalToCloud(wal)
     }
 
+    func flushToDiskForTesting() {
+        flushToDisk()
+    }
+
+    func chunkCurrentFramesForTesting() {
+        createWalFromCurrentFrames()
+    }
+
+    func reloadWalsFromDiskForTesting() {
+        wals = []
+        pendingWals = []
+        loadWals()
+    }
+
+    /// Test seam: delay before async frame writes complete so flush races are observable.
+    var diskWriteDelayForTesting: TimeInterval?
+
     private var walDirectory: URL?
     private var flushTimer: Timer?
     private var chunkTimer: Timer?
+
+    /// Tracks async frame writes keyed by WAL id so flush can wait instead of
+    /// marking storage=disk before filePath exists.
+    private var inFlightDiskWrites: [String: DispatchGroup] = [:]
 
     // In-memory frame buffer for current recording
     private var currentFrames: [Data] = []
@@ -132,6 +153,7 @@ final class WALService: ObservableObject {
             let data = try Data(contentsOf: file)
             let metadata = try JSONDecoder().decode(WALMetadata.self, from: data)
             wals = metadata.wals
+            repairInconsistentWalsOnLoad()
             updatePendingWals()
             logger.info("Loaded \(self.wals.count) WALs from disk")
         } catch {
@@ -150,10 +172,39 @@ final class WALService: ObservableObject {
             let data = try Data(contentsOf: backup)
             let metadata = try JSONDecoder().decode(WALMetadata.self, from: data)
             wals = metadata.wals
+            repairInconsistentWalsOnLoad()
             updatePendingWals()
             logger.info("Loaded \(self.wals.count) WALs from backup")
         } catch {
             logger.error("Failed to load WALs from backup: \(error.localizedDescription)")
+        }
+    }
+
+    /// Migrate metadata that claims disk storage without a persisted frame file.
+    private func repairInconsistentWalsOnLoad() {
+        guard let walDir = walDirectory else { return }
+
+        var changed = false
+        for index in wals.indices {
+            guard wals[index].storage == .disk else { continue }
+
+            if wals[index].filePath == nil {
+                wals[index].status = .corrupted
+                changed = true
+                logger.warning("Marked WAL \(self.wals[index].id) corrupted: disk storage without filePath")
+                continue
+            }
+
+            let fileUrl = walDir.appendingPathComponent(wals[index].filePath!)
+            if !fileManager.fileExists(atPath: fileUrl.path) {
+                wals[index].status = .corrupted
+                changed = true
+                logger.warning("Marked WAL \(self.wals[index].id) corrupted: missing frame file")
+            }
+        }
+
+        if changed {
+            saveWals()
         }
     }
 
@@ -335,11 +386,26 @@ final class WALService: ObservableObject {
         }
 
         let frameCount = frames.count
+        let writeDelay = diskWriteDelayForTesting ?? 0
+        let group = DispatchGroup()
+        group.enter()
+        inFlightDiskWrites[walId] = group
 
         // Write to disk on background thread to avoid blocking the main actor.
         // The completion handler hops back to main to set filePath — callers that
         // need filePath set before proceeding should use writeFramesToDiskAndWait.
         DispatchQueue.global(qos: .utility).async { [weak self] in
+            defer {
+                group.leave()
+                DispatchQueue.main.async {
+                    self?.inFlightDiskWrites.removeValue(forKey: walId)
+                }
+            }
+
+            if writeDelay > 0 {
+                Thread.sleep(forTimeInterval: writeDelay)
+            }
+
             do {
                 try fileData.write(to: fileUrl, options: .atomic)
                 log("WALService: Wrote \(frameCount) frames to \(fileName)")
@@ -400,9 +466,59 @@ final class WALService: ObservableObject {
     }
 
     private func writeWalToDisk(at index: Int) {
-        // For in-memory WALs that don't have frames here, just mark as disk
-        // In a full implementation, this would write buffered frames
+        guard wals.indices.contains(index) else { return }
+
+        let walId = wals[index].id
+
+        if wals[index].totalFrames == 0 {
+            return
+        }
+
+        if walHasPersistedFrames(wals[index]) {
+            promoteWalToDiskIfPersisted(at: index)
+            return
+        }
+
+        if let group = inFlightDiskWrites[walId] {
+            group.wait()
+            if let refreshedIndex = wals.firstIndex(where: { $0.id == walId }) {
+                promoteWalToDiskIfPersisted(at: refreshedIndex)
+                return
+            }
+        }
+
+        logger.warning("WAL flush deferred for \(walId): frames not yet on disk")
+    }
+
+    private func promoteWalToDiskIfPersisted(at index: Int) {
+        guard let persistedPath = persistedWalFilePath(for: wals[index]) else { return }
         wals[index].storage = .disk
+        if wals[index].filePath == nil {
+            wals[index].filePath = persistedPath
+        }
+    }
+
+    private func walHasPersistedFrames(_ wal: WALEntry) -> Bool {
+        persistedWalFilePath(for: wal) != nil
+    }
+
+    private func persistedWalFilePath(for wal: WALEntry) -> String? {
+        guard let walDir = walDirectory else { return nil }
+
+        if let filePath = wal.filePath {
+            let fileUrl = walDir.appendingPathComponent(filePath)
+            if fileManager.fileExists(atPath: fileUrl.path) {
+                return filePath
+            }
+        }
+
+        let expected = wal.generateFileName()
+        let expectedUrl = walDir.appendingPathComponent(expected)
+        if fileManager.fileExists(atPath: expectedUrl.path) {
+            return expected
+        }
+
+        return nil
     }
 
     // MARK: - SD Card Sync
