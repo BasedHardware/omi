@@ -47,28 +47,67 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("signInWithIdp?key=\\(apiKey)"))
   }
 
-  // MARK: BL-020 — checkSystemAudioPermission() must report the real state
+  // MARK: BL-047 — system audio permission truth
 
-  /// The check is no longer a no-op: it must derive `hasSystemAudioPermission`
-  /// from the real screen-recording TCC preflight the rest of the app uses,
-  /// mirroring `checkScreenRecordingPermission()`.
-  func testCheckSystemAudioPermissionReadsRealTccState() throws {
+  /// Core Audio process taps do not expose a preflight API. The app must not
+  /// proxy this through Screen Recording; it reports the last real tap outcome.
+  func testCheckSystemAudioPermissionUsesObservedTapOutcome() throws {
     let src = try source(relativePath: "Sources/AppState/AppState+SystemActions.swift")
 
     guard let range = src.range(of: "func checkSystemAudioPermission() {") else {
       return XCTFail("checkSystemAudioPermission not found")
     }
-    let body = String(src[range.lowerBound...].prefix(600))
+    let body = String(src[range.lowerBound...].prefix(900))
 
     XCTAssertFalse(
       body.contains("No-op"),
       "checkSystemAudioPermission must no longer be a no-op")
-    XCTAssertTrue(
-      body.contains("hasSystemAudioPermission ="),
-      "it must actually assign the reported permission state")
-    XCTAssertTrue(
+    XCTAssertFalse(
       body.contains("ScreenCaptureService.checkPermission()"),
-      "it must query the real TCC preflight the rest of the app relies on")
+      "system audio permission must not be proxied from Screen Recording TCC")
+    XCTAssertTrue(
+      src.contains("func recordSystemAudioCaptureOutcome(_ status: SystemAudioPermissionStatus)"),
+      "tap outcomes should be recorded through a single AppState helper")
+    XCTAssertTrue(
+      body.contains("recordSystemAudioCaptureOutcome(.unsupported)"),
+      "unsupported OS should be explicitly represented")
+    XCTAssertTrue(
+      body.contains("service.capturing"),
+      "active system audio capture should preserve a granted state")
+    XCTAssertTrue(
+      body.contains("recordSystemAudioCaptureOutcome(.unknown)"),
+      "refreshes without an active tap must not keep stale granted state")
+  }
+
+  func testSystemAudioCaptureOutcomesUpdatePermissionState() throws {
+    let src = try source(relativePath: "Sources/AppState/AppState+Transcription.swift")
+
+    XCTAssertTrue(
+      src.contains("recordSystemAudioCaptureOutcome(.granted)"),
+      "successful system-audio tap starts must mark the permission granted")
+    XCTAssertTrue(
+      src.contains("recordSystemAudioCaptureOutcome(.denied)"),
+      "failed system-audio tap starts must mark the permission denied")
+  }
+
+  func testAudioSourceManagerSystemAudioOutcomesUpdatePermissionState() throws {
+    let src = try source(relativePath: "Sources/Audio/AudioSourceManager.swift")
+
+    XCTAssertTrue(
+      src.contains("AppState.current?.recordSystemAudioCaptureOutcome(.granted)"),
+      "desktop audio-source system audio starts should mark the state granted")
+    XCTAssertTrue(
+      src.contains("AppState.current?.recordSystemAudioCaptureOutcome(.denied)"),
+      "desktop audio-source system audio failures should mark the state denied")
+  }
+
+  func testPermissionsPageSurfacesSystemAudioRow() throws {
+    let src = try source(relativePath: "Sources/MainWindow/Pages/PermissionsPage.swift")
+
+    XCTAssertTrue(src.contains("SystemAudioPermissionSection(appState: appState)"))
+    XCTAssertTrue(src.contains("Text(\"System Audio\")"))
+    XCTAssertTrue(src.contains("appState.systemAudioPermissionStatus"))
+    XCTAssertTrue(src.contains("appState.triggerSystemAudioPermission()"))
   }
 
   func testProductionAuthTokensUseKeychainStorage() throws {

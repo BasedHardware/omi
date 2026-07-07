@@ -35,6 +35,11 @@ struct PermissionsPage: View {
                     // Screen Recording Permission
                     ScreenRecordingPermissionSection(appState: appState)
 
+                    // System Audio Permission (Core Audio process taps, macOS 14.4+)
+                    if #available(macOS 14.4, *) {
+                        SystemAudioPermissionSection(appState: appState)
+                    }
+
                     // Notification Permission
                     NotificationPermissionSection(appState: appState)
                 }
@@ -650,6 +655,250 @@ struct ScreenRecordingPermissionSection: View {
     }
 }
 
+// MARK: - System Audio Permission Section
+struct SystemAudioPermissionSection: View {
+    @ObservedObject var appState: AppState
+    @State private var isExpanded = true
+    @State private var isTesting = false
+
+    private var status: SystemAudioPermissionStatus {
+        appState.systemAudioPermissionStatus
+    }
+
+    private var mode: AssistantSettings.SystemAudioCaptureMode {
+        appState.effectiveSystemAudioMode
+    }
+
+    private var isDisabledBySetting: Bool {
+        mode == .never
+    }
+
+    private var isGranted: Bool {
+        status == .granted
+    }
+
+    private var iconBackgroundColor: Color {
+        switch status {
+        case .granted:
+            return Color.green.opacity(0.15)
+        case .denied:
+            return OmiColors.warning.opacity(0.15)
+        case .unsupported:
+            return OmiColors.backgroundTertiary.opacity(0.7)
+        case .unknown:
+            return OmiColors.backgroundTertiary
+        }
+    }
+
+    private var iconColor: Color {
+        switch status {
+        case .granted:
+            return .green
+        case .denied:
+            return OmiColors.warning
+        case .unsupported:
+            return OmiColors.textTertiary
+        case .unknown:
+            return OmiColors.textSecondary
+        }
+    }
+
+    private var borderColor: Color {
+        switch status {
+        case .granted:
+            return Color.green.opacity(0.3)
+        case .denied:
+            return OmiColors.warning.opacity(0.5)
+        case .unsupported, .unknown:
+            return OmiColors.backgroundQuaternary.opacity(0.5)
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button(action: { withAnimation { isExpanded.toggle() } }) {
+                HStack(spacing: 16) {
+                    ZStack {
+                        Circle()
+                            .fill(iconBackgroundColor)
+                            .frame(width: 48, height: 48)
+
+                        Image(systemName: isGranted ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            .scaledFont(size: 22)
+                            .foregroundColor(iconColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 8) {
+                            Text("System Audio")
+                                .scaledFont(size: 16, weight: .semibold)
+                                .foregroundColor(OmiColors.textPrimary)
+
+                            systemAudioStatusBadge
+                        }
+
+                        Text(descriptionText)
+                            .scaledFont(size: 13)
+                            .foregroundColor(status == .denied ? OmiColors.warning : OmiColors.textTertiary)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .scaledFont(size: 14, weight: .medium)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .padding(20)
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 16) {
+                    Divider()
+                        .background(OmiColors.backgroundQuaternary)
+
+                    expandedContent
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(OmiColors.backgroundSecondary.opacity(0.5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(borderColor, lineWidth: status == .denied ? 2 : 1)
+                )
+        )
+    }
+
+    private var descriptionText: String {
+        if isDisabledBySetting {
+            return "Disabled in Settings > General"
+        }
+
+        switch status {
+        case .granted:
+            return "Captures audio from calls, videos, and other apps"
+        case .denied:
+            return "Access was not granted or the last system audio test failed"
+        case .unsupported:
+            return "Requires macOS 14.4 or later"
+        case .unknown:
+            return "Test access to confirm Omi can capture audio from other apps"
+        }
+    }
+
+    private var systemAudioStatusBadge: some View {
+        let label: String
+        let foreground: Color
+        let background: Color
+        let icon: String
+
+        if isDisabledBySetting {
+            label = "Disabled"
+            foreground = OmiColors.textTertiary
+            background = OmiColors.backgroundTertiary.opacity(0.8)
+            icon = "minus.circle.fill"
+        } else {
+            switch status {
+            case .granted:
+                label = "Granted"
+                foreground = .green
+                background = Color.green.opacity(0.15)
+                icon = "checkmark.circle.fill"
+            case .denied:
+                label = "Not Granted"
+                foreground = OmiColors.warning
+                background = OmiColors.warning.opacity(0.15)
+                icon = "xmark.circle.fill"
+            case .unsupported:
+                label = "Unsupported"
+                foreground = OmiColors.textTertiary
+                background = OmiColors.backgroundTertiary.opacity(0.8)
+                icon = "slash.circle.fill"
+            case .unknown:
+                label = "Unknown"
+                foreground = OmiColors.textSecondary
+                background = OmiColors.backgroundTertiary.opacity(0.8)
+                icon = "questionmark.circle.fill"
+            }
+        }
+
+        return HStack(spacing: 4) {
+            Image(systemName: icon)
+                .scaledFont(size: 12)
+            Text(label)
+                .scaledFont(size: 12, weight: .medium)
+        }
+        .foregroundColor(foreground)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 4)
+        .background(Capsule().fill(background))
+    }
+
+    private var expandedContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if isDisabledBySetting {
+                Text("System audio capture is set to Never in Settings > General. Change that setting before testing access.")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+            } else if status == .granted {
+                Text("System audio access was confirmed by a successful Core Audio tap.")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+            } else {
+                Text("How to grant system audio access:")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    neutralInstructionStep(number: 1, text: "Click Test Access below")
+                    neutralInstructionStep(number: 2, text: "If System Settings opens, enable Omi under Screen & System Audio Recording")
+                    neutralInstructionStep(number: 3, text: "Return to Omi and click Test Access again")
+                }
+            }
+
+            Button(action: testSystemAudioAccess) {
+                HStack(spacing: 8) {
+                    if isTesting {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    } else {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .scaledFont(size: 14)
+                    }
+                    Text(isGranted ? "Test Again" : "Test Access")
+                        .scaledFont(size: 14, weight: .semibold)
+                }
+                .foregroundColor(OmiColors.textPrimary)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(OmiColors.backgroundTertiary)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(isTesting || isDisabledBySetting || status == .unsupported)
+            .opacity((isTesting || isDisabledBySetting || status == .unsupported) ? 0.6 : 1)
+        }
+    }
+
+    private func testSystemAudioAccess() {
+        isTesting = true
+        appState.triggerSystemAudioPermission()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+            isTesting = false
+        }
+    }
+}
+
 // MARK: - Notification Permission Section
 struct NotificationPermissionSection: View {
     @ObservedObject var appState: AppState
@@ -874,6 +1123,20 @@ private func instructionStep(number: Int, text: String) -> some View {
             .foregroundColor(.white)
             .frame(width: 22, height: 22)
             .background(Circle().fill(OmiColors.purplePrimary))
+
+        Text(text)
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textSecondary)
+    }
+}
+
+private func neutralInstructionStep(number: Int, text: String) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+        Text("\(number)")
+            .scaledFont(size: 12, weight: .bold)
+            .foregroundColor(OmiColors.textPrimary)
+            .frame(width: 22, height: 22)
+            .background(Circle().fill(OmiColors.backgroundTertiary))
 
         Text(text)
             .scaledFont(size: 13)

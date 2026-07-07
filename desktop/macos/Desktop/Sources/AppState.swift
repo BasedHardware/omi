@@ -4,6 +4,13 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+enum SystemAudioPermissionStatus: String {
+  case unknown
+  case granted
+  case denied
+  case unsupported
+}
+
 /// Translation from backend (e.g., Japanese speech translated to English)
 struct SegmentTranslation: Identifiable {
   var id: String { lang }
@@ -146,6 +153,7 @@ class AppState: ObservableObject {
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
   @Published var hasSystemAudioPermission = false
+  @Published var systemAudioPermissionStatus: SystemAudioPermissionStatus = .unknown
   @Published var isSystemAudioSupported = false
 
   // Audio source (microphone or BLE device)

@@ -192,6 +192,11 @@ extension AppState {
     if !hasScreenRecordingPermission || isScreenRecordingStale {
       missing.append("Screen Recording")
     }
+    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+      systemAudioPermissionStatus != .granted
+    {
+      missing.append("System Audio")
+    }
     if !hasNotificationPermission {
       missing.append("Notifications")
     } else if isNotificationBannerDisabled {

@@ -415,8 +415,10 @@ extension AppState {
         log("Transcription: System audio capture aborted (recording stopped during start)")
         return
       }
+      recordSystemAudioCaptureOutcome(.granted)
       log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
     } catch {
+      recordSystemAudioCaptureOutcome(.denied)
       logError(
         "Transcription: System audio capture failed (continuing with mic only)", error: error)
     }

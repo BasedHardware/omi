@@ -254,16 +254,26 @@ final class AudioSourceManager: ObservableObject {
 
         // Start system audio capture if available
         if #available(macOS 14.4, *), let systemCapture = systemAudioCaptureService as? SystemAudioCaptureService {
-            try await systemCapture.startCapture(
-                onAudioChunk: { [weak self] audioData in
-                    self?.audioMixer?.setSystemAudio(audioData)
-                },
-                onAudioLevel: { level in
-                    Task { @MainActor in
-                        AudioLevelMonitor.shared.updateSystemLevel(level)
+            do {
+                try await systemCapture.startCapture(
+                    onAudioChunk: { [weak self] audioData in
+                        self?.audioMixer?.setSystemAudio(audioData)
+                    },
+                    onAudioLevel: { level in
+                        Task { @MainActor in
+                            AudioLevelMonitor.shared.updateSystemLevel(level)
+                        }
                     }
+                )
+                await MainActor.run {
+                    AppState.current?.recordSystemAudioCaptureOutcome(.granted)
                 }
-            )
+            } catch {
+                await MainActor.run {
+                    AppState.current?.recordSystemAudioCaptureOutcome(.denied)
+                }
+                throw error
+            }
         }
 
         conversationSource = .desktop
@@ -449,4 +459,3 @@ enum AudioSourceError: LocalizedError {
         }
     }
 }
-
