@@ -117,11 +117,16 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertTrue(source.contains("terminalStatus: failedByUserStop ? .completed : .failed"))
   }
 
-  func testTaskChatFollowUpSignalsLocalSendWhenUserRowIsAppended() throws {
+  func testTaskChatSendAlwaysSignalsLocalSendWhenUserRowIsAppended() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("if !isFollowUp {\n            localSendToken = LocalSendToken"))
-    XCTAssertTrue(source.contains("messages.append(userMessage)\n        localSendToken = LocalSendToken"))
+    XCTAssertFalse(source.contains("isFollowUp"))
+    XCTAssertFalse(source.contains("sendFollowUp"))
+    guard let tokenRange = source.range(of: "localSendToken = LocalSendToken"),
+          let appendRange = source.range(of: "messages.append(userMessage)") else {
+      return XCTFail("Expected task chat sends to signal local send and append a user row")
+    }
+    XCTAssertLessThan(tokenRange.lowerBound, appendRange.lowerBound)
   }
 
   func testFailureTranscriptFormatterUsesStructuredProjectionFailure() {

@@ -534,9 +534,6 @@ struct DashboardPage: View {
                     )
                     Task { await chatProvider.sendMessage(text) }
                 },
-                onFollowUp: { text in
-                    Task { await chatProvider.sendFollowUp(text) }
-                },
                 onStop: {
                     chatProvider.stopAgent(owner: .mainChat)
                 },
@@ -933,7 +930,7 @@ struct DashboardPage: View {
             source: "home_ask_bar"
         )
         if chatProvider.isSending {
-            Task { await chatProvider.sendFollowUp(text) }
+            return
         } else {
             Task { await chatProvider.sendMessage(text) }
         }
@@ -1956,12 +1953,15 @@ private struct HomeAskBar: View {
             sendButton
         case .connect:
             connectButton
+        case .none:
+            EmptyView()
         }
     }
 
     private var actionMode: HomeAskBarActionMode {
         if isSending { return .stop }
         if canSend { return .send }
+        if isFocused { return .none }
         return .connect
     }
 
@@ -2017,6 +2017,7 @@ private enum HomeAskBarActionMode: Equatable {
     case connect
     case send
     case stop
+    case none
 }
 
 private struct HomeAskBarConnectButton: View {

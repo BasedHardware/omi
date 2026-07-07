@@ -2694,22 +2694,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
-    // MARK: - Stop / Follow-Up
-
-    private struct PendingFollowUpRequest {
-        let text: String
-        let model: String?
-        let systemPromptSuffix: String?
-        let systemPromptPrefix: String?
-        let systemPromptStyle: ChatSystemPromptStyle
-        let surfaceRef: AgentSurfaceReference?
-        let turnOwner: ChatTurnOwner
-    }
-
-    /// Follow-ups queued while the current query is being interrupted.
-    /// Drained FIFO at the end of `sendMessage` so rapid barge-ins do not overwrite each other.
-    private var pendingFollowUps = ChatFollowUpQueue<PendingFollowUpRequest>()
-    private var activeFollowUpContext: PendingFollowUpRequest?
+    // MARK: - Stop
 
     /// Stop the running agent, keeping partial response
     func canInterruptActiveTurn(owner: ChatTurnOwner) -> Bool {
@@ -2755,79 +2740,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         // Result flows back normally through the bridge with partial text
         return true
-    }
-
-    /// Send a follow-up message while the agent is still running.
-    /// Interrupts the current query and chains a new one with full context.
-    func sendFollowUp(_ text: String) async {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, isSending else { return }
-
-        // Add as user message in UI
-        let userMessage = ChatMessage(
-            id: UUID().uuidString,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
-        // Signal local send for turn anchoring.
-        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
-
-        // Persist to backend and sync server ID back to prevent poll duplicates.
-        //
-        // saveMessage site 1 of 5: user follow-up message sent
-        // mid-query. Fire-and-forget Task. `pendingSaves` guards the
-        // poll for the lifetime of this save.
-        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
-        let capturedAppId = overrideAppId ?? selectedAppId
-        let localId = userMessage.id
-        pendingSaves.begin()
-        Task { [weak self] in
-            do {
-                let response = try await APIClient.shared.saveMessage(
-                    text: trimmedText,
-                    sender: "human",
-                    appId: capturedAppId,
-                    sessionId: capturedSessionId,
-                    clientMessageId: localId
-                )
-                await MainActor.run {
-                    if let index = self?.messages.firstIndex(where: { $0.id == localId }) {
-                        self?.messages[index].id = response.id
-                        self?.messages[index].isSynced = true
-                    }
-                    self?.pendingSaves.end()
-                }
-                log("Saved follow-up message to backend: \(response.id)")
-            } catch {
-                await MainActor.run { self?.pendingSaves.end() }
-                logError("Failed to persist follow-up message", error: error)
-            }
-        }
-
-        // Queue the follow-up and interrupt the current query.
-        // When sendMessage finishes (due to the interrupt), it checks
-        // pendingFollowUps and chains a new full query automatically.
-        let context = activeFollowUpContext ?? PendingFollowUpRequest(
-            text: trimmedText,
-            model: nil,
-            systemPromptSuffix: nil,
-            systemPromptPrefix: nil,
-            systemPromptStyle: .main,
-            surfaceRef: nil,
-            turnOwner: activeTurnOwner ?? .mainChat
-        )
-        pendingFollowUps.append(PendingFollowUpRequest(
-            text: trimmedText,
-            model: context.model,
-            systemPromptSuffix: context.systemPromptSuffix,
-            systemPromptPrefix: context.systemPromptPrefix,
-            systemPromptStyle: context.systemPromptStyle,
-            surfaceRef: context.surfaceRef,
-            turnOwner: context.turnOwner
-        ))
-        await resolvedAgentClient().interrupt()
-        log("ChatProvider: follow-up queued, interrupt sent")
     }
 
     @discardableResult
@@ -3145,7 +3057,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     func sendMessage(
         _ text: String,
         model: String? = nil,
-        isFollowUp: Bool = false,
         systemPromptSuffix: String? = nil,
         systemPromptPrefix: String? = nil,
         systemPromptStyle: ChatSystemPromptStyle = .main,
@@ -3192,15 +3103,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         currentError = nil
         sendGeneration += 1
         let sendGen = sendGeneration
-        activeFollowUpContext = PendingFollowUpRequest(
-            text: trimmedText,
-            model: model,
-            systemPromptSuffix: systemPromptSuffix,
-            systemPromptPrefix: systemPromptPrefix,
-            systemPromptStyle: systemPromptStyle,
-            surfaceRef: surfaceRef,
-            turnOwner: turnOwner
-        )
 
         // Ensure bridge is running
         tracer?.begin("bridge_ensure")
@@ -3308,8 +3210,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         // Save user message to backend and add to UI.
-        // (skip for follow-ups — sendFollowUp already did both)
-        //
         // The save is fire-and-forget (unstructured Task) so it doesn't block
         // the ACP query from starting. This is safe because isSending=true for
         // the entire duration of the ACP query, so the poll timer is suppressed
@@ -3319,59 +3219,57 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let isFirstMessage = messages.isEmpty
         let capturedSessionId = sessionId
         let capturedAppId = overrideAppId ?? selectedAppId
-        if !isFollowUp {
-            // saveMessage site 3 of 5: user message at turn start.
-            // Fire-and-forget Task launched before the bridge query so
-            // it doesn't block streaming. `isSending` already gates the
-            // poll until the AI response lands, but `pendingSaves`
-            // provides defense-in-depth in case the save outlives the
-            // bridge query (slow backend, retry, etc.).
-            pendingSaves.begin()
-            Task { [weak self] in
-                do {
-                    let response = try await APIClient.shared.saveMessage(
-                        text: trimmedText,
-                        sender: "human",
-                        appId: capturedAppId,
-                        sessionId: capturedSessionId,
-                        metadata: attachmentMetadataJSON,
-                        clientMessageId: userMessageId
-                    )
-                    // Adopt the server ID (local UUID → server ID) and mark synced.
-                    // isSynced=true enables rating buttons on the message bubble.
-                    await MainActor.run {
-                        if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
-                            self?.messages[index].id = response.id
-                            self?.messages[index].isSynced = true
-                        }
-                        self?.pendingSaves.end()
-                    }
-                    log("Saved user message to backend: \(response.id)")
-                } catch {
-                    await MainActor.run { self?.pendingSaves.end() }
-                    logError("Failed to persist user message", error: error)
-                    // Non-critical - continue with chat
-                }
-            }
-
-            let userMessage = ChatMessage(
-                id: userMessageId,
-                clientTurnId: clientTurnId,
-                text: trimmedText,
-                sender: .user,
-                attachments: attachmentsForMessage
-            )
-            messages.append(userMessage)
-            // Signal to ChatMessagesView after the local user row exists so
-            // it anchors the new turn, not the previous one.
-            localSendToken = LocalSendToken(generation: sendGeneration)
-
-            // Track onboarding user messages with full content
-            if isOnboarding {
-                AnalyticsManager.shared.onboardingChatMessageDetailed(
-                    role: "user", text: trimmedText, step: "chat"
+        // saveMessage site 3 of 5: user message at turn start.
+        // Fire-and-forget Task launched before the bridge query so
+        // it doesn't block streaming. `isSending` already gates the
+        // poll until the AI response lands, but `pendingSaves`
+        // provides defense-in-depth in case the save outlives the
+        // bridge query (slow backend, retry, etc.).
+        pendingSaves.begin()
+        Task { [weak self] in
+            do {
+                let response = try await APIClient.shared.saveMessage(
+                    text: trimmedText,
+                    sender: "human",
+                    appId: capturedAppId,
+                    sessionId: capturedSessionId,
+                    metadata: attachmentMetadataJSON,
+                    clientMessageId: userMessageId
                 )
+                // Adopt the server ID (local UUID → server ID) and mark synced.
+                // isSynced=true enables rating buttons on the message bubble.
+                await MainActor.run {
+                    if let index = self?.messages.firstIndex(where: { $0.id == userMessageId }) {
+                        self?.messages[index].id = response.id
+                        self?.messages[index].isSynced = true
+                    }
+                    self?.pendingSaves.end()
+                }
+                log("Saved user message to backend: \(response.id)")
+            } catch {
+                await MainActor.run { self?.pendingSaves.end() }
+                logError("Failed to persist user message", error: error)
+                // Non-critical - continue with chat
             }
+        }
+
+        let userMessage = ChatMessage(
+            id: userMessageId,
+            clientTurnId: clientTurnId,
+            text: trimmedText,
+            sender: .user,
+            attachments: attachmentsForMessage
+        )
+        messages.append(userMessage)
+        // Signal to ChatMessagesView after the local user row exists so
+        // it anchors the new turn, not the previous one.
+        localSendToken = LocalSendToken(generation: sendGeneration)
+
+        // Track onboarding user messages with full content
+        if isOnboarding {
+            AnalyticsManager.shared.onboardingChatMessageDetailed(
+                role: "user", text: trimmedText, step: "chat"
+            )
         }
 
         let resolvedSurface = querySurface(
@@ -3968,13 +3866,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // turn.
             if let bridgeError = error as? BridgeError, case .stopped = bridgeError {
                 stoppedByUser = true
-                // User stopped — no error to show, but the card system
-                // still surfaces .interrupted so users can resume.
-                if let card = ChatErrorState.from(bridgeError) {
-                    currentError = card
-                    lastFailedPrompt = trimmedText
-                    errorMessage = nil
-                }
+                currentError = nil
+                lastFailedPrompt = nil
+                errorMessage = nil
             } else if let bridgeError = error as? BridgeError,
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
@@ -3986,30 +3880,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
 
-        let releasedCurrentGeneration: Bool
         if stoppedByUser, isStopping, sendGeneration != sendGen {
             clearSendLockState()
-            releasedCurrentGeneration = false
         } else {
-            releasedCurrentGeneration = releaseSendLock(sendGeneration: sendGen)
+            releaseSendLock(sendGeneration: sendGen)
         }
 
-        // If follow-ups were queued while we were running, chain the oldest as a new full query.
-        // Each chained query drains one item; this preserves user barge-in order without
-        // recursively starting overlapping bridge queries.
-        if releasedCurrentGeneration, let followUp = pendingFollowUps.popFirst() {
-            log("ChatProvider: chaining follow-up query")
-            await sendMessage(
-                followUp.text,
-                model: followUp.model,
-                isFollowUp: true,
-                systemPromptSuffix: followUp.systemPromptSuffix,
-                systemPromptPrefix: followUp.systemPromptPrefix,
-                systemPromptStyle: followUp.systemPromptStyle,
-                surfaceRef: followUp.surfaceRef,
-                turnOwner: followUp.turnOwner
-            )
-        }
         return completedResponseText
     }
 
@@ -4025,7 +3901,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         isStopping = false
         activeBridgeSendGeneration = nil
         activeTurnOwner = nil
-        activeFollowUpContext = nil
         if let prompt = pendingErrorRecoveryPrompt {
             pendingErrorRecoveryPrompt = nil
             Task { [weak self] in

@@ -326,24 +326,3 @@ enum ToolCallBlockUpdater {
     return name == requestedName
   }
 }
-
-struct ChatFollowUpQueue<Element> {
-  private var elements: [Element] = []
-
-  var isEmpty: Bool {
-    elements.isEmpty
-  }
-
-  mutating func append(_ element: Element) {
-    elements.append(element)
-  }
-
-  mutating func popFirst() -> Element? {
-    guard !elements.isEmpty else { return nil }
-    return elements.removeFirst()
-  }
-
-  mutating func removeAll() {
-    elements.removeAll()
-  }
-}

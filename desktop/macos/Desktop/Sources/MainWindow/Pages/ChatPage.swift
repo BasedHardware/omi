@@ -453,9 +453,6 @@ struct ChatPage: View {
           messageLength: text.count, hasContext: selectedApp != nil, source: "main_chat")
         Task { await chatProvider.sendMessage(text) }
       },
-      onFollowUp: { text in
-        Task { await chatProvider.sendFollowUp(text) }
-      },
       onStop: {
         chatProvider.stopAgent(owner: .mainChat)
       },

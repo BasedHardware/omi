@@ -36,7 +36,7 @@ final class ChatErrorStateMappingTests: XCTestCase {
   /// map and which don't — changing the factory's mapping requires
   /// updating this test, which surfaces the user-visible impact.
   func testFactoryMappabilityIsStableUnderRefactor() {
-    XCTAssertNotNil(ChatErrorState.from(BridgeError.stopped))
+    XCTAssertNil(ChatErrorState.from(BridgeError.stopped))
     XCTAssertNotNil(ChatErrorState.from(BridgeError.timeout))
     XCTAssertNotNil(ChatErrorState.from(BridgeError.notRunning))
     XCTAssertNotNil(ChatErrorState.from(BridgeError.restarting))
@@ -85,7 +85,7 @@ final class ChatErrorStateTests: XCTestCase {
     // around fails loudly.
     XCTAssertEqual(ChatErrorState.authRequired.primaryRecovery, .signIn)
     XCTAssertEqual(ChatErrorState.timeout(toolName: nil).primaryRecovery, .retry)
-    XCTAssertEqual(ChatErrorState.interrupted.primaryRecovery, .retry)
+    XCTAssertEqual(ChatErrorState.interrupted.primaryRecovery, .dismiss)
     XCTAssertEqual(ChatErrorState.noDataFound.primaryRecovery, .dismiss)
     XCTAssertEqual(
       ChatErrorState.bridgeUnavailable(reason: .nodeMissing).primaryRecovery,
@@ -112,9 +112,9 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertEqual(mapped, .timeout(toolName: nil))
   }
 
-  func testFromBridgeErrorMapsStoppedToInterrupted() {
+  func testFromBridgeErrorDoesNotMapStoppedToResumeCard() {
     let mapped = ChatErrorState.from(.stopped)
-    XCTAssertEqual(mapped, .interrupted)
+    XCTAssertNil(mapped)
   }
 
   func testFromBridgeErrorReturnsNilForUnmappableCases() {

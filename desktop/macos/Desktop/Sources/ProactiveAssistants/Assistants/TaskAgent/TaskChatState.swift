@@ -25,9 +25,6 @@ class TaskChatState: ObservableObject {
     var onAuthRequired: AgentBridge.AuthRequiredHandler?
     var onAuthSuccess: AgentBridge.AuthSuccessHandler?
 
-    /// Follow-up chaining
-    private var pendingFollowUps = ChatFollowUpQueue<String>()
-
     private var runtimeProjectionCancellable: AnyCancellable?
     private var surfacedFailureKeys: Set<String> = []
     private var activeAssistantMessageId: String?
@@ -106,7 +103,7 @@ class TaskChatState: ObservableObject {
 
     // MARK: - Send Message
 
-    func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
+    func sendMessage(_ text: String, taskContext: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
@@ -118,21 +115,16 @@ class TaskChatState: ObservableObject {
         errorMessage = nil
         TaskAgentStatusRegistry.shared.markRunning(taskId: taskId)
         // Signal local send for turn anchoring.
-        if !isFollowUp {
-            localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
-        }
+        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Add user message to local messages and persist
-        // Skip for follow-ups — sendFollowUp() already added and persisted it
-        if !isFollowUp {
-            let userMessage = ChatMessage(
-                id: UUID().uuidString,
-                text: trimmedText,
-                sender: .user
-            )
-            messages.append(userMessage)
-            persistMessage(userMessage)
-        }
+        let userMessage = ChatMessage(
+            id: UUID().uuidString,
+            text: trimmedText,
+            sender: .user
+        )
+        messages.append(userMessage)
+        persistMessage(userMessage)
 
         // Create placeholder AI message
         let aiMessageId = UUID().uuidString
@@ -283,14 +275,9 @@ class TaskChatState: ObservableObject {
         activeAssistantMessageId = nil
         isSending = false
         isStopping = false
-
-        // Chain follow-up if queued
-        if let followUp = pendingFollowUps.popFirst() {
-            await sendMessage(followUp, isFollowUp: true)
-        }
     }
 
-    // MARK: - Follow-Up
+    // MARK: - Failure Formatting
 
     static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
         let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
@@ -417,26 +404,6 @@ class TaskChatState: ObservableObject {
         if persist {
             persistMessage(failureMessage)
         }
-    }
-
-    func sendFollowUp(_ text: String) async {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, isSending else { return }
-
-        // Add user message locally and persist
-        let userMessage = ChatMessage(
-            id: UUID().uuidString,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
-        localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
-        persistMessage(userMessage)
-
-        // Queue follow-up and interrupt current query
-        pendingFollowUps.append(trimmedText)
-        await TaskChatRuntime.interrupt(taskId: taskId)
-        log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
     }
 
     // MARK: - Stop
