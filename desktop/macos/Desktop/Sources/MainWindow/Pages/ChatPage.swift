@@ -1394,6 +1394,57 @@ struct ToolCallStalledBanner: View {
   }
 }
 
+#if DEBUG
+#Preview("Tool call stall states") {
+  VStack(alignment: .leading, spacing: 14) {
+    ToolCallsGroup(
+      calls: [
+        .toolCall(
+          id: "running-tool", name: "execute_sql", status: .running,
+          toolUseId: "tool-running",
+          input: ToolCallInput(summary: "SELECT * FROM memories", details: nil)
+        ),
+        .toolCall(
+          id: "slow-tool", name: "search_screen_history", status: .slow,
+          toolUseId: "tool-slow",
+          input: ToolCallInput(summary: "last 7 days", details: nil)
+        ),
+      ],
+      onCancel: {}
+    )
+
+    ToolCallsGroup(
+      calls: [
+        .toolCall(
+          id: "stalled-tool", name: "execute_sql", status: .stalled,
+          toolUseId: "tool-stalled",
+          input: ToolCallInput(
+            summary: "large local query",
+            details: "{\n  \"query\": \"SELECT * FROM screenshots ORDER BY timestamp DESC\"\n}"
+          )
+        ),
+        .toolCall(
+          id: "failed-tool", name: "request_screenshot", status: .failed,
+          toolUseId: "tool-failed",
+          input: ToolCallInput(summary: "screenshot_id: 42", details: nil),
+          output: "screenshot_pending"
+        ),
+        .toolCall(
+          id: "completed-tool", name: "create_action_item", status: .completed,
+          toolUseId: "tool-completed",
+          input: ToolCallInput(summary: "Follow up tomorrow", details: nil),
+          output: "Task created"
+        ),
+      ],
+      onCancel: {}
+    )
+  }
+  .padding(24)
+  .frame(width: 520)
+  .background(OmiColors.backgroundPrimary)
+}
+#endif
+
 // MARK: - Thinking Block
 
 struct ThinkingBlock: View {
