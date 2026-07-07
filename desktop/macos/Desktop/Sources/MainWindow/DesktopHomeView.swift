@@ -620,10 +620,15 @@ struct DesktopHomeView: View {
       }
     }
 
-    if let sectionRaw = settingsSectionRaw,
-      let section = SettingsContentView.SettingsSection(rawValue: sectionRaw)
-    {
-      selectedSettingsSection = section
+    if let sectionRaw = settingsSectionRaw {
+      // Tolerant match (SET-01): omi-ctl sends the caller's casing verbatim (docs use
+      // lowercase, raw values are Title Case), so a strict rawValue init silently left
+      // navigation on General for every sub-section command.
+      if let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw) {
+        selectedSettingsSection = section
+      } else {
+        log("AutomationNavigation: unknown settings section '\(sectionRaw)'")
+      }
     }
     highlightedSettingId = settingId
 
