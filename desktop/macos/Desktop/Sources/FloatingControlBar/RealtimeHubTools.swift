@@ -50,8 +50,6 @@ enum RealtimeHubTools {
     for providers: [AgentPillsManager.DirectedProvider]
   ) -> String {
     guard !providers.isEmpty else { return "" }
-    // Affirmative task->provider rules for each connected agent, mirroring the
-    // Haiku router (AgentPill) so voice-hub and text routing agree.
     var rules: [String] = []
     if providers.contains(.codex) {
       rules.append(

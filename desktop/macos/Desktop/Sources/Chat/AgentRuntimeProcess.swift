@@ -737,11 +737,9 @@ actor AgentRuntimeProcess {
         }
       }
       log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
-      // codex-acp authenticates from OPENAI_API_KEY. If the user configured a
-      // usable OpenAI key in Omi (BYOK) and one isn't already in the environment,
-      // seed it so Codex can run without a separate `codex login`. The Node
-      // bridge only forwards OPENAI_API_KEY to the Codex subprocess (see
-      // ADAPTER_EXTRA_ENV_ALLOWLIST), so it does not leak to other adapters.
+      // Seed OPENAI_API_KEY from the user's BYOK key so Codex can run without
+      // a separate `codex login`; the bridge's per-adapter allowlist forwards
+      // it to the Codex subprocess only.
       if (env["OPENAI_API_KEY"]?.isEmpty ?? true),
         !byok.suppressedProviders.contains(.openai),
         let openAIKey = APIKeyService.byokKey(.openai)

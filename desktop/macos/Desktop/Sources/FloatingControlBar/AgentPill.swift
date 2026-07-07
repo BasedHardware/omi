@@ -302,14 +302,9 @@ final class AgentPillsManager: ObservableObject {
         _ errorText: String,
         failure: AgentRuntimeFailure? = nil
     ) -> Bool {
-        // Prefer the runtime's own failure taxonomy when the bridge provided a
-        // structured failure (failures.ts / kernel failAttemptBeforeExecution):
-        // - source "adapter_process": the adapter subprocess errored/exited
-        //   (spawn failure, backend unreachable) — no prompt was completed.
-        // - binding/registration/config codes: the kernel failed the attempt
-        //   before execution started.
-        // - adapter_execution_failed: the prompt was already running — may
-        //   have side effects, never re-run elsewhere.
+        // Prefer the runtime's own taxonomy when a structured failure exists:
+        // process-level and pre-execution codes mean no prompt work happened;
+        // adapter_execution_failed may have side effects and must not re-run.
         if let failure {
             if failure.source == "adapter_process" { return true }
             switch failure.code {
@@ -321,8 +316,7 @@ final class AgentPillsManager: ObservableObject {
                 break
             }
         }
-        // Unstructured errors (plain bridge `type:"error"` messages) fall back
-        // to marker matching on the display text.
+        // Unstructured errors fall back to marker matching on the display text.
         let lower = errorText.lowercased()
         return startupFailureMarkers.contains { lower.contains($0) }
     }
