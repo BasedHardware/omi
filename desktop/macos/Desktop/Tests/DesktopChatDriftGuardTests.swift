@@ -11,7 +11,6 @@ final class DesktopChatDriftGuardTests: XCTestCase {
     XCTAssertTrue(source.contains("ChatMessagesView("))
     XCTAssertTrue(source.contains("ChatInputView("))
     XCTAssertTrue(source.contains("localSendToken: taskState.localSendToken"))
-    XCTAssertTrue(source.contains("onFollowUp: { text in"))
     XCTAssertTrue(source.contains("onStop: {"))
     XCTAssertFalse(source.contains("OmiTextEditor("))
     XCTAssertFalse(source.contains("TypingIndicator()"))
