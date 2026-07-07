@@ -119,7 +119,7 @@ if ($Script:PythonLauncher) {
             Add-Pass "Python version matches .python-version ($ExpectedPythonVersion)"
         } else {
             Add-Fail "Python version mismatch: expected $ExpectedPythonVersion from .python-version, got $pythonVersion from $Script:PythonLauncherName"
-            Write-Host "  -> Run: .\scripts\sync-python-deps.ps1, then `$env:PYTHON = '.\.venv\Scripts\python.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1" -ForegroundColor Yellow
+            Write-Host "  -> Run: bash ./scripts/sync-python-deps.sh, then `$env:PYTHON = '.\.venv\Scripts\python.exe'; powershell -NoProfile -ExecutionPolicy Bypass -File .\test-preflight.ps1" -ForegroundColor Yellow
         }
     }
 } else {
