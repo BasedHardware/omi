@@ -17,6 +17,9 @@ class ViewModelContainer: ObservableObject {
     let homeStatusStore = HomeStatusStore()
     /// Conversations search — persistent so a typed query survives navigation.
     let conversationsSearchModel = ConversationsSearchModel()
+    /// Brain-map graph — persistent so the SceneKit scene, force layout, and
+    /// camera survive page navigation instead of rebuilding every visit.
+    let memoryGraphViewModel = MemoryGraphViewModel()
     let chatProvider: ChatProvider
     let taskChatCoordinator: TaskChatCoordinator
     private lazy var warmupCoordinator = StartupWarmupCoordinator(
