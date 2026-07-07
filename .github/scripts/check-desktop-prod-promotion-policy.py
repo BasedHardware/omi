@@ -71,6 +71,10 @@ def main() -> int:
             fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
 
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
+    require("--override-unblessed", text, "workflow must expose override_unblessed for break-glass bless bypass")
+    require("--override-confirm", text, "workflow must expose override_confirm for break-glass bless bypass")
+    require("I-ACCEPT-UNBLESSED-PROD-RISK", text, "workflow must require typed override confirmation")
+    require("blessed_sha", text, "workflow must compare blessedSha to the promotion target")
     require('git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"', text, "workflow must reject tags that cannot consume release identity env vars")
     require('git grep -q "release_tag" "$TARGET_SHA"', text, "workflow must reject tags that cannot report release identity")
     require("Preflight Omi Bot token configuration", text, "workflow must verify GitHub App token secrets before prod mutations")

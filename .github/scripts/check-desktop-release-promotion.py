@@ -6,46 +6,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from desktop_release_metadata import fail, parse_metadata  # noqa: E402
 
 
 REQUIRED_ASSETS = {"Omi.zip"}
 DMG_ASSETS = {"omi.dmg", "Omi.dmg"}
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?)\+(?P<build>\d+)-macos$")
-
-
-def fail(message: str) -> None:
-    raise SystemExit(f"FAIL: {message}")
-
-
-def normalize_metadata_line(line: str) -> str:
-    stripped = line.strip()
-    if stripped.startswith("<!--"):
-        stripped = stripped[4:].strip()
-    if stripped.endswith("-->"):
-        stripped = stripped[:-3].strip()
-    return stripped
-
-
-def parse_metadata(body: str) -> dict[str, str]:
-    in_block = False
-    metadata: dict[str, str] = {}
-
-    for line in body.splitlines():
-        stripped = normalize_metadata_line(line)
-        if stripped == "KEY_VALUE_START":
-            in_block = True
-            continue
-        if stripped == "KEY_VALUE_END":
-            return metadata
-        if not in_block or not stripped or stripped.startswith("#"):
-            continue
-        if ":" not in stripped:
-            fail(f"invalid release metadata line: {stripped}")
-        key, value = stripped.split(":", 1)
-        metadata[key.strip()] = value.strip()
-
-    fail("release body is missing KEY_VALUE_START/KEY_VALUE_END metadata block")
 
 
 def write_github_output(path: str | None, values: dict[str, str]) -> None:
@@ -62,6 +32,16 @@ def main() -> int:
     parser.add_argument("--release-json", required=True)
     parser.add_argument("--release-tag", required=True)
     parser.add_argument("--github-output")
+    parser.add_argument(
+        "--override-unblessed",
+        action="store_true",
+        help="DANGER: allow prod promotion without a blessed release",
+    )
+    parser.add_argument(
+        "--override-confirm",
+        default="",
+        help="Must be I-ACCEPT-UNBLESSED-PROD-RISK when --override-unblessed is set",
+    )
     args = parser.parse_args()
 
     release = json.loads(Path(args.release_json).read_text())
@@ -98,6 +78,20 @@ def main() -> int:
     if not (asset_names & DMG_ASSETS):
         fail(f"{tag_name} is missing a DMG release asset")
 
+    blessed = metadata.get("blessed", "").strip().lower()
+    blessed_sha = metadata.get("blessedSha", "").strip()
+    blessed_at = metadata.get("blessedAt", "").strip()
+    override_unblessed = args.override_unblessed and args.override_confirm == "I-ACCEPT-UNBLESSED-PROD-RISK"
+    if args.override_unblessed and not override_unblessed:
+        fail("--override-unblessed requires --override-confirm I-ACCEPT-UNBLESSED-PROD-RISK")
+    if not override_unblessed:
+        if blessed not in {"true", "1", "yes"}:
+            fail(f"{tag_name} must be blessed before prod promotion (missing blessed: true)")
+        if not blessed_sha:
+            fail(f"{tag_name} is missing blessedSha metadata")
+        if not blessed_at:
+            fail(f"{tag_name} is missing blessedAt metadata")
+
     write_github_output(
         args.github_output,
         {
@@ -105,6 +99,8 @@ def main() -> int:
             "release_version": tag_match.group("version"),
             "release_build_number": tag_match.group("build"),
             "firestore_doc_id": f"v{tag_match.group('version')}+{tag_match.group('build')}",
+            "blessed_sha": blessed_sha,
+            "blessed_override": "true" if override_unblessed else "false",
         },
     )
     print(f"desktop release promotion sanity OK: {tag_name} ({channel})")
