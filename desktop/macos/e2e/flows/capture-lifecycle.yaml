@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
 preconditions:
   - automation_bridge_ready
 

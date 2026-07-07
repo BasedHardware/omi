@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
 preconditions:
   - automation_bridge_ready

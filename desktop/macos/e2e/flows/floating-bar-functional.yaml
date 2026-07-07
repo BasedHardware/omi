@@ -5,6 +5,8 @@ description: Ask Omi open + stubbed typed turn on the floating bar (distinct fro
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
 preconditions:
   - automation_bridge_ready
 

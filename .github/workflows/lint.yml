@@ -378,6 +378,16 @@ jobs:
         if: steps.changed.outputs.should_run == 'true'
         run: brew install pkg-config webp
 
+      - name: Check desktop e2e flow coverage
+        if: steps.changed.outputs.should_run == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_BASE="origin/${{ github.base_ref }}"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          python3 desktop/macos/scripts/check-e2e-flow-coverage.py --strict --base "$DIFF_BASE"
+
       - name: Build desktop Swift app
         if: steps.changed.outputs.should_run == 'true'
         working-directory: desktop/macos
