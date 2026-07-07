@@ -1037,13 +1037,19 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var refreshAllObserver: AnyCancellable?
 
     // MARK: - Streaming Buffer
-    /// Accumulates text deltas during streaming and flushes them to the published
-    /// messages array at most once per ~100ms, reducing SwiftUI re-render frequency.
+    /// Accumulates text deltas during streaming and reveals them into the published
+    /// messages array in metered steps every ~35ms (`SmoothStreamReveal`), so text
+    /// types smoothly instead of jumping in whole-chunk bursts. Also caps SwiftUI
+    /// re-render frequency to the flush cadence.
     private var streamingTextBuffer: String = ""
     private var streamingThinkingBuffer: String = ""
     private var streamingBufferMessageId: String?
     private var streamingFlushWorkItem: DispatchWorkItem?
     private let streamingFlushInterval: TimeInterval = 0.035
+    /// Monotonic timestamp of the previous reveal tick (or of scheduling, when the
+    /// loop starts from idle) — measures real elapsed time so a late tick reveals
+    /// proportionally more instead of falling behind.
+    private var streamingLastRevealTime: TimeInterval?
 
     // MARK: - Filtered Sessions
     var filteredSessions: [ChatSession] {
@@ -3843,7 +3849,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Flush any remaining buffered streaming text before finalizing
             streamingFlushWorkItem?.cancel()
             streamingFlushWorkItem = nil
-            flushStreamingBuffer()
+            flushStreamingBuffer(revealAll: true)
 
             // Determine the final text to display and save
             let messageText: String
@@ -4048,7 +4054,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Flush any remaining buffered streaming text before handling the error
             streamingFlushWorkItem?.cancel()
             streamingFlushWorkItem = nil
-            flushStreamingBuffer()
+            flushStreamingBuffer(revealAll: true)
 
             // Only remove the AI message if it's still empty (no streamed text yet).
             // If text was already streamed and visible, keep it and just stop streaming.
@@ -4257,25 +4263,36 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return normalized
     }
 
-    /// Append text to a streaming message via a buffer that flushes at ~100ms intervals.
-    /// This reduces SwiftUI re-renders from once-per-token to ~10 times/second.
+    /// Append text to a streaming message via a buffer that reveals in metered
+    /// steps every ~35ms, smoothing chunky network deltas into steady typing.
     private func appendToMessage(id: String, text: String) {
         streamingBufferMessageId = id
         streamingTextBuffer += text
-
-        // Schedule a flush if one isn't already pending
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
-        }
+        scheduleStreamingFlushIfNeeded()
     }
 
-    /// Flush accumulated text and thinking deltas to the published messages array.
-    private func flushStreamingBuffer() {
+    /// Start the reveal loop if it isn't already running. Resets the reveal
+    /// clock when starting from idle so time spent waiting (e.g. during a tool
+    /// call) doesn't count as elapsed typing time and dump the backlog at once.
+    private func scheduleStreamingFlushIfNeeded() {
+        guard streamingFlushWorkItem == nil else { return }
+        streamingLastRevealTime = ProcessInfo.processInfo.systemUptime
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.flushStreamingBuffer()
+        }
+        streamingFlushWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+    }
+
+    /// Reveal buffered text and thinking deltas into the published messages array.
+    /// Each tick reveals `SmoothStreamReveal.step` characters (adaptive typing
+    /// rate) and reschedules itself until the buffers drain; `revealAll` bypasses
+    /// the metering to drain everything at once (completion/error finalization).
+    private func flushStreamingBuffer(revealAll: Bool = false) {
         streamingFlushWorkItem = nil
+        let now = ProcessInfo.processInfo.systemUptime
+        let elapsedMs = (now - (streamingLastRevealTime ?? now - streamingFlushInterval)) * 1000
+        streamingLastRevealTime = now
 
         guard let id = streamingBufferMessageId,
               let index = messages.firstIndex(where: { $0.id == id }) else {
@@ -4284,10 +4301,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return
         }
 
-        // Flush text buffer
+        // Reveal from the text buffer
         if !streamingTextBuffer.isEmpty {
-            let buffered = streamingTextBuffer
-            streamingTextBuffer = ""
+            let step = revealAll
+                ? streamingTextBuffer.count
+                : SmoothStreamReveal.step(remaining: streamingTextBuffer.count, elapsedMs: elapsedMs)
+            let buffered = String(streamingTextBuffer.prefix(step))
+            streamingTextBuffer.removeFirst(step)
 
             messages[index].text += buffered
             if messages[index].sender == .ai {
@@ -4305,10 +4325,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             }
         }
 
-        // Flush thinking buffer
+        // Reveal from the thinking buffer
         if !streamingThinkingBuffer.isEmpty {
-            let buffered = streamingThinkingBuffer
-            streamingThinkingBuffer = ""
+            let step = revealAll
+                ? streamingThinkingBuffer.count
+                : SmoothStreamReveal.step(remaining: streamingThinkingBuffer.count, elapsedMs: elapsedMs)
+            let buffered = String(streamingThinkingBuffer.prefix(step))
+            streamingThinkingBuffer.removeFirst(step)
 
             if let lastBlockIndex = messages[index].contentBlocks.indices.last,
                case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
@@ -4316,6 +4339,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             } else {
                 messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
             }
+        }
+
+        // Keep the reveal loop ticking until the buffers drain — network chunks
+        // may stop arriving while metered text is still typing out.
+        if !revealAll && (!streamingTextBuffer.isEmpty || !streamingThinkingBuffer.isEmpty) {
+            scheduleStreamingFlushIfNeeded()
         }
     }
 
@@ -4493,15 +4522,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private func appendThinking(messageId: String, text: String) {
         streamingBufferMessageId = messageId
         streamingThinkingBuffer += text
-
-        // Schedule a flush if one isn't already pending
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
-        }
+        scheduleStreamingFlushIfNeeded()
     }
 
     /// Mark any remaining in-flight tool call blocks as terminal in a message.

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ChatMsg } from '../../hooks/useChat'
 import { Markdown } from '../Markdown'
+import { revealStep } from '../../lib/reveal'
 
 // Smooth text reveal, decoupled from SSE chunk sizes so a reply streams in evenly
-// instead of landing in bulky jumps. Rendered as markdown either way.
+// instead of landing in bulky jumps. Rendered as markdown either way. The pace
+// lives in `revealStep` (adaptive: steady base rate plus backlog catch-up); the
+// tick measures real elapsed time so late frames reveal proportionally more.
 const REVEAL_MS = 16
-const REVEAL_MIN_CHARS = 2
 
-function RevealMarkdown({
+export function RevealMarkdown({
   text,
   startRevealed
 }: {
@@ -18,17 +20,20 @@ function RevealMarkdown({
   const targetRef = useRef(text)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
   targetRef.current = text
+  // Only tick while text is pending: the interval stops once caught up and
+  // restarts when more text arrives, instead of spinning for the bubble's life.
+  const pending = shown < text.length
   useEffect(() => {
+    if (!pending) return
+    let last = performance.now()
     const id = setInterval(() => {
-      setShown((prev) => {
-        const t = targetRef.current.length
-        if (prev >= t) return prev
-        const step = Math.max(REVEAL_MIN_CHARS, Math.ceil((t - prev) / 24))
-        return Math.min(t, prev + step)
-      })
+      const now = performance.now()
+      const elapsed = now - last
+      last = now
+      setShown((prev) => prev + revealStep(targetRef.current.length - prev, elapsed))
     }, REVEAL_MS)
     return () => clearInterval(id)
-  }, [])
+  }, [pending])
   return <Markdown text={text.slice(0, shown)} />
 }
 
