@@ -774,8 +774,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         return emitted;
       }
 
-      case "available_commands_update":
-      case "usage_update": {
+      case "available_commands_update": {
         return false;
       }
 

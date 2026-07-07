@@ -73,7 +73,7 @@ describe("adapter selection and activation", () => {
     expect(adapterActivationError("openclaw")).not.toContain("OMI_OPENCLAW_ADAPTER_COMMAND");
   });
 
-  it("source: daemon registers Hermes/OpenClaw explicitly and does not stamp MCP env as ACP", () => {
+  it("source: daemon registers Hermes/OpenClaw/Codex explicitly and does not stamp MCP env as ACP", () => {
     const indexSource = readFileSync(new URL("../src/index.ts", import.meta.url), "utf8");
 
     expect(indexSource).toContain("adapterIdForHarnessMode(defaultHarnessMode)");

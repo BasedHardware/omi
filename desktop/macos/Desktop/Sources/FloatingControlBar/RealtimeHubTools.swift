@@ -69,6 +69,13 @@ enum HubTool: String {
 }
 
 enum RealtimeHubTools {
+  // KNOWN LIMITATION: this provider availability snapshot (and the tool enums
+  // derived from it) is built once when the realtime session's system
+  // instruction / tools are assembled at session start. If an agent is
+  // installed mid-session (via install-assist), the model keeps seeing the old
+  // "not connected" guidance until the session reconnects and these are
+  // rebuilt. The spawn-time availability check is always live, so a directed
+  // spawn still works; only the model's guidance lags until reconnect.
   private static func localAgentProviderInstruction() -> String {
     let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes, .codex]
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
@@ -101,14 +108,23 @@ enum RealtimeHubTools {
     for providers: [AgentPillsManager.DirectedProvider]
   ) -> String {
     guard !providers.isEmpty else { return "" }
+    // Affirmative task->provider rules for each connected agent, mirroring the
+    // Haiku router (AgentPill) so voice-hub and text routing agree.
+    var rules: [String] = []
+    if providers.contains(.codex) {
+      rules.append(
+        "coding — writing, creating, editing, refactoring, debugging, or running ANY code, script, or program (any language, however small) — MUST use provider \"codex\".")
+    }
+    if providers.contains(.hermes) {
+      rules.append("open-ended autonomous research or long-form independent work fits provider \"hermes\".")
+    }
+    if providers.contains(.openclaw) {
+      rules.append("automation flows the user has set up in OpenClaw fit provider \"openclaw\".")
+    }
     let strengths = providers
       .map { "\($0.rawValue): \($0.routerBlurb)" }
       .joined(separator: " ")
-    let codexConnected = providers.contains(.codex)
-    let codexRule = codexConnected
-      ? "MANDATORY: if the task is to write, create, edit, refactor, debug, or run ANY code, script, program, or code file — in any language, however small (even a one-line script) — you MUST set provider to \"codex\". Do not use the default agent for coding tasks while codex is connected. "
-      : ""
-    return "Provider selection when the user does NOT name an agent: \(codexRule)For non-code tasks — summaries, questions, lookups, messages, email, calendar, notes, browsing, or acting in the user's apps — OMIT provider entirely; the built-in Omi agent handles those. Connected agent strengths: \(strengths)"
+    return "Provider selection when the user does NOT name an agent — match the task to a connected agent's strength: \(rules.joined(separator: " ")) For general computer/app/browser/data tasks (summaries, questions, lookups, messages, email, calendar, notes, browsing, acting in the user's apps) OMIT provider — the built-in Omi agent is the default. Connected agent strengths: \(strengths)"
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {

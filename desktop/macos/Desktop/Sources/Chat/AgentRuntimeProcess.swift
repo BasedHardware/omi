@@ -583,23 +583,16 @@ actor AgentRuntimeProcess {
       env["HERMES_HOME"] = "\(home)/.hermes"
     }
 
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-    ]
-    let adapterSearchDirs = adapterPathDirs + [
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
-    let trustedPathDirs = [
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
+    // Fixed dirs shared with LocalAgentProviderDetector so the bridge and the
+    // detector never disagree about whether an agent is available.
+    let sharedSearchDirs = LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
+    let pathDirs = existingPath.split(separator: ":").map(String.init)
+    // Look up binaries in the shared dirs AND the user's live PATH, so installs
+    // under nvm/volta/asdf (global bin outside the fixed dirs) are still found.
+    let adapterSearchDirs = sharedSearchDirs + pathDirs
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
+    for path in pathDirs + sharedSearchDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }

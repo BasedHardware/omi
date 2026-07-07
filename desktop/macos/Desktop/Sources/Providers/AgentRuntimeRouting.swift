@@ -166,10 +166,27 @@ enum LocalAgentProviderDetector {
                 return true
             }
         }
-        if fileManager.fileExists(atPath: "\(homeDirectory)/.codex/auth.json") {
+        if codexAuthFileHasCredential(path: "\(homeDirectory)/.codex/auth.json") {
             return true
         }
         return byokOpenAIKeyPresent
+    }
+
+    /// A `codex login` session is only valid if auth.json actually carries a
+    /// token — an empty/stale/corrupt `{}` file would otherwise pass the
+    /// pre-flight and spawn Codex into a post-hoc auth failure.
+    private static func codexAuthFileHasCredential(path: String) -> Bool {
+        guard let data = FileManager.default.contents(atPath: path),
+            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return false
+        }
+        // codex-acp / Codex store either an API key or an OAuth/ChatGPT token.
+        let credentialKeys = ["OPENAI_API_KEY", "openai_api_key", "tokens", "access_token", "id_token"]
+        return credentialKeys.contains { key in
+            if let str = json[key] as? String { return !str.trimmingCharacters(in: .whitespaces).isEmpty }
+            return json[key] != nil
+        }
     }
 
     static func isAvailable(
@@ -204,7 +221,11 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    private static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
+    /// Fixed directories both the detector (here) and the runtime bridge
+    /// (AgentRuntimeProcess) search for external agent binaries. Shared so the
+    /// two never disagree about whether an agent is available. The bridge also
+    /// searches the user's live PATH on top of these.
+    static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
         [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",

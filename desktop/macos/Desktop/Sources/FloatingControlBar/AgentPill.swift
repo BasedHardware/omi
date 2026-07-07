@@ -274,8 +274,12 @@ final class AgentPillsManager: ObservableObject {
     /// silently re-run elsewhere.
     nonisolated static let startupFailureMarkers: [String] = [
         "not available",
-        "installed",
-        "signed in",
+        // Negated/qualified phrases only — bare "installed"/"signed in" would
+        // misclassify mid-task text like "successfully installed".
+        "don't see",
+        "not installed",
+        "not signed in",
+        "isn't signed in",
         "not authenticated",
         "needs setup",
         "adapter is unavailable",

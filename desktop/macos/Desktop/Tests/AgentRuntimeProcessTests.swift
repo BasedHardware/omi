@@ -155,13 +155,14 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
     XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
-    XCTAssertTrue(source.contains(#""\(home)/.hermes/hermes-agent/venv/bin""#))
-    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init) + trustedPathDirs"))
-    XCTAssertTrue(source.contains("+ adapterPathDirs"))
-    XCTAssertFalse(source.contains("adapterPathPrefixDirs + existingPath.split"))
+    // Discovery shares its search dirs with the detector and also scans the live PATH.
+    XCTAssertTrue(source.contains("LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)"))
+    XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init)"))
+    XCTAssertTrue(source.contains("for path in pathDirs + sharedSearchDirs"))
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
+    XCTAssertTrue(source.contains(#"env["OMI_CODEX_ADAPTER_COMMAND"]"#))
   }
 
   func testOpenClawAdapterCommandUsesSiblingNodeWhenAvailable() throws {

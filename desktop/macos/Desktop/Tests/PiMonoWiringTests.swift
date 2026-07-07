@@ -129,6 +129,10 @@ final class PiMonoWiringTests: XCTestCase {
       "Agent ended before reporting a final result",
       "AI service is busy. Please try again in a moment.",
       "tool execution failed: browser tab crashed",
+      // Bare-substring false positives the tightened markers must NOT catch.
+      "Package successfully installed to /usr/local.",
+      "database must be installed and running",
+      "You are now signed in to the service.",
     ]
     for message in midTaskFailures {
       XCTAssertFalse(AgentPillsManager.isStartupClassFailure(message), "must not be startup-class: \(message)")
@@ -204,15 +208,25 @@ final class PiMonoWiringTests: XCTestCase {
         homeDirectory: home.path, byokOpenAIKeyPresent: false
       ).isAvailable)
 
-    // 2. codex login session (~/.codex/auth.json)
+    // 2. codex login session (~/.codex/auth.json) with a real credential
     let codexDir = home.appendingPathComponent(".codex", isDirectory: true)
     try FileManager.default.createDirectory(at: codexDir, withIntermediateDirectories: true)
-    try "{}".write(to: codexDir.appendingPathComponent("auth.json"), atomically: true, encoding: .utf8)
+    let authFile = codexDir.appendingPathComponent("auth.json")
+    try #"{"OPENAI_API_KEY":"sk-live","tokens":{"access_token":"t"}}"#
+      .write(to: authFile, atomically: true, encoding: .utf8)
     XCTAssertTrue(
       LocalAgentProviderDetector.availability(
         for: .codex, environment: [:],
         homeDirectory: home.path, byokOpenAIKeyPresent: false
       ).isAvailable)
+
+    // 2b. an empty/stale auth.json ({}) must NOT count as authenticated
+    try "{}".write(to: authFile, atomically: true, encoding: .utf8)
+    XCTAssertEqual(
+      LocalAgentProviderDetector.availability(
+        for: .codex, environment: [:],
+        homeDirectory: home.path, byokOpenAIKeyPresent: false
+      ).status, .needsAuth(command: executable.path))
     try FileManager.default.removeItem(at: codexDir)
 
     // 3. in-app BYOK OpenAI key

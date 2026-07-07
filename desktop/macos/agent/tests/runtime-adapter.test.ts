@@ -614,6 +614,17 @@ describe("adapter capability matrix", () => {
       supportsTools: false,
       restartBehavior: "native_bindings_survive",
     });
+    expect(adapterCapabilitiesFor("codex")).toEqual({
+      resumeFidelity: "none",
+      supportsNativeResume: false,
+      supportsCancellation: true,
+      acknowledgesCancellation: false,
+      requiresPinnedWorker: true,
+      supportsModelSwitching: false,
+      supportsArtifactEmission: false,
+      supportsTools: false,
+      restartBehavior: "process_local_bindings_stale",
+    });
   });
 });
 
