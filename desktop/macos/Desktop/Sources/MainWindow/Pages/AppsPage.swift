@@ -1194,6 +1194,10 @@ struct ImportConnectorSheet: View {
     @ObservedObject private var runner = ConnectorImportRunner.shared
     @State private var draftText = ""
     @State private var validationError: String?
+    /// The trimmed draft a run consumed, kept to make success-clearing exact:
+    /// only ever wipe the text the run actually imported, never a newer paste.
+    @State private var submittedDraft: String?
+    @FocusState private var draftFocused: Bool
 
     private var snapshot: ImportConnectorStatusStore.Snapshot {
         statusStore.snapshot(for: connector)
@@ -1248,10 +1252,16 @@ struct ImportConnectorSheet: View {
         .padding(24)
         .background(OmiColors.backgroundPrimary)
         .onChange(of: runState?.phase) { _, newPhase in
-            // A successful import consumed the pasted draft; a failed one
-            // keeps it so the user can retry without re-pasting.
+            // A successful import consumed the pasted draft, so clear it —
+            // but only if it is still the submitted text. A reopened sheet
+            // (submittedDraft == nil) or a draft edited mid-run must never
+            // be wiped by an older run finishing. A failed run keeps the
+            // draft so the user can retry without re-pasting.
             if newPhase == .succeeded {
-                draftText = ""
+                if draftText.trimmingCharacters(in: .whitespacesAndNewlines) == submittedDraft {
+                    draftText = ""
+                }
+                submittedDraft = nil
             }
         }
         .onDisappear {
@@ -1324,6 +1334,14 @@ struct ImportConnectorSheet: View {
                     .foregroundColor(OmiColors.textPrimary)
                     .frame(minHeight: 220)
                     .padding(8)
+                    // The running import consumed the text captured at start,
+                    // so edits mid-run would be ignored — and a success landing
+                    // from a run started in an earlier sheet instance clears
+                    // the draft, which must not eat text pasted mid-run.
+                    // `.disabled` alone doesn't evict an already-focused
+                    // NSTextView, so `startMemoryLogImport` also drops focus.
+                    .focused($draftFocused)
+                    .disabled(isRunning)
             }
 
             Button {
@@ -1411,6 +1429,8 @@ struct ImportConnectorSheet: View {
             return
         }
         let source = memorySource
+        draftFocused = false
+        submittedDraft = trimmed
         startRun(
             title: "Importing \(source.displayName)",
             detail: "Extracting durable memories from the pasted conversation.",
