@@ -56,12 +56,22 @@ cmd_scan() {
   local dir="${1:-}"
   [ -n "$dir" ] || die "usage: omi-hardening-smoke.sh scan <dir>"
   [ -d "$dir" ] || die "scan: no such directory: $dir"
-  local dirty
-  dirty="$(grep -rlE "$CRED_PATTERNS" "$dir" 2>/dev/null || true)"
-  if [ -n "$dirty" ]; then
+  local dirty status
+  set +e
+  dirty="$(grep -rlE "$CRED_PATTERNS" -- "$dir" 2>&1)"
+  status=$?
+  set -e
+  if [ "$status" -eq 0 ]; then
     log "scan: credential patterns found in:"
     printf '%s\n' "$dirty" >&2
     return 1
+  fi
+  if [ "$status" -ne 1 ]; then
+    # grep >=2 means it could not scan (unreadable files, bad args) — that is a
+    # scan FAILURE, never a clean result.
+    log "scan: could not scan $dir (grep exit $status)"
+    printf '%s\n' "$dirty" >&2
+    return 2
   fi
   log "scan: clean ($dir)"
   return 0
@@ -103,7 +113,9 @@ parse_run_args() {
     esac
   done
   case "$PORT" in (*[!0-9]*|'') die "--port must be numeric" ;; esac
+  if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then die "--port must be in 1-65535"; fi
   case "$TIMEOUT_MULT" in (*[!0-9]*|'') die "--timeout-mult must be a positive integer" ;; esac
+  [ "$TIMEOUT_MULT" -ge 1 ] || die "--timeout-mult must be >= 1"
   validate_probe_csv "$ONLY"
   validate_probe_csv "$SKIP"
   refuse_non_test_bundle
@@ -434,13 +446,14 @@ probe_lnch_07() {
 }
 
 probe_self_hygiene() {
-  local t0
+  local t0 rc=0
   t0=$(now_s)
-  if cmd_scan "$REPORT_DIR" 2>>"$REPORT_DIR/self-hygiene.log"; then
-    record self-hygiene PASS $(( $(now_s) - t0 )) "report dir clean"
-  else
-    record self-hygiene FAIL $(( $(now_s) - t0 )) "credential patterns in the report dir itself"
-  fi
+  cmd_scan "$REPORT_DIR" 2>>"$REPORT_DIR/self-hygiene.log" || rc=$?
+  case "$rc" in
+    0) record self-hygiene PASS $(( $(now_s) - t0 )) "report dir clean" ;;
+    1) record self-hygiene FAIL $(( $(now_s) - t0 )) "credential patterns in the report dir itself" ;;
+    *) record self-hygiene BLOCKED $(( $(now_s) - t0 )) "scan could not read the report dir (see self-hygiene.log)" ;;
+  esac
 }
 
 # ---------------------------------------------------------------------------
