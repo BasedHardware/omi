@@ -229,6 +229,53 @@ package struct WALEntry: Codable, Identifiable {
     }
 }
 
+// MARK: - Sync upload filename normalization
+
+/// Helpers for `/v2/sync-local-files` multipart uploads.
+package enum WALSyncUploadFileName {
+    private static let fsTokenPattern = "_fs(\\d+)_(\\d+)\\.bin$"
+
+    /// Rewrites legacy desktop `_fsN` tokens that used encoded byte length
+    /// (`_fs80` for opus, `_fs160` for opus_fs320) to sample-frame size
+    /// (`_fs160`/`_fs320`) expected by the backend decoder.
+    package static func normalizedForUpload(_ fileName: String) -> String {
+        guard fileName.hasPrefix("audio_"), fileName.hasSuffix(".bin") else {
+            return fileName
+        }
+        if fileName.contains("_pcm16_") || fileName.contains("_pcm8_") {
+            return fileName
+        }
+
+        guard let fsRange = fileName.range(of: fsTokenPattern, options: .regularExpression) else {
+            return fileName
+        }
+        let fsTokenMatch = String(fileName[fsRange])
+        guard
+            let fsValueRange = fsTokenMatch.range(of: "_fs(\\d+)_", options: .regularExpression),
+            let fsValue = Int(fsTokenMatch[fsValueRange].dropFirst(3).dropLast(1))
+        else {
+            return fileName
+        }
+        let fsToken = "_fs\(fsValue)"
+
+        let codec: String
+        if fileName.contains("_opus_fs320_") {
+            codec = "opus_fs320"
+        } else if fileName.contains("_opus_") {
+            codec = "opus"
+        } else {
+            return fileName
+        }
+
+        let reference = WALEntry(timerStart: 0, codec: codec, device: "x", deviceModel: "x")
+        let expectedSamples = reference.samplesPerFrame
+        guard fsValue == reference.bytesPerFrame else {
+            return fileName
+        }
+        return fileName.replacingOccurrences(of: fsToken, with: "_fs\(expectedSamples)")
+    }
+}
+
 // MARK: - WAL Metadata
 
 /// Metadata wrapper for WAL storage file

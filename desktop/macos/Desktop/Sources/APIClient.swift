@@ -1,4 +1,5 @@
 import Foundation
+import OmiWAL
 
 actor APIClient {
   static let shared = APIClient()
@@ -5489,7 +5490,9 @@ extension APIClient {
     var body = Data()
     let lineBreak = "\r\n"
     for fileURL in fileURLs {
-      let fileName = fileURL.lastPathComponent
+      // Legacy desktop WAL files on disk may still use byte-length `_fsN` tokens;
+      // normalize at upload time so the backend Opus decoder gets sample-frame size.
+      let fileName = WALSyncUploadFileName.normalizedForUpload(fileURL.lastPathComponent)
       let fileData = try Data(contentsOf: fileURL)
       body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
       body.append(
