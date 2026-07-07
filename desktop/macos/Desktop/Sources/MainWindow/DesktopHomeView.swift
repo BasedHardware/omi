@@ -18,7 +18,7 @@ struct DesktopHomeView: View {
   private let minimumWindowHeight: CGFloat = 680
   private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
 
-  @StateObject private var appState = AppState()
+  @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
@@ -1150,5 +1150,6 @@ private struct ConversationsPageHost: View {
 #if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
+    .environmentObject(AppState())
 }
 #endif

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a duplicate AppState at desktop launch that could cause double lifecycle observers and fragile state initialization"
+}
