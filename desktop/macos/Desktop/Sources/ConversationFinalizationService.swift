@@ -186,8 +186,31 @@ actor ConversationFinalizationService {
       conversationStatus: status,
       allowBackendIdOverride: allowBackendIdOverride
     )
-    if completed {
-      log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
+    guard completed else {
+      if let latest = try await TranscriptionStorage.shared.getSession(id: sessionId),
+        latest.status == .completed,
+        latest.backendSynced
+      {
+        return
+      }
+      throw TranscriptionStorageError.invalidState(
+        "from-segments returned \(response.id) but local completion was rejected"
+      )
+    }
+    await hydrateUploadedLocalConversation(id: response.id)
+    log("ConversationFinalization: Uploaded local session \(sessionId) -> backend conversation \(response.id)")
+  }
+
+  private func hydrateUploadedLocalConversation(id conversationId: String) async {
+    do {
+      let conversation = try await apiClient.getConversation(id: conversationId)
+      _ = try await TranscriptionStorage.shared.syncServerConversation(conversation)
+      log("ConversationFinalization: Hydrated uploaded local conversation \(conversationId)")
+    } catch {
+      logError(
+        "ConversationFinalization: Failed to hydrate uploaded local conversation \(conversationId)",
+        error: error
+      )
     }
   }
 
