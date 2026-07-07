@@ -611,11 +611,17 @@ struct DashboardPage: View {
     /// suggested questions under the bar while the hub is showing.
     private var homeStage: some View {
         VStack(spacing: 0) {
+            // Constant container alignment — each mode positions itself inside
+            // the flexible area. Animating the container's own alignment made
+            // the hub snap instead of gliding when the chat opened.
             ZStack {
                 switch homeMode {
                 case .hub:
-                    homeHubCenterpiece
-                        .transition(.homeHubFade)
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        homeHubCenterpiece
+                    }
+                    .transition(.homeHubFade)
                 case .chat:
                     homeChatPanel
                         .transition(.homeDropFromTop)
@@ -624,18 +630,12 @@ struct DashboardPage: View {
                         .transition(.homeDropFromTop)
                 }
             }
-            // Hub: the centerpiece sits directly above the ask bar; the chat /
-            // connect panels fill the whole area instead.
-            .frame(
-                maxWidth: .infinity,
-                maxHeight: .infinity,
-                alignment: homeMode == .hub ? .bottom : .center
-            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             homeAskBar
                 .frame(maxWidth: Self.homeAskBarMaxWidth)
                 .padding(.horizontal, Self.homeStageHorizontalPadding)
-                .padding(.top, homeMode == .hub ? 26 : 16)
+                .padding(.top, 22)
 
             if homeMode == .hub {
                 homeSuggestionList
@@ -702,7 +702,7 @@ struct DashboardPage: View {
                     )
                 }
             }
-            .frame(width: 336)
+            .frame(width: 304)
         }
         .frame(maxWidth: .infinity)
     }
@@ -766,38 +766,18 @@ struct DashboardPage: View {
     // MARK: Connect tray
 
     private var homeConnectPanel: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Connect")
-                        .font(.system(size: 24, weight: .medium, design: .serif))
-                        .foregroundStyle(HomePalette.ink)
-
-                    Text("Feed omi new context — and take its memory everywhere.")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundStyle(HomePalette.muted)
+        ScrollView(showsIndicators: false) {
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    sourceColumnHeader
+                    sourceConstellation
                 }
+                .frame(maxWidth: .infinity)
 
-                Spacer()
-
-                HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
-                    closeHomeStagePanel()
-                }
-            }
-
-            ScrollView(showsIndicators: false) {
-                HStack(alignment: .top, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 12) {
-                        sourceColumnHeader
-                        sourceConstellation
-                    }
+                destinationStack
                     .frame(maxWidth: .infinity)
-
-                    destinationStack
-                        .frame(maxWidth: .infinity)
-                }
-                .padding(.bottom, 4)
             }
+            .padding(.bottom, 4)
         }
         .padding(24)
         .background(
@@ -808,6 +788,12 @@ struct DashboardPage: View {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
         )
+        .overlay(alignment: .topTrailing) {
+            HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
+                closeHomeStagePanel()
+            }
+            .padding(14)
+        }
         .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
         .frame(maxWidth: Self.homeStagePanelMaxWidth)
         .padding(.horizontal, Self.homeStageHorizontalPadding)
@@ -1754,7 +1740,7 @@ extension AnyTransition {
 
     fileprivate static var homeHubFade: AnyTransition {
         .modifier(
-            active: HomeStageDropModifier(offsetY: 18, scale: 0.985, opacity: 0),
+            active: HomeStageDropModifier(offsetY: 14, scale: 1, opacity: 0),
             identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
         )
     }
@@ -2815,44 +2801,42 @@ private struct HomeCenterMetricTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Image(systemName: systemImage)
-                        .scaledFont(size: 11, weight: .semibold)
+                        .scaledFont(size: 12, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
 
                     Spacer(minLength: 8)
 
                     Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 8, weight: .bold)
+                        .scaledFont(size: 9, weight: .bold)
                         .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
                 }
 
-                Spacer(minLength: 0)
-
                 Text(value)
-                    .font(.system(size: 17, weight: .medium, design: .serif))
+                    .font(.system(size: 20, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
                 Text(title)
-                    .scaledFont(size: 10, weight: .medium)
+                    .scaledFont(size: 11, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
-            .padding(9)
-            .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66, alignment: .topLeading)
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
                     .stroke(isHovering ? HomePalette.hairline : HomePalette.hairline.opacity(0.82), lineWidth: 1)
             )
-            .contentShape(.rect(cornerRadius: 13))
+            .contentShape(.rect(cornerRadius: 15))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
