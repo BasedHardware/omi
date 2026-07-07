@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from database import redis_db
 from models.tts import TtsSynthesizeRequest
@@ -29,6 +30,19 @@ from utils.executors import run_blocking, critical_executor
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class TtsVoice(BaseModel):
+    voice_id: str
+    name: Optional[str] = None
+    category: Optional[str] = None
+    preview_url: Optional[str] = None
+    labels: Dict[str, Any] = Field(default_factory=dict)
+
+
+class TtsVoicesResponse(BaseModel):
+    voices: List[TtsVoice]
+
 
 # `utils.other.endpoints.with_rate_limit` has an untyped `auth_dependency`
 # parameter; route access through a cast so this strict-checked file sees a
@@ -215,8 +229,8 @@ async def tts_synthesize(
     return StreamingResponse(audio_stream(), media_type="audio/mpeg")
 
 
-@router.get('/v2/tts/voices', tags=['tts'])
-async def get_voices(uid: str = Depends(auth.get_current_user_uid)) -> dict:
+@router.get('/v2/tts/voices', tags=['tts'], response_model=TtsVoicesResponse)
+async def get_voices(uid: str = Depends(auth.get_current_user_uid)) -> Dict[str, List[Dict[str, Any]]]:
     """List the available ElevenLabs voices, proxied server-side (the API key is server-only).
 
     Cached in-process for _VOICES_CACHE_TTL_SECS so a client voice picker does not hammer the upstream.

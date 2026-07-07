@@ -20151,6 +20151,57 @@
         "title": "TtsSynthesizeRequest",
         "type": "object"
       },
+      "TtsVoice": {
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "labels": {
+            "additionalProperties": true,
+            "title": "Labels",
+            "type": "object"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "preview_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview Url"
+          },
+          "voice_id": {
+            "title": "Voice Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "voice_id"
+        ],
+        "title": "TtsVoice",
+        "type": "object"
+      },
       "TtsVoiceSettings": {
         "properties": {
           "similarity_boost": {
@@ -20199,6 +20250,22 @@
           }
         },
         "title": "TtsVoiceSettings",
+        "type": "object"
+      },
+      "TtsVoicesResponse": {
+        "properties": {
+          "voices": {
+            "items": {
+              "$ref": "#/components/schemas/TtsVoice"
+            },
+            "title": "Voices",
+            "type": "array"
+          }
+        },
+        "required": [
+          "voices"
+        ],
+        "title": "TtsVoicesResponse",
         "type": "object"
       },
       "UnapprovedPublicAppResponse": {
@@ -54217,9 +54284,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Get Voices V2 Tts Voices Get",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TtsVoicesResponse"
                 }
               }
             },
