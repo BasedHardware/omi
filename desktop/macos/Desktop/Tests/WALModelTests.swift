@@ -51,4 +51,15 @@ final class WALModelTests: XCTestCase {
     let other = "notes.txt"
     XCTAssertEqual(WALSyncUploadFileName.normalizedForUpload(other), other)
   }
+
+  func testNormalizedForUploadDoesNotCorruptDeviceIdContainingFsToken() {
+    // A device identifier containing the `_fs80` substring must not be touched
+    // by the trailing `_fsN` rewrite. Only the matched trailing token is
+    // rewritten; the device segment stays intact.
+    let legacy = "audio_dev_fs80_opus_16000_1_fs80_1700000000.bin"
+    XCTAssertEqual(
+      WALSyncUploadFileName.normalizedForUpload(legacy),
+      "audio_dev_fs80_opus_16000_1_fs160_1700000000.bin"
+    )
+  }
 }

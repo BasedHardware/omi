@@ -272,7 +272,15 @@ package enum WALSyncUploadFileName {
         guard fsValue == reference.bytesPerFrame else {
             return fileName
         }
-        return fileName.replacingOccurrences(of: fsToken, with: "_fs\(expectedSamples)")
+        // Replace the `_fsN` token only within the already-matched trailing
+        // range, not globally — a device identifier could contain the same
+        // substring (e.g. "dev_fs80"), and a global replacingOccurrences would
+        // corrupt it.
+        let replacedInRange = fileName[fsRange].replacingOccurrences(
+            of: fsToken, with: "_fs\(expectedSamples)")
+        var result = fileName
+        result.replaceSubrange(fsRange, with: replacedInRange)
+        return result
     }
 }
 
