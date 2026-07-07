@@ -10,6 +10,12 @@ covers:
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/APIClient.swift
+  - desktop/macos/Desktop/Sources/OmiWAL/WALModel.swift
+  - desktop/macos/Desktop/Sources/WAL/StorageSyncService.swift
+  - desktop/macos/Desktop/Sources/WAL/WALCloudSyncLogic.swift
+  - desktop/macos/Desktop/Sources/WAL/WALService.swift
+  - desktop/macos/Desktop/Sources/WAL/WALSyncReconciler.swift
 preconditions:
   - automation_bridge_ready
 

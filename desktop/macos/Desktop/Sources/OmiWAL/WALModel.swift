@@ -7,6 +7,7 @@ import Foundation
 package enum WALStatus: String, Codable {
     case inProgress = "inProgress"  // Currently recording/receiving
     case miss = "miss"              // Downloaded from device, needs upload
+    case uploaded = "uploaded"      // Server ack (202); reconciler resolves to synced
     case synced = "synced"          // Successfully uploaded to cloud
     case corrupted = "corrupted"    // Failed to process
 }
@@ -77,6 +78,12 @@ package struct WALEntry: Codable, Identifiable {
     /// Original storage location (for migration tracking)
     package var originalStorage: WALStorageType?
 
+    /// Server job id after HTTP 202 upload ack (reconciler polls this)
+    package var jobId: String?
+
+    /// Unix timestamp when upload was acknowledged (HTTP 202)
+    package var uploadedAt: Int
+
     // MARK: - Initialization
 
     package init(
@@ -95,7 +102,9 @@ package struct WALEntry: Codable, Identifiable {
         fileNum: Int = 1,
         totalFrames: Int = 0,
         syncedFrameOffset: Int = 0,
-        originalStorage: WALStorageType? = nil
+        originalStorage: WALStorageType? = nil,
+        jobId: String? = nil,
+        uploadedAt: Int = 0
     ) {
         self.timerStart = timerStart
         self.codec = codec
@@ -113,6 +122,60 @@ package struct WALEntry: Codable, Identifiable {
         self.totalFrames = totalFrames
         self.syncedFrameOffset = syncedFrameOffset
         self.originalStorage = originalStorage
+        self.jobId = jobId
+        self.uploadedAt = uploadedAt
+    }
+
+    package enum CodingKeys: String, CodingKey {
+        case timerStart, codec, channel, sampleRate, status, storage, filePath, seconds
+        case device, deviceModel, storageOffset, storageTotalBytes, fileNum, totalFrames
+        case syncedFrameOffset, originalStorage, jobId, uploadedAt
+    }
+
+    package init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        timerStart = try container.decode(Int.self, forKey: .timerStart)
+        codec = try container.decode(String.self, forKey: .codec)
+        channel = try container.decodeIfPresent(Int.self, forKey: .channel) ?? 1
+        sampleRate = try container.decodeIfPresent(Int.self, forKey: .sampleRate) ?? 16000
+        status = try container.decode(WALStatus.self, forKey: .status)
+        storage = try container.decode(WALStorageType.self, forKey: .storage)
+        filePath = try container.decodeIfPresent(String.self, forKey: .filePath)
+        seconds = try container.decode(Int.self, forKey: .seconds)
+        device = try container.decode(String.self, forKey: .device)
+        deviceModel = try container.decode(String.self, forKey: .deviceModel)
+        storageOffset = try container.decodeIfPresent(Int.self, forKey: .storageOffset) ?? 0
+        storageTotalBytes = try container.decodeIfPresent(Int.self, forKey: .storageTotalBytes) ?? 0
+        fileNum = try container.decodeIfPresent(Int.self, forKey: .fileNum) ?? 1
+        totalFrames = try container.decodeIfPresent(Int.self, forKey: .totalFrames) ?? 0
+        syncedFrameOffset = try container.decodeIfPresent(Int.self, forKey: .syncedFrameOffset) ?? 0
+        originalStorage = try container.decodeIfPresent(WALStorageType.self, forKey: .originalStorage)
+        jobId = try container.decodeIfPresent(String.self, forKey: .jobId)
+        uploadedAt = try container.decodeIfPresent(Int.self, forKey: .uploadedAt) ?? 0
+    }
+
+    package func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(timerStart, forKey: .timerStart)
+        try container.encode(codec, forKey: .codec)
+        try container.encode(channel, forKey: .channel)
+        try container.encode(sampleRate, forKey: .sampleRate)
+        try container.encode(status, forKey: .status)
+        try container.encode(storage, forKey: .storage)
+        try container.encodeIfPresent(filePath, forKey: .filePath)
+        try container.encode(seconds, forKey: .seconds)
+        try container.encode(device, forKey: .device)
+        try container.encode(deviceModel, forKey: .deviceModel)
+        try container.encode(storageOffset, forKey: .storageOffset)
+        try container.encode(storageTotalBytes, forKey: .storageTotalBytes)
+        try container.encode(fileNum, forKey: .fileNum)
+        try container.encode(totalFrames, forKey: .totalFrames)
+        try container.encode(syncedFrameOffset, forKey: .syncedFrameOffset)
+        try container.encodeIfPresent(originalStorage, forKey: .originalStorage)
+        try container.encodeIfPresent(jobId, forKey: .jobId)
+        if uploadedAt != 0 {
+            try container.encode(uploadedAt, forKey: .uploadedAt)
+        }
     }
 
     // MARK: - Computed Properties
@@ -135,6 +198,15 @@ package struct WALEntry: Codable, Identifiable {
         }
     }
 
+    /// Opus decoder frame size in samples — the `_fsN` token the backend parses
+    /// from the filename (`decode_files_to_wav` → `frame_size`). Must be sample
+    /// count, not byte length, or audio decodes with half-sized buffers.
+    /// Flutter writes `_fs160` (opus) / `_fs320` (opus_fs320).
+    package var samplesPerFrame: Int {
+        guard framesPerSecond > 0 else { return 160 }
+        return sampleRate / framesPerSecond
+    }
+
     /// Expected total frames for the duration
     package var expectedFrames: Int {
         framesPerSecond * seconds
@@ -150,9 +222,65 @@ package struct WALEntry: Codable, Identifiable {
         totalFrames >= expectedFrames || status == .synced
     }
 
-    /// Generate filename for this WAL
+    /// Generate filename for this WAL. The `_fsN` token is the Opus decoder
+    /// frame size in samples (matching Flutter), not the encoded byte length.
     package func generateFileName() -> String {
-        "audio_\(device)_\(codec)_\(sampleRate)_\(channel)_fs\(bytesPerFrame)_\(timerStart).bin"
+        "audio_\(device)_\(codec)_\(sampleRate)_\(channel)_fs\(samplesPerFrame)_\(timerStart).bin"
+    }
+}
+
+// MARK: - Sync upload filename normalization
+
+/// Helpers for `/v2/sync-local-files` multipart uploads.
+package enum WALSyncUploadFileName {
+    private static let fsTokenPattern = "_fs(\\d+)_(\\d+)\\.bin$"
+
+    /// Rewrites legacy desktop `_fsN` tokens that used encoded byte length
+    /// (`_fs80` for opus, `_fs160` for opus_fs320) to sample-frame size
+    /// (`_fs160`/`_fs320`) expected by the backend decoder.
+    package static func normalizedForUpload(_ fileName: String) -> String {
+        guard fileName.hasPrefix("audio_"), fileName.hasSuffix(".bin") else {
+            return fileName
+        }
+        if fileName.contains("_pcm16_") || fileName.contains("_pcm8_") {
+            return fileName
+        }
+
+        guard let fsRange = fileName.range(of: fsTokenPattern, options: .regularExpression) else {
+            return fileName
+        }
+        let fsTokenMatch = String(fileName[fsRange])
+        guard
+            let fsValueRange = fsTokenMatch.range(of: "_fs(\\d+)_", options: .regularExpression),
+            let fsValue = Int(fsTokenMatch[fsValueRange].dropFirst(3).dropLast(1))
+        else {
+            return fileName
+        }
+        let fsToken = "_fs\(fsValue)"
+
+        let codec: String
+        if fileName.contains("_opus_fs320_") {
+            codec = "opus_fs320"
+        } else if fileName.contains("_opus_") {
+            codec = "opus"
+        } else {
+            return fileName
+        }
+
+        let reference = WALEntry(timerStart: 0, codec: codec, device: "x", deviceModel: "x")
+        let expectedSamples = reference.samplesPerFrame
+        guard fsValue == reference.bytesPerFrame else {
+            return fileName
+        }
+        // Replace the `_fsN` token only within the already-matched trailing
+        // range, not globally — a device identifier could contain the same
+        // substring (e.g. "dev_fs80"), and a global replacingOccurrences would
+        // corrupt it.
+        let replacedInRange = fileName[fsRange].replacingOccurrences(
+            of: fsToken, with: "_fs\(expectedSamples)")
+        var result = fileName
+        result.replaceSubrange(fsRange, with: replacedInRange)
+        return result
     }
 }
 

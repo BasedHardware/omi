@@ -1,0 +1,3 @@
+{
+  "change": "Device offline audio now uploads to the cloud via POST /v2/sync-local-files instead of being marked synced locally without a server call"
+}
