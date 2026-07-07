@@ -528,11 +528,6 @@ struct DashboardPage: View {
                     // Full Keyboard Access.
                     .accessibilityHidden(isHomeModalPresented)
 
-                homeHeader
-                    .padding(.horizontal, Self.homeStageHorizontalPadding)
-                    .padding(.top, 26)
-                    .accessibilityHidden(isHomeModalPresented)
-
                 appsPopupOverlay(
                     contentWidth: proxy.size.width,
                     panelWidth: panelWidth,
@@ -998,9 +993,6 @@ struct DashboardPage: View {
         )
     }
 
-    private var homeHeader: some View {
-        PageHeaderView(appState: appState)
-    }
 
     private var sourceColumnHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -1419,8 +1411,8 @@ struct DashboardPage: View {
 
 // MARK: - Home Components
 
-/// Home design palette — internal so the shared page-header components
-/// (PageHeaderControls) keep rendering with the exact Home look.
+/// Home design palette — internal so shared components (toolbar status
+/// controls, capture state) keep rendering with the exact Home look.
 enum HomePalette {
     static let paper = Color(red: 0.018, green: 0.019, blue: 0.021)
     static let panel = Color(red: 0.045, green: 0.046, blue: 0.052)

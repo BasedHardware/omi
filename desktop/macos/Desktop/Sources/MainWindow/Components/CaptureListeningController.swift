@@ -1,12 +1,51 @@
 import AppKit
 import SwiftUI
 
-/// Shared state + actions behind the Capture and Listening header pills.
-/// One instance per `PageHeaderView`; the underlying truth lives in
+/// Status of a capture-style feature as shown in the toolbar controls.
+enum HomeStatusState {
+    case active
+    case inactive
+    case blocked
+
+    var indicator: Color {
+        switch self {
+        case .active:
+            return HomePalette.green
+        case .inactive:
+            return HomePalette.faint
+        case .blocked:
+            return Color(red: 1.0, green: 0.24, blue: 0.30)
+        }
+    }
+
+    var text: String {
+        switch self {
+        case .active:
+            return "On"
+        case .inactive:
+            return "Off"
+        case .blocked:
+            return "Blocked"
+        }
+    }
+
+    var isActive: Bool {
+        if case .active = self { return true }
+        return false
+    }
+
+    var isBlocked: Bool {
+        if case .blocked = self { return true }
+        return false
+    }
+}
+
+/// Shared state + actions behind the Capture and Listening toolbar controls.
+/// One instance per `ToolbarStatusControls`; the underlying truth lives in
 /// `ProactiveAssistantsPlugin` / `AssistantSettings` / `AppState`, so
 /// instances stay in sync via the monitoring notifications.
 ///
-/// Extracted from `DashboardPage` so every main page can host the same
+/// Extracted from `DashboardPage` so the window toolbar can host the
 /// control cluster without duplicating the toggle logic.
 @MainActor
 final class CaptureListeningController: ObservableObject {

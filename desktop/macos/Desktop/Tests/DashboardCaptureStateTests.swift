@@ -1,25 +1,25 @@
 import XCTest
 
 final class DashboardCaptureStateTests: XCTestCase {
-    func testDashboardCaptureStatusUsesLiveMonitoringState() throws {
-        let source = try dashboardSource()
+    func testCaptureStatusUsesLiveMonitoringState() throws {
+        let source = try captureControllerSource()
 
         XCTAssertTrue(
-            source.contains("private var isCaptureLive: Bool"),
-            "DashboardPage should centralize live capture state so the header reflects the running monitor"
+            source.contains("var isCaptureLive: Bool"),
+            "CaptureListeningController should centralize live capture state so the toolbar reflects the running monitor"
         )
         XCTAssertTrue(
-            source.contains("if isCaptureLive {\n            return .active\n        }"),
+            source.contains("return isCaptureLive ? .active : .inactive"),
             "Capture status should light up when monitoring is live, even if persisted intent is stale"
         )
         XCTAssertFalse(
-            source.contains("if screenAnalysisEnabled && isCaptureMonitoring {\n            return .active\n        }"),
+            source.contains("screenAnalysisEnabled && isCaptureMonitoring"),
             "Capture status must not require persisted intent to match the live monitor"
         )
     }
 
-    func testDashboardCaptureToggleDerivesFromLiveState() throws {
-        let source = try dashboardSource()
+    func testCaptureToggleDerivesFromLiveState() throws {
+        let source = try captureControllerSource()
 
         XCTAssertTrue(
             source.contains("syncCaptureState()\n        let enabled = !isCaptureLive"),
@@ -31,21 +31,26 @@ final class DashboardCaptureStateTests: XCTestCase {
         )
     }
 
-    func testListeningPillShowsAndTogglesCaptureMode() throws {
-        let source = try dashboardSource()
+    func testToolbarListeningControlShowsAndTogglesCaptureMode() throws {
+        let controller = try captureControllerSource()
+        let toolbar = try toolbarControlsSource()
 
-        XCTAssertTrue(source.contains("@AppStorage(\"systemAudioCaptureMode\")"))
-        XCTAssertTrue(source.contains("private var listeningModeTitle: String"))
-        XCTAssertTrue(source.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
-        XCTAssertTrue(source.contains("HomeListeningStatusButton("))
-        XCTAssertTrue(source.contains("modeAction: toggleListeningMode"))
-        XCTAssertTrue(source.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
-        XCTAssertTrue(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"person.fill\")"))
-        XCTAssertTrue(source.contains("private var modeIconColor: Color"))
-        XCTAssertTrue(source.contains(".frame(height: 34)"))
-        XCTAssertFalse(source.contains("Image(systemName: isMeetingsOnly ? \"person.2.fill\" : \"infinity\")"))
-        XCTAssertFalse(source.contains("Circle()\n                    .fill(status.indicator)"))
-        XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
+        // The listening control is labeled — an unlabeled mic glyph doesn't
+        // tell the user what it controls.
+        XCTAssertTrue(toolbar.contains("title: \"Listening\""))
+        XCTAssertTrue(toolbar.contains("title: \"Capture\""))
+        XCTAssertTrue(toolbar.contains("controls.toggleListeningMode()"))
+        XCTAssertTrue(controller.contains("var listeningModeTitle: String"))
+        XCTAssertTrue(controller.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
+        XCTAssertTrue(controller.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
+        // Toolbar glyphs stay neutral — the app's purple accent is banned in
+        // the window chrome (and blocked state is amber, never red).
+        XCTAssertFalse(toolbar.contains("OmiColors.purplePrimary"))
+        XCTAssertFalse(toolbar.contains("Color.purple"))
+        XCTAssertTrue(
+            toolbar.contains(".tint(Color.secondary)"),
+            "The settings menu glyph must override the app's purple root tint"
+        )
     }
 
     func testHomeConnectorButtonsOpenSheetsDirectly() throws {
@@ -317,6 +322,22 @@ final class DashboardCaptureStateTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/Stores/HomeStatusStore.swift")
         return try String(contentsOf: storeURL, encoding: .utf8)
+    }
+
+    private func captureControllerSource() throws -> String {
+        try componentSource(named: "CaptureListeningController.swift")
+    }
+
+    private func toolbarControlsSource() throws -> String {
+        try componentSource(named: "ToolbarStatusControls.swift")
+    }
+
+    private func componentSource(named fileName: String) throws -> String {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/Components/\(fileName)")
+        return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 
     private func appsSource() throws -> String {

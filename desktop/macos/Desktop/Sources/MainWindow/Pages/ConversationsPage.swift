@@ -162,17 +162,9 @@ struct ConversationsPage: View {
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {
-    VStack(spacing: 0) {
-      // Shared page header: title + Home chip + Capture/Listening/settings
-      // cluster. Recording start/stop lives in the Listening pill.
-      PageHeaderView(title: "Conversations", showsHomeButton: true, appState: appState)
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
-        .padding(.bottom, 12)
-
-      // Conversation list
-      conversationListSection
-    }
+    // Title and status controls live in the window toolbar.
+    conversationListSection
+      .padding(.top, 6)
   }
 
   private var quickNoteButton: some View {

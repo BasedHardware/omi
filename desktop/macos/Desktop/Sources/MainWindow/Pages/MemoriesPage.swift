@@ -1380,10 +1380,6 @@ struct MemoriesPage: View {
 
   private var mainMemoriesView: some View {
     VStack(spacing: 0) {
-      PageHeaderView(title: "Memories", showsHomeButton: true, appState: appState)
-        .padding(.horizontal, 24)
-        .padding(.top, 18)
-
       // Header (includes search, filters, and action buttons)
       header
 

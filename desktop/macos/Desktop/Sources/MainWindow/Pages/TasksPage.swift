@@ -2751,10 +2751,6 @@ struct TasksPage: View {
 
     private var tasksContent: some View {
         VStack(spacing: 0) {
-            PageHeaderView(title: "Tasks", showsHomeButton: true, appState: appState)
-                .padding(.horizontal, 16)
-                .padding(.top, 18)
-
             // Header with filter toggle and sort
             headerView
 

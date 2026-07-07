@@ -406,26 +406,19 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
                 .help("Back to results")
             } else {
-                // Rewind title
-                HStack(spacing: 8) {
-                    Text("Rewind")
-                        .scaledFont(size: 16, weight: .semibold)
-                        .foregroundColor(.white)
-
-                    // Global hotkey hint
-                    HStack(spacing: 2) {
-                        Text("⌘")
-                        Text("⌥")
-                        Text("R")
-                    }
-                    .scaledFont(size: 10, weight: .medium, design: .rounded)
-                    .foregroundColor(.white.opacity(0.4))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.1))
-                    .cornerRadius(4)
-                    .help("Press ⌘⌥R from anywhere to open Rewind")
+                // Global hotkey hint (page title lives in the window toolbar)
+                HStack(spacing: 2) {
+                    Text("⌘")
+                    Text("⌥")
+                    Text("R")
                 }
+                .scaledFont(size: 10, weight: .medium, design: .rounded)
+                .foregroundColor(.white.opacity(0.4))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(4)
+                .help("Press ⌘⌥R from anywhere to open Rewind")
             }
 
             // Search field + date picker - always present
