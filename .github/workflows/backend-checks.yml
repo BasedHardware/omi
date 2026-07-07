@@ -19,6 +19,7 @@ jobs:
       has_backend_async_gate: ${{ steps.changes.outputs.has_backend_async_gate }}
       has_backend_runtime_env: ${{ steps.changes.outputs.has_backend_runtime_env }}
       has_backend_static_contracts: ${{ steps.changes.outputs.has_backend_static_contracts }}
+      has_backend_workflow_contracts: ${{ steps.changes.outputs.has_backend_workflow_contracts }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,3 +56,7 @@ jobs:
             --dirs backend/routers backend/utils \
             --diff-base "${{ needs.changes.outputs.diff_base }}" \
             --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
+
+      - name: Check workflow contracts
+        if: needs.changes.outputs.has_backend_workflow_contracts == 'true'
+        run: python3 backend/scripts/check_workflow_contracts.py
