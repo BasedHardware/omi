@@ -213,15 +213,50 @@ enum ConnectorImportOperations {
         let result = await ChatToolExecutor.scanLocalFiles()
 
         guard result.didCompleteSuccessfully, result.hasReadableUserFileTarget else {
-            return .failure(message: result.summaryText)
+            return .failure(message: localFilesFailureLine(for: result))
         }
 
         let updatedCount = await currentIndexedFileCount()
         let newItems = max(updatedCount - previousCount, 0)
         return .success(
             SyncResult(sourceCount: updatedCount, memoryCount: nil, newItems: newItems),
-            message: result.summaryText
+            message: localFilesStatusLine(
+                indexedCount: updatedCount,
+                newItems: newItems,
+                deniedFolders: result.deniedUserFolders
+            )
         )
+    }
+
+    /// One-line user-facing summary for a completed scan. The scan outcome's
+    /// `summaryText` is agent-facing context and must not be shown in the UI.
+    static func localFilesStatusLine(indexedCount: Int, newItems: Int, deniedFolders: [String]) -> String {
+        var line = "Indexed \(indexedCount.formatted()) files"
+        if newItems > 0 {
+            line += " (+\(newItems.formatted()) new)"
+        }
+        line += "."
+        if !deniedFolders.isEmpty {
+            line += " Some folders weren't scanned (\(folderList(deniedFolders))) — grant access and reindex."
+        }
+        return line
+    }
+
+    static func localFilesFailureLine(for outcome: ChatToolExecutor.LocalFileScanOutcome) -> String {
+        guard outcome.didCompleteSuccessfully else {
+            return "Indexing couldn't complete. Try again."
+        }
+        guard !outcome.deniedUserFolders.isEmpty else {
+            return "Omi couldn't access your folders. Click Allow on the macOS permission dialogs, then reindex."
+        }
+        return "Omi couldn't access your folders (\(folderList(outcome.deniedUserFolders))). "
+            + "Click Allow on the macOS permission dialogs, then reindex."
+    }
+
+    private static func folderList(_ folders: [String]) -> String {
+        folders
+            .map { $0.hasPrefix("~/") ? String($0.dropFirst(2)) : $0 }
+            .joined(separator: ", ")
     }
 
     private enum FolderSelection {
