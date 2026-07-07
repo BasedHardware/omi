@@ -207,6 +207,24 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertNil(session.finalizationCompletedAt)
     }
 
+    func testMeetingEndedFinalizationReasonPersists() async throws {
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: "desktop",
+            finalizationStrategy: .localSegments
+        )
+
+        try await TranscriptionStorage.shared.finishSession(
+            id: sessionId,
+            reason: .meetingEnded
+        )
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let session = try XCTUnwrap(storedSession)
+        XCTAssertEqual(session.status, .pendingUpload)
+        XCTAssertEqual(session.finalizationStrategy, .localSegments)
+        XCTAssertEqual(session.finalizationReason, .meetingEnded)
+    }
+
     func testSessionsNeedingFinalizationIncludesRetryableWorkOnly() async throws {
         let recordingId = try await TranscriptionStorage.shared.startSession(source: "desktop")
 

@@ -165,3 +165,71 @@ final class SystemAudioCaptureModeSettingsTests: XCTestCase {
         XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
     }
 }
+
+// MARK: - Meeting conversation boundary
+
+final class MeetingConversationBoundaryPolicyTests: XCTestCase {
+
+    func testMeetingGateClosingWithSegmentsFinishesConversation() {
+        XCTAssertTrue(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: false
+            )
+        )
+    }
+
+    func testMeetingGateClosingWithOnlyInMemorySegmentsFinishesConversation() {
+        XCTAssertTrue(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                shouldCapture: false,
+                segmentCount: 0,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testWaitingForFirstMeetingDoesNotFinishEmptySession() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                shouldCapture: false,
+                segmentCount: 0,
+                hasSpeakerSegments: false
+            )
+        )
+    }
+
+    func testNonMeetingModesDoNotUseMeetingEndBoundary() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .always,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .never,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testActiveMeetingDoesNotFinishConversation() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                shouldCapture: true,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+}
