@@ -228,6 +228,12 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          cache: true
+
+      - name: Resolve Flutter dependencies for formatting
+        if: needs.changed-files.outputs.has_dart == 'true'
+        working-directory: app
+        run: flutter pub get
 
       - name: Check Dart formatting
         if: needs.changed-files.outputs.has_dart == 'true'
