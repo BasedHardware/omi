@@ -244,14 +244,42 @@ enum LocalAgentProviderDetector {
             "/opt/homebrew/bin",
             "/usr/local/bin",
         ]
-        // nvm installs global binaries under versioned dirs; include each
-        // installed version's bin (newest first).
-        let nvmVersions = "\(homeDirectory)/.nvm/versions/node"
-        if let versions = try? fileManager.contentsOfDirectory(atPath: nvmVersions) {
-            for version in versions.sorted(by: { $0.compare($1, options: .numeric) == .orderedDescending }) {
-                dirs.append("\(nvmVersions)/\(version)/bin")
-            }
-        }
+        dirs.append(contentsOf: nvmVersionBinDirectories(homeDirectory: homeDirectory, fileManager: fileManager))
         return dirs
+    }
+
+    /// nvm installs global binaries under versioned dirs; include each
+    /// installed version's bin (newest first). This is the only entry that
+    /// needs filesystem I/O, and availability checks run on hot paths (router
+    /// prompt builds, spawn pre-flights), so the scan is cached per home
+    /// directory for the process lifetime — like the rest of the whitelist, a
+    /// mid-session install is picked up after reconnect/restart. Tests that
+    /// inject a custom FileManager bypass the cache to stay deterministic.
+    private static let nvmBinDirsCache = ProcessLifetimeCache()
+
+    private static func nvmVersionBinDirectories(homeDirectory: String, fileManager: FileManager) -> [String] {
+        let compute: () -> [String] = {
+            let nvmVersions = "\(homeDirectory)/.nvm/versions/node"
+            guard let versions = try? fileManager.contentsOfDirectory(atPath: nvmVersions) else { return [] }
+            return versions
+                .sorted { $0.compare($1, options: .numeric) == .orderedDescending }
+                .map { "\(nvmVersions)/\($0)/bin" }
+        }
+        guard fileManager === FileManager.default else { return compute() }
+        return nvmBinDirsCache.value(forKey: homeDirectory, compute: compute)
+    }
+
+    private final class ProcessLifetimeCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var storage: [String: [String]] = [:]
+
+        func value(forKey key: String, compute: () -> [String]) -> [String] {
+            lock.lock()
+            defer { lock.unlock() }
+            if let cached = storage[key] { return cached }
+            let value = compute()
+            storage[key] = value
+            return value
+        }
     }
 }
