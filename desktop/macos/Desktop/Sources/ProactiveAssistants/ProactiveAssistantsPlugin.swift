@@ -63,6 +63,7 @@ public class ProactiveAssistantsPlugin: NSObject {
     // the user is trying to take a screenshot (CleanShot, Shottr, macOS screenshot, etc.).
     private var wasScreenshotAppFrontmost = false
     private var screenshotAppBackoffUntil: Date = .distantPast
+    private let screenshotAppBackoffDuration: TimeInterval = 10
 
     // Change-gated distribution: only distribute frames to assistants when context changes.
     // Eliminates continuous polling when the user stays on the same app/window.
@@ -614,7 +615,11 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Detects when the user revokes permission via System Settings while monitoring is active,
         // and stops gracefully instead of silently failing on every capture.
         let now = Date()
-        if now.timeIntervalSince(lastPermissionCheckTime) >= permissionCheckInterval {
+        if ProactiveAssistantOrchestrationPolicy.shouldRecheckPermission(
+            now: now,
+            lastCheckTime: lastPermissionCheckTime,
+            interval: permissionCheckInterval
+        ) {
             lastPermissionCheckTime = now
             let permissionGranted = ScreenCaptureService.checkPermission()
             _hasScreenRecordingPermission = permissionGranted
@@ -636,22 +641,31 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Skip capture while a screenshot / screen-recording app is frontmost.
         // Both apps using ScreenCaptureKit at the same time contend for WindowServer
         // locks, which can stall the user's capture UI for 20-60s. Yield to the user.
-        if isScreenshotAppFrontmost() {
+        switch ProactiveAssistantOrchestrationPolicy.screenshotAppDecision(
+            isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
+            wasScreenshotAppFrontmost: wasScreenshotAppFrontmost,
+            backoffUntil: screenshotAppBackoffUntil,
+            now: now,
+            backoffDuration: screenshotAppBackoffDuration
+        ) {
+        case .pause(let backoffUntil):
             if !wasScreenshotAppFrontmost {
                 log("ProactiveAssistantsPlugin: Screenshot app frontmost — pausing capture to avoid WindowServer contention")
                 wasScreenshotAppFrontmost = true
             }
-            screenshotAppBackoffUntil = Date().addingTimeInterval(10)
+            screenshotAppBackoffUntil = backoffUntil
             return
-        } else if wasScreenshotAppFrontmost {
+        case .resumeIntoBackoff:
             log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotAppBackoffUntil.timeIntervalSinceNow)))s")
             wasScreenshotAppFrontmost = false
-        }
-
-        // Continue honoring the backoff window after the screenshot app resigns so its
-        // post-capture editor UI (e.g. CleanShot's annotation window) isn't disturbed.
-        if Date() < screenshotAppBackoffUntil {
             return
+        case .resumeAndCapture:
+            log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for 0s")
+            wasScreenshotAppFrontmost = false
+        case .continueBackoff:
+            return
+        case .capture:
+            break
         }
 
         // Get current window info (use real app name, not cached)
@@ -662,19 +676,23 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         // Throttle capture when a video call app is frontmost to reduce CPU contention.
         // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
-        if isVideoCallApp(appName: realAppName, windowTitle: windowTitle) {
-            videoCallFrameCounter += 1
-            if videoCallFrameCounter < videoCallThrottleFactor {
-                if videoCallFrameCounter == 1 {
-                    log("VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames")
-                }
-                return  // Skip this frame
+        let videoCallDecision = ProactiveAssistantOrchestrationPolicy.videoCallThrottleDecision(
+            isVideoCall: isVideoCallApp(appName: realAppName, windowTitle: windowTitle),
+            currentCounter: videoCallFrameCounter,
+            throttleFactor: videoCallThrottleFactor
+        )
+        switch videoCallDecision {
+        case .skip(let nextCounter, let didEnterCall):
+            videoCallFrameCounter = nextCounter
+            if didEnterCall {
+                log("VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames")
             }
-            // This frame will be captured — reset counter for next cycle
-            videoCallFrameCounter = 0
-        } else if videoCallFrameCounter > 0 {
-            log("VideoCallThrottle: Left call app, resuming normal capture")
-            videoCallFrameCounter = 0
+            return
+        case .capture(let nextCounter, let didLeaveCall):
+            videoCallFrameCounter = nextCounter
+            if didLeaveCall {
+                log("VideoCallThrottle: Left call app, resuming normal capture")
+            }
         }
 
         // Unified context switch detection (covers app changes, window ID changes, and title changes)
@@ -924,28 +942,22 @@ public class ProactiveAssistantsPlugin: NSObject {
     private func distributeFrameIfChanged(_ frame: CapturedFrame) {
         latestCapturedFrame = frame
 
-        // First frame after monitoring starts — distribute immediately, no debounce
-        if lastDistributedApp == nil {
+        let now = Date()
+        switch ProactiveAssistantOrchestrationPolicy.distributionDecision(
+            lastDistributedApp: lastDistributedApp,
+            lastDistributedWindowTitle: lastDistributedWindowTitle,
+            frameApp: frame.appName,
+            frameWindowTitle: frame.windowTitle,
+            lastDistributionTime: lastDistributionTime,
+            now: now,
+            defaultFallbackInterval: distributionFallbackInterval,
+            messagingFallbackInterval: messagingDistributionFallbackInterval,
+            messagingFastPathApps: Self.messagingFastPathApps
+        ) {
+        case .flushNow:
+            distributionDebounceTimer?.invalidate()
             flushDebouncedFrame()
-            return
-        }
-
-        let contextChanged = ContextDetection.didContextChange(
-            fromApp: lastDistributedApp,
-            fromWindowTitle: lastDistributedWindowTitle,
-            toApp: frame.appName,
-            toWindowTitle: frame.windowTitle
-        )
-
-        let timeSinceLastDistribution = Date().timeIntervalSince(lastDistributionTime)
-        // Messaging apps get a much shorter same-context fallback so a new chat message
-        // reaches the analyzer in ~15s, even when you stay in the app the whole time.
-        let activeFallbackInterval = Self.messagingFastPathApps.contains(frame.appName)
-            ? messagingDistributionFallbackInterval
-            : distributionFallbackInterval
-        let fallbackDue = timeSinceLastDistribution >= activeFallbackInterval
-
-        if contextChanged {
+        case .debounce:
             // Update tracking immediately so subsequent captures in the same new context
             // don't keep resetting the debounce timer (fixes starvation bug).
             lastDistributedApp = frame.appName
@@ -958,12 +970,9 @@ public class ProactiveAssistantsPlugin: NSObject {
                     self?.flushDebouncedFrame()
                 }
             }
-        } else if fallbackDue {
-            // Same context but fallback interval elapsed — distribute for periodic re-analysis
-            distributionDebounceTimer?.invalidate()
-            flushDebouncedFrame()
+        case .skip:
+            break
         }
-        // Otherwise: same context, within fallback interval — skip distribution
     }
 
     /// Flush the latest captured frame to all assistants (called when debounce timer fires or fallback is due).
