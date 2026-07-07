@@ -167,7 +167,7 @@ struct ChatErrorCard: View {
         return "The AI is not responding. Try again to start a fresh response."
       }
     case .interrupted:
-      return "Resume the response or discard it and ask something new."
+      return "Ask something new when you're ready."
     case .noDataFound:
       return "Try a different question, or be more specific."
     }
@@ -176,9 +176,6 @@ struct ChatErrorCard: View {
   private var primaryCTATitle: String {
     switch state.primaryRecovery {
     case .retry:
-      if case .interrupted = state {
-        return "Resume"
-      }
       return "Retry"
     case .signIn:
       return "Sign in"

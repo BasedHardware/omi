@@ -90,9 +90,6 @@ struct TaskChatPanel: View {
                                     await taskState.sendMessage(text, taskContext: taskContext)
                                 }
                             },
-                            onFollowUp: { text in
-                                Task { await taskState.sendFollowUp(text) }
-                            },
                             onStop: {
                                 taskState.stopAgent()
                             },

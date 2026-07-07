@@ -25,20 +25,13 @@ class TaskChatState: ObservableObject {
     var onAuthRequired: AgentBridge.AuthRequiredHandler?
     var onAuthSuccess: AgentBridge.AuthSuccessHandler?
 
-    /// Follow-up chaining
-    private var pendingFollowUpText: String?
-
     private var runtimeProjectionCancellable: AnyCancellable?
     private var surfacedFailureKeys: Set<String> = []
     private var activeAssistantMessageId: String?
 
-    // MARK: - Streaming Buffers (mirrored from ChatProvider)
+    // MARK: - Streaming Buffer
 
-    private var streamingTextBuffer: String = ""
-    private var streamingThinkingBuffer: String = ""
-    private var streamingBufferMessageId: String?
-    private var streamingFlushWorkItem: DispatchWorkItem?
-    private let streamingFlushInterval: TimeInterval = 0.1
+    private let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.1)
 
     /// Whether persisted messages have been loaded from GRDB
     private var hasLoadedFromStorage = false
@@ -110,7 +103,7 @@ class TaskChatState: ObservableObject {
 
     // MARK: - Send Message
 
-    func sendMessage(_ text: String, isFollowUp: Bool = false, taskContext: String? = nil) async {
+    func sendMessage(_ text: String, taskContext: String? = nil) async {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedText.isEmpty else { return }
         guard !isSending else {
@@ -125,16 +118,13 @@ class TaskChatState: ObservableObject {
         localSendToken = LocalSendToken(generation: localSendToken.generation + 1)
 
         // Add user message to local messages and persist
-        // Skip for follow-ups — sendFollowUp() already added and persisted it
-        if !isFollowUp {
-            let userMessage = ChatMessage(
-                id: UUID().uuidString,
-                text: trimmedText,
-                sender: .user
-            )
-            messages.append(userMessage)
-            persistMessage(userMessage)
-        }
+        let userMessage = ChatMessage(
+            id: UUID().uuidString,
+            text: trimmedText,
+            sender: .user
+        )
+        messages.append(userMessage)
+        persistMessage(userMessage)
 
         // Create placeholder AI message
         let aiMessageId = UUID().uuidString
@@ -167,7 +157,7 @@ class TaskChatState: ObservableObject {
                     self?.addToolActivity(
                         messageId: aiMessageId,
                         toolName: name,
-                        status: status == "started" ? .running : .completed,
+                        status: ToolCallStatus.fromBridgeStatus(status),
                         toolUseId: toolUseId,
                         input: input
                     )
@@ -201,8 +191,7 @@ class TaskChatState: ObservableObject {
             )
 
             // Flush remaining streaming buffers
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             // Finalize AI message
@@ -248,8 +237,7 @@ class TaskChatState: ObservableObject {
                 TaskAgentStatusRegistry.shared.markCompleted(taskId: taskId)
             }
         } catch {
-            streamingFlushWorkItem?.cancel()
-            streamingFlushWorkItem = nil
+            streamingBuffer.cancelPendingFlush()
             flushStreamingBuffer()
 
             let failedByUserStop: Bool
@@ -263,7 +251,9 @@ class TaskChatState: ObservableObject {
                 if failedByUserStop && messages[index].text.isEmpty && messages[index].contentBlocks.isEmpty {
                     messages.remove(at: index)
                 } else {
-                    Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+                    if !failedByUserStop {
+                        Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)
+                    }
                     messages[index].isStreaming = false
                     completeRemainingToolCalls(
                         messageId: aiMessageId,
@@ -285,19 +275,54 @@ class TaskChatState: ObservableObject {
         activeAssistantMessageId = nil
         isSending = false
         isStopping = false
+    }
 
-        // Chain follow-up if queued
-        if let followUp = pendingFollowUpText {
-            pendingFollowUpText = nil
-            await sendMessage(followUp, isFollowUp: true)
+    // MARK: - Failure Formatting
+
+    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
+        let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        let existingText = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if existingText.isEmpty {
+            message.text = failureText
+        } else if !existingText.contains(failureText) {
+            message.text += "\n\n\(failureText)"
+        }
+
+        guard !message.contentBlocks.isEmpty else { return }
+
+        if !existingText.isEmpty && !Self.contentBlocks(message.contentBlocks, containText: existingText) {
+            message.contentBlocks.insert(.text(id: UUID().uuidString, text: existingText), at: 0)
+        }
+
+        let hasFailureTextBlock = message.contentBlocks.contains { block in
+            if case .text(_, let text) = block {
+                return text.trimmingCharacters(in: .whitespacesAndNewlines) == failureText
+            }
+            return false
+        }
+        if !hasFailureTextBlock {
+            message.contentBlocks.append(.text(id: UUID().uuidString, text: failureText))
         }
     }
 
-    // MARK: - Follow-Up
+    private static func contentBlocks(_ blocks: [ChatContentBlock], containText needle: String) -> Bool {
+        let combinedText = blocks.compactMap { block in
+            if case .text(_, let text) = block {
+                return text
+            }
+            return nil
+        }
+        .joined()
 
-    static func applyFailureTextIfNeeded(to message: inout ChatMessage, errorDescription: String) {
-        if message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            message.text = AgentFailureTranscriptFormatter.transcriptText(for: errorDescription) ?? "Failed: Agent failed"
+        if combinedText.contains(needle) {
+            return true
+        }
+
+        return blocks.contains { block in
+            if case .text(_, let text) = block {
+                return text.contains(needle)
+            }
+            return false
         }
     }
 
@@ -381,25 +406,6 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    func sendFollowUp(_ text: String) async {
-        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty, isSending else { return }
-
-        // Add user message locally and persist
-        let userMessage = ChatMessage(
-            id: UUID().uuidString,
-            text: trimmedText,
-            sender: .user
-        )
-        messages.append(userMessage)
-        persistMessage(userMessage)
-
-        // Queue follow-up and interrupt current query
-        pendingFollowUpText = trimmedText
-        await TaskChatRuntime.interrupt(taskId: taskId)
-        log("TaskChatState[\(taskId)]: follow-up queued, interrupt sent")
-    }
-
     // MARK: - Stop
 
     func stopAgent() {
@@ -410,100 +416,52 @@ class TaskChatState: ObservableObject {
         }
     }
 
-    // MARK: - Streaming Helpers (mirrored from ChatProvider)
+    // MARK: - Streaming Helpers
 
     private func appendToMessage(id: String, text: String) {
-        streamingBufferMessageId = id
-        streamingTextBuffer += text
-
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendText(messageId: id, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
     private func flushStreamingBuffer() {
-        streamingFlushWorkItem = nil
-
-        guard let id = streamingBufferMessageId,
-              let index = messages.firstIndex(where: { $0.id == id }) else {
-            streamingTextBuffer = ""
-            streamingThinkingBuffer = ""
-            return
-        }
-
-        if !streamingTextBuffer.isEmpty {
-            let buffered = streamingTextBuffer
-            streamingTextBuffer = ""
-
-            messages[index].text += buffered
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .text(let blockId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .text(id: blockId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.text(id: UUID().uuidString, text: buffered))
-            }
-        }
-
-        if !streamingThinkingBuffer.isEmpty {
-            let buffered = streamingThinkingBuffer
-            streamingThinkingBuffer = ""
-
-            if let lastBlockIndex = messages[index].contentBlocks.indices.last,
-               case .thinking(let thinkId, let existing) = messages[index].contentBlocks[lastBlockIndex] {
-                messages[index].contentBlocks[lastBlockIndex] = .thinking(id: thinkId, text: existing + buffered)
-            } else {
-                messages[index].contentBlocks.append(.thinking(id: UUID().uuidString, text: buffered))
-            }
-        }
+        streamingBuffer.flush(messages: &messages)
     }
 
     private func addToolActivity(messageId: String, toolName: String, status: ToolCallStatus, toolUseId: String? = nil, input: [String: Any]? = nil) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolActivity(
-            to: &messages[index].contentBlocks,
+        streamingBuffer.applyToolActivity(
+            messageId: messageId,
             toolName: toolName,
             status: status,
             toolUseId: toolUseId,
-            input: input
+            input: input,
+            messages: &messages
         )
     }
 
     private func addToolResult(messageId: String, toolUseId: String, name: String, output: String) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.applyToolOutput(
-            to: &messages[index].contentBlocks,
+        streamingBuffer.applyToolResult(
+            messageId: messageId,
             toolUseId: toolUseId,
             name: name,
-            output: output
+            output: output,
+            messages: &messages
         )
     }
 
     private func appendThinking(messageId: String, text: String) {
-        streamingBufferMessageId = messageId
-        streamingThinkingBuffer += text
-
-        if streamingFlushWorkItem == nil {
-            let workItem = DispatchWorkItem { [weak self] in
-                self?.flushStreamingBuffer()
-            }
-            streamingFlushWorkItem = workItem
-            DispatchQueue.main.asyncAfter(deadline: .now() + streamingFlushInterval, execute: workItem)
+        streamingBuffer.appendThinking(messageId: messageId, text: text) { [weak self] in
+            self?.flushStreamingBuffer()
         }
     }
 
-    /// Mirrors ChatProvider.completeRemainingToolCalls — matches any
-    /// in-flight state (`.running`, `.slow`, `.stalled`) so detector-
-    /// promoted blocks resolve when the turn ends.
+    /// Matches any in-flight state (`.running`, `.slow`, `.stalled`) so
+    /// detector-promoted blocks resolve when the turn ends.
     private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed) {
-        guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return }
-        ToolCallBlockUpdater.completeRemainingToolCalls(
-            in: &messages[index].contentBlocks,
-            terminalStatus: terminalStatus
+        streamingBuffer.completeRemainingToolCalls(
+            messageId: messageId,
+            terminalStatus: terminalStatus,
+            messages: &messages
         )
     }
 }

@@ -1586,22 +1586,8 @@ private struct NotchOmiMark: View {
 /// carry a brightness trail (bright head → faint tail) so the continuous
 /// rotation reads as a sweeping comet rather than a static ring of dots.
 private struct NotchThinkingMark: View {
-    @State private var angle: Double = 0
-
-    private static let trail: [Color] = (0..<8).map { index in
-        Color.white.opacity(1.0 - Double(index) * 0.1)
-    }
-
     var body: some View {
-        NotchOmiMark(dotColors: Self.trail)
-            .rotationEffect(.degrees(angle))
-            .onAppear {
-                angle = 0
-                withAnimation(.linear(duration: 0.9).repeatForever(autoreverses: false)) {
-                    angle = 360
-                }
-            }
-            .accessibilityLabel("Thinking")
+        OmiThinkingMark()
     }
 }
 
