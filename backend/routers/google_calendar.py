@@ -14,7 +14,7 @@ import database.users as users_db
 from models.conversation import CalendarEventLink
 from utils.conversations.calendar_utils import extract_attendees, parse_event_times
 from utils.other import endpoints as auth
-from utils.retrieval.tools.calendar_tools import get_google_calendar_events
+from utils.retrieval.tools.calendar_tools import delete_google_calendar_event, get_google_calendar_events
 from utils.retrieval.tools.google_utils import refresh_google_token
 
 router = APIRouter()
@@ -118,3 +118,32 @@ async def list_google_calendar_events(
             raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {error_msg}")
 
     return [converted for event in events if (converted := _event_to_response(event))]
+
+
+@router.delete("/v1/calendar/google/events/{event_id}", tags=['google_calendar'])
+async def delete_google_calendar_event_endpoint(event_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Delete a Google Calendar event by id.
+
+    Used by the messaging Replies inbox to "discard" a tentative hold that an
+    availability-aware reply created. Idempotent from the client's view: a missing event
+    (already discarded) is treated as success.
+    """
+    access_token, integration = _get_google_calendar_token(uid)
+    try:
+        await delete_google_calendar_event(access_token, event_id)
+    except Exception as e:
+        error_msg = str(e)
+        low = error_msg.lower()
+        if "404" in low or "not found" in low:
+            return {'success': True}  # already gone
+        if "error 401" in low or "authentication failed" in low:
+            new_token = await refresh_google_token(uid, integration)
+            if not new_token:
+                raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
+            try:
+                await delete_google_calendar_event(new_token, event_id)
+            except Exception as retry_error:
+                raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+        else:
+            raise HTTPException(status_code=500, detail=f"Failed to delete calendar event: {error_msg}")
+    return {'success': True}
