@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Gemini realtime voice sessions failing to start for managed users due to a malformed token-mint request"
+}
