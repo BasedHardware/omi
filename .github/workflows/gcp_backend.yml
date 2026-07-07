@@ -192,6 +192,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --remove-secrets=SERVICE_ACCOUNT_JSON,POSTHOG_PROJECT_API_KEY
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_secrets }}
@@ -212,6 +213,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --remove-secrets=SERVICE_ACCOUNT_JSON,POSTHOG_PROJECT_API_KEY
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_sync_secrets }}
@@ -269,6 +271,7 @@ jobs:
           no_traffic: true
           flags: >-
             --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
+            --remove-secrets=SERVICE_ACCOUNT_JSON,POSTHOG_PROJECT_API_KEY
             ${{ steps.runtime-env.outputs.cloud_run_flags }}
           env_vars: ${{ steps.runtime-env.outputs.backend_integration_env_vars }}
           secrets: ${{ steps.runtime-env.outputs.backend_integration_secrets }}
