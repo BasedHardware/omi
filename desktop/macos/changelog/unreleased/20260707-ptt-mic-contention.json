@@ -1,0 +1,1 @@
+{"change":"Fixed a conflict where push-to-talk could fight the active transcription microphone (e.g. Ray-Ban Meta glasses) over the same audio device — push-to-talk now uses the built-in mic while another capture is running"}

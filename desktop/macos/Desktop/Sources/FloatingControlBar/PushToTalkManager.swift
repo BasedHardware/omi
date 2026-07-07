@@ -1509,10 +1509,29 @@ class PushToTalkManager: ObservableObject {
   }
 
   private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID? {
-    if AudioCaptureService.isDefaultOutputBluetooth(),
-      let builtIn = AudioCaptureService.findBuiltInMicDeviceID()
-    {
+    guard let builtIn = AudioCaptureService.findBuiltInMicDeviceID() else { return nil }
+    if AudioCaptureService.isDefaultOutputBluetooth() {
       return builtIn
+    }
+    // The transcription capture may be pinned to a specific mic (e.g. Ray-Ban
+    // Meta glasses chosen in Settings → Transcription). Opening a second
+    // IOProc on a device another capture already holds — or opening any
+    // Bluetooth input while another capture runs and can flap the A2DP↔HFP
+    // profile — races both instances' stream-format reconfiguration. PTT
+    // yields and captures from the built-in mic instead.
+    if let defaultInput = AudioCaptureService.currentDefaultInputDeviceID(),
+      defaultInput != builtIn
+    {
+      if AudioCaptureService.isDeviceActivelyCaptured(defaultInput) {
+        log("PushToTalkManager: default input is held by another capture — using built-in mic")
+        return builtIn
+      }
+      if AudioCaptureService.hasActiveCapture(),
+        AudioCaptureService.isBluetoothTransport(deviceID: defaultInput)
+      {
+        log("PushToTalkManager: Bluetooth input while another capture is live — using built-in mic")
+        return builtIn
+      }
     }
     return nil
   }

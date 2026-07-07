@@ -334,6 +334,7 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         isCapturing = true
+        registerActiveCapture(deviceID: deviceID)
         log("AudioCapture: Started capturing")
 
         // 8. Install property listeners for device changes
@@ -345,6 +346,7 @@ class AudioCaptureService: @unchecked Sendable {
         resetSilentMicWatchdog()
         guard isCapturing else { return }
 
+        unregisterActiveCapture()
         removePropertyListeners()
 
         // Capture values before clearing state so we can dispatch the heavy
@@ -477,6 +479,41 @@ class AudioCaptureService: @unchecked Sendable {
     /// UserDefaults key for the user's explicit microphone choice ("" = system default).
     static let preferredInputUIDDefaultsKey = "preferredMicrophoneDeviceUID"
 
+    // MARK: - Active-capture registry
+    //
+    // Tracks which devices are held by a live capture so other audio consumers
+    // (push-to-talk) can avoid opening a second IOProc against the same device
+    // — or joining a Bluetooth mic's A2DP↔HFP profile flap — which races the
+    // two instances' stream-format reconfiguration paths.
+    private static let activeCapturesLock = NSLock()
+    private static var activeCaptures: [ObjectIdentifier: AudioDeviceID] = [:]
+
+    private func registerActiveCapture(deviceID: AudioDeviceID) {
+        Self.activeCapturesLock.lock()
+        Self.activeCaptures[ObjectIdentifier(self)] = deviceID
+        Self.activeCapturesLock.unlock()
+    }
+
+    private func unregisterActiveCapture() {
+        Self.activeCapturesLock.lock()
+        Self.activeCaptures.removeValue(forKey: ObjectIdentifier(self))
+        Self.activeCapturesLock.unlock()
+    }
+
+    /// True when another live capture already holds this device.
+    static func isDeviceActivelyCaptured(_ deviceID: AudioDeviceID) -> Bool {
+        activeCapturesLock.lock()
+        defer { activeCapturesLock.unlock() }
+        return activeCaptures.values.contains(deviceID)
+    }
+
+    /// True when any capture is currently running in this process.
+    static func hasActiveCapture() -> Bool {
+        activeCapturesLock.lock()
+        defer { activeCapturesLock.unlock() }
+        return !activeCaptures.isEmpty
+    }
+
     static func getCurrentMicrophoneName() -> String? {
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
@@ -539,7 +576,7 @@ class AudioCaptureService: @unchecked Sendable {
         return defaultDeviceID
     }
 
-    private static func currentDefaultInputDeviceID() -> AudioDeviceID? {
+    static func currentDefaultInputDeviceID() -> AudioDeviceID? {
         var deviceID: AudioDeviceID = kAudioObjectUnknown
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         var address = AudioObjectPropertyAddress(
@@ -734,6 +771,7 @@ class AudioCaptureService: @unchecked Sendable {
     // MARK: - Property Listeners
 
     private func installPropertyListeners() {
+        registerActiveCapture(deviceID: deviceID)
         updateDefaultDeviceListener()
         installDeviceFormatListener()
     }
