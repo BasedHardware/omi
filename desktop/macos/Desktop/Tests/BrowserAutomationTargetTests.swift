@@ -40,7 +40,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertNotNil(MemoryExportDestination.claude.assistedOverlayHint)
     XCTAssertNil(MemoryExportDestination.gemini.assistedOverlayHint)
     XCTAssertEqual(MemoryExportDestination.claude.assistedSetupFields(key: "k")?.count, 4)
-    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 7)
+    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 8)
     // Prod ChatGPT client is public PKCE — the secret row must stay blank.
     XCTAssertEqual(
       MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
@@ -48,10 +48,16 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertEqual(
       MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?
         .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, false)
-    // Claude secret must be masked on screen.
+    // Claude cloud uses a public OAuth client too — the secret row must stay blank.
     XCTAssertEqual(
       MemoryExportDestination.claude.assistedSetupFields(key: "secret-key")?
-        .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, true)
+        .first(where: { $0.label == "OAuth Client ID" })?.value, "omi-claude-prod")
+    XCTAssertEqual(
+      MemoryExportDestination.claude.assistedSetupFields(key: "secret-key")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.value, "")
+    XCTAssertEqual(
+      MemoryExportDestination.claude.assistedSetupFields(key: "secret-key")?
+        .first(where: { $0.label == "OAuth Client Secret" })?.masksValue, false)
     // Stable ids — never label-derived (duplicate labels would crash ForEach).
     let chatgptIDs = MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.map(\.id) ?? []
     XCTAssertEqual(Set(chatgptIDs).count, chatgptIDs.count)

@@ -25,6 +25,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from multipart.multipart import shutil
+from pydantic import BaseModel
 
 import database.chat as chat_db
 import database.conversations as conversations_db
@@ -39,6 +40,8 @@ from models.chat import (
     ResponseMessage,
     MessageConversation,
     FileChat,
+    RateMessageRequest,
+    ShareChatMessagesRequest,
 )
 from utils.apps import get_available_app_by_id
 from utils.conversation_helpers import extract_memory_ids
@@ -84,6 +87,37 @@ _WS_IDLE_TIMEOUT_S = 60
 # Hard body-size cap for octet-stream uploads (200 MB).
 # Prevents memory exhaustion from oversized payloads regardless of budget.
 _MAX_PCM_BODY_BYTES = 200_000_000
+
+
+class VoiceMessageTranscriptionResponse(BaseModel):
+    transcript: str
+    language: Optional[str] = None
+
+
+class MessageReportResponse(BaseModel):
+    message: str
+
+
+class ChatRatingResponse(BaseModel):
+    status: str
+
+
+class ShareChatMessagesResponse(BaseModel):
+    url: str
+    token: str
+
+
+class SharedChatMessage(BaseModel):
+    id: str
+    text: str
+    sender: str
+    created_at: Optional[str] = None
+
+
+class SharedChatMessagesResponse(BaseModel):
+    sender_name: str
+    messages: List[SharedChatMessage] = []
+    count: int
 
 
 def _parse_context_keywords(raw: Optional[str]) -> List[str]:
@@ -137,7 +171,7 @@ def _build_quota_exceeded_reply(
         type='text',
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, user_msg.dict())
+    chat_db.add_message(uid, user_msg.model_dump())
 
     plan = detail.get('plan') or 'Free'
     unit = detail.get('unit')
@@ -170,8 +204,8 @@ def _build_quota_exceeded_reply(
         type='text',
         app_id=compat_app_id,
     )
-    chat_db.add_message(uid, ai_msg.dict())
-    return ResponseMessage(**ai_msg.dict(), ask_for_nps=False)
+    chat_db.add_message(uid, ai_msg.model_dump())
+    return ResponseMessage(**ai_msg.model_dump(), ask_for_nps=False)
 
 
 def _record_chat_quota_question_safe(
@@ -267,7 +301,7 @@ def send_message(
         message.chat_session_id = chat_session.id
         chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
     _record_chat_quota_question_safe(
         uid,
         idempotency_key=f'v2_messages:{message.id}',
@@ -286,7 +320,20 @@ def send_message(
 
     app_id_from_app = app.id if app else None
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10, app_id=compat_app_id)]))
+    # Skip a malformed/legacy stored message rather than 500 the whole chat send.
+    messages = list(
+        reversed(
+            Message.deserialize_many_safe(
+                chat_db.get_messages(uid, limit=10, app_id=compat_app_id),
+                on_error=lambda record, exc: logger.warning(
+                    'Skipping malformed chat message %s for uid=%s: %s',
+                    record.get('id') if isinstance(record, dict) else None,
+                    uid,
+                    type(exc).__name__,
+                ),
+            )
+        )
+    )
 
     def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
@@ -321,7 +368,7 @@ def send_message(
             ai_message.chat_session_id = chat_session.id
             chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        chat_db.add_message(uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
         if app_id:
             record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
@@ -349,7 +396,7 @@ def send_message(
                     response = callback_data.get('answer')
                     if response:
                         ai_message, ask_for_nps = process_message(response, callback_data)
-                        ai_message_dict = ai_message.dict()
+                        ai_message_dict = ai_message.model_dump()
                         response_message = ResponseMessage(**ai_message_dict)
                         response_message.ask_for_nps = ask_for_nps
                         encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
@@ -362,7 +409,7 @@ def send_message(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=dict)
+@router.post('/v2/messages/{message_id}/report', tags=['chat'], response_model=MessageReportResponse)
 def report_message(message_id: str, uid: str = Depends(auth.get_current_user_uid)):
     message, msg_doc_id = chat_db.get_message(uid, message_id)
     if message is None:
@@ -445,7 +492,16 @@ def get_messages(
     return messages
 
 
-@router.post("/v2/voice-messages")
+@router.post(
+    "/v2/voice-messages",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-sent event stream of chat message chunks.",
+            "content": {"text/event-stream": {"schema": {"type": "string"}}},
+        }
+    },
+)
 def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
@@ -499,7 +555,7 @@ def create_voice_message_stream(
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post("/v2/voice-message/transcribe")
+@router.post("/v2/voice-message/transcribe", response_model=VoiceMessageTranscriptionResponse)
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
@@ -1005,11 +1061,11 @@ def upload_file_chat(
                 thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response = [fc.model_dump() for fc in files_chat]
 
     return response
 
@@ -1063,11 +1119,11 @@ def upload_file_chat(
             thumb_file.unlink()
 
     # save db
-    files_chat_dict = [fc.dict() for fc in files_chat]
+    files_chat_dict = [fc.model_dump() for fc in files_chat]
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.dict() for fc in files_chat]
+    response = [fc.model_dump() for fc in files_chat]
 
     return response
 
@@ -1130,14 +1186,14 @@ def create_initial_message(
 # MARK: - Message Rating
 
 
-@router.patch('/v2/messages/{message_id}/rating', tags=['chat'])
+@router.patch('/v2/messages/{message_id}/rating', tags=['chat'], response_model=ChatRatingResponse)
 def rate_message(
     message_id: str,
-    data: dict,
+    data: RateMessageRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Rate a chat message (thumbs up/down). Used by desktop client."""
-    rating = data.get('rating')
+    rating = data.rating
 
     # Update rating on the message document
     chat_db.update_message_rating(uid, message_id, rating)
@@ -1171,13 +1227,13 @@ def rate_message(
 # MARK: - Chat Sharing
 
 
-@router.post('/v2/messages/share', tags=['chat'])
+@router.post('/v2/messages/share', tags=['chat'], response_model=ShareChatMessagesResponse)
 def share_chat_messages(
-    data: dict,
+    data: ShareChatMessagesRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
     """Create a shareable link for chat messages."""
-    message_ids = data.get('message_ids', [])
+    message_ids = data.message_ids
     if not message_ids:
         raise HTTPException(status_code=400, detail='No message IDs provided')
 
@@ -1196,7 +1252,7 @@ def share_chat_messages(
     return {"url": f"https://h.omi.me/chat/{token}", "token": token}
 
 
-@router.get('/v2/messages/shared/{token}', tags=['chat'])
+@router.get('/v2/messages/shared/{token}', tags=['chat'], response_model=SharedChatMessagesResponse)
 def get_shared_chat_messages(token: str):
     """Public endpoint — get shared chat messages (no auth required)."""
     share_data = get_chat_share(token)

@@ -1,35 +1,10 @@
 """Review-queue and extractor schema tests (legacy consolidation stack removed in O-W6)."""
 
-import os
-import sys
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-import types
-
-ledger_stub = types.ModuleType("database.memory_ledger")
-ledger_stub.add_fact = lambda fact: {"type": "add_fact", "fact": fact}
-ledger_stub.supersede_fact = lambda existing_id, **kwargs: {"type": "supersede_fact", "fact_id": existing_id, **kwargs}
-ledger_stub.retract_fact = lambda fact_id, **kwargs: {"type": "retract_fact", "fact_id": fact_id, **kwargs}
-ledger_stub.refine_fact = lambda fact_id, arg_changes: {
-    "type": "refine_fact",
-    "fact_id": fact_id,
-    "arg_changes": arg_changes,
-}
-ledger_stub.append_commit = MagicMock()
-
-sys.modules["database._client"] = MagicMock()
-sys.modules["database.memories"] = MagicMock()
-sys.modules["database.memory_ledger"] = ledger_stub
-sys.modules["database.short_term_memories"] = MagicMock()
-
-from database import review_queue  # noqa: E402
-from utils.llm.memories import HighRecallMemories, Memories  # noqa: E402
+from database import review_queue
+from utils.llm.memories import HighRecallMemories, Memories
 
 
 def test_high_recall_short_term_extractor_schema_removes_legacy_cap():
@@ -65,7 +40,8 @@ def test_pending_timeout_resolves_by_evidence_not_fixed_outcome():
     assert review_queue.timeout_decision({'review_id': 'r1'}, current_veracity=0.5) == 'drop'
 
 
-def test_review_resolution_mutations_and_correction_record():
+def test_review_resolution_mutations_and_correction_record(monkeypatch):
+    monkeypatch.setattr(review_queue, 'db', MagicMock())
     item = {
         'review_id': 'review1',
         'fact_id': 'new',

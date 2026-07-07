@@ -79,6 +79,11 @@ traces, logs, timing, and AX text. The harness does not score screenshot quality
 the agent should open the PNGs listed in `summary.md` and judge layout, polish,
 clipping, empty states, and visual regressions directly.
 
+Before adding an AX step, inspect `./scripts/omi-ctl actions`. Action descriptors
+include `surfaces`, `safety`, `sideEffects`, and `examples`; use a matching semantic
+`bridge.action` first when `preferSemantic` is true, especially for read-only probes,
+local captures, and deterministic visual fixtures.
+
 Bridge routes return as soon as the app has accepted the command. Prefer `wait:`
 for readiness checks so benchmark timing separates command latency from UI settle
 latency. If a flow genuinely needs a fixed pause, pass `settleMs:` on

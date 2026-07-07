@@ -1,13 +1,14 @@
+import AppKit
 import SwiftUI
 import Combine
 
 // MARK: - Font Scale Settings
 
-class FontScaleSettings: ObservableObject {
-    static let shared = FontScaleSettings()
+package class FontScaleSettings: ObservableObject {
+    package static let shared = FontScaleSettings()
     private let defaults = UserDefaults.standard
 
-    @Published var scale: CGFloat {
+    @Published package var scale: CGFloat {
         didSet {
             defaults.set(scale, forKey: "fontScale")
         }
@@ -17,7 +18,7 @@ class FontScaleSettings: ObservableObject {
         self.scale = defaults.object(forKey: "fontScale") as? CGFloat ?? 1.0
     }
 
-    func resetToDefault() {
+    package func resetToDefault() {
         scale = 1.0
     }
 }
@@ -28,8 +29,8 @@ private struct FontScaleKey: EnvironmentKey {
     static let defaultValue: CGFloat = 1.0
 }
 
-extension EnvironmentValues {
-    var fontScale: CGFloat {
+package extension EnvironmentValues {
+    package var fontScale: CGFloat {
         get { self[FontScaleKey.self] }
         set { self[FontScaleKey.self] = newValue }
     }
@@ -37,58 +38,58 @@ extension EnvironmentValues {
 
 // MARK: - Scaled Font Modifier
 
-struct ScaledFontModifier: ViewModifier {
+package struct ScaledFontModifier: ViewModifier {
     @Environment(\.fontScale) private var fontScale
     let size: CGFloat
     var weight: Font.Weight = .regular
     var design: Font.Design = .default
 
-    func body(content: Content) -> some View {
+    package func body(content: Content) -> some View {
         content.font(.system(size: round(size * fontScale), weight: weight, design: design))
     }
 }
 
-extension View {
-    func scaledFont(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
+package extension View {
+package func scaledFont(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
         modifier(ScaledFontModifier(size: size, weight: weight, design: design))
     }
 }
 
 // MARK: - Monospaced Digit Variant
 
-struct ScaledMonospacedDigitFontModifier: ViewModifier {
+package struct ScaledMonospacedDigitFontModifier: ViewModifier {
     @Environment(\.fontScale) private var fontScale
     let size: CGFloat
     var weight: Font.Weight = .regular
 
-    func body(content: Content) -> some View {
+    package func body(content: Content) -> some View {
         content.font(.system(size: round(size * fontScale), weight: weight).monospacedDigit())
     }
 }
 
-struct ScaledMonospacedFontModifier: ViewModifier {
+package struct ScaledMonospacedFontModifier: ViewModifier {
     @Environment(\.fontScale) private var fontScale
     let size: CGFloat
     var weight: Font.Weight = .regular
 
-    func body(content: Content) -> some View {
+    package func body(content: Content) -> some View {
         content.font(.system(size: round(size * fontScale), weight: weight).monospaced())
     }
 }
 
-extension View {
-    func scaledMonospacedDigitFont(size: CGFloat, weight: Font.Weight = .regular) -> some View {
+package extension View {
+package func scaledMonospacedDigitFont(size: CGFloat, weight: Font.Weight = .regular) -> some View {
         modifier(ScaledMonospacedDigitFontModifier(size: size, weight: weight))
     }
 
-    func scaledMonospacedFont(size: CGFloat, weight: Font.Weight = .regular) -> some View {
+package func scaledMonospacedFont(size: CGFloat, weight: Font.Weight = .regular) -> some View {
         modifier(ScaledMonospacedFontModifier(size: size, weight: weight))
     }
 }
 
 // MARK: - Window Size Reset
 
-func resetWindowToDefaultSize() {
+package func resetWindowToDefaultSize() {
     guard let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.title.contains("omi") || $0.title.contains("Omi") }) else { return }
     let defaultSize = NSSize(width: 1200, height: 800)
     let frame = window.frame
@@ -101,16 +102,16 @@ func resetWindowToDefaultSize() {
 
 // MARK: - Font Scale Environment Injection
 
-struct FontScaleEnvironmentModifier: ViewModifier {
+package struct FontScaleEnvironmentModifier: ViewModifier {
     @ObservedObject private var settings = FontScaleSettings.shared
 
-    func body(content: Content) -> some View {
+    package func body(content: Content) -> some View {
         content.environment(\.fontScale, settings.scale)
     }
 }
 
-extension View {
-    func withFontScaling() -> some View {
+package extension View {
+package func withFontScaling() -> some View {
         modifier(FontScaleEnvironmentModifier())
     }
 }

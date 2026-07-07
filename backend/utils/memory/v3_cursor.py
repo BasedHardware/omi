@@ -10,7 +10,7 @@ import hashlib
 import hmac
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 _CURSOR_PREFIX = 'v3'
 _CURSOR_SCHEMA_VERSION = 1
@@ -97,7 +97,7 @@ def create_v3_cursor(
     slice.
     """
 
-    payload = {
+    payload: dict[str, Any] = {
         'schema_version': _CURSOR_SCHEMA_VERSION,
         'uid': context.uid,
         'account_generation': context.account_generation,
@@ -126,26 +126,32 @@ def parse_v3_cursor(cursor: str, context: V3CursorContext, secret: bytes) -> V3C
         raise V3CursorError('invalid_signature')
 
     try:
-        payload = json.loads(_b64decode(payload_segment).decode('utf-8'))
-        keyset_payload = payload['keyset']
+        payload = cast(object, json.loads(_b64decode(payload_segment).decode('utf-8')))
+        if not isinstance(payload, dict):
+            raise V3CursorError('malformed_cursor')
+        payload_data = cast(dict[str, Any], payload)
+        keyset_payload = payload_data['keyset']
+        if not isinstance(keyset_payload, dict):
+            raise V3CursorError('malformed_cursor')
+        keyset_data = cast(dict[str, Any], keyset_payload)
         claims = V3CursorClaims(
-            uid=payload['uid'],
-            account_generation=payload['account_generation'],
-            projection_generation=payload['projection_generation'],
-            filter_hash=payload['filter_hash'],
-            source=payload['source'],
-            read_mode=payload['read_mode'],
+            uid=payload_data['uid'],
+            account_generation=payload_data['account_generation'],
+            projection_generation=payload_data['projection_generation'],
+            filter_hash=payload_data['filter_hash'],
+            source=payload_data['source'],
+            read_mode=payload_data['read_mode'],
             keyset=V3Keyset(
-                created_at_ms=keyset_payload['created_at_ms'],
-                memory_id=keyset_payload['memory_id'],
+                created_at_ms=keyset_data['created_at_ms'],
+                memory_id=keyset_data['memory_id'],
             ),
-            expires_at_epoch_seconds=payload['expires_at_epoch_seconds'],
-            keyset_order=tuple(payload['keyset_order']),
+            expires_at_epoch_seconds=payload_data['expires_at_epoch_seconds'],
+            keyset_order=tuple(payload_data['keyset_order']),
         )
     except (KeyError, TypeError, ValueError, json.JSONDecodeError):
         raise V3CursorError('malformed_cursor')
 
-    if payload.get('schema_version') != _CURSOR_SCHEMA_VERSION or claims.keyset_order != _KEYSET_ORDER:
+    if payload_data.get('schema_version') != _CURSOR_SCHEMA_VERSION or claims.keyset_order != _KEYSET_ORDER:
         raise V3CursorError('malformed_cursor')
     if context.now_epoch_seconds > claims.expires_at_epoch_seconds:
         raise V3CursorError('cursor_expired')

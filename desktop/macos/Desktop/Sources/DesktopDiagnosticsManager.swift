@@ -9,6 +9,7 @@ enum DesktopHealthEventName: String {
   case pttAudioCaptureDeviceRouteChanged = "ptt_audio_capture_device_route_changed"
   case pttCommitted = "ptt_committed"
   case realtimeTokenMintFailed = "realtime_token_mint_failed"
+  case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
 }
@@ -68,7 +69,9 @@ final class DesktopDiagnosticsManager {
     rms: Int,
     deviceDescription: String?,
     micPermissionGranted: Bool,
-    hubActive: Bool
+    hubActive: Bool,
+    recoveryAction: String = "none",
+    recoveryResult: String = "not_attempted"
   ) {
     let nearZero = peak <= 5 && rms <= 5
     let watchdogEligible = audioSeconds >= pttWatchdogMinimumAudioSeconds
@@ -90,8 +93,8 @@ final class DesktopDiagnosticsManager {
       "consecutive_silent_turns": consecutiveNearZeroPTTTurns,
       "tcc_microphone_granted": micPermissionGranted,
       "input_device_class": classifyInputDevice(deviceDescription),
-      "recovery_action": "none",
-      "recovery_result": "not_attempted",
+      "recovery_action": recoveryAction,
+      "recovery_result": recoveryResult,
     ]
     if let voicedSeconds {
       properties["voiced_audio_seconds"] = rounded(voicedSeconds)
@@ -124,28 +127,78 @@ final class DesktopDiagnosticsManager {
       ])
   }
 
-  func recordRealtimeTokenMintFailed(provider: String, reason: String, phase: String) {
+  func recordRealtimeTokenMintFailed(
+    provider: String,
+    reason: String,
+    phase: String,
+    httpStatusCode: Int? = nil,
+    backendRoute: String? = nil,
+    upstreamStatusCode: Int? = nil,
+    providerCode: String? = nil,
+    retryable: Bool? = nil
+  ) {
+    var properties: [String: Any] = [
+      "provider": safeProvider(provider),
+      "reason": reason,
+      "phase": phase,
+    ]
+    if let httpStatusCode {
+      properties["http_status_code"] = httpStatusCode
+    }
+    if let backendRoute {
+      properties["backend_route"] = backendRoute
+    }
+    if let upstreamStatusCode {
+      properties["upstream_status_code"] = upstreamStatusCode
+    }
+    if let providerCode {
+      properties["provider_code"] = providerCode
+    }
+    if let retryable {
+      properties["retryable"] = retryable
+    }
     record(
       .realtimeTokenMintFailed,
-      properties: [
-        "provider": safeProvider(provider),
-        "reason": reason,
-        "phase": phase,
-      ])
+      properties: properties)
   }
 
-  func recordRealtimeProviderClose(provider: String, category: String?, aliveFor: TimeInterval, activeTurn: Bool) {
-    let event: DesktopHealthEventName = category == RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue
-      ? .realtimeProviderPolicyClose
-      : .realtimeProviderSessionError
+  func recordRealtimeProviderClose(
+    provider: String,
+    category: String?,
+    aliveFor: TimeInterval,
+    activeTurn: Bool,
+    authMode: CredentialAuthMode?,
+    failureClass: CredentialFailureClass?
+  ) {
+    let normalizedCategory = category ?? failureClass?.logValue ?? "unclassified"
+    let event: DesktopHealthEventName
+    switch normalizedCategory {
+    case RealtimeHubCloseCategory.expectedIdleTeardown.rawValue:
+      event = .realtimeProviderExpectedIdleTeardown
+    case RealtimeHubCloseCategory.providerPolicyCloseFast.rawValue,
+      CredentialFailureClass.providerPolicyClose(provider: .openai).logValue:
+      event = .realtimeProviderPolicyClose
+    default:
+      event = .realtimeProviderSessionError
+    }
+    var properties: [String: Any] = [
+      "provider": safeProvider(provider),
+      "category": normalizedCategory,
+      "alive_for_seconds": Int(aliveFor),
+      "active_turn": activeTurn,
+    ]
+    if let authMode {
+      properties["auth_mode"] = authMode.rawValue
+    }
+    if let failureClass {
+      properties["failure_class"] = failureClass.logValue
+      if let httpStatusCode = failureClass.httpStatusCode {
+        properties["http_status_code"] = httpStatusCode
+      }
+    }
     record(
       event,
-      properties: [
-        "provider": safeProvider(provider),
-        "category": category ?? "unclassified",
-        "alive_for_seconds": Int(aliveFor),
-        "active_turn": activeTurn,
-      ])
+      properties: properties)
   }
 
   func currentSnapshotsForSentry() -> [[String: Any]] {
@@ -173,6 +226,123 @@ final class DesktopDiagnosticsManager {
       log("DesktopDiagnostics: failed to write diagnostics attachment")
       return nil
     }
+  }
+
+  // MARK: - Local (offline) diagnostics export
+
+  /// Build a redacted, offline diagnostics bundle and write it to `url`.
+  ///
+  /// Unlike the Sentry path, this works with no network and without a crash
+  /// reporter — it backs the local "Save Diagnostics…" export so users can share
+  /// a report manually (BL-023 / SET-03). The bundle carries app/version/OS
+  /// metadata, the already-sanitized health snapshots, and a redacted tail of the
+  /// local log. Returns `true` on success.
+  @discardableResult
+  func writeLocalDiagnosticsBundle(
+    to url: URL,
+    logPath: String = omiLogFilePath(),
+    maxLogLines: Int = 500
+  ) -> Bool {
+    let text = buildLocalDiagnosticsText(logPath: logPath, maxLogLines: maxLogLines)
+    guard let data = text.data(using: .utf8) else { return false }
+    do {
+      try data.write(to: url, options: .atomic)
+      return true
+    } catch {
+      log("DesktopDiagnostics: failed to write local diagnostics bundle")
+      return false
+    }
+  }
+
+  /// Render the redacted diagnostics bundle as plain text (metadata header,
+  /// sanitized health snapshots, redacted recent log tail). Exposed for testing
+  /// the redaction guarantee without disk I/O.
+  func buildLocalDiagnosticsText(logPath: String, maxLogLines: Int = 500) -> String {
+    var sections: [String] = []
+
+    let meta = commonProperties()
+    var header = ["# Omi Desktop Diagnostics"]
+    header.append("generated_at: \(ISO8601DateFormatter.desktopDiagnostics.string(from: Date()))")
+    header.append("privacy: redacted_local_export")
+    for key in ["build", "build_number", "os_version", "device_model", "system_audio_mode"] {
+      if let value = meta[key] {
+        header.append("\(key): \(value)")
+      }
+    }
+    sections.append(header.joined(separator: "\n"))
+
+    let snapshots = currentSnapshotsForSentry()
+    if JSONSerialization.isValidJSONObject(snapshots),
+      let data = try? JSONSerialization.data(withJSONObject: snapshots, options: [.prettyPrinted]),
+      let json = String(data: data, encoding: .utf8)
+    {
+      sections.append("## Health snapshots\n\(json)")
+    }
+
+    let tail = redactedLogTail(logPath: logPath, maxLines: maxLogLines)
+    sections.append("## Recent log (redacted, last \(maxLogLines) lines)\n\(tail)")
+
+    return sections.joined(separator: "\n\n") + "\n"
+  }
+
+  /// Read up to `maxLines` from the end of the log file, redacting anything that
+  /// looks like a secret (tokens, JWTs, credential kv pairs) line by line.
+  private func redactedLogTail(logPath: String, maxLines: Int) -> String {
+    guard let handle = FileHandle(forReadingAtPath: logPath) else {
+      return "(no readable log file at \(logPath))"
+    }
+    defer { handle.closeFile() }
+    // Read only a bounded tail from the end rather than loading the whole log
+    // into memory, so export latency and memory stay predictable on large logs.
+    // 512 KB comfortably covers maxLines (default 500) of log text.
+    let maxTailBytes: UInt64 = 512 * 1024
+    let fileSize = handle.seekToEndOfFile()
+    let start = fileSize > maxTailBytes ? fileSize - maxTailBytes : 0
+    handle.seek(toFileOffset: start)
+    let data = handle.readDataToEndOfFile()
+    // Lenient decode: a byte-offset seek can split a multibyte character, so
+    // substitute rather than fail; the possibly-partial first line is dropped.
+    var content = String(decoding: data, as: UTF8.self)
+    if start > 0, let newline = content.firstIndex(of: "\n") {
+      content = String(content[content.index(after: newline)...])
+    }
+    let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+    let tail = lines.suffix(max(0, maxLines))
+    return tail.map { redactSensitive(String($0)) }.joined(separator: "\n")
+  }
+
+  /// Defensive best-effort redaction. The desktop log is not expected to contain
+  /// raw credentials, but a manually-shared export must never leak one, so we
+  /// mask common token shapes before including any log text.
+  private static let redactionPatterns: [(NSRegularExpression, String)] = {
+    let specs: [(String, String)] = [
+      // JWT: three base64url segments starting with a typical header.
+      ("eyJ[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+", "[redacted-jwt]"),
+      // Authorization: Bearer <token>
+      ("(?i)(bearer)\\s+[A-Za-z0-9._~+/=-]{8,}", "$1 [redacted]"),
+      // Authorization: Basic <base64 credentials>. Anchored to the header prefix
+      // so benign phrases like "basic settings" aren't over-redacted.
+      ("(?i)(authorization:\\s*basic)\\s+[A-Za-z0-9+/=]{8,}", "$1 [redacted]"),
+      // Bare OpenAI-style API keys.
+      ("sk-[A-Za-z0-9_-]{20,}", "sk-[redacted]"),
+      // key=..., token: ..., password="..." in query strings, JSON, or kv logs.
+      (
+        "(?i)(api[_-]?key|access[_-]?token|refresh[_-]?token|id[_-]?token|token|password|passwd|secret|client[_-]?secret|authorization)([\"']?\\s*[=:]\\s*[\"']?)[A-Za-z0-9._~+/=-]{6,}",
+        "$1$2[redacted]"
+      ),
+    ]
+    return specs.compactMap { pattern, template in
+      (try? NSRegularExpression(pattern: pattern)).map { ($0, template) }
+    }
+  }()
+
+  private func redactSensitive(_ line: String) -> String {
+    var result = line
+    for (regex, template) in DesktopDiagnosticsManager.redactionPatterns {
+      let range = NSRange(result.startIndex..., in: result)
+      result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: template)
+    }
+    return result
   }
 
   #if DEBUG

@@ -1,4 +1,4 @@
-FROM node:18-alpine AS builder
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -6,11 +6,11 @@ WORKDIR /app
 COPY plugins/apps-js/package*.json ./
 
 # Install dependencies including dd-trace
-RUN npm ci --only=production && \
+RUN npm ci --omit=dev && \
     npm install dd-trace && \
     npm cache clean --force
 
-FROM node:18-alpine
+FROM node:20-alpine
 
 WORKDIR /app
 

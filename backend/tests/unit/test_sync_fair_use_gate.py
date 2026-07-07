@@ -5,84 +5,31 @@ from unittest.mock import patch, MagicMock
 
 import pytest
 
-# --- Stubs to isolate from heavy deps ---
-import sys
-from types import ModuleType
-
-# Stub database modules
-_MISSING = object()
-_STUB_MODULE_NAMES = [
-    'database._client',
-    'database.redis_db',
-    'database.fair_use',
-    'database.users',
-    'database.user_usage',
-    'database.announcements',
-    'database.conversations',
-    'firebase_admin',
-    'firebase_admin.auth',
-    'firebase_admin.messaging',
-    'stripe',
-    'utils.fair_use',
-]
-_SAVED_MODULES = {mod_name: sys.modules.get(mod_name, _MISSING) for mod_name in _STUB_MODULE_NAMES}
-_utils_parent = sys.modules.get('utils')
-_SAVED_UTILS_FAIR_USE_ATTR = getattr(_utils_parent, 'fair_use', _MISSING) if _utils_parent else _MISSING
-
-for mod_name in _STUB_MODULE_NAMES:
-    if mod_name == 'utils.fair_use':
-        continue
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = ModuleType(mod_name)
-
-sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
-sys.modules['firebase_admin.auth'].get_user = MagicMock()
-
-# Stub redis_db.r
-_mock_redis = MagicMock()
-sys.modules['database.redis_db'].r = _mock_redis
-
-# Stub database._client.db
-sys.modules['database._client'].db = MagicMock()
-sys.modules['database.announcements'].compare_versions = MagicMock(return_value=0)
-
-sys.modules.pop('utils.fair_use', None)
 import utils.fair_use as fair_use_mod
-
-for mod_name, original in _SAVED_MODULES.items():
-    if original is _MISSING:
-        sys.modules.pop(mod_name, None)
-    else:
-        sys.modules[mod_name] = original
-_utils_parent = sys.modules.get('utils')
-if _utils_parent is not None:
-    if _SAVED_UTILS_FAIR_USE_ATTR is _MISSING:
-        if getattr(_utils_parent, 'fair_use', _MISSING) is fair_use_mod:
-            delattr(_utils_parent, 'fair_use')
-    else:
-        setattr(_utils_parent, 'fair_use', _SAVED_UTILS_FAIR_USE_ATTR)
 
 
 class TestRecordSpeechMsSource:
     """Test that source param is accepted and doesn't change Redis behavior."""
 
-    def setup_method(self):
-        _mock_redis.reset_mock()
-        _mock_redis.pipeline.return_value = MagicMock()
-        _mock_redis.zrangebyscore.return_value = []
+    @pytest.fixture(autouse=True)
+    def mock_redis(self, monkeypatch):
+        self._mock_redis = MagicMock()
+        self._mock_redis.pipeline.return_value = MagicMock()
+        self._mock_redis.zrangebyscore.return_value = []
+        monkeypatch.setattr(fair_use_mod, 'redis_client', self._mock_redis)
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_source_defaults_to_realtime(self):
         """Calling without source uses 'realtime' default."""
         fair_use_mod.record_speech_ms('user1', 5000)
-        pipe = _mock_redis.pipeline.return_value
+        pipe = self._mock_redis.pipeline.return_value
         pipe.hincrby.assert_called_once()
 
     @patch.object(fair_use_mod, 'FAIR_USE_ENABLED', True)
     def test_source_sync_accepted(self):
         """Calling with source='sync' works the same — same Redis keys."""
         fair_use_mod.record_speech_ms('user1', 5000, source='sync')
-        pipe = _mock_redis.pipeline.return_value
+        pipe = self._mock_redis.pipeline.return_value
         pipe.hincrby.assert_called_once()
         # Verify same Redis key pattern (no source in key)
         call_args = pipe.hincrby.call_args
@@ -92,13 +39,13 @@ class TestRecordSpeechMsSource:
     def test_source_does_not_change_redis_keys(self):
         """Source param is for logging only — Redis keys are identical."""
         pipe_mock = MagicMock()
-        _mock_redis.pipeline.return_value = pipe_mock
+        self._mock_redis.pipeline.return_value = pipe_mock
 
         fair_use_mod.record_speech_ms('user1', 1000, source='realtime')
         realtime_calls = [str(c) for c in pipe_mock.method_calls]
 
         pipe_mock.reset_mock()
-        _mock_redis.pipeline.return_value = pipe_mock
+        self._mock_redis.pipeline.return_value = pipe_mock
 
         fair_use_mod.record_speech_ms('user1', 1000, source='sync')
         sync_calls = [str(c) for c in pipe_mock.method_calls]

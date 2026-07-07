@@ -6,7 +6,7 @@ WORKDIR /app
 COPY plugins/apps-js/package*.json ./
 
 # Install dependencies
-RUN npm ci --only=production && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force
 
 FROM node:20-alpine
 

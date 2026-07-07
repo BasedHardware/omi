@@ -1,45 +1,30 @@
-# E2E Flow: Language settings — transcription language mode switching
-# Tests: settings navigation, radio buttons, picker interaction, back navigation
-
 version: 2
 name: language
-description: Language mode switching in Settings > Transcription — radio buttons, language picker, and back navigation
-app: com.omi.computer-macos
+tier: 2
+description: Transcription language settings navigation via automation bridge
+app: non-prod
 covers:
-  - desktop/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
-  - desktop/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
 preconditions:
-  - auth_ready
+  - automation_bridge_ready
 
 steps:
   - id: S1
-    name: Navigate to Settings
-    do: "Click the Settings sidebar icon (identifier: sidebar_settings) to open the Settings page. Verify settings sidebar shows section names."
-    expect:
-      text_visible:
-        - Settings
+    name: Open Settings transcription section
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
 
   - id: S2
-    name: Navigate to Transcription section
-    do: "Press the 'Transcription' button in the Settings sidebar to open transcription settings. Verify Language Mode card appears."
-    expect:
-      text_visible:
-        - Language Mode
+    name: Assert settings section loaded
+    state.expect:
+      state.selectedSettingsSection: Transcription
 
   - id: S3
-    name: Switch to Single Language mode
-    do: "Click the 'Single Language Better Accuracy' radio option. Verify a language picker dropdown appears when Single Language mode is active."
-    expect:
-      interactive_count: { min: 3 }
-
-  - id: S4
-    name: Switch back to Auto-Detect mode
-    do: "Click the 'Auto-Detect Multi-Language' radio option to restore auto-detect mode. Verify the language picker is hidden."
-    expect:
-      interactive_count: { min: 3 }
-
-  - id: S5
-    name: Return from Settings
-    do: "Click the Back button to return to the main view. Verify the sidebar navigation icons are visible again."
-    expect:
-      interactive_count: { min: 5 }
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

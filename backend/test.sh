@@ -4,104 +4,148 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT_DIR"
 
+PYTHON_BIN="${PYTHON:-}"
+if [[ -z "$PYTHON_BIN" ]]; then
+  if [[ -x ".venv/bin/python" ]]; then
+    PYTHON_BIN=".venv/bin/python"
+  else
+    PYTHON_BIN="python3"
+  fi
+fi
+
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
-PYTHON_BIN="${PYTHON:-python3}"
+export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
+export BACKEND_FAST_UNIT_MAX_SECONDS="${BACKEND_FAST_UNIT_MAX_SECONDS:-0.1}"
+# Keep the CI fast-unit guard focused on materially slow tests while allowing
+# only a narrow CPU accounting jitter margin around the 100ms target.
+export BACKEND_FAST_UNIT_GRACE_SECONDS="${BACKEND_FAST_UNIT_GRACE_SECONDS:-0.02}"
 
-pytest() {
-  "$PYTHON_BIN" -m pytest "$@"
-}
+pytest_args=(-v)
 
-run_test_files() {
-  if [[ $# -eq 0 ]]; then
-    return 0
+marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
+if [[ -n "$marker_expr" ]]; then
+  pytest_args+=(-m "$marker_expr")
+fi
+
+use_file_isolation="${BACKEND_PYTEST_FILE_ISOLATION:-1}"
+if [[ "$use_file_isolation" != "1" && "$use_file_isolation" != "true" && "${BACKEND_PYTEST_XDIST:-auto}" != "0" && "${BACKEND_PYTEST_XDIST:-auto}" != "false" ]]; then
+  if "$PYTHON_BIN" -c "import xdist" >/dev/null 2>&1; then
+    workers="${BACKEND_PYTEST_WORKERS:-auto}"
+    pytest_args+=(-n "$workers" --dist=loadfile)
+  else
+    echo "pytest-xdist is not installed; running backend unit tests serially."
   fi
+fi
 
-  if [[ -n "${BACKEND_PYTEST_XDIST:-}" && "${BACKEND_PYTEST_XDIST:-}" != "0" ]]; then
-    "$PYTHON_BIN" - "$@" <<'PY'
-from __future__ import annotations
+test_list_file="${BACKEND_UNIT_TEST_FILE_LIST:-}"
+generated_test_list=""
+if [[ -z "$test_list_file" ]]; then
+  generated_test_list="$(mktemp)"
+  trap '[[ -z "${generated_test_list:-}" ]] || rm -f "$generated_test_list"' EXIT
+  "$PYTHON_BIN" scripts/select_backend_unit_tests.py --all --output "$generated_test_list"
+  test_list_file="$generated_test_list"
+fi
 
-from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
-import os
-import subprocess
-import sys
-
-
-def _worker_count(test_count: int) -> int:
-    raw = os.environ.get('BACKEND_PYTEST_WORKERS') or os.environ.get('BACKEND_PYTEST_XDIST') or 'auto'
-    if raw == 'auto':
-        return max(1, min(test_count, os.cpu_count() or 1))
-    try:
-        return max(1, min(test_count, int(raw)))
-    except ValueError:
-        return 1
-
-
-def _run_test(test_path: str) -> tuple[str, int, str]:
-    proc = subprocess.run(
-        [sys.executable, '-m', 'pytest', test_path, '-v'],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT,
-        text=True,
-    )
-    return test_path, proc.returncode, proc.stdout
-
-
-tests = sys.argv[1:]
-workers = _worker_count(len(tests))
-print(f'Running {len(tests)} backend unit test file(s) with {workers} isolated worker process(es).', flush=True)
-
-failed = False
-with ThreadPoolExecutor(max_workers=workers) as executor:
-    pending = {executor.submit(_run_test, test_path) for test_path in tests}
-    while pending:
-        done, pending = wait(pending, return_when=FIRST_COMPLETED)
-        for future in done:
-            test_path, returncode, output = future.result()
-            print(f'::group::{test_path}', flush=True)
-            print(output, end='' if output.endswith('\n') else '\n')
-            print('::endgroup::', flush=True)
-            if returncode:
-                failed = True
-
-if failed:
-    raise SystemExit(1)
-PY
-    return
-  fi
-
-  for test_path in "$@"; do
-    pytest "$test_path" -v
-  done
-}
-
-if [[ -n "${BACKEND_UNIT_TEST_FILE_LIST:-}" ]]; then
-  if [[ ! -f "$BACKEND_UNIT_TEST_FILE_LIST" ]]; then
-    echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $BACKEND_UNIT_TEST_FILE_LIST" >&2
-    exit 1
-  fi
-
-  selected_tests=()
-  while IFS= read -r test_path; do
-    [[ -n "$test_path" ]] && selected_tests+=("$test_path")
-  done < "$BACKEND_UNIT_TEST_FILE_LIST"
-
-  if [[ ${#selected_tests[@]} -eq 0 ]]; then
-    echo "No backend unit tests selected."
-    exit 0
-  fi
-
-  echo "Running ${#selected_tests[@]} selected backend unit test file(s)."
-  run_test_files "${selected_tests[@]}"
-  exit 0
+if [[ ! -f "$test_list_file" ]]; then
+  echo "BACKEND_UNIT_TEST_FILE_LIST does not exist: $test_list_file" >&2
+  exit 1
 fi
 
 selected_tests=()
-selected_tests_file="$(mktemp "${TMPDIR:-/tmp}/backend-unit-tests.XXXXXX")"
-trap 'rm -f "$selected_tests_file"' EXIT
-"$PYTHON_BIN" scripts/select_backend_unit_tests.py --all > "$selected_tests_file"
 while IFS= read -r test_path; do
   [[ -n "$test_path" ]] && selected_tests+=("$test_path")
-done < "$selected_tests_file"
+done < "$test_list_file"
+
+if [[ ${#selected_tests[@]} -eq 0 ]]; then
+  echo "No backend unit tests selected."
+  exit 0
+fi
+
 echo "Running ${#selected_tests[@]} backend unit test file(s)."
-run_test_files "${selected_tests[@]}"
+
+if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
+  worker_count="${BACKEND_PYTEST_WORKERS:-auto}"
+  if [[ "$worker_count" == "auto" ]]; then
+    if command -v getconf >/dev/null 2>&1; then
+      worker_count="$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
+    elif command -v sysctl >/dev/null 2>&1; then
+      worker_count="$(sysctl -n hw.ncpu 2>/dev/null || echo 4)"
+    else
+      worker_count="4"
+    fi
+  fi
+
+  active_pids=()
+  failed=0
+
+  reap_finished_children() {
+    local running_pids
+    local pid
+    local still_active=()
+
+    running_pids="$(jobs -pr || true)"
+    for pid in "${active_pids[@]}"; do
+      if [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
+        still_active+=("$pid")
+      else
+        if ! wait "$pid"; then
+          failed=1
+        fi
+      fi
+    done
+    set +u
+    active_pids=("${still_active[@]}")
+    set -u
+  }
+
+  for test_path in "${selected_tests[@]}"; do
+    (
+      echo "::group::$test_path"
+      set +e
+      "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
+      status=$?
+      set -e
+      if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+        echo "No tests matched marker expression for $test_path; treating as skipped."
+        status=0
+      fi
+      echo "::endgroup::"
+      exit "$status"
+    ) &
+    active_pids+=("$!")
+
+    while [[ "${#active_pids[@]}" -ge "$worker_count" ]]; do
+      reap_finished_children
+      if [[ "${#active_pids[@]}" -lt "$worker_count" ]]; then
+        break
+      fi
+      oldest_pid="${active_pids[0]}"
+      active_pids=("${active_pids[@]:1}")
+      if ! wait "$oldest_pid"; then
+        failed=1
+      fi
+    done
+  done
+
+  reap_finished_children
+  set +u
+  for pid in "${active_pids[@]}"; do
+    if ! wait "$pid"; then
+      failed=1
+    fi
+  done
+  set -u
+
+  exit "$failed"
+fi
+
+set +e
+"$PYTHON_BIN" -m pytest "${pytest_args[@]}" "${selected_tests[@]}"
+status=$?
+set -e
+if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
+  echo "No tests matched marker expression for selected files; treating as skipped."
+  exit 0
+fi
+exit "$status"

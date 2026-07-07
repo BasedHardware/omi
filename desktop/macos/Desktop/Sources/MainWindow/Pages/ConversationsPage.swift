@@ -1,5 +1,6 @@
 import Combine
 import SwiftUI
+import OmiTheme
 
 // MARK: - Search Debouncer
 
@@ -791,8 +792,10 @@ private struct TranscriptNotesDivider: View {
   }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
   ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundSecondary)
 }
+#endif

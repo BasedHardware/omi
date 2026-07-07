@@ -63,6 +63,12 @@ def _sample_memory_dict(memory_id: str = "mem-1", *, locked: bool = False) -> di
     }
 
 
+def _sample_tiered_memory_dict(memory_id: str = "mem-1") -> dict:
+    memory = _sample_memory_dict(memory_id)
+    memory.update({"memory_tier": "short_term", "layer": "short_term", "tier": "short_term"})
+    return memory
+
+
 def _purge_stub_memory_modules() -> None:
     import sys
 
@@ -285,20 +291,21 @@ class TestMemoryServiceParity:
             "write",
             MagicMock(side_effect=AssertionError("external canonical writes must not re-enter public write")),
         )
-        monkeypatch.setattr(service_mod, "_read_canonical_memory_item", MagicMock(return_value=None))
+        monkeypatch.setattr(service_mod, "read_canonical_memory_item", MagicMock(return_value=None))
 
         service = service_mod.MemoryService(db_client=_FirestoreFake())
         service._canonical.write = canonical_write
 
-        result = service.create_external_memory(
-            "uid-test",
-            memory_db,
-            memory_system=MemorySystem.CANONICAL,
-            consumer="mcp",
-            operation="mcp_tool_memory_create",
-        )
+        with pytest.raises(HTTPException) as exc:
+            service.create_external_memory(
+                "uid-test",
+                memory_db,
+                memory_system=MemorySystem.CANONICAL,
+                consumer="mcp",
+                operation="mcp_tool_memory_create",
+            )
 
-        assert result == memory_db
+        assert exc.value.status_code == 503
         canonical_write.assert_called_once()
         create_memory.assert_not_called()
 
@@ -383,6 +390,58 @@ class TestMemoryServiceParity:
         assert len(result) == 1
         assert result[0].id == "mem-1"
 
+    def test_legacy_backend_strips_canonical_lifecycle_fields_on_read(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        memories = [_sample_tiered_memory_dict()]
+
+        with patch.object(service_mod.memories_db, "get_memories", return_value=memories):
+            result = service_mod.MemoryService(db_client=_FirestoreFake()).read("uid-test")
+
+        assert len(result) == 1
+        assert result[0].memory_tier is None
+        serialized = result[0].model_dump(mode="json")
+        assert serialized["memory_tier"] is None
+        assert serialized["layer"] is None
+        assert "short_term" not in serialized.values()
+
+    def test_legacy_backend_strips_canonical_lifecycle_fields_on_write(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        create_memory = MagicMock()
+        monkeypatch.setattr(service_mod.memories_db, "create_memory", create_memory)
+
+        service_mod.MemoryService(db_client=_FirestoreFake()).write("uid-test", _sample_tiered_memory_dict())
+
+        payload = create_memory.call_args.args[1]
+        assert "memory_tier" not in payload
+        assert "layer" not in payload
+        assert "tier" not in payload
+
+    def test_external_legacy_create_strips_canonical_lifecycle_fields(self, monkeypatch):
+        service_mod = _load_memory_service(monkeypatch)
+        memory_db = service_mod.MemoryDB.model_validate(_sample_tiered_memory_dict())
+        create_memory = MagicMock()
+        monkeypatch.setattr(service_mod.memories_db, "create_memory", create_memory)
+        monkeypatch.setattr(
+            service_mod,
+            "guard_legacy_memory_write",
+            lambda *args, **kwargs: SimpleNamespace(allowed=True, status_code=200, detail=None),
+        )
+
+        result = service_mod.MemoryService(db_client=_FirestoreFake()).create_external_memory(
+            "uid-test",
+            memory_db,
+            memory_system=MemorySystem.LEGACY,
+            consumer="mcp",
+            operation="mcp_tool_memory_create",
+            upsert_vector=False,
+        )
+
+        payload = create_memory.call_args.args[1]
+        assert "memory_tier" not in payload
+        assert "layer" not in payload
+        assert "tier" not in payload
+        assert result.memory_tier is None
+
     def test_search_mcp_legacy_fetch_limit_filters_and_rrf(self, monkeypatch):
         service_mod = _load_memory_service(monkeypatch)
         vector_matches = [
@@ -447,7 +506,9 @@ class TestMemoryServiceUsesRequestPin:
 
             return MemorySystem.LEGACY if calls["count"] == 1 else MemorySystem.CANONICAL
 
-        monkeypatch.setattr("utils.memory.memory_system_pin.resolve_memory_system", flipping_resolve)
+        import utils.memory.memory_system_pin as memory_system_pin
+
+        monkeypatch.setattr(memory_system_pin, "resolve_memory_system", flipping_resolve)
         canonical_mock = MagicMock(return_value=[{"id": "canonical-only"}])
         monkeypatch.setattr(service_mod, "_canonical_search_memories_mcp", canonical_mock)
 

@@ -9367,7 +9367,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Zaenkrat deluje z napravami Omi. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.';
+      'Zaenkrat deluje z napravami Omi in Limitless. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9517,4 +9517,23 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Namesti vdelano programsko opremo';
+
+  @override
+  String get pendantRecordingTitle => 'Snemanje na obesku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Vaš obesek snema samostojno. Posnetki se sinhronizirajo s telefonom, dokler je aplikacija odprta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sinhronizacija posnetkov z vašega obeska…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min shranjeno';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pomnilnik obeska je skoraj poln — pustite aplikacijo odprto za sinhronizacijo.';
 }

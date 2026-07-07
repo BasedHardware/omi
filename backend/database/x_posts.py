@@ -10,7 +10,7 @@ conversations are kept raw and then mined for memories.
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -28,11 +28,11 @@ KIND_BOOKMARK = 'bookmark'
 KIND_LIKE = 'like'
 
 
-def _posts_ref(uid: str):
+def _posts_ref(uid: str) -> Any:
     return db.collection(users_collection).document(uid).collection(x_posts_collection)
 
 
-def save_x_posts(uid: str, posts: List[dict]) -> int:
+def save_x_posts(uid: str, posts: List[Dict[str, Any]]) -> int:
     """Idempotently store raw X posts. Returns the number of NEW posts written.
 
     Each post dict must contain at least: id (tweet id, str), text, created_at,
@@ -46,11 +46,11 @@ def save_x_posts(uid: str, posts: List[dict]) -> int:
     # Find which ids already exist so we can report an accurate delta and avoid
     # clobbering `ingested_at` on re-sync.
     ids = [str(p['id']) for p in posts if p.get('id') is not None]
-    existing: set = set()
+    existing: set[str] = set()
     # get_all is efficient for the modest page sizes the connector pulls (<=100).
     for snap in db.get_all([coll.document(i) for i in ids]):
-        if snap.exists:
-            existing.add(snap.id)
+        if getattr(snap, "exists", False):
+            existing.add(str(snap.id))
 
     now = datetime.now(timezone.utc)
     batch = db.batch()
@@ -59,7 +59,7 @@ def save_x_posts(uid: str, posts: List[dict]) -> int:
         pid = str(p.get('id')) if p.get('id') is not None else None
         if not pid:
             continue
-        doc = dict(p)
+        doc: Dict[str, Any] = dict(p)
         doc['id'] = pid
         doc['updated_at'] = now
         if pid not in existing:
@@ -71,7 +71,7 @@ def save_x_posts(uid: str, posts: List[dict]) -> int:
     return new_count
 
 
-def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[dict]:
+def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[Dict[str, Any]]:
     """Return stored posts, newest first. Optionally filter by kind.
 
     A kind filter + order_by would require a composite index, so when filtering
@@ -80,22 +80,33 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
     """
     coll = _posts_ref(uid)
     if kind:
-        docs = [d.to_dict() for d in coll.where(filter=FieldFilter('kind', '==', kind)).limit(limit * 3).stream()]
-        docs.sort(key=lambda d: d.get('created_at') or '', reverse=True)
+        docs: List[Dict[str, Any]] = []
+        for d in coll.where(filter=FieldFilter('kind', '==', kind)).limit(limit * 3).stream():
+            raw: object = d.to_dict()
+            if isinstance(raw, dict):
+                docs.append(cast(Dict[str, Any], raw))
+        docs.sort(key=lambda x: x.get('created_at') or '', reverse=True)
         return docs[:limit]
     query = coll.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
-    return [d.to_dict() for d in query.stream()]
+    out: List[Dict[str, Any]] = []
+    for d in query.stream():
+        raw = d.to_dict()
+        if isinstance(raw, dict):
+            out.append(cast(Dict[str, Any], raw))
+    return out
 
 
-def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[dict]:
+def get_x_posts_by_ids(uid: str, ids: List[str]) -> List[Dict[str, Any]]:
     """Fetch specific posts by id (used by semantic search to hydrate matches)."""
     if not ids:
         return []
     coll = _posts_ref(uid)
-    out = []
+    out: List[Dict[str, Any]] = []
     for snap in db.get_all([coll.document(str(i)) for i in ids]):
-        if snap.exists:
-            out.append(snap.to_dict())
+        if getattr(snap, "exists", False):
+            raw: object = snap.to_dict()
+            if isinstance(raw, dict):
+                out.append(cast(Dict[str, Any], raw))
     return out
 
 

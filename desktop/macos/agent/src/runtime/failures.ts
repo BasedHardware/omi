@@ -107,6 +107,8 @@ function classifyAdapterProcessFailure(
   return undefined;
 }
 
+// Adapter stderr is unstructured; this is the sanctioned adapter-boundary sniffing site
+// (Phase 6 item 7 exception). Prefer typed RuntimeFailure codes when the adapter can classify.
 function isOpenClawInvalidConfig(diagnostic: string): boolean {
   const lower = diagnostic.toLowerCase();
   return (

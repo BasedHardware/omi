@@ -1,5 +1,5 @@
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import database._client as db_client_module
 import database.memories as memories_db
@@ -8,6 +8,7 @@ from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
 from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 import logging
@@ -43,7 +44,7 @@ def process_external_integration_memory(
     uid: str, memory_data: ExternalIntegrationCreateMemory, app_id: str
 ) -> List[MemoryDB]:
     memory_data.app_id = app_id
-    saved_memories = []
+    saved_memories: List[MemoryDB] = []
     language = users_db.get_user_language_preference(uid)
 
     # Process explicit memories if provided
@@ -126,9 +127,12 @@ def process_external_integration_memory(
         ):
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
-                memory_service.write(uid, memory_db.dict())
+                memory_service.write(uid, memory_db.model_dump())
         else:
-            memories_db.save_memories(uid, [fact_db.dict() for fact_db in saved_memories])
+            memories_db.save_memories(
+                uid,
+                [memory_write_payload(fact_db, MemoryApiExposure.LEGACY) for fact_db in saved_memories],
+            )
 
     return saved_memories
 
@@ -143,7 +147,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
         return []
 
     # Convert extracted memories to database format
-    saved_memories = []
+    saved_memories: List[MemoryDB] = []
     for memory in extracted_memories:
         source_id = f"{persona_id}:text:{_stable_source_id('twitter_tweets', tweets_text)}"
         memory_db = MemoryDB.from_memory(
@@ -170,8 +174,11 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
         ):
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
-                memory_service.write(uid, memory_db.dict())
+                memory_service.write(uid, memory_db.model_dump())
         else:
-            memories_db.save_memories(uid, [memory_db.dict() for memory_db in saved_memories])
+            memories_db.save_memories(
+                uid,
+                [memory_write_payload(memory_db, MemoryApiExposure.LEGACY) for memory_db in saved_memories],
+            )
 
     return saved_memories

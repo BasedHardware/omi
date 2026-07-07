@@ -33,6 +33,7 @@ from utils.pusher import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestCircuitBreakerStateTransitions:
     def test_initial_state_is_closed(self):
         cb = PusherCircuitBreaker()

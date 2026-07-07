@@ -34,10 +34,18 @@ Merging `desktop/macos/**` changes to `main` triggers a beta desktop release:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
+   - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing
    - Publishes GitHub release, uploads to GCS, registers in Firestore
 3. **Sparkle beta update** delivers the new version to beta users
 
+Signed artifact smoke scope:
+- Always-on release audit covers bundle identity, version/tag alignment, signing/Keychain entitlements, Sparkle metadata, backend URL leakage, helper/runtime packaging, artifact readability, and local storage package surface.
+- Codemagic uploads `build/desktop-smoke-result.json` with artifact digests and completed checks; promotion tooling should compare this result to the exact release asset before changing channels.
+- Optional live probes (`--launch --network --auth --chat --permissions --storage`) require an isolated release runner and explicit canary env vars; production-bundle launch is fail-closed unless `OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1`, and `--auth` requires `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND` to prove app-level persistence rather than a raw bearer-token curl.
+- Future release gating should split artifact creation from user visibility: create/upload the immutable artifact first, run the live smoke against that artifact, then flip beta/stable appcast/Firestore visibility only after the digest-matched smoke passes.
+
 Stable/prod is manual:
+- Before preparing stable/prod promotion, follow `docs/agent-prod-promotion-runbook.md` for target discovery, curated stable release-log creation, shared-backend coupling, approval shape, and deterministic post-promotion checks. External readiness is handled separately.
 - Run GitHub Actions workflow `desktop_promote_prod.yml` with `release_tag=v*-macos` and `confirm=promote-stable`.
 - The workflow runs `.github/scripts/check-desktop-release-promotion.py`, deploys the Rust backend from that exact tag, verifies `/health` reports the release tag/SHA, promotes the Firestore bridge release, marks the GitHub release `channel: stable`, then moves `desktop-backend-prod-deployed`.
 - Do not manually edit a release to stable before the backend is promoted; the promotion workflow owns that mutation.
@@ -65,6 +73,25 @@ db = firestore.client()
 print('Connected to Firebase: based-hardware')
 "
 ```
+
+## Module Layout (SwiftPM)
+
+`Desktop/Package.swift` is incrementally splitting the monolithic executable into
+library targets with enforced dependency edges:
+
+- `OmiTheme` — shared colors, typography, chrome (`Sources/Theme/`)
+- `OmiWAL` — write-ahead log model + coordinator (`Sources/OmiWAL/`)
+- `OmiSupport` — shared desktop runtime helpers (`Sources/OmiSupport/`, e.g. `DesktopLocalProfile`)
+
+`Rewind/Core/` remains in the executable target for now — it still references main-app
+types (`TaskActionItem`, `PowerMonitor`, etc.) and needs a shared-models carve-out first.
+
+**Do not add new `.swift` files directly under `Desktop/Sources/`.** Place new
+code in a feature directory (`Onboarding/`, `MainWindow/`, `Chat/`, etc.). CI
+enforces this via `scripts/check-sources-root-layout.py`.
+
+When carving out additional leaf modules, prefer bottom-up order (models and
+storage before UI) and wire `import` + `public` on the extracted target's API.
 
 ## Key Architecture Notes
 

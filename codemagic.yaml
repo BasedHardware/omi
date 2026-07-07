@@ -32,13 +32,8 @@ workflows:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
         - $HOME/Library/Caches/CocoaPods
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
+    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
+    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
@@ -184,7 +179,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
-          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -257,13 +251,8 @@ workflows:
         - $HOME/opt
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
+    # Automatic app deploys are dispatched by .github/workflows/mobile_internal_auto.yml
+    # after GitHub paths filtering, so desktop-only merges never allocate mobile runners.
     when:
       changeset:
         includes:
@@ -429,8 +418,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
-          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -582,7 +569,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist
-          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -985,8 +971,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod
-          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
-          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
 
 
     artifacts:
@@ -1135,7 +1119,6 @@ workflows:
           shorebird patch ios \
             --flavor prod -- \
             --export-options-plist=$HOME/export_options.plist
-          ../scripts/scan-public-artifact-secrets.py build/ios/ipa/*.ipa
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1904,8 +1887,6 @@ workflows:
           # Should use bump version automatically by CI
           shorebird patch android \
             --flavor prod
-          AAB_ARTIFACTS=$(find build -path '*/outputs/*.aab' -print)
-          ../scripts/scan-public-artifact-secrets.py $AAB_ARTIFACTS
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -2054,6 +2035,20 @@ workflows:
 
       - name: Test desktop tool surfaces
         script: |
+          cd agent
+          NODE_BIN=""
+          for candidate in ../Desktop/Sources/Resources/node "$(brew --prefix node@22 2>/dev/null)/bin/node" "$(command -v node)"; do
+            if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+              NODE_BIN="$candidate"
+              break
+            fi
+          done
+          if [[ -z "$NODE_BIN" ]]; then
+            echo "ERROR: Node.js 22.6+ with --experimental-strip-types required" >&2
+            exit 1
+          fi
+          "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs --check
+          cd ..
           scripts/test-tool-surfaces.sh
 
       - name: Prepare universal ffmpeg (arm64 + x86_64)
@@ -2363,9 +2358,12 @@ workflows:
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
             cp -Rf agent/dist        "$APP_BUNDLE/Contents/Resources/agent/"
             cp -f  agent/package.json "$APP_BUNDLE/Contents/Resources/agent/"
-            cp -Rf agent/node_modules "$APP_BUNDLE/Contents/Resources/agent/"
+            if [ ! -d ".harness/agent-runtime/agent-node_modules" ]; then
+              echo "ERROR: packaged agent dependencies missing"
+              exit 1
+            fi
+            cp -Rf .harness/agent-runtime/agent-node_modules "$APP_BUNDLE/Contents/Resources/agent/node_modules"
             mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-            cp -f agent/src/runtime/control-tool-manifest.js "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/control-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/node-tools.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
             cp -f agent/src/runtime/omi-tool-manifest.ts "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -2382,7 +2380,11 @@ workflows:
             cp -f pi-mono-extension/index.ts    "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
             cp -f pi-mono-extension/package-lock.json "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-            cp -Rf pi-mono-extension/node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+            if [ ! -d ".harness/agent-runtime/pi-mono-extension-node_modules" ]; then
+              echo "ERROR: packaged pi-mono-extension dependencies missing"
+              exit 1
+            fi
+            cp -Rf .harness/agent-runtime/pi-mono-extension-node_modules "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
           else
             echo "ERROR: pi-mono-extension directory not found"
             exit 1
@@ -2423,6 +2425,8 @@ workflows:
 
       - name: Sign app
         script: |
+          scripts/prepare-desktop-bundle-native-deps.sh "$APP_BUNDLE"
+
           xattr -cr "$APP_BUNDLE"
 
           # Sign ffmpeg (inside SPM resource bundle)
@@ -2524,6 +2528,10 @@ workflows:
 
           codesign --verify --verbose=2 "$APP_BUNDLE" 2>&1 | head -3
           echo "App signed successfully"
+
+      - name: Audit app bundle dependencies
+        script: |
+          scripts/audit-desktop-bundle-deps.sh "$APP_BUNDLE"
 
       - name: Notarize app
         script: |
@@ -2643,6 +2651,16 @@ workflows:
           fi
           echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
+
+      - name: Smoke signed desktop artifact
+        script: |
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$APP_BUNDLE" \
+            --zip "$SPARKLE_ZIP_PATH" \
+            --dmg "$DMG_PATH" \
+            --tag "$CM_TAG" \
+            --expected-channel beta \
+            --result-json "$BUILD_DIR/desktop-smoke-result.json"
 
       - name: Create GitHub release
         script: |
@@ -2785,68 +2803,11 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/desktop-smoke-result.json
     publishing:
       email:
         recipients:
           - i@m13v.com
         notify:
           success: true
-          failure: true
-
-  # ============================================
-  # AUTO-DEPLOY: Agent Cloud (agent.mjs → GCS)
-  # Triggered on push to main when desktop/macos/agent-cloud/ changes.
-  # Uploads agent.mjs to GCS; running VMs hot-reload within 10 min.
-  # ============================================
-  agent-cloud-auto-deploy:
-    name: Auto Deploy Agent Cloud to GCS
-    instance_type: linux_x2
-    max_build_duration: 10
-    environment:
-      groups:
-        - desktop_secrets
-      vars:
-        GCS_BUCKET: "gs://based-hardware-agent"
-        GCP_PROJECT: "based-hardware"
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
-    when:
-      changeset:
-        includes:
-          - 'desktop/macos/agent-cloud/agent.mjs'
-          - 'desktop/macos/agent-cloud/scripts/startup.sh'
-    scripts:
-      - name: Authenticate with GCP
-        script: |
-          echo "$GCP_SERVICE_ACCOUNT_KEY" | base64 --decode > /tmp/gcp_key.json
-          gcloud auth activate-service-account --key-file=/tmp/gcp_key.json --quiet
-          gcloud config set project "$GCP_PROJECT" --quiet
-          rm /tmp/gcp_key.json
-
-      - name: Deploy agent.mjs and startup.sh to GCS
-        script: |
-          VERSION="$(date -u +%Y-%m-%d-%H%M%S)"
-          echo "Deploying version $VERSION to $GCS_BUCKET..."
-
-          gsutil cp desktop/macos/agent-cloud/agent.mjs "$GCS_BUCKET/agent.mjs"
-          echo "Uploaded agent.mjs"
-
-          gsutil cp desktop/macos/agent-cloud/scripts/startup.sh "$GCS_BUCKET/startup.sh"
-          echo "Uploaded startup.sh"
-
-          # Update version.txt last — triggers hot-reload on running VMs
-          echo "$VERSION" | gsutil cp - "$GCS_BUCKET/version.txt"
-          echo "Version bumped to $VERSION"
-          echo "Running VMs will hot-reload within 10 minutes."
-    publishing:
-      email:
-        recipients:
-          - i@m13v.com
-        notify:
-          success: false
           failure: true

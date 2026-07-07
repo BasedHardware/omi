@@ -47,6 +47,32 @@ jobs:
           echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           echo "revision_suffix=${GITHUB_SHA::7}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
+      - name: Install Python deps for deploy scripts
+        run: python3 -m pip install -q pyyaml
+
+      - name: Render backend runtime env
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
+
+      - name: Preflight Cloud Run deploy
+        run: |
+          python3 backend/scripts/preflight-cloud-run-deploy.py \
+            --env dev \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --check-secrets \
+            --check-traffic \
+            --repair-traffic
+
+      - name: Validate backend runtime env before deploy
+        run: |
+          python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -58,12 +84,6 @@ jobs:
             gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Render backend runtime env
-        id: runtime-env
-        run: |
-          python3 -m pip install -q pyyaml
-          python3 backend/scripts/render-backend-runtime-env.py --env dev >> "$GITHUB_OUTPUT"
 
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
@@ -122,9 +142,7 @@ jobs:
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
-        run: |
-          python3 -m pip install -q pyyaml
-          backend/scripts/deploy-backend-secrets.sh
+        run: backend/scripts/deploy-backend-secrets.sh
 
       - name: Deploy ${{ env.SERVICE }}-listen to GKE
         run: |
@@ -162,9 +180,18 @@ jobs:
         run: |
           echo "revision=backend-integration-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
-      - name: Validate backend runtime env
+      - name: Wait for Cloud Run revisions to become ready
         run: |
-          python3 -m pip install -q pyyaml
+          python3 backend/scripts/preflight-cloud-run-deploy.py \
+            --env dev \
+            --project ${{ vars.GCP_PROJECT_ID }} \
+            --region ${{ env.REGION }} \
+            --wait-revision-ready backend=${{ steps.capture-backend-revision.outputs.revision }} \
+            --wait-revision-ready backend-sync=${{ steps.capture-backend-sync-revision.outputs.revision }} \
+            --wait-revision-ready backend-integration=${{ steps.capture-backend-integration-revision.outputs.revision }}
+
+      - name: Validate backend runtime env after deploy
+        run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-live-cloud-run
 
       - name: Verify validated revisions are still current
@@ -178,6 +205,10 @@ jobs:
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-integration-revision.outputs.revision }}=100 --quiet
+
+      - name: Cloud Run deploy status report
+        if: always()
+        run: |
           python3 backend/scripts/deploy_status_report.py \
             --env dev \
             --project ${{ vars.GCP_PROJECT_ID }} \

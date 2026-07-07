@@ -2,6 +2,7 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+import OmiTheme
 
 extension SettingsContentView {
   var transcriptionSection: some View {
@@ -98,20 +99,21 @@ extension SettingsContentView {
                       .scaledFont(size: 12)
                       .foregroundColor(OmiColors.textTertiary)
 
-                    Picker("", selection: $transcriptionLanguage) {
-                      ForEach(languageOptions, id: \.0) { option in
-                        Text(option.1).tag(option.0)
-                      }
-                    }
-                    .pickerStyle(.menu)
-                    .frame(width: 180)
-                    .onChange(of: transcriptionLanguage) { _, newValue in
-                      AssistantSettings.shared.transcriptionLanguage = newValue
-                      let supportsMulti = AssistantSettings.supportsAutoDetect(newValue)
+                    SearchableDropdown(
+                      title: "Language",
+                      options: languageOptions.map { option in
+                        SearchableDropdownOption(id: option.0, title: option.1)
+                      },
+                      selectedId: transcriptionLanguage,
+                      minWidth: 180
+                    ) { option in
+                      transcriptionLanguage = option.id
+                      AssistantSettings.shared.transcriptionLanguage = option.id
+                      let supportsMulti = AssistantSettings.supportsAutoDetect(option.id)
                       transcriptionAutoDetect = supportsMulti
                       AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
                       updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
-                      updateLanguage(newValue)
+                      updateLanguage(option.id)
                       restartTranscriptionIfNeeded()
                     }
                   }
@@ -149,6 +151,11 @@ extension SettingsContentView {
             .foregroundColor(OmiColors.textTertiary)
           }
         }
+      }
+
+      // Voice assistant (push-to-talk) languages
+      settingsCard(settingId: "transcription.voicelanguages") {
+        VoiceAssistantLanguagesCard()
       }
 
       // Custom Vocabulary
@@ -318,4 +325,118 @@ extension SettingsContentView {
 
   // MARK: - Notifications Section
 
+}
+
+/// Multi-select for the languages the user speaks to the VOICE ASSISTANT (push-to-talk).
+/// Order matters: the first selection is the primary. Self-contained — reads and writes
+/// `AssistantSettings.voiceLanguages` directly and re-warms the realtime hub so the new
+/// set reaches the session's system instruction without an app restart. Deliberately
+/// separate from the ambient Language Mode card above: this never touches the always-on
+/// transcriber's language settings.
+private struct VoiceAssistantLanguagesCard: View {
+  @State private var selection: [String] = []
+
+  private var chipOptions: [(code: String, name: String)] {
+    let common = OnboardingPagedIntroCoordinator.commonLanguages
+    let extra =
+      selection
+      .filter { code in !common.contains(where: { $0.code == code }) }
+      .map { code in
+        (
+          code: code,
+          name: AssistantSettings.supportedLanguages.first(where: { $0.code == code })?.name
+            ?? code
+        )
+      }
+    return common + extra
+  }
+
+  private var addableLanguages: [(code: String, name: String)] {
+    AssistantSettings.supportedLanguages.filter { option in
+      !option.code.contains("-") && !selection.contains(option.code)
+        && !chipOptions.contains(where: { $0.code == option.code })
+    }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      HStack {
+        Image(systemName: "person.wave.2")
+          .scaledFont(size: 16)
+          .foregroundColor(OmiColors.textSecondary)
+
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Voice Assistant Languages")
+            .scaledFont(size: 15, weight: .medium)
+            .foregroundColor(OmiColors.textPrimary)
+
+          Text("Languages you speak to Omi over push-to-talk — the first is your primary. Omi identifies which one you're speaking each turn.")
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        Spacer()
+      }
+
+      FlowLayout(spacing: 6) {
+        ForEach(chipOptions, id: \.code) { option in
+          languageChip(option)
+        }
+        if !addableLanguages.isEmpty {
+          SearchableDropdown(
+            title: "Add language",
+            label: "More…",
+            options: addableLanguages.map { option in
+              SearchableDropdownOption(id: option.code, title: option.name)
+            },
+            selectedId: nil
+          ) { option in
+            selection.append(option.id)
+            persist()
+          }
+          .fixedSize()
+        }
+      }
+    }
+    .onAppear {
+      selection = AssistantSettings.shared.voiceLanguages
+    }
+  }
+
+  private func languageChip(_ option: (code: String, name: String)) -> some View {
+    let isSelected = selection.contains(option.code)
+    let isPrimary = selection.first == option.code
+    return Button(action: {
+      if let idx = selection.firstIndex(of: option.code) {
+        selection.remove(at: idx)
+      } else {
+        selection.append(option.code)
+      }
+      persist()
+    }) {
+      Text(isPrimary ? "\(option.name) ✓" : option.name)
+        .scaledFont(size: 12, weight: isSelected ? .semibold : .regular)
+        .foregroundColor(isSelected ? OmiColors.backgroundPrimary : OmiColors.textSecondary)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+          Capsule().fill(isSelected ? Color.white.opacity(0.9) : Color.clear)
+            .overlay(Capsule().stroke(OmiColors.backgroundQuaternary, lineWidth: isSelected ? 0 : 1))
+        )
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func persist() {
+    guard !selection.isEmpty else {
+      // Never store an empty set — fall back to the current stored value.
+      selection = AssistantSettings.shared.voiceLanguages
+      return
+    }
+    AssistantSettings.shared.voiceLanguages = selection
+    selection = AssistantSettings.shared.voiceLanguages
+    // The voiceLanguages setter posts .voiceLanguagesDidChange; the hub controller
+    // observes it to prewarm the LID model and re-warm the session's instructions.
+  }
 }

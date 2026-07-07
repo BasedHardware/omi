@@ -6,7 +6,7 @@ remains for ``plan_v3_memory_read`` and equivalence tests that document
 intentional divergence (e.g. ``rollout_write_ready`` coupling, archive 404).
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 

@@ -4,20 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-
-def fail(message: str) -> None:
-    raise SystemExit(f"FAIL: {message}")
-
-
-def normalize_metadata_line(line: str) -> str:
-    stripped = line.strip()
-    if stripped.startswith("<!--"):
-        stripped = stripped[4:].strip()
-    if stripped.endswith("-->"):
-        stripped = stripped[:-3].strip()
-    return stripped
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from desktop_release_metadata import fail, normalize_metadata_line  # noqa: E402
 
 
 def mark_stable(body: str) -> str:

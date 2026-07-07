@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from models.product_memory import (
     AccessDecision,
@@ -12,6 +12,20 @@ from models.product_memory import (
     is_default_access_eligible,
 )
 from utils.memory.short_term_lifecycle import ShortTermLifecycleDecision, evaluate_short_term_lifecycle
+
+LifecycleAuditMetadata = Dict[str, Any]
+
+
+def _empty_memory_items() -> List[MemoryItem]:
+    return []
+
+
+def _empty_decisions() -> Dict[str, "ProductMemoryItemDecision"]:
+    return {}
+
+
+def _empty_lifecycle_audit_metadata() -> Dict[str, LifecycleAuditMetadata]:
+    return {}
 
 
 @dataclass(frozen=True)
@@ -24,9 +38,9 @@ class ProductMemoryItemDecision:
 
 @dataclass(frozen=True)
 class DefaultProductMemoryReadReport:
-    visible_items: List[MemoryItem] = field(default_factory=list)
-    decisions: Dict[str, ProductMemoryItemDecision] = field(default_factory=dict)
-    lifecycle_audit_metadata: Dict[str, Dict] = field(default_factory=dict)
+    visible_items: List[MemoryItem] = field(default_factory=_empty_memory_items)
+    decisions: Dict[str, ProductMemoryItemDecision] = field(default_factory=_empty_decisions)
+    lifecycle_audit_metadata: Dict[str, LifecycleAuditMetadata] = field(default_factory=_empty_lifecycle_audit_metadata)
 
 
 def _current_time(now: Optional[datetime]) -> datetime:
@@ -81,7 +95,7 @@ def filter_default_product_memory_items(
     current_time = _current_time(now)
     visible_items: List[MemoryItem] = []
     decisions: Dict[str, ProductMemoryItemDecision] = {}
-    lifecycle_audit_metadata: Dict[str, Dict] = {}
+    lifecycle_audit_metadata: Dict[str, LifecycleAuditMetadata] = {}
 
     for item in items:
         access = is_default_access_eligible(item, policy, now=current_time)

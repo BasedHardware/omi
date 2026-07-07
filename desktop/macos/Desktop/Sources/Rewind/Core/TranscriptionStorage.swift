@@ -92,7 +92,8 @@ actor TranscriptionStorage {
                 return false
             }
 
-            record.finishedAt = Date()
+            let now = Date()
+            record.finishedAt = max(now, record.startedAt.addingTimeInterval(1.0))
             record.status = .pendingUpload
             if let strategy {
                 record.finalizationStrategy = strategy
@@ -183,7 +184,8 @@ actor TranscriptionStorage {
     func markSessionCompleted(
         id: Int64,
         backendId: String,
-        conversationStatus: LocalConversationStatus = .completed
+        conversationStatus: LocalConversationStatus = .completed,
+        allowBackendIdOverride: Bool = false
     ) async throws -> Bool {
         let db = try await ensureInitialized()
 
@@ -192,7 +194,7 @@ actor TranscriptionStorage {
                 throw TranscriptionStorageError.sessionNotFound
             }
 
-            guard record.canAcceptCompletion(backendId: backendId) else {
+            guard allowBackendIdOverride || record.canAcceptCompletion(backendId: backendId) else {
                 log("TranscriptionStorage: Skipping conflicting completion for session \(id) (existing: \(record.backendId ?? "nil"), incoming: \(backendId))")
                 return false
             }
@@ -647,6 +649,48 @@ actor TranscriptionStorage {
         }
     }
 
+    /// Get failed cloud-reconciliation sessions that exhausted normal retries but still have saved
+    /// local transcript segments. These can be recovered by uploading those segments directly.
+    func getExhaustedCloudSessionsWithLocalSegments(
+        maxRetries: Int = 5,
+        maxLocalFallbackRetries: Int = 3
+    ) async throws -> [TranscriptionSessionRecord] {
+        let db = try await ensureInitialized()
+        let retryLimit = maxRetries + maxLocalFallbackRetries
+
+        return try await db.read { database in
+            try TranscriptionSessionRecord
+                .filter(Column("backendSynced") == false)
+                .filter(Column("status") == TranscriptionSessionStatus.failed.rawValue)
+                .filter(Column("retryCount") >= maxRetries)
+                .filter(Column("retryCount") < retryLimit)
+                .filter(
+                    sql: """
+                        finalizationStrategy = ?
+                        OR (
+                            finalizationStrategy IS NULL
+                            AND ((backendId IS NOT NULL AND backendId != '') OR source != ?)
+                        )
+                        """,
+                    arguments: [
+                        TranscriptionFinalizationStrategy.cloudReconcile.rawValue,
+                        ConversationSource.desktop.rawValue,
+                    ]
+                )
+                .filter(
+                    sql: """
+                        EXISTS (
+                            SELECT 1
+                            FROM transcription_segments
+                            WHERE transcription_segments.sessionId = transcription_sessions.id
+                        )
+                        """
+                )
+                .order(Column("createdAt").asc)
+                .fetchAll(database)
+        }
+    }
+
     /// Get sessions that were left in "recording" status (crashed)
     func getCrashedSessions() async throws -> [TranscriptionSessionRecord] {
         let db = try await ensureInitialized()
@@ -762,9 +806,14 @@ actor TranscriptionStorage {
                 .filter(Column("backendId") == conversation.id)
                 .fetchOne(database) {
                 // Skip if local record is newer than the conversation's latest timestamp.
-                // This prevents sync from overwriting recent local mutations (star, delete, title edit, etc.)
+                // This prevents sync from overwriting recent local mutations (star, delete, title edit, etc.).
+                // Exception: finalization can create a backend-synced local shell with an id/status
+                // but no structured title/overview. Backend list/detail sync must be allowed to hydrate
+                // that shell later, even when local completion happened after the server's finished_at timestamp.
                 let serverTimestamp = conversation.finishedAt ?? conversation.startedAt ?? conversation.createdAt
-                if existingSession.updatedAt >= serverTimestamp {
+                let localMutationIsNewer = existingSession.updatedAt >= serverTimestamp
+                let shouldHydrateLocalShell = existingSession.hasHydratableServerFields(from: conversation)
+                if localMutationIsNewer && !shouldHydrateLocalShell {
                     guard let sessionId = existingSession.id else {
                         throw TranscriptionStorageError.invalidState("Session ID is nil")
                     }
@@ -772,7 +821,7 @@ actor TranscriptionStorage {
                 }
 
                 // Update existing session
-                existingSession.updateFrom(conversation)
+                existingSession.updateFrom(conversation, preservingNewerLocalFields: localMutationIsNewer)
                 try existingSession.update(database)
                 guard let sessionId = existingSession.id else {
                     throw TranscriptionStorageError.invalidState("Session ID is nil after update")
@@ -792,8 +841,8 @@ actor TranscriptionStorage {
         }
     }
 
-    /// Upsert segments from a ServerConversation
-    /// Deletes existing segments and re-inserts from conversation.
+    /// Upsert segments from a ServerConversation.
+    /// Replaces backend-owned transcript fields while preserving existing local speaker assignments.
     /// Skips when incoming segments are empty to avoid wiping locally-cached data
     /// (list endpoints often return conversations without transcript segments).
     func upsertSegmentsFromServerConversation(_ conversation: ServerConversation, sessionId: Int64) async throws {
@@ -802,6 +851,18 @@ actor TranscriptionStorage {
         let db = try await ensureInitialized()
 
         try await db.write { database in
+            let existingSegments = try TranscriptionSegmentRecord
+                .filter(Column("sessionId") == sessionId)
+                .fetchAll(database)
+            var existingBySegmentId: [String: TranscriptionSegmentRecord] = [:]
+            var existingByOrder: [Int: TranscriptionSegmentRecord] = [:]
+            for segment in existingSegments {
+                if let segmentId = segment.segmentId {
+                    existingBySegmentId[segmentId] = segment
+                }
+                existingByOrder[segment.segmentOrder] = segment
+            }
+
             // Delete existing segments for this session
             try database.execute(
                 sql: "DELETE FROM transcription_segments WHERE sessionId = ?",
@@ -810,7 +871,12 @@ actor TranscriptionStorage {
 
             // Insert new segments
             for (index, segment) in conversation.transcriptSegments.enumerated() {
-                let record = TranscriptionSegmentRecord.from(segment, sessionId: sessionId, segmentOrder: index)
+                var record = TranscriptionSegmentRecord.from(segment, sessionId: sessionId, segmentOrder: index)
+                let existing = segment.backendId.flatMap { existingBySegmentId[$0] } ?? existingByOrder[index]
+                if let existing, existing.hasSpeakerAssignment {
+                    record.isUser = existing.isUser
+                    record.personId = existing.personId
+                }
                 _ = try record.inserted(database)
             }
 
@@ -824,8 +890,9 @@ actor TranscriptionStorage {
         // First upsert the session
         let (sessionId, changed) = try await upsertFromServerConversation(conversation)
 
-        // Only re-sync segments if the session was actually inserted or updated
-        if changed {
+        // Detail responses can carry backend segment ids, speaker assignments, or translations even
+        // when session metadata is skipped by the local-newer timestamp guard.
+        if changed || conversation.transcriptPresenceState == .includedNonEmpty {
             try await upsertSegmentsFromServerConversation(conversation, sessionId: sessionId)
         }
 

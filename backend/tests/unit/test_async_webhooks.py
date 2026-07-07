@@ -7,54 +7,28 @@ use httpx.AsyncClient instead of blocking requests.post.
 import ast
 import os
 import re
-import sys
-import types
 from unittest.mock import MagicMock, AsyncMock, patch
 
 import pytest
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
-# Stub database modules before import
-sys.modules.setdefault("database._client", MagicMock())
-_db_redis = types.ModuleType("database.redis_db")
-sys.modules["database.redis_db"] = _db_redis
-_db_redis.get_user_webhook_db = MagicMock(return_value="https://example.com/webhook")
-_db_redis.user_webhook_status_db = MagicMock(return_value=True)
-_db_redis.disable_user_webhook_db = MagicMock()
-_db_redis.enable_user_webhook_db = MagicMock()
-_db_redis.set_user_webhook_db = MagicMock()
-_db_redis.get_generic_cache = MagicMock(return_value=None)
-_db_redis.set_generic_cache = MagicMock()
-_db_redis.r = MagicMock()
-
-_backend_dir = os.path.join(os.path.dirname(__file__), '..', '..')
-
-for mod_name in ["database", "database.notifications", "database.users", "database.folders", "database.conversations"]:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = types.ModuleType(mod_name)
-        if mod_name == "database":
-            sys.modules[mod_name].__path__ = [os.path.abspath(os.path.join(_backend_dir, 'database'))]
-
-sys.modules["database.notifications"].get_token_only = MagicMock(return_value=None)
-sys.modules["database.users"].get_user_profile = MagicMock(return_value={"name": "Test"})
-sys.modules["database.users"].get_people_by_ids = MagicMock(return_value=[])
-sys.modules["database.folders"].get_folders = MagicMock(return_value=[])
-sys.modules["database.conversations"].get_conversations = MagicMock(return_value=[])
-
-if "utils.notifications" not in sys.modules:
-    sys.modules["utils.notifications"] = types.ModuleType("utils.notifications")
-sys.modules["utils.notifications"].send_notification = MagicMock()
-
+import utils.webhooks as webhooks_module
 from utils.webhooks import realtime_transcript_webhook, send_audio_bytes_developer_webhook, day_summary_webhook
 
 
 @pytest.fixture(autouse=True)
-def _disable_webhook_retry_sleeps(monkeypatch):
-    monkeypatch.setenv("DEV_WEBHOOK_RETRY_DELAYS", "")
+def _stub_webhook_db_helpers(monkeypatch):
+    """Hermetic defaults for the DB-interfacing names ``utils.webhooks`` binds.
+
+    Replaces the former module-scope ``sys.modules`` stubs of ``database.redis_db``
+    etc. Individual tests override specific names via ``with patch(...)`` as needed.
+    """
+    monkeypatch.setattr(webhooks_module, "user_webhook_status_db", MagicMock(return_value=True))
+    monkeypatch.setattr(webhooks_module, "get_user_webhook_db", MagicMock(return_value="https://example.com/webhook"))
+    monkeypatch.setattr(webhooks_module, "disable_user_webhook_db", MagicMock())
+    monkeypatch.setattr(webhooks_module, "enable_user_webhook_db", MagicMock())
+    monkeypatch.setattr(webhooks_module, "set_user_webhook_db", MagicMock())
+    monkeypatch.setattr(webhooks_module, "record_dev_webhook_success", MagicMock())
+    monkeypatch.setattr(webhooks_module, "record_dev_webhook_failure", MagicMock(return_value=False))
 
 
 class TestRealtimeTranscriptWebhook:
@@ -128,7 +102,9 @@ class TestRealtimeTranscriptWebhook:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=httpx.TimeoutException("connect timeout"))
 
-        with patch("utils.webhooks.get_webhook_client", return_value=mock_client):
+        with patch("utils.webhooks.get_webhook_client", return_value=mock_client), patch(
+            "utils.webhooks._get_dev_webhook_retry_delays", return_value=()
+        ):
             # Should not raise
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
 
@@ -420,7 +396,7 @@ class TestCircuitBreakerIntegration:
 
         with patch("utils.webhooks.get_webhook_circuit_breaker", return_value=mock_cb), patch(
             "utils.webhooks.get_webhook_client", return_value=mock_client
-        ):
+        ), patch("utils.webhooks._get_dev_webhook_retry_delays", return_value=()):
             await realtime_transcript_webhook("uid-1", [{"text": "hello"}])
             mock_cb.record_failure.assert_called_once()
 

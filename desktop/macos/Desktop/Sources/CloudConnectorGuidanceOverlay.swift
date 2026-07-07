@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 /// One copy row on the assisted cloud-connector card. `id` must be unique across
 /// the card — never derive it from `label` alone (duplicate labels crash SwiftUI).
@@ -36,6 +37,39 @@ struct CloudConnectorCopyField: Identifiable, Sendable {
       let ids = fields.map(\.id)
       precondition(Set(ids).count == ids.count, "CloudConnectorCopyField ids must be unique")
     #endif
+  }
+}
+
+/// A visible group of copy rows on the assisted cloud-connector card.
+struct CloudConnectorCopySection: Identifiable, Sendable {
+  let id: String
+  let title: String
+  let fields: [CloudConnectorCopyField]
+
+  init(id: String, title: String, fields: [CloudConnectorCopyField]) {
+    self.id = id
+    self.title = title
+    self.fields = fields
+  }
+
+  var hasVisibleTitle: Bool {
+    !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  static func flattenedFields(_ sections: [CloudConnectorCopySection]) -> [CloudConnectorCopyField] {
+    sections.flatMap(\.fields)
+  }
+
+  static func visibleTitleCount(_ sections: [CloudConnectorCopySection]) -> Int {
+    sections.filter(\.hasVisibleTitle).count
+  }
+
+  static func assertUniqueIDs(_ sections: [CloudConnectorCopySection]) {
+    #if DEBUG
+      let sectionIDs = sections.map(\.id)
+      precondition(Set(sectionIDs).count == sectionIDs.count, "CloudConnectorCopySection ids must be unique")
+    #endif
+    CloudConnectorCopyField.assertUniqueIDs(flattenedFields(sections))
   }
 }
 
@@ -189,12 +223,31 @@ final class CloudConnectorGuidanceOverlay {
     fields: [CloudConnectorCopyField],
     near anchor: CGRect?
   ) {
+    presentFieldCopyCard(
+      title: title,
+      subtitle: subtitle,
+      sections: [CloudConnectorCopySection(id: "fields", title: "", fields: fields)],
+      near: anchor
+    )
+  }
+
+  func presentFieldCopyCard(
+    title: String,
+    subtitle: String,
+    sections: [CloudConnectorCopySection],
+    near anchor: CGRect?
+  ) {
     dismissTask?.cancel()
     window?.close()
 
-    CloudConnectorCopyField.assertUniqueIDs(fields)
+    CloudConnectorCopySection.assertUniqueIDs(sections)
+    let fields = CloudConnectorCopySection.flattenedFields(sections)
     let cardSize = Self.fieldCopyCardSize(
-      title: title, subtitle: subtitle, fieldCount: fields.count)
+      title: title,
+      subtitle: subtitle,
+      fieldCount: fields.count,
+      sectionTitleCount: CloudConnectorCopySection.visibleTitleCount(sections)
+    )
     let screen = Self.screen(forAnchor: anchor)
     let frame = Self.instructionCardFrame(
       anchor: anchor, cardSize: cardSize, visibleFrame: screen.visibleFrame)
@@ -212,7 +265,7 @@ final class CloudConnectorGuidanceOverlay {
     let view = CloudConnectorFieldCopyCardView(
       title: title,
       subtitle: subtitle,
-      fields: fields,
+      sections: sections,
       size: cardSize,
       onDismiss: { [weak self] in self?.dismiss() })
     let hostingController = NSHostingController(rootView: view)
@@ -250,11 +303,17 @@ final class CloudConnectorGuidanceOverlay {
     }
   }
 
-  static func fieldCopyCardSize(title: String, subtitle: String, fieldCount: Int) -> CGSize {
+  static func fieldCopyCardSize(
+    title: String,
+    subtitle: String,
+    fieldCount: Int,
+    sectionTitleCount: Int = 0
+  ) -> CGSize {
     // Match instruction-card subtitle wrapping: long copy needs extra header height.
     let compactSubtitleThreshold = 86
     let headerHeight: CGFloat = subtitle.count <= compactSubtitleThreshold ? 96 : 118
-    return CGSize(width: 460, height: headerHeight + CGFloat(fieldCount) * 30)
+    let sectionHeaderHeight = CGFloat(sectionTitleCount) * 24
+    return CGSize(width: 460, height: headerHeight + CGFloat(fieldCount) * 30 + sectionHeaderHeight)
   }
 
   private static func screen(forAnchor anchor: CGRect?) -> NSScreen {
@@ -454,6 +513,7 @@ private struct CloudConnectorCardHeaderView: View {
       }
       .buttonStyle(.plain)
       .help("Dismiss")
+      .accessibilityLabel("Close")
     }
   }
 }
@@ -479,7 +539,7 @@ private struct CloudConnectorInstructionCardView: View {
 private struct CloudConnectorFieldCopyCardView: View {
   let title: String
   let subtitle: String
-  let fields: [CloudConnectorCopyField]
+  let sections: [CloudConnectorCopySection]
   let size: CGSize
   let onDismiss: () -> Void
 
@@ -489,9 +549,9 @@ private struct CloudConnectorFieldCopyCardView: View {
     VStack(alignment: .leading, spacing: 10) {
       CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
 
-      VStack(alignment: .leading, spacing: 6) {
-        ForEach(fields) { field in
-          fieldRow(field)
+      VStack(alignment: .leading, spacing: 10) {
+        ForEach(sections) { section in
+          sectionView(section)
         }
       }
     }
@@ -502,12 +562,30 @@ private struct CloudConnectorFieldCopyCardView: View {
     .background(SpatialOverlayCardBackground())
   }
 
+  private func sectionView(_ section: CloudConnectorCopySection) -> some View {
+    VStack(alignment: .leading, spacing: 6) {
+      if section.hasVisibleTitle {
+        Text(section.title)
+          .scaledFont(size: 10.5, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(1)
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        ForEach(section.fields) { field in
+          fieldRow(field)
+        }
+      }
+    }
+  }
+
   private func fieldRow(_ field: CloudConnectorCopyField) -> some View {
     HStack(spacing: 8) {
       Text(field.label)
         .scaledFont(size: 11.5, weight: .medium)
         .foregroundColor(OmiColors.textTertiary)
         .lineLimit(1)
+        .minimumScaleFactor(0.82)
         .frame(width: 152, alignment: .leading)
 
       Text(field.displayValue)
@@ -535,15 +613,12 @@ private struct CloudConnectorFieldCopyCardView: View {
     Button {
       copy(field)
     } label: {
-      HStack(spacing: 4) {
+      ZStack {
         Image(systemName: copiedFieldID == field.id ? "checkmark" : "doc.on.doc")
-          .scaledFont(size: 9, weight: .bold)
-        Text(copiedFieldID == field.id ? "Copied" : "Copy")
-          .scaledFont(size: 10.5, weight: .semibold)
+          .scaledFont(size: 10, weight: .bold)
       }
+      .frame(width: 28, height: 22)
       .foregroundColor(copiedFieldID == field.id ? OmiColors.success : OmiColors.textPrimary)
-      .padding(.horizontal, 9)
-      .padding(.vertical, 4)
       .background(
         Capsule().fill(
           copiedFieldID == field.id
@@ -551,7 +626,8 @@ private struct CloudConnectorFieldCopyCardView: View {
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)
-    .help("Copy \(field.label)")
+    .help(copiedFieldID == field.id ? "Copied \(field.label)" : "Copy \(field.label)")
+    .accessibilityLabel(copiedFieldID == field.id ? "Copied \(field.label)" : "Copy \(field.label)")
   }
 
   private func copy(_ field: CloudConnectorCopyField) {

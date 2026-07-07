@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional, cast
+
+from google.api_core.exceptions import NotFound as FirestoreNotFound
 
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
@@ -33,7 +35,8 @@ def _content_for_kg_extraction(item: MemoryItem) -> str:
     content = (item.content or "").strip()
     predicate = getattr(item, "predicate", None)
     subject_entity_id = getattr(item, "subject_entity_id", None)
-    arguments = getattr(item, "arguments", None) or {}
+    raw_arguments = getattr(item, "arguments", None)
+    arguments = cast(dict[str, Any], raw_arguments) if isinstance(raw_arguments, dict) else {}
     args_suffix = ""
     if arguments:
         args_suffix = f" ({' '.join(f'{key}={value}' for key, value in arguments.items())})"
@@ -45,19 +48,37 @@ def _content_for_kg_extraction(item: MemoryItem) -> str:
     return content
 
 
-def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client=None) -> None:
-    client = db_client if db_client is not None else default_db_client
+def set_canonical_memory_kg_extracted(uid: str, memory_id: str, *, db_client: Any = None) -> bool:
+    client: Any = db_client if db_client is not None else default_db_client
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     ref = client.document(path)
-    ref.set({"kg_extracted": True, "updated_at": datetime.now(timezone.utc)}, merge=True)
+    try:
+        ref.update({"kg_extracted": True, "updated_at": datetime.now(timezone.utc)})
+        return True
+    except FirestoreNotFound:
+        logger.warning(
+            "Skipping stale canonical memory kg_extracted update: document no longer exists uid=%s",
+            uid,
+        )
+        return False
 
 
-def set_canonical_memory_kg_extracted_without_touching_updated_at(uid: str, memory_id: str, *, db_client=None) -> None:
+def set_canonical_memory_kg_extracted_without_touching_updated_at(
+    uid: str, memory_id: str, *, db_client: Any = None
+) -> bool:
     """Mark KG extraction complete without changing the product-memory timestamp."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     ref = client.document(path)
-    ref.set({"kg_extracted": True}, merge=True)
+    try:
+        ref.update({"kg_extracted": True})
+        return True
+    except FirestoreNotFound:
+        logger.warning(
+            "Skipping stale canonical memory kg_extracted update: document no longer exists uid=%s",
+            uid,
+        )
+        return False
 
 
 def extract_kg_for_promoted_memory(
@@ -65,11 +86,11 @@ def extract_kg_for_promoted_memory(
     item: MemoryItem,
     *,
     user_name: str = "User",
-    db_client=None,
+    db_client: Any = None,
     preserve_item_updated_at: bool = False,
 ) -> CanonicalKgPromotionResult:
     """Extract KG nodes/edges for a newly promoted long_term memory."""
-    client = db_client if db_client is not None else default_db_client
+    client: Any = db_client if db_client is not None else default_db_client
     if resolve_memory_system(uid, db_client=client) != MemorySystem.CANONICAL:
         return CanonicalKgPromotionResult(skipped_reason="not_canonical_cohort")
     if item.tier != MemoryLayer.long_term:

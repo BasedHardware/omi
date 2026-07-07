@@ -194,7 +194,9 @@ class AppState: ObservableObject {
   // People (speaker voice profiles)
   @Published var people: [Person] = []
   var peopleById: [String: Person] {
-    Dictionary(uniqueKeysWithValues: people.map { ($0.id, $0) })
+    // Last-write-wins: the API can return duplicate person ids; uniqueKeysWithValues
+    // would trap on a collision and crash the render path (same class as the fixed #6506).
+    Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { _, latest in latest })
   }
 
   /// Maps live speaker IDs to person IDs during recording (cleared on finalize)
@@ -272,6 +274,7 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
   var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
@@ -323,6 +326,8 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
+  var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
   var pendingBackendConversationId: String?
   var ignoredRotatedBackendConversationIds: Set<String> = []
@@ -662,6 +667,16 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted (automation bridge) to open the inline chat on the redesigned Home
+  static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
+  /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
+  static let homeStageToggleConnect = Notification.Name("homeStageToggleConnect")
+  /// Posted (automation bridge) to collapse the redesigned Home back to the hub
+  static let homeStageClose = Notification.Name("homeStageClose")
+  /// Posted (automation bridge) to send a query through the Home ask bar. userInfo["query"] = text.
+  static let homeStageAsk = Notification.Name("homeStageAsk")
+  /// Posted (automation bridge) to stage a file in the Home ask bar. userInfo["path"] = file path.
+  static let homeStageAttach = Notification.Name("homeStageAttach")
   /// Posted to show the over-usage-limit popup. userInfo["reason"] = "transcription" | "chat" | "floating_bar".
   static let showUsageLimitPopup = Notification.Name("showUsageLimitPopup")
   /// Posted to navigate to Rewind settings

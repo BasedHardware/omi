@@ -5,66 +5,99 @@ import os
 import sys
 import types
 import unittest
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import pytest
 from fastapi import HTTPException
 
-# Stub heavy dependencies before importing our modules
-for mod_name in [
-    'firebase_admin',
-    'firebase_admin.auth',
-    'google.cloud',
-    'google.cloud.firestore',
-    'google.cloud.firestore_v1',
-    'database.redis_db',
-    'database.auth',
-    'database.users',
-]:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = types.ModuleType(mod_name)
-
-# Stub redis
-redis_mock = types.ModuleType('redis')
-redis_mock.Redis = MagicMock
-redis_mock.exceptions = types.ModuleType('redis.exceptions')
+from testing.import_isolation import stub_modules
+from utils.rate_limit_config import RATE_LIMIT_BOOST, RATE_POLICIES, get_effective_limit
 
 
 class _RedisError(Exception):
     pass
 
 
-redis_mock.exceptions.RedisError = _RedisError
-sys.modules['redis'] = redis_mock
-sys.modules['redis.exceptions'] = redis_mock.exceptions
+@pytest.fixture(scope="module", autouse=True)
+def _rate_limit_stubs():
+    """Install import-time fakes (redis, firebase_admin, database.redis_db, ...).
 
-# Stub firebase_admin.auth
-firebase_auth = sys.modules['firebase_admin.auth']
-firebase_auth.CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-firebase_auth.ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-firebase_auth.InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-firebase_auth.RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+    ``database.redis_db`` constructs a ``redis.Redis(...)`` client at import time
+    (a Tier-1 import-purity violation), and ``utils.other.endpoints`` transitively
+    pulls ``firebase_admin`` + ``database.redis_db`` + ``database.users``. These
+    fakes must be active *before* those modules are exec'd, so they live inside a
+    ``stub_modules`` block (the sanctioned reserve seam — see
+    ``backend/docs/test_isolation.md`` and DECISIONS D2). The stub ``check_rate_limit``
+    reproduces the production boundary logic with a mockable Lua callable.
+    """
 
-# Stub database.redis_db with real check_rate_limit logic (Lua script mocked)
-redis_db_stub = sys.modules['database.redis_db']
-redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
-redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
-sys.modules['database.users'].record_user_platform = MagicMock()
-sys.modules['database.users'].record_client_device = MagicMock()
+    firebase_admin = ModuleType("firebase_admin")
+    firebase_auth = ModuleType("firebase_admin.auth")
+    firebase_auth.CertificateFetchError = type("CertificateFetchError", (Exception,), {})
+    firebase_auth.ExpiredIdTokenError = type("ExpiredIdTokenError", (Exception,), {})
+    firebase_auth.InvalidIdTokenError = type("InvalidIdTokenError", (Exception,), {})
+    firebase_auth.RevokedIdTokenError = type("RevokedIdTokenError", (Exception,), {})
 
+    google_pkg = ModuleType("google")
+    google_pkg.__path__ = []  # type: ignore[attr-defined]
+    google_cloud_pkg = ModuleType("google.cloud")
+    google_cloud_pkg.__path__ = []  # type: ignore[attr-defined]
+    firestore_stub = ModuleType("google.cloud.firestore")
+    firestore_stub.FieldFilter = MagicMock()
+    fv1_stub = ModuleType("google.cloud.firestore_v1")
+    fv1_stub.FieldFilter = MagicMock()
 
-def _check_rate_limit(key, policy, max_requests, window):
-    """Real Python logic from redis_db.check_rate_limit, with mockable Lua."""
-    redis_key = f'rl:{policy}:{key}'
-    current, ttl = redis_db_stub._RATE_LIMIT_LUA(keys=[redis_key], args=[window])
-    remaining = max(0, max_requests - current)
-    allowed = current <= max_requests
-    retry_after = max(0, ttl) if not allowed else 0
-    return allowed, remaining, retry_after
+    redis_pkg = ModuleType("redis")
+    redis_pkg.Redis = MagicMock
+    redis_exceptions = ModuleType("redis.exceptions")
+    redis_exceptions.RedisError = _RedisError
+    redis_pkg.exceptions = redis_exceptions
 
+    redis_db_stub = ModuleType("database.redis_db")
+    redis_db_stub._RATE_LIMIT_LUA = MagicMock(return_value=[1, 3600])
+    redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
 
-redis_db_stub.check_rate_limit = _check_rate_limit
+    def _check_rate_limit(key, policy, max_requests, window):
+        """Real Python logic from redis_db.check_rate_limit, with mockable Lua."""
+        redis_key = f"rl:{policy}:{key}"
+        current, ttl = redis_db_stub._RATE_LIMIT_LUA(keys=[redis_key], args=[window])
+        remaining = max(0, max_requests - current)
+        allowed = current <= max_requests
+        retry_after = max(0, ttl) if not allowed else 0
+        return allowed, remaining, retry_after
 
-from utils.rate_limit_config import RATE_POLICIES, get_effective_limit, RATE_LIMIT_BOOST
+    redis_db_stub.check_rate_limit = _check_rate_limit
+
+    database_auth = ModuleType("database.auth")
+    database_users = ModuleType("database.users")
+    database_users.record_user_platform = MagicMock()
+    database_users.record_client_device = MagicMock()
+
+    fakes = {
+        "firebase_admin": firebase_admin,
+        "firebase_admin.auth": firebase_auth,
+        "google": google_pkg,
+        "google.cloud": google_cloud_pkg,
+        "google.cloud.firestore": firestore_stub,
+        "google.cloud.firestore_v1": fv1_stub,
+        "redis": redis_pkg,
+        "redis.exceptions": redis_exceptions,
+        "database.redis_db": redis_db_stub,
+        "database.auth": database_auth,
+        "database.users": database_users,
+    }
+    with stub_modules(fakes):
+        # ``utils.other.endpoints`` binds ``check_rate_limit`` / ``try_acquire_listen_lock``
+        # at import, so it must (re-)exec against the fake ``database.redis_db``.
+        for _cached in (
+            "utils.other.endpoints",
+            "utils.other",
+        ):
+            sys.modules.pop(_cached, None)
+        import utils.other.endpoints  # noqa: F401  (re-exec'd against fakes above)
+
+        yield
 
 
 class TestRatePolicies(unittest.TestCase):
@@ -405,6 +438,8 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "goals:extract",
             "dev:conversations",
             "dev:conversations_read",
+            "dev:conversation_detail_read",
+            "dev:conversation_transcript_read",
             "dev:action_items_read",
             "dev:action_items_write",
             "dev:goals_read",
@@ -472,9 +507,61 @@ class TestRouterWiring(unittest.TestCase):
             "dev:memories_read",
             "dev:action_items_read",
             "dev:conversations_read",
+            "dev:conversation_detail_read",
+            "dev:conversation_transcript_read",
             "dev:goals_read",
         ]:
             self.assertIn(policy, source)
+
+    def test_developer_conversation_reads_split_detail_and_transcript_policies(self):
+        dependencies_source = open("dependencies.py", encoding='utf-8').read()
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+
+        self.assertIn('policy_name="dev:conversation_detail_read"', dependencies_source)
+        self.assertIn('policy_name="dev:conversation_transcript_read"', dependencies_source)
+        self.assertIn("get_auth_with_conversations_read", developer_source)
+        self.assertIn("get_auth_with_conversation_detail_read", developer_source)
+        self.assertIn("check_conversation_transcript_read_limit(auth, request=request)", developer_source)
+
+    def test_developer_conversation_reads_emit_sanitized_audit_logs(self):
+        developer_source = open("routers/developer.py", encoding='utf-8').read()
+        dependencies_source = open("dependencies.py", encoding='utf-8').read()
+
+        self.assertIn("developer_api_read operation=%s", developer_source)
+        self.assertIn("developer_api_rate_limit_failure policy=%s", dependencies_source)
+        self.assertIn("auth.app_id or 'unknown_app'", developer_source)
+        self.assertIn("auth.key_id or 'unknown_key'", developer_source)
+        self.assertIn("sanitize(request.headers.get('user-agent'))", developer_source)
+        self.assertNotIn("request.headers.get('Authorization'", developer_source)
+        self.assertNotIn('request.headers.get("Authorization"', developer_source)
+        self.assertNotIn("request.headers.get('Authorization'", dependencies_source)
+        self.assertNotIn('request.headers.get("Authorization"', dependencies_source)
+
+    def test_developer_rate_limit_failures_log_without_request(self):
+        dependencies = importlib.import_module("dependencies")
+        auth = dependencies.ApiKeyAuth(
+            uid="uid1",
+            scopes=["conversations:read"],
+            app_id="test-app",
+            key_id="test-key",
+        )
+
+        with patch.object(
+            dependencies,
+            "check_api_key_rate_limit",
+            side_effect=HTTPException(status_code=429, detail="Rate limit exceeded"),
+        ):
+            with self.assertLogs("dependencies", level="WARNING") as logs:
+                with self.assertRaises(HTTPException):
+                    dependencies.check_conversation_transcript_read_limit(auth)
+
+        log_output = "\n".join(logs.output)
+        self.assertIn("developer_api_rate_limit_failure policy=dev:conversation_transcript_read", log_output)
+        self.assertIn("path=unknown_path", log_output)
+        self.assertIn("uid=uid1", log_output)
+        self.assertIn("app_id=test-app", log_output)
+        self.assertIn("key_id=test-key", log_output)
+        self.assertNotIn("Authorization", log_output)
 
     def test_goals_router_has_rate_limits(self):
         matches = self._grep_file("routers/goals.py", r"with_rate_limit.*goals:")
@@ -524,8 +611,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_memories_router_has_rate_limits(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:")
-        # create, batch, 2 review, delete, delete_all, 3 modify endpoints = 9
-        self.assertEqual(len(matches), 9, f"memories.py expected 9 rate limits, got {len(matches)}")
+        # create, batch, 3 review (list/get/resolve), delete, delete_all, 3 modify endpoints = 10
+        self.assertEqual(len(matches), 10, f"memories.py expected 10 rate limits, got {len(matches)}")
 
     def test_memories_create_endpoint_rate_limited(self):
         matches = self._grep_file("routers/memories.py", r"with_rate_limit.*memories:create")

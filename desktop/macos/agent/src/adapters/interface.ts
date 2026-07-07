@@ -3,7 +3,7 @@
 // Issue #6592: Support multiple AI harnesses via common interface.
 // Issue #6594: Pi-mono harness with Omi API proxy.
 
-import type { OutboundMessage, WarmupSessionConfig } from "../protocol.js";
+import type { OutboundMessageDraft, WarmupSessionConfig } from "../protocol.js";
 import type { RuntimeFailure } from "../runtime/failures.js";
 import type { ArtifactRole, ResumeFidelity, RunMode } from "../runtime/types.js";
 
@@ -67,7 +67,7 @@ export type ToolExecutor = (
 /**
  * Event callback for streaming updates.
  */
-export type EventCallback = (event: OutboundMessage) => void;
+export type EventCallback = (event: OutboundMessageDraft) => void;
 
 /**
  * Features that a harness may or may not support.
@@ -356,7 +356,7 @@ export interface AdapterAttemptContext {
   sessionId: string;
   /** Omi/Firebase owner from the active Omi request context. Adapter payloads must not override this. */
   ownerId: string;
-  /** Compatibility transport correlation for request-scoped tool relays. */
+  /** Transport correlation for request-scoped tool relays. */
   requestId: string;
   clientId: string;
   runId: string;
@@ -369,7 +369,7 @@ export interface AdapterAttemptContext {
   metadata?: Record<string, unknown>;
 }
 
-export type AdapterEventSink = (event: OutboundMessage) => void;
+export type AdapterEventSink = (event: OutboundMessageDraft) => void;
 
 export interface AdapterArtifactReference {
   kind: string;
@@ -389,7 +389,7 @@ export interface AdapterAttemptResult {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
-  /** Adapter-owned native session id exposed for compatibility fields while v1 clients migrate. */
+  /** Adapter-owned native session id for request-scoped tool relays. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";
   failure?: RuntimeFailure;
@@ -436,7 +436,7 @@ export interface RuntimeAdapter {
    * Return the MCP server configuration this adapter actually passes to its
    * underlying session. Adapters that strip per-session MCP servers (e.g.
    * OpenClaw with {@code sessionMcpServersMode: "empty"}) should return an
-   * empty array so the kernel's binding-compatibility hash reflects what the
+   * empty array so the kernel's binding hash reflects what the
    * adapter truly saw, not the raw input. Adapters that pass MCP servers
    * through unchanged can omit this method; the kernel treats absent
    * implementations as identity (passthrough).

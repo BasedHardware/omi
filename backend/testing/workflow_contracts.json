@@ -153,7 +153,10 @@
       "id": "l2_promotion_worker",
       "risk": "high",
       "sources": ["backend/jobs/l2_promotion_worker.py", "backend/jobs/l2_promotion_orchestrator.py"],
-      "tests": ["tests/unit/test_l2_promotion_agent_v2.py"],
+      "tests": [
+        "tests/unit/test_l2_promotion_agent_v2.py",
+        "tests/unit/test_l2_promotion_worker.py"
+      ],
       "checks": [],
       "invariants": [
         "forward and backfill modes have explicit gates",
@@ -180,6 +183,28 @@
       "invariants": [
         "resume config mismatches fail closed",
         "failed shards remain visible in run summaries"
+      ]
+    },
+    {
+      "id": "backend_cloud_run_deploy",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_backend.yml",
+        "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/repair_cloud_run_traffic.py",
+        "backend/scripts/pre-deploy-check.sh"
+      ],
+      "tests": [
+        "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_repair_cloud_run_traffic.py",
+        "tests/unit/test_deploy_status_report.py",
+        "tests/unit/test_backend_runtime_env_validator.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "preflight fails before revision creation when Secret Manager bindings are missing",
+        "traffic shifts only after candidate revisions are Ready=True",
+        "spec.traffic mismatches are repaired or block deploy with an explicit command"
       ]
     }
   ]

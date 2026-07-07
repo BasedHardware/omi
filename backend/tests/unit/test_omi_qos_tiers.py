@@ -1181,3 +1181,15 @@ class TestGeminiThinkingBudget:
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
+
+    def test_structured_output_route_omits_thinking_budget(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('trends', 'gemini-2.5-flash-lite', 'gemini')
+        assert 'thinking_budget' not in opts
+
+    def test_non_structured_gemini_route_sets_thinking_budget_zero(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
+        assert opts.get('thinking_budget') == 0

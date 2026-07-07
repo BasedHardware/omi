@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVFoundation
+import OmiTheme
 
 struct PermissionsPage: View {
     @ObservedObject var appState: AppState
@@ -880,8 +881,10 @@ private func instructionStep(number: Int, text: String) -> some View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     PermissionsPage(appState: AppState())
         .frame(width: 800, height: 700)
         .background(OmiColors.backgroundPrimary)
 }
+#endif

@@ -26,7 +26,7 @@ class HardSecretDetector {
     (
       category: 'token',
       pattern: RegExp(
-        r"""\b(?:access[_-]?token|auth[_-]?token|refresh[_-]?token|bearer)\b\s*[:=]\s*["']?[A-Za-z0-9._~+/=-]{16,}""",
+        r"""\b(?:(?:access[_-]?|auth[_-]?|refresh[_-]?)?token\b\s*[:=]\s*["']?|authorization\b\s*:\s*bearer\s+|bearer\b\s+)[A-Za-z0-9._~+/=-]{16,}""",
         caseSensitive: false,
       ),
     ),

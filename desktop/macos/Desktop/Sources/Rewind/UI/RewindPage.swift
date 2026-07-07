@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Main Rewind page - Timeline-first view with integrated search
 /// The timeline is the primary interface, with search results highlighted inline
@@ -1890,7 +1891,9 @@ extension View {
 }
 
 
+#if canImport(PreviewsMacros)
 #Preview {
     RewindPage()
         .frame(width: 1000, height: 700)
 }
+#endif

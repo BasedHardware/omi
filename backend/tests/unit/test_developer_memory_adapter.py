@@ -133,7 +133,7 @@ def test_developer_batch_create_route_checks_split_brain_guard_before_categoriza
     categorization = 'identify_category_for_memory(mem_req.content.strip())'
     external_batch = '.create_external_memory_batch('
     guard_call = 'guard_legacy_memory_write('
-    legacy_write = 'memories_db.save_memories(uid, [memory.model_dump() for memory in memory_dbs])'
+    legacy_write = 'memory_write_payload(memory, MemoryApiExposure.LEGACY)'
     vector_write = 'upsert_memory_vectors_batch('
     assert pin_call in route_source
     assert categorization in route_source

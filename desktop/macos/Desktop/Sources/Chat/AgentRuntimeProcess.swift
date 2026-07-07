@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
@@ -43,6 +44,9 @@ actor AgentRuntimeProcess {
       case authSuccess
       case cancelAck
       case controlToolResult
+      case turnRecorded
+      case voiceSeedContext
+      case kernelTurnTail
       case unknown(String)
     }
 
@@ -87,6 +91,9 @@ actor AgentRuntimeProcess {
       case "auth_success": return .authSuccess
       case "cancel_ack": return .cancelAck
       case "control_tool_result": return .controlToolResult
+      case "turn_recorded": return .turnRecorded
+      case "voice_seed_context": return .voiceSeedContext
+      case "kernel_turn_tail": return .kernelTurnTail
       default: return .unknown(type)
       }
     }
@@ -120,6 +127,48 @@ actor AgentRuntimeProcess {
     let continuation: CheckedContinuation<String, Error>
   }
 
+  private struct ActiveVoiceSeedRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<(conversationId: String, context: String), Error>
+  }
+
+  struct KernelTurnTailTurn: Sendable {
+    let role: String
+    let content: String
+    let surfaceKind: String
+    let createdAtMs: Int
+    let metadataJson: String
+    let origin: String
+  }
+
+  struct KernelTurnTailResult: Sendable {
+    let conversationId: String
+    let turns: [KernelTurnTailTurn]
+  }
+
+  private struct ActiveKernelTurnTailRequest {
+    let clientId: String
+    let requestId: String
+    let continuation: CheckedContinuation<KernelTurnTailResult, Error>
+  }
+
+  struct KernelTurnRecorded: Sendable {
+    let conversationId: String
+    let surfaceKind: String
+    let externalRefKind: String
+    let externalRefId: String
+    let userText: String
+    let assistantText: String
+    let origin: String
+    let interrupted: Bool
+    let idempotencyKey: String?
+    let userTurnId: String?
+    let assistantTurnId: String?
+  }
+
+  typealias TurnRecordedHandler = @Sendable (KernelTurnRecorded) -> Void
+
   private var process: Process?
   private var stdinPipe: Pipe?
   private var stdoutPipe: Pipe?
@@ -131,10 +180,15 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
+  private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
+  private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
+  private var turnRecordedHandlers: [TurnRecordedHandler] = []
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
+  private var advertisedAgentControlTools: Set<String> = []
   private var isRestarting = false
+  private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
 
   var isAlive: Bool { isRunning }
 
@@ -154,6 +208,7 @@ actor AgentRuntimeProcess {
     clients[clientId] = registration
 
     if isRunning {
+      try await waitForInit(timeout: 30.0)
       return
     }
 
@@ -169,6 +224,14 @@ actor AgentRuntimeProcess {
     }
     for (requestKey, request) in activeControlRequests where request.clientId == clientId {
       activeControlRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeVoiceSeedRequests where request.clientId == clientId {
+      activeVoiceSeedRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+    }
+    for (requestKey, request) in activeKernelTurnTailRequests where request.clientId == clientId {
+      activeKernelTurnTailRequests.removeValue(forKey: requestKey)
       request.continuation.resume(throwing: BridgeError.stopped)
     }
 
@@ -234,14 +297,223 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func invalidateSession(clientId: String, sessionKey: String) {
+  func invalidateSurface(clientId: String, surface: AgentSurfaceReference) {
     var dict: [String: Any] = [
       "type": "invalidate_session",
       "protocolVersion": 2,
       "requestId": UUID().uuidString,
       "clientId": clientId,
-      "sessionKey": sessionKey,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
     ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func clearOwnerState(clientId: String) {
+    var dict: [String: Any] = [
+      "type": "clear_owner_state",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func clearOwnerSurfaceState(clientId: String, chatId: String = "default") {
+    var dict: [String: Any] = [
+      "type": "clear_owner_surface_state",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "chatId": chatId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  // TODO(desktop-agent-platonic-gap-closure G6): delete importer two desktop releases after platonic ships.
+  func importLegacyMainChatSessions(clientId: String, entries: [[String: String]]) {
+    var dict: [String: Any] = [
+      "type": "import_legacy_main_chat_sessions",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "entries": entries,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func mergeFloatingChatIntoMainChat(clientId: String, chatId: String = "default") {
+    var dict: [String: Any] = [
+      "type": "merge_floating_chat_into_main_chat",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "chatId": chatId,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func importConversationTurns(clientId: String, surface: AgentSurfaceReference, turns: [[String: Any]]) {
+    var dict: [String: Any] = [
+      "type": "import_conversation_turns",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "turns": turns,
+    ]
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func setTurnRecordedHandlers(_ handlers: [TurnRecordedHandler]) {
+    turnRecordedHandlers = handlers
+  }
+
+  func addTurnRecordedHandler(_ handler: @escaping TurnRecordedHandler) {
+    turnRecordedHandlers.append(handler)
+  }
+
+  func recordSurfaceTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    interrupted: Bool = false,
+    idempotencyKey: String? = nil
+  ) {
+    var dict: [String: Any] = [
+      "type": "record_surface_turn",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "userText": userText,
+      "assistantText": assistantText,
+      "origin": origin,
+      "interrupted": interrupted,
+    ]
+    if let idempotencyKey, !idempotencyKey.isEmpty {
+      dict["idempotencyKey"] = idempotencyKey
+    }
+    if let ownerId = currentOwnerId() {
+      dict["ownerId"] = ownerId
+    }
+    sendJson(dict)
+  }
+
+  func getVoiceSeedContext(
+    clientId: String,
+    harnessMode: String,
+    surface: AgentSurfaceReference
+  ) async throws -> (conversationId: String, context: String) {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeVoiceSeedRequests[requestKey] = ActiveVoiceSeedRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "get_voice_seed_context",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeVoiceSeedRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send voice seed request"))
+      }
+    }
+  }
+
+  func getKernelTurnTail(
+    clientId: String,
+    harnessMode: String,
+    limit: Int = 8,
+    chatId: String = "default"
+  ) async throws -> KernelTurnTailResult {
+    try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    let requestId = UUID().uuidString
+    let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
+    return try await withCheckedThrowingContinuation { continuation in
+      activeKernelTurnTailRequests[requestKey] = ActiveKernelTurnTailRequest(
+        clientId: clientId,
+        requestId: requestId,
+        continuation: continuation
+      )
+      var dict: [String: Any] = [
+        "type": "get_kernel_turn_tail",
+        "protocolVersion": 2,
+        "requestId": requestId,
+        "clientId": clientId,
+        "limit": limit,
+        "chatId": chatId,
+      ]
+      if let ownerId = currentOwnerId() {
+        dict["ownerId"] = ownerId
+      }
+      let sent = sendJson(dict)
+      if !sent, let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey) {
+        request.continuation.resume(throwing: BridgeError.agentError("Failed to send kernel turn tail request"))
+      }
+    }
+  }
+
+  func projectCrossSurfaceTurn(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    userText: String,
+    assistantText: String,
+    origin: String,
+    idempotencyKey: String? = nil
+  ) {
+    var dict: [String: Any] = [
+      "type": "project_cross_surface_turn",
+      "protocolVersion": 2,
+      "requestId": UUID().uuidString,
+      "clientId": clientId,
+      "surfaceKind": surface.surfaceKind,
+      "externalRefKind": surface.externalRefKind,
+      "externalRefId": surface.externalRefId,
+      "userText": userText,
+      "assistantText": assistantText,
+      "origin": origin,
+    ]
+    if let idempotencyKey, !idempotencyKey.isEmpty {
+      dict["idempotencyKey"] = idempotencyKey
+    }
     if let ownerId = currentOwnerId() {
       dict["ownerId"] = ownerId
     }
@@ -269,6 +541,9 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Agent control requires a signed-in owner")
     }
     try await registerClient(clientId: clientId, harnessMode: harnessMode)
+    guard advertisedAgentControlTools.contains(name) else {
+      throw BridgeError.agentError("Agent runtime does not advertise direct control tool \(name)")
+    }
 
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -308,7 +583,14 @@ actor AgentRuntimeProcess {
     if let ownerId = currentOwnerId() {
       dict["ownerId"] = ownerId
     }
-    sendJson(dict)
+    guard sendJson(dict) else {
+      activeRequests.removeValue(forKey: requestKey)
+      request.continuation.resume(throwing: BridgeError.stopped)
+      return
+    }
+    activeRequests.removeValue(forKey: requestKey)
+    expectedCancelledRequests.insert(requestKey)
+    request.continuation.resume(throwing: BridgeError.stopped)
   }
 
   func query(
@@ -317,17 +599,13 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     prompt: String,
     systemPrompt: String,
-    sessionKey: String?,
-    omiSessionId: String?,
-    surfaceKind: String?,
-    externalRefKind: String?,
-    externalRefId: String?,
-    legacyClientScope: String?,
+    surface: AgentSurfaceReference,
     cwd: String?,
     mode: String?,
     model: String?,
-    resume: String?,
     imageData: Data?,
+    attachmentMetadataJson: String?,
+    surfaceContextJson: String?,
     onTextDelta: @escaping AgentBridge.TextDeltaHandler,
     onToolCall: @escaping AgentBridge.ToolCallHandler,
     onToolActivity: @escaping AgentBridge.ToolActivityHandler,
@@ -342,16 +620,7 @@ actor AgentRuntimeProcess {
     }
 
     return try await withCheckedThrowingContinuation { continuation in
-      let surfaceRef: AgentSurfaceReference?
-      if let surfaceKind, let externalRefKind, let externalRefId {
-        surfaceRef = AgentSurfaceReference(
-          surfaceKind: surfaceKind,
-          externalRefKind: externalRefKind,
-          externalRefId: externalRefId
-        )
-      } else {
-        surfaceRef = nil
-      }
+      let surfaceRef = surface
       let request = ActiveRequest(
         clientId: clientId,
         requestId: requestId,
@@ -366,10 +635,8 @@ actor AgentRuntimeProcess {
         continuation: continuation
       )
       activeRequests[RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)] = request
-      if let surfaceRef {
-        Task { @MainActor in
-          AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
-        }
+      Task { @MainActor in
+        AgentRuntimeStatusStore.shared.beginRequest(surface: surfaceRef)
       }
 
       var queryDict: [String: Any] = [
@@ -381,35 +648,21 @@ actor AgentRuntimeProcess {
         "prompt": prompt,
         "systemPrompt": systemPrompt,
         "adapterId": adapterId,
+        "surfaceKind": surface.surfaceKind,
+        "externalRefKind": surface.externalRefKind,
+        "externalRefId": surface.externalRefId,
       ]
-      if let sessionKey {
-        queryDict["sessionKey"] = sessionKey
-        queryDict["legacySessionKey"] = sessionKey
-      }
-      if let omiSessionId {
-        queryDict["sessionId"] = omiSessionId
-      }
-      if let surfaceKind {
-        queryDict["surfaceKind"] = surfaceKind
-      }
-      if let externalRefKind {
-        queryDict["externalRefKind"] = externalRefKind
-      }
-      if let externalRefId {
-        queryDict["externalRefId"] = externalRefId
-      }
-      if let legacyClientScope {
-        queryDict["legacyClientScope"] = legacyClientScope
-      }
       if let cwd { queryDict["cwd"] = cwd }
       if let mode { queryDict["mode"] = mode }
       if let model { queryDict["model"] = model }
-      if let resume {
-        queryDict["legacyAdapterSessionId"] = resume
-        queryDict["resume"] = resume
-      }
       if let imageData {
         queryDict["imageBase64"] = imageData.base64EncodedString()
+      }
+      if let attachmentMetadataJson, !attachmentMetadataJson.isEmpty {
+        queryDict["attachmentMetadataJson"] = attachmentMetadataJson
+      }
+      if let surfaceContextJson, !surfaceContextJson.isEmpty {
+        queryDict["surfaceContextJson"] = surfaceContextJson
       }
       if let ownerId = currentOwnerId() {
         queryDict["ownerId"] = ownerId
@@ -430,6 +683,7 @@ actor AgentRuntimeProcess {
     closePipes()
     lastExitWasOOM = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
 
     guard let nodePath = findNodeBinary() else {
       throw BridgeError.nodeNotFound
@@ -456,6 +710,7 @@ actor AgentRuntimeProcess {
     env["NODE_NO_WARNINGS"] = "1"
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
+    env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
@@ -468,25 +723,36 @@ actor AgentRuntimeProcess {
       throw BridgeError.bridgeScriptNotFound
     }
 
+    Self.removeInheritedBYOKEnvironment(from: &env)
+    let byok = await Self.usableBYOKEnvironment()
+    for (key, value) in byok.values {
+      env[key] = value
+    }
     if APIKeyService.isByokActive {
-      for provider in BYOKProvider.allCases {
-        if let key = APIKeyService.byokKey(provider) {
-          env["OMI_BYOK_\(provider.rawValue.uppercased())"] = key
+      if !byok.suppressedProviders.isEmpty {
+        for provider in byok.suppressedProviders {
+          log(
+            "CredentialHealth: context=agent_runtime_env failure_class=byok_invalid_suppressed provider=\(provider.rawValue)"
+          )
         }
       }
-      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(BYOKProvider.allCases.count) user keys")
-      // codex-acp authenticates from OPENAI_API_KEY. If the user configured an
-      // OpenAI key in Omi (BYOK) and one isn't already in the environment, seed
-      // it so the Codex adapter can run without a separate `codex login`. The
-      // Node bridge only forwards OPENAI_API_KEY to the Codex subprocess (see
-      // ADAPTER_EXTRA_ENV_ALLOWLIST), so this does not leak to other adapters.
-      if (env["OPENAI_API_KEY"]?.isEmpty ?? true), let openAIKey = APIKeyService.byokKey(.openai) {
+      log("AgentRuntimeProcess: pi-mono BYOK active, forwarding \(byok.values.count) usable user keys")
+      // codex-acp authenticates from OPENAI_API_KEY. If the user configured a
+      // usable OpenAI key in Omi (BYOK) and one isn't already in the environment,
+      // seed it so Codex can run without a separate `codex login`. The Node
+      // bridge only forwards OPENAI_API_KEY to the Codex subprocess (see
+      // ADAPTER_EXTRA_ENV_ALLOWLIST), so it does not leak to other adapters.
+      if (env["OPENAI_API_KEY"]?.isEmpty ?? true),
+        !byok.suppressedProviders.contains(.openai),
+        let openAIKey = APIKeyService.byokKey(.openai)
+      {
         env["OPENAI_API_KEY"] = openAIKey
       }
     }
 
     let authService = await MainActor.run { AuthService.shared }
-    if let token = try? await authService.getIdToken(), !token.isEmpty {
+    let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
+    if let token = try? await authService.getIdToken(forceRefresh: forceRefreshToken), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
     } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")
@@ -629,6 +895,40 @@ actor AgentRuntimeProcess {
     }
   }
 
+  static func byokEnvironmentKey(for provider: BYOKProvider) -> String {
+    "OMI_BYOK_\(provider.rawValue.uppercased())"
+  }
+
+  static func removeInheritedBYOKEnvironment(from env: inout [String: String]) {
+    let inheritedBYOKKeys = env.keys.filter { $0.uppercased().hasPrefix("OMI_BYOK_") }
+    for key in inheritedBYOKKeys {
+      env.removeValue(forKey: key)
+    }
+  }
+
+  @MainActor
+  static func usableBYOKEnvironment() -> (values: [String: String], suppressedProviders: [BYOKProvider]) {
+    guard APIKeyService.isByokActive else {
+      return ([:], [])
+    }
+
+    var candidateValues: [String: String] = [:]
+    var suppressedProviders: [BYOKProvider] = []
+    for provider in BYOKProvider.allCases {
+      guard let key = APIKeyService.byokKey(provider) else { continue }
+      let fingerprint = APIKeyService.byokFingerprint(key)
+      if CredentialHealthManager.shared.canUseBYOK(provider: provider, fingerprint: fingerprint) {
+        candidateValues[byokEnvironmentKey(for: provider)] = key
+      } else {
+        suppressedProviders.append(provider)
+      }
+    }
+    guard suppressedProviders.isEmpty, candidateValues.count == BYOKProvider.allCases.count else {
+      return ([:], suppressedProviders)
+    }
+    return (candidateValues, [])
+  }
+
   static func openClawAdapterCommand(openClawPath: String, fileManager: FileManager = .default) -> String {
     let nodePath = ((openClawPath as NSString).deletingLastPathComponent as NSString).appendingPathComponent("node")
     if fileManager.isExecutableFile(atPath: nodePath) {
@@ -670,6 +970,7 @@ actor AgentRuntimeProcess {
     closePipes()
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: BridgeError.stopped)
     resumeInitContinuations(throwing: BridgeError.stopped)
   }
@@ -736,6 +1037,7 @@ actor AgentRuntimeProcess {
     oomDiagnosticLatch.reset(generation: processGeneration)
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
   }
@@ -797,6 +1099,8 @@ actor AgentRuntimeProcess {
     switch message.kind {
     case .initMessage:
       log("AgentRuntimeProcess: bridge ready (sessionId=\(message.payload["sessionId"] as? String ?? ""))")
+      let tools = message.payload["agentControlTools"] as? [String] ?? []
+      advertisedAgentControlTools = Set(tools)
       receivedInit = true
       resolveInitContinuations()
 
@@ -853,6 +1157,19 @@ actor AgentRuntimeProcess {
     case .controlToolResult:
       completeControlRequest(message)
 
+    case .voiceSeedContext:
+      completeVoiceSeedRequest(message)
+
+    case .kernelTurnTail:
+      completeKernelTurnTailRequest(message)
+
+    case .turnRecorded:
+      if let recorded = kernelTurnRecorded(from: message) {
+        for handler in turnRecordedHandlers {
+          handler(recorded)
+        }
+      }
+
     case .result:
       completeRequest(message)
 
@@ -867,9 +1184,6 @@ actor AgentRuntimeProcess {
   private func routedRequest(for message: RuntimeMessage) -> ActiveRequest? {
     if let requestKey = message.requestKey {
       return activeRequests[requestKey]
-    }
-    if message.protocolVersion != 2 && activeRequests.count == 1 {
-      return activeRequests.values.first
     }
     return nil
   }
@@ -914,11 +1228,18 @@ actor AgentRuntimeProcess {
   }
 
   private func completeRequest(_ message: RuntimeMessage) {
-    guard let requestKey = message.requestKey, let request = activeRequests.removeValue(forKey: requestKey) else {
+    let terminalStatus = message.payload["terminalStatus"] as? String
+    guard let requestKey = message.requestKey else {
       log("AgentRuntimeProcess: dropping unroutable result")
       return
     }
-    let terminalStatus = message.payload["terminalStatus"] as? String
+    guard let request = activeRequests.removeValue(forKey: requestKey) else {
+      if terminalStatus == "cancelled", expectedCancelledRequests.remove(requestKey) != nil {
+        return
+      }
+      log("AgentRuntimeProcess: dropping unroutable result")
+      return
+    }
     if terminalStatus == "cancelled" {
       request.continuation.resume(throwing: BridgeError.stopped)
       return
@@ -944,6 +1265,58 @@ actor AgentRuntimeProcess {
     request.continuation.resume(returning: message.payload["result"] as? String ?? "")
   }
 
+  private func completeVoiceSeedRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeVoiceSeedRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable voice seed context")
+      return
+    }
+    let conversationId = message.payload["conversationId"] as? String ?? ""
+    let context = message.payload["context"] as? String ?? ""
+    request.continuation.resume(returning: (conversationId: conversationId, context: context))
+  }
+
+  private func completeKernelTurnTailRequest(_ message: RuntimeMessage) {
+    guard let requestKey = message.requestKey,
+      let request = activeKernelTurnTailRequests.removeValue(forKey: requestKey)
+    else {
+      log("AgentRuntimeProcess: dropping unroutable kernel turn tail")
+      return
+    }
+    let conversationId = message.payload["conversationId"] as? String ?? ""
+    let rawTurns = message.payload["turns"] as? [[String: Any]] ?? []
+    let turns = rawTurns.map { row in
+      KernelTurnTailTurn(
+        role: row["role"] as? String ?? "",
+        content: row["content"] as? String ?? "",
+        surfaceKind: row["surfaceKind"] as? String ?? "",
+        createdAtMs: row["createdAtMs"] as? Int ?? 0,
+        metadataJson: row["metadataJson"] as? String ?? "{}",
+        origin: row["origin"] as? String ?? ""
+      )
+    }
+    request.continuation.resume(returning: KernelTurnTailResult(conversationId: conversationId, turns: turns))
+  }
+
+  private func kernelTurnRecorded(from message: RuntimeMessage) -> KernelTurnRecorded? {
+    let payload = message.payload
+    guard let conversationId = payload["conversationId"] as? String else { return nil }
+    return KernelTurnRecorded(
+      conversationId: conversationId,
+      surfaceKind: payload["surfaceKind"] as? String ?? "",
+      externalRefKind: payload["externalRefKind"] as? String ?? "",
+      externalRefId: payload["externalRefId"] as? String ?? "",
+      userText: payload["userText"] as? String ?? "",
+      assistantText: payload["assistantText"] as? String ?? "",
+      origin: payload["origin"] as? String ?? "",
+      interrupted: payload["interrupted"] as? Bool ?? false,
+      idempotencyKey: payload["idempotencyKey"] as? String,
+      userTurnId: payload["userTurnId"] as? String,
+      assistantTurnId: payload["assistantTurnId"] as? String
+    )
+  }
+
   private func failRequest(_ message: RuntimeMessage) {
     let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
     let raw = failure?.displayMessage ?? message.payload["message"] as? String ?? "Unknown error"
@@ -964,10 +1337,8 @@ actor AgentRuntimeProcess {
 
   private func queryResult(from message: RuntimeMessage) -> AgentBridge.QueryResult {
     let payload = message.payload
-    let omiSessionId = payload["sessionId"] as? String ?? message.payload["omiSessionId"] as? String ?? ""
-    let adapterSessionId =
-      payload["adapterSessionId"] as? String
-      ?? payload["legacyAdapterSessionId"] as? String
+    let omiSessionId = payload["sessionId"] as? String ?? ""
+    let adapterSessionId = payload["adapterSessionId"] as? String
     return AgentBridge.QueryResult(
       text: payload["text"] as? String ?? "",
       costUsd: payload["costUsd"] as? Double ?? 0,
@@ -979,7 +1350,13 @@ actor AgentRuntimeProcess {
       inputTokens: payload["inputTokens"] as? Int ?? 0,
       outputTokens: payload["outputTokens"] as? Int ?? 0,
       cacheReadTokens: payload["cacheReadTokens"] as? Int ?? 0,
-      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0
+      cacheWriteTokens: payload["cacheWriteTokens"] as? Int ?? 0,
+      artifacts: AgentArtifactProjection.parseList(
+        fromJSONArray: payload["artifacts"] as? [[String: Any]] ?? []
+      ),
+      completionDeltaArtifacts: AgentArtifactProjection.parseList(
+        fromJSONArray: payload["completionDeltaArtifacts"] as? [[String: Any]] ?? []
+      )
     )
   }
 
@@ -1034,6 +1411,7 @@ actor AgentRuntimeProcess {
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
     isRunning = false
     receivedInit = false
+    advertisedAgentControlTools.removeAll()
     closePipes()
     resumeAllRequests(throwing: error)
     resumeInitContinuations(throwing: error)
@@ -1048,6 +1426,16 @@ actor AgentRuntimeProcess {
     let controlRequests = activeControlRequests.values
     activeControlRequests.removeAll()
     for request in controlRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let seedRequests = activeVoiceSeedRequests.values
+    activeVoiceSeedRequests.removeAll()
+    for request in seedRequests {
+      request.continuation.resume(throwing: error)
+    }
+    let tailRequests = activeKernelTurnTailRequests.values
+    activeKernelTurnTailRequests.removeAll()
+    for request in tailRequests {
       request.continuation.resume(throwing: error)
     }
   }
@@ -1098,6 +1486,21 @@ actor AgentRuntimeProcess {
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
       .appendingPathComponent("AgentRuntime")
+      .appendingPathComponent(bundleComponent)
+      .path
+  }
+
+  static func defaultArtifactsDirectory(
+    bundleIdentifier: String? = Bundle.main.bundleIdentifier,
+    homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+  ) -> String {
+    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+      ?? "com.omi.desktop-dev"
+    return homeDirectory
+      .appendingPathComponent("Library")
+      .appendingPathComponent("Application Support")
+      .appendingPathComponent("Omi")
+      .appendingPathComponent("Artifacts")
       .appendingPathComponent(bundleComponent)
       .path
   }

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import OmiTheme
 
 /// Full-width timeline bar with time-based positioning and gap indicators
 struct InteractiveTimelineBar: View {
@@ -771,6 +772,7 @@ struct GapTooltipView: View {
     }
 }
 
+#if canImport(PreviewsMacros)
 #Preview {
     InteractiveTimelineBar(
         screenshots: [],
@@ -781,3 +783,4 @@ struct GapTooltipView: View {
     .frame(width: 800, height: 100)
     .background(Color.black)
 }
+#endif

@@ -2,127 +2,37 @@
 
 Verifies that process_segment() applies user vocabulary, language, and model
 selection matching the realtime transcription path.
+
+``routers.sync`` pulls a heavy transitive chain (Firestore/GCS clients, Firebase
+Admin, typesense, deepgram SDK, opus/pydub native audio) that constructs clients
+and reads credentials at import time. Importing it therefore requires fakes to
+be active *before* the import. This is the sanctioned Tier-2 "fake must precede
+import" case (see ``backend/docs/test_isolation.md`` and
+``testing.import_isolation``): the fakes live inside a module-scoped fixture that
+uses ``stub_modules`` + ``load_module_fresh``, so nothing leaks to ``sys.modules``
+after the module's tests finish.
 """
 
+import io
 import os
 import re
-import sys
 import threading
+import wave
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module-level stubs: routers.sync has heavy transitive imports (Firestore,
-# GCS, Firebase Admin) that require credentials.  We stub them out so unit
-# tests can import process_segment without cloud access.
-# ---------------------------------------------------------------------------
+from testing.import_isolation import load_module_fresh, stub_modules
 
-# Stub database package
-_database_pkg = ModuleType('database')
-_database_pkg.__path__ = ['database']
-_database_pkg.__package__ = 'database'
-sys.modules.setdefault('database', _database_pkg)
-
-for _sub in [
-    '_client',
-    'action_items',
-    'announcements',
-    'apps',
-    'auth',
-    'cache',
-    'cache_manager',
-    'calendar_meetings',
-    'chat',
-    'conversations',
-    'daily_summaries',
-    'dev_api_key',
-    'fair_use',
-    'folders',
-    'goals',
-    'helpers',
-    'import_jobs',
-    'knowledge_graph',
-    'llm_usage',
-    'mcp_api_key',
-    'mem_db',
-    'memories',
-    'notifications',
-    'phone_calls',
-    'redis_db',
-    'redis_pubsub',
-    'screen_activity',
-    'sync_jobs',
-    'tasks',
-    'trends',
-    'user_usage',
-    'users',
-    'vector_db',
-    'wrapped',
-    'people',
-    'processing_memories',
-    'plugins',
-]:
-    _full = f'database.{_sub}'
-    if _full not in sys.modules:
-        _m = MagicMock()
-        sys.modules[_full] = _m
-        setattr(_database_pkg, _sub, _m)
-
-# Stub firebase_admin
-_fb = MagicMock()
-_fb.__path__ = ['firebase_admin']
-sys.modules.setdefault('firebase_admin', _fb)
-sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
-sys.modules.setdefault('firebase_admin.auth', _fb.auth)
-
-# Stub import-time SDK/native audio dependencies that are not needed for these
-# unit tests and can be unavailable on Windows developer machines.
-_deepgram = sys.modules.setdefault('deepgram', ModuleType('deepgram'))
-_deepgram.DeepgramClient = MagicMock
-_deepgram.DeepgramClientOptions = MagicMock
-
-_opuslib = ModuleType('opuslib')
-_opuslib.Decoder = MagicMock
-sys.modules.setdefault('opuslib', _opuslib)
-
-_pydub = ModuleType('pydub')
-_pydub.AudioSegment = MagicMock
-sys.modules.setdefault('pydub', _pydub)
-
-_fal_client = ModuleType('fal_client')
-_fal_client.subscribe = MagicMock()
-sys.modules.setdefault('fal_client', _fal_client)
-
-sys.modules.setdefault('stripe', ModuleType('stripe'))
-
-_python_multipart = ModuleType('python_multipart')
-_python_multipart.__version__ = '0.0.99'
-sys.modules.setdefault('python_multipart', _python_multipart)
-
-_python_multipart_parser = ModuleType('python_multipart.multipart')
-_python_multipart_parser.parse_options_header = MagicMock(return_value={})
-sys.modules.setdefault('python_multipart.multipart', _python_multipart_parser)
-
-_process_conversation = ModuleType('utils.conversations.process_conversation')
-_process_conversation.process_conversation = MagicMock()
-sys.modules['utils.conversations.process_conversation'] = _process_conversation
-
-_vad = ModuleType('utils.stt.vad')
-_vad.vad_is_empty = MagicMock(return_value=False)
-sys.modules['utils.stt.vad'] = _vad
+_BACKEND = Path(__file__).resolve().parents[2]
 
 
 def _detect_speaker_from_text(text: str):
     match = re.search(r'\b(?:my name is|i am)\s+([a-z][a-z-]*)', text, re.IGNORECASE)
     return match.group(1).capitalize() if match else None
-
-
-_speaker_identification = ModuleType('utils.speaker_identification')
-_speaker_identification.detect_speaker_from_text = _detect_speaker_from_text
-sys.modules['utils.speaker_identification'] = _speaker_identification
 
 
 def _compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
@@ -137,54 +47,170 @@ def _compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float
     return 1.0 - similarity
 
 
-_speaker_embedding = ModuleType('utils.stt.speaker_embedding')
-_speaker_embedding.extract_embedding_from_bytes = MagicMock()
-_speaker_embedding.compare_embeddings = _compare_embeddings
-_speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
-sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+def _build_fakes() -> dict:
+    """Build the stub-module mapping that lets ``routers.sync`` import cleanly."""
+    fakes: dict[str, ModuleType] = {}
 
-_cloud_tasks = ModuleType('utils.cloud_tasks')
-_cloud_tasks.enqueue_audio_merge_job = MagicMock()
-_cloud_tasks.enqueue_sync_job = MagicMock()
-_cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
-_cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
-_cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
-_cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
-sys.modules['utils.cloud_tasks'] = _cloud_tasks
+    # database package + submodules
+    database_pkg = ModuleType('database')
+    database_pkg.__path__ = ['database']
+    database_pkg.__package__ = 'database'
+    fakes['database'] = database_pkg
+    for _sub in [
+        '_client',
+        'action_items',
+        'announcements',
+        'apps',
+        'auth',
+        'cache',
+        'cache_manager',
+        'calendar_meetings',
+        'chat',
+        'conversations',
+        'daily_summaries',
+        'dev_api_key',
+        'fair_use',
+        'folders',
+        'goals',
+        'helpers',
+        'import_jobs',
+        'knowledge_graph',
+        'llm_usage',
+        'mcp_api_key',
+        'mem_db',
+        'memories',
+        'notifications',
+        'phone_calls',
+        'redis_db',
+        'redis_pubsub',
+        'screen_activity',
+        'sync_jobs',
+        'tasks',
+        'trends',
+        'user_usage',
+        'users',
+        'vector_db',
+        'wrapped',
+        'people',
+        'processing_memories',
+        'plugins',
+    ]:
+        fakes[f'database.{_sub}'] = MagicMock()
 
-# Stub google.cloud.storage.Client to avoid GCS credentials
-import google.cloud as _google_cloud
-import google.cloud.storage as _gcs
+    # firebase_admin
+    fb = MagicMock()
+    fb.__path__ = ['firebase_admin']
+    fakes['firebase_admin'] = fb
+    fakes['firebase_admin.messaging'] = fb.messaging
+    fakes['firebase_admin.auth'] = fb.auth
 
-if not hasattr(_gcs, 'Client'):
+    # deepgram SDK
+    deepgram = ModuleType('deepgram')
+    deepgram.DeepgramClient = MagicMock
+    deepgram.DeepgramClientOptions = MagicMock
+    fakes['deepgram'] = deepgram
+
+    # native audio / optional SDKs
+    opuslib = ModuleType('opuslib')
+    opuslib.Decoder = MagicMock
+    fakes['opuslib'] = opuslib
+
+    pydub = ModuleType('pydub')
+    pydub.AudioSegment = MagicMock
+    fakes['pydub'] = pydub
+
+    fal_client = ModuleType('fal_client')
+    fal_client.subscribe = MagicMock()
+    fakes['fal_client'] = fal_client
+
+    fakes['stripe'] = ModuleType('stripe')
+
+    python_multipart = ModuleType('python_multipart')
+    python_multipart.__version__ = '0.0.99'
+    fakes['python_multipart'] = python_multipart
+
+    python_multipart_parser = ModuleType('python_multipart.multipart')
+    python_multipart_parser.parse_options_header = MagicMock(return_value={})
+    fakes['python_multipart.multipart'] = python_multipart_parser
+
+    # utils heavy/optional modules
+    process_conversation = ModuleType('utils.conversations.process_conversation')
+    process_conversation.process_conversation = MagicMock()
+    fakes['utils.conversations.process_conversation'] = process_conversation
+
+    vad = ModuleType('utils.stt.vad')
+    vad.vad_is_empty = MagicMock(return_value=False)
+    fakes['utils.stt.vad'] = vad
+
+    speaker_identification = ModuleType('utils.speaker_identification')
+    speaker_identification.detect_speaker_from_text = _detect_speaker_from_text
+    fakes['utils.speaker_identification'] = speaker_identification
+
+    speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+    speaker_embedding.extract_embedding_from_bytes = MagicMock()
+    speaker_embedding.compare_embeddings = _compare_embeddings
+    speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+    fakes['utils.stt.speaker_embedding'] = speaker_embedding
+
+    cloud_tasks = ModuleType('utils.cloud_tasks')
+    cloud_tasks.enqueue_audio_merge_job = MagicMock()
+    cloud_tasks.enqueue_sync_job = MagicMock()
+    cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+    cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
+    fakes['utils.cloud_tasks'] = cloud_tasks
+
+    # google.cloud.tasks_v2
+    tasks_v2 = ModuleType('google.cloud.tasks_v2')
+    tasks_v2.CloudTasksClient = MagicMock
+    tasks_v2.Task = MagicMock
+    tasks_v2.HttpRequest = MagicMock
+    tasks_v2.OidcToken = MagicMock
+    tasks_v2.HttpMethod = MagicMock(POST='POST')
+    fakes['google.cloud.tasks_v2'] = tasks_v2
+
+    return fakes
+
+
+@pytest.fixture(scope="module", autouse=True)
+def sync_module():
+    """Load routers.sync + utils.stt.pre_recorded under stubbed heavy deps.
+
+    Ensures the heavy transitive imports (database/google/firebase/deepgram/native
+    audio) are faked *before* the target modules are exec'd, then evicts the
+    stub-fed modules on teardown so nothing leaks to other test files.
+    """
+    os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
+    os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
+
+    import google.cloud.storage as _gcs
+
+    fakes = _build_fakes()
+    _orig_storage_client = getattr(_gcs, 'Client', None)
     _gcs.Client = MagicMock
-_orig_storage_client = _gcs.Client
-_gcs.Client = MagicMock
 
-_tasks_v2 = ModuleType('google.cloud.tasks_v2')
-_tasks_v2.CloudTasksClient = MagicMock
-_tasks_v2.Task = MagicMock
-_tasks_v2.HttpRequest = MagicMock
-_tasks_v2.OidcToken = MagicMock
-_tasks_v2.HttpMethod = MagicMock(POST='POST')
-sys.modules.setdefault('google.cloud.tasks_v2', _tasks_v2)
-setattr(_google_cloud, 'tasks_v2', sys.modules['google.cloud.tasks_v2'])
+    try:
+        with stub_modules(fakes):
+            load_module_fresh("routers.sync", os.path.join(str(_BACKEND), "routers", "sync.py"))
+            load_module_fresh("utils.stt.pre_recorded", os.path.join(str(_BACKEND), "utils", "stt", "pre_recorded.py"))
+            yield
+    finally:
+        if _orig_storage_client is not None:
+            _gcs.Client = _orig_storage_client
+        else:
+            delattr(_gcs, 'Client')
 
-# Ensure env vars for modules that read them at import time
-os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
-os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+# ---------------------------------------------------------------------------
+# deepgram_prerecorded: keywords parameter
+# ---------------------------------------------------------------------------
 
 
 def test_compare_embeddings_accepts_1d_vectors():
     """Speaker embedding stub should match production's 1D vector tolerance."""
     assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0, 0.0])) == pytest.approx(0.0)
     assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0])) == 2.0
-
-
-# ---------------------------------------------------------------------------
-# deepgram_prerecorded: keywords parameter
-# ---------------------------------------------------------------------------
 
 
 class TestDeepgramPrerecordedKeywords:
@@ -778,10 +804,6 @@ class TestGetDeepgramModelForLanguage:
 # ---------------------------------------------------------------------------
 # Speaker identification for sync path
 # ---------------------------------------------------------------------------
-
-import io
-import struct
-import wave
 
 
 def _make_wav_bytes(duration_sec: float = 2.0, sample_rate: int = 16000) -> bytes:

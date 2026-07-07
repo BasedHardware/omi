@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import importlib
+import json
 import os
 import sys
 from datetime import datetime, timedelta, timezone
@@ -369,7 +370,10 @@ def test_legacy_extract_path_unchanged_for_non_canonical():
     legacy_fn_idx = source.index("def _extract_memories_legacy")
     assert canonical_fn_idx < legacy_fn_idx
     assert "deletion_result = memories_db.delete_memories_for_conversation" in source
-    assert "memories_db.save_memories(uid, [fact.dict() for fact in parsed_memories])" in source
+    assert (
+        "memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) "
+        "for fact in parsed_memories])"
+    ) in source
 
 
 def test_canonical_extract_uses_memory_service_not_legacy_save():
@@ -584,7 +588,13 @@ def test_v3_get_keeps_legacy_path_for_non_canonical(monkeypatch):
         x_device_id_hash=None,
     )
 
-    assert result == legacy_memories
+    body = json.loads(result.body)
+    assert body[0]["id"] == "mem-legacy"
+    assert body[0]["content"] == "legacy"
+    assert "memory_tier" not in body[0]
+    assert "layer" not in body[0]
+    assert "tier" not in body[0]
+    assert result.headers["x-omi-memory-device-scope-supported"] == "false"
     legacy_get.assert_called_once_with("uid-legacy", 10, 0)
     service_read.assert_not_called()
 
@@ -675,7 +685,7 @@ def test_mcp_validate_memory_uses_canonical_store_for_canonical_cohort():
     assert "fetch_memory_dict" in section
     memory_service_source = (BACKEND_DIR / "utils" / "memory" / "memory_service.py").read_text(encoding="utf-8")
     assert "MemorySystem.CANONICAL" in memory_service_source
-    assert "_read_canonical_memory_item" in memory_service_source
+    assert "read_canonical_memory_item" in memory_service_source
 
 
 _WRITER_FILES = [
