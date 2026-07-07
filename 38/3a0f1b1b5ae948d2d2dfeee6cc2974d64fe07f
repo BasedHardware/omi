@@ -1,0 +1,175 @@
+assets/logos/anthropic.svg
+  s_751b5889fd7450::t_d2ead3b5783efa 1
+assets/logos/apple.svg
+  s_751b5889fd7450::t_58d1b6c6893f2d 1
+assets/logos/brands/anthropic.svg
+  s_751b5889fd7450::t_65a37599653a65 1
+assets/logos/brands/figma.svg
+  s_751b5889fd7450::t_1284c69cdbaa56 1
+assets/logos/brands/linear.svg
+  s_751b5889fd7450::t_fe31343caac3d2 1
+assets/logos/brands/loom.svg
+  s_751b5889fd7450::t_1e7a64404b9ab2 1
+assets/logos/brands/notion.svg
+  s_751b5889fd7450::t_8956390731d30f 1
+assets/logos/brands/openai.svg
+  s_751b5889fd7450::t_8119374b53ab4f 1
+assets/logos/brands/perplexity.svg
+  s_751b5889fd7450::t_b455fe2c29d91a 1
+assets/logos/brands/ramp.svg
+  s_751b5889fd7450::t_a9b6330661e76a 1
+assets/logos/brands/rippling.svg
+  s_751b5889fd7450::t_4e0b3d9107818a 1
+assets/logos/brands/stripe.svg
+  s_751b5889fd7450::t_673ab1f3d5bc78 1
+assets/logos/brands/vercel.svg
+  s_751b5889fd7450::t_ce40919b4126f0 1
+assets/logos/brands/ycombinator.svg
+  s_751b5889fd7450::t_272ecaa51daa68 1
+assets/logos/claude.svg
+  s_751b5889fd7450::t_73fe356ebdb33b 1
+assets/logos/gcal.svg
+  s_751b5889fd7450::t_c2f8bbd5247f8b 1
+assets/logos/gemini.svg
+  s_751b5889fd7450::t_440ca84ee9fa6f 1
+assets/logos/gmail2.svg
+  s_751b5889fd7450::t_90876a82ed1b65 1
+assets/logos/notion.svg
+  s_751b5889fd7450::t_4df2fa2a9e74fe 1
+assets/logos/obsidian.svg
+  s_751b5889fd7450::t_1a5d0d91823c3e 1
+assets/logos/openai.svg
+  s_751b5889fd7450::t_7ea117d92ceb37 1
+assets/logos/telegram.svg
+  s_751b5889fd7450::t_77b15367e8ef6e 1
+assets/logos/whatsapp.svg
+  s_751b5889fd7450::t_223f4b28cf768b 1
+assets/logos/x.svg
+  s_751b5889fd7450::t_44b40604954f72 1
+common.js
+  s_751b5889fd7450::t_e32b7c61edc242 1-122
+design-system.css
+  s_751b5889fd7450::t_a38d1965c9ed68 1-572
+index.html
+  s_751b5889fd7450::t_c8a0d9cce63180 1-154
+interactions.js
+  s_751b5889fd7450::t_d5d9c7648d9821 1-159
+ios/ios-apps.html
+  s_751b5889fd7450::t_5748b217557cd4 1-38
+ios/ios-ask.html
+  s_751b5889fd7450::t_ab76085ddf316b 1-54
+ios/ios-conversations.html
+  s_751b5889fd7450::t_f606fbffde8405 1-42
+ios/ios-device.html
+  s_751b5889fd7450::t_dd3a0b657ac97e 1-52
+ios/ios-frame.js
+  s_751b5889fd7450::t_175b5a82b367e3 1-63
+ios/ios-home.html
+  s_751b5889fd7450::t_90a08a6b85bdd8 1-73
+ios/ios-live.html
+  s_751b5889fd7450::t_ae20ae57f64c69 1-63
+ios/ios-memory.html
+  s_751b5889fd7450::t_7bbb9fac26ed79 1-52
+ios/ios-messages.html
+  s_751b5889fd7450::t_068dcd5020404b 1-63
+ios/ios-notification.html
+  s_751b5889fd7450::t_297e0f0f34572e 1-64
+ios/ios-onboarding.html
+  s_751b5889fd7450::t_40fac1d6fc85dc 1-88
+ios/ios-settings.html
+  s_751b5889fd7450::t_3b89c64563f787 1-57
+ios/ios-tasks.html
+  s_751b5889fd7450::t_769c33aa13641d 1-37
+ios/ios.css
+  s_751b5889fd7450::t_6182e2bf8b6653 1-183
+screens/accent-preview.html
+  s_751b5889fd7450::t_b85c50fe274d43 1-55
+screens/apps.html
+  s_751b5889fd7450::t_998d03b6002406 1-93
+screens/ask.html
+  s_751b5889fd7450::t_0d101207336237 1-94
+screens/conversations.html
+  s_751b5889fd7450::t_5097cd8ee327a9 1-96
+screens/dashboard.html
+  s_751b5889fd7450::t_b867ed0b8661d2 1-127
+screens/empty-states.html
+  s_751b5889fd7450::t_363289433bbeb0 1-46
+screens/focus.html
+  s_751b5889fd7450::t_cfa6b07088b943 1-52
+screens/help.html
+  s_751b5889fd7450::t_bbb9295ba8bb89 1-41
+screens/home.html
+  s_751b5889fd7450::t_35485628aee87f 1-67
+screens/insights.html
+  s_751b5889fd7450::t_8aa8826c609477 1-42
+screens/live.html
+  s_751b5889fd7450::t_56006b98a82a61 1-169
+screens/memory-graph.html
+  s_751b5889fd7450::t_edde400dfe1765 1-45
+screens/memory.html
+  s_751b5889fd7450::t_e92ee177d0b302 1-104
+screens/messages-imessage.html
+  s_751b5889fd7450::t_88d9e8667811b5 1-124
+screens/messages-telegram.html
+  s_751b5889fd7450::t_e8b8111db3b065 1-131
+screens/messages-whatsapp.html
+  s_751b5889fd7450::t_de08a5d201c6b1 1-123
+screens/more.html
+  s_751b5889fd7450::t_3b80802cd3e66d 1-59
+screens/notification.html
+  s_751b5889fd7450::t_0b49bde22ee74d 1-53
+screens/ob-brainlive.html
+  s_751b5889fd7450::t_74f2237286ceb0 1-60
+screens/ob-goal.html
+  s_751b5889fd7450::t_43443b27ed42b1 1-56
+screens/ob-import.html
+  s_751b5889fd7450::t_09c8da9d3a8b6d 1-55
+screens/ob-permissions.html
+  s_751b5889fd7450::t_eb39d4e90e825a 1-56
+screens/ob-ping.html
+  s_751b5889fd7450::t_1e9328fa62d8ff 1-55
+screens/ob-promise.html
+  s_751b5889fd7450::t_997b9141bc3d7a 1-47
+screens/ob-welcome.html
+  s_751b5889fd7450::t_d3edf0b1f82174 1-71
+screens/onboarding.html
+  s_751b5889fd7450::t_f2491e608602a3 1-164
+screens/permissions.html
+  s_751b5889fd7450::t_25ddb5c2d414b0 1-52
+screens/persona.html
+  s_751b5889fd7450::t_82f0b9f3fddd82 1-45
+screens/plan-usage.html
+  s_751b5889fd7450::t_cd9114c0f1dd84 1-59
+screens/referral.html
+  s_751b5889fd7450::t_506ca3af8c0155 1-39
+screens/rewind.html
+  s_751b5889fd7450::t_aae73c9965fdab 1-118
+screens/settings.html
+  s_751b5889fd7450::t_dc36f0b0d62dd6 1-147
+screens/share-card.html
+  s_751b5889fd7450::t_8dfdc67492266f 1-50
+screens/signin.html
+  s_751b5889fd7450::t_6d2d9cc11c991b 1-48
+screens/spotlight.html
+  s_751b5889fd7450::t_ff9cb3aa300fc9 1-65
+screens/tasks.html
+  s_751b5889fd7450::t_23446e206ebec9 1-72
+web/index.html
+  s_751b5889fd7450::t_2ccb749bd0e8a8 1-458
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "383a0f1b1b5ae948d2d2dfeee6cc2974d64fe07f",
+  "prompts": {},
+  "sessions": {
+    "s_751b5889fd7450": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "44a34924-0fec-4e67-8c50-8adeafa8e48b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
