@@ -161,6 +161,9 @@ def test_ai_profile_update_bypasses_cached_getter_for_merge_safety():
 def test_listen_reuses_transcription_projection_language_without_second_user_read():
     source = open('routers/transcribe.py').read()
 
-    assert source.count('get_user_transcription_preferences(uid)') == 1
+    assert source.count('get_user_transcription_preferences(uid)') == 0
+    assert (
+        source.count('run_blocking(db_executor, get_user_transcription_preferences, uid)') == 1
+    ), 'listen startup must offload the single transcription prefs read via db_executor'
     assert "transcription_prefs.get('language', '')" in source
     assert 'get_user_language_preference' not in source
