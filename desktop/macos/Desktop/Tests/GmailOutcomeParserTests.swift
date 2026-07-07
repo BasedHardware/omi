@@ -22,6 +22,27 @@ final class GmailOutcomeParserTests: XCTestCase {
     XCTAssertEqual(emails.count, 1)
   }
 
+  func testBootstrapSuccessAfterAtomAuthFailureIsStillSuccess() {
+    let json: [String: Any] = [
+      "ok": true,
+      "browser": "Chrome",
+      "source": "bootstrap",
+      "emails": [["id": "m1", "subject": "Hello"]],
+      "attempts": [
+        ["browser": "Chrome", "stage": "fetch", "reason": "HTTP 401", "had_auth": true, "http": 401],
+        ["browser": "Chrome", "stage": "ok", "reason": "ok", "had_auth": true],
+      ],
+    ]
+
+    guard case let .success(emails, browser, source) = GmailOutcomeParser.parse(json) else {
+      return XCTFail("expected success")
+    }
+
+    XCTAssertEqual(browser, "Chrome")
+    XCTAssertEqual(source, "bootstrap")
+    XCTAssertEqual(emails.count, 1)
+  }
+
   func testNotSignedInRetainsEveryProfileAttempt() {
     let json: [String: Any] = [
       "ok": false,

@@ -715,10 +715,10 @@ actor GmailReaderService {
                            'reason': reason, 'had_auth': True,
                            'http': status, 'login_redirect': login_redirect})
 
-          # Fallback to the richer bootstrap home page only when the atom result
-          # was ambiguous. A definitive 401/403 is already an auth failure, so we
-          # skip the heavy download in that case and fail fast.
-          if use_bootstrap and status not in (401, 403):
+          # Fallback to the richer bootstrap home page whenever the caller allows
+          # it. Some sessions can read the web UI while Atom/feed access is
+          # restricted, so Atom 401/403 is not definitive until bootstrap fails too.
+          if use_bootstrap:
               status, final, body = fetch_home_page(jar)
               if status == 200:
                   emails, parse_err = parse_bootstrap_page(body, max_results)
