@@ -106,6 +106,8 @@ struct DesktopAutomationSnapshot: Codable {
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
   var usesLegacyHomeDesign: Bool
+  /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
+  var homeMode: String?
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -363,6 +365,7 @@ final class DesktopAutomationStateStore {
     selectedSettingsSection: nil,
     highlightedSettingId: nil,
     usesLegacyHomeDesign: false,
+    homeMode: nil,
     showsPrimarySidebar: false,
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,

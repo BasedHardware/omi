@@ -153,7 +153,7 @@ final class DashboardCaptureStateTests: XCTestCase {
         let method = try methodBody(named: "refreshHomeStatusData", in: source)
 
         XCTAssertTrue(source.contains("@State private var lastHomeStatusRefreshAt = Date.distantPast"))
-        XCTAssertTrue(normalizedSource.contains("syncCaptureState() Task { await refreshHomeStatusData(force: true) }"))
+        XCTAssertTrue(normalizedSource.contains("syncCaptureState() reportHomeAutomationMode() Task { await refreshHomeStatusData(force: true) }"))
         XCTAssertTrue(
             normalizedSource.contains(
                 "viewModel.refreshGoals() appState.checkAllPermissions() syncCaptureState() Task { await refreshHomeStatusData(force: false) }"

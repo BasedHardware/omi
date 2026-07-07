@@ -432,6 +432,7 @@ struct DashboardPage: View {
                 NotificationCenter.default.post(name: .showTryAskingPopup, object: nil)
             }
             syncCaptureState()
+            reportHomeAutomationMode()
             Task { await refreshHomeStatusData(force: true) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
@@ -894,11 +895,21 @@ struct DashboardPage: View {
 
     // MARK: Stage actions
 
+    private func reportHomeAutomationMode() {
+        guard DesktopAutomationLaunchOptions.isEnabled else { return }
+        let modeLabel = useLegacyHomeDesign ? nil : homeMode.automationLabel
+        DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+            snapshot.homeMode = modeLabel
+            snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+        }
+    }
+
     private func openHomeChat() {
         guard homeMode != .chat else { return }
         withAnimation(Self.homeStageAnimation) {
             homeMode = .chat
         }
+        reportHomeAutomationMode()
     }
 
     private func toggleHomeConnectPanel() {
@@ -909,6 +920,7 @@ struct DashboardPage: View {
         withAnimation(Self.homeStageAnimation) {
             homeMode = target
         }
+        reportHomeAutomationMode()
     }
 
     private func closeHomeStagePanel() {
@@ -916,6 +928,7 @@ struct DashboardPage: View {
         withAnimation(Self.homeStageAnimation) {
             homeMode = .hub
         }
+        reportHomeAutomationMode()
     }
 
     private func sendFromHomeAskBar() {
@@ -1770,6 +1783,14 @@ private enum HomeStageMode: Equatable {
     case hub
     case chat
     case connect
+
+    var automationLabel: String {
+        switch self {
+        case .hub: return "hub"
+        case .chat: return "chat"
+        case .connect: return "connect"
+        }
+    }
 }
 
 /// Shared "drop from the top" motion for stage panels: a short slide with a

@@ -5044,6 +5044,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         if let ownerId = runtimeOwnerId {
             detail["owner_id"] = ownerId
         }
+        let hasStructuredError = currentError != nil
+        let hasLegacyError = !(errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        detail["has_error"] = (hasStructuredError || hasLegacyError) ? "true" : "false"
+        if let errorMessage, !errorMessage.isEmpty {
+            detail["error_message"] = errorMessage
+        }
+        if let currentError {
+            detail["current_error"] = String(describing: currentError)
+        }
         return detail
     }
 

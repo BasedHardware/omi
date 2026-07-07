@@ -575,6 +575,8 @@ struct DesktopHomeView: View {
     let currentWindow = NSApp.windows.first(where: {
       $0.title.lowercased().hasPrefix("omi") && $0.isVisible
     })
+    let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
+    let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
     let snapshot = DesktopAutomationSnapshot(
       bridgeEnabled: true,
       bridgePort: DesktopAutomationLaunchOptions.port,
@@ -585,6 +587,7 @@ struct DesktopHomeView: View {
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: useLegacyHomeDesign,
+      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
