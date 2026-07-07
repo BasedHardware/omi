@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "surfaces": {
+    "python-backend": {
+      "display_name": "Python backend",
+      "blessing_tag_prefix": "python-backend-bless-",
+      "depends_on": [],
+      "promotion_workflows": [".github/workflows/gcp_backend.yml"]
+    },
+    "desktop-rust-backend": {
+      "display_name": "Desktop Rust backend",
+      "depends_on": ["python-backend"],
+      "promotion_workflows": [".github/workflows/desktop_promote_prod.yml"]
+    },
+    "desktop-macos": {
+      "display_name": "macOS Desktop app",
+      "depends_on": ["desktop-rust-backend", "python-backend"],
+      "promotion_workflows": [".github/workflows/desktop_promote_prod.yml"]
+    },
+    "flutter-ios": {
+      "display_name": "Flutter iOS app",
+      "depends_on": ["python-backend"],
+      "promotion_workflows": []
+    },
+    "flutter-android": {
+      "display_name": "Flutter Android app",
+      "depends_on": ["python-backend"],
+      "promotion_workflows": []
+    }
+  }
+}

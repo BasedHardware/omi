@@ -1984,6 +1984,19 @@ extension APIClient {
     let id: String
     let status: String
     let discarded: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case status
+      case discarded
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      id = try container.decode(String.self, forKey: .id)
+      status = try container.decodeIfPresent(String.self, forKey: .status) ?? ConversationStatus.processing.rawValue
+      discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
+    }
   }
 
   /// Upload an already-transcribed (on-device Parakeet) conversation to the backend so it is
