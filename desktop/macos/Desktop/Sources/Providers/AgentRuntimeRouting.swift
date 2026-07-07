@@ -97,6 +97,9 @@ struct LocalAgentProviderAvailability: Equatable {
         if needsAuthentication, provider == .hermes {
             return "Hermes is installed but isn't signed in yet. I can open the Nous sign-in page in your browser to connect it."
         }
+        if needsAuthentication, provider == .openclaw {
+            return "OpenClaw is installed but not set up yet. I can run its setup (Gateway + your Claude sign-in) automatically to connect it."
+        }
         switch provider {
         case .hermes:
             return "I don't see Hermes connected. I can run the official Hermes installer or open setup docs."
@@ -141,6 +144,18 @@ enum LocalAgentProviderDetector {
         ) {
             if provider == .hermes,
                !HermesAuthProbe.hasAnyInferenceCredential(
+                   environment: environment,
+                   fileManager: fileManager,
+                   homeDirectory: homeDirectory
+               ) {
+                return LocalAgentProviderAvailability(provider: provider, status: .needsAuthentication(command: path))
+            }
+            // The OpenClaw binary installs with `--no-onboard`, so a present
+            // binary is not yet a working agent: the Gateway daemon and model
+            // auth only exist after `openclaw onboard`. Surface that as a
+            // connect step instead of a silently broken "available".
+            if provider == .openclaw,
+               !OpenClawOnboardProbe.isOnboarded(
                    environment: environment,
                    fileManager: fileManager,
                    homeDirectory: homeDirectory

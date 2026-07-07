@@ -99,6 +99,11 @@ struct AgentInstallPromptState: Equatable {
         switch status {
         case .ready:
             if plan.kind == .authenticate {
+                // OpenClaw's connect is a non-interactive setup run, not a
+                // browser sign-in — describe it accurately.
+                if plan.provider == .openclaw {
+                    return "Omi will set up OpenClaw automatically (Gateway + your Claude sign-in), then check the connection."
+                }
                 return "Omi will open the sign-in page in your browser, then wait for your approval."
             }
             if plan.installCommand != nil {
@@ -219,13 +224,27 @@ extension AgentPillsManager.DirectedProvider {
     /// credentials. Only Hermes has an app-driven flow today (Nous Portal
     /// device-code OAuth); other providers fall back to their install plan.
     var authenticationPlan: LocalAgentInstallPlan {
-        guard self == .hermes else { return installPlan }
-        return LocalAgentInstallPlan(
-            provider: self,
-            installCommand: nil,
-            documentationURL: URL(string: "https://hermes-agent.nousresearch.com/docs/integrations/nous-portal")!,
-            postInstallInstruction: "Approve the sign-in in your browser, then try your request again.",
-            kind: .authenticate)
+        switch self {
+        case .hermes:
+            return LocalAgentInstallPlan(
+                provider: self,
+                installCommand: nil,
+                documentationURL: URL(string: "https://hermes-agent.nousresearch.com/docs/integrations/nous-portal")!,
+                postInstallInstruction: "Approve the sign-in in your browser, then try your request again.",
+                kind: .authenticate)
+        case .openclaw:
+            // OpenClaw's "sign-in" is a non-interactive `openclaw onboard` run
+            // (Gateway daemon + model auth via the local Claude credential), so
+            // no browser step — the connect action does it all.
+            return LocalAgentInstallPlan(
+                provider: self,
+                installCommand: nil,
+                documentationURL: URL(string: "https://docs.openclaw.ai/cli/onboard")!,
+                postInstallInstruction: "Omi will set up OpenClaw's Gateway and connect it to your Claude sign-in, then try your request again.",
+                kind: .authenticate)
+        default:
+            return installPlan
+        }
     }
 
     var installPlan: LocalAgentInstallPlan {

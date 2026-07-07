@@ -1,0 +1,3 @@
+{
+  "change": "OpenClaw now sets itself up automatically — after install the app runs OpenClaw's onboarding (gateway + your Claude sign-in) for you, so a fresh install becomes a working agent instead of silently doing nothing until you run onboarding by hand"
+}

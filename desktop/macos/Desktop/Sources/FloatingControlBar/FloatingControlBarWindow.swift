@@ -1944,6 +1944,21 @@ class FloatingControlBarManager {
                     if let retryContext {
                         self.retryAgentInstallPrompt(retryContext, provider: plan.provider)
                     }
+                } else if availability.needsAuthentication {
+                    // Binary installed but not yet connected (e.g. OpenClaw
+                    // installs with `--no-onboard`). Swap to the provider's
+                    // connect step instead of reporting "still can't find it".
+                    let retryContext = window.state.agentInstallPrompt(for: messageId)?.retryContext
+                    let authPlan = plan.provider.authenticationPlan
+                    window.state.setAgentInstallPrompt(
+                        AgentInstallPromptState(plan: authPlan, retryContext: retryContext, status: .ready),
+                        for: messageId)
+                    // OpenClaw onboards non-interactively, so continue setup now
+                    // rather than making the user click again. Hermes needs a
+                    // browser step, so it waits for the user to start sign-in.
+                    if plan.provider == .openclaw {
+                        self.runAgentAuthentication(messageId: messageId, plan: authPlan)
+                    }
                 } else {
                     window.state.updateAgentInstallPrompt(for: messageId) {
                         $0.status = .finishedButMissing(output: result.output)
@@ -1969,6 +1984,13 @@ class FloatingControlBarManager {
         }
         window.resizeToResponseHeightPublic(animated: true)
 
+        // OpenClaw's "connect" is a one-shot non-interactive onboarding run
+        // (no browser), so it uses its own simpler service + phase mapping.
+        if plan.provider == .openclaw {
+            runOpenClawOnboarding(messageId: messageId, plan: plan)
+            return
+        }
+
         // connect() synchronously moves the phase to .starting (or .failed),
         // so subscribing after it never replays a stale terminal phase from
         // an earlier attempt.
@@ -1986,6 +2008,43 @@ class FloatingControlBarManager {
                         $0.status = .waitingForApproval(userCode: userCode)
                     }
                     window.resizeToResponseHeightPublic(animated: true)
+                case .connected:
+                    self.agentAuthCancellables[messageId] = nil
+                    let retryContext = window.state.agentInstallPrompt(for: messageId)?.retryContext
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .connected
+                    }
+                    window.resizeToResponseHeightPublic(animated: true)
+                    if let retryContext {
+                        self.retryAgentInstallPrompt(retryContext, provider: plan.provider)
+                    }
+                case .failed(let message):
+                    self.agentAuthCancellables[messageId] = nil
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .authFailed(message: message)
+                    }
+                    window.resizeToResponseHeightPublic(animated: true)
+                }
+            }
+    }
+
+    /// Drives the OpenClaw setup (non-interactive `openclaw onboard`) from the
+    /// install-help prompt: mirrors the service phase into the prompt and, on
+    /// success, retries the original request. No browser step.
+    private func runOpenClawOnboarding(
+        messageId: String,
+        plan: LocalAgentInstallPlan
+    ) {
+        guard let window else { return }
+        let service = OpenClawConnectService.shared
+        service.connect()
+        agentAuthCancellables[messageId] = service.$phase
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] phase in
+                guard let self, let window = self.window else { return }
+                switch phase {
+                case .idle, .onboarding:
+                    break
                 case .connected:
                     self.agentAuthCancellables[messageId] = nil
                     let retryContext = window.state.agentInstallPrompt(for: messageId)?.retryContext

@@ -481,6 +481,30 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "openclaw_connect_state",
+      summary: "Return OpenClaw install/onboard state and the connect flow phase"
+    ) { _ in
+      let availability = LocalAgentProviderDetector.availability(for: .openclaw)
+      let service = OpenClawConnectService.shared
+      service.refreshConnectionState()
+      return [
+        "installed": LocalAgentProviderDetector.executablePath(for: .openclaw) == nil ? "false" : "true",
+        "availability": availability.isAvailable
+          ? "available" : (availability.needsAuthentication ? "needsAuthentication" : "missing"),
+        "onboarded": OpenClawOnboardProbe.isOnboarded() ? "true" : "false",
+        "phase": service.phase.automationValue,
+      ]
+    }
+
+    register(
+      name: "openclaw_connect_start",
+      summary: "Run OpenClaw's non-interactive onboarding (Gateway + Claude auth)"
+    ) { _ in
+      OpenClawConnectService.shared.connect()
+      return ["phase": OpenClawConnectService.shared.phase.automationValue]
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]

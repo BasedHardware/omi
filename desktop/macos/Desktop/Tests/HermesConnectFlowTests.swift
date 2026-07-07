@@ -167,9 +167,28 @@ final class HermesConnectFlowTests: XCTestCase {
     XCTAssertFalse(availability.needsAuthentication)
   }
 
-  func testDetectorAuthCheckOnlyAppliesToHermes() throws {
-    // Other providers with a found executable stay available even with an
-    // empty home (no Hermes-style auth probing).
+  func testDetectorAuthCheckSkipsProvidersWithoutSetupProbe() throws {
+    // Codex has no auth/onboard probe: a found executable is simply available.
+    let home = try makeTempHome(withHermesExecutable: false)
+    defer { try? FileManager.default.removeItem(at: home) }
+    let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
+    try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+    let executable = bin.appendingPathComponent("codex")
+    try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let availability = LocalAgentProviderDetector.availability(
+      for: .codex,
+      environment: [:],
+      homeDirectory: home.path)
+
+    XCTAssertTrue(availability.isAvailable)
+  }
+
+  func testDetectorTreatsUnonboardedOpenClawAsNeedsAuth() throws {
+    // OpenClaw installs the binary with `--no-onboard`; a present binary with
+    // no config is "installed but not set up", not "available".
     let home = try makeTempHome(withHermesExecutable: false)
     defer { try? FileManager.default.removeItem(at: home) }
     let bin = home.appendingPathComponent(".local/bin", isDirectory: true)
@@ -179,12 +198,21 @@ final class HermesConnectFlowTests: XCTestCase {
     try FileManager.default.setAttributes(
       [.posixPermissions: 0o755], ofItemAtPath: executable.path)
 
-    let availability = LocalAgentProviderDetector.availability(
-      for: .openclaw,
-      environment: [:],
-      homeDirectory: home.path)
+    let notOnboarded = LocalAgentProviderDetector.availability(
+      for: .openclaw, environment: [:], homeDirectory: home.path)
+    XCTAssertTrue(notOnboarded.needsAuthentication)
+    XCTAssertFalse(notOnboarded.isAvailable)
 
-    XCTAssertTrue(availability.isAvailable)
+    // Once onboarded (config with Gateway + default model), it is available.
+    let openClawDir = home.appendingPathComponent(".openclaw", isDirectory: true)
+    try FileManager.default.createDirectory(at: openClawDir, withIntermediateDirectories: true)
+    try """
+    {"gateway":{"port":18789},"agents":{"defaults":{"model":{"primary":"anthropic/claude-opus-4-8"}}}}
+    """.write(to: openClawDir.appendingPathComponent("openclaw.json"), atomically: true, encoding: .utf8)
+
+    let onboarded = LocalAgentProviderDetector.availability(
+      for: .openclaw, environment: [:], homeDirectory: home.path)
+    XCTAssertTrue(onboarded.isAvailable)
   }
 
   // MARK: - Device-code stdout parsing
@@ -249,7 +277,20 @@ final class HermesConnectFlowTests: XCTestCase {
 
   func testInstallPlansStayInstallKind() {
     XCTAssertEqual(AgentPillsManager.DirectedProvider.hermes.installPlan.kind, .install)
-    XCTAssertEqual(AgentPillsManager.DirectedProvider.openclaw.authenticationPlan.kind, .install)
+    // OpenClaw's installer is still an install plan, but it now has a distinct
+    // authenticate plan for the post-install onboarding step.
+    XCTAssertEqual(AgentPillsManager.DirectedProvider.openclaw.installPlan.kind, .install)
+    XCTAssertEqual(AgentPillsManager.DirectedProvider.openclaw.authenticationPlan.kind, .authenticate)
+    XCTAssertNil(AgentPillsManager.DirectedProvider.openclaw.authenticationPlan.installCommand)
+  }
+
+  func testOpenClawAuthenticatePromptCopyIsNotBrowserFlow() {
+    let plan = AgentPillsManager.DirectedProvider.openclaw.authenticationPlan
+    let state = AgentInstallPromptState(plan: plan)
+    // Must not claim a browser sign-in — OpenClaw onboards non-interactively.
+    XCTAssertFalse(state.detailText.lowercased().contains("browser"))
+    XCTAssertTrue(state.detailText.contains("OpenClaw"))
+    XCTAssertEqual(state.primaryActionTitle, "Connect OpenClaw")
   }
 
   func testPromptCopyForAuthenticateFlow() {
