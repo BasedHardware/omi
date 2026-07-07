@@ -1,0 +1,35 @@
+backend/utils/whatsapp_connector.py
+  s_edfd59e96df44b::t_61ba3c82d37350 379-386
+  s_edfd59e96df44b::t_1a46330a6919c5 62
+backend/tests/unit/test_person_backfill.py
+  s_edfd59e96df44b::t_30a1b2deaeee17 16-29
+  s_edfd59e96df44b::t_734dbdc05949aa 50-52
+  s_edfd59e96df44b::t_a437fb00a3f748 1-15,30-49,53-97
+backend/utils/memory/person_backfill.py
+  s_edfd59e96df44b::t_c7a07e1573a4f1 1-15,17-23,27-85
+  s_edfd59e96df44b::t_5e904d4afb1630 86-87,89-103
+  s_edfd59e96df44b::t_80916b09baf75a 88
+  s_edfd59e96df44b::t_6101a723e9029f 16,24-26
+backend/utils/telegram_connector.py
+  s_edfd59e96df44b::t_554bc003742777 62
+  s_edfd59e96df44b::t_490edca2f2b10c 379-386
+backend/utils/imessage_connector.py
+  s_edfd59e96df44b::t_c05e8b5f16c45a 514-522
+  s_edfd59e96df44b::t_b793b74ab5c78b 55
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b27b6dc5585b25e69bd623e5f8023b0032c6fdfb",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
