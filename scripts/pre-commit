@@ -21,7 +21,7 @@ EOF
 fi
 
 # Dart formatting for app/
-STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$')
+STAGED_DART_FILES=$(git diff --cached --name-only --diff-filter=ACM "app/**.dart" | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' -e '^app/lib/l10n/app_localizations.*\.dart$')
 
 if [ -n "$STAGED_DART_FILES" ]; then
   echo "Formatting staged Dart files in app/..."
