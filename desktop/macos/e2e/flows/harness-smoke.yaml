@@ -2,6 +2,8 @@ version: 1
 name: harness-smoke
 description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
 
