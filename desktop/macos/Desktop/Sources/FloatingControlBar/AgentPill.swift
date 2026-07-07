@@ -213,7 +213,6 @@ final class AgentPillsManager: ObservableObject {
             switch self {
             case .hermes: return "hermes"
             case .openclaw: return "openclaw"
-            // codex-acp is the ACP stdio bridge that drives the Codex CLI.
             case .codex: return "codex-acp"
             }
         }
