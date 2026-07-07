@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import sys
 from pathlib import Path
@@ -268,7 +269,7 @@ def test_build_reply_prompt_has_no_hardcoded_example_slang():
     )
     low = "\n".join(prompt).lower()  # build_reply_prompt returns (system, user)
     # The old priming list ("u, ur, lol, ngl, bet, etc.") must be gone entirely.
-    assert 'ngl' not in low
+    assert not re.search(r'\bngl\b', low)  # word-boundary: 'single' etc. contain the substring 'ngl'
     assert 'lowkey' not in low
     assert 'u, ur, lol' not in low
     # Corpus-relative instruction + measured fingerprint are present instead.
@@ -401,118 +402,56 @@ def test_group_message_not_for_user_abstains():
 # --- Universal memory grounding: durable fallback when semantic search misses ----
 
 
-class _FakeMemoryService:
-    """Stands in for MemoryService: `.search()` is the semantic (index-backed) path
-    that can come back empty; `.read()` is the plain-Firestore durable read that
-    resolves canonical/legacy and always works."""
-
-    def __init__(self, *, search_results, read_results, db_client=None):
-        self._search_results = search_results
-        self._read_results = read_results
-
-    def search(self, uid, query, *, limit=5, device_scope_request=None):
-        return list(self._search_results)
-
-    def read(self, uid, *, limit=100, offset=0, device_scope_request=None):
-        return list(self._read_results)
+def test_relevant_context_empty_when_no_inbound_query():
+    """No inbound message (thread is all from the user) -> empty query -> no grounding block.
+    A clean ungrounded reply beats one polluted with off-topic memory."""
+    out = rd._relevant_context('uid', [{'text': 'hey', 'is_from_me': True}])
+    assert out == ''
 
 
-def _mem_match(content):
-    return SimpleNamespace(memory=SimpleNamespace(content=content))
-
-
-def _mem_db(content):
-    return SimpleNamespace(content=content)
-
-
-def test_relevant_context_falls_back_to_durable_memories_when_search_empty():
-    """The regression this guards: when the semantic index returns nothing (cold,
-    unavailable, or an off-topic thread), the draft must still be grounded in the
-    user's REAL durable memories instead of going in blind. Works for every user in
-    every environment because the fallback is a plain Firestore read."""
-    thread = [{'text': 'what have you been up to?', 'is_from_me': False}]
-    fake = _FakeMemoryService(
-        search_results=[],  # index miss / unavailable
-        read_results=[_mem_db('User founded GetEventful.com.'), _mem_db('User lives in San Francisco.')],
-    )
-    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
-        rd.conversations_db, 'get_conversations', return_value=[]
-    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
-        out = rd._relevant_context('uid', thread)
-
-    assert 'WHAT OMI KNOWS ABOUT YOU' in out
-    assert 'GetEventful.com' in out
-    assert 'San Francisco' in out
-
-
-def test_relevant_context_prefers_semantic_matches_over_durable_fallback():
-    """When semantic search DOES return topic-relevant memories, those are used and
-    the durable fallback read is not surfaced — relevance beats a blunt dump."""
-    thread = [{'text': 'are we still on for dinner friday?', 'is_from_me': False}]
-    fake = _FakeMemoryService(
-        search_results=[_mem_match('User has dinner plans Friday at 7.')],
-        read_results=[_mem_db('DURABLE_ONLY_SENTINEL fact that should not appear.')],
-    )
-    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
-        rd.conversations_db, 'get_conversations', return_value=[]
-    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
-        out = rd._relevant_context('uid', thread)
-
-    assert 'dinner plans Friday' in out
-    assert 'DURABLE_ONLY_SENTINEL' not in out
-
-
-def test_relevant_context_grounds_even_when_no_inbound_query():
-    """Even when the latest messages are all from the user (empty thread query), the
-    draft should still be grounded in durable memories rather than returning ''."""
-    thread = [{'text': 'hey', 'is_from_me': True}]  # nothing inbound -> empty query
-    fake = _FakeMemoryService(
-        search_results=[_mem_match('should not be used, query is empty')],
-        read_results=[_mem_db('User is 20 years old.')],
-    )
-    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
-        rd.conversations_db, 'get_conversations', return_value=[]
-    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
-        out = rd._relevant_context('uid', thread)
-
-    assert 'User is 20 years old.' in out
-
-
-def test_relevant_context_falls_back_to_ai_profile_when_memories_empty():
-    """Covers users whose discrete memory atoms are empty but who have a cached AI
-    profile synthesized from all their data (a common real-world state). The draft
-    must still be grounded in who they are — never ungrounded — via a plain
-    Firestore profile read."""
-    thread = [{'text': 'where are you based again?', 'is_from_me': False}]
-    fake = _FakeMemoryService(search_results=[], read_results=[])  # both memory paths empty
-    profile = {'profile_text': "- User founded GetEventful.com.\n- User lives in San Francisco."}
-    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
-        rd.users_db, 'get_ai_user_profile', return_value=profile
-    ), patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
-        rd.vector_db, 'query_vectors', return_value=[]
+def test_relevant_context_leads_with_ranked_memory_facts():
+    """Query-relevant durable FACTS lead the grounding block under the facts header."""
+    thread = [{'text': 'where am i based again?', 'is_from_me': False}]
+    with (
+        patch.object(rd, '_rank_memories', return_value=[{'content': 'User lives in San Francisco.', 'date': None}]),
+        patch.object(rd, '_retrieve_chunks', return_value=[]),
+        patch.object(rd, '_embed_rank', return_value=[]),
+        patch.object(rd.vector_db, 'query_vectors', return_value=[]),
+        patch.object(rd.conversations_db, 'get_conversations', return_value=[]),
     ):
         out = rd._relevant_context('uid', thread)
-
     assert 'WHAT OMI KNOWS ABOUT YOU' in out
-    assert 'GetEventful.com' in out
     assert 'San Francisco' in out
 
 
-def test_durable_fallback_is_capped_to_avoid_prompt_bloat():
-    """MemoryService.read ignores its limit on the legacy path (returns the full
-    set). The drafter must cap the durable fallback itself so a user with hundreds
-    of memories doesn't blow up the prompt."""
-    thread = [{'text': 'what have you been up to?', 'is_from_me': False}]
-    many = [_mem_db(f'memory fact number {i}') for i in range(200)]
-    fake = _FakeMemoryService(search_results=[], read_results=many)
-    with patch.object(rd, 'MemoryService', lambda *a, **k: fake), patch.object(
-        rd.conversations_db, 'get_conversations', return_value=[]
-    ), patch.object(rd.vector_db, 'query_vectors', return_value=[]):
+def test_relevant_context_includes_related_conversations():
+    """Reranked conversations surface under a RELATED CONVERSATIONS block."""
+    thread = [{'text': 'how was the trip?', 'is_from_me': False}]
+    convo = {'kind': 'conversation', 'title': 'Weekend trip', 'summary': 'drove to Tahoe', 'date': None}
+    with (
+        patch.object(rd, '_rank_memories', return_value=[]),
+        patch.object(rd, '_retrieve_chunks', return_value=[]),
+        patch.object(rd, '_embed_rank', return_value=[convo]),
+        patch.object(rd.vector_db, 'query_vectors', return_value=[]),
+        patch.object(rd.conversations_db, 'get_conversations', return_value=[]),
+    ):
         out = rd._relevant_context('uid', thread)
+    assert 'RELATED CONVERSATIONS' in out
+    assert 'Weekend trip' in out
 
-    facts_block = out.split('WHAT OMI KNOWS ABOUT YOU (relevant to this chat):')[1]
-    n = facts_block.count('memory fact number')
-    assert n == rd.DURABLE_FACTS_CAP, f'expected {rd.DURABLE_FACTS_CAP} capped facts, got {n}'
+
+def test_relevant_context_empty_when_nothing_relevant():
+    """Nothing topic-relevant retrieved -> no block emitted (never an ungrounded dump)."""
+    thread = [{'text': 'random unrelated thing', 'is_from_me': False}]
+    with (
+        patch.object(rd, '_rank_memories', return_value=[]),
+        patch.object(rd, '_retrieve_chunks', return_value=[]),
+        patch.object(rd, '_embed_rank', return_value=[]),
+        patch.object(rd.vector_db, 'query_vectors', return_value=[]),
+        patch.object(rd.conversations_db, 'get_conversations', return_value=[]),
+    ):
+        out = rd._relevant_context('uid', thread)
+    assert out == ''
 
 
 def test_group_missing_sender_attribution_abstains_without_calling_llm():
@@ -551,33 +490,6 @@ def test_group_with_sender_attribution_reaches_the_drafter():
 
     assert out.get('abstain') is not True
     assert out['draft'] == 'sure, im down'
-
-
-def test_profile_fallback_text_is_length_capped():
-    """The AI-profile fallback (used when both memory paths are empty) must be bounded
-    like every other context source, so a huge profile can't bloat the prompt."""
-
-    class _EmptyMemoryService:
-        def __init__(self, *a, **k):
-            pass
-
-        def search(self, *a, **k):
-            return []
-
-        def read(self, *a, **k):
-            return []
-
-    long_profile = "x" * (rd.PROFILE_TEXT_CHAR_CAP + 5000)
-    with patch.object(rd, 'MemoryService', _EmptyMemoryService), patch.object(
-        rd.users_db, 'get_ai_user_profile', return_value={'profile_text': long_profile}
-    ), patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
-        rd.vector_db, 'query_vectors', return_value=[]
-    ):
-        out = rd._relevant_context('uid', [{'text': 'what have you been up to?', 'is_from_me': False}])
-
-    assert 'WHAT OMI KNOWS ABOUT YOU' in out
-    # Only the capped number of profile chars survive (the profile is all 'x').
-    assert out.count('x') == rd.PROFILE_TEXT_CHAR_CAP
 
 
 def test_parse_selection_index():
