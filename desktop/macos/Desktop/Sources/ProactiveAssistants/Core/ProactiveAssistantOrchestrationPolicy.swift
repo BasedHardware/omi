@@ -100,3 +100,122 @@ enum ProactiveAssistantOrchestrationPolicy {
         return now.timeIntervalSince(lastDistributionTime) >= fallbackInterval ? .flushNow : .skip
     }
 }
+
+struct ProactiveScreenshotCaptureGate {
+    private(set) var wasScreenshotAppFrontmost = false
+    private(set) var backoffUntil: Date = .distantPast
+
+    mutating func nextDecision(
+        isScreenshotAppFrontmost: Bool,
+        now: Date,
+        backoffDuration: TimeInterval
+    ) -> ProactiveAssistantOrchestrationPolicy.ScreenshotAppDecision {
+        let decision = ProactiveAssistantOrchestrationPolicy.screenshotAppDecision(
+            isScreenshotAppFrontmost: isScreenshotAppFrontmost,
+            wasScreenshotAppFrontmost: wasScreenshotAppFrontmost,
+            backoffUntil: backoffUntil,
+            now: now,
+            backoffDuration: backoffDuration
+        )
+
+        switch decision {
+        case .pause(let nextBackoffUntil):
+            wasScreenshotAppFrontmost = true
+            backoffUntil = nextBackoffUntil
+        case .resumeIntoBackoff, .resumeAndCapture:
+            wasScreenshotAppFrontmost = false
+        case .continueBackoff, .capture:
+            break
+        }
+
+        return decision
+    }
+}
+
+struct ProactiveVideoCallThrottleGate {
+    private(set) var counter = 0
+
+    mutating func nextDecision(
+        isVideoCall: Bool,
+        throttleFactor: Int
+    ) -> ProactiveAssistantOrchestrationPolicy.VideoCallThrottleDecision {
+        let decision = ProactiveAssistantOrchestrationPolicy.videoCallThrottleDecision(
+            isVideoCall: isVideoCall,
+            currentCounter: counter,
+            throttleFactor: throttleFactor
+        )
+
+        switch decision {
+        case .capture(let nextCounter, _), .skip(let nextCounter, _):
+            counter = nextCounter
+        }
+
+        return decision
+    }
+
+    mutating func reset() {
+        counter = 0
+    }
+}
+
+struct ProactiveFrameDistributionGate {
+    enum Action: Equatable {
+        case flushNow
+        case scheduleDebounce
+        case skip
+    }
+
+    private(set) var lastDistributedApp: String?
+    private(set) var lastDistributedWindowTitle: String?
+    private(set) var lastDistributionTime: Date = .distantPast
+
+    mutating func reset() {
+        lastDistributedApp = nil
+        lastDistributedWindowTitle = nil
+        lastDistributionTime = .distantPast
+    }
+
+    mutating func nextAction(
+        frameApp: String,
+        frameWindowTitle: String?,
+        now: Date,
+        defaultFallbackInterval: TimeInterval,
+        messagingFallbackInterval: TimeInterval,
+        messagingFastPathApps: Set<String>
+    ) -> Action {
+        let decision = ProactiveAssistantOrchestrationPolicy.distributionDecision(
+            lastDistributedApp: lastDistributedApp,
+            lastDistributedWindowTitle: lastDistributedWindowTitle,
+            frameApp: frameApp,
+            frameWindowTitle: frameWindowTitle,
+            lastDistributionTime: lastDistributionTime,
+            now: now,
+            defaultFallbackInterval: defaultFallbackInterval,
+            messagingFallbackInterval: messagingFallbackInterval,
+            messagingFastPathApps: messagingFastPathApps
+        )
+
+        switch decision {
+        case .flushNow:
+            return .flushNow
+        case .debounce:
+            // Track the pending context immediately so repeated captures in that same
+            // context do not starve the debounce timer by rescheduling forever.
+            lastDistributedApp = frameApp
+            lastDistributedWindowTitle = frameWindowTitle
+            return .scheduleDebounce
+        case .skip:
+            return .skip
+        }
+    }
+
+    mutating func markFlushed(
+        frameApp: String,
+        frameWindowTitle: String?,
+        at time: Date
+    ) {
+        lastDistributedApp = frameApp
+        lastDistributedWindowTitle = frameWindowTitle
+        lastDistributionTime = time
+    }
+}

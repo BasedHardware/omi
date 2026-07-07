@@ -46,6 +46,16 @@ struct LiveNotesAccumulator {
         trimExistingNotesContext()
     }
 
+    mutating func replaceExistingNote(oldText: String, newText: String) {
+        guard let index = existingNotesContext.firstIndex(of: oldText) else { return }
+        existingNotesContext[index] = newText
+    }
+
+    mutating func removeExistingNote(_ note: String) {
+        guard let index = existingNotesContext.firstIndex(of: note) else { return }
+        existingNotesContext.remove(at: index)
+    }
+
     mutating func handleSegmentsUpdate(
         _ segments: [SpeakerSegment],
         isGenerating: Bool

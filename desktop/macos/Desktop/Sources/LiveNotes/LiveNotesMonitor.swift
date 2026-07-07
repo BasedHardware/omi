@@ -2,6 +2,32 @@ import Foundation
 import Combine
 import GRDB
 
+protocol LiveNoteGenerating {
+    func generateNote(prompt: String, systemPrompt: String) async throws -> String
+}
+
+extension GeminiClient: LiveNoteGenerating {
+    func generateNote(prompt: String, systemPrompt: String) async throws -> String {
+        try await sendTextRequest(prompt: prompt, systemPrompt: systemPrompt)
+    }
+}
+
+protocol LiveNoteStoring {
+    func createNote(
+        sessionId: Int64,
+        text: String,
+        timestamp: Date,
+        isAiGenerated: Bool,
+        segmentStartOrder: Int?,
+        segmentEndOrder: Int?
+    ) async throws -> LiveNoteRecord
+    func updateNote(id: Int64, text: String) async throws
+    func deleteNote(id: Int64) async throws
+    func getLiveNotes(sessionId: Int64) async throws -> [LiveNote]
+}
+
+extension NoteStorage: LiveNoteStoring {}
+
 /// Dedicated monitor for live notes generation during recording sessions.
 /// Accumulates transcript words and triggers AI note generation at word thresholds.
 /// Only views that explicitly observe this class will update when notes change.
@@ -24,8 +50,12 @@ class LiveNotesMonitor: ObservableObject {
     /// Pure transcript/note policy state for deciding when AI generation should run.
     private var accumulator = LiveNotesAccumulator()
 
-    /// GeminiClient for AI generation (lazily initialized)
-    private var geminiClient: GeminiClient?
+    /// AI note generator (lazily initialized)
+    private var noteGenerator: LiveNoteGenerating?
+
+    private let noteGeneratorFactory: () throws -> LiveNoteGenerating
+
+    private let noteStorage: LiveNoteStoring
 
     /// Cancellables for subscriptions
     private var cancellables = Set<AnyCancellable>()
@@ -41,14 +71,31 @@ class LiveNotesMonitor: ObservableObject {
         avoid repeating information from existing notes.
         """
 
-    private init() {
-        // Subscribe to transcript changes
-        LiveTranscriptMonitor.shared.$segments
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] segments in
-                self?.handleSegmentsUpdate(segments)
-            }
-            .store(in: &cancellables)
+    private convenience init() {
+        self.init(
+            noteGeneratorFactory: { try GeminiClient() },
+            noteStorage: NoteStorage.shared,
+            subscribeToTranscript: true
+        )
+    }
+
+    init(
+        noteGeneratorFactory: @escaping () throws -> LiveNoteGenerating,
+        noteStorage: LiveNoteStoring,
+        subscribeToTranscript: Bool = false
+    ) {
+        self.noteGeneratorFactory = noteGeneratorFactory
+        self.noteStorage = noteStorage
+
+        if subscribeToTranscript {
+            // Subscribe to transcript changes
+            LiveTranscriptMonitor.shared.$segments
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] segments in
+                    self?.handleSegmentsUpdate(segments)
+                }
+                .store(in: &cancellables)
+        }
     }
 
     // MARK: - Session Lifecycle
@@ -58,13 +105,14 @@ class LiveNotesMonitor: ObservableObject {
         log("LiveNotesMonitor: Starting session \(sessionId)")
         currentSessionId = sessionId
         notes = []
+        isGenerating = false
         accumulator.reset()
 
-        // Initialize Gemini client if not already done
-        if geminiClient == nil {
+        // Initialize AI generator if not already done
+        if noteGenerator == nil {
             do {
                 // Use Gemini Flash for note generation (text-only, no tool loop — Flash-safe)
-                geminiClient = try GeminiClient()
+                noteGenerator = try noteGeneratorFactory()
                 log("LiveNotesMonitor: GeminiClient initialized with default model (Flash)")
             } catch {
                 logError("LiveNotesMonitor: Failed to initialize GeminiClient", error: error)
@@ -73,7 +121,7 @@ class LiveNotesMonitor: ObservableObject {
 
         // Load any existing notes from DB (for crash recovery)
         Task {
-            await loadExistingNotes()
+            await loadExistingNotes(for: sessionId)
         }
     }
 
@@ -81,12 +129,14 @@ class LiveNotesMonitor: ObservableObject {
     func endSession() {
         log("LiveNotesMonitor: Ending session \(currentSessionId ?? -1) with \(notes.count) notes")
         currentSessionId = nil
+        isGenerating = false
         accumulator.reset()
     }
 
     /// Clear all notes (used when recording stops)
     func clear() {
         notes = []
+        isGenerating = false
         accumulator.reset()
     }
 
@@ -101,15 +151,18 @@ class LiveNotesMonitor: ObservableObject {
 
         Task {
             do {
-                let record = try await NoteStorage.shared.createNote(
+                let record = try await noteStorage.createNote(
                     sessionId: sessionId,
                     text: text,
+                    timestamp: Date(),
                     isAiGenerated: false,
-                    segmentStartOrder: accumulator.currentSegmentOrder
+                    segmentStartOrder: accumulator.currentSegmentOrder,
+                    segmentEndOrder: nil
                 )
 
                 if let note = record.toLiveNote() {
                     await MainActor.run {
+                        guard self.currentSessionId == sessionId else { return }
                         self.notes.append(note)
                         self.accumulator.appendExistingNote(text)
                     }
@@ -124,14 +177,16 @@ class LiveNotesMonitor: ObservableObject {
     func updateNote(id: Int64, text: String) {
         Task {
             do {
-                try await NoteStorage.shared.updateNote(id: id, text: text)
+                try await noteStorage.updateNote(id: id, text: text)
 
                 await MainActor.run {
                     if let index = self.notes.firstIndex(where: { $0.id == id }) {
                         var updatedNote = self.notes[index]
+                        let oldText = updatedNote.text
                         updatedNote.text = text
                         updatedNote.updatedAt = Date()
                         self.notes[index] = updatedNote
+                        self.accumulator.replaceExistingNote(oldText: oldText, newText: text)
                     }
                 }
             } catch {
@@ -144,10 +199,13 @@ class LiveNotesMonitor: ObservableObject {
     func deleteNote(id: Int64) {
         Task {
             do {
-                try await NoteStorage.shared.deleteNote(id: id)
+                try await noteStorage.deleteNote(id: id)
 
                 await MainActor.run {
-                    self.notes.removeAll { $0.id == id }
+                    if let index = self.notes.firstIndex(where: { $0.id == id }) {
+                        let removedNote = self.notes.remove(at: index)
+                        self.accumulator.removeExistingNote(removedNote.text)
+                    }
                 }
             } catch {
                 logError("LiveNotesMonitor: Failed to delete note", error: error)
@@ -158,12 +216,11 @@ class LiveNotesMonitor: ObservableObject {
     // MARK: - Private Methods
 
     /// Load existing notes from DB (for crash recovery)
-    private func loadExistingNotes() async {
-        guard let sessionId = currentSessionId else { return }
-
+    private func loadExistingNotes(for sessionId: Int64) async {
         do {
-            let existingNotes = try await NoteStorage.shared.getLiveNotes(sessionId: sessionId)
+            let existingNotes = try await noteStorage.getLiveNotes(sessionId: sessionId)
             await MainActor.run {
+                guard self.currentSessionId == sessionId else { return }
                 self.notes = existingNotes
                 self.accumulator.seedExistingNotes(existingNotes.map { $0.text })
             }
@@ -174,7 +231,7 @@ class LiveNotesMonitor: ObservableObject {
     }
 
     /// Handle transcript segments update
-    private func handleSegmentsUpdate(_ segments: [SpeakerSegment]) {
+    func handleSegmentsUpdate(_ segments: [SpeakerSegment]) {
         guard currentSessionId != nil, isAiEnabled else { return }
 
         if let request = accumulator.handleSegmentsUpdate(segments, isGenerating: isGenerating) {
@@ -185,7 +242,7 @@ class LiveNotesMonitor: ObservableObject {
     /// Generate an AI note from recent transcript
     private func generateNote(for request: LiveNotesGenerationRequest) {
         guard let sessionId = currentSessionId,
-              let client = geminiClient,
+              let generator = noteGenerator,
               !isGenerating else { return }
 
         isGenerating = true
@@ -201,7 +258,7 @@ class LiveNotesMonitor: ObservableObject {
 
         Task {
             do {
-                let response = try await client.sendTextRequest(
+                let response = try await generator.generateNote(
                     prompt: prompt,
                     systemPrompt: "You are a concise note-taker. Generate a single short note (3-10 words) about the key point in the transcript. Do not use quotes. Be direct and specific."
                 )
@@ -213,14 +270,15 @@ class LiveNotesMonitor: ObservableObject {
                     .replacingOccurrences(of: "'", with: "")
 
                 guard !noteText.isEmpty else {
-                    await MainActor.run { self.isGenerating = false }
+                    await MainActor.run { self.finishGeneration(for: sessionId) }
                     return
                 }
 
                 // Save to DB
-                let record = try await NoteStorage.shared.createNote(
+                let record = try await noteStorage.createNote(
                     sessionId: sessionId,
                     text: noteText,
+                    timestamp: Date(),
                     isAiGenerated: true,
                     segmentStartOrder: request.segmentStartOrder,
                     segmentEndOrder: request.segmentEndOrder
@@ -228,22 +286,28 @@ class LiveNotesMonitor: ObservableObject {
 
                 if let note = record.toLiveNote() {
                     await MainActor.run {
+                        guard self.currentSessionId == sessionId else { return }
                         self.notes.append(note)
                         self.accumulator.markGenerationSucceeded(noteText: noteText)
                         self.isGenerating = false
                     }
                 } else {
-                    await MainActor.run { self.isGenerating = false }
+                    await MainActor.run { self.finishGeneration(for: sessionId) }
                 }
             } catch let dbError as DatabaseError where dbError.resultCode == .SQLITE_CONSTRAINT {
                 // Session was deleted during async AI generation — not an error
                 log("LiveNotesMonitor: Session \(sessionId) deleted during note generation, skipping")
-                await MainActor.run { self.isGenerating = false }
+                await MainActor.run { self.finishGeneration(for: sessionId) }
             } catch {
                 logError("LiveNotesMonitor: Failed to generate note", error: error)
-                await MainActor.run { self.isGenerating = false }
+                await MainActor.run { self.finishGeneration(for: sessionId) }
             }
         }
+    }
+
+    private func finishGeneration(for sessionId: Int64) {
+        guard currentSessionId == sessionId else { return }
+        isGenerating = false
     }
 
     // MARK: - Computed Properties

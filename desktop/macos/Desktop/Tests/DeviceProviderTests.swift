@@ -6,6 +6,16 @@ import XCTest
 
 @MainActor
 final class DeviceProviderTests: XCTestCase {
+  private var defaultsToRemove: [UserDefaults] = []
+
+  override func tearDown() {
+    for defaults in defaultsToRemove {
+      removeDefaults(defaults)
+    }
+    defaultsToRemove = []
+    super.tearDown()
+  }
+
   func testLoadsPersistedPairedDeviceFromInjectedDefaults() {
     let defaults = makeDefaults()
     defaults.set(testDevice.id, forKey: "pairedDeviceId")
@@ -31,6 +41,29 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertEqual(defaults.string(forKey: "pairedDeviceId"), testDevice.id)
     XCTAssertEqual(defaults.string(forKey: "pairedDeviceName"), testDevice.name)
     XCTAssertEqual(defaults.string(forKey: "pairedDeviceType"), testDevice.type.rawValue)
+  }
+
+  func testFailedConnectionCleansUpTransientStateAndDoesNotPersistPairing() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: defaults,
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { FakeDeviceConnection(device: $0, connectError: DeviceTransportError.connectionFailed("boom")) },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+
+    XCTAssertFalse(provider.isConnecting)
+    XCTAssertFalse(provider.isConnected)
+    XCTAssertNil(provider.connectedDevice)
+    XCTAssertNil(provider.activeConnection)
+    XCTAssertNil(provider.pairedDevice)
+    XCTAssertNil(defaults.string(forKey: "pairedDeviceId"))
+    XCTAssertEqual(provider.errorMessage, "Failed to connect: Connection failed: boom")
   }
 
   func testStartDiscoveryDoesNotScanWhenBluetoothIsNotPoweredOn() {
@@ -78,6 +111,107 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertEqual(provider.pairedDevice, testDevice)
   }
 
+  func testDisconnectNotificationForDifferentPeripheralDoesNotClearCurrentDevice() async {
+    let notificationCenter = NotificationCenter()
+    let provider = makeProvider(notificationCenter: notificationCenter, autoReconnectEnabled: false)
+
+    await provider.connect(to: testDevice)
+    XCTAssertTrue(provider.isConnected)
+
+    notificationCenter.post(
+      name: .bleDeviceDisconnected,
+      object: nil,
+      userInfo: ["peripheralId": UUID(uuidString: "AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")!]
+    )
+    await drainMainQueue()
+
+    XCTAssertTrue(provider.isConnected)
+    XCTAssertEqual(provider.connectedDevice, testDevice)
+    XCTAssertNotNil(provider.activeConnection)
+    XCTAssertEqual(provider.pairedDevice, testDevice)
+    XCTAssertEqual(provider.batteryLevel, 82)
+  }
+
+  func testConnectReflectsBatteryAndStorageSupport() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: defaults,
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { FakeDeviceConnection(device: $0, batteryLevel: 25, storageList: [8_000]) },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+
+    XCTAssertTrue(provider.isConnected)
+    XCTAssertEqual(provider.batteryLevel, 25)
+    XCTAssertTrue(provider.isDeviceStorageSupported)
+  }
+
+  func testFirmwareUpdateInProgressStateCanBeToggled() {
+    let provider = makeProvider(autoReconnectEnabled: false)
+
+    provider.setFirmwareUpdateInProgress(true)
+    XCTAssertTrue(provider.isFirmwareUpdateInProgress)
+
+    provider.setFirmwareUpdateInProgress(false)
+    XCTAssertFalse(provider.isFirmwareUpdateInProgress)
+  }
+
+  func testStartReconnectionTimerAttemptsPersistedPairingImmediately() async {
+    let defaults = makeDefaults()
+    defaults.set(testDevice.id, forKey: "pairedDeviceId")
+    defaults.set(testDevice.name, forKey: "pairedDeviceName")
+    defaults.set(testDevice.type.rawValue, forKey: "pairedDeviceType")
+    defer { removeDefaults(defaults) }
+    var attemptedDevices: [BtDevice] = []
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: defaults,
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { device in
+        attemptedDevices.append(device)
+        return FakeDeviceConnection(device: device)
+      },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: true
+    )
+
+    provider.startReconnectionTimer()
+    await waitUntil { provider.isConnected }
+    provider.stopReconnectionTimer()
+
+    XCTAssertEqual(attemptedDevices, [testDevice])
+    XCTAssertTrue(provider.isConnected)
+    XCTAssertEqual(provider.connectedDevice, testDevice)
+  }
+
+  func testStartReconnectionTimerWithoutPairingDoesNotAttemptConnection() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    var connectionFactoryCallCount = 0
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: defaults,
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { device in
+        connectionFactoryCallCount += 1
+        return FakeDeviceConnection(device: device)
+      },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: true
+    )
+
+    provider.startReconnectionTimer()
+    await drainMainQueue()
+
+    XCTAssertEqual(connectionFactoryCallCount, 0)
+    XCTAssertFalse(provider.isConnected)
+  }
+
   func testUnpairDisconnectsAndClearsPersistedPairing() async {
     let defaults = makeDefaults()
     defer { removeDefaults(defaults) }
@@ -91,6 +225,7 @@ final class DeviceProviderTests: XCTestCase {
         connection = newConnection
         return newConnection
       },
+      storageDataChecker: { nil },
       autoReconnectEnabled: false
     )
 
@@ -126,6 +261,7 @@ final class DeviceProviderTests: XCTestCase {
       userDefaults: defaults ?? makeDefaults(),
       notificationCenter: notificationCenter,
       connectionFactory: { FakeDeviceConnection(device: $0) },
+      storageDataChecker: { nil },
       autoReconnectEnabled: autoReconnectEnabled
     )
   }
@@ -134,6 +270,7 @@ final class DeviceProviderTests: XCTestCase {
     let suiteName = "DeviceProviderTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
     defaults.set(suiteName, forKey: "__testSuiteName")
+    defaultsToRemove.append(defaults)
     return defaults
   }
 
@@ -147,6 +284,20 @@ final class DeviceProviderTests: XCTestCase {
   private func drainMainQueue() async {
     await Task.yield()
     await Task.yield()
+  }
+
+  private func waitUntil(
+    _ predicate: @MainActor () -> Bool,
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) async {
+    for _ in 0..<100 {
+      if predicate() {
+        return
+      }
+      await Task.yield()
+    }
+    XCTFail("Timed out waiting for condition", file: file, line: line)
   }
 }
 
@@ -199,10 +350,28 @@ private final class FakeDeviceBluetoothManager: DeviceBluetoothManaging {
 }
 
 private final class FakeDeviceConnection: BaseDeviceConnection {
+  private let connectError: Error?
+  private let batteryLevel: Int
+  private let storageList: [Int32]
   var unpairCallCount = 0
 
-  init(device: BtDevice) {
+  init(
+    device: BtDevice,
+    connectError: Error? = nil,
+    batteryLevel: Int = 82,
+    storageList: [Int32] = []
+  ) {
+    self.connectError = connectError
+    self.batteryLevel = batteryLevel
+    self.storageList = storageList
     super.init(device: device, transport: FakeDeviceTransport(deviceId: device.id))
+  }
+
+  override func connect() async throws {
+    if let connectError {
+      throw connectError
+    }
+    try await super.connect()
   }
 
   override func unpair() async {
@@ -211,7 +380,7 @@ private final class FakeDeviceConnection: BaseDeviceConnection {
   }
 
   override func getBatteryLevel() async -> Int {
-    82
+    batteryLevel
   }
 
   override func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
@@ -221,7 +390,7 @@ private final class FakeDeviceConnection: BaseDeviceConnection {
   }
 
   override func getStorageList() async -> [Int32] {
-    []
+    storageList
   }
 }
 

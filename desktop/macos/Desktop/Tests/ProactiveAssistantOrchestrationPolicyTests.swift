@@ -161,6 +161,103 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
         )
     }
 
+    func testScreenshotGateMutatesBackoffStateAcrossPauseResumeAndExpiry() {
+        var gate = ProactiveScreenshotCaptureGate()
+        let now = Date(timeIntervalSinceReferenceDate: 6_000)
+
+        XCTAssertEqual(
+            gate.nextDecision(isScreenshotAppFrontmost: true, now: now, backoffDuration: 10),
+            .pause(backoffUntil: now.addingTimeInterval(10))
+        )
+        XCTAssertTrue(gate.wasScreenshotAppFrontmost)
+        XCTAssertEqual(gate.backoffUntil, now.addingTimeInterval(10))
+
+        XCTAssertEqual(
+            gate.nextDecision(isScreenshotAppFrontmost: false, now: now.addingTimeInterval(2), backoffDuration: 10),
+            .resumeIntoBackoff
+        )
+        XCTAssertFalse(gate.wasScreenshotAppFrontmost)
+        XCTAssertEqual(gate.backoffUntil, now.addingTimeInterval(10))
+
+        XCTAssertEqual(
+            gate.nextDecision(isScreenshotAppFrontmost: false, now: now.addingTimeInterval(9), backoffDuration: 10),
+            .continueBackoff
+        )
+        XCTAssertEqual(
+            gate.nextDecision(isScreenshotAppFrontmost: false, now: now.addingTimeInterval(10), backoffDuration: 10),
+            .capture
+        )
+    }
+
+    func testVideoCallThrottleGateCarriesCounterAndResetsWhenLeavingCall() {
+        var gate = ProactiveVideoCallThrottleGate()
+
+        XCTAssertEqual(gate.nextDecision(isVideoCall: true, throttleFactor: 3), .skip(nextCounter: 1, didEnterCall: true))
+        XCTAssertEqual(gate.counter, 1)
+        XCTAssertEqual(gate.nextDecision(isVideoCall: true, throttleFactor: 3), .skip(nextCounter: 2, didEnterCall: false))
+        XCTAssertEqual(gate.counter, 2)
+        XCTAssertEqual(gate.nextDecision(isVideoCall: true, throttleFactor: 3), .capture(nextCounter: 0, didLeaveCall: false))
+        XCTAssertEqual(gate.counter, 0)
+
+        XCTAssertEqual(gate.nextDecision(isVideoCall: true, throttleFactor: 3), .skip(nextCounter: 1, didEnterCall: true))
+        XCTAssertEqual(gate.nextDecision(isVideoCall: false, throttleFactor: 3), .capture(nextCounter: 0, didLeaveCall: true))
+        XCTAssertEqual(gate.counter, 0)
+    }
+
+    func testDistributionGateTracksPendingContextAndFlushTime() {
+        var gate = ProactiveFrameDistributionGate()
+        let now = Date(timeIntervalSinceReferenceDate: 7_000)
+
+        XCTAssertEqual(
+            gate.nextAction(
+                frameApp: "Xcode",
+                frameWindowTitle: "Project",
+                now: now,
+                defaultFallbackInterval: 60,
+                messagingFallbackInterval: 15,
+                messagingFastPathApps: ["Slack"]
+            ),
+            .flushNow
+        )
+        XCTAssertNil(gate.lastDistributedApp)
+
+        gate.markFlushed(frameApp: "Xcode", frameWindowTitle: "Project", at: now)
+        XCTAssertEqual(gate.lastDistributedApp, "Xcode")
+        XCTAssertEqual(gate.lastDistributedWindowTitle, "Project")
+        XCTAssertEqual(gate.lastDistributionTime, now)
+
+        XCTAssertEqual(
+            gate.nextAction(
+                frameApp: "Safari",
+                frameWindowTitle: "Docs",
+                now: now.addingTimeInterval(1),
+                defaultFallbackInterval: 60,
+                messagingFallbackInterval: 15,
+                messagingFastPathApps: ["Slack"]
+            ),
+            .scheduleDebounce
+        )
+        XCTAssertEqual(gate.lastDistributedApp, "Safari")
+        XCTAssertEqual(gate.lastDistributedWindowTitle, "Docs")
+        XCTAssertEqual(gate.lastDistributionTime, now)
+
+        XCTAssertEqual(
+            gate.nextAction(
+                frameApp: "Safari",
+                frameWindowTitle: "Docs",
+                now: now.addingTimeInterval(2),
+                defaultFallbackInterval: 60,
+                messagingFallbackInterval: 15,
+                messagingFastPathApps: ["Slack"]
+            ),
+            .skip
+        )
+
+        let flushTime = now.addingTimeInterval(4)
+        gate.markFlushed(frameApp: "Safari", frameWindowTitle: "Docs", at: flushTime)
+        XCTAssertEqual(gate.lastDistributionTime, flushTime)
+    }
+
     private func distributionDecision(
         lastApp: String?,
         lastTitle: String?,

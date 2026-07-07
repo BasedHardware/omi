@@ -8,12 +8,21 @@ actor FileIndexerService {
 
     private var _dbQueue: DatabasePool?
     private var isScanning = false
-    private let scanPolicy = FileIndexScanPolicy.standard
+    private let scanPolicy: FileIndexScanPolicy
 
     /// Batch insert size
-    private let batchSize = 500
+    private let batchSize: Int
 
-    private init() {}
+    private init() {
+        scanPolicy = .standard
+        batchSize = 500
+    }
+
+    init(databasePool: DatabasePool, scanPolicy: FileIndexScanPolicy = .standard, batchSize: Int = 500) {
+        _dbQueue = databasePool
+        self.scanPolicy = scanPolicy
+        self.batchSize = batchSize
+    }
 
     // MARK: - Database Access
 

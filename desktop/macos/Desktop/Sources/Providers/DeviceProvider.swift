@@ -21,6 +21,7 @@ final class DeviceProvider: ObservableObject {
 
     static let shared = DeviceProvider(bluetoothManager: BluetoothManager.shared)
     typealias ConnectionFactory = @MainActor (BtDevice) -> DeviceConnection?
+    typealias StorageDataChecker = @MainActor () async -> (totalBytes: Int, currentOffset: Int)?
 
     // MARK: - Published State
 
@@ -69,6 +70,7 @@ final class DeviceProvider: ObservableObject {
     private let userDefaults: UserDefaults
     private let notificationCenter: NotificationCenter
     private let connectionFactory: ConnectionFactory
+    private let storageDataChecker: StorageDataChecker
     private let autoReconnectEnabled: Bool
     /// The active device connection (internal for AudioSourceManager access)
     private(set) var activeConnection: DeviceConnection?
@@ -99,12 +101,14 @@ final class DeviceProvider: ObservableObject {
         userDefaults: UserDefaults = .standard,
         notificationCenter: NotificationCenter = .default,
         connectionFactory: @escaping ConnectionFactory = { DeviceConnectionFactory.create(device: $0) },
+        storageDataChecker: @escaping StorageDataChecker = { await StorageSyncService.shared.checkForStorageData() },
         autoReconnectEnabled: Bool = true
     ) {
         self.bluetoothManager = bluetoothManager
         self.userDefaults = userDefaults
         self.notificationCenter = notificationCenter
         self.connectionFactory = connectionFactory
+        self.storageDataChecker = storageDataChecker
         self.autoReconnectEnabled = autoReconnectEnabled
         setupNotificationBindings()
         loadPairedDevice()
@@ -482,7 +486,7 @@ final class DeviceProvider: ObservableObject {
 
     /// Check if device has pending storage data to sync
     private func checkPendingStorageSync() async {
-        guard let (totalBytes, currentOffset) = await StorageSyncService.shared.checkForStorageData() else {
+        guard let (totalBytes, currentOffset) = await storageDataChecker() else {
             return
         }
 

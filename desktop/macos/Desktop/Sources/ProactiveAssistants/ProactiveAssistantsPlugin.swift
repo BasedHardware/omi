@@ -54,24 +54,21 @@ public class ProactiveAssistantsPlugin: NSObject {
 
     // Video call throttling: reduce capture frequency when a call app is frontmost
     // to avoid competing with the call app for CPU/GPU (ScreenCaptureKit, encoding, OCR).
-    private var videoCallFrameCounter = 0
+    private var videoCallThrottleGate = ProactiveVideoCallThrottleGate()
     private let videoCallThrottleFactor = 5  // Capture 1 out of every 5 frames (effective ~5s interval)
 
     // Screenshot-app yielding: pause capture entirely while another screenshot/recording
     // app is frontmost, and hold a short backoff after it resigns so its editor UI isn't
     // disturbed. Prevents Omi's 3s capture loop from locking WindowServer at the moment
     // the user is trying to take a screenshot (CleanShot, Shottr, macOS screenshot, etc.).
-    private var wasScreenshotAppFrontmost = false
-    private var screenshotAppBackoffUntil: Date = .distantPast
+    private var screenshotCaptureGate = ProactiveScreenshotCaptureGate()
     private let screenshotAppBackoffDuration: TimeInterval = 10
 
     // Change-gated distribution: only distribute frames to assistants when context changes.
     // Eliminates continuous polling when the user stays on the same app/window.
-    private var lastDistributedApp: String?
-    private var lastDistributedWindowTitle: String?
+    private var distributionGate = ProactiveFrameDistributionGate()
     private var distributionDebounceTimer: Timer?
     private var latestCapturedFrame: CapturedFrame?
-    private var lastDistributionTime: Date = .distantPast
     /// Fallback interval: re-distribute even without context change to catch visual-only updates.
     private let distributionFallbackInterval: TimeInterval = 60
     private let messagingDistributionFallbackInterval: TimeInterval = 15
@@ -458,10 +455,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         distributionDebounceTimer?.invalidate()
         distributionDebounceTimer = nil
         isInDelayPeriod = false
-        lastDistributedApp = nil
-        lastDistributedWindowTitle = nil
+        distributionGate.reset()
         latestCapturedFrame = nil
-        lastDistributionTime = .distantPast
 
         windowMonitor?.stop()
         windowMonitor = nil
@@ -641,27 +636,22 @@ public class ProactiveAssistantsPlugin: NSObject {
         // Skip capture while a screenshot / screen-recording app is frontmost.
         // Both apps using ScreenCaptureKit at the same time contend for WindowServer
         // locks, which can stall the user's capture UI for 20-60s. Yield to the user.
-        switch ProactiveAssistantOrchestrationPolicy.screenshotAppDecision(
+        let wasScreenshotAppFrontmostBeforeDecision = screenshotCaptureGate.wasScreenshotAppFrontmost
+        switch screenshotCaptureGate.nextDecision(
             isScreenshotAppFrontmost: isScreenshotAppFrontmost(),
-            wasScreenshotAppFrontmost: wasScreenshotAppFrontmost,
-            backoffUntil: screenshotAppBackoffUntil,
             now: now,
             backoffDuration: screenshotAppBackoffDuration
         ) {
-        case .pause(let backoffUntil):
-            if !wasScreenshotAppFrontmost {
+        case .pause:
+            if !wasScreenshotAppFrontmostBeforeDecision {
                 log("ProactiveAssistantsPlugin: Screenshot app frontmost — pausing capture to avoid WindowServer contention")
-                wasScreenshotAppFrontmost = true
             }
-            screenshotAppBackoffUntil = backoffUntil
             return
         case .resumeIntoBackoff:
-            log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotAppBackoffUntil.timeIntervalSinceNow)))s")
-            wasScreenshotAppFrontmost = false
+            log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for \(Int(max(0, screenshotCaptureGate.backoffUntil.timeIntervalSinceNow)))s")
             return
         case .resumeAndCapture:
             log("ProactiveAssistantsPlugin: Screenshot app no longer frontmost, holding backoff for 0s")
-            wasScreenshotAppFrontmost = false
         case .continueBackoff:
             return
         case .capture:
@@ -676,20 +666,17 @@ public class ProactiveAssistantsPlugin: NSObject {
 
         // Throttle capture when a video call app is frontmost to reduce CPU contention.
         // Captures 1 out of every N frames (e.g., effective ~5s interval at default 1s capture rate).
-        let videoCallDecision = ProactiveAssistantOrchestrationPolicy.videoCallThrottleDecision(
+        let videoCallDecision = videoCallThrottleGate.nextDecision(
             isVideoCall: isVideoCallApp(appName: realAppName, windowTitle: windowTitle),
-            currentCounter: videoCallFrameCounter,
             throttleFactor: videoCallThrottleFactor
         )
         switch videoCallDecision {
-        case .skip(let nextCounter, let didEnterCall):
-            videoCallFrameCounter = nextCounter
+        case .skip(_, let didEnterCall):
             if didEnterCall {
                 log("VideoCallThrottle: Detected call app '\(realAppName ?? "unknown")', throttling capture to 1/\(videoCallThrottleFactor) frames")
             }
             return
-        case .capture(let nextCounter, let didLeaveCall):
-            videoCallFrameCounter = nextCounter
+        case .capture(_, let didLeaveCall):
             if didLeaveCall {
                 log("VideoCallThrottle: Left call app, resuming normal capture")
             }
@@ -943,12 +930,9 @@ public class ProactiveAssistantsPlugin: NSObject {
         latestCapturedFrame = frame
 
         let now = Date()
-        switch ProactiveAssistantOrchestrationPolicy.distributionDecision(
-            lastDistributedApp: lastDistributedApp,
-            lastDistributedWindowTitle: lastDistributedWindowTitle,
+        switch distributionGate.nextAction(
             frameApp: frame.appName,
             frameWindowTitle: frame.windowTitle,
-            lastDistributionTime: lastDistributionTime,
             now: now,
             defaultFallbackInterval: distributionFallbackInterval,
             messagingFallbackInterval: messagingDistributionFallbackInterval,
@@ -957,12 +941,7 @@ public class ProactiveAssistantsPlugin: NSObject {
         case .flushNow:
             distributionDebounceTimer?.invalidate()
             flushDebouncedFrame()
-        case .debounce:
-            // Update tracking immediately so subsequent captures in the same new context
-            // don't keep resetting the debounce timer (fixes starvation bug).
-            lastDistributedApp = frame.appName
-            lastDistributedWindowTitle = frame.windowTitle
-
+        case .scheduleDebounce:
             // Restart the 3s debounce timer — fires 3s after the last context change
             distributionDebounceTimer?.invalidate()
             distributionDebounceTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
@@ -979,9 +958,11 @@ public class ProactiveAssistantsPlugin: NSObject {
     private func flushDebouncedFrame() {
         guard let frame = latestCapturedFrame else { return }
 
-        lastDistributedApp = frame.appName
-        lastDistributedWindowTitle = frame.windowTitle
-        lastDistributionTime = Date()
+        distributionGate.markFlushed(
+            frameApp: frame.appName,
+            frameWindowTitle: frame.windowTitle,
+            at: Date()
+        )
         distributionDebounceTimer = nil
 
         AssistantCoordinator.shared.distributeFrame(frame)
