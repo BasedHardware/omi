@@ -51,7 +51,6 @@ def block_outbound_network() -> Iterator[None]:
     original_gethostbyname = socket.gethostbyname
     original_gethostbyname_ex = socket.gethostbyname_ex
 
-    af_unix = getattr(socket, 'AF_UNIX', None)
 
     def guarded_connect(sock: socket.socket, address: object):
         if not _is_unix_socket(sock) and not is_local_address(_host_from_address(address)):
