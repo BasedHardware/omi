@@ -438,6 +438,17 @@ check_openapi_contract_if_needed() {
   if ! changed_matches \
     'backend/**' \
     'docs/api-reference/openapi.json' \
+    'docs/api-reference/app-client-openapi.json' \
+    'docs/api-reference/integration-public-openapi.json' \
+    'app/lib/backend/http/api/**' \
+    'app/lib/backend/schema/**' \
+    'app/lib/models/announcement.dart' \
+    'app/lib/models/subscription.dart' \
+    'app/lib/models/user_usage.dart' \
+    'desktop/windows/src/renderer/src/lib/omiApi.generated.ts' \
+    'web/app/src/lib/omiApi.generated.ts' \
+    'web/admin/lib/services/omi-api/omiApi.generated.ts' \
+    'web/personas-open-source/src/lib/omiApi.generated.ts' \
     'docs/docs.json' \
     '.github/workflows/openapi-contract.yml' \
     'scripts/pre-push'
@@ -448,7 +459,13 @@ check_openapi_contract_if_needed() {
   (
     cd backend
     scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+    scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json
+    scripts/openapi_runner.sh scripts/export_openapi.py --surface integration-public --check ../docs/api-reference/integration-public-openapi.json
   )
+
+  "$BACKEND_PYTHON" backend/scripts/generate_dart_models.py --all --check
+  "$BACKEND_PYTHON" backend/scripts/generate_ts_openapi_types.py --check
+  "$BACKEND_PYTHON" backend/scripts/generate_swift_openapi_types.py --check
 }
 
 check_workflows_if_needed() {
