@@ -21,6 +21,10 @@ on:
       confirm:
         description: 'Type promote-stable to deploy prod and mark the release stable'
         required: true
+      python_backend_sha:
+        description: 'Blessed python-backend SHA compatible with this desktop release'
+        required: false
+        default: ''
       override_unblessed:
         description: 'DANGER: allow promotion without bless metadata'
         required: false
@@ -66,6 +70,7 @@ jobs:
           REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ inputs.release_tag }}
           CONFIRM: ${{ inputs.confirm }}
+          PYTHON_BACKEND_SHA: ${{ inputs.python_backend_sha }}
           OVERRIDE_UNBLESSED: ${{ inputs.override_unblessed }}
           OVERRIDE_CONFIRM: ${{ inputs.override_confirm }}
         run: |
@@ -111,6 +116,51 @@ jobs:
             else
               echo "blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA)" >&2
               exit 1
+            fi
+          fi
+
+          if [ -z "$PYTHON_BACKEND_SHA" ]; then
+            if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
+              echo "::warning::python_backend_sha is missing; allowed by override_unblessed"
+              echo "::warning::python_backend_sha is missing; allowed by override_unblessed" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "python_backend_sha is required for desktop prod promotion." >&2
+              echo "Provide a SHA blessed by backend/scripts/bless-python-backend.sh, or use the typed override." >&2
+              exit 1
+            fi
+          else
+            if ! git cat-file -e "${PYTHON_BACKEND_SHA}^{commit}" 2>/dev/null; then
+              git fetch --depth=1 origin "$PYTHON_BACKEND_SHA"
+            fi
+            PYTHON_BACKEND_BLESS_TAG="python-backend-bless-${PYTHON_BACKEND_SHA}"
+            git fetch --force --tags origin "+refs/tags/${PYTHON_BACKEND_BLESS_TAG}:refs/tags/${PYTHON_BACKEND_BLESS_TAG}" || true
+            if ! gh release view "$PYTHON_BACKEND_BLESS_TAG" --repo "$REPO" \
+              --json tagName,body,isDraft,isPrerelease,assets \
+              > /tmp/python-backend-blessing.json; then
+              if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
+                echo "::warning::No python-backend blessing release found for ${PYTHON_BACKEND_SHA}; allowed by override_unblessed"
+                echo "::warning::No python-backend blessing release found for ${PYTHON_BACKEND_SHA}; allowed by override_unblessed" >> "$GITHUB_STEP_SUMMARY"
+                printf '{"tagName":"missing-%s","body":""}\n' "$PYTHON_BACKEND_BLESS_TAG" > /tmp/python-backend-blessing.json
+              else
+                echo "Missing python-backend blessing release: ${PYTHON_BACKEND_BLESS_TAG}" >&2
+                exit 1
+              fi
+            fi
+
+            python3 .github/scripts/check-python-backend-blessing.py \
+              --release-json /tmp/python-backend-blessing.json \
+              --target-sha "$PYTHON_BACKEND_SHA" \
+              --tag-sha "$(git rev-list -n1 "$PYTHON_BACKEND_BLESS_TAG" 2>/dev/null || true)" \
+              "${OVERRIDE_ARGS[@]}"
+
+            if ! git merge-base --is-ancestor "$PYTHON_BACKEND_SHA" "$TARGET_SHA"; then
+              if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
+                echo "::warning::python_backend_sha ($PYTHON_BACKEND_SHA) is not an ancestor of desktop target ($TARGET_SHA); allowed by override_unblessed"
+                echo "::warning::python_backend_sha ($PYTHON_BACKEND_SHA) is not an ancestor of desktop target ($TARGET_SHA); allowed by override_unblessed" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "python_backend_sha ($PYTHON_BACKEND_SHA) is not an ancestor of desktop target ($TARGET_SHA)" >&2
+                exit 1
+              fi
             fi
           fi
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)

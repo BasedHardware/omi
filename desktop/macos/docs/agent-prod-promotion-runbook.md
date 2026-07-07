@@ -59,6 +59,7 @@ Confirm:
 - assets include `Omi.zip` and `omi.dmg`;
 - release body has `isLive: true`, `channel: beta`, and an `edSignature`;
 - for prod promotion, release metadata includes `blessed: true`, `blessedSha` matching the tag commit, and `blessedAt` (or run `desktop/macos/scripts/bless-release.sh <tag>` first);
+- a compatible Python backend commit is blessed by a `python-backend-bless-<sha>` release, and that SHA is an ancestor of the desktop release tag;
 - live appcast beta/dev item points to the same build.
 
 For high-risk desktop auth/runtime releases, run the live signed-artifact canary
@@ -202,12 +203,16 @@ End with an explicit confirmation question naming the exact tag and phase(s).
 
 Desktop stable promotion:
 
+Use the full 40-character SHA from the compatible `python-backend-bless-<sha>` GitHub Release.
+
 ```bash
 RELEASE_TAG='vX.Y.Z+BUILD-macos'
+PYTHON_BACKEND_SHA='<40-char blessed python-backend SHA>'
 
 gh workflow run desktop_promote_prod.yml \
   --repo BasedHardware/omi \
   -f release_tag="$RELEASE_TAG" \
+  -f python_backend_sha="$PYTHON_BACKEND_SHA" \
   -f confirm='promote-stable'
 ```
 

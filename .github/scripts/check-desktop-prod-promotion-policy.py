@@ -55,6 +55,7 @@ def main() -> int:
         fail(f"prod promotion must allow only workflow_dispatch, got: {', '.join(triggers) or '<none>'}")
     require("release_tag:", text, "manual promotion must require an explicit release tag")
     require("confirm:", text, "manual promotion must require an explicit confirmation input")
+    require("python_backend_sha:", text, "manual promotion must require an explicit compatible python backend SHA")
     require("promote-stable", text, "manual promotion confirmation phrase must remain explicit")
     if "\n      force:" in text or "inputs.force" in text:
         fail("prod promotion must stay roll-forward only; do not expose a force rollback input")
@@ -71,10 +72,15 @@ def main() -> int:
             fail(f"desktop backend prod promotion must not use automatic trigger {trigger.strip()}")
 
     require("check-desktop-release-promotion.py", text, "workflow must run pre-release sanity checks")
+    require("check-python-backend-blessing.py", text, "workflow must validate the compatible python-backend blessing")
     require("--override-unblessed", text, "workflow must expose override_unblessed for break-glass bless bypass")
     require("--override-confirm", text, "workflow must expose override_confirm for break-glass bless bypass")
     require("I-ACCEPT-UNBLESSED-PROD-RISK", text, "workflow must require typed override confirmation")
     require("blessed_sha", text, "workflow must compare blessedSha to the promotion target")
+    require("python-backend-bless-${PYTHON_BACKEND_SHA}", text, "workflow must look up the explicit python-backend blessing")
+    require("--tag-sha", text, "workflow must verify the python-backend blessing tag points to the explicit SHA")
+    require('git merge-base --is-ancestor "$PYTHON_BACKEND_SHA" "$TARGET_SHA"', text, "workflow must enforce backend SHA ancestry")
+    require("backend/scripts/bless-python-backend.sh", text, "workflow must tell operators how to bless python-backend")
     require('git grep -q "OMI_DESKTOP_RELEASE_TAG" "$TARGET_SHA"', text, "workflow must reject tags that cannot consume release identity env vars")
     require('git grep -q "release_tag" "$TARGET_SHA"', text, "workflow must reject tags that cannot report release identity")
     require("Preflight Omi Bot token configuration", text, "workflow must verify GitHub App token secrets before prod mutations")
