@@ -1816,6 +1816,11 @@
             "default": 0,
             "title": "Rating Count",
             "type": "integer"
+          },
+          "status": {
+            "default": "approved",
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [

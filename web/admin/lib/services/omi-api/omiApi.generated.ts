@@ -264,6 +264,7 @@ export interface AppCatalogItem {
   private?: boolean;
   rating_avg?: number | null;
   rating_count?: number;
+  status?: string;
 }
 
 export interface AppCatalogMeta {

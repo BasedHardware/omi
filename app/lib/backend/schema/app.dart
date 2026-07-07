@@ -477,6 +477,52 @@ class App {
     );
   }
 
+  factory App.fromGeneratedCatalogItem(wire.GeneratedAppCatalogItem generated) {
+    return App(
+      category: generated.category,
+      approved: generated.approved,
+      status: generated.status,
+      id: generated.id,
+      email: '',
+      uid: '',
+      name: generated.name,
+      author: generated.author,
+      description: generated.description,
+      image: generated.image,
+      externalIntegration: generated.externalIntegration == null
+          ? null
+          : ExternalIntegration.fromGenerated(generated.externalIntegration!),
+      ratingAvg: generated.ratingAvg,
+      ratingCount: generated.ratingCount,
+      capabilities: (generated.capabilities ?? const <String>[]).toSet(),
+      chatPrompt: null,
+      conversationPrompt: null,
+      reviews: [],
+      userReview: null,
+      deleted: false,
+      enabled: generated.enabled,
+      installs: generated.installs,
+      private: generated.private,
+      usageCount: 0,
+      moneyMade: 0.0,
+      isPaid: generated.isPaid ?? false,
+      paymentPlan: null,
+      price: generated.price ?? 0.0,
+      isUserPaid: false,
+      paymentLink: null,
+      thumbnailIds: [],
+      thumbnailUrls: [],
+      username: null,
+      isPopular: false,
+      chatTools: [],
+      createdAt: null,
+      updatedAt: null,
+      score: null,
+      official: false,
+      sourceCodeUrl: null,
+    );
+  }
+
   String getFormattedPrice() {
     if (price == null) {
       return 'Free';
