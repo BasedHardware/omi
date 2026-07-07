@@ -675,9 +675,7 @@ final class AICloneSendModeService: ObservableObject {
   /// Autonomous: generate and send automatically — HARD-GATED on `!isPaused`. If paused (the
   /// default), this degrades to enqueuing a draft so nothing is ever sent unattended.
   ///
-  /// The whole flow is human-paced so the reply reads like the user really handled it:
-  /// pause to "read" the message, leave a read receipt where the platform supports one,
-  /// think (generation time), then "type" each bubble under a live typing indicator.
+  /// Replies dispatch the moment generation finishes — no simulated reading/typing pacing.
   private func autoRespond(for contact: ImportedContact, persona: ContactPersona, incoming: String) {
     guard !isPaused else {
       log("AICloneSendModeService: autonomous paused — enqueuing draft for \(contact.id)")
@@ -686,8 +684,6 @@ final class AICloneSendModeService: ObservableObject {
     }
     Task {
       do {
-        try? await Task.sleep(
-          nanoseconds: UInt64(AICloneHumanizer.readingDelay(forIncoming: incoming) * 1_000_000_000))
         await markIncomingRead(contactId: contact.id, displayName: contact.displayName)
         let context = await replyContext(for: contact, incoming: incoming)
         let reply = try await AIClonePersonaService.shared.respond(
@@ -700,8 +696,7 @@ final class AICloneSendModeService: ObservableObject {
           return
         }
         try await sendBubbles(
-          contactId: contact.id, displayName: contact.displayName, text: text, mode: .autonomous,
-          humanizedTyping: true)
+          contactId: contact.id, displayName: contact.displayName, text: text, mode: .autonomous)
       } catch {
         log("AICloneSendModeService: autonomous send failed for \(contact.id): \(error)")
       }
@@ -741,76 +736,26 @@ final class AICloneSendModeService: ObservableObject {
 
   /// Send a (possibly multi-bubble) clone reply as separate messages, one per bubble, the
   /// way a real person sends a burst — `respond()` joins bubbles with newlines, and sending
-  /// that as one message would land as a single wall of text. A short human-ish pause
-  /// separates bubbles. Throws on the first failed bubble (earlier bubbles stay sent).
-  ///
-  /// `humanizedTyping` (autonomous sends) replaces the fixed pause with a per-bubble
-  /// "typing" delay scaled to the bubble's length, refreshing a live typing indicator on
-  /// platforms that support one (WhatsApp presence, Telegram chat action).
+  /// that as one message would land as a single wall of text. Bubbles go out back-to-back
+  /// (sends are sequential, so order is preserved) — no simulated typing pacing. Throws on
+  /// the first failed bubble (earlier bubbles stay sent).
   func sendBubbles(
-    contactId: String, displayName: String, text: String, mode: SendMode,
-    humanizedTyping: Bool = false
+    contactId: String, displayName: String, text: String, mode: SendMode
   ) async throws {
     let bubbles = AICloneReplyPresentation.bubbles(from: text)
     guard !bubbles.isEmpty else { throw IMessageSendError.emptyText }
-    for (index, bubble) in bubbles.enumerated() {
-      if humanizedTyping {
-        await typeLikeAHuman(
-          contactId: contactId, displayName: displayName,
-          seconds: AICloneHumanizer.typingDelay(forBubble: bubble))
-      } else if index > 0 {
-        try? await Task.sleep(nanoseconds: UInt64.random(in: 600_000_000...1_400_000_000))
-      }
+    for bubble in bubbles {
       try await send(contactId: contactId, displayName: displayName, text: bubble, mode: mode)
     }
-    if humanizedTyping { await clearTypingIndicator(contactId: contactId, displayName: displayName) }
   }
 
-  // MARK: - Human-pacing helpers (autonomous sends only)
-
   /// Leave a read receipt where the platform exposes one (WhatsApp "blue ticks"). iMessage
-  /// and Telegram have no usable read API here — the pacing alone carries the illusion.
+  /// and Telegram have no usable read API here.
   private func markIncomingRead(contactId: String, displayName: String) async {
     guard AIClonePlatform.of(contactId: contactId) == .whatsapp else { return }
     guard let target = try? await whatsAppSendTarget(contactId: contactId, displayName: displayName)
     else { return }
     await WhatsAppSendService.shared.markRead(to: target)
-  }
-
-  /// Hold a "typing…" indicator for `seconds`, re-firing it every few seconds because both
-  /// WhatsApp presence and Telegram chat actions auto-expire. Best-effort and non-throwing.
-  private func typeLikeAHuman(contactId: String, displayName: String, seconds: TimeInterval) async {
-    var remaining = seconds
-    while remaining > 0 {
-      await showTypingIndicator(contactId: contactId, displayName: displayName)
-      let chunk = min(remaining, 4.0)
-      try? await Task.sleep(nanoseconds: UInt64(chunk * 1_000_000_000))
-      remaining -= chunk
-    }
-  }
-
-  private func showTypingIndicator(contactId: String, displayName: String) async {
-    switch AIClonePlatform.of(contactId: contactId) {
-    case .imessage:
-      break  // No public typing-indicator API for iMessage.
-    case .telegram:
-      if let chatId = Int64(String(contactId.dropFirst("telegram:".count))) {
-        await TelegramSendService.shared.setTyping(chatId: chatId)
-      }
-    case .whatsapp:
-      if let target = try? await whatsAppSendTarget(contactId: contactId, displayName: displayName) {
-        await WhatsAppSendService.shared.setComposing(to: target, true)
-      }
-    }
-  }
-
-  /// WhatsApp keeps showing "typing…" briefly after the last send; explicitly pause it.
-  /// Telegram chat actions are cancelled server-side by the send itself.
-  private func clearTypingIndicator(contactId: String, displayName: String) async {
-    guard AIClonePlatform.of(contactId: contactId) == .whatsapp else { return }
-    guard let target = try? await whatsAppSendTarget(contactId: contactId, displayName: displayName)
-    else { return }
-    await WhatsAppSendService.shared.setComposing(to: target, false)
   }
 
   /// Route a send to the correct platform backend and, on success, log it. Throws on failure

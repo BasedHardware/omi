@@ -226,48 +226,4 @@ final class AICloneSendModeTests: XCTestCase {
     XCTAssertEqual(decoded.mode, .manual)
   }
 
-  // MARK: - Humanized pacing (autonomous sends)
-
-  func testReadingDelayScalesWithLengthAndClamps() {
-    // Fixed jitter of 1.0 makes the formula deterministic: 1.0 + 0.03/char, clamped.
-    let short = AICloneHumanizer.readingDelay(forIncoming: "hi", jitter: 1.0...1.0)
-    XCTAssertEqual(short, 1.06, accuracy: 0.001)
-    let long = AICloneHumanizer.readingDelay(
-      forIncoming: String(repeating: "a", count: 2_000), jitter: 1.0...1.0)
-    XCTAssertEqual(long, AICloneHumanizer.maxReadingDelay)
-    // Even a hostile jitter range can never escape the clamps.
-    for _ in 0..<50 {
-      let value = AICloneHumanizer.readingDelay(forIncoming: "", jitter: 0.0...100.0)
-      XCTAssertGreaterThanOrEqual(value, AICloneHumanizer.minReadingDelay)
-      XCTAssertLessThanOrEqual(value, AICloneHumanizer.maxReadingDelay)
-    }
-  }
-
-  func testTypingDelayScalesWithLengthAndClamps() {
-    let short = AICloneHumanizer.typingDelay(forBubble: "ok", jitter: 1.0...1.0)
-    XCTAssertEqual(short, 0.9, accuracy: 0.001)  // 0.6 + 2*0.15 = 0.9 (also the floor)
-    let sentence = AICloneHumanizer.typingDelay(
-      forBubble: "sounds good see you there", jitter: 1.0...1.0)
-    XCTAssertEqual(sentence, 0.6 + 25 * 0.15, accuracy: 0.001)
-    let wall = AICloneHumanizer.typingDelay(
-      forBubble: String(repeating: "a", count: 5_000), jitter: 1.0...1.0)
-    XCTAssertEqual(wall, AICloneHumanizer.maxTypingDelay)
-    for _ in 0..<50 {
-      let value = AICloneHumanizer.typingDelay(forBubble: "", jitter: 0.0...100.0)
-      XCTAssertGreaterThanOrEqual(value, AICloneHumanizer.minTypingDelay)
-      XCTAssertLessThanOrEqual(value, AICloneHumanizer.maxTypingDelay)
-    }
-  }
-
-  func testDelaysJitterWithinDefaultBounds() {
-    // Default jitter must keep short-message delays inside the documented clamps.
-    for _ in 0..<100 {
-      let reading = AICloneHumanizer.readingDelay(forIncoming: "wanna grab lunch tmrw?")
-      XCTAssertGreaterThanOrEqual(reading, AICloneHumanizer.minReadingDelay)
-      XCTAssertLessThanOrEqual(reading, AICloneHumanizer.maxReadingDelay)
-      let typing = AICloneHumanizer.typingDelay(forBubble: "ya im down")
-      XCTAssertGreaterThanOrEqual(typing, AICloneHumanizer.minTypingDelay)
-      XCTAssertLessThanOrEqual(typing, AICloneHumanizer.maxTypingDelay)
-    }
-  }
 }
