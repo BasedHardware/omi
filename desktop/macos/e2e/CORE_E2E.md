@@ -29,6 +29,13 @@ cd desktop/macos && OMI_APP_NAME=omi-core-e2e OMI_SKIP_TUNNEL=1 ./run.sh
 ./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e --port <PORT>
 ```
 
+**Fault suite (chat backend 5xx — auto-starts `omi-fault-inject` + `omi-fault` bundle):**
+
+```bash
+cd desktop/macos
+./scripts/desktop-core-harness.sh --fault-suite --port <PORT>
+```
+
 Do **not** mix `omi-auth-seed.sh` (Omi Dev prod session) with `make desktop-run-local` (Auth emulator) — the app will boot unsigned-in.
 
 Linux / CI static gate (desktop checks only — backend contracts run in the sibling `contracts` job):
@@ -50,6 +57,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | **T0** | Linux + macOS, CI | <2 min | flow lint, gauntlet `--self-check`; backend contracts locally or in CI `contracts` job | `--tier 0` / `--self-check` |
 | **T1** | macOS agent-local | ~5 min | all flows with `tier: 1` metadata on bridge lane | `--tier 1` |
 | **T2** | macOS agent-local; **bless tier** | ~15 min | dev-up offline (enforced); all flows with `tier <= 2` + spatial overlay swift tests | `--tier 2` |
+| **Fault** | macOS agent-local | ~5 min | `omi-fault-inject` + `omi-fault` bundle; `chat-fault-5xx.yaml` (backend 5xx → surfaced chat error) | `--fault-suite` |
 | **T3** | macOS opt-in | 30+ min | agent continuity gauntlet (live LLM/BYOK) | `--tier 3` |
 
 ## Change → tier map
@@ -59,6 +67,7 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Transcription / audio capture | T2 |
 | ChatProvider / agent runtime | T0 + T3 |
 | Sidebar / navigation | T1 |
+| Redesigned Home stage (hub/chat/connect) | T2 (`home-stage.yaml`) |
 | Spatial overlay | T1 (`spatial-overlay-harness.sh`) |
 | Memories / tasks CRUD surfaces | T2 |
 | Rust chat completions / API client | T0 + T1 |
@@ -78,7 +87,9 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | `tasks` | v2 | typed bridge | 2 | Navigate + snapshot |
 | `settings` | v2 | typed bridge | 2 | Settings sections via bridge |
 | `dashboard` | v2 | typed bridge | 2 | Dashboard load |
+| `home-stage` | v2 | typed bridge | 2 | Redesigned Home hub/chat/connect via `homeMode` assertions |
 | `chat` | v2 | typed bridge | 2 | Main chat hermetic path |
+| `chat-fault-5xx` | v2 | typed bridge | fault | Backend 5xx via `omi-fault-inject` (`--fault-suite`) |
 | `language` | v2 | typed bridge | 2 | Settings transcription section |
 | `ask-omi-*-benchmark` | v1 | typed bridge | 3 | Perf benchmarks |
 | `desktop-responsiveness-benchmark` | v1 | typed bridge | 3 | Perf |

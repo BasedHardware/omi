@@ -16,6 +16,8 @@ HARNESS_ROOT="$DESKTOP_DIR/.harness/desktop-core"
 
 TIER=""
 BUNDLE="${OMI_CORE_E2E_BUNDLE:-omi-core-e2e}"
+FAULT_SUITE=0
+FAULT_BUNDLE="omi-fault"
 KEEP_STACK=0
 SELF_CHECK=0
 SKIP_BACKEND_CONTRACTS=0
@@ -31,6 +33,7 @@ Options:
   --bundle NAME               Named test bundle for T1+ (default: omi-core-e2e)
   --port PORT                 Automation bridge port (default: OMI_AUTOMATION_PORT or 47777)
   --keep-stack                On T2+, leave dev-up running after the run
+  --fault-suite               Start omi-fault-inject + omi-fault bundle; run chat-fault-5xx flow
   --self-check                Static checks (flow lint + gauntlet self-check; backend contracts locally)
   --skip-backend-contracts    With --self-check, skip backend preflight + pytest contracts (CI desktop gate)
   --help                      Show this help
@@ -53,6 +56,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-stack)
       KEEP_STACK=1
+      ;;
+    --fault-suite)
+      FAULT_SUITE=1
       ;;
     --self-check)
       SELF_CHECK=1
@@ -153,7 +159,7 @@ max_tier = int(sys.argv[2])
 for path in sorted(flows_dir.glob("*.yaml")):
     flow = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     tier = flow.get("tier")
-    if tier == "manual":
+    if tier == "manual" or tier == "fault":
         continue
     if tier is None:
         continue
@@ -490,13 +496,128 @@ ensure_dev_stack() {
   exit 1
 }
 
+FAULT_RUN_PID=""
+FAULT_RUN_STARTED=0
+
+stop_fault_stack() {
+  if [[ "$FAULT_RUN_STARTED" -eq 1 ]]; then
+    pkill -f "${FAULT_BUNDLE}.app" 2>/dev/null || true
+    FAULT_RUN_STARTED=0
+  fi
+  if [[ -x "$SCRIPT_DIR/omi-fault-inject.sh" ]]; then
+    "$SCRIPT_DIR/omi-fault-inject.sh" stop >/dev/null 2>&1 || true
+  fi
+}
+
+start_fault_stack() {
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    echo "desktop-core-harness: --fault-suite requires macOS" >&2
+    exit 1
+  fi
+  refuse_prod_bundle "$FAULT_BUNDLE"
+  "$SCRIPT_DIR/omi-fault-inject.sh" stop >/dev/null 2>&1 || true
+  eval "$("$SCRIPT_DIR/omi-fault-inject.sh" start error)"
+  echo "desktop-core-harness: fault inject at $OMI_FAULT_URL"
+  if [[ -x "$DESKTOP_DIR/scripts/omi-auth-seed.sh" ]]; then
+    "$DESKTOP_DIR/scripts/omi-auth-seed.sh" "com.omi.${FAULT_BUNDLE}" >/dev/null 2>&1 || true
+  fi
+  (
+    cd "$DESKTOP_DIR"
+    OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
+      OMI_PYTHON_API_URL="$OMI_FAULT_URL" \
+      OMI_DESKTOP_API_URL="$OMI_FAULT_URL" \
+      OMI_AUTH_API_URL="$OMI_FAULT_URL" \
+      OMI_AUTOMATION_PORT="$PORT" \
+      OMI_APP_NAME="$FAULT_BUNDLE" \
+      ./run.sh
+  ) &
+  FAULT_RUN_PID=$!
+  FAULT_RUN_STARTED=1
+  local attempt
+  for attempt in $(seq 1 90); do
+    if bridge_health 2>/dev/null; then
+      echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT"
+      return 0
+    fi
+    if ! kill -0 "$FAULT_RUN_PID" 2>/dev/null; then
+      echo "desktop-core-harness: $FAULT_BUNDLE launch exited before bridge was ready" >&2
+      stop_fault_stack
+      exit 1
+    fi
+    sleep 2
+  done
+  echo "desktop-core-harness: timed out waiting for $FAULT_BUNDLE bridge on port $PORT" >&2
+  stop_fault_stack
+  exit 1
+}
+
+run_flow_file() {
+  local flow_path="$1"
+  local run_dir="$2"
+  [[ -f "$flow_path" ]] || return 0
+  local flow_name flow_out flow_status
+  flow_name="$(basename "$flow_path" .yaml)"
+  echo "=== flow: $flow_name ==="
+  flow_out="$run_dir/flows/$flow_name"
+  mkdir -p "$flow_out"
+  set +e
+  (
+    cd "$DESKTOP_DIR"
+    python3 scripts/omi-harness run "$flow_path" --lane bridge --port "$PORT" --out "$flow_out" \
+      --allow-legacy-flow-version
+  )
+  flow_status=$?
+  set -e
+  FLOW_RESULTS=$(python3 - "$FLOW_RESULTS" "$flow_name" "$flow_status" "$flow_out" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+rows = json.loads(sys.argv[1])
+name, status, out_dir = sys.argv[2:5]
+rows.append({
+    "name": name,
+    "passed": int(status) == 0,
+    "artifacts": str(Path(out_dir).resolve()),
+})
+print(json.dumps(rows))
+PY
+)
+  if [[ "$flow_status" -ne 0 ]]; then
+    PASSED=false
+  fi
+}
+
 if [[ "$SELF_CHECK" -eq 1 ]]; then
   run_self_check
   exit 0
 fi
 
+if [[ "$FAULT_SUITE" -eq 1 ]]; then
+  RUN_DIR="$HARNESS_ROOT/$(run_id)-fault"
+  mkdir -p "$RUN_DIR"
+  STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  START_SEC=$(date +%s)
+  FLOW_RESULTS="[]"
+  PASSED=true
+  trap stop_fault_stack EXIT
+  start_fault_stack
+  run_flow_file "$DESKTOP_DIR/e2e/flows/chat-fault-5xx.yaml" "$RUN_DIR"
+  stop_fault_stack
+  trap - EXIT
+  DURATION=$(( $(date +%s) - START_SEC ))
+  if [[ "$PASSED" == true ]]; then
+    finalize_run "$RUN_DIR" true "fault" "$STARTED_AT" "$DURATION" "$FLOW_RESULTS"
+    echo "desktop-core-harness fault-suite passed (evidence: $RUN_DIR)"
+    exit 0
+  fi
+  finalize_run "$RUN_DIR" false "fault" "$STARTED_AT" "$DURATION" "$FLOW_RESULTS"
+  echo "desktop-core-harness fault-suite failed (evidence: $RUN_DIR)" >&2
+  exit 1
+fi
+
 if [[ -z "$TIER" ]]; then
-  echo "--tier is required unless --self-check" >&2
+  echo "--tier is required unless --self-check or --fault-suite" >&2
   usage >&2
   exit 2
 fi
@@ -531,37 +652,7 @@ case "$TIER" in
     [[ -n "$flow_path" ]] && FLOW_PATHS+=("$flow_path")
   done < <(flows_for_max_tier "$TIER")
   for flow_path in "${FLOW_PATHS[@]}"; do
-  [[ -f "$flow_path" ]] || continue
-  flow_name="$(basename "$flow_path" .yaml)"
-  echo "=== flow: $flow_name ==="
-  flow_out="$RUN_DIR/flows/$flow_name"
-  mkdir -p "$flow_out"
-  set +e
-  (
-    cd "$DESKTOP_DIR"
-    python3 scripts/omi-harness run "$flow_path" --lane bridge --port "$PORT" --out "$flow_out" \
-      --allow-legacy-flow-version
-  )
-  flow_status=$?
-  set -e
-  if [[ "$flow_status" -ne 0 ]]; then
-    PASSED=false
-  fi
-  FLOW_RESULTS=$(python3 - "$FLOW_RESULTS" "$flow_name" "$flow_status" "$flow_out" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-rows = json.loads(sys.argv[1])
-name, status, out_dir = sys.argv[2:5]
-rows.append({
-    "name": name,
-    "passed": int(status) == 0,
-    "artifacts": str(Path(out_dir).resolve()),
-})
-print(json.dumps(rows))
-PY
-)
+  run_flow_file "$flow_path" "$RUN_DIR"
   done
   if [[ "$TIER" -ge 2 ]]; then
     set +e

@@ -1,0 +1,3 @@
+{
+  "change": "Desktop harness: home-stage tier-2 flow with homeMode snapshot, fault-suite for chat 5xx errors, and Sentry session heartbeat moved to breadcrumbs (fixes noisy unresolved issues)."
+}

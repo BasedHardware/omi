@@ -37,7 +37,8 @@ TYPED_STEP_KEYS = {
 }
 
 MANUAL_TIER = "manual"
-ALLOWED_TIERS = {0, 1, 2, 3, MANUAL_TIER}
+FAULT_TIER = "fault"
+ALLOWED_TIERS = {0, 1, 2, 3, MANUAL_TIER, FAULT_TIER}
 
 
 def fail(message: str) -> None:
@@ -82,7 +83,7 @@ def lint_flow(path: Path, actions: set[str]) -> list[str]:
     if tier is None:
         errors.append(f"{path.name}: missing required tier metadata")
     elif tier not in ALLOWED_TIERS:
-        errors.append(f"{path.name}: invalid tier {tier!r}; expected 0-3 or manual")
+        errors.append(f"{path.name}: invalid tier {tier!r}; expected 0-3, manual, or fault")
 
     covers = flow.get("covers") or []
     repo_root = DESKTOP_DIR.parent.parent
