@@ -920,8 +920,9 @@ struct DashboardPage: View {
 
     private func sendFromHomeAskBar() {
         let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Attachments without text are sendable, matching the chat page.
-        guard !text.isEmpty || !chatProvider.pendingAttachments.isEmpty else { return }
+        // Text is required — ChatProvider.sendMessage no-ops on empty text, so
+        // an attachment-only "send" would silently drop the turn.
+        guard !text.isEmpty else { return }
         chatProvider.draftText = ""
         openHomeChat()
         AnalyticsManager.shared.chatMessageSent(
@@ -1833,9 +1834,11 @@ private struct HomeAskBar: View {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    /// Matches ChatInputView: attachments without text are sendable.
+    /// Requires text: ChatProvider.sendMessage drops empty-text sends, so
+    /// presenting attachment-only as sendable would silently do nothing.
+    /// Staged files ride along with the typed message instead.
     private var canSend: Bool {
-        hasText || !attachments.isEmpty
+        hasText
     }
 
     private var isFocused: Bool { focus.wrappedValue }
