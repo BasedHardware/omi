@@ -1312,27 +1312,33 @@ struct ImportConnectorSheet: View {
             .buttonStyle(.plain)
 
             ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(OmiColors.backgroundSecondary)
                     .overlay(
-                        RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .stroke(
+                                Color.white.opacity(draftFocused ? 0.18 : 0.08),
+                                lineWidth: 1
+                            )
                     )
 
                 if draftText.isEmpty {
                     Text("Paste the full \(connector.title) response here…")
                         .scaledFont(size: 13)
                         .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 14)
+                        .padding(.horizontal, draftFieldHorizontalInset)
+                        .padding(.vertical, draftFieldVerticalInset)
+                        .allowsHitTesting(false)
                 }
 
                 TextEditor(text: $draftText)
                     .scrollContentBackground(.hidden)
                     .font(.system(size: 13))
                     .foregroundColor(OmiColors.textPrimary)
-                    .frame(minHeight: 220)
-                    .padding(8)
+                    // NSTextView adds a built-in 5pt line-fragment inset, so
+                    // subtract it here to align the caret with the placeholder.
+                    .padding(.horizontal, draftFieldHorizontalInset - 5)
+                    .padding(.vertical, draftFieldVerticalInset)
                     // The running import consumed the text captured at start,
                     // so edits mid-run would be ignored — and a success landing
                     // from a run started in an earlier sheet instance clears
@@ -1342,6 +1348,10 @@ struct ImportConnectorSheet: View {
                     .focused($draftFocused)
                     .disabled(isRunning)
             }
+            // Collapsed until the user engages, per the macOS convention for
+            // paste-blob inputs in compact modals: grow on focus or content.
+            .frame(height: draftFieldExpanded ? 200 : 64)
+            .animation(.easeInOut(duration: 0.18), value: draftFieldExpanded)
 
             Button {
                 startMemoryLogImport()
@@ -1424,6 +1434,15 @@ struct ImportConnectorSheet: View {
     private var isDraftEmpty: Bool {
         draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    // Collapsed while empty (even when focused, since macOS auto-focuses the
+    // editor on open); grows once there is text to paste/type into.
+    private var draftFieldExpanded: Bool {
+        !draftText.isEmpty
+    }
+
+    private let draftFieldHorizontalInset: CGFloat = 14
+    private let draftFieldVerticalInset: CGFloat = 12
 
     private func startMemoryLogImport() {
         // The Import button is disabled while the draft is empty; this guard
