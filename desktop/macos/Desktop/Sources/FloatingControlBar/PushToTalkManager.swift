@@ -1345,6 +1345,65 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// Routing state the mic-frame closures consult per chunk. Lock-guarded so a
+  /// parked (warm) capture can be re-leased to a new turn without reinstalling
+  /// closures on a running capture (the IOProc thread reads them).
+  private final class MicCaptureLease {
+    private let lock = NSLock()
+    private var _generation: UInt64
+    private var _batchMode: Bool
+    init(generation: UInt64, batchMode: Bool) {
+      _generation = generation
+      _batchMode = batchMode
+    }
+    func snapshot() -> (generation: UInt64, batchMode: Bool) {
+      lock.lock()
+      defer { lock.unlock() }
+      return (_generation, _batchMode)
+    }
+    func renew(generation: UInt64, batchMode: Bool) {
+      lock.lock()
+      _generation = generation
+      _batchMode = batchMode
+      lock.unlock()
+    }
+  }
+
+  /// Warm mic keep-alive: opening a CoreAudio input can take seconds under
+  /// load (observed ~5s with capture pipelines spinning up), which makes a
+  /// PTT turn hear nothing. Instead of destroying the capture at turn end,
+  /// park it running-but-dropped and re-lease it on the next press.
+  private var parkedMicCapture:
+    (service: AudioCaptureService, lease: MicCaptureLease, overrideID: AudioDeviceID?)?
+  private var parkedMicExpiryTask: Task<Void, Never>?
+  private var activeMicLease: MicCaptureLease?
+  private var activeMicOverrideID: AudioDeviceID?
+  private static let parkedMicKeepAliveSeconds: UInt64 = 120
+
+  private func parkMicCapture(_ service: AudioCaptureService, lease: MicCaptureLease, overrideID: AudioDeviceID?) {
+    parkedMicExpiryTask?.cancel()
+    if let old = parkedMicCapture, old.service !== service {
+      old.service.stopCapture()
+    }
+    parkedMicCapture = (service, lease, overrideID)
+    parkedMicExpiryTask = Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: Self.parkedMicKeepAliveSeconds * 1_000_000_000)
+      guard let self, !Task.isCancelled else { return }
+      if let parked = self.parkedMicCapture {
+        parked.service.stopCapture()
+        self.parkedMicCapture = nil
+        log("PushToTalkManager: warm mic keep-alive expired — capture released")
+      }
+    }
+  }
+
+  private func discardParkedMicCapture() {
+    parkedMicExpiryTask?.cancel()
+    parkedMicExpiryTask = nil
+    parkedMicCapture?.service.stopCapture()
+    parkedMicCapture = nil
+  }
+
   private func startMicCapture(
     batchMode: Bool = false,
     overrideDeviceID: AudioDeviceID? = nil,
@@ -1362,7 +1421,31 @@ class PushToTalkManager: ObservableObject {
     micCaptureStartInFlight = true
     micCaptureGeneration &+= 1
     let generation = micCaptureGeneration
+
+    // Warm reuse: a parked capture on the same device skips the multi-second
+    // CoreAudio device open entirely — the turn hears audio immediately.
+    if let parked = parkedMicCapture, parked.overrideID == overrideDeviceID, parked.service.capturing {
+      parkedMicExpiryTask?.cancel()
+      parkedMicExpiryTask = nil
+      parkedMicCapture = nil
+      parked.lease.renew(generation: generation, batchMode: batchMode)
+      parked.service.resetSilentMicWatchdog()
+      audioCaptureService = parked.service
+      micCaptureStartInFlight = false
+      if let diagnosticRecoveryAction {
+        DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
+          recoveryAction: diagnosticRecoveryAction,
+          recoveryResult: "succeeded_warm_reuse")
+      }
+      log("PushToTalkManager: mic capture adopted from warm keep-alive (batch=\(batchMode))")
+      return
+    }
+    discardParkedMicCapture()
+
     let capture = overrideDeviceID.map(AudioCaptureService.init(overrideDeviceID:)) ?? AudioCaptureService()
+    let lease = MicCaptureLease(generation: generation, batchMode: batchMode)
+    activeMicLease = lease
+    activeMicOverrideID = overrideDeviceID
     audioCaptureService = capture
 
     // Silent-mic watchdog: Bluetooth inputs can return zeros during A2DP/HFP conflicts,
@@ -1371,8 +1454,10 @@ class PushToTalkManager: ObservableObject {
     capture.detectSilentMicOnAnyTransport = true
     capture.onSilentMicDetected = { [weak self] detection in
       Task { @MainActor in
-        guard let self, self.micCaptureGeneration == generation else { return }
-        self.handleSilentMicDetection(detection, batchMode: batchMode)
+        guard let self else { return }
+        let leased = lease.snapshot()
+        guard self.micCaptureGeneration == leased.generation else { return }
+        self.handleSilentMicDetection(detection, batchMode: leased.batchMode)
       }
     }
 
@@ -1382,7 +1467,10 @@ class PushToTalkManager: ObservableObject {
         try await capture.startCapture(
           onAudioChunk: { [weak self] audioData in
             guard let self else { return }
-            guard self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else { return }
+            let leased = lease.snapshot()
+            guard self.micCaptureGeneration == leased.generation, self.shouldKeepMicCaptureAlive else { return }
+            let batchMode = leased.batchMode
+            let generation = leased.generation
             if self.isHubMode {
               // Realtime hub owns this turn — stream mic PCM straight to it, and
               // retain it so finalize() can silence-gate the turn.
@@ -1409,7 +1497,9 @@ class PushToTalkManager: ObservableObject {
             }
           },
           onAudioLevel: { [weak self] level in
-            guard let self, self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else { return }
+            guard let self, self.micCaptureGeneration == lease.snapshot().generation,
+              self.shouldKeepMicCaptureAlive
+            else { return }
             // Feed the floating-bar mic waveform (VoiceWaveformBars). Throttled to ~5 Hz
             // inside the monitor; used only for visualization.
             AudioLevelMonitor.shared.updateMicrophoneLevel(level)
@@ -1417,19 +1507,21 @@ class PushToTalkManager: ObservableObject {
         )
         let isCurrentGeneration = self.micCaptureGeneration == generation
         guard isCurrentGeneration, self.shouldKeepMicCaptureAlive else {
-          capture.stopCapture()
+          // The device is finally open — keep it warm for the next press
+          // instead of paying the multi-second open again.
           if self.audioCaptureService === capture {
             self.audioCaptureService = nil
           }
           if isCurrentGeneration {
             self.micCaptureStartInFlight = false
           }
+          self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)
           if let diagnosticRecoveryAction {
             DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
               recoveryAction: diagnosticRecoveryAction,
-              recoveryResult: "ignored_turn_ended")
+              recoveryResult: "ignored_turn_ended_parked_warm")
           }
-          log("PushToTalkManager: mic capture start completed after turn ended — stopped")
+          log("PushToTalkManager: mic capture start completed after turn ended — parked warm")
           return
         }
         self.micCaptureStartInFlight = false
@@ -1470,7 +1562,7 @@ class PushToTalkManager: ObservableObject {
        builtInID != detection.deviceID {
       log("PushToTalkManager: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
       silentMicRecoveryPolicy.recordCaptureRebuild()
-      stopMicCapture()
+      stopMicCapture(parkWarm: false)
       clearBufferedTurnAudio()
       startMicCapture(
         batchMode: batchMode,
@@ -1496,7 +1588,7 @@ class PushToTalkManager: ObservableObject {
   private func requestCoreAudioCaptureRecovery(reason: String, restartPTT: Bool, batchMode: Bool) {
     log("PushToTalkManager: requesting CoreAudio capture rebuild — \(reason)")
     silentMicRecoveryPolicy.recordCaptureRebuild()
-    stopMicCapture()
+    stopMicCapture(parkWarm: false)
     clearBufferedTurnAudio()
     NotificationCenter.default.post(
       name: .coreAudioCaptureRecoveryRequested,
@@ -1546,11 +1638,22 @@ class PushToTalkManager: ObservableObject {
     state == .listening || state == .lockedListening
   }
 
-  private func stopMicCapture() {
+  private func stopMicCapture(parkWarm: Bool = true) {
     micCaptureGeneration &+= 1
     micCaptureStartInFlight = false
-    audioCaptureService?.stopCapture()
+    if parkWarm, let service = audioCaptureService, service.capturing, let lease = activeMicLease {
+      // Turn ended: keep the open device warm so the next press hears
+      // audio immediately (frames are dropped via the generation guard).
+      parkMicCapture(service, lease: lease, overrideID: activeMicOverrideID)
+    } else {
+      audioCaptureService?.stopCapture()
+      if !parkWarm {
+        discardParkedMicCapture()
+      }
+    }
     audioCaptureService = nil
+    activeMicLease = nil
+    activeMicOverrideID = nil
   }
 
   private func stopAudioTranscription() {
