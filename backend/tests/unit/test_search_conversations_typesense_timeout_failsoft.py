@@ -20,6 +20,19 @@ def test_search_conversations_typesense_timeout_failsoft():
             search_conversations(uid='uid-1', query='meeting notes')
 
 
+def test_search_conversations_typesense_service_unavailable_failsoft():
+    class ServiceUnavailable(Exception):
+        pass
+
+    ServiceUnavailable.__module__ = 'typesense.exceptions'
+    with patch('utils.conversations.search.client') as mock_client:
+        mock_client.collections['conversations'].documents.search.side_effect = ServiceUnavailable(
+            '{"message":"not ready"}'
+        )
+        with pytest.raises(ConversationSearchUnavailableError):
+            search_conversations(uid='uid-1', query='meeting notes')
+
+
 def test_search_conversations_non_transient_error_still_raises():
     with patch('utils.conversations.search.client') as mock_client:
         mock_client.collections['conversations'].documents.search.side_effect = ValueError('bad query shape')

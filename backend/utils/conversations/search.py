@@ -26,7 +26,13 @@ def _is_typesense_transient_error(exc: BaseException) -> bool:
         return True
     module = type(exc).__module__
     name = type(exc).__name__
-    return module.endswith('exceptions') and name in {'Timeout', 'ConnectTimeout', 'ReadTimeout', 'ConnectionError'}
+    return module.endswith('exceptions') and name in {
+        'Timeout',
+        'ConnectTimeout',
+        'ReadTimeout',
+        'ConnectionError',
+        'ServiceUnavailable',
+    }
 
 
 client = typesense.Client(
