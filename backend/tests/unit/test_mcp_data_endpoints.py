@@ -145,6 +145,18 @@ sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenErr
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
+# The heavy-dep stubs replace the real `google` namespace with an auto-mock, so
+# `from google.api_core.exceptions import FailedPrecondition` (used by mcp_sse's #9189
+# typed-error mapping) can't resolve. Register a real exception class under that path so
+# the import works and the tool's except clause and this test's raiser share one class.
+_gapic_exceptions = ModuleType('google.api_core.exceptions')
+_gapic_exceptions.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
+_gapic_api_core = ModuleType('google.api_core')
+_gapic_api_core.exceptions = _gapic_exceptions
+sys.modules['google.api_core'] = _gapic_api_core
+sys.modules['google.api_core.exceptions'] = _gapic_exceptions
+sys.modules['google'].api_core = _gapic_api_core
+
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
 
@@ -492,6 +504,17 @@ class TestScreenActivity:
         mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
         result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
         assert result['total_screenshots'] == 0
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_maps_missing_index_to_actionable_error(self, mock_db):
+        # A filtered query on a missing/building Firestore index raises FailedPrecondition;
+        # it must surface as a typed ToolExecutionError, not a raw 500 (#9189).
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc:
+            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
+        assert 'index' in str(exc.value).lower()
 
 
 class TestDailySummaries:

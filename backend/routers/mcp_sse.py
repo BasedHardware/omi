@@ -19,6 +19,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 from pydantic import BaseModel
 
 import firebase_admin.auth
+from google.api_core.exceptions import FailedPrecondition
 from fastapi import APIRouter, HTTPException, Header, Request, Response, Form
 from fastapi.responses import StreamingResponse, JSONResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -1288,15 +1289,25 @@ def execute_tool(
         end = _parse_mcp_date(arguments.get("end_date"), "end_date")
         app = arguments.get("app")
         summary = parse_mcp_bool(arguments.get("summary"), "summary", default=False)
-        if summary:
-            return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
         try:
             limit = parse_mcp_int(arguments.get("limit"), "limit", default=200, minimum=1, maximum=1000)
         except ValueError as e:
             raise ToolExecutionError(str(e), code=-32602)
-        rows = screen_activity_db.get_screen_activity(
-            user_id, start_date=start, end_date=end, app_filter=app, limit=limit
-        )
+        # A filtered screen-activity query needs a composite Firestore index; while that index is
+        # still building (or missing) Firestore raises FailedPrecondition, which would otherwise
+        # surface as a raw 500. Convert it into an actionable typed tool error instead. (#9189)
+        try:
+            if summary:
+                return screen_activity_db.get_screen_activity_summary(user_id, start_date=start, end_date=end)
+            rows = screen_activity_db.get_screen_activity(
+                user_id, start_date=start, end_date=end, app_filter=app, limit=limit
+            )
+        except FailedPrecondition as e:
+            raise ToolExecutionError(
+                "Screen activity is temporarily unavailable for this query while a database index "
+                "finishes building. Retry without the app filter, or try again in a few minutes.",
+                code=-32000,
+            ) from e
         return {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
 
     elif tool_name == "get_daily_summaries":
