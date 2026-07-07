@@ -1,0 +1,23 @@
+backend/routers/google_calendar.py
+  s_9b37231caca872::t_1945b59d7d6d07 17
+  s_9b37231caca872::t_00f9c2a09da719 121-149
+backend/utils/retrieval/tools/calendar_tools.py
+  s_9b37231caca872::t_e1cb1a1a915eeb 239,252-253
+  s_9b37231caca872::t_bf130ee579015d 295-297
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "d1d751cb05baced3607c0370d12b7ce4591ae75d",
+  "prompts": {},
+  "sessions": {
+    "s_9b37231caca872": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ba397e6-4570-42c8-8b46-2c4828c26dd8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
