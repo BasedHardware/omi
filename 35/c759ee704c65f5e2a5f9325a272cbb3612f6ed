@@ -1,0 +1,21 @@
+backend/utils/retrieval/tool_services/person_service.py
+  s_edfd59e96df44b::t_0130d82aea269b 82-95
+backend/tests/unit/test_person_service.py
+  s_edfd59e96df44b::t_f5f8015d5b0370 119-141
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "35c759ee704c65f5e2a5f9325a272cbb3612f6ed",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
