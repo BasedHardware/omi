@@ -259,6 +259,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return
     }
 
+    // Running from the mounted DMG / a translocated mount breaks TCC permissions
+    // and Sparkle updates — install to /Applications and relaunch before any
+    // services start. Returns true when this process is being replaced.
+    if AppInstaller.moveToApplicationsIfNeeded() {
+      return
+    }
+
     // Ignore SIGPIPE so broken-pipe writes return errors instead of crashing the app.
     // Without this, writing to a dead FFmpeg stdin or agent-bridge pipe kills the process.
     signal(SIGPIPE, SIG_IGN)

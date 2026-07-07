@@ -1,0 +1,3 @@
+{
+  "change": "Omi now installs itself to Applications when launched from the downloaded disk image, fixing screen-recording permissions that wouldn't stick and the installer window reappearing after onboarding restarts; the onboarding language step also retries transient save failures instead of immediately showing a connection error"
+}
