@@ -1,0 +1,81 @@
+backend/utils/llm/reply_scheduling.py
+  s_9b37231caca872::t_6919bad5a03fee 37
+  s_9b37231caca872::t_963dc2b5550301 387-389
+  s_9b37231caca872::t_0f04ecc2485df4 493-536
+  s_9b37231caca872::t_791ab252313845 214,254,414,424,458
+  s_9b37231caca872::t_cf47955fde3dc4 398-400
+  s_9b37231caca872::t_7bc59908de1234 1-36,38-213,215-253,255-386,390-397,401-413,415-423,425-457,459-492
+desktop/macos/changelog/unreleased/20260706-auto-reply-needs-input.json
+  s_809387decd82d4::t_a82ebe6449389f 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingNeedsInput.swift
+  s_809387decd82d4::t_0d0eb2a5453aa9 1-92
+desktop/macos/changelog/unreleased/20260706-messaging-availability-holds.json
+  s_9b37231caca872::t_dd05cbfce73e17 1-3
+backend/utils/llm/reply_draft.py
+  s_9b37231caca872::t_1873c8cb149f0d 699
+  s_9b37231caca872::t_6a19b2c58d7b63 369-371
+  s_809387decd82d4::t_dd43f020229257 797-805
+  s_809387decd82d4::t_ed643051156e73 629,633
+  s_9b37231caca872::t_4ed8a6792ad468 765
+  s_9b37231caca872::t_66a71a4d7969e9 479
+  s_9b37231caca872::t_217134b3e9fa4e 364
+  s_9b37231caca872::t_01755ec8ac46a7 462
+  s_809387decd82d4::t_95108f0f3e36e8 612-628,630-632,634-689
+  s_9b37231caca872::t_9ca8a371d32d98 389-409
+  s_9b37231caca872::t_5cb7a178cc626b 806-814
+  s_edfd59e96df44b::t_c320bdf3a1c288 690-691
+desktop/macos/Desktop/Sources/DraftHold.swift
+  s_9b37231caca872::t_dc90e8a55f3606 1-32
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_809387decd82d4::t_a8de774ec7cc43 339-341
+  s_809387decd82d4::t_84036801c4b6e1 325-326,331-334
+  s_809387decd82d4::t_4e0f07a869f4d6 257-258
+  s_809387decd82d4::t_3931ee93628be8 192-199
+backend/tests/unit/test_reply_draft.py
+  s_809387decd82d4::t_86247137c718b0 173
+  s_809387decd82d4::t_39f28d326a7556 136
+  s_809387decd82d4::t_3321ea458aa99a 81-83
+  s_9b37231caca872::t_43d114e9fa8cff 289-311
+  s_9b37231caca872::t_62f0e6da48b566 312-313
+backend/tests/unit/test_reply_draft_escalation.py
+  s_809387decd82d4::t_5eade8c1de5d34 214
+  s_809387decd82d4::t_1576c9fa1fa4e7 1-213,215-225
+backend/tests/unit/test_reply_scheduling.py
+  s_9b37231caca872::t_a1c94506c2a183 1-29,56-76,83-238
+  s_9b37231caca872::t_019418175a4c3f 30-55
+  s_9b37231caca872::t_22d3e2c374d0c3 251-256
+  s_9b37231caca872::t_9397b3485eb935 239-250,257-266,272-279,285-293,299-307,313-318
+  s_9b37231caca872::t_791ab252313845 77-82,267-271,280-284,294-298,308-312
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "49c60e6c818266e36fb19cf4685838216bf475bc",
+  "prompts": {},
+  "sessions": {
+    "s_809387decd82d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92047e7b-a159-4481-8ade-63354d6fb77e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_9b37231caca872": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ba397e6-4570-42c8-8b46-2c4828c26dd8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
