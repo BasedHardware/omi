@@ -726,17 +726,6 @@ struct DashboardPage: View {
 
     private var homeChatPanel: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("Ask omi")
-                    .font(.system(size: 19, weight: .medium, design: .serif))
-                    .foregroundStyle(HomePalette.ink)
-
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 16)
-            .padding(.bottom, 2)
-
             ChatMessagesView(
                 messages: chatProvider.messages,
                 isSending: chatProvider.isSending,
@@ -772,17 +761,28 @@ struct DashboardPage: View {
                 )
             )
             .padding(.horizontal, 8)
-            .padding(.bottom, 6)
+            .padding(.vertical, 6)
         }
         // Barely-there card so the chat reads as a bounded surface — making it
         // obvious the canvas around it is clickable (and closes the chat).
+        // The stroke is a soft gradient that dissolves toward the bottom.
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color.white.opacity(0.016))
+                .fill(Color.white.opacity(0.012))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            HomePalette.hairline.opacity(0.45),
+                            HomePalette.hairline.opacity(0.10),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
         )
         .frame(maxWidth: Self.homeStagePanelMaxWidth)
         .padding(.horizontal, Self.homeStageHorizontalPadding)
