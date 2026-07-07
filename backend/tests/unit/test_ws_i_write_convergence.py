@@ -134,6 +134,11 @@ class _DocRef:
             return
         self._db.docs[self.path] = data
 
+    def update(self, data):
+        if self.path not in self._db.docs:
+            raise KeyError(self.path)
+        self._db.docs[self.path] = self._db.docs[self.path] | data
+
 
 class _CollectionRef:
     def __init__(self, db, path):
