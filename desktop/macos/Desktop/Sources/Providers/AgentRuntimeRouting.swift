@@ -221,19 +221,37 @@ enum LocalAgentProviderDetector {
         return nil
     }
 
-    /// Fixed directories both the detector (here) and the runtime bridge
+    /// Curated directories both the detector (here) and the runtime bridge
     /// (AgentRuntimeProcess) search for external agent binaries. Shared so the
-    /// two never disagree about whether an agent is available. The bridge also
-    /// searches the user's live PATH on top of these.
-    static func adapterActivationSearchDirectories(homeDirectory: String) -> [String] {
-        [
+    /// two never disagree about whether an agent is available. Deliberately a
+    /// whitelist of well-known install locations (package managers + version
+    /// managers) rather than the inherited PATH: discovered binaries are
+    /// launched as child processes, so arbitrary user-controlled PATH entries
+    /// must not participate in discovery.
+    static func adapterActivationSearchDirectories(
+        homeDirectory: String,
+        fileManager: FileManager = .default
+    ) -> [String] {
+        var dirs = [
             "\(homeDirectory)/.hermes/hermes-agent/venv/bin",
             "\(homeDirectory)/.hermes/node/bin",
             "\(homeDirectory)/.hermes/hermes-agent",
             "\(homeDirectory)/.codex/bin",
             "\(homeDirectory)/.local/bin",
+            "\(homeDirectory)/.volta/bin",
+            "\(homeDirectory)/.asdf/shims",
+            "\(homeDirectory)/.npm-global/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
         ]
+        // nvm installs global binaries under versioned dirs; include each
+        // installed version's bin (newest first).
+        let nvmVersions = "\(homeDirectory)/.nvm/versions/node"
+        if let versions = try? fileManager.contentsOfDirectory(atPath: nvmVersions) {
+            for version in versions.sorted(by: { $0.compare($1, options: .numeric) == .orderedDescending }) {
+                dirs.append("\(nvmVersions)/\(version)/bin")
+            }
+        }
+        return dirs
     }
 }

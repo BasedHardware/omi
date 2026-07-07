@@ -199,10 +199,12 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(source.contains("guard adapterId == .hermes || adapterId == .openclaw else"))
     XCTAssertTrue(source.contains(#"env["HOME"] = home"#))
     XCTAssertTrue(source.contains(#"env["HERMES_HOME"] = "\(home)/.hermes""#))
-    // Discovery shares its search dirs with the detector and also scans the live PATH.
+    // Discovery shares its curated search dirs with the detector; the inherited
+    // PATH is used only to assemble the subprocess PATH, never for discovery.
     XCTAssertTrue(source.contains("LocalAgentProviderDetector.adapterActivationSearchDirectories(homeDirectory: home)"))
     XCTAssertTrue(source.contains("existingPath.split(separator: \":\").map(String.init)"))
-    XCTAssertTrue(source.contains("for path in pathDirs + sharedSearchDirs"))
+    XCTAssertTrue(source.contains("for path in pathDirs + adapterSearchDirs"))
+    XCTAssertFalse(source.contains("sharedSearchDirs + pathDirs"))
     XCTAssertTrue(source.contains(#"env["PATH"] = pathElements.joined(separator: ":")"#))
     XCTAssertTrue(source.contains(#"env["OMI_OPENCLAW_ADAPTER_COMMAND"]"#))
     XCTAssertTrue(source.contains(#"env["OMI_HERMES_ADAPTER_COMMAND"]"#))
