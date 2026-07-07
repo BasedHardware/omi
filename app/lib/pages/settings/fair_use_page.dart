@@ -69,27 +69,27 @@ class _FairUsePageState extends State<FairUsePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _error != null
-          ? _buildError()
-          : _status == null
-          ? _buildError()
-          : RefreshIndicator(
-              onRefresh: _loadStatus,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildStatusBanner(),
-                    _buildUsageSection(),
-                    _buildBudgetSection(),
-                    _buildMessageBanner(),
-                    const SizedBox(height: 24),
-                    _buildAboutFooter(),
-                  ],
-                ),
-              ),
-            ),
+              ? _buildError()
+              : _status == null
+                  ? _buildError()
+                  : RefreshIndicator(
+                      onRefresh: _loadStatus,
+                      child: SingleChildScrollView(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildStatusBanner(),
+                            _buildUsageSection(),
+                            _buildBudgetSection(),
+                            _buildMessageBanner(),
+                            const SizedBox(height: 24),
+                            _buildAboutFooter(),
+                          ],
+                        ),
+                      ),
+                    ),
     );
   }
 
@@ -237,8 +237,8 @@ class _FairUsePageState extends State<FairUsePage> {
     final barColor = pct >= 100
         ? const Color(0xFFEF4444)
         : pct >= 80
-        ? const Color(0xFFFBBF24)
-        : const Color(0xFF8B5CF6);
+            ? const Color(0xFFFBBF24)
+            : const Color(0xFF8B5CF6);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

@@ -210,7 +210,7 @@ class CircularDotsIndicator extends CustomPainter {
   final Animation<double> animation;
 
   CircularDotsIndicator({required this.progress, required this.isRefreshing, required this.animation})
-    : super(repaint: animation);
+      : super(repaint: animation);
 
   @override
   void paint(Canvas canvas, Size size) {

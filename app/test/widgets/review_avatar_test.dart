@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
-  home: Scaffold(body: Center(child: child)),
-);
+      home: Scaffold(body: Center(child: child)),
+    );
 
 void main() {
   group('ReviewAvatar', () {

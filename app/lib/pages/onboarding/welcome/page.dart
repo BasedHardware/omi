@@ -164,8 +164,8 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                           image: DecorationImage(
                             image: ResizeImage(
                               AssetImage(Assets.images.onboardingBg51.path),
-                              width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
-                                  .round(),
+                              width:
+                                  (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
                               height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
                                   .round(),
                             ),

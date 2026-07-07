@@ -372,8 +372,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                                 _selectedContacts.isEmpty
                                     ? context.l10n.selectContactsToShare
                                     : _selectedContacts.length > 1
-                                    ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                    : context.l10n.shareWithContactCount(_selectedContacts.length),
+                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
+                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
                                 style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
                               ),
                       ),

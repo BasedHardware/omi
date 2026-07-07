@@ -58,8 +58,8 @@ class InfoCardWidget extends StatelessWidget {
               maxLines != null
                   ? description.decodeString
                   : (description.decodeString.characters.length > 200
-                        ? '${description.decodeString.characters.take(200).toString().trim()}...'
-                        : description.decodeString),
+                      ? '${description.decodeString.characters.take(200).toString().trim()}...'
+                      : description.decodeString),
               style: const TextStyle(color: Colors.grey, fontSize: 15, height: 1.4),
               maxLines: maxLines,
               overflow: maxLines != null ? TextOverflow.ellipsis : null,

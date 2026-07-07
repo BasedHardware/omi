@@ -105,10 +105,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                         try {
                           await replyToAppReview(widget.app.id, controller.text.trim(), review.uid);
                           context.read<AppProvider>().updateLocalAppReviewResponse(
-                            widget.app.id,
-                            controller.text.trim(),
-                            review.uid,
-                          );
+                                widget.app.id,
+                                controller.text.trim(),
+                                review.uid,
+                              );
                           review.response = controller.text.trim();
                           review.respondedAt = DateTime.now();
                           if (mounted) {

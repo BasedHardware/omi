@@ -18,7 +18,7 @@ class PhoneCallToken {
   final DateTime expiresAt;
 
   PhoneCallToken({required this.accessToken, required this.ttl, required this.identity})
-    : expiresAt = DateTime.now().add(Duration(seconds: ttl));
+      : expiresAt = DateTime.now().add(Duration(seconds: ttl));
 
   factory PhoneCallToken.fromJson(Map<String, dynamic> json) {
     return PhoneCallToken.fromGenerated(wire.GeneratedTokenResponse.fromJson(json));

@@ -294,50 +294,50 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                               ],
                             )
                           : provider.text.isEmpty
-                          ? const SizedBox.shrink()
-                          : Padding(
-                              padding: const EdgeInsets.only(top: 80.0),
-                              child: LayoutBuilder(
-                                builder: (context, constraints) {
-                                  return ShaderMask(
-                                    shaderCallback: (bounds) {
-                                      if (provider.text.split(' ').length < 10) {
-                                        return const LinearGradient(
-                                          colors: [Colors.white, Colors.white],
-                                        ).createShader(bounds);
-                                      }
-                                      return const LinearGradient(
-                                        colors: [Colors.transparent, Colors.white],
-                                        stops: [0.0, 0.5],
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                      ).createShader(bounds);
-                                    },
-                                    blendMode: BlendMode.dstIn,
-                                    child: SizedBox(
-                                      height: 130,
-                                      child: ListView(
-                                        controller: _scrollController,
-                                        shrinkWrap: true,
-                                        physics: const NeverScrollableScrollPhysics(),
-                                        children: [
-                                          Text(
-                                            provider.text,
-                                            textAlign: TextAlign.center,
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 20,
-                                              fontWeight: FontWeight.w400,
-                                              height: 1.5,
-                                            ),
+                              ? const SizedBox.shrink()
+                              : Padding(
+                                  padding: const EdgeInsets.only(top: 80.0),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      return ShaderMask(
+                                        shaderCallback: (bounds) {
+                                          if (provider.text.split(' ').length < 10) {
+                                            return const LinearGradient(
+                                              colors: [Colors.white, Colors.white],
+                                            ).createShader(bounds);
+                                          }
+                                          return const LinearGradient(
+                                            colors: [Colors.transparent, Colors.white],
+                                            stops: [0.0, 0.5],
+                                            begin: Alignment.topCenter,
+                                            end: Alignment.bottomCenter,
+                                          ).createShader(bounds);
+                                        },
+                                        blendMode: BlendMode.dstIn,
+                                        child: SizedBox(
+                                          height: 130,
+                                          child: ListView(
+                                            controller: _scrollController,
+                                            shrinkWrap: true,
+                                            physics: const NeverScrollableScrollPhysics(),
+                                            children: [
+                                              Text(
+                                                provider.text,
+                                                textAlign: TextAlign.center,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 20,
+                                                  fontWeight: FontWeight.w400,
+                                                  height: 1.5,
+                                                ),
+                                              ),
+                                            ],
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
                     ),
                   ),
                   Align(
@@ -445,68 +445,69 @@ class _SpeechProfilePageState extends State<SpeechProfilePage> with TickerProvid
                               ],
                             )
                           : provider.profileCompleted
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                              decoration: BoxDecoration(
-                                border: const GradientBoxBorder(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Color.fromARGB(127, 208, 208, 208),
-                                      Color.fromARGB(127, 188, 99, 121),
-                                      Color.fromARGB(127, 86, 101, 182),
-                                      Color.fromARGB(127, 126, 190, 236),
-                                    ],
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                                  decoration: BoxDecoration(
+                                    border: const GradientBoxBorder(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Color.fromARGB(127, 208, 208, 208),
+                                          Color.fromARGB(127, 188, 99, 121),
+                                          Color.fromARGB(127, 86, 101, 182),
+                                          Color.fromARGB(127, 126, 190, 236),
+                                        ],
+                                      ),
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
-                                  width: 2,
-                                ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: TextButton(
-                                onPressed: () {
-                                  // Conversation processing already triggered in finalize()
-                                  Navigator.pop(context);
-                                },
-                                child: Text(
-                                  context.l10n.allDone,
-                                  style: const TextStyle(color: Colors.white, fontSize: 16),
-                                ),
-                              ),
-                            )
-                          : provider.uploadingProfile
-                          ? const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white))
-                          : Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(height: 8),
-                                FadeTransition(
-                                  opacity: _questionFadeAnimation,
-                                  child: Text(
-                                    provider.currentQuestion,
-                                    style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
-                                    textAlign: TextAlign.center,
+                                  child: TextButton(
+                                    onPressed: () {
+                                      // Conversation processing already triggered in finalize()
+                                      Navigator.pop(context);
+                                    },
+                                    child: Text(
+                                      context.l10n.allDone,
+                                      style: const TextStyle(color: Colors.white, fontSize: 16),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 8),
-                                SizedBox(
-                                  width: MediaQuery.sizeOf(context).width * 0.9,
-                                  child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  context.l10n.keepGoingGreat,
-                                  style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
-                                  textAlign: TextAlign.center,
-                                ),
-                                const SizedBox(height: 8),
-                                TextButton(
-                                  onPressed: () => provider.skipCurrentQuestion(),
-                                  child: Text(
-                                    context.l10n.skipThisQuestion,
-                                    style: const TextStyle(color: Colors.white70, fontSize: 14),
-                                  ),
-                                ),
-                              ],
-                            ),
+                                )
+                              : provider.uploadingProfile
+                                  ? const CircularProgressIndicator(
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white))
+                                  : Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const SizedBox(height: 8),
+                                        FadeTransition(
+                                          opacity: _questionFadeAnimation,
+                                          child: Text(
+                                            provider.currentQuestion,
+                                            style: const TextStyle(color: Colors.white, fontSize: 22, height: 1.3),
+                                            textAlign: TextAlign.center,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        SizedBox(
+                                          width: MediaQuery.sizeOf(context).width * 0.9,
+                                          child: ProgressBarWithPercentage(progressValue: provider.questionProgress),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          context.l10n.keepGoingGreat,
+                                          style: TextStyle(color: Colors.grey.shade300, fontSize: 14, height: 1.3),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                        const SizedBox(height: 8),
+                                        TextButton(
+                                          onPressed: () => provider.skipCurrentQuestion(),
+                                          child: Text(
+                                            context.l10n.skipThisQuestion,
+                                            style: const TextStyle(color: Colors.white70, fontSize: 14),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                     ),
                   ),
                 ],

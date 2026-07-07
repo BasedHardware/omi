@@ -87,9 +87,8 @@ class _PaymentsPageState extends State<PaymentsPage> {
                     Consumer<PaymentMethodProvider>(
                       builder: (context, provider, child) {
                         // PayPal is no longer offered; only treat Stripe as a valid active method.
-                        final activeMethod = provider.activeMethod == PaymentMethodType.stripe
-                            ? provider.activeMethod
-                            : null;
+                        final activeMethod =
+                            provider.activeMethod == PaymentMethodType.stripe ? provider.activeMethod : null;
                         final hasActiveMethod = activeMethod != null;
 
                         return Column(
