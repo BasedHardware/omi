@@ -1,0 +1,54 @@
+backend/utils/llm/reply_scheduling.py
+  s_8b147a3524178e::t_892ac4583ac7f3 523-526,534
+backend/utils/llm/reply_draft.py
+  s_8b147a3524178e::t_b56c3c95e31052 1248-1255
+  s_edfd59e96df44b::t_d07a81bbacfcae 1257-1263,1276
+  s_8b147a3524178e::t_7cbc129c405bf6 954-976,978,981-1005
+  s_8b147a3524178e::t_5efde9e4de8343 1016-1026
+  s_8b147a3524178e::t_1d5e7650fc4299 1185
+  s_edfd59e96df44b::t_9834ccf0adb92b 30
+  s_edfd59e96df44b::t_9e91f47d8e92bb 570
+  s_8b147a3524178e::t_7c594a6de309cc 977,979-980
+  s_8b147a3524178e::t_c415174179be80 1050
+  s_edfd59e96df44b::t_4938fafb07c916 635-655,660
+  s_8b147a3524178e::t_13a7bed0862b4a 1081,1084
+  s_8b147a3524178e::t_ca83a0a6f1916d 1176-1182,1184,1186-1193
+  s_8b147a3524178e::t_07cac834c252e5 1046-1049
+  s_8b147a3524178e::t_3582487b3582b3 1256
+backend/tests/unit/test_reply_scheduling.py
+  s_8b147a3524178e::t_96fb890bb76cb4 307-328
+backend/tests/unit/test_reply_draft.py
+  s_8b147a3524178e::t_34d36d8a53e847 710-712
+  s_edfd59e96df44b::t_39a9c5f24a1dd6 290-338,342-343
+  s_8b147a3524178e::t_3915eda7c3bb64 762-763
+  s_8b147a3524178e::t_466a4d43133055 700-704,708-709,714
+  s_8b147a3524178e::t_934c2db5672c98 713,718-727,730-731,735-745,750-761
+  s_edfd59e96df44b::t_96b971abbf6920 339-341
+  s_8b147a3524178e::t_5c3093acdfd209 746-749
+  s_8b147a3524178e::t_dbcaea9159559f 588-591,602-605,613,618,620-622
+  s_edfd59e96df44b::t_697b93ded93ba7 715-717
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6ce7292ff1da9b2219cecafe291e99d1e6164423",
+  "prompts": {},
+  "sessions": {
+    "s_8b147a3524178e": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7ee077d3-7ce9-455d-9b3b-3d68d6cd2ab0",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": null
+    },
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
