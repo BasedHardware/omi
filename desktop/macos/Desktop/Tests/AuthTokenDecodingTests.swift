@@ -76,6 +76,20 @@ final class AuthTokenDecodingTests: XCTestCase {
     }
   }
 
+  func testSignInWithIdpLogsWellFormedMalformedTokenResponses() throws {
+    let source = try desktopSource(relativePath: "Sources/AuthService.swift")
+
+    XCTAssertTrue(source.contains("tokens = try Self.decodeFirebaseTokenResult(from: data)"))
+    XCTAssertTrue(source.contains("OMI AUTH: Failed to parse Firebase signInWithIdp response: %@"))
+  }
+
+  private func desktopSource(relativePath: String) throws -> String {
+    let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+    let desktopURL = testsURL.deletingLastPathComponent()
+    let sourceURL = desktopURL.appendingPathComponent(relativePath)
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
   private func firebaseTokenResponse(idToken: String, expiresIn: Any, localId: String?) throws -> Data {
     var json: [String: Any] = [
       "idToken": idToken,

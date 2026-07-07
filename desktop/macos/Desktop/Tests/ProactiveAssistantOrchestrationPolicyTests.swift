@@ -67,6 +67,39 @@ final class ProactiveAssistantOrchestrationPolicyTests: XCTestCase {
         )
     }
 
+    func testScreenshotAppTransitionCapturesImmediatelyWhenBackoffExpired() {
+        let now = Date(timeIntervalSinceReferenceDate: 3_500)
+
+        XCTAssertEqual(
+            ProactiveAssistantOrchestrationPolicy.screenshotAppDecision(
+                isScreenshotAppFrontmost: false,
+                wasScreenshotAppFrontmost: true,
+                backoffUntil: now.addingTimeInterval(-0.1),
+                now: now,
+                backoffDuration: 10
+            ),
+            .resumeAndCapture
+        )
+    }
+
+    func testScreenshotAndVideoGatesResetStaleState() {
+        var screenshotGate = ProactiveScreenshotCaptureGate()
+        let now = Date(timeIntervalSinceReferenceDate: 3_750)
+        XCTAssertEqual(
+            screenshotGate.nextDecision(isScreenshotAppFrontmost: true, now: now, backoffDuration: 10),
+            .pause(backoffUntil: now.addingTimeInterval(10))
+        )
+
+        screenshotGate.reset()
+        XCTAssertFalse(screenshotGate.wasScreenshotAppFrontmost)
+        XCTAssertEqual(screenshotGate.backoffUntil, .distantPast)
+
+        var videoGate = ProactiveVideoCallThrottleGate()
+        XCTAssertEqual(videoGate.nextDecision(isVideoCall: true, throttleFactor: 5), .skip(nextCounter: 1, didEnterCall: true))
+        videoGate.reset()
+        XCTAssertEqual(videoGate.counter, 0)
+    }
+
     func testVideoCallThrottleCapturesOneOutOfEveryNFrames() {
         let factor = 5
 

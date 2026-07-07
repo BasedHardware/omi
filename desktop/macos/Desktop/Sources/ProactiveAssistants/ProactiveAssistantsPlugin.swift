@@ -455,6 +455,8 @@ public class ProactiveAssistantsPlugin: NSObject {
         distributionDebounceTimer?.invalidate()
         distributionDebounceTimer = nil
         isInDelayPeriod = false
+        screenshotCaptureGate.reset()
+        videoCallThrottleGate.reset()
         distributionGate.reset()
         latestCapturedFrame = nil
 

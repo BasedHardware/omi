@@ -149,6 +149,58 @@ final class LiveNotesMonitorTests: XCTestCase {
         XCTAssertTrue(secondPrompt.contains("- AI kept project context"))
     }
 
+    func testUpdatingAndDeletingDuplicateNotesRebuildsGenerationContextByIdentity() async throws {
+        let generator = FakeLiveNoteGenerator(results: [
+            .success("AI after duplicate edit"),
+            .success("AI after duplicate delete"),
+        ])
+        let storage = FakeLiveNoteStorage(
+            existingNotes: [
+                liveNoteRecord(id: 1, sessionId: 42, text: "duplicate note"),
+                liveNoteRecord(id: 2, sessionId: 42, text: "duplicate note"),
+            ]
+        )
+        let monitor = LiveNotesMonitor(
+            noteGeneratorFactory: { generator },
+            noteStorage: storage
+        )
+        monitor.startSession(sessionId: 42)
+        await waitUntil("duplicate notes loaded") {
+            monitor.notes.map(\.id) == [1, 2]
+        }
+
+        monitor.updateNote(id: 2, text: "edited duplicate note")
+        await waitUntil("duplicate note updated") {
+            monitor.notes.map(\.text) == ["duplicate note", "edited duplicate note"]
+        }
+
+        monitor.handleSegmentsUpdate([segment(text: words(50, prefix: "first"), start: 0, end: 1)])
+        await waitUntil("first duplicate prompt generated") {
+            await generator.prompts().count == 1
+        }
+
+        let firstPrompt = await generator.prompts()[0]
+        XCTAssertTrue(firstPrompt.contains("Existing notes:\n- duplicate note\n- edited duplicate note"))
+
+        monitor.deleteNote(id: 2)
+        await waitUntil("edited duplicate deleted") {
+            monitor.notes.map(\.text) == ["duplicate note", "AI after duplicate edit"]
+        }
+
+        monitor.handleSegmentsUpdate([
+            segment(text: words(50, prefix: "first"), start: 0, end: 1),
+            segment(text: words(50, prefix: "second"), start: 1, end: 2),
+        ])
+        await waitUntil("second duplicate prompt generated") {
+            await generator.prompts().count == 2
+        }
+
+        let secondPrompt = await generator.prompts()[1]
+        XCTAssertTrue(secondPrompt.contains("- duplicate note"))
+        XCTAssertTrue(secondPrompt.contains("- AI after duplicate edit"))
+        XCTAssertFalse(secondPrompt.contains("edited duplicate note"))
+    }
+
     func testLateSessionLoadCannotOverwriteNewSessionNotes() async throws {
         let storage = FakeLiveNoteStorage(
             existingNotes: [
@@ -327,6 +379,7 @@ private actor FakeLiveNoteGenerator: LiveNoteGenerating {
 
 private actor FakeLiveNoteStorage: LiveNoteStoring {
     private var notes: [LiveNoteRecord]
+    private var createdRecords: [LiveNoteRecord] = []
     private var nextId: Int64
     private let createError: Error?
     private let suspendedLoadSessionId: Int64?
@@ -370,6 +423,7 @@ private actor FakeLiveNoteStorage: LiveNoteStoring {
         )
         nextId += 1
         notes.append(record)
+        createdRecords.append(record)
         return record
     }
 
@@ -398,7 +452,7 @@ private actor FakeLiveNoteStorage: LiveNoteStoring {
     }
 
     func createdNotes() -> [LiveNoteRecord] {
-        notes
+        createdRecords
     }
 
     func getLiveNotesCallCount() -> Int {

@@ -130,6 +130,11 @@ struct ProactiveScreenshotCaptureGate {
 
         return decision
     }
+
+    mutating func reset() {
+        wasScreenshotAppFrontmost = false
+        backoffUntil = .distantPast
+    }
 }
 
 struct ProactiveVideoCallThrottleGate {

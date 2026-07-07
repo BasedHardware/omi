@@ -2341,7 +2341,14 @@ class AuthService {
             NSLog("OMI AUTH: Failed to parse Firebase signInWithIdp response")
             throw AuthError.invalidResponse
         }
-        let tokens = try Self.decodeFirebaseTokenResult(from: data)
+
+        let tokens: FirebaseTokenResult
+        do {
+            tokens = try Self.decodeFirebaseTokenResult(from: data)
+        } catch {
+            NSLog("OMI AUTH: Failed to parse Firebase signInWithIdp response: %@", String(data: data, encoding: .utf8) ?? "nil")
+            throw error
+        }
 
         // Get email from response if not already set
         if AuthState.shared.userEmail == nil {

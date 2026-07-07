@@ -182,11 +182,10 @@ class LiveNotesMonitor: ObservableObject {
                 await MainActor.run {
                     if let index = self.notes.firstIndex(where: { $0.id == id }) {
                         var updatedNote = self.notes[index]
-                        let oldText = updatedNote.text
                         updatedNote.text = text
                         updatedNote.updatedAt = Date()
                         self.notes[index] = updatedNote
-                        self.accumulator.replaceExistingNote(oldText: oldText, newText: text)
+                        self.accumulator.seedExistingNotes(self.notes.map { $0.text })
                     }
                 }
             } catch {
@@ -203,8 +202,8 @@ class LiveNotesMonitor: ObservableObject {
 
                 await MainActor.run {
                     if let index = self.notes.firstIndex(where: { $0.id == id }) {
-                        let removedNote = self.notes.remove(at: index)
-                        self.accumulator.removeExistingNote(removedNote.text)
+                        self.notes.remove(at: index)
+                        self.accumulator.seedExistingNotes(self.notes.map { $0.text })
                     }
                 }
             } catch {

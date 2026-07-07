@@ -16,7 +16,7 @@ struct LiveNotesAccumulator {
     private(set) var existingNotesContext: [String] = []
     private(set) var currentSegmentOrder: Int = 0
 
-    private var lastProcessedSegmentEnd: Double?
+    private var processedSegmentWordCounts: [String: Int] = [:]
     private var wordsSinceLastGeneration = 0
 
     init(
@@ -33,7 +33,7 @@ struct LiveNotesAccumulator {
         wordBuffer = []
         existingNotesContext = []
         currentSegmentOrder = 0
-        lastProcessedSegmentEnd = nil
+        processedSegmentWordCounts = [:]
         wordsSinceLastGeneration = 0
     }
 
@@ -46,40 +46,24 @@ struct LiveNotesAccumulator {
         trimExistingNotesContext()
     }
 
-    mutating func replaceExistingNote(oldText: String, newText: String) {
-        guard let index = existingNotesContext.firstIndex(of: oldText) else { return }
-        existingNotesContext[index] = newText
-    }
-
-    mutating func removeExistingNote(_ note: String) {
-        guard let index = existingNotesContext.firstIndex(of: note) else { return }
-        existingNotesContext.remove(at: index)
-    }
-
     mutating func handleSegmentsUpdate(
         _ segments: [SpeakerSegment],
         isGenerating: Bool
     ) -> LiveNotesGenerationRequest? {
         currentSegmentOrder = segments.count
 
-        let newSegments: ArraySlice<SpeakerSegment>
-        if let lastProcessedSegmentEnd {
-            guard let startIndex = segments.firstIndex(where: { $0.end > lastProcessedSegmentEnd }) else {
-                return nil
-            }
-            newSegments = segments[startIndex...]
-        } else {
-            newSegments = segments[...]
-        }
+        let currentSegmentIds = Set(segments.map(\.id))
+        processedSegmentWordCounts = processedSegmentWordCounts.filter { currentSegmentIds.contains($0.key) }
 
-        let newWords = newSegments.flatMap { segment in
-            segment.text.split(separator: " ").map(String.init)
+        let newWords = segments.flatMap { segment in
+            let words = segment.text.split(separator: " ").map(String.init)
+            let processedCount = processedSegmentWordCounts[segment.id] ?? 0
+            processedSegmentWordCounts[segment.id] = words.count
+
+            guard words.count > processedCount else { return [String]() }
+            return Array(words.dropFirst(processedCount))
         }
         guard !newWords.isEmpty else { return nil }
-
-        if let lastSegment = segments.last {
-            lastProcessedSegmentEnd = lastSegment.end
-        }
 
         wordBuffer.append(contentsOf: newWords)
         wordsSinceLastGeneration += newWords.count
@@ -98,7 +82,7 @@ struct LiveNotesAccumulator {
     }
 
     mutating func markGenerationSucceeded(noteText: String) {
-        wordsSinceLastGeneration = 0
+        wordsSinceLastGeneration = max(0, wordsSinceLastGeneration - wordThreshold)
         appendExistingNote(noteText)
     }
 

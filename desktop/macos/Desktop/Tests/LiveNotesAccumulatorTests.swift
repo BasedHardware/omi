@@ -60,6 +60,43 @@ final class LiveNotesAccumulatorTests: XCTestCase {
         XCTAssertEqual(secondRequest?.existingNotesText, "Existing notes:\n- old three\n- new note")
     }
 
+    func testSuccessfulGenerationPreservesOverflowWordsAccumulatedWhileInFlight() {
+        var accumulator = LiveNotesAccumulator(wordThreshold: 3, maxWordBufferSize: 20, maxExistingNotesContext: 3)
+
+        XCTAssertNotNil(accumulator.handleSegmentsUpdate([
+            segment(text: "one two three", start: 0, end: 1),
+        ], isGenerating: false))
+        XCTAssertNil(accumulator.handleSegmentsUpdate([
+            segment(text: "one two three", start: 0, end: 1),
+            segment(text: "four five", start: 1, end: 2),
+        ], isGenerating: true))
+
+        accumulator.markGenerationSucceeded(noteText: "first note")
+
+        let request = accumulator.handleSegmentsUpdate([
+            segment(text: "one two three", start: 0, end: 1),
+            segment(text: "four five", start: 1, end: 2),
+            segment(text: "six", start: 2, end: 3),
+        ], isGenerating: false)
+
+        XCTAssertEqual(request?.recentText, "four five six")
+    }
+
+    func testUpdatedSegmentOnlyAppendsNewWords() {
+        var accumulator = LiveNotesAccumulator(wordThreshold: 4, maxWordBufferSize: 20, maxExistingNotesContext: 3)
+
+        XCTAssertNil(accumulator.handleSegmentsUpdate([
+            segment(id: "backend-1", text: "one two", start: 0, end: 1),
+        ], isGenerating: false))
+
+        let request = accumulator.handleSegmentsUpdate([
+            segment(id: "backend-1", text: "one two three four", start: 0, end: 2),
+        ], isGenerating: false)
+
+        XCTAssertEqual(accumulator.wordBuffer, ["one", "two", "three", "four"])
+        XCTAssertEqual(request?.recentText, "one two three four")
+    }
+
     func testWordBufferTrimsWithoutBlockingFutureGeneration() {
         var accumulator = LiveNotesAccumulator(wordThreshold: 3, maxWordBufferSize: 5, maxExistingNotesContext: 3)
 
@@ -93,9 +130,9 @@ final class LiveNotesAccumulatorTests: XCTestCase {
         XCTAssertEqual(request?.recentText, "two three four")
     }
 
-    private func segment(text: String, start: Double, end: Double) -> SpeakerSegment {
+    private func segment(id: String? = nil, text: String, start: Double, end: Double) -> SpeakerSegment {
         SpeakerSegment(
-            segmentId: nil,
+            segmentId: id,
             speaker: 1,
             text: text,
             start: start,

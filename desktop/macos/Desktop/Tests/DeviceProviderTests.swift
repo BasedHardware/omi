@@ -151,6 +151,34 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertTrue(provider.isDeviceStorageSupported)
   }
 
+  func testStorageSyncNotificationUsesInjectedNotificationCenter() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    let notificationCenter = NotificationCenter()
+    var observedBytesToSync: Int?
+    let observer = notificationCenter.addObserver(
+      forName: .storageSyncAvailable,
+      object: nil,
+      queue: nil
+    ) { notification in
+      observedBytesToSync = notification.userInfo?["bytesToSync"] as? Int
+    }
+    defer { notificationCenter.removeObserver(observer) }
+
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: defaults,
+      notificationCenter: notificationCenter,
+      connectionFactory: { FakeDeviceConnection(device: $0, batteryLevel: 25, storageList: [8_000]) },
+      storageDataChecker: { (2_000_000, 1_000_000) },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+
+    XCTAssertEqual(observedBytesToSync, 1_000_000)
+  }
+
   func testFirmwareUpdateInProgressStateCanBeToggled() {
     let provider = makeProvider(autoReconnectEnabled: false)
 

@@ -499,7 +499,7 @@ final class DeviceProvider: ObservableObject {
             logger.info("Device has \(String(format: "%.1f", mbToSync)) MB of audio data pending sync")
 
             // Post notification that storage sync is available
-            NotificationCenter.default.post(
+            notificationCenter.post(
                 name: .storageSyncAvailable,
                 object: nil,
                 userInfo: ["bytesToSync": bytesToSync]
