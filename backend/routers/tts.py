@@ -44,7 +44,7 @@ _TTS_REQUEST_CHAR_LIMIT = 5_000
 _ELEVENLABS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 _ELEVENLABS_VOICES_URL = "https://api.elevenlabs.io/v1/voices"
 _VOICES_CACHE_TTL_SECS = 3600
-_voices_cache: Optional[Tuple[float, List[dict]]] = None
+_voices_cache: Optional[Tuple[float, List[Dict[str, Any]]]] = None
 
 
 def _is_valid_voice_id(voice_id: str) -> bool:
@@ -54,26 +54,28 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
-def _normalize_voices(raw: dict) -> List[dict]:
+def _normalize_voices(raw: object) -> List[Dict[str, Any]]:
     """Reduce the ElevenLabs /v1/voices payload to a minimal, client-safe voice list.
 
     Tolerates a missing/non-list `voices` key and non-dict/partial entries so an upstream shape
     change yields an empty or partial list rather than a 500.
     """
-    voices = raw.get("voices") if isinstance(raw, dict) else None
+    raw_dict = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+    voices = raw_dict.get("voices")
     if not isinstance(voices, list):
         return []
-    result = []
+    result: List[Dict[str, Any]] = []
     for v in voices:
         if not isinstance(v, dict) or not v.get("voice_id"):
             continue
+        voice = cast(Dict[str, Any], v)
         result.append(
             {
-                "voice_id": v.get("voice_id"),
-                "name": v.get("name"),
-                "category": v.get("category"),
-                "preview_url": v.get("preview_url"),
-                "labels": v.get("labels") if isinstance(v.get("labels"), dict) else {},
+                "voice_id": voice.get("voice_id"),
+                "name": voice.get("name"),
+                "category": voice.get("category"),
+                "preview_url": voice.get("preview_url"),
+                "labels": voice.get("labels") if isinstance(voice.get("labels"), dict) else {},
             }
         )
     return result

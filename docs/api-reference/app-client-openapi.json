@@ -54170,6 +54170,86 @@
         ]
       }
     },
+    "/v2/tts/voices": {
+      "get": {
+        "description": "List the available ElevenLabs voices, proxied server-side (the API key is server-only).\n\nCached in-process for _VOICES_CACHE_TTL_SECS so a client voice picker does not hammer the upstream.\nThe synthesize endpoint already accepts any voice_id; this just lets clients discover them.",
+        "operationId": "get_voices_v2_tts_voices_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Voices V2 Tts Voices Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Voices",
+        "tags": [
+          "tts"
+        ]
+      }
+    },
     "/v2/voice-message/transcribe": {
       "post": {
         "description": "Transcribe audio and return the transcript text.\n\nAccepts two content types:\n- multipart/form-data: file upload with optional 'language' form field (mobile)\n- application/octet-stream: raw PCM bytes with query params (desktop PTT)\n\nReturns {\"transcript\": \"...\", \"language\": \"...\"}.",
