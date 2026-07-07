@@ -1,3 +1,9 @@
+import os
+
+os.environ.setdefault('TYPESENSE_API_KEY', 'test-key')
+os.environ.setdefault('TYPESENSE_HOST', 'localhost')
+os.environ.setdefault('TYPESENSE_HOST_PORT', '8108')
+
 from unittest.mock import patch
 
 from models.memories import MemoryDB
