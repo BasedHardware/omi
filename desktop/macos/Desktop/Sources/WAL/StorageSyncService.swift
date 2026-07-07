@@ -360,6 +360,9 @@ final class StorageSyncService: ObservableObject {
         }
 
         logger.info("Sync completed: \(self.downloadedFrames.count) frames downloaded")
+
+        // Upload downloaded WALs to cloud (real POST /v2/sync-local-files)
+        await walService.syncToCloud()
     }
 }
 

@@ -54,6 +54,24 @@ final class WALService: ObservableObject {
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "WALService")
     private let fileManager = FileManager.default
+    private let apiClient: APIClient
+    private let reconciler: WALSyncReconciler
+
+    /// Test seam — when set, bypasses `APIClient.uploadLocalFilesV2`.
+    var uploadLocalFilesHandler: ((URL) async throws -> UploadLocalFilesResult)?
+
+    /// Test-only: point WAL I/O at a temp directory.
+    func setWalDirectoryForTesting(_ url: URL) {
+        walDirectory = url
+    }
+
+    func setWalsForTesting(_ entries: [WALEntry]) {
+        wals = entries
+    }
+
+    func uploadWalToCloudForTesting(_ wal: WALEntry) async throws {
+        try await uploadWalToCloud(wal)
+    }
 
     private var walDirectory: URL?
     private var flushTimer: Timer?
@@ -68,7 +86,12 @@ final class WALService: ObservableObject {
 
     // MARK: - Initialization
 
-    private init() {
+    init(
+        apiClient: APIClient = .shared,
+        reconciler: WALSyncReconciler = .shared
+    ) {
+        self.apiClient = apiClient
+        self.reconciler = reconciler
         setupWalDirectory()
         loadWals()
     }
@@ -414,9 +437,19 @@ final class WALService: ObservableObject {
         for wal in toSync {
             do {
                 try await uploadWalToCloud(wal)
+            } catch APIError.syncRateLimited {
+                logger.warning("WAL upload rate limited; leaving pending WALs for retry")
+                break
             } catch {
                 logger.error("Failed to sync WAL \(wal.id): \(error.localizedDescription)")
             }
+        }
+
+        var workingWals = wals
+        if await reconciler.reconcileUploadedWals(wals: &workingWals, walDirectory: walDirectory) {
+            wals = workingWals
+            updatePendingWals()
+            saveWals()
         }
     }
 
@@ -429,59 +462,35 @@ final class WALService: ObservableObject {
         let fileUrl = walDir.appendingPathComponent(filePath)
 
         guard fileManager.fileExists(atPath: fileUrl.path) else {
+            if let index = wals.firstIndex(where: { $0.id == wal.id }) {
+                wals[index].status = .corrupted
+                updatePendingWals()
+                saveWals()
+            }
             throw WALError.fileNotFound
         }
 
-        // Read file data
-        let fileData = try Data(contentsOf: fileUrl)
-
-        // Parse frames from file
-        let frames = parseFramesFromFile(fileData)
-
-        guard !frames.isEmpty else {
-            throw WALError.noFramesToUpload
+        let result: UploadLocalFilesResult
+        if let handler = uploadLocalFilesHandler {
+            result = try await handler(fileUrl)
+        } else {
+            result = try await apiClient.uploadLocalFilesV2(fileURLs: [fileUrl])
         }
 
-        // Convert frames to PCM and create segments
-        // For now, log what would be uploaded
-        logger.info("Would upload WAL \(wal.id): \(frames.count) frames, \(fileData.count) bytes")
+        guard let index = wals.firstIndex(where: { $0.id == wal.id }) else {
+            return
+        }
 
-        // TODO: Integrate with transcription service and API
-        // 1. Decode Opus frames to PCM
-        // 2. Run through transcription
-        // 3. Upload conversation to API
-
-        // Mark as synced
-        if let index = wals.firstIndex(where: { $0.id == wal.id }) {
-            wals[index].status = .synced
+        WALCloudSyncLogic.applyUploadResult(to: &wals[index], result: result)
+        let uploadedStatus = wals[index].status.rawValue
+        if let jobId = wals[index].jobId {
+            logger.info("Uploaded WAL \(wal.id): status=\(uploadedStatus), jobId=\(jobId)")
+        } else {
+            logger.info("Uploaded WAL \(wal.id): status=\(uploadedStatus)")
         }
 
         updatePendingWals()
         saveWals()
-    }
-
-    private func parseFramesFromFile(_ data: Data) -> [Data] {
-        var frames: [Data] = []
-        var offset = 0
-
-        while offset + 4 <= data.count {
-            // Read frame length (little-endian uint32)
-            let length = Int(data[offset]) |
-                        (Int(data[offset + 1]) << 8) |
-                        (Int(data[offset + 2]) << 16) |
-                        (Int(data[offset + 3]) << 24)
-            offset += 4
-
-            guard length > 0, offset + length <= data.count else {
-                break
-            }
-
-            let frame = data.subdata(in: offset..<(offset + length))
-            frames.append(frame)
-            offset += length
-        }
-
-        return frames
     }
 
     // MARK: - Cleanup

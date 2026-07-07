@@ -420,10 +420,18 @@ enum APIError: LocalizedError {
   case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
   case unsupportedTierScopedBulkMutation(String)
+  case syncRateLimited(retryAfterSeconds: Int?)
+  case syncUploadRejected(reason: String)
 
   var detail: String? {
-    if case .httpError(_, let detail) = self { return detail }
-    return nil
+    switch self {
+    case .httpError(_, let detail):
+      return detail
+    case .syncUploadRejected(let reason):
+      return reason
+    default:
+      return nil
+    }
   }
 
   var errorDescription: String? {
@@ -439,6 +447,13 @@ enum APIError: LocalizedError {
       return "Failed to decode response: \(error.localizedDescription)"
     case .unsupportedTierScopedBulkMutation(let operation):
       return "Layer-scoped bulk memory \(operation) is not supported yet."
+    case .syncRateLimited(let retryAfterSeconds):
+      if let retryAfterSeconds {
+        return "Sync rate limited (retry after \(retryAfterSeconds)s)"
+      }
+      return "Sync rate limited"
+    case .syncUploadRejected(let reason):
+      return reason
     }
   }
 }
@@ -5414,11 +5429,122 @@ extension APIClient {
     return try decoder.decode([ChatFileResponse].self, from: data)
   }
 
-}
+  // MARK: - Sync local files (WAL upload)
 
-/// Response from rating a message
-struct MessageStatusResponse: Codable {
-  let status: String
+  /// Upload-only POST to `/v2/sync-local-files`. Mirrors Flutter `uploadLocalFilesV2`.
+  func uploadLocalFilesV2(
+    fileURLs: [URL],
+    conversationId: String? = nil
+  ) async throws -> UploadLocalFilesResult {
+    var endpoint = "v2/sync-local-files"
+    if let conversationId, !conversationId.isEmpty {
+      let encoded = conversationId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? conversationId
+      endpoint += "?conversation_id=\(encoded)"
+    }
+    let url = URL(string: baseURL + endpoint)!
+    let request = try await buildSyncLocalFilesMultipartRequest(url: url, fileURLs: fileURLs)
+    return try await performSyncLocalFilesUpload(request)
+  }
+
+  /// Single GET of a sync job's status — no polling loop.
+  func fetchSyncJobStatus(jobId: String) async -> SyncJobFetch {
+    let endpoint = "v2/sync-local-files/\(jobId)"
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
+
+    guard let (data, response) = try? await session.data(for: request),
+          let http = response as? HTTPURLResponse else {
+      return SyncJobFetch(outcome: .transient)
+    }
+
+    if http.statusCode == 404 || http.statusCode == 403 {
+      return SyncJobFetch(outcome: .notFound)
+    }
+    guard http.statusCode == 200 else {
+      return SyncJobFetch(outcome: .transient)
+    }
+
+    do {
+      let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
+      return SyncJobFetch(outcome: .ok, status: status)
+    } catch {
+      return SyncJobFetch(outcome: .transient)
+    }
+  }
+
+  private func buildSyncLocalFilesMultipartRequest(url: URL, fileURLs: [URL]) async throws -> URLRequest {
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    var headers = try await buildHeaders(requireAuth: true)
+    headers.removeValue(forKey: "Content-Type")
+    request.allHTTPHeaderFields = headers
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    for fileURL in fileURLs {
+      let fileName = fileURL.lastPathComponent
+      let fileData = try Data(contentsOf: fileURL)
+      body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
+      body.append(
+        "Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\(lineBreak)"
+          .data(using: .utf8)!)
+      body.append("Content-Type: application/octet-stream\(lineBreak)\(lineBreak)".data(using: .utf8)!)
+      body.append(fileData)
+      body.append(lineBreak.data(using: .utf8)!)
+    }
+    body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
+    request.httpBody = body
+    return request
+  }
+
+  private func performSyncLocalFilesUpload(_ request: URLRequest) async throws -> UploadLocalFilesResult {
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+
+    if http.statusCode == 401 {
+      var retryRequest = request
+      let authService = await MainActor.run { AuthService.shared }
+      retryRequest.setValue(
+        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      return try await performSyncLocalFilesUpload(retryRequest)
+    }
+
+    if http.statusCode == 200 {
+      let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)
+      return .done(completed)
+    }
+    if http.statusCode == 202 {
+      let start = try decoder.decode(SyncJobStartResponse.self, from: data)
+      guard !start.jobId.isEmpty else {
+        throw APIError.syncUploadRejected(reason: "Upload accepted but no job id returned")
+      }
+      return .queued(jobId: start.jobId)
+    }
+    if http.statusCode == 429 {
+      let retryAfter = Self.parseRetryAfterSeconds(from: http)
+      throw APIError.syncRateLimited(retryAfterSeconds: retryAfter)
+    }
+    if http.statusCode == 400 {
+      throw APIError.syncUploadRejected(reason: "Audio file could not be processed by server")
+    }
+    if http.statusCode == 413 {
+      throw APIError.syncUploadRejected(reason: "Audio file is too large to upload")
+    }
+    if http.statusCode >= 500 {
+      throw APIError.syncUploadRejected(reason: "Server is temporarily unavailable")
+    }
+    throw APIError.syncUploadRejected(reason: "Upload failed unexpectedly")
+  }
+
+  private static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
 }
 
 /// Response shape for `POST /v2/files` — mirrors backend `FileChat` model.
@@ -5437,6 +5563,98 @@ struct ChatFileResponse: Codable {
     case mimeType = "mime_type"
     case thumbName = "thumb_name"
     case openaiFileId = "openai_file_id"
+  }
+}
+
+/// Response from rating a message
+struct MessageStatusResponse: Codable {
+  let status: String
+}
+
+// MARK: - Sync local files (WAL upload)
+
+/// Outcome of POST `/v2/sync-local-files` — exactly one of `jobId` (202) or `completed` (200).
+enum UploadLocalFilesResult: Equatable {
+  case queued(jobId: String)
+  case done(SyncLocalFilesResultResponse)
+
+  var jobId: String? {
+    if case .queued(let jobId) = self { return jobId }
+    return nil
+  }
+}
+
+struct SyncLocalFilesResultResponse: Codable, Equatable {
+  let newMemories: [String]
+  let updatedMemories: [String]
+  let failedSegments: Int
+  let totalSegments: Int
+  let errors: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case newMemories = "new_memories"
+    case updatedMemories = "updated_memories"
+    case failedSegments = "failed_segments"
+    case totalSegments = "total_segments"
+    case errors
+  }
+}
+
+struct SyncJobStartResponse: Codable, Equatable {
+  let jobId: String
+  let status: String
+  let totalFiles: Int
+  let totalSegments: Int
+  let pollAfterMs: Int
+
+  enum CodingKeys: String, CodingKey {
+    case jobId = "job_id"
+    case status
+    case totalFiles = "total_files"
+    case totalSegments = "total_segments"
+    case pollAfterMs = "poll_after_ms"
+  }
+}
+
+struct SyncJobStatusResponse: Codable, Equatable {
+  let jobId: String
+  let status: String
+  let totalSegments: Int
+  let processedSegments: Int
+  let successfulSegments: Int
+  let failedSegments: Int
+  let result: SyncLocalFilesResultResponse?
+  let error: String?
+
+  var isTerminal: Bool {
+    status == "completed" || status == "partial_failure" || status == "failed"
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case jobId = "job_id"
+    case status
+    case totalSegments = "total_segments"
+    case processedSegments = "processed_segments"
+    case successfulSegments = "successful_segments"
+    case failedSegments = "failed_segments"
+    case result
+    case error
+  }
+}
+
+enum SyncJobFetchOutcome: Equatable {
+  case ok
+  case notFound
+  case transient
+}
+
+struct SyncJobFetch: Equatable {
+  let outcome: SyncJobFetchOutcome
+  let status: SyncJobStatusResponse?
+
+  init(outcome: SyncJobFetchOutcome, status: SyncJobStatusResponse? = nil) {
+    self.outcome = outcome
+    self.status = status
   }
 }
 
