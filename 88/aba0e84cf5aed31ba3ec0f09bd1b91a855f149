@@ -1,0 +1,151 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingInboxKit.swift
+  s_809387decd82d4::t_1ff7704918e1e3 121-123
+  s_809387decd82d4::t_35789280820383 148-152
+  s_809387decd82d4::t_e76d53c70fbece 247-257
+  s_9b37231caca872::t_756ad513bb71e2 208-246,260-261
+  s_809387decd82d4::t_8608fb30b3e32f 182-207
+  s_9b37231caca872::t_bada5f44d1df3b 262
+  s_f2930f5c8b0c67::t_ae2c102c20882d 258-259
+desktop/macos/Desktop/Sources/IMessageInboxStore.swift
+  s_9b37231caca872::t_cc6dd07d40d7b0 254
+  s_9b37231caca872::t_861be32c37b104 37-40
+  s_809387decd82d4::t_87bed68d736dce 31-36
+  s_9b37231caca872::t_82d68496b8ba8b 305-307
+  s_809387decd82d4::t_500474d7ef253d 308-319
+  s_809387decd82d4::t_30a1472f964d35 223
+  s_809387decd82d4::t_367ea11900a8e3 385-386
+  s_9b37231caca872::t_ee4a6367db0983 367-379
+  s_9b37231caca872::t_b20c53ffe64ae9 224
+  s_edfd59e96df44b::t_d07d2c0a4565b5 380-381
+desktop/macos/Desktop/Sources/TelegramInboxStore.swift
+  s_809387decd82d4::t_af694cbb5e9bae 39-43
+  s_9b37231caca872::t_08c491ffa71ee4 332-333
+  s_809387decd82d4::t_59bb1df6189ca6 171
+  s_9b37231caca872::t_b5e9126a1d09f9 307
+  s_ddd71af34c629b::t_889fdc9899050c 123-137,392
+  s_9b37231caca872::t_762bb676e67254 379-391
+  s_809387decd82d4::t_b9a4768a9a668a 248
+  s_9b37231caca872::t_90e6344e739a1f 172
+  s_809387decd82d4::t_4b5fcde9d953c5 395-396
+  s_809387decd82d4::t_6d5bf627be1a3f 334-344
+  s_9b37231caca872::t_88c505f9ebd2a4 249
+  s_9b37231caca872::t_2f2522e9e69b28 44-46
+  s_edfd59e96df44b::t_fe54dcf3c3fe9e 393
+desktop/macos/Desktop/Sources/IMessageModels.swift
+  s_809387decd82d4::t_bc3b5a2d80097b 207-213,218,220-222,232-233
+  s_9b37231caca872::t_241b4f6cc5caf9 214-216,219,234
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_9b37231caca872::t_6d21922c9132b9 5587-5593
+backend/models/whatsapp.py
+  s_9b37231caca872::t_349302ec68b102 100-103
+  s_809387decd82d4::t_56b55eeb41d2dd 93-99
+  s_9b37231caca872::t_57a628b3534c8f 6
+backend/routers/telegram.py
+  s_9b37231caca872::t_01ab2272925bcb 29
+  s_809387decd82d4::t_cb2f045cba17d2 70-74
+  s_9b37231caca872::t_b7abb4adda8709 66-67,75
+desktop/macos/Desktop/Sources/TelegramModels.swift
+  s_9b37231caca872::t_c4e376bf69093f 219-221,224,239
+  s_809387decd82d4::t_ca405e78b7d319 212-218,223,225-227,237-238
+backend/routers/imessage.py
+  s_9b37231caca872::t_1022986e7124eb 70-73,81
+  s_809387decd82d4::t_1d0e76f52a14d6 76-80
+  s_9b37231caca872::t_9d94614d002076 30-31
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_809387decd82d4::t_611b4291399730 170-172
+  s_9b37231caca872::t_61a11fab4d7f88 173-179
+  s_809387decd82d4::t_f5137ad1b489f1 81
+backend/routers/whatsapp.py
+  s_9b37231caca872::t_ace4049488901e 71-72,80
+  s_9b37231caca872::t_cc2c5c9163b7e4 33-34
+  s_809387decd82d4::t_94497b3149d2ab 75-79
+desktop/macos/changelog/unreleased/20260705-telegram-refresh-button.json
+  s_ddd71af34c629b::t_2a1b741ad5e306 1-3
+desktop/macos/Desktop/Sources/WhatsAppInboxStore.swift
+  s_9b37231caca872::t_2267a7acbc37be 34-36
+  s_809387decd82d4::t_4adbce30ac8a00 382-383
+  s_809387decd82d4::t_29752e7d144bfb 201
+  s_9b37231caca872::t_6663c705aeb110 231
+  s_9b37231caca872::t_957f73fe8c59aa 273-274
+  s_809387decd82d4::t_e6ae4d68c7bcc6 29-33
+  s_9b37231caca872::t_2f9e1f96934de1 335-345
+  s_809387decd82d4::t_a6416aebe0bffe 275-285,347
+  s_9b37231caca872::t_28788b846f9d1f 202
+  s_809387decd82d4::t_d2a55fdc7b48d9 346,348-349
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_809387decd82d4::t_1ef1c8b8ed8f8d 25-26
+  s_809387decd82d4::t_85fc18ced713be 992-1008
+  s_edfd59e96df44b::t_b8f5b0c3f5580b 1009
+backend/models/draft_common.py
+  s_9b37231caca872::t_24eb333fa0a77d 10-13
+  s_9b37231caca872::t_2187ec3df39789 38-49
+desktop/macos/Desktop/Sources/MainWindow/Pages/TelegramInboxPage.swift
+  s_ddd71af34c629b::t_43703f8c35bd3c 130
+  s_809387decd82d4::t_dfe7ffc5c626c2 148
+  s_809387decd82d4::t_0d26b30fc94317 206-208
+  s_9b37231caca872::t_eb15a098e97610 209-215
+  s_ddd71af34c629b::t_71af63a2c5e922 118-129
+backend/models/imessage.py
+  s_809387decd82d4::t_b3dcfe767f44f9 95-101
+  s_9b37231caca872::t_c69f5ee736b218 102-105
+  s_9b37231caca872::t_d407aa0a604e50 6
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_809387decd82d4::t_1ca085af06c32d 81
+  s_809387decd82d4::t_833cb1d9080416 174-176
+  s_9b37231caca872::t_2f44e52d2845c6 177-183
+desktop/macos/Desktop/Sources/WhatsAppModels.swift
+  s_809387decd82d4::t_f427aaaad8dee2 243-249,254,256-258,269-270
+  s_9b37231caca872::t_2031bdd9890ba2 250-252,255,271
+backend/models/telegram.py
+  s_809387decd82d4::t_084070c6cb5727 93-99
+  s_9b37231caca872::t_5d00044c7deb9f 6
+  s_9b37231caca872::t_a645e1def74265 100-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "88aba0e84cf5aed31ba3ec0f09bd1b91a855f149",
+  "prompts": {},
+  "sessions": {
+    "s_809387decd82d4": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "92047e7b-a159-4481-8ade-63354d6fb77e",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_9b37231caca872": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9ba397e6-4570-42c8-8b46-2c4828c26dd8",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_ddd71af34c629b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "e1d822f2-7dfc-4029-85b7-bfe6670f2ed6",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_f2930f5c8b0c67": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "agent-af78f27b4e43958f5",
+        "model": "unknown"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
