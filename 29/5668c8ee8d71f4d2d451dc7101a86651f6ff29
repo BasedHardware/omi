@@ -1,0 +1,72 @@
+backend/utils/conversations/process_conversation.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 49-50,576-582,585-586,1042-1046
+backend/tests/unit/test_subject_memory_writer.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-246
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 21,42,67-87,685-694,1095-1103,1106,1130-1150,1152-1155
+  s_edfd59e96df44b::t_08acccd50d9d54 703,1158-1166
+backend/models/other.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 40-47
+backend/tests/unit/test_person_profile.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 121-204
+backend/utils/memory/person_backfill.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-103
+backend/utils/prompts.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 574-637
+backend/utils/retrieval/tool_services/person_service.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 11,17,48-65,101-114,118-159,183-203,206
+backend/utils/memory/subject_memory_writer.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-245
+backend/tests/unit/test_person_service_search.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-275
+backend/tests/unit/test_person_messaging_extractor.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-102
+backend/tests/unit/test_person_service.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 119-141
+backend/routers/mcp.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 53,739-754
+  s_edfd59e96df44b::t_a3640065ffbdc0 755-756
+backend/utils/telegram_connector.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 61-62,268-276,379-384
+  s_edfd59e96df44b::t_673a1e1559296e 385-386
+docs/doc/developer/mcp/tools.mdx
+  s_edfd59e96df44b::t_c1f80fa8135a88 93-115
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-211
+backend/utils/whatsapp_connector.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 61-62,268-276,379-384
+  s_edfd59e96df44b::t_04017b4fb1c15f 385-386
+backend/utils/llm/person_messaging.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-103
+backend/tests/unit/test_person_messaging_enrichment.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-231
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_75ec53e5e69bb7 515,542,575,602
+  s_edfd59e96df44b::t_c1f80fa8135a88 285-286,495-514,516-541,543-574,576-601,603-624,641-675
+backend/tests/unit/test_kg_user_type_mismatch.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 564-632
+backend/tests/unit/test_person_backfill.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 1-97
+backend/utils/llm/person_profile.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 43-50,162-168,198-213
+  s_edfd59e96df44b::t_1e6647fd2dceab 214
+backend/utils/imessage_connector.py
+  s_edfd59e96df44b::t_c1f80fa8135a88 54-55,388-396,514-520
+  s_edfd59e96df44b::t_6298d505ae4cfc 521-522
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "295668c8ee8d71f4d2d451dc7101a86651f6ff29",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
