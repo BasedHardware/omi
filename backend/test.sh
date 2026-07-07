@@ -78,14 +78,26 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
 
   active_pids=()
   failed=0
+  status_dir="$(mktemp -d)"
+  test_index=0
+
+  active_pid_count() {
+    set +u
+    local count="${#active_pids[@]}"
+    set -u
+    echo "$count"
+  }
 
   reap_finished_children() {
     local running_pids
     local pid
     local still_active=()
+    local current_pids=()
 
     running_pids="$(jobs -pr || true)"
-    for pid in "${active_pids[@]}"; do
+    set +u
+    current_pids=("${active_pids[@]}")
+    for pid in "${current_pids[@]}"; do
       if [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
         still_active+=("$pid")
       else
@@ -94,12 +106,15 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         fi
       fi
     done
+    set -u
     set +u
     active_pids=("${still_active[@]}")
     set -u
   }
 
   for test_path in "${selected_tests[@]}"; do
+    status_file="$status_dir/$test_index.status"
+    test_index=$((test_index + 1))
     (
       echo "::group::$test_path"
       set +e
@@ -110,14 +125,18 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         echo "No tests matched marker expression for $test_path; treating as skipped."
         status=0
       fi
+      printf '%s\t%s\n' "$status" "$test_path" > "$status_file"
+      if [[ "$status" -ne 0 ]]; then
+        echo "::error title=Backend unit file failed::$test_path exited with status $status"
+      fi
       echo "::endgroup::"
-      exit "$status"
+      exit 0
     ) &
     active_pids+=("$!")
 
-    while [[ "${#active_pids[@]}" -ge "$worker_count" ]]; do
+    while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
       reap_finished_children
-      if [[ "${#active_pids[@]}" -lt "$worker_count" ]]; then
+      if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
         break
       fi
       oldest_pid="${active_pids[0]}"
@@ -137,6 +156,16 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   done
   set -u
 
+  for status_file in "$status_dir"/*.status; do
+    [[ -e "$status_file" ]] || continue
+    IFS=$'\t' read -r status test_path < "$status_file"
+    if [[ "$status" -ne 0 ]]; then
+      echo "Backend unit test file failed: $test_path (status $status)"
+      failed=1
+    fi
+  done
+
+  rm -rf "$status_dir"
   exit "$failed"
 fi
 
