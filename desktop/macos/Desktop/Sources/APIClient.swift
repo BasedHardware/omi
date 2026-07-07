@@ -2286,21 +2286,11 @@ extension APIClient {
   }
 
   private func performPatchRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(T.self, from: data)
+    // Delegate to performRequest so PATCH gets the same 401 refresh-and-retry as
+    // GET/POST. PATCH previously threw `.unauthorized` on the first 401, which
+    // surfaced as a user-visible failure (e.g. the onboarding language step)
+    // whenever the ID token was momentarily stale right after sign-in.
+    return try await performRequest(request)
   }
 }
 

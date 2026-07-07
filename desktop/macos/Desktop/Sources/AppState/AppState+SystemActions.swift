@@ -62,10 +62,22 @@ extension AppState {
       return
     }
 
+    // Never relaunch a DMG/translocated path — `open` on the mounted-DMG bundle
+    // re-reveals the installer's "Drag to Applications" Finder window. Prefer an
+    // installed copy when one exists (AppInstaller normally guarantees this).
+    var relaunchURL = bundleURL
+    if AppInstaller.isInstallerLocation(bundleURL.path) {
+      let installed = AppInstaller.installedURL(forBundleURL: bundleURL)
+      if FileManager.default.fileExists(atPath: installed.path) {
+        log("Restart: bundle is on an installer mount, relaunching installed copy instead")
+        relaunchURL = installed
+      }
+    }
+
     // Use a shell script to wait briefly, then relaunch the app
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
-    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+    task.arguments = ["-c", "sleep 0.5 && open \"\(relaunchURL.path)\""]
 
     do {
       try task.run()
