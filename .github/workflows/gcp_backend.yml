@@ -169,6 +169,9 @@ jobs:
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env ${{ vars.ENV }} --check-workflows --check-rendered-cloud-run
 
+      - name: Google Service Account
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
+
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
