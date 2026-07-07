@@ -159,6 +159,37 @@ def test_normalize_voices_non_dict_labels_defaulted():
     assert result[0]["labels"] == {}
 
 
+def test_normalize_voices_returns_response_model_safe_fields():
+    raw = {
+        "voices": [
+            {
+                "voice_id": 123,
+                "name": "bad-id",
+            },
+            {
+                "voice_id": "v1",
+                "name": 123,
+                "category": False,
+                "preview_url": ["bad"],
+                "labels": {"accent": "american", 1: "bad-key"},
+            },
+        ]
+    }
+
+    result = tts_router._normalize_voices(raw)
+
+    assert result == [
+        {
+            "voice_id": "v1",
+            "name": None,
+            "category": None,
+            "preview_url": None,
+            "labels": {"accent": "american"},
+        }
+    ]
+    assert tts_router.TtsVoicesResponse(voices=result).voices[0].voice_id == "v1"
+
+
 def test_is_cache_fresh_boundary():
     ttl = tts_router._VOICES_CACHE_TTL_SECS
     assert tts_router._is_cache_fresh(100.0, 100.0)  # same instant is fresh

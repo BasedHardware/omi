@@ -68,6 +68,16 @@ def _is_valid_voice_id(voice_id: str) -> bool:
     return 1 <= len(voice_id) <= 128 and voice_id.isalnum()
 
 
+def _optional_str(value: object) -> Optional[str]:
+    return value if isinstance(value, str) else None
+
+
+def _normalize_voice_labels(value: object) -> Dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: label_value for key, label_value in value.items() if isinstance(key, str)}
+
+
 def _normalize_voices(raw: object) -> List[Dict[str, Any]]:
     """Reduce the ElevenLabs /v1/voices payload to a minimal, client-safe voice list.
 
@@ -80,16 +90,19 @@ def _normalize_voices(raw: object) -> List[Dict[str, Any]]:
         return []
     result: List[Dict[str, Any]] = []
     for v in voices:
-        if not isinstance(v, dict) or not v.get("voice_id"):
+        if not isinstance(v, dict):
             continue
         voice = cast(Dict[str, Any], v)
+        voice_id = voice.get("voice_id")
+        if not isinstance(voice_id, str) or not voice_id:
+            continue
         result.append(
             {
-                "voice_id": voice.get("voice_id"),
-                "name": voice.get("name"),
-                "category": voice.get("category"),
-                "preview_url": voice.get("preview_url"),
-                "labels": voice.get("labels") if isinstance(voice.get("labels"), dict) else {},
+                "voice_id": voice_id,
+                "name": _optional_str(voice.get("name")),
+                "category": _optional_str(voice.get("category")),
+                "preview_url": _optional_str(voice.get("preview_url")),
+                "labels": _normalize_voice_labels(voice.get("labels")),
             }
         )
     return result
