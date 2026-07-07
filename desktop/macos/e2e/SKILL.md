@@ -83,6 +83,33 @@ OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
 `reset` RSTs the connection; `refuse` leaves the port closed (connection refused). Verify a
 mode with `curl` before launching the app: `curl -s -o /dev/null -w '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
 
+### 2d. Hardening smoke (runtime regression tripwire)
+`scripts/omi-hardening-smoke.sh` re-runs the proven runtime probes behind hardened
+acceptance rows so a behavior that regresses upstream is caught on the next run, not the
+next manual audit. One-time setup — build and seed a dedicated named bundle:
+```bash
+cd desktop/macos
+OMI_APP_NAME="omi-smoke" ./run.sh          # build + install /Applications/omi-smoke.app, then quit it
+./scripts/omi-auth-dump.sh                 # capture the signed-in Omi Dev session
+./scripts/omi-auth-seed.sh com.omi.omi-smoke
+```
+Then re-run any time (launches the installed bundle on an isolated port, ends with it stopped):
+```bash
+./scripts/omi-hardening-smoke.sh run                          # all probes, defaults: com.omi.omi-smoke, port 47797
+./scripts/omi-hardening-smoke.sh run --only set-01,set-04     # subset
+./scripts/omi-hardening-smoke.sh run --attach --port 47795    # against an already-running bundle (skips lifecycle probes)
+./scripts/omi-hardening-smoke.sh scan <dir>                   # credential-pattern sweep of any evidence dir
+```
+Probes in canonical order (destructive last): `auth-06` prod tokens-at-rest (passive read) ·
+`set-04` log credential hygiene · `set-01` settings navigation · `mic-06` rapid-PTT orphan
+guard · `chat-03` agent-kill recovery · `auth-03` expired-token refresh (**relaunches** the
+app) · `lnch-07` shutdown flush (**stops** the app) · `self-hygiene` report-dir scan.
+Exit codes: `0` all PASS · `1` any FAIL (a regression — investigate) · `2` usage/prod-refusal ·
+`3` BLOCKED only (harness couldn't run: port busy, stale auth seed, app missing). Reports +
+`smoke-summary.json` land under `${TMPDIR}/omi-hardening-smoke/<ts>/` unless `--report-dir` is
+given. Safety: only `com.omi.omi-*` bundles are accepted; the sole production interaction is
+the read-only `defaults read` in `auth-06`.
+
 ### The full loop
 ```bash
 cd desktop/macos
