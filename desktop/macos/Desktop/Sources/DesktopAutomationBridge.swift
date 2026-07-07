@@ -635,7 +635,7 @@ final class DesktopAutomationActionRegistry {
       await coordinator.confirmLanguages()
       let error = await MainActor.run { coordinator.lastActionError }
       if error == nil {
-        await MainActor.run { UserDefaults.standard.set(2, forKey: "onboardingStep") }
+        await MainActor.run { UserDefaults.standard.set(2, forKey: DefaultsKey.onboardingStep) }
         return ["status": "saved", "advanced_to_step": "2", "languages": codes.joined(separator: ",")]
       }
       return ["status": "failed", "error": error ?? "unknown"]
