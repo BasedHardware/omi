@@ -733,6 +733,8 @@ struct DashboardPage: View {
 
                 Spacer()
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
             .padding(.bottom, 2)
 
             ChatMessagesView(
@@ -769,7 +771,19 @@ struct DashboardPage: View {
                     endPoint: .bottom
                 )
             )
+            .padding(.horizontal, 8)
+            .padding(.bottom, 6)
         }
+        // Barely-there card so the chat reads as a bounded surface — making it
+        // obvious the canvas around it is clickable (and closes the chat).
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.white.opacity(0.016))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+        )
         .frame(maxWidth: Self.homeStagePanelMaxWidth)
         .padding(.horizontal, Self.homeStageHorizontalPadding)
     }
