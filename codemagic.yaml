@@ -2652,6 +2652,16 @@ workflows:
           echo "EdDSA signature: $ED_SIGNATURE"
           echo "ED_SIGNATURE=$ED_SIGNATURE" >> $CM_ENV
 
+      - name: Smoke signed desktop artifact
+        script: |
+          scripts/smoke-signed-desktop-artifact.sh \
+            --app "$APP_BUNDLE" \
+            --zip "$SPARKLE_ZIP_PATH" \
+            --dmg "$DMG_PATH" \
+            --tag "$CM_TAG" \
+            --expected-channel beta \
+            --result-json "$BUILD_DIR/desktop-smoke-result.json"
+
       - name: Create GitHub release
         script: |
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
@@ -2793,6 +2803,7 @@ workflows:
       - build/*.app
       - build/*.dmg
       - build/*.zip
+      - build/desktop-smoke-result.json
     publishing:
       email:
         recipients:
