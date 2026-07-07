@@ -39,6 +39,7 @@ def users_service():
         "database.screen_activity": AutoMockModule("database.screen_activity"),
         "database.vector_db": AutoMockModule("database.vector_db"),
         "utils": _pkg("utils"),
+        "utils.cloud_tasks": AutoMockModule("utils.cloud_tasks"),
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
@@ -140,7 +141,7 @@ def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_serv
     m["delete_user_data"].assert_not_called()
 
 
-def test_gcs_failure_does_not_block_firestore_wipe(users_service):
+def test_gcs_failure_blocks_firestore_wipe(users_service):
     patchers, m = _purge_patches(
         users_service, delete_all_conversation_recordings={"side_effect": Exception("gcs down")}
     )
@@ -149,7 +150,7 @@ def test_gcs_failure_does_not_block_firestore_wipe(users_service):
     finally:
         _stop(patchers)
     m["delete_all_conversation_recordings"].assert_called_once_with("uid1")  # purge was wired + attempted
-    m["delete_user_data"].assert_called_once_with("uid1")  # and the failure didn't block the wipe
+    m["delete_user_data"].assert_not_called()
 
 
 def test_enumeration_failure_is_isolated(users_service):

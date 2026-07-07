@@ -667,25 +667,16 @@ extension AppState {
     let bundleId = Bundle.main.bundleIdentifier ?? "com.omi.computer-macos"
     log("Resetting accessibility permission for \(bundleId) via tccutil...")
 
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
-    process.arguments = ["reset", "Accessibility", bundleId]
+    let success = SystemCommand.runLogging(
+      "tccutil reset Accessibility (\(bundleId))",
+      executable: "/usr/bin/tccutil",
+      arguments: ["reset", "Accessibility", bundleId])
 
-    do {
-      try process.run()
-      process.waitUntilExit()
-      let success = process.terminationStatus == 0
-      log("tccutil reset completed with exit code: \(process.terminationStatus)")
-
-      if success && shouldRestart {
-        restartApp()
-      }
-
-      return success
-    } catch {
-      log("Failed to run tccutil: \(error)")
-      return false
+    if success && shouldRestart {
+      restartApp()
     }
+
+    return success
   }
 
   /// Reset accessibility permission via tccutil and restart the app.

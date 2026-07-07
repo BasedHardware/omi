@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Detailed transcript view showing all segments as chat bubbles
 struct TranscriptDetailView: View {

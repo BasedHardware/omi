@@ -195,7 +195,7 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8B5CF6), size: 9),
+                            FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8B5CF6), size: 9),
                             const SizedBox(width: 4),
                             Text(
                               app.getRatingAvg()!,

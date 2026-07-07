@@ -21,7 +21,7 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
-# routers/sync.py pulls in Firestore/Redis/GCS/opus/pydub/models and friends.
+# routers/sync.py pulls in Firestore/Redis/GCS/opus/pydub and friends.
 # Stub every heavy package so importing the router stays light; fastapi, pydantic,
 # numpy and httpx are real (the function under test raises a real HTTPException).
 _STUB = (
@@ -43,7 +43,6 @@ _STUB = (
     'requests',
     'typesense',
     'pusher',
-    'models',
 )
 
 

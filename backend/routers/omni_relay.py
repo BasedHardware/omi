@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+from typing import cast
 from urllib.parse import quote
 
 import websockets
@@ -15,7 +16,7 @@ from utils.byok import (
 )
 from utils.executors import critical_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
-from utils.other.endpoints import _verify_ws_auth
+from utils.other.endpoints import _verify_ws_auth  # type: ignore[reportPrivateUsage]  # shared WS auth helper, intentionally reused cross-module
 from utils.subscription import is_trial_paywalled
 
 router = APIRouter()
@@ -42,7 +43,7 @@ GEMINI_URL = (
 OPENAI_URL = "wss://api.openai.com/v1/realtime?model={model}"
 
 
-def _upstream(provider: str, model: str | None):
+def _upstream(provider: str, model: str | None) -> tuple[tuple[str, dict[str, str]], None] | tuple[None, str]:
     """Return (url, headers) for the chosen provider, or (None, reason).
 
     Prefers the caller's BYOK key (so BYOK users pay their own way, same as the
@@ -80,7 +81,7 @@ async def omni_relay(websocket: WebSocket):
         f"provider={websocket.query_params.get('provider')}"
     )
     try:
-        uid = await run_blocking(critical_executor, _verify_ws_auth, authz)
+        uid = await run_blocking(critical_executor, _verify_ws_auth, cast(str, authz))
     except WebSocketException as e:
         logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
         await websocket.close(code=e.code, reason=e.reason or "unauthorized")
@@ -109,7 +110,7 @@ async def omni_relay(websocket: WebSocket):
     if err:
         await websocket.close(code=1011, reason=err)
         return
-    url, headers = upstream_cfg
+    url, headers = cast(tuple[str, dict[str, str]], upstream_cfg)
 
     await websocket.accept()
     try:

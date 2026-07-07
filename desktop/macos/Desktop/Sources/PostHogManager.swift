@@ -276,7 +276,8 @@ extension PostHogManager {
         retryCount: Int,
         hasBackendId: Bool,
         hasClientConversationId: Bool,
-        segmentCount: Int?
+        segmentCount: Int?,
+        diagnostics: ReconciliationFailureDiagnostics? = nil
     ) {
         var properties: [String: Any] = [
             "platform": "macos",
@@ -295,6 +296,32 @@ extension PostHogManager {
         if let segmentCount {
             properties["segment_count"] = segmentCount
             properties["has_local_segments"] = segmentCount > 0
+        }
+        if let diagnostics {
+            if let sessionStatus = diagnostics.sessionStatus {
+                properties["session_status"] = sessionStatus
+            }
+            if let conversationStatus = diagnostics.conversationStatus {
+                properties["conversation_status"] = conversationStatus
+            }
+            if let finalizationReason = diagnostics.finalizationReason {
+                properties["finalization_reason"] = finalizationReason
+            }
+            properties["has_finished_at"] = diagnostics.hasFinishedAt
+            properties["has_finalization_started_at"] = diagnostics.hasFinalizationStartedAt
+            properties["has_finalization_completed_at"] = diagnostics.hasFinalizationCompletedAt
+            properties["has_input_device_name"] = diagnostics.hasInputDeviceName
+            properties["local_fallback_available"] = diagnostics.localFallbackAvailable
+            properties["local_fallback_retries_remaining"] = diagnostics.localFallbackRetriesRemaining
+            if let hasLocalSegments = diagnostics.hasLocalSegments {
+                properties["has_local_segments"] = hasLocalSegments
+            }
+            if let sessionAgeSeconds = diagnostics.sessionAgeSeconds {
+                properties["session_age_seconds"] = sessionAgeSeconds
+            }
+            if let sessionDurationSeconds = diagnostics.sessionDurationSeconds {
+                properties["session_duration_seconds"] = sessionDurationSeconds
+            }
         }
         track("Desktop Conversation Reconciliation Failed", properties: properties)
     }

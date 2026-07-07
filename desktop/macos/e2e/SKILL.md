@@ -33,6 +33,15 @@ The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that 
 ```
 Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
 
+### 2a. Desktop core E2E harness (tiered)
+Primary entry for the desktop confidence ladder: `scripts/desktop-core-harness.sh` (see `e2e/CORE_E2E.md`).
+```bash
+./scripts/desktop-core-harness.sh --self-check   # Linux-safe T0 (flow lint + gauntlet hooks)
+./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
+./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e   # hermetic: dev-up offline + core matrix
+```
+Typed flows live in `e2e/flows/`; run individually with `scripts/omi-harness run <flow.yaml> --lane bridge`.
+
 ### 2b. Run semantic actions (cursor-free, in-process)
 Beyond navigation, the bridge exposes named **actions** that invoke the app's real
 code paths directly — no synthetic mouse events, so they never grab the cursor (the
@@ -43,10 +52,36 @@ deterministic equivalent of the Flutter app's Marionette driver). Prefer these o
 ./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
 ./scripts/omi-ctl action toggle_transcription enabled=false
 ```
+`omi-ctl actions` returns descriptors with `category`, `surfaces`, `safety`,
+`sideEffects`, `examples`, and `preferSemantic`. Scan those fields before using
+`agent-swift`: prefer actions whose `surfaces` match the screen and whose
+`safety` is `read_only`, `local_artifact`, or `local_ui_state` for routine checks.
 Add new actions in `DesktopAutomationActionRegistry` (`registerBuiltins()` for global
 ones, or `register(name:summary:params:handler:)` from a view model for screen-scoped
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
+
+### 2c. Inject backend faults (failure-path testing)
+The hermetic E2E harness is backend-only, so desktop failure paths (backend 5xx →
+structured `ChatErrorState`, task sortOrder sync failure surfaced/retried not silent,
+transcription transport truthfulness) can't be driven end-to-end. `scripts/omi-fault-inject.sh`
+stands up a local endpoint that fails on purpose; point a **named test bundle** (never
+prod) at it via the documented backend overrides — `OMI_PYTHON_API_URL` (chat / action-item
+sync / transcription relay), `OMI_DESKTOP_API_URL` (Rust backend), `OMI_AUTH_API_URL` (auth):
+```bash
+cd desktop/macos
+eval "$(./scripts/omi-fault-inject.sh start error)"      # modes: error | status:CODE | latency | reset | refuse
+OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
+  OMI_PYTHON_API_URL="$OMI_FAULT_URL" OMI_DESKTOP_API_URL="$OMI_FAULT_URL" \
+  OMI_APP_NAME="omi-fault" ./run.sh &
+./scripts/omi-ctl wait-ready
+./scripts/omi-ctl action ask query="hi"                  # exercise the path; assert a surfaced error, not a crash/silent no-op
+./scripts/omi-fault-inject.sh stop
+```
+`status:CODE` returns an HTTP status code in 100-599 (e.g. `status:503`, `status:429`, `status:401`);
+`latency` sleeps `--latency-ms` (default 30 000) before replying (watchdog/timeout paths);
+`reset` RSTs the connection; `refuse` leaves the port closed (connection refused). Verify a
+mode with `curl` before launching the app: `curl -s -o /dev/null -w '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
 
 ### The full loop
 ```bash

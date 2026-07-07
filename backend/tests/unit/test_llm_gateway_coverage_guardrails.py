@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config
 from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
@@ -121,6 +122,7 @@ def test_inventory_surfaces_have_status_guardrails_and_resolvable_code_paths():
         assert _inventory_file_exists(surface['code_path']), surface['code_path']
 
 
+@pytest.mark.slow
 def test_direct_provider_usage_stays_inside_approved_boundaries():
     detected = set()
     for path in BACKEND_DIR.rglob('*.py'):
@@ -167,6 +169,7 @@ def _is_skipped_path(rel: str) -> bool:
             'testing/',
             'pusher/',
             '.venv/',
+            'venv/',
             '.openapi-venv/',
         )
     )

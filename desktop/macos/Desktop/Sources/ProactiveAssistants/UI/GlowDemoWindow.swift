@@ -1,5 +1,6 @@
 import Cocoa
 import SwiftUI
+import OmiTheme
 
 /// Preview phase for glow demonstration
 enum GlowDemoPhase {

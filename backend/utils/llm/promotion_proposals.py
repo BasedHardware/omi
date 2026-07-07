@@ -2,7 +2,7 @@ import json
 import logging
 import re
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
@@ -18,12 +18,13 @@ from models.memory_contracts import (
 try:
     from .clients import get_llm
 
-    _CLIENT_IMPORT_ERROR = None
+    _client_import_error: Optional[Exception] = None
 except Exception as exc:
     # Benchmark/product-module tests may run without Firestore ADC or optional provider deps.
     # Keep the L2 prompt/parser/validation importable so callers can inject an equivalent llm.
     get_llm = None
-    _CLIENT_IMPORT_ERROR = exc
+    _client_import_error = exc
+_CLIENT_IMPORT_ERROR = _client_import_error
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +109,7 @@ class DurableMemoryPatchProposal(BaseModel):
 class DurableMemoryPatchProposals(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    patches: List[DurableMemoryPatchProposal] = Field(default_factory=list)
+    patches: List[DurableMemoryPatchProposal] = Field(default_factory=list)  # type: ignore[reportUnknownVariableType]
 
 
 # Neutral product vocabulary aliases (WS-G11).
@@ -142,8 +143,8 @@ class CandidateOutcome(BaseModel):
 
 class DurableMemorySynthesisResult(BaseModel):
     status: SynthesisStatus
-    patches: List[DurableMemoryPatch] = Field(default_factory=list)
-    outcomes: List[CandidateOutcome] = Field(default_factory=list)
+    patches: List[DurableMemoryPatch] = Field(default_factory=list)  # type: ignore[reportUnknownVariableType]
+    outcomes: List[CandidateOutcome] = Field(default_factory=list)  # type: ignore[reportUnknownVariableType]
     error_code: Optional[str] = None
     synthesis_terminal: bool = False
 
@@ -151,7 +152,7 @@ class DurableMemorySynthesisResult(BaseModel):
 PromotionSynthesisResult = DurableMemorySynthesisResult
 
 
-durable_memory_patch_prompt = ChatPromptTemplate.from_messages(
+durable_memory_patch_prompt = cast(Any, ChatPromptTemplate).from_messages(
     [
         (
             "system",
@@ -203,10 +204,10 @@ Custom search replay artifact:
 promotion_proposal_prompt = durable_memory_patch_prompt
 
 
-def _content_from_response(response) -> str:
+def _content_from_response(response: Any) -> str:
     content = getattr(response, "content", response)
     if isinstance(content, list):
-        return "\n".join(str(part) for part in content)
+        return "\n".join(str(part) for part in cast(List[Any], content))
     return str(content)
 
 
@@ -338,27 +339,27 @@ def _candidate_outcome_for_patch(index: int, patch: DurableMemoryPatch) -> Candi
 
 
 def _packet_evidence_ids(packet: Dict[str, Any]) -> set[str]:
-    ids = set(packet.get("evidence_ids") or [])
-    for source_ref in packet.get("source_refs") or []:
-        evidence_id = source_ref.get("evidence_id") if isinstance(source_ref, dict) else None
+    ids: Set[str] = set(cast(List[Any], packet.get("evidence_ids") or []))
+    for source_ref in cast(List[Any], packet.get("source_refs") or []):
+        evidence_id = cast(Dict[str, Any], source_ref).get("evidence_id") if isinstance(source_ref, dict) else None
         if evidence_id:
             ids.add(evidence_id)
-    for observation in packet.get("observations") or []:
+    for observation in cast(List[Any], packet.get("observations") or []):
         if not isinstance(observation, dict):
             continue
-        ids.update(observation.get("evidence_ids") or [])
-        for source_ref in observation.get("source_refs") or []:
-            evidence_id = source_ref.get("evidence_id") if isinstance(source_ref, dict) else None
+        ids.update(cast(List[Any], cast(Dict[str, Any], observation).get("evidence_ids") or []))
+        for source_ref in cast(List[Any], cast(Dict[str, Any], observation).get("source_refs") or []):
+            evidence_id = cast(Dict[str, Any], source_ref).get("evidence_id") if isinstance(source_ref, dict) else None
             if evidence_id:
                 ids.add(evidence_id)
     return ids
 
 
 def _retrieved_memory_ids(packet: Dict[str, Any]) -> set[str]:
-    ids = set()
-    for memory in packet.get("retrieved_memory_context") or []:
-        if isinstance(memory, dict) and memory.get("memory_id"):
-            ids.add(memory["memory_id"])
+    ids: Set[str] = set()
+    for memory in cast(List[Any], packet.get("retrieved_memory_context") or []):
+        if isinstance(memory, dict) and cast(Dict[str, Any], memory).get("memory_id"):
+            ids.add(cast(str, memory["memory_id"]))
     return ids
 
 
@@ -370,7 +371,7 @@ def _raw_payload_from_response_text(text: str) -> Dict[str, Any]:
     payload = json.loads(stripped)
     if not isinstance(payload, dict):
         raise ValueError("synthesis payload must be a JSON object")
-    return payload
+    return cast(Dict[str, Any], payload)
 
 
 def _proposal_to_patch(
@@ -406,7 +407,7 @@ def synthesize_durable_memory_patch_result(
     packet: Dict[str, Any],
     custom_search_artifact: Dict[str, Any],
     observed_head_commit_id: Optional[str],
-    llm=None,
+    llm: Any = None,
 ) -> DurableMemorySynthesisResult:
     parser = PydanticOutputParser(pydantic_object=DurableMemoryPatchProposals)
     messages = durable_memory_patch_prompt.format_messages(
@@ -416,7 +417,7 @@ def synthesize_durable_memory_patch_result(
         format_instructions=parser.get_format_instructions(),
     )
     if llm is not None:
-        model = llm
+        model: Any = llm
     elif get_llm is not None:
         model = get_llm("memory_l2")
     else:
@@ -466,13 +467,13 @@ def synthesize_durable_memory_patch_result(
     patches: List[DurableMemoryPatch] = []
     outcomes: List[CandidateOutcome] = []
 
-    for index, raw_patch in enumerate(raw_patches):
+    for index, raw_patch in enumerate(cast(List[Any], raw_patches)):
         if not isinstance(raw_patch, dict):
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="not_object")
             )
             continue
-        if _CONTROL_FIELDS.intersection(raw_patch.keys()):
+        if _CONTROL_FIELDS.intersection(cast(Dict[str, Any], raw_patch).keys()):
             outcomes.append(
                 CandidateOutcome(
                     index=index, status=CandidateOutcomeStatus.invalid, reason_code="untrusted_control_field"
@@ -480,14 +481,14 @@ def synthesize_durable_memory_patch_result(
             )
             continue
         try:
-            proposal = DurableMemoryPatchProposal(**raw_patch)
+            proposal = DurableMemoryPatchProposal(**cast(Dict[str, Any], raw_patch))
         except ValidationError:
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="validation_error")
             )
             continue
 
-        evidence_ids = set(proposal.evidence_ids or [])
+        evidence_ids: Set[str] = set(proposal.evidence_ids or [])
         if not evidence_ids.issubset(allowed_evidence):
             outcomes.append(
                 CandidateOutcome(
@@ -521,7 +522,7 @@ def synthesize_durable_memory_patch_result(
                 )
                 continue
             patch = _with_server_control_ids(patch, packet, observed_head_commit_id)
-            patch = DurableMemoryPatch(**patch.model_dump())
+            patch = DurableMemoryPatch(**patch.dict())
         except ValidationError:
             outcomes.append(
                 CandidateOutcome(index=index, status=CandidateOutcomeStatus.invalid, reason_code="validation_error")
@@ -550,7 +551,7 @@ def synthesize_durable_memory_patches(
     packet: Dict[str, Any],
     custom_search_artifact: Dict[str, Any],
     observed_head_commit_id: Optional[str],
-    llm=None,
+    llm: Any = None,
 ) -> List[DurableMemoryPatch]:
     result = synthesize_durable_memory_patch_result(
         packet=packet,
@@ -563,3 +564,39 @@ def synthesize_durable_memory_patches(
             f"memory durable synthesis did not reach terminal success: {result.error_code or result.status.value}"
         )
     return result.patches
+
+
+__all__ = [
+    "PROMOTION_RUBRIC",
+    "CandidateOutcome",
+    "CandidateOutcomeStatus",
+    "DurableMemoryPatchProposal",
+    "DurableMemoryPatchProposals",
+    "DurableMemorySynthesisResult",
+    "PromotionProposal",
+    "PromotionProposals",
+    "PromotionSynthesisResult",
+    "SynthesisStatus",
+    "_CLIENT_IMPORT_ERROR",
+    "_CONTROL_FIELDS",
+    "_QUOTE_WRAPPER_RE",
+    "_candidate_outcome_for_patch",
+    "_canonical_json",
+    "_content_from_response",
+    "_is_quote_wrapper",
+    "_logical_patch_payload",
+    "_packet_evidence_ids",
+    "_proposal_to_patch",
+    "_raw_payload_from_response_text",
+    "_retrieved_memory_ids",
+    "_valid_non_quote_wrapper_patches",
+    "_with_deterministic_patch_ids",
+    "_with_production_safety_guards",
+    "_with_server_control_ids",
+    "durable_memory_patch_prompt",
+    "get_llm",
+    "logger",
+    "promotion_proposal_prompt",
+    "synthesize_durable_memory_patch_result",
+    "synthesize_durable_memory_patches",
+]

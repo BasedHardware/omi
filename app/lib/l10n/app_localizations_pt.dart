@@ -9345,7 +9345,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Por enquanto, funciona com dispositivos Omi. O áudio permanece no seu telefone até você decidir enviá-lo.';
+      'Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9495,4 +9495,23 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Gravar firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Gravando no pingente';
+
+  @override
+  String get pendantRecordingNote =>
+      'Seu pingente grava sozinho. As gravações são sincronizadas com o telefone enquanto o app está aberto.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sincronizando gravações do seu pingente…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min armazenados';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'O armazenamento do pingente está quase cheio — mantenha o app aberto para sincronizar.';
 }

@@ -12,7 +12,7 @@ imports the other (routers must never import from other routers).
 import hashlib
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import database.action_items as action_items_db
 from database.vector_db import (
@@ -77,30 +77,28 @@ def parse_due_at(value: Union[str, datetime, None]) -> Optional[datetime]:
     """
     if value is None or isinstance(value, datetime):
         return value
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-        parsed = None
+    text = value.strip()
+    if not text:
+        return None
+    parsed: Optional[datetime] = None
+    try:
+        # fromisoformat also accepts a date-only string (e.g. 2026-07-01) and
+        # returns it naive, so the strptime branch is a fallback for formats it
+        # rejects rather than the date-only path.
+        parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
         try:
-            # fromisoformat also accepts a date-only string (e.g. 2026-07-01) and
-            # returns it naive, so the strptime branch is a fallback for formats it
-            # rejects rather than the date-only path.
-            parsed = datetime.fromisoformat(text.replace('Z', '+00:00'))
+            parsed = datetime.strptime(text, "%Y-%m-%d")
         except ValueError:
-            try:
-                parsed = datetime.strptime(text, "%Y-%m-%d")
-            except ValueError:
-                raise ValueError(f"Invalid due_at: '{value}'. Use ISO 8601 (e.g. 2026-07-01T17:00:00Z) or YYYY-MM-DD.")
-        # Normalize a tz-naive value to UTC so due-date filtering never has to
-        # compare offset-naive and offset-aware datetimes.
-        if parsed.tzinfo is None:
-            parsed = parsed.replace(tzinfo=timezone.utc)
-        return parsed
-    raise ValueError("due_at must be a date string or datetime")
+            raise ValueError(f"Invalid due_at: '{value}'. Use ISO 8601 (e.g. 2026-07-01T17:00:00Z) or YYYY-MM-DD.")
+    # Normalize a tz-naive value to UTC so due-date filtering never has to
+    # compare offset-naive and offset-aware datetimes.
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed
 
 
-def _require_unlocked(uid: str, action_item_id: str) -> dict:
+def _require_unlocked(uid: str, action_item_id: str) -> Dict[str, Any]:
     """Fetch the item (uid-scoped, so a foreign id can never resolve) and reject
     a missing/deleted item with ``ActionItemNotFound`` and a paywalled one with
     ``ActionItemLocked`` — mirroring the memory write guards."""
@@ -112,7 +110,7 @@ def _require_unlocked(uid: str, action_item_id: str) -> dict:
     return item
 
 
-def _reload(uid: str, action_item_id: str) -> dict:
+def _reload(uid: str, action_item_id: str) -> Dict[str, Any]:
     """Re-read an item after a write and shape it for the response. Raises
     ActionItemNotFound if a concurrent delete removed it between the write and
     this read, rather than dereferencing None."""
@@ -124,10 +122,10 @@ def _reload(uid: str, action_item_id: str) -> dict:
 
 def create_action_item(
     uid: str,
-    description: str,
+    description: Optional[str],
     due_at: Union[str, datetime, None] = None,
     completed: bool = False,
-) -> dict:
+) -> Dict[str, Any]:
     """Create a task and return its cleaned MCP shape. Content-idempotent on
     (uid, normalized description)."""
     text = _normalize_description(description)
@@ -155,7 +153,7 @@ def create_action_item(
     return clean_action_item(item)
 
 
-def set_completed(uid: str, action_item_id: str, completed: bool = True) -> dict:
+def set_completed(uid: str, action_item_id: str, completed: bool = True) -> Dict[str, Any]:
     """Mark a task complete or reopen it."""
     _require_unlocked(uid, action_item_id)
     if not action_items_db.mark_action_item_completed(uid, action_item_id, completed=completed):
@@ -168,14 +166,14 @@ def update_action_item(
     action_item_id: str,
     description: Optional[str] = None,
     due_at: Union[str, datetime, None] = None,
-) -> dict:
+) -> Dict[str, Any]:
     """Update a task's description and/or due date.
 
     Only the fields provided are changed. Clearing a due date is not supported in
     this version (an omitted ``due_at`` leaves it unchanged rather than nulling it).
     """
     _require_unlocked(uid, action_item_id)
-    update_data: dict = {}
+    update_data: Dict[str, Any] = {}
     new_text: Optional[str] = None
     if description is not None:
         new_text = _normalize_description(description)
@@ -220,7 +218,7 @@ def delete_action_item(uid: str, action_item_id: str) -> None:
         )
 
 
-def search_action_items(uid: str, query: str, limit: int = 10) -> List[dict]:
+def search_action_items(uid: str, query: Optional[str], limit: int = 10) -> List[Dict[str, Any]]:
     """Semantic search over the user's tasks, returned in relevance order."""
     if not query or not query.strip():
         raise ValueError("query is required")
@@ -233,9 +231,9 @@ def search_action_items(uid: str, query: str, limit: int = 10) -> List[dict]:
     ids = search_action_items_by_vector(uid, query, limit=limit)
     if not ids:
         return []
-    items = action_items_db.get_action_items_by_ids(uid, ids)
+    items: List[Dict[str, Any]] = action_items_db.get_action_items_by_ids(uid, ids)
     # Preserve the relevance order from the vector search; get_action_items_by_ids
     # does not guarantee ordering.
     order = {aid: i for i, aid in enumerate(ids)}
-    items.sort(key=lambda it: order.get(it.get("id"), len(ids)))
+    items.sort(key=lambda it: order.get(it.get("id", ""), len(ids)))
     return [clean_action_item(it) for it in items if not it.get("deleted", False)]

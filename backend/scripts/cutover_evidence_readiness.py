@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, Sequence
 
 CUTOVER_GATE_STATUS_BLOCKED = "BLOCKED"
 CUTOVER_GATE_STATUS_NOT_RUN = "NOT_RUN"

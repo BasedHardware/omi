@@ -1029,6 +1029,25 @@ mod tests {
     }
 
     #[test]
+    fn app_matching_accepts_legacy_main_shapes_and_requires_exact_plugin() {
+        let absent_fields = json!({});
+        let empty_fields = json!({
+            "plugin_id": {"stringValue": ""},
+            "app_id": {"stringValue": ""}
+        });
+        let plugin_fields = json!({
+            "plugin_id": {"stringValue": "plugin-a"},
+            "app_id": {"stringValue": "plugin-a"}
+        });
+
+        assert!(chat_session_matches_app(&absent_fields, None));
+        assert!(chat_session_matches_app(&empty_fields, None));
+        assert!(chat_session_matches_app(&plugin_fields, Some("plugin-a")));
+        assert!(!chat_session_matches_app(&plugin_fields, Some("plugin-b")));
+        assert!(!chat_session_matches_app(&plugin_fields, None));
+    }
+
+    #[test]
     fn create_chat_session_fields_preserve_main_nulls_and_plugin_fields() {
         let main_fields = build_create_chat_session_fields("session", None, None, timestamp());
         assert_eq!(main_fields["app_id"], json!({"nullValue": null}));

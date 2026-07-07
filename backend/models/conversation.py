@@ -165,7 +165,7 @@ class Conversation(BaseModel):
             else:
                 return obj
 
-        conversation_dict = self.dict()
+        conversation_dict = self.model_dump()
         # Convert all datetime objects recursively
         conversation_dict = convert_datetime_to_iso(conversation_dict)
         return conversation_dict

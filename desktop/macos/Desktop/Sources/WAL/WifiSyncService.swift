@@ -2,6 +2,7 @@ import Combine
 import Foundation
 import Network
 import os.log
+import OmiWAL
 
 // MARK: - WiFi Sync Service
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, cast
 
 from database import memory_ledger
 from database.memory_ledger import HeadConflict
@@ -23,13 +23,29 @@ class MemoryToolValidationError(ValueError):
     pass
 
 
+MutationPayload = Dict[str, Any]
+FactPayload = Dict[str, Any]
+
+
+def _empty_mutations() -> List[MutationPayload]:
+    return []
+
+
+def _empty_evidence_id_set() -> set[str]:
+    return set()
+
+
+def _empty_existing_facts() -> Dict[str, FactPayload]:
+    return {}
+
+
 @dataclass(frozen=True)
 class MemoryToolResult:
     patch_id: str
     decision: str
     commit_id: Optional[str]
     applied: bool
-    mutations: List[Dict[str, Any]] = field(default_factory=list)
+    mutations: List[MutationPayload] = field(default_factory=_empty_mutations)
     non_active_route: Optional[Any] = None
     head_conflict_retry: bool = False
 
@@ -42,10 +58,10 @@ RoutePersister = Callable[..., Any]
 @dataclass
 class MemoryToolContext:
     uid: str
-    allowed_evidence_ids: set[str] = field(default_factory=set)
-    existing_facts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    allowed_evidence_ids: set[str] = field(default_factory=_empty_evidence_id_set)
+    existing_facts: Dict[str, FactPayload] = field(default_factory=_empty_existing_facts)
     run_id: Optional[str] = None
-    append_commit: AppendCommit = memory_ledger.append_commit
+    append_commit: AppendCommit = cast(AppendCommit, getattr(memory_ledger, 'append_commit'))
     read_head: ReadHead = memory_ledger.read_head
     route_persister: RoutePersister = persist_non_active_route_for_patch
     retry_on_head_conflict: bool = True
@@ -104,7 +120,7 @@ def _validate_patch_shape(patch: DurableMemoryPatch) -> None:
         raise MemoryToolValidationError('target_memory_id is required')
 
 
-def _validate_subject_integrity(patch: DurableMemoryPatch, existing_facts: Dict[str, Dict[str, Any]]) -> None:
+def _validate_subject_integrity(patch: DurableMemoryPatch, existing_facts: Dict[str, FactPayload]) -> None:
     if not patch.target_memory_id or not patch.subject_entity_id:
         return
     target = existing_facts.get(patch.target_memory_id)
@@ -122,8 +138,16 @@ def validate_patch_for_memory_tools(patch: DurableMemoryPatch, context: MemoryTo
 
 
 def _commit_id(result: Dict[str, Any]) -> Optional[str]:
-    commit = result.get('commit') or {}
-    return commit.get('commit_id')
+    raw_commit = result.get('commit')
+    commit = cast(Dict[str, Any], raw_commit) if isinstance(raw_commit, dict) else {}
+    raw_commit_id = commit.get('commit_id')
+    return raw_commit_id if isinstance(raw_commit_id, str) else None
+
+
+def _string_values(raw: Any) -> List[str]:
+    if not isinstance(raw, list):
+        return []
+    return [str(value) for value in cast(List[object], raw) if value]
 
 
 def apply_patch_with_memory_tools(patch: DurableMemoryPatch, context: MemoryToolContext) -> MemoryToolResult:
@@ -183,34 +207,51 @@ def apply_patch_with_memory_tools(patch: DurableMemoryPatch, context: MemoryTool
 
 
 def evidence_ids_from_bundle(bundle: Dict[str, Any]) -> set[str]:
-    ids = set()
-    for packet in bundle.get('evidence_packets') or []:
-        ids.update(packet.get('evidence_ids') or [])
-        for ref in packet.get('source_refs') or []:
-            if isinstance(ref, dict) and ref.get('evidence_id'):
-                ids.add(ref['evidence_id'])
-        for observation in packet.get('observations') or []:
-            if isinstance(observation, dict):
-                ids.update(observation.get('evidence_ids') or [])
-    for item in bundle.get('l1_items') or []:
-        ids.update(item.get('evidence_ids') or [])
-        for ref in item.get('source_refs') or []:
-            if isinstance(ref, dict) and ref.get('evidence_id'):
-                ids.add(ref['evidence_id'])
+    ids: set[str] = set()
+    raw_packets = bundle.get('evidence_packets')
+    packets = cast(List[Dict[str, Any]], raw_packets) if isinstance(raw_packets, list) else []
+    for packet in packets:
+        raw_packet_evidence_ids = packet.get('evidence_ids')
+        ids.update(_string_values(raw_packet_evidence_ids))
+        raw_source_refs = packet.get('source_refs')
+        source_refs = cast(List[Dict[str, Any]], raw_source_refs) if isinstance(raw_source_refs, list) else []
+        for ref in source_refs:
+            if ref.get('evidence_id'):
+                ids.add(str(ref['evidence_id']))
+        raw_observations = packet.get('observations')
+        observations = cast(List[Dict[str, Any]], raw_observations) if isinstance(raw_observations, list) else []
+        for observation in observations:
+            raw_observation_evidence_ids = observation.get('evidence_ids')
+            ids.update(_string_values(raw_observation_evidence_ids))
+    raw_l1_items = bundle.get('l1_items')
+    l1_items = cast(List[Dict[str, Any]], raw_l1_items) if isinstance(raw_l1_items, list) else []
+    for item in l1_items:
+        raw_item_evidence_ids = item.get('evidence_ids')
+        ids.update(_string_values(raw_item_evidence_ids))
+        raw_source_refs = item.get('source_refs')
+        source_refs = cast(List[Dict[str, Any]], raw_source_refs) if isinstance(raw_source_refs, list) else []
+        for ref in source_refs:
+            if ref.get('evidence_id'):
+                ids.add(str(ref['evidence_id']))
     return {evidence_id for evidence_id in ids if evidence_id}
 
 
-def facts_from_bundle(bundle: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    facts = {}
-    graph = bundle.get('graph_snapshot') or {}
-    for edge in graph.get('edges') or []:
-        if isinstance(edge, dict) and edge.get('fact_id'):
-            facts[str(edge['fact_id'])] = edge
-    for item in bundle.get('vector_seed') or []:
-        if isinstance(item, dict):
-            fact_id = item.get('id') or item.get('memory_id')
-            if fact_id:
-                facts[str(fact_id)] = item
+def facts_from_bundle(bundle: Dict[str, Any]) -> Dict[str, FactPayload]:
+    facts: Dict[str, FactPayload] = {}
+    raw_graph = bundle.get('graph_snapshot')
+    graph = cast(Dict[str, Any], raw_graph) if isinstance(raw_graph, dict) else {}
+    raw_edges = graph.get('edges')
+    edges = cast(List[Dict[str, Any]], raw_edges) if isinstance(raw_edges, list) else []
+    for edge in edges:
+        fact_id = edge.get('fact_id')
+        if fact_id:
+            facts[str(fact_id)] = edge
+    raw_vector_seed = bundle.get('vector_seed')
+    vector_seed = cast(List[Dict[str, Any]], raw_vector_seed) if isinstance(raw_vector_seed, list) else []
+    for item in vector_seed:
+        fact_id = item.get('id') or item.get('memory_id')
+        if fact_id:
+            facts[str(fact_id)] = item
     return facts
 
 

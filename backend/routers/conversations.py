@@ -1,7 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from typing import Optional, List
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
@@ -35,9 +35,11 @@ from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.app import App
 from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
+from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
@@ -117,6 +119,41 @@ class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
 
 
+class SearchConversationsResponse(BaseModel):
+    items: List[Conversation]
+    total_pages: int
+    current_page: int
+    per_page: int
+
+
+class ConversationStatusResponse(BaseModel):
+    status: str
+
+
+class ConversationsCountResponse(BaseModel):
+    count: int
+    sources: List[str] | None = None
+
+
+class ConversationRecordingResponse(BaseModel):
+    has_recording: bool
+
+
+class SharedConversationResponse(Conversation):
+    model_config = {"extra": "allow"}
+
+    people: List[Person] = []
+
+
+class ConversationSuggestedAppsResponse(BaseModel):
+    suggested_apps: List[App]
+    conversation_id: str
+
+
+class ConversationTestPromptResponse(BaseModel):
+    summary: str
+
+
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
 def process_in_progress_conversation(
     request: ProcessConversationRequest = None,
@@ -133,7 +170,7 @@ def process_in_progress_conversation(
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
 
     # Geolocation
     geolocation = redis_db.get_cached_user_geolocation(uid)
@@ -172,7 +209,7 @@ def finalize_conversation(
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
         claim_updates['external_data'] = conversation.external_data
 
     if not conversations_db.claim_conversation_status(
@@ -281,7 +318,7 @@ def get_conversations(
     return conversations
 
 
-@router.get('/v1/conversations/count', tags=['conversations'])
+@router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
@@ -335,14 +372,20 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
     return conversation
 
 
-@router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+)
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
 
 
-@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+@router.delete(
+    "/v1/conversations/{conversation_id}/calendar-event",
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Unlink a calendar event from a conversation.
@@ -501,7 +544,9 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
-@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/summary", tags=['conversations'], response_model=ConversationStatusResponse
+)
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -513,7 +558,11 @@ def patch_conversation_summary(
     return {'status': 'Ok'}
 
 
-@router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/segments/text",
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -545,7 +594,7 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
+@router.delete("/v1/conversations/{conversation_id}", response_model=StatusResponse, tags=['conversations'])
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
@@ -580,13 +629,19 @@ def delete_conversation(
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/recording",
+    response_model=ConversationRecordingResponse,
+    tags=['conversations'],
+)
 def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
-@router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/events", response_model=ConversationStatusResponse, tags=['conversations']
+)
 def set_conversation_events_state(
     conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -600,11 +655,15 @@ def set_conversation_events_state(
             continue
         events[event_idx].created = data.values[i]
 
-    conversations_db.update_conversation_events(uid, conversation_id, [event.dict() for event in events])
+    conversations_db.update_conversation_events(uid, conversation_id, [event.model_dump() for event in events])
     return {"status": "Ok"}
 
 
-@router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
 def set_action_item_status(
     data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
 ):
@@ -634,7 +693,7 @@ def set_action_item_status(
             action_item.completed_at = None
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
     # Mirror status updates to the standalone action_items collection
@@ -664,7 +723,9 @@ def set_action_item_status(
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations']
+    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
 )
 def update_action_item_description(
     conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
@@ -684,7 +745,7 @@ def update_action_item_description(
         raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
     # Mirror description update in the standalone action_items collection
@@ -698,14 +759,18 @@ def update_action_item_description(
     return {"status": "Ok"}
 
 
-@router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+@router.delete(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     updated_action_items = [item for item in action_items if not (item.description == data.description)]
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in updated_action_items]
     )
 
     # Mirror deletion in the standalone action_items collection
@@ -772,7 +837,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -846,7 +911,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -903,7 +968,7 @@ def assign_segments_bulk(
                 raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -924,7 +989,11 @@ def assign_segments_bulk(
 # *********************************************
 
 
-@router.patch('/v1/conversations/{conversation_id}/visibility', tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/visibility',
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def set_conversation_visibility(
     conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -941,7 +1010,9 @@ def set_conversation_visibility(
     return {"status": "Ok"}
 
 
-@router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+)
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
@@ -949,7 +1020,9 @@ def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Dep
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/shared", tags=['conversations'], response_model=SharedConversationResponse
+)
 def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)
     if not uid:
@@ -971,11 +1044,11 @@ def get_shared_conversation_by_id(conversation_id: str):
 
     # Return conversation with people data
     response_dict = conversation_to_dict(conversation)
-    response_dict['people'] = [p.dict() for p in people]
+    response_dict['people'] = [p.model_dump() for p in people]
     return response_dict
 
 
-@router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
+@router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
 def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
@@ -1001,7 +1074,7 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
-    return search_conversations(
+    search_results = search_conversations(
         query=search_request.query,
         page=search_request.page,
         per_page=search_request.per_page,
@@ -1011,12 +1084,30 @@ def search_conversations_endpoint(
         end_date=end_timestamp,
         speaker_id=search_request.speaker_id,
     )
+    conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    conversations = conversations_db.get_conversations_by_id_without_photos(
+        uid,
+        conversation_ids,
+        include_discarded=bool(search_request.include_discarded),
+    )
+    # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
+    # so search never leaks that a locked conversation matched a query.
+    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    redact_conversations_for_list(conversations)
+    search_results['items'] = conversations
+    search_results['total_pages'] = (
+        search_request.page + 1 if len(conversations) >= search_request.per_page else search_request.page
+    )
+    return search_results
 
 
-@router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/suggested-apps",
+    response_model=ConversationSuggestedAppsResponse,
+    tags=['conversations'],
+)
 def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
-    from models.app import App
+    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
 
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
@@ -1028,8 +1119,6 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
         if app_data:
             app = App(**app_data)
             # Add user-specific data
-            from utils.apps import get_is_user_paid_app
-
             app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
             # Add payment link with user reference
@@ -1044,10 +1133,14 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
             suggested_apps.append(app)
 
-    return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
+    return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
 
 
-@router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
+@router.post(
+    "/v1/conversations/{conversation_id}/test-prompt",
+    response_model=ConversationTestPromptResponse,
+    tags=['conversations'],
+)
 def test_prompt(
     conversation_id: str,
     request: TestPromptRequest,

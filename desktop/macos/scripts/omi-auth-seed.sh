@@ -15,6 +15,11 @@ set -euo pipefail
 TARGET="${1:?usage: omi-auth-seed.sh <target-bundle-id> [in-file]}"
 IN="${2:-$(cd "$(dirname "$0")/.." && pwd)/tmp/desktop-auth.json}"
 
+[ "$TARGET" != "com.omi.computer-macos" ] || {
+  echo "Refusing to seed production auth; shipped bundles store Firebase tokens in Keychain." >&2
+  exit 1
+}
+
 [ -f "$IN" ] || { echo "No auth file at $IN — run omi-auth-dump.sh first." >&2; exit 1; }
 
 python3 - "$TARGET" "$IN" <<'PY'

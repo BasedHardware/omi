@@ -1,43 +1,7 @@
-class McpApiKey {
-  final String id;
-  final String name;
-  final String keyPrefix;
-  final DateTime createdAt;
-  final DateTime? lastUsedAt;
+// Phase 4 SSOT: hand-written schema classes replaced with generated wire DTOs.
+// The generated types carry identical fields + fromJson + toJson; the hand-written
+// classes were pure 1:1 field-mapping boilerplate (fromGenerated/toGenerated).
+import 'package:omi/backend/schema/gen/api_keys_wire.g.dart' as wire;
 
-  McpApiKey({required this.id, required this.name, required this.keyPrefix, required this.createdAt, this.lastUsedAt});
-
-  factory McpApiKey.fromJson(Map<String, dynamic> json) {
-    return McpApiKey(
-      id: json['id'],
-      name: json['name'],
-      keyPrefix: json['key_prefix'],
-      createdAt: DateTime.parse(json['created_at']),
-      lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
-    );
-  }
-}
-
-class McpApiKeyCreated extends McpApiKey {
-  final String key;
-
-  McpApiKeyCreated({
-    required super.id,
-    required super.name,
-    required super.keyPrefix,
-    required super.createdAt,
-    super.lastUsedAt,
-    required this.key,
-  });
-
-  factory McpApiKeyCreated.fromJson(Map<String, dynamic> json) {
-    return McpApiKeyCreated(
-      id: json['id'],
-      name: json['name'],
-      keyPrefix: json['key_prefix'],
-      createdAt: DateTime.parse(json['created_at']),
-      lastUsedAt: json['last_used_at'] != null ? DateTime.parse(json['last_used_at']) : null,
-      key: json['key'],
-    );
-  }
-}
+typedef McpApiKey = wire.GeneratedMcpApiKey;
+typedef McpApiKeyCreated = wire.GeneratedMcpApiKeyCreated;

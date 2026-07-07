@@ -3,6 +3,7 @@ import UserNotifications
 
 enum NotificationRegistrationRepair {
   static let repairedVersionKey = "notificationRegistrationRepairedAppVersion"
+  static let startupRepairAttemptedVersionKey = "notificationStartupRepairAttemptedAppVersion"
 
   private static var isRepairing = false
   private static var pendingCompletions: [(Bool) -> Void] = []
@@ -26,6 +27,24 @@ enum NotificationRegistrationRepair {
     versionIdentifier: String = currentVersionIdentifier()
   ) {
     defaults.set(versionIdentifier, forKey: repairedVersionKey)
+  }
+
+  /// Whether the non-user-initiated startup path may attempt a launch-services
+  /// notification repair. Users stuck in the launch-disabled + notDetermined state
+  /// would otherwise re-run lsregister + killall usernoted/NotificationCenter on
+  /// every launch/wake; gate that attempt to once per installed app version.
+  static func shouldAttemptStartupRepair(
+    defaults: UserDefaults = .standard,
+    versionIdentifier: String = currentVersionIdentifier()
+  ) -> Bool {
+    defaults.string(forKey: startupRepairAttemptedVersionKey) != versionIdentifier
+  }
+
+  static func markStartupRepairAttempted(
+    defaults: UserDefaults = .standard,
+    versionIdentifier: String = currentVersionIdentifier()
+  ) {
+    defaults.set(versionIdentifier, forKey: startupRepairAttemptedVersionKey)
   }
 
   @MainActor

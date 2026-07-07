@@ -58,7 +58,7 @@ except ModuleNotFoundError:
         created: bool = False
 
         def as_dict_cleaned_dates(self):
-            event_dict = self.dict()
+            event_dict = self.model_dump()
             event_dict['start'] = event_dict['start'].isoformat()
             return event_dict
 

@@ -6,6 +6,27 @@
 
 These rules apply to every AI agent working in this repository. This file is the single source of truth; `CLAUDE.md` just points here.
 
+**Two audiences read this file.** Engineering standards (Definition of Done, coding guidelines, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about this repo's `main` branch, production app bundles, deploys, and local machine workflows assume a maintainer environment; if you are working in a fork, follow your user's process for landing changes and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`.
+
+## Definition of Done
+
+Every change must satisfy this checklist before it is committed or put in a PR. When in doubt about any other rule in this file, satisfying this list is the priority.
+
+1. **Behavior changed → a test changed.** Bug fixes include the regression test that would have caught the bug. New features test the core path and the main error path — no more.
+2. **The component's test suite passes** (`backend/test.sh`, `app/test.sh`, or the component's documented equivalent), run locally before committing.
+3. **You exercised the change yourself** — ran the real user-facing path, not just compiled or lint-passed. If you truly could not, say so explicitly instead of implying it works.
+4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
+5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
+6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR.
+
+## Leave It Better Than You Found It
+
+Improve the code you touch — within your blast radius:
+
+- If you touch a file and see a small related defect (dead code, a bug adjacent to your fix, a missing test for code you are modifying), fix it **in a separate commit in the same PR** so it is independently reviewable and revertable.
+- Only make an opportunistic fix you can verify — covered by an existing or new test, or trivially checkable. If you can't verify it, open a GitHub issue instead of touching it.
+- Never expand beyond files you were already modifying, refactor working code for style alone, or "clean up" code you haven't run. Deferring is wrong when the fix is in scope and verifiable; expanding scope is wrong everywhere else.
+
 ## Behavior
 
 - Never ask for permission to access folders, run commands, search the web, or use tools. Just do it.
@@ -89,7 +110,8 @@ agent-proxy (agent-proxy/main.py)
 
 backend-sync (main.py, Cloud Run)
   ├── ──────► Cloud Tasks queue `sync-jobs` ──► POST /v2/sync-jobs/run (OIDC, same service)
-  └── ──────► Cloud Tasks queue `audio-merge` ──► POST /v2/audio-merge-jobs/run (OIDC, same service)
+  ├── ──────► Cloud Tasks queue `audio-merge` ──► POST /v2/audio-merge-jobs/run (OIDC, same service)
+  └── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
 
 notifications-job (modal/job.py)  [cron]
 agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
@@ -106,13 +128,13 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 - **vad** (`modal/main.py`) — GPU. `/v1/vad` and `/v1/speaker-identification`. Called by backend only.
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and parakeet is selected.
-- **backend-sync** (`main.py`, same image as backend) — Cloud Run service for `/v2/sync-local-files`. When `SYNC_DISPATCH_MODE=cloud_tasks`: stages raw audio in GCS, enqueues to Cloud Tasks queue `sync-jobs`, which POSTs `/v2/sync-jobs/run` (OIDC-verified, `utils/cloud_tasks.py`) to run decode→VAD→STT inside a request. Inline fallback when the flag is off, env is incomplete, BYOK headers are present, or enqueue fails. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`).
+- **backend-sync** (`main.py`, same image as backend) — Cloud Run service for `/v2/sync-local-files`. When `SYNC_DISPATCH_MODE=cloud_tasks`: stages raw audio in GCS, enqueues to Cloud Tasks queue `sync-jobs`, which POSTs `/v2/sync-jobs/run` (OIDC-verified, `utils/cloud_tasks.py`) to run decode→VAD→STT inside a request. Inline fallback when the flag is off, env is incomplete, BYOK headers are present, or enqueue fails. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`). Account deletion uses `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` to enqueue durable wipes to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
 - **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
 - **monitoring** (`backend/charts/monitoring/`) — Prometheus, Grafana, Loki, Alloy, alerts, and HPA metric adapters for backend services.
 - **agent-vm-reaper** (`backend/charts/agent-vm-reaper/`) — CronJob that deletes stale `omi-agent-*` GCE VMs left by desktop agent sandboxes.
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
 
-Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `python backend/scripts/validate-backend-runtime-env.py --env <dev|prod>` after backend runtime env changes.
+Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes.
 
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section. If a PR changes audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR.
 
@@ -270,6 +292,16 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 ## Testing
 
+### Philosophy — coverage grows by ratchet, not by mandate
+
+- **Every bug fix adds the regression test that would have caught it.** This is the one non-negotiable way coverage grows; it compounds exactly where the codebase has proven fragile.
+- **New features test the core path and the main error path.** Don't chase exhaustive coverage — a small test that will still be meaningful in a year beats ten brittle ones.
+- **CI tests must be hermetic**: no live services, no network, no sleeps, no ordering dependence. A test that needs a live service stays out of the CI suite; note in the PR how you ran it instead.
+- **Hermetic tests must run in CI.** Put new hermetic tests where the component's runner discovers them and confirm they execute in a full local run; if a test requires a live service, keep it out of CI and document how you ran it in the PR.
+- Delete or fix a flaky/obsolete test you encounter (see Leave It Better) — a suite people distrust is worse than a smaller suite.
+
+### Running Tests
+
 - Run `backend/test-preflight.sh` first to verify tools, packages, and env vars.
 - High-risk backend workflows (checkpoint/resume, retry/idempotency, side-effect fanout, rollout/repair jobs) must be listed in `backend/testing/workflow_contracts.json` with local contract tests; source-only changes must run those tests before PR.
 - OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
@@ -286,6 +318,8 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 
 - **This file (`AGENTS.md`) is the single source of truth for agent instructions.** Add or change rules here. `CLAUDE.md` is only a pointer — do not put instructions in it.
 - **Any AI editing this file must keep it concise and simple** — short, plain bullets a human or agent can scan fast. Prefer editing/replacing an existing line over adding new ones; no verbose prose.
+- **Write rules mechanically, and back them with checks.** Agents of very different capability read this file; a rule is only reliable if a weak agent can apply it without judgment ("put live-service tests under X, excluded from CI" beats "avoid heavy tests"). Prefer encoding a rule as a script or CI check with a clear failure message — enforced rules don't drift; requested behavior does.
+- **When a defect ships because guidance was misread or missing, tighten the guidance in the fix PR** — make the rule mechanical enough that the same misreading can't recur, or add a check that catches it.
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.

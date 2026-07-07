@@ -20,6 +20,7 @@ enum TranscriptionFinalizationStrategy: String, Codable, CaseIterable {
 enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
     case userStop = "user_stop"
     case finishAndContinue = "finish_and_continue"
+    case meetingEnded = "meeting_ended"
     case maxDurationRotation = "max_duration_rotation"
     case crashRecovery = "crash_recovery"
     case retry = "retry"

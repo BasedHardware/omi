@@ -96,9 +96,31 @@ def write_json(path: Path, data: typing.Any) -> None:
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def automation_token(port: int) -> str | None:
+    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
+    if token:
+        return token
+    token_file = Path(
+        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
+        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
+    )
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    return token or None
+
+
+def automation_port_from_base_url(base_url: str) -> int:
+    return int(base_url.rsplit(":", 1)[1])
+
+
 def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
     data = None
     headers = {"Accept": "application/json"}
+    token = automation_token(automation_port_from_base_url(base_url))
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -1042,7 +1064,6 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
         default=env_flag("OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION"),
         help="explicitly allow compatible flows older than the current harness schema",
     )
-
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)

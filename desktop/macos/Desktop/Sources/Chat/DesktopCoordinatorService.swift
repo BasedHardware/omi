@@ -105,6 +105,10 @@ struct DesktopCoordinatorCompletionDelta: Codable {
   let ids: [String]
   let prompt: String
   let completedAtHighWaterMs: Int?
+  // Artifacts produced by the newly-completed sub-agents in this delta, so the
+  // consuming surface (main chat / notch) can render them as resource cards on
+  // the parent's response.
+  var artifacts: [AgentArtifactProjection] = []
 }
 
 struct DesktopCoordinatorSpawnedAgent: Codable {
@@ -120,6 +124,7 @@ struct DesktopCoordinatorAgentRunInspection: Codable {
   let status: String
   let finalText: String?
   let errorMessage: String?
+  let artifacts: [AgentArtifactProjection]
 }
 
 @MainActor
@@ -136,9 +141,11 @@ final class DesktopCoordinatorService {
     static let createDispatch = "create_desktop_dispatch"
     static let resolveDispatch = "resolve_desktop_dispatch"
     static let cancelAgentRun = "cancel_agent_run"
+    static let inspectAgentArtifacts = "inspect_agent_artifacts"
     static let sendAgentMessage = "send_agent_message"
-    static let spawnBackgroundAgent = "spawn_background_agent"
-    static let delegateAgent = "delegate_agent"
+    static let spawnAgent = "spawn_agent"
+    static let runAgentAndWait = "run_agent_and_wait"
+    static let setDesktopAttentionOverride = "set_desktop_attention_override"
   }
 
   private let runtime: DesktopCoordinatorRuntimeControlling
@@ -274,33 +281,47 @@ final class DesktopCoordinatorService {
     )
   }
 
-  func spawnBackgroundAgent(
-    prompt: String,
+  func spawnAgent(
+    objective: String,
     title: String?,
     pillId: UUID,
+    provider: String?,
+    parentRunId: String?,
+    visible: Bool,
     model: String?,
     harnessMode: AgentHarnessMode?,
     cwd: String?
   ) async throws -> DesktopCoordinatorSpawnedAgent {
     var input: [String: Any] = [
-      "prompt": prompt,
-      "surfaceKind": "background_agent",
-      "externalRefKind": "pill",
+      "objective": objective,
+      "visible": visible,
       "externalRefId": pillId.uuidString,
       "clientId": "desktop-floating-pill",
-      "mode": "act",
       "metadata": [
-        "uiProjection": "floating_pill",
+        "uiProjection": visible ? "floating_bar" : "delegated_agent",
         "pillId": pillId.uuidString,
       ],
     ]
     if let title, !title.isEmpty { input["title"] = title }
+    if let provider, !provider.isEmpty { input["provider"] = provider }
+    if let parentRunId, !parentRunId.isEmpty { input["parentRunId"] = parentRunId }
     if let model, !model.isEmpty { input["model"] = model }
     if let harnessMode { input["adapterId"] = AgentRuntimeRouting.adapterId(for: harnessMode).rawValue }
     if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
-
-    let raw = try await callRuntimeControlTool(ToolName.spawnBackgroundAgent, input: input)
+    let raw = try await callRuntimeControlTool(ToolName.spawnAgent, input: input)
     return try parseSpawnedAgent(from: raw)
+  }
+
+  func dismissFloatingRunAttention(runId: String, reason: String = "Dismissed by user") async throws {
+    _ = try await callRuntimeControlTool(
+      ToolName.setDesktopAttentionOverride,
+      input: [
+        "subjectKind": "run",
+        "subjectId": runId,
+        "dismissed": true,
+        "reason": reason,
+      ]
+    )
   }
 
   func continueAgent(sessionId: String, prompt: String, model: String?, cwd: String?) async throws -> DesktopCoordinatorAgentRunInspection {
@@ -309,7 +330,7 @@ final class DesktopCoordinatorService {
       "prompt": prompt,
       "mode": "act",
       "clientId": "desktop-floating-pill",
-      "metadata": ["uiProjection": "floating_pill"],
+      "metadata": ["uiProjection": "floating_bar"],
     ]
     if let model, !model.isEmpty { input["model"] = model }
     if let cwd, !cwd.isEmpty { input["cwd"] = cwd }
@@ -319,6 +340,19 @@ final class DesktopCoordinatorService {
 
   func inspectAgentRun(runId: String) async throws -> DesktopCoordinatorAgentRunInspection {
     parseInspectedRun(from: try await inspectRun(runId: runId))
+  }
+
+  func inspectArtifactsForRun(runId: String) async throws -> [AgentArtifactProjection] {
+    let trimmedRunId = runId.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmedRunId.isEmpty else {
+      throw NSError(
+        domain: "DesktopCoordinatorService",
+        code: 4,
+        userInfo: [NSLocalizedDescriptionKey: "runId is required to inspect agent artifacts"]
+      )
+    }
+    let raw = try await callRuntimeControlTool(ToolName.inspectAgentArtifacts, input: ["runId": trimmedRunId, "limit": 100])
+    return try AgentArtifactProjection.parseList(fromToolResult: raw)
   }
 
   func completedAgentDeltaPrompt(surfaceKind: String, limit: Int = 5) async -> String? {
@@ -347,12 +381,17 @@ final class DesktopCoordinatorService {
       let seen = Set(checkpointDefaults.stringArray(forKey: completionCheckpointKey(surfaceKey: surfaceKey)) ?? [])
       let nowMs = currentTimeMs()
       let highWaterKey = completionHighWaterKey(surfaceKey: surfaceKey)
-      guard checkpointDefaults.object(forKey: highWaterKey) != nil else {
-        checkpointDefaults.set(nowMs, forKey: highWaterKey)
-        return nil
-      }
-      let highWaterMs = checkpointDefaults.integer(forKey: highWaterKey)
       let minCompletedAtMs = nowMs - completionDeltaMaxAgeMs
+      let highWaterMs: Int
+      if checkpointDefaults.object(forKey: highWaterKey) != nil {
+        highWaterMs = checkpointDefaults.integer(forKey: highWaterKey)
+      } else {
+        // First use starts at the bounded recent-window floor, not now. A parent
+        // chat may not ask for deltas until after its sub-agent finishes, and that
+        // first check still needs to surface the completed agent's resources.
+        highWaterMs = minCompletedAtMs
+        checkpointDefaults.set(minCompletedAtMs, forKey: highWaterKey)
+      }
       let items = parseCompletionDeltaItems(from: raw)
         .filter {
           guard let completedAtMs = $0.completedAtMs else { return false }
@@ -368,7 +407,8 @@ final class DesktopCoordinatorService {
       return DesktopCoordinatorCompletionDelta(
         ids: items.map(\.id),
         prompt: formatCompletionDeltaPrompt(surfaceKind: surfaceLabel, items: items),
-        completedAtHighWaterMs: items.compactMap(\.completedAtMs).max()
+        completedAtHighWaterMs: items.compactMap(\.completedAtMs).max(),
+        artifacts: await collectDeltaArtifacts(for: items)
       )
     } catch {
       logError("DesktopCoordinatorService: completed agent delta unavailable", error: error)
@@ -452,7 +492,7 @@ final class DesktopCoordinatorService {
     }
 
     let route = normalized.count > 140 || normalized.contains("build") || normalized.contains("implement")
-      ? "delegate_agent"
+      ? "spawn_agent"
       : "answer_or_start_session"
     return DesktopCoordinatorRouteDecision(
       generatedAt: nowString(),
@@ -476,10 +516,46 @@ final class DesktopCoordinatorService {
       ToolName.createDispatch,
       ToolName.resolveDispatch,
       ToolName.cancelAgentRun,
+      ToolName.inspectAgentArtifacts,
       ToolName.sendAgentMessage,
-      ToolName.spawnBackgroundAgent,
-      ToolName.delegateAgent,
+      ToolName.spawnAgent,
+      ToolName.runAgentAndWait,
+      ToolName.setDesktopAttentionOverride,
     ]
+  }
+
+  func listFloatingAgentPills(limit: Int = 50) async throws -> [[String: Any]] {
+    let raw = try await callRuntimeControlTool(
+      ToolName.listAgentSessions,
+      input: ["limit": limit, "surfaceKind": "floating_bar"]
+    )
+    guard let data = raw.data(using: .utf8),
+      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+      object["ok"] as? Bool == true
+    else {
+      return []
+    }
+    return object["floating_agent_pills"] as? [[String: Any]] ?? []
+  }
+
+  func floatingAgentStatusSummary(limit: Int = 8) async -> String {
+    do {
+      let pills = try await listFloatingAgentPills(limit: limit)
+      guard !pills.isEmpty else {
+        return "No floating agent pills are running or recently finished."
+      }
+      let lines = pills.map { entry -> String in
+        let title = stringValue(entry["title"]) ?? "Background agent"
+        let id = (stringValue(entry["id"]) ?? "").prefix(8)
+        let status = stringValue(entry["status"]) ?? "unknown"
+        let activity = stringValue(entry["latestActivity"]) ?? ""
+        return "- \(title) [\(id)]: \(status); \(activity)"
+      }
+      return "Floating agent pills:\n" + lines.joined(separator: "\n")
+    } catch {
+      logError("DesktopCoordinatorService: floating agent status unavailable", error: error)
+      return ""
+    }
   }
 
   private func callRuntimeControlTool(_ name: String, input: [String: Any]) async throws -> String {
@@ -566,11 +642,10 @@ final class DesktopCoordinatorService {
       let sessionStatus = stringValue(session["status"]) ?? "unknown"
       let title = stringValue(session["title"])
         ?? stringValue(session["surfaceKind"])
-        ?? stringValue(session["omiSessionId"])
         ?? "Untitled agent"
 
       return DesktopCoordinatorSessionProjection(
-        sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+        sessionId: stringValue(session["sessionId"]),
         title: title,
         surfaceKind: stringValue(session["surfaceKind"]),
         externalRefKind: stringValue(session["externalRefKind"]),
@@ -598,7 +673,7 @@ final class DesktopCoordinatorService {
       let status = stringValue(latestRun["status"]) ?? stringValue(session["status"]) ?? "unknown"
       guard isTerminal(status) else { return nil }
       let runId = stringValue(latestRun["runId"])
-      let sessionId = stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"])
+      let sessionId = stringValue(session["sessionId"])
       let completedAtMs = intValue(latestRun["completedAtMs"])
       // When runId is absent, include completedAtMs so that each distinct
       // terminal run completion carries a unique id even if the same session
@@ -611,7 +686,6 @@ final class DesktopCoordinatorService {
 
       let title = stringValue(session["title"])
         ?? surfaceKind
-        ?? stringValue(session["omiSessionId"])
         ?? "Completed agent"
       let sanitizedTitle = sanitizePromptLine(title, maxLength: 120)
       let finalText = stringValue(latestRun["finalText"])
@@ -659,6 +733,47 @@ final class DesktopCoordinatorService {
 
   private func completionHighWaterKey(surfaceKey: String) -> String {
     "\(completionHighWaterPrefix).\(surfaceKey.isEmpty ? "unknown" : surfaceKey)"
+  }
+
+  /// Fetches the artifacts produced by each successfully-completed sub-agent in
+  /// the delta so the consuming surface can render them as resource cards.
+  /// Bounded by the delta `limit`; failed runs are skipped (no artifacts to show).
+  private func collectDeltaArtifacts(for items: [DesktopCoordinatorCompletionDeltaItem]) async -> [AgentArtifactProjection] {
+    let inspectable = items.filter { item in
+      guard let runId = item.runId, !runId.isEmpty else { return false }
+      return ["succeeded", "completed"].contains(item.status)
+    }
+    guard !inspectable.isEmpty else { return [] }
+
+    var collected: [AgentArtifactProjection] = []
+    var seenIds = Set<String>()
+    for item in inspectable {
+      guard let runId = item.runId else { continue }
+      let inspection: DesktopCoordinatorAgentRunInspection
+      do {
+        inspection = try await inspectAgentRun(runId: runId)
+      } catch {
+        let fallbackArtifacts = (try? await inspectArtifactsForRun(runId: runId)) ?? []
+        for artifact in fallbackArtifacts where artifact.isUserFacingResult {
+          guard seenIds.insert(artifact.artifactId).inserted else { continue }
+          collected.append(artifact)
+        }
+        continue
+      }
+      if inspection.status == "failed", inspection.artifacts.isEmpty {
+        let fallbackArtifacts = (try? await inspectArtifactsForRun(runId: runId)) ?? []
+        for artifact in fallbackArtifacts where artifact.isUserFacingResult {
+          guard seenIds.insert(artifact.artifactId).inserted else { continue }
+          collected.append(artifact)
+        }
+        continue
+      }
+      for artifact in inspection.artifacts where artifact.isUserFacingResult {
+        guard seenIds.insert(artifact.artifactId).inserted else { continue }
+        collected.append(artifact)
+      }
+    }
+    return collected
   }
 
   private func formatCompletionDeltaPrompt(surfaceKind: String, items: [DesktopCoordinatorCompletionDeltaItem]) -> String {
@@ -723,7 +838,7 @@ final class DesktopCoordinatorService {
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
     let attempt = object["attempt"] as? [String: Any] ?? [:]
-    guard let sessionId = stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+    guard let sessionId = stringValue(session["sessionId"]),
       let runId = stringValue(run["runId"])
     else {
       throw NSError(domain: "DesktopCoordinatorService", code: 2, userInfo: [NSLocalizedDescriptionKey: "Background-agent spawn response did not include canonical handles"])
@@ -737,19 +852,36 @@ final class DesktopCoordinatorService {
   }
 
   private func parseInspectedRun(from raw: String) -> DesktopCoordinatorAgentRunInspection {
-    guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else {
-      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run")
+    guard let object = jsonObject(from: raw) else {
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: "Unable to inspect agent run: invalid runtime response", artifacts: [])
+    }
+    if object["ok"] as? Bool == false {
+      return DesktopCoordinatorAgentRunInspection(sessionId: nil, runId: nil, status: "failed", finalText: nil, errorMessage: runtimeErrorMessage(from: object) ?? "Unable to inspect agent run", artifacts: [])
     }
     let session = object["session"] as? [String: Any] ?? [:]
     let run = object["run"] as? [String: Any] ?? [:]
     let result = run["result"] as? [String: Any] ?? [:]
     return DesktopCoordinatorAgentRunInspection(
-      sessionId: stringValue(session["omiSessionId"]) ?? stringValue(session["sessionId"]),
+      sessionId: stringValue(session["sessionId"]),
       runId: stringValue(run["runId"]),
       status: stringValue(run["status"]) ?? stringValue(object["terminalStatus"]) ?? "unknown",
       finalText: stringValue(run["finalText"]) ?? stringValue(result["text"]) ?? stringValue(object["text"]),
-      errorMessage: stringValue(run["errorMessage"]) ?? stringValue(object["error"])
+      errorMessage: stringValue(run["errorMessage"]) ?? runtimeErrorMessage(from: object),
+      artifacts: AgentArtifactProjection.parseList(fromJSONArray: object["artifacts"] as? [[String: Any]] ?? [])
     )
+  }
+
+  private func runtimeErrorMessage(from object: [String: Any]) -> String? {
+    if let message = stringValue(object["error"]) {
+      return message
+    }
+    if let error = object["error"] as? [String: Any] {
+      let code = stringValue(error["code"])
+      let message = stringValue(error["message"])
+      if let code, let message { return "\(code): \(message)" }
+      return message ?? code
+    }
+    return nil
   }
 
   private func stringValue(_ value: Any?) -> String? {

@@ -156,6 +156,8 @@ APP_PATH="/Applications/$APP_NAME.app"
 # Without this, `[ -d "$AGENT_DIR/dist" ]` tests an empty path and the agent
 # copy is silently skipped → app shows "AI components missing".
 AGENT_DIR="$SCRIPT_DIR/agent"
+AGENT_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/agent-node_modules"
+PI_MONO_PACKAGED_NODE_MODULES="$SCRIPT_DIR/.harness/agent-runtime/pi-mono-extension-node_modules"
 APP_DESKTOP_PATH="$HOME/Desktop/$APP_NAME.app"
 APP_DOWNLOADS_PATH="$HOME/Downloads/$APP_NAME.app"
 SIGN_IDENTITY="${OMI_SIGN_IDENTITY:-}"
@@ -441,18 +443,53 @@ else
     substep "Skipping backend (OMI_SKIP_BACKEND=1) — using OMI_DESKTOP_API_URL from .env"
 fi
 
-# Check if another SwiftPM instance is running (will block our build)
+# Wait only for SwiftPM instances building THIS checkout. Parallel worktrees
+# have their own .build scratch dirs and SwiftPM locks its shared caches, so
+# other worktrees' builds (including SourceKit-LSP indexing builds, which
+# respawn continuously and would starve a global wait forever) don't block us.
 while true; do
-    SWIFTPM_PIDS=$(pgrep -f "swift-build|swift-package" 2>/dev/null || true)
-    if [ -z "$SWIFTPM_PIDS" ]; then
+    SWIFTPM_BLOCKING=""
+    for _pid in $(pgrep -f "swift-build|swift-package" 2>/dev/null); do
+        # SourceKit-LSP indexing builds use their own scratch dir
+        # (.build/index-build) and respawn continuously — never wait on them.
+        if ps -p "$_pid" -o command= 2>/dev/null | grep -q "prepare-for-indexing\|index-build"; then
+            continue
+        fi
+        _pcwd=$(lsof -a -p "$_pid" -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+        case "$_pcwd" in
+            "$SCRIPT_DIR"*) SWIFTPM_BLOCKING="$_pid"; break ;;
+        esac
+    done
+    if [ -z "$SWIFTPM_BLOCKING" ]; then
         break
     fi
-    step "Waiting for other SwiftPM instance(s) to finish..."
+    step "Waiting for this checkout's SwiftPM instance (pid $SWIFTPM_BLOCKING) to finish..."
     sleep 2
 done
 
 step "Preparing agent runtime..."
 "$(dirname "$0")/scripts/prepare-agent-runtime.sh" --universal-node
+
+step "Generating tool surfaces..."
+(
+  cd agent
+  NODE_BIN=""
+  for candidate in \
+    "../Desktop/Sources/Resources/node" \
+    "/opt/homebrew/opt/node@22/bin/node" \
+    "/usr/local/opt/node@22/bin/node" \
+    "$(command -v node 2>/dev/null || true)"; do
+    if [[ -n "$candidate" && -x "$candidate" ]] && "$candidate" --experimental-strip-types -e '0' >/dev/null 2>&1; then
+      NODE_BIN="$candidate"
+      break
+    fi
+  done
+  if [[ -z "$NODE_BIN" ]]; then
+    echo "ERROR: Node.js 22.6+ with --experimental-strip-types required for tool surface generation." >&2
+    exit 1
+  fi
+  "$NODE_BIN" --experimental-strip-types scripts/generate-tool-surfaces.mjs
+)
 
 step "Checking schema docs..."
 if [ -f scripts/check_schema_docs.sh ]; then
@@ -551,9 +588,13 @@ if [ -d "$AGENT_DIR/dist" ]; then
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent"
     macos_copy_tree "$AGENT_DIR/dist" "$APP_BUNDLE/Contents/Resources/agent/dist"
     cp -f "$AGENT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/agent/"
-    macos_copy_tree "$AGENT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
+    if [ ! -d "$AGENT_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged agent dependencies missing at $AGENT_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$AGENT_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/agent/node_modules"
     mkdir -p "$APP_BUNDLE/Contents/Resources/agent/src/runtime"
-    cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.js" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/control-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/node-tools.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
     cp -f "$AGENT_DIR/src/runtime/omi-tool-manifest.ts" "$APP_BUNDLE/Contents/Resources/agent/src/runtime/"
@@ -570,7 +611,12 @@ if [ -d "$PI_MONO_EXT_DIR" ]; then
     cp -f "$PI_MONO_EXT_DIR/index.ts" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
     cp -f "$PI_MONO_EXT_DIR/package-lock.json" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
-    cp -Rf "$PI_MONO_EXT_DIR/node_modules" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/"
+    if [ ! -d "$PI_MONO_PACKAGED_NODE_MODULES" ]; then
+        echo "ERROR: packaged pi-mono-extension dependencies missing at $PI_MONO_PACKAGED_NODE_MODULES"
+        echo "       Run scripts/prepare-agent-runtime.sh before bundling."
+        exit 1
+    fi
+    macos_copy_tree "$PI_MONO_PACKAGED_NODE_MODULES" "$APP_BUNDLE/Contents/Resources/pi-mono-extension/node_modules"
 else
     echo "Warning: pi-mono-extension not found at $PI_MONO_EXT_DIR"
 fi
@@ -690,6 +736,10 @@ if [ -z "$SIGN_IDENTITY" ]; then
     if [ -z "$SIGN_IDENTITY" ]; then
         SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
     fi
+    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+        SIGN_IDENTITY="-"
+        substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
+    fi
 fi
 
 if [ -n "$SIGN_IDENTITY" ]; then
@@ -765,6 +815,9 @@ else
     echo "  Fix: Install an Apple Development certificate in Keychain Access,"
     echo "       or set OMI_SIGN_IDENTITY to a valid identity:"
     echo "       OMI_SIGN_IDENTITY=\"Apple Development: you@example.com\" ./run.sh"
+    echo ""
+    echo "       For named throwaway bundles only, tests may opt into ad-hoc signing:"
+    echo "       OMI_APP_NAME=\"omi-my-test\" OMI_ALLOW_ADHOC_SIGN=1 ./run.sh"
     echo ""
     exit 1
 fi

@@ -109,6 +109,57 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
         XCTAssertEqual(record?.tierIsExplicit, false)
     }
 
+    func testLocalReadsCanExcludeCanonicalLifecycleRowsWhenServerDoesNotExposeLifecycle() async throws {
+        let legacy = makeMemory(
+            id: "legacy-visible",
+            tier: .longTerm,
+            tierIsExplicit: false,
+            updatedAt: Date(timeIntervalSince1970: 1_000)
+        )
+        let shortTerm = makeMemory(
+            id: "canonical-short-hidden",
+            tier: .shortTerm,
+            tierIsExplicit: true,
+            updatedAt: Date(timeIntervalSince1970: 1_100)
+        )
+        let longTerm = makeMemory(
+            id: "canonical-long-hidden",
+            tier: .longTerm,
+            tierIsExplicit: true,
+            updatedAt: Date(timeIntervalSince1970: 1_200)
+        )
+        try await MemoryStorage.shared.syncServerMemories([legacy, shortTerm, longTerm])
+
+        let local = try await MemoryStorage.shared.getLocalMemories(
+            limit: 10,
+            tiers: nil,
+            includeExplicitLifecycleRows: false
+        )
+        XCTAssertEqual(local.map(\.id), ["legacy-visible"])
+
+        let count = try await MemoryStorage.shared.getLocalMemoriesCount(
+            tiers: nil,
+            includeExplicitLifecycleRows: false
+        )
+        XCTAssertEqual(count, 1)
+
+        let filtered = try await MemoryStorage.shared.getFilteredMemories(
+            limit: 10,
+            matchAnyCategory: ["system"],
+            tiers: nil,
+            includeExplicitLifecycleRows: false
+        )
+        XCTAssertEqual(filtered.map(\.id), ["legacy-visible"])
+
+        let search = try await MemoryStorage.shared.searchLocalMemories(
+            query: "Memory",
+            limit: 10,
+            tiers: nil,
+            includeExplicitLifecycleRows: false
+        )
+        XCTAssertEqual(search.map(\.id), ["legacy-visible"])
+    }
+
     private func corruptLocalTier(
         backendId: String,
         tier: String,

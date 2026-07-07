@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct FocusSummaryWidget: View {
     let todayStats: FocusDayStats

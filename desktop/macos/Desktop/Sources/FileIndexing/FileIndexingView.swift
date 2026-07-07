@@ -1,5 +1,6 @@
 import SwiftUI
 import SceneKit
+import OmiTheme
 
 /// Standalone file indexing view: loading → brainMap.
 /// Works in two contexts:

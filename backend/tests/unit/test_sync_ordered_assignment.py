@@ -19,6 +19,7 @@ import threading
 import time
 from collections import deque
 from typing import List
+import pytest
 
 SYNC_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
 
@@ -59,6 +60,7 @@ def _load_turnstile_class():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestOrderedTurnstile:
     def test_serializes_in_given_order_despite_reverse_readiness(self):
         """Threads become ready newest-first; assignment order must still be oldest-first."""

@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import Combine
 import UniformTypeIdentifiers
+import OmiTheme
 
 // MARK: - Task Category (by due date)
 
@@ -26,6 +27,24 @@ enum TaskCategory: String, CaseIterable {
         case .tomorrow: return OmiColors.textSecondary
         case .later: return OmiColors.textSecondary
         case .noDeadline: return OmiColors.textTertiary
+        }
+    }
+}
+
+struct TaskSortOrderSyncFailure: Equatable {
+    let storageErrorDescription: String?
+    let backendErrorDescription: String?
+
+    var message: String {
+        switch (storageErrorDescription != nil, backendErrorDescription != nil) {
+        case (true, true):
+            return "Could not save task order to this Mac or Omi Cloud. Retry when your connection is available."
+        case (true, false):
+            return "Could not save task order to this Mac. Retry to keep the order after restart."
+        case (false, true):
+            return "Task order was saved on this Mac, but not synced to Omi Cloud. Retry when your connection is available."
+        case (false, false):
+            return "Could not confirm task order sync. Retry when your connection is available."
         }
     }
 }
@@ -690,6 +709,9 @@ class TasksViewModel: ObservableObject {
 
     /// Debounced task for syncing sort orders to SQLite + backend
     private var sortOrderSyncTask: Task<Void, Never>?
+    @Published private(set) var sortOrderSyncFailure: TaskSortOrderSyncFailure?
+    private var pendingSortOrderUpdates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
+    var hasPendingSortOrderRetry: Bool { !pendingSortOrderUpdates.isEmpty }
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -840,6 +862,47 @@ class TasksViewModel: ObservableObject {
         }
     }
 
+    /// Width of each category's numeric sortOrder band. Category N owns the
+    /// half-open range `[N*bandWidth, (N+1)*bandWidth)`. Kept at 100_000 so
+    /// orders already persisted under the previous fixed scheme keep the same
+    /// band assignment.
+    nonisolated static let sortOrderBandWidth = 100_000
+
+    /// Compute a task's sortOrder so every item in a category stays strictly
+    /// inside that category's band — even when the category holds enough items
+    /// that the previous fixed 1000-spacing would overflow into the next
+    /// category's band and corrupt cross-category ordering (BL-016).
+    ///
+    /// The old scheme (`categoryIndex*100_000 + (itemIndex+1)*1000`) had a hard
+    /// ceiling of ~100 items per category: item 100 landed on the next band's
+    /// base. Here the spacing is derived from the item count as
+    /// `bandWidth / (count + 1)`, capped at the historical 1000 so small
+    /// categories keep the familiar sparse spacing (room for future in-place
+    /// inserts). While `count < bandWidth` the integer spacing is >= 1 and the
+    /// largest value is `count * spacing <= count/(count+1) * bandWidth < bandWidth`,
+    /// so the last item never reaches the next band's base — true for any realistic
+    /// category size (values are byte-identical to the old scheme for count <= 99).
+    /// Only when `count >= bandWidth` (~100k+ items in one section, not reachable
+    /// in practice) does the integer spacing floor to 0; that degenerate case is
+    /// handled separately by distributing items evenly so the result still stays
+    /// strictly inside the band. Both reorder sites (`moveTask`,
+    /// `collectSortOrderUpdates`) call this single helper so their optimistic and
+    /// persisted orders agree.
+    nonisolated static func sortOrder(categoryIndex: Int, itemIndex: Int, itemCount: Int) -> Int {
+        let band = sortOrderBandWidth
+        let base = categoryIndex * band
+        let rawSpacing = band / (itemCount + 1)
+        guard rawSpacing >= 1 else {
+            // Degenerate: itemCount >= bandWidth leaves no integer room for unique
+            // spacing. Spread items evenly across [base, base+band) so the result
+            // never leaves the band; ordering is preserved even if exact spacing
+            // is not. Unreachable for any real task section.
+            return base + min(band - 1, (itemIndex * (band - 1)) / max(1, itemCount - 1))
+        }
+        let spacing = min(1000, rawSpacing)
+        return base + (itemIndex + 1) * spacing
+    }
+
     /// Move a task within a category
     func moveTask(_ task: TaskActionItem, toIndex targetIndex: Int, inCategory category: TaskCategory) {
         log("REORDER: moveTask(\(task.id), toIndex: \(targetIndex), inCategory: \(category.rawValue))")
@@ -860,11 +923,12 @@ class TasksViewModel: ObservableObject {
         // write to only one of them misses when filters/search are active. Each
         // reassignment fires its own @Published; recomputeAllCaches at the end folds
         // them all into categorizedTasks.
-        let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
+        let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
+        let itemCount = order.count
 
         func applyOrder(to array: inout [TaskActionItem]) {
             for (index, taskId) in order.enumerated() {
-                let newSortOrder = categoryOffset + (index + 1) * 1000
+                let newSortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: itemCount)
                 if let i = array.firstIndex(where: { $0.id == taskId }) {
                     array[i].sortOrder = newSortOrder
                 }
@@ -1133,28 +1197,43 @@ class TasksViewModel: ObservableObject {
             // and pick up any membership changes that happened during the debounce window.
             recomputeAllCaches()
         }
+        let updates = collectSortOrderUpdates()
+        await syncSortOrderUpdates(updates)
+    }
+
+    private func collectSortOrderUpdates() -> [(id: String, sortOrder: Int, indentLevel: Int)] {
         var updates: [(id: String, sortOrder: Int, indentLevel: Int)] = []
 
         for category in TaskCategory.allCases {
             let orderedTasks = getOrderedTasks(for: category)
-            // Category offset: today=0, tomorrow=100_000, later=200_000, noDeadline=300_000
-            let categoryOffset = (TaskCategory.allCases.firstIndex(of: category) ?? 0) * 100_000
+            // Category bands: today=[0,100k), tomorrow=[100k,200k), later=[200k,300k),
+            // noDeadline=[300k,400k). Spacing is derived from the per-category count so a
+            // large category never overflows its band (BL-016); see TasksViewModel.sortOrder.
+            let categoryIndex = TaskCategory.allCases.firstIndex(of: category) ?? 0
 
             for (index, task) in orderedTasks.enumerated() {
                 guard !task.id.hasPrefix("local_"), !task.id.hasPrefix("staged_") else { continue }
-                let sortOrder = categoryOffset + (index + 1) * 1000
+                let sortOrder = Self.sortOrder(categoryIndex: categoryIndex, itemIndex: index, itemCount: orderedTasks.count)
                 let indent = indentLevels[task.id] ?? task.indentLevel ?? 0
                 updates.append((id: task.id, sortOrder: sortOrder, indentLevel: indent))
             }
         }
 
+        return updates
+    }
+
+    private func syncSortOrderUpdates(_ updates: [(id: String, sortOrder: Int, indentLevel: Int)]) async {
         guard !updates.isEmpty else { return }
+
+        var storageErrorDescription: String?
+        var backendErrorDescription: String?
 
         // Write to SQLite
         let storageUpdates = updates.map { (backendId: $0.id, sortOrder: $0.sortOrder, indentLevel: $0.indentLevel) }
         do {
             try await ActionItemStorage.shared.updateSortOrders(storageUpdates)
         } catch {
+            storageErrorDescription = String(describing: error)
             log("TasksVM: Failed to write sort orders to SQLite: \(error)")
         }
 
@@ -1163,7 +1242,57 @@ class TasksViewModel: ObservableObject {
             try await APIClient.shared.batchUpdateSortOrders(updates)
             log("TasksVM: Synced \(updates.count) sort orders to backend")
         } catch {
+            backendErrorDescription = String(describing: error)
             log("TasksVM: Failed to sync sort orders to backend: \(error)")
+        }
+
+        if storageErrorDescription == nil, backendErrorDescription == nil {
+            await MainActor.run {
+                self.clearSortOrderSyncFailure()
+            }
+        } else {
+            await MainActor.run {
+                self.recordSortOrderSyncFailure(
+                    storageErrorDescription: storageErrorDescription,
+                    backendErrorDescription: backendErrorDescription,
+                    updates: updates
+                )
+            }
+        }
+    }
+
+    func recordSortOrderSyncFailure(
+        storageErrorDescription: String?,
+        backendErrorDescription: String?,
+        updates: [(id: String, sortOrder: Int, indentLevel: Int)]
+    ) {
+        pendingSortOrderUpdates = updates
+        sortOrderSyncFailure = TaskSortOrderSyncFailure(
+            storageErrorDescription: storageErrorDescription,
+            backendErrorDescription: backendErrorDescription
+        )
+    }
+
+    private func clearSortOrderSyncFailure() {
+        pendingSortOrderUpdates = []
+        sortOrderSyncFailure = nil
+    }
+
+    func retrySortOrderSync() {
+        sortOrderSyncTask?.cancel()
+        let updates = pendingSortOrderUpdates
+        sortOrderSyncTask = Task { [weak self] in
+            guard let self else { return }
+            if updates.isEmpty {
+                await self.syncSortOrders()
+                return
+            }
+            self.suppressDatabaseRequery = true
+            defer {
+                self.suppressDatabaseRequery = false
+                self.recomputeAllCaches()
+            }
+            await self.syncSortOrderUpdates(updates)
         }
     }
 
@@ -1986,6 +2115,221 @@ class TasksViewModel: ObservableObject {
         showingCreateTask = false
     }
 
+    // MARK: - Automation (headless task CRUD + reorder for the desktop bridge)
+
+    private var didRegisterAutomationActions = false
+
+    /// Register task actions on the desktop automation registry so omi-ctl can drive
+    /// TASK-01/02/03 headlessly against this genuine, long-lived view model (the one
+    /// `ViewModelContainer` owns). Each action routes through the same store / view-model
+    /// path the UI uses — create/toggle/delete via the store, reorder via `moveTask` plus
+    /// the debounced sortOrder sync (flushed here for a deterministic persistence check) —
+    /// and `dump_tasks` reads back from SQLite so callers can prove the write landed.
+    /// The caller gates this on `DesktopAutomationLaunchOptions.isEnabled` (never on prod).
+    func registerAutomationActions() {
+        guard !didRegisterAutomationActions else { return }
+        didRegisterAutomationActions = true
+        let registry = DesktopAutomationActionRegistry.shared
+
+        registry.register(
+            name: "create_task",
+            summary: "Create a task through the genuine store path; waits for the backend id (see 'synced') and returns it",
+            params: ["description", "priority"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            let trimmed = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let desc = (trimmed?.isEmpty == false ? trimmed! : "Automation task")
+            guard let created = await self.store.createTask(
+                description: desc, dueAt: nil, priority: params["priority"], tags: nil)
+            else { return ["error": "create failed"] }
+            self.recomputeAllCaches()
+            // store.createTask is local-first: it returns a transient "local_<rowid>" id and
+            // syncs in the background. Hand back the stable backend id once the sync lands so
+            // follow-up-by-id and reorder persistence (which skips "local_" ids) both work.
+            let stableId = await self.resolveStableTaskIdsForAutomation([created.id], timeoutSeconds: 6).first ?? created.id
+            return [
+                "id": stableId,
+                "synced": stableId.hasPrefix("local_") ? "false" : "true",
+                "description": created.description,
+            ]
+        }
+
+        registry.register(
+            name: "seed_tasks",
+            summary: "Create N tasks for reorder/stress testing; waits for backend ids so they are reorder-persistable; returns synced count + ids",
+            params: ["count", "prefix"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            let count = max(0, min(Int(params["count"] ?? "") ?? 5, 300))
+            let prefix = params["prefix"] ?? "Automation task"
+            var localIds: [String] = []
+            for i in 0..<count {
+                if let created = await self.store.createTask(
+                    description: "\(prefix) \(i + 1)", dueAt: nil, priority: nil, tags: nil) {
+                    localIds.append(created.id)
+                }
+            }
+            self.recomputeAllCaches()
+            // Wait (bounded) for the background syncs so seeded tasks carry backend ids —
+            // reorder persistence skips "local_" ids, so unsynced seeds would not persist.
+            let ids = await self.resolveStableTaskIdsForAutomation(
+                localIds, timeoutSeconds: min(10 + Double(count) * 0.1, 30))
+            let syncedCount = ids.filter { !$0.hasPrefix("local_") }.count
+            return [
+                "created": String(ids.count),
+                "synced": String(syncedCount),
+                "ids": ids.joined(separator: ","),
+            ]
+        }
+
+        registry.register(
+            name: "toggle_task",
+            summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
+            params: ["id"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            // Load from SQLite first so a headless caller (Tasks page never opened) resolves
+            // the task instead of getting a spurious "not found".
+            await self.ensureTasksLoadedForAutomation()
+            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
+            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            await self.toggleTask(task)
+            // Report the real post-toggle state read back from the store rather than the
+            // assumed negation — TasksStore leaves the prior state if the local write fails.
+            let completed = self.store.tasks.first(where: { $0.id == id })?.completed ?? !task.completed
+            return ["id": id, "completed": completed ? "true" : "false"]
+        }
+
+        registry.register(
+            name: "delete_task",
+            summary: "Delete a task by id (mirrors swipe / menu delete)",
+            params: ["id"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            // Load from SQLite first so a headless caller resolves the task instead of a
+            // spurious "not found" when the Tasks page was never opened.
+            await self.ensureTasksLoadedForAutomation()
+            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
+            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            await self.deleteTask(task)
+            return ["id": id, "deleted": "true"]
+        }
+
+        registry.register(
+            name: "reorder_task",
+            summary: "Move a task to a new index within a category (today|tomorrow|later|nodeadline) via the real drag path, flush the sortOrder sync to SQLite + backend, and return the resulting order",
+            params: ["id", "index", "category"]
+        ) { [weak self] params in
+            guard let self else { return ["error": "tasks view model deallocated"] }
+            await self.ensureTasksLoadedForAutomation()
+            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
+            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            // moveTask only clamps the upper bound before Array.insert(at:), so a negative
+            // index would crash the bridge; clamp to >= 0 for deterministic behavior.
+            let index = max(0, Int(params["index"] ?? "") ?? 0)
+            let category = Self.automationCategory(params["category"]) ?? .today
+            self.moveTask(task, toIndex: index, inCategory: category)
+            await self.flushSortOrderSyncForAutomation()
+            let order = self.getOrderedTasks(for: category).map(\.id).joined(separator: ",")
+            return ["id": id, "category": category.rawValue, "order": order]
+        }
+
+        registry.register(
+            name: "dump_tasks",
+            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field",
+            params: ["includeCompleted", "limit"]
+        ) { params in
+            let includeCompleted = ["true", "1", "yes"].contains(params["includeCompleted"]?.lowercased() ?? "")
+            let limit = Int(params["limit"] ?? "") ?? 500
+            let items: [TaskActionItem]
+            do {
+                // No category filter here: `category` means the due-date display bucket in
+                // reorder_task, but the stored classification/tags here — overloading one
+                // param name for two concepts is a footgun. Return all rows (each carries
+                // its own `category`) and let the caller filter.
+                items = try await ActionItemStorage.shared.getLocalActionItems(
+                    limit: limit, completed: includeCompleted ? nil : false)
+            } catch {
+                return ["error": "sqlite read failed: \(error.localizedDescription)"]
+            }
+            let sorted = items.sorted { ($0.sortOrder ?? Int.max) < ($1.sortOrder ?? Int.max) }
+            let rows: [[String: Any]] = sorted.map { t in
+                [
+                    "id": t.id,
+                    "description": t.description,
+                    "completed": t.completed,
+                    "sortOrder": t.sortOrder ?? -1,
+                    "category": t.category ?? "",
+                ]
+            }
+            let json = (try? JSONSerialization.data(withJSONObject: rows))
+                .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
+            return ["count": String(sorted.count), "tasks": json]
+        }
+    }
+
+    /// Ensure the store + category caches are populated before a headless reorder, so
+    /// `moveTask` operates on real ordering rather than an empty category. Cheap once
+    /// tasks are already loaded.
+    private func ensureTasksLoadedForAutomation() async {
+        if store.tasks.isEmpty {
+            await store.loadTasks()
+        }
+        recomputeAllCaches()
+    }
+
+    /// Cancel the debounced sortOrder sync and run it now, so an automation caller can
+    /// deterministically observe the SQLite + backend write instead of racing the 500ms
+    /// debounce window.
+    private func flushSortOrderSyncForAutomation() async {
+        sortOrderSyncTask?.cancel()
+        await syncSortOrders()
+    }
+
+    /// Resolve automation-created tasks to their stable backend ids. `store.createTask`
+    /// is local-first: it returns a `"local_<rowid>"` id and syncs to the backend in the
+    /// background, which sets `backendId` on the same SQLite row (`markSynced`), so the
+    /// task's string id flips from `"local_<rowid>"` to the backend id. This polls each
+    /// stable rowid until its `backendId` lands (or a shared deadline elapses), returning
+    /// the backend id where synced and the original `"local_"` id otherwise. Ids that are
+    /// already backend ids pass through untouched.
+    private func resolveStableTaskIdsForAutomation(
+        _ ids: [String], timeoutSeconds: Double
+    ) async -> [String] {
+        let rowIds: [Int64?] = ids.map { id in
+            guard id.hasPrefix("local_") else { return nil }
+            return Int64(id.dropFirst("local_".count))
+        }
+        var resolved = ids
+        var pending = Set(rowIds.indices.filter { rowIds[$0] != nil })
+        let deadline = Date().addingTimeInterval(timeoutSeconds)
+        while !pending.isEmpty, Date() < deadline {
+            for i in Array(pending) {
+                guard let rowId = rowIds[i] else { continue }
+                if let record = try? await ActionItemStorage.shared.getActionItem(id: rowId),
+                    let backendId = record.backendId, !backendId.isEmpty {
+                    resolved[i] = backendId
+                    pending.remove(i)
+                }
+            }
+            if pending.isEmpty { break }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return resolved
+    }
+
+    /// Map a friendly automation category key (today|tomorrow|later|nodeadline) to a
+    /// `TaskCategory`. Case-insensitive; nil for unknown input.
+    private static func automationCategory(_ raw: String?) -> TaskCategory? {
+        switch raw?.lowercased() {
+        case "today": return .today
+        case "tomorrow": return .tomorrow
+        case "later": return .later
+        case "nodeadline", "no_deadline", "none": return .noDeadline
+        default: return nil
+        }
+    }
+
     func updateTaskDetails(
         _ task: TaskActionItem,
         description: String? = nil,
@@ -2404,6 +2748,10 @@ struct TasksPage: View {
         VStack(spacing: 0) {
             // Header with filter toggle and sort
             headerView
+
+            if let failure = viewModel.sortOrderSyncFailure {
+                sortOrderSyncFailureBanner(failure)
+            }
 
             // Content
             if viewModel.isLoading && viewModel.tasks.isEmpty {
@@ -3078,6 +3426,42 @@ struct TasksPage: View {
 
     // MARK: - Error View
 
+    private func sortOrderSyncFailureBanner(_ failure: TaskSortOrderSyncFailure) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .scaledFont(size: 14)
+                .foregroundColor(OmiColors.textSecondary)
+                .accessibilityHidden(true)
+
+            Text(failure.message)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textPrimary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Spacer(minLength: 8)
+
+            Button("Retry") {
+                viewModel.retrySortOrderSync()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(OmiColors.textSecondary)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(OmiColors.backgroundSecondary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(OmiColors.border, lineWidth: 1)
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+    }
+
     private func errorView(_ error: String) -> some View {
         VStack(spacing: 16) {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -3194,14 +3578,16 @@ struct TasksPage: View {
                                     draggedTaskId: viewModel.draggedTaskId,
                                     findTaskGlobal: { viewModel.findTask($0) },
                                     onDragStarted: { viewModel.draggedTaskId = $0 },
-                                    onDragEnded: {
-                                        // Idempotent: TaskDragItemProvider.deinit fires onDragEnded
-                                        // a second time after the synchronous drop handler. Without
-                                        // this guard, the duplicate dispatch would no-op redundantly
-                                        // in the common case but could clobber state during a rapid
-                                        // re-drag (deinit dispatch is one main.async hop, sub-ms).
-                                        // Keep the guard so the design is strictly idempotent.
-                                        guard viewModel.draggedTaskId != nil else { return }
+                                    onDragEnded: { endedId in
+                                        // Drag-end is task-scoped. Both the drop handler and
+                                        // TaskDragItemProvider.deinit route here; deinit hops one
+                                        // main.async and can land *after* the user has already
+                                        // started a new drag. A late deinit from a prior drag
+                                        // carries that prior task's id, so guarding on
+                                        // draggedTaskId == endedId stops it clobbering the new
+                                        // drag's dim state (BL-030). Same-id re-fires are idempotent
+                                        // (second call sees a nil/other draggedTaskId and no-ops).
+                                        guard viewModel.draggedTaskId == endedId else { return }
                                         viewModel.draggedTaskId = nil
                                         viewModel.dropTargetTaskId = nil
                                     },
@@ -3427,7 +3813,10 @@ struct TaskCategorySection: View {
     // Non-optional with no-op defaults: this callback is load-bearing for the
     // dim-while-dragging effect, and a silent nil here was the original bug.
     var onDragStarted: (String) -> Void = { _ in }
-    var onDragEnded: () -> Void = {}
+    // Carries the id of the task whose drag ended, so the receiver can scope the
+    // dim/drag-state reset to that exact task and ignore a stale late end from a
+    // prior drag (BL-030).
+    var onDragEnded: (String) -> Void = { _ in }
     var onDragHoverChanged: ((String, Bool) -> Void)?
 
     // Edit mode support
@@ -3626,7 +4015,9 @@ struct TaskDragDropModifier: ViewModifier {
     var findTask: ((String) -> TaskActionItem?)?
     var findTargetIndex: (() -> Int?)?
     var onMoveTask: ((TaskActionItem, Int) -> Void)?
-    var onDragEnded: (() -> Void)?
+    /// Called with the id of the dragged task when a drop lands, so the drag-end
+    /// reset stays scoped to that task (BL-030).
+    var onDragEnded: ((String) -> Void)?
     var onHoverChanged: ((String, Bool) -> Void)?
 
     func body(content: Content) -> some View {
@@ -3652,9 +4043,10 @@ struct TaskDragDropModifier: ViewModifier {
                     }
                 )) { providers in
                     log("DROP: Received drop on task \(taskId), providers=\(providers.count)")
-                    onDragEnded?()
                     guard let provider = providers.first else {
                         log("DROP: No providers")
+                        // No payload to identify the dragged task; the provider's
+                        // deinit is the catch-all that fires the id-scoped reset.
                         return false
                     }
                     provider.loadItem(forTypeIdentifier: "public.plain-text", options: nil) { data, error in
@@ -3665,6 +4057,11 @@ struct TaskDragDropModifier: ViewModifier {
                             return
                         }
                         DispatchQueue.main.async {
+                            // End the drag scoped to the task that was actually dragged
+                            // (droppedId), before applying the move. The provider's deinit
+                            // fires the same scoped reset as the catch-all; both are
+                            // idempotent via the draggedTaskId == endedId guard (BL-030).
+                            onDragEnded?(droppedId)
                             guard let targetIndex = findTargetIndex?() else {
                                 log("DROP: findTargetIndex returned nil")
                                 return
@@ -3692,9 +4089,11 @@ struct TaskDragDropModifier: ViewModifier {
 /// NSEvent.addLocalMonitor/addGlobalMonitor approach that didn't fire from
 /// inside the AppKit drag modal loop, leaving the dragged row stuck dimmed.
 final class TaskDragItemProvider: NSItemProvider {
-    private let onEnd: () -> Void
+    private let taskId: String
+    private let onEnd: (String) -> Void
 
-    init(taskId: String, onEnd: @escaping () -> Void) {
+    init(taskId: String, onEnd: @escaping (String) -> Void) {
+        self.taskId = taskId
         self.onEnd = onEnd
         super.init()
         registerObject(taskId as NSString, visibility: .all)
@@ -3702,9 +4101,12 @@ final class TaskDragItemProvider: NSItemProvider {
 
     deinit {
         // deinit may run off-main when AppKit releases its reference. Hop to
-        // main before mutating @Published state.
+        // main before mutating @Published state. Pass this drag's own taskId so
+        // a late deinit from a *prior* drag can't clear a newer drag's dim
+        // state (BL-030): the receiver clears only when draggedTaskId == this id.
         let cb = onEnd
-        DispatchQueue.main.async { cb() }
+        let endedId = taskId
+        DispatchQueue.main.async { cb(endedId) }
     }
 }
 
@@ -3834,9 +4236,11 @@ struct TaskRow: View {
     /// Non-optional with no-op default: load-bearing for the dim effect, and a
     /// silent-nil here was the original bug we're fixing.
     var onDragStarted: (String) -> Void = { _ in }
-    /// Fires when the drag actually ends (mouseUp), regardless of drop outcome.
-    /// Required so the dimmed row is restored even if the drop misses every target.
-    var onDragEnded: () -> Void = {}
+    /// Fires when the drag actually ends (mouseUp), regardless of drop outcome,
+    /// carrying the id of the task whose drag ended. Required so the dimmed row is
+    /// restored even if the drop misses every target — and so a late end from a
+    /// prior drag doesn't clear a newer drag's dim (BL-030).
+    var onDragEnded: (String) -> Void = { _ in }
     /// True iff this row is the one currently being dragged. Drives the dim effect.
     var isBeingDragged: Bool = false
     var isChatActive: Bool = false

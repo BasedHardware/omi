@@ -22,11 +22,10 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("let resolvedAck = resolution.ack?.trimmingCharacters"))
     XCTAssertTrue(source.contains("resolvedAck?.isEmpty == false ? resolvedAck! : \"Starting a background agent.\""))
     XCTAssertTrue(source.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
-    XCTAssertTrue(source.contains("let assistantText = \"Started background agent \\\"\\(handoff.title)\\\" for: \\(handoff.brief)\""))
-    XCTAssertTrue(source.contains("rememberVoiceContinuityTurn(userText: heard, assistantText: assistantText, interrupted: false)"))
+    XCTAssertTrue(source.contains("recordTurnToKernel(userText: heard, assistantText: handoffReply, interrupted: false)"))
     XCTAssertTrue(source.contains("Started background agent"))
     XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck"))
-    XCTAssertFalse(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
     XCTAssertFalse(source.contains("speak(ack)"))
   }
 
@@ -34,7 +33,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript)"))
-    XCTAssertTrue(source.contains("blocked manage_agent_pills action="))
+    XCTAssertTrue(source.contains("blocked set_desktop_attention_override"))
     XCTAssertTrue(source.contains("Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks."))
     XCTAssertTrue(source.contains("case \"dismiss\":"))
     XCTAssertTrue(source.contains("case \"clear_completed\":"))
@@ -77,6 +76,30 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("dropping stale spawn_agent resolution before side effects"))
     XCTAssertTrue(source.contains("private func isCurrentToolTurn("))
     XCTAssertTrue(source.contains("return expectedTurnEpoch == realtimeToolTurnEpoch && pendingRealtimeToolCallIds.contains(key)"))
+  }
+
+  func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("case deferredForReplacement"))
+    XCTAssertTrue(source.contains("if var pending = pendingBargeInReplacement"))
+    XCTAssertTrue(source.contains("pending.pendingCommit = true"))
+    XCTAssertTrue(source.contains("pendingBargeInReplacement = pending"))
+    XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
+    XCTAssertTrue(source.contains("return .deferredForReplacement"))
+    XCTAssertFalse(
+      source.contains("barge-in replacement not ready at commit — falling back to buffered transcription"))
+  }
+
+  func testCompletedVoiceTurnUsesKernelPersistenceAfterAsyncCorrection() throws {
+    let source = try realtimeHubControllerSource()
+
+    XCTAssertTrue(source.contains("let capturedIdempotencyKey = turnIdempotencyKey"))
+    XCTAssertTrue(source.contains("self?.turnIdempotencyKey = capturedIdempotencyKey"))
+    XCTAssertTrue(source.contains("var usedLocal = false"))
+    XCTAssertTrue(source.contains("self?.recordTurnToKernel(userText: userText, assistantText: reply, interrupted: false)"))
+    XCTAssertFalse(source.contains("rememberVoiceContinuityTurn("))
+    XCTAssertFalse(source.contains("replaceVoiceContinuityTurn("))
   }
 
   func testSpawnAgentPreflightsDirectedProviderAvailability() throws {

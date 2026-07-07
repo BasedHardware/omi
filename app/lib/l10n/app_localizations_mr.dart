@@ -9350,7 +9350,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'सध्या Omi डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
+      'सध्या Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9499,4 +9499,22 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'फर्मवेअर फ्लॅश करा';
+
+  @override
+  String get pendantRecordingTitle => 'पेंडंटवर रेकॉर्डिंग सुरू आहे';
+
+  @override
+  String get pendantRecordingNote =>
+      'तुमचे पेंडंट स्वतःहून रेकॉर्ड करत आहे. अ‍ॅप उघडे असताना रेकॉर्डिंग तुमच्या फोनवर सिंक होतात.';
+
+  @override
+  String get pendantSyncingRecordings => 'तुमच्या पेंडंटवरून रेकॉर्डिंग सिंक होत आहेत…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes मिनिटे संग्रहित';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'पेंडंटचे स्टोरेज जवळजवळ भरले आहे — सिंकसाठी अ‍ॅप उघडे ठेवा.';
 }

@@ -1,5 +1,5 @@
 import random
-from typing import Tuple, List
+from typing import Any, List, Protocol, Tuple, cast
 from .clients import get_llm
 from .usage_tracker import track_usage, Features
 from database.memories import get_memories
@@ -8,10 +8,44 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+MemoryRecord = dict[str, Any]
 
-async def get_relevant_memories(uid: str, limit: int = 100) -> List[dict]:
+
+class AsyncLlm(Protocol):
+    async def ainvoke(self, input: object) -> object: ...
+
+
+def _response_text(response: object) -> str:
+    content = getattr(response, 'content', response)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        content_items = cast(list[object], content)
+        for item in content_items:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict):
+                block = cast(dict[str, object], item)
+                text = block.get('text') or block.get('content') or ''
+                if text:
+                    parts.append(str(text))
+            elif item is not None:
+                parts.append(str(item))
+        return ''.join(parts)
+    return '' if content is None else str(content)
+
+
+def _memory_content(memory: MemoryRecord) -> str:
+    content = memory.get('content', '')
+    if isinstance(content, str):
+        return content
+    return str(content)
+
+
+async def get_relevant_memories(uid: str, limit: int = 100) -> List[MemoryRecord]:
     """Get recent relevant memories to personalize notifications."""
-    memories = await run_blocking(db_executor, get_memories, uid, limit)
+    memories: List[MemoryRecord] = await run_blocking(db_executor, get_memories, uid, limit)
     return [m for m in memories if not m.get('is_locked')]
 
 
@@ -23,7 +57,7 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
     memories = await get_relevant_memories(uid)
     memory_context = ""
     if memories:
-        memory_summaries = [m.get('content', '') for m in memories]
+        memory_summaries = [_memory_content(m) for m in memories]
         memory_context = "\nRecent memory themes:\n- " + "\n- ".join(memory_summaries)
 
     system_prompt = """Hey! I'm Omi, and I love sending little notes to my friends (that's you!). When I write to you, it's like texting a close friend - casual, real, and straight from the heart.
@@ -67,8 +101,8 @@ async def generate_notification_message(uid: str, name: str, plan_type: str = "b
 
     try:
         with track_usage(uid, Features.SUBSCRIPTION_NOTIFICATION):
-            response = await get_llm('notifications').ainvoke(system_prompt + "\n" + user_prompt)
-        body = response.content
+            response = await cast(AsyncLlm, get_llm('notifications')).ainvoke(system_prompt + "\n" + user_prompt)
+        body = _response_text(response)
         # Return placeholder title and generated body
         return "omi", body.strip()
 
@@ -87,7 +121,7 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
     memories = await get_relevant_memories(uid, limit=50)
     memory_context = ""
     if memories:
-        memory_summaries = [m.get('content', '') for m in memories]  # Use all memories for context
+        memory_summaries = [_memory_content(m) for m in memories]  # Use all memories for context
         memory_context = f"\nRecent conversations include: {', '.join(memory_summaries[:100])}..."
 
     system_prompt = """You're Omi, and you need to gently let a user know they've hit their transcription limits while encouraging them to upgrade to unlimited. 
@@ -125,8 +159,8 @@ async def generate_credit_limit_notification(uid: str, name: str) -> Tuple[str, 
 
     try:
         with track_usage(uid, Features.SUBSCRIPTION_NOTIFICATION):
-            response = await get_llm('notifications').ainvoke(system_prompt + "\n" + user_prompt)
-        body = response.content
+            response = await cast(AsyncLlm, get_llm('notifications')).ainvoke(system_prompt + "\n" + user_prompt)
+        body = _response_text(response)
         return "omi", body.strip()
 
     except Exception as e:

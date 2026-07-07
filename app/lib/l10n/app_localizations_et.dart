@@ -9337,7 +9337,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Praegu töötab Omi seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
+      'Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9487,4 +9487,22 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Installi püsivara';
+
+  @override
+  String get pendantRecordingTitle => 'Salvestamine ripatsil';
+
+  @override
+  String get pendantRecordingNote =>
+      'Sinu ripats salvestab iseseisvalt. Salvestised sünkroonitakse telefoniga, kui rakendus on avatud.';
+
+  @override
+  String get pendantSyncingRecordings => 'Ripatsi salvestiste sünkroonimine…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min salvestatud';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Ripatsi mälu on peaaegu täis — hoia rakendus avatud, et sünkroonida.';
 }
