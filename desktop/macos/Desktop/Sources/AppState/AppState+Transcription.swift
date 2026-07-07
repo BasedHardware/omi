@@ -450,9 +450,14 @@ extension AppState {
     // The meeting detector runs only in "Only during meetings" mode.
     if mode == .onlyDuringMeetings {
       if meetingDetector == nil {
-        let detector = MeetingDetector(onChange: { [weak self] _ in
-          Task { @MainActor in await self?.reconcileCapture() }
-        })
+        let detector = MeetingDetector(
+          onInitialStateObserved: { [weak self] in
+            Task { @MainActor in await self?.reconcileCapture() }
+          },
+          onChange: { [weak self] _ in
+            Task { @MainActor in await self?.reconcileCapture() }
+          }
+        )
         meetingDetector = detector
         detector.start()
       }
@@ -461,11 +466,17 @@ extension AppState {
       meetingDetector = nil
     }
 
+    let meetingStateReady = mode != .onlyDuringMeetings || meetingDetector?.hasObservedState == true
     let meetingActive = meetingDetector?.isMeetingActive ?? false
     // Only during meetings → capture (mic + system) only while in a call. Always/Never → the mic
     // runs continuously (system audio still respects the mode below).
     let shouldCapture = mode != .onlyDuringMeetings || meetingActive
     isAwaitingMeeting = mode == .onlyDuringMeetings && !meetingActive
+
+    guard meetingStateReady else {
+      log("Transcription: waiting for meeting detector before changing capture state")
+      return
+    }
 
     captureGateInFlight = true
 
@@ -509,6 +520,7 @@ extension AppState {
     if !meetingEndFinalizationInProgress,
       MeetingConversationBoundaryPolicy.shouldFinishConversation(
         mode: mode,
+        meetingStateReady: meetingStateReady,
         shouldCapture: shouldCapture,
         segmentCount: totalSegmentCount,
         hasSpeakerSegments: !speakerSegments.isEmpty
@@ -518,6 +530,16 @@ extension AppState {
       log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
       Task { @MainActor in
         defer { self.meetingEndFinalizationInProgress = false }
+        guard MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: self.effectiveSystemAudioMode,
+          meetingStateReady: self.meetingDetector?.hasObservedState == true,
+          shouldCapture: self.meetingDetector?.isMeetingActive == true,
+          segmentCount: self.totalSegmentCount,
+          hasSpeakerSegments: !self.speakerSegments.isEmpty
+        ) else {
+          log("Transcription: skipped meeting-ended finalization because meeting state changed")
+          return
+        }
         _ = await self.finishConversation(finalizationReason: .meetingEnded)
       }
     }
