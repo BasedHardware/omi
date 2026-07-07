@@ -7,6 +7,28 @@ import typesense
 
 logger = logging.getLogger(__name__)
 
+
+class ConversationSearchUnavailableError(Exception):
+    """Raised when Typesense is unreachable or times out (transient upstream failure)."""
+
+
+def _is_typesense_transient_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    transient_markers = (
+        'timed out',
+        'timeout',
+        'connection refused',
+        'connection reset',
+        'temporarily unavailable',
+        'service unavailable',
+    )
+    if any(marker in message for marker in transient_markers):
+        return True
+    module = type(exc).__module__
+    name = type(exc).__name__
+    return module.endswith('exceptions') and name in {'Timeout', 'ConnectTimeout', 'ReadTimeout', 'ConnectionError'}
+
+
 client = typesense.Client(
     {
         'nodes': [
@@ -111,7 +133,15 @@ def search_conversations(
             'per_page': per_page,
         }
     except Exception as e:
-        raise Exception(f"Failed to search conversations: {str(e)}")
+        if _is_typesense_transient_error(e):
+            logger.warning(
+                "search_conversations upstream timeout/unavailable uid=%s query_len=%s: %s",
+                uid,
+                len(query or ''),
+                e,
+            )
+            raise ConversationSearchUnavailableError('Typesense search temporarily unavailable') from e
+        raise Exception(f"Failed to search conversations: {str(e)}") from e
 
 
 def keyword_search_conversation_ids(
