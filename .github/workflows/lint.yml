@@ -1,4 +1,4 @@
-name: Lint Check
+name: PR Checks
 
 on:
   push:
@@ -6,10 +6,39 @@ on:
   pull_request:
     branches: main
 
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  lint:
-    name: Lint & Format Check
+  changed-files:
+    name: Changed Files
     runs-on: ubuntu-latest
+    outputs:
+      diff_base: ${{ steps.changed.outputs.diff_base }}
+      has_dart: ${{ steps.changed.outputs.has_dart }}
+      has_python: ${{ steps.changed.outputs.has_python }}
+      has_arb: ${{ steps.changed.outputs.has_arb }}
+      has_firmware: ${{ steps.changed.outputs.has_firmware }}
+      has_frontend: ${{ steps.changed.outputs.has_frontend }}
+      has_web_app: ${{ steps.changed.outputs.has_web_app }}
+      has_admin: ${{ steps.changed.outputs.has_admin }}
+      has_personas: ${{ steps.changed.outputs.has_personas }}
+      has_workflows: ${{ steps.changed.outputs.has_workflows }}
+      has_backend_runtime_env: ${{ steps.changed.outputs.has_backend_runtime_env }}
+      has_backend_async_gate: ${{ steps.changed.outputs.has_backend_async_gate }}
+      has_desktop_agent_runtime: ${{ steps.changed.outputs.has_desktop_agent_runtime }}
+      has_app_codegen: ${{ steps.changed.outputs.has_app_codegen }}
+      has_app_l10n: ${{ steps.changed.outputs.has_app_l10n }}
+      has_app_compile_smoke: ${{ steps.changed.outputs.has_app_compile_smoke }}
+      has_desktop_rust: ${{ steps.changed.outputs.has_desktop_rust }}
+      has_desktop_defaults_ratchet: ${{ steps.changed.outputs.has_desktop_defaults_ratchet }}
+      has_desktop_async_after_ratchet: ${{ steps.changed.outputs.has_desktop_async_after_ratchet }}
+      has_format: ${{ steps.changed.outputs.has_format }}
+      has_flutter_generated: ${{ steps.changed.outputs.has_flutter_generated }}
+      has_backend_static_contracts: ${{ steps.changed.outputs.has_backend_static_contracts }}
+      has_web_lint: ${{ steps.changed.outputs.has_web_lint }}
+      has_web_build: ${{ steps.changed.outputs.has_web_build }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -24,35 +53,97 @@ jobs:
           else
             DIFF_BASE="HEAD~1"
           fi
-          FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
-          echo "$FILES"
-          echo "$FILES" > /tmp/changed-files.txt
-          echo "diff_base=$DIFF_BASE" >> $GITHUB_OUTPUT
-          echo "has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_web_app=$(echo "$FILES" | grep -q '^web/app/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_admin=$(echo "$FILES" | grep -q '^web/admin/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/(render_backend_runtime_env|validate-backend-runtime-env|preflight-cloud-run-deploy|repair_cloud_run_traffic|deploy_status_report|pre-deploy-check)\.(py|sh)$|^backend/tests/unit/test_(backend_runtime_env_validator|preflight_cloud_run_deploy|repair_cloud_run_traffic|deploy_status_report)\.py$|^backend/tests/fixtures/deploy_status/|^docs/doc/developer/backend/prod_hotfix_runbook\.mdx$|^docs/docs\.json$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/' && echo true || echo false)" >> $GITHUB_OUTPUT
-          echo "has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          # Also run the Rust check when this workflow changes so CI PRs dogfood
-          # the new guard instead of only validating YAML syntax.
-          echo "has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          # UserDefaults key ratchet: run when desktop Swift sources, the ratchet
-          # script, or this workflow change (so the gate dogfoods itself).
-          echo "has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
-          # asyncAfter ratchet: run when floating-bar / PTT sources, the ratchet
-          # script, or this workflow change (so the gate dogfoods itself).
-          echo "has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)" >> $GITHUB_OUTPUT
 
-      # -- Universal source hygiene --
+          FILES=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE"...HEAD)
+          APP_COMPILE_FILES=$(git diff --name-only --diff-filter=ACMD "$DIFF_BASE"...HEAD)
+          echo "$FILES"
+          echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
+
+          has_dart=$(echo "$FILES" | grep -q '\.dart$' && echo true || echo false)
+          has_python=$(echo "$FILES" | grep -q 'backend/.*\.py$' && echo true || echo false)
+          has_arb=$(echo "$FILES" | grep -q '\.arb$' && echo true || echo false)
+          has_firmware=$(echo "$FILES" | grep -qE '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' && echo true || echo false)
+          has_frontend=$(echo "$FILES" | grep -q '^web/frontend/' && echo true || echo false)
+          has_web_app=$(echo "$FILES" | grep -q '^web/app/' && echo true || echo false)
+          has_admin=$(echo "$FILES" | grep -q '^web/admin/' && echo true || echo false)
+          has_personas=$(echo "$FILES" | grep -q '^web/personas-open-source/' && echo true || echo false)
+          has_workflows=$(echo "$FILES" | grep -qE '^\.github/workflows/.*\.ya?ml$|^\.github/actionlint\.ya?ml$' && echo true || echo false)
+          has_backend_runtime_env=$(echo "$FILES" | grep -qE '^backend/deploy/runtime_env\.yaml$|^backend/charts/backend-listen/.*_values\.yaml$|^backend/scripts/(render_backend_runtime_env|validate-backend-runtime-env|preflight-cloud-run-deploy|repair_cloud_run_traffic|deploy_status_report|pre-deploy-check)\.(py|sh)$|^backend/tests/unit/test_(backend_runtime_env_validator|preflight_cloud_run_deploy|repair_cloud_run_traffic|deploy_status_report)\.py$|^backend/tests/fixtures/deploy_status/|^docs/doc/developer/backend/prod_hotfix_runbook\.mdx$|^docs/docs\.json$|^\.github/workflows/gcp_backend.*\.ya?ml$|^\.github/workflows/lint\.yml$' && echo true || echo false)
+          has_backend_async_gate=$(echo "$FILES" | grep -qE '^backend/.*\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)
+          has_desktop_agent_runtime=$(echo "$FILES" | grep -qE '^desktop/macos/agent/|^desktop/macos/pi-mono-extension/|^desktop/macos/run\.sh$|^desktop/macos/scripts/(audit-desktop-bundle-deps|prepare-agent-runtime|prepare-desktop-bundle-native-deps|test-tool-surfaces)\.sh$|^codemagic\.yaml$|^scripts/pre-push$|^\.github/workflows/lint\.yml$' && echo true || echo false)
+          has_app_codegen=$(echo "$FILES" | grep -qE '^app/lib/|^app/pubspec\.yaml$|^app/pubspec\.lock$|^app/build\.yaml$|^app/assets/' && echo true || echo false)
+          has_app_l10n=$(echo "$FILES" | grep -qE '^app/lib/l10n/.*\.arb$|^app/l10n\.yaml$' && echo true || echo false)
+          has_app_compile_smoke=$(echo "$APP_COMPILE_FILES" | grep -qE '^app/(lib/|android/|ios/|pubspec\.yaml$|pubspec\.lock$|build\.yaml$|analysis_options\.yaml$|l10n\.yaml$|flavorizr\.yaml$|setup/prebuilt/|setup/scripts/|config/|assets/)|^\.github/workflows/lint\.yml$' && echo true || echo false)
+          has_desktop_rust=$(echo "$FILES" | grep -qE '^desktop/macos/Backend-Rust/|^\.github/workflows/lint\.yml$' && echo true || echo false)
+          has_desktop_defaults_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/.*\.swift$|^desktop/macos/scripts/check-userdefaults-key-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)
+          has_desktop_async_after_ratchet=$(echo "$FILES" | grep -qE '^desktop/macos/Desktop/Sources/FloatingControlBar/.*\.swift$|^desktop/macos/scripts/check-async-after-ratchet\.py$|^\.github/workflows/lint\.yml$' && echo true || echo false)
+
+          {
+            echo "has_dart=$has_dart"
+            echo "has_python=$has_python"
+            echo "has_arb=$has_arb"
+            echo "has_firmware=$has_firmware"
+            echo "has_frontend=$has_frontend"
+            echo "has_web_app=$has_web_app"
+            echo "has_admin=$has_admin"
+            echo "has_personas=$has_personas"
+            echo "has_workflows=$has_workflows"
+            echo "has_backend_runtime_env=$has_backend_runtime_env"
+            echo "has_backend_async_gate=$has_backend_async_gate"
+            echo "has_desktop_agent_runtime=$has_desktop_agent_runtime"
+            echo "has_app_codegen=$has_app_codegen"
+            echo "has_app_l10n=$has_app_l10n"
+            echo "has_app_compile_smoke=$has_app_compile_smoke"
+            echo "has_desktop_rust=$has_desktop_rust"
+            echo "has_desktop_defaults_ratchet=$has_desktop_defaults_ratchet"
+            echo "has_desktop_async_after_ratchet=$has_desktop_async_after_ratchet"
+          } >> "$GITHUB_OUTPUT"
+
+          if [ "$has_dart" = "true" ] || [ "$has_python" = "true" ] || [ "$has_arb" = "true" ] || [ "$has_firmware" = "true" ]; then
+            echo "has_format=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_format=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$has_dart" = "true" ] || [ "$has_app_codegen" = "true" ] || [ "$has_app_l10n" = "true" ]; then
+            echo "has_flutter_generated=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_flutter_generated=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$has_backend_runtime_env" = "true" ] || [ "$has_backend_async_gate" = "true" ]; then
+            echo "has_backend_static_contracts=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_backend_static_contracts=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$has_frontend" = "true" ] || [ "$has_personas" = "true" ]; then
+            echo "has_web_lint=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_web_lint=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "$has_web_app" = "true" ] || [ "$has_admin" = "true" ]; then
+            echo "has_web_build=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_web_build=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  source-hygiene:
+    name: Source Hygiene
+    runs-on: ubuntu-latest
+    needs: changed-files
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Save changed files
+        run: |
+          git diff --name-only --diff-filter=ACM "${{ needs.changed-files.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          cat /tmp/changed-files.txt
+
       - name: Check merge conflict markers
         run: |
           failed=0
@@ -95,28 +186,20 @@ jobs:
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
 
-      - name: Check backend runtime env manifest
-        if: steps.changed.outputs.has_backend_runtime_env == 'true'
-        run: |
-          python3 -m pip install -q pyyaml pytest
-          CLOUD_RUN_VPC_NETWORK=offline-check-network \
-          CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
-            backend/scripts/pre-deploy-check.sh
-
       - name: Summarize deferred-work markers
         continue-on-error: true
         run: python3 .github/scripts/deferred-work-marker-count.py --format github-summary >> "$GITHUB_STEP_SUMMARY"
 
       - name: Check desktop UserDefaults key ratchet
-        if: steps.changed.outputs.has_desktop_defaults_ratchet == 'true'
+        if: needs.changed-files.outputs.has_desktop_defaults_ratchet == 'true'
         run: python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
 
       - name: Check desktop asyncAfter ratchet
-        if: steps.changed.outputs.has_desktop_async_after_ratchet == 'true'
+        if: needs.changed-files.outputs.has_desktop_async_after_ratchet == 'true'
         run: python3 desktop/macos/scripts/check-async-after-ratchet.py
 
       - name: Check GitHub Actions workflows
-        if: steps.changed.outputs.has_workflows == 'true'
+        if: needs.changed-files.outputs.has_workflows == 'true'
         run: |
           GOBIN=/tmp/actionlint-bin go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           FILES=$(grep -E '^\.github/workflows/.*\.ya?ml$' /tmp/changed-files.txt || true)
@@ -124,59 +207,38 @@ jobs:
             /tmp/actionlint-bin/actionlint -shellcheck "" $FILES
           fi
 
-      # -- Dart --
+  format:
+    name: Format Checks
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_format == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Save changed files
+        run: |
+          git diff --name-only --diff-filter=ACM "${{ needs.changed-files.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          cat /tmp/changed-files.txt
+
       - name: Setup Flutter
-        if: steps.changed.outputs.has_dart == 'true' || steps.changed.outputs.has_app_codegen == 'true' || steps.changed.outputs.has_app_l10n == 'true'
+        if: needs.changed-files.outputs.has_dart == 'true'
         uses: subosito/flutter-action@v2
         with:
           channel: stable
 
-      - name: Resolve Flutter dependencies
-        if: steps.changed.outputs.has_dart == 'true' || steps.changed.outputs.has_app_codegen == 'true' || steps.changed.outputs.has_app_l10n == 'true'
-        working-directory: app
-        run: flutter pub get
-
-      - name: Check Flutter generated code
-        if: steps.changed.outputs.has_app_codegen == 'true'
-        working-directory: app
-        run: |
-          dart run build_runner build --delete-conflicting-outputs
-          git diff --exit-code -- lib || {
-            echo "Generated Dart files are stale. Run: cd app && dart run build_runner build --delete-conflicting-outputs"
-            exit 1
-          }
-          if [ -n "$(git ls-files --others --exclude-standard -- lib)" ]; then
-            echo "Generated Dart files are stale; untracked generated files were produced:"
-            git ls-files --others --exclude-standard -- lib
-            exit 1
-          fi
-
-      - name: Check Flutter l10n
-        if: steps.changed.outputs.has_app_l10n == 'true'
-        working-directory: app
-        run: |
-          flutter gen-l10n
-          git diff --exit-code -- lib/l10n || {
-            echo "Generated localization files are stale. Run: cd app && flutter gen-l10n"
-            exit 1
-          }
-          if [ -n "$(git ls-files --others --exclude-standard -- lib/l10n)" ]; then
-            echo "Generated localization files are stale; untracked generated files were produced:"
-            git ls-files --others --exclude-standard -- lib/l10n
-            exit 1
-          fi
-
       - name: Check Dart formatting
-        if: steps.changed.outputs.has_dart == 'true'
+        if: needs.changed-files.outputs.has_dart == 'true'
         run: |
           FILES=$(grep '\.dart$' /tmp/changed-files.txt | grep -v -e '\.gen\.dart$' -e '\.g\.dart$' || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs dart format --line-length 120 --set-exit-if-changed --output=none
           fi
 
-      # -- Python --
       - name: Check Python formatting
-        if: steps.changed.outputs.has_python == 'true'
+        if: needs.changed-files.outputs.has_python == 'true'
         run: |
           pip install -q black
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt || true)
@@ -184,17 +246,8 @@ jobs:
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
           fi
 
-      - name: Check backend async blockers
-        if: steps.changed.outputs.has_backend_async_gate == 'true'
-        run: |
-          python3 backend/scripts/scan_async_blockers.py \
-            --dirs backend/routers backend/utils \
-            --diff-base "${{ steps.changed.outputs.diff_base }}" \
-            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
-
-      # -- ARB --
       - name: Check ARB formatting
-        if: steps.changed.outputs.has_arb == 'true'
+        if: needs.changed-files.outputs.has_arb == 'true'
         run: |
           FILES=$(grep '\.arb$' /tmp/changed-files.txt || true)
           failed=0
@@ -222,24 +275,170 @@ jobs:
             exit 1
           fi
 
-      # -- C/C++ --
       - name: Check C/C++ formatting
-        if: steps.changed.outputs.has_firmware == 'true'
+        if: needs.changed-files.outputs.has_firmware == 'true'
         run: |
           FILES=$(grep -E '^(omi|omiGlass)/.*\.(c|cpp|cc|cxx|h|hpp)$' /tmp/changed-files.txt || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs clang-format --dry-run --Werror
           fi
 
-      # -- Desktop Rust backend --
+  flutter-generated:
+    name: Flutter Generated Files
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_flutter_generated == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Check Flutter generated code
+        if: needs.changed-files.outputs.has_app_codegen == 'true'
+        working-directory: app
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- lib || {
+            echo "Generated Dart files are stale. Run: cd app && dart run build_runner build --delete-conflicting-outputs"
+            exit 1
+          }
+          if [ -n "$(git ls-files --others --exclude-standard -- lib)" ]; then
+            echo "Generated Dart files are stale; untracked generated files were produced:"
+            git ls-files --others --exclude-standard -- lib
+            exit 1
+          fi
+
+      - name: Check Flutter l10n
+        if: needs.changed-files.outputs.has_app_l10n == 'true'
+        working-directory: app
+        run: |
+          flutter gen-l10n
+          git diff --exit-code -- lib/l10n || {
+            echo "Generated localization files are stale. Run: cd app && flutter gen-l10n"
+            exit 1
+          }
+          if [ -n "$(git ls-files --others --exclude-standard -- lib/l10n)" ]; then
+            echo "Generated localization files are stale; untracked generated files were produced:"
+            git ls-files --others --exclude-standard -- lib/l10n
+            exit 1
+          fi
+
+  flutter-android-compile-smoke:
+    name: Flutter Android Compile Smoke
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_app_compile_smoke == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Resolve Flutter dependencies
+        working-directory: app
+        run: flutter pub get
+
+      - name: Prepare Flutter dev compile inputs
+        working-directory: app
+        run: |
+          mkdir -p android/app/src/dev/ android/app/src/prod/
+          cp setup/prebuilt/firebase_options.dart lib/firebase_options_dev.dart
+          cp setup/prebuilt/firebase_options.dart lib/firebase_options_prod.dart
+          cp setup/prebuilt/google-services.json android/app/src/dev/
+          cp setup/prebuilt/google-services.json android/app/src/prod/
+          cp setup/prebuilt/key.properties android/key.properties
+          {
+            echo "API_BASE_URL="
+            echo "USE_WEB_AUTH=true"
+            echo "USE_AUTH_CUSTOM_TOKEN=true"
+            echo "STAGING_API_URL="
+          } > .dev.env
+          : > .env
+
+      - name: Generate Flutter code for compile smoke
+        working-directory: app
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Setup Gradle for Flutter compile smoke
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build Flutter Android dev debug APK
+        working-directory: app
+        env:
+          # GitHub Actions sets CI=true; android/app/build.gradle reads Codemagic
+          # keystore env vars in that case even for debug APK builds.
+          CM_KEYSTORE_PATH: ${{ github.workspace }}/app/setup/prebuilt/debug.keystore
+          CM_KEYSTORE_PASSWORD: android
+          CM_KEY_ALIAS: androiddebugkey
+          CM_KEY_PASSWORD: android
+        run: flutter build apk --debug --flavor dev
+
+  backend-static-contracts:
+    name: Backend Static Contracts
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_backend_static_contracts == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check backend runtime env manifest
+        if: needs.changed-files.outputs.has_backend_runtime_env == 'true'
+        run: |
+          python3 -m pip install -q pyyaml pytest
+          CLOUD_RUN_VPC_NETWORK=offline-check-network \
+          CLOUD_RUN_VPC_SUBNET=offline-check-subnet \
+            backend/scripts/pre-deploy-check.sh
+
+      - name: Check backend async blockers
+        if: needs.changed-files.outputs.has_backend_async_gate == 'true'
+        run: |
+          python3 backend/scripts/scan_async_blockers.py \
+            --dirs backend/routers backend/utils \
+            --diff-base "${{ needs.changed-files.outputs.diff_base }}" \
+            --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
+
+  desktop-rust-backend:
+    name: Desktop Rust Backend
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_desktop_rust == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Save changed files
+        run: |
+          git diff --name-only --diff-filter=ACM "${{ needs.changed-files.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          cat /tmp/changed-files.txt
+
       - name: Set up desktop Rust toolchain
-        if: steps.changed.outputs.has_desktop_rust == 'true'
         run: |
           cd desktop/macos/Backend-Rust
           rustup show
 
       - name: Cache desktop Rust backend build
-        if: steps.changed.outputs.has_desktop_rust == 'true'
         uses: actions/cache@v4
         with:
           path: |
@@ -251,7 +450,6 @@ jobs:
             ${{ runner.os }}-desktop-rust-
 
       - name: Check desktop Rust backend
-        if: steps.changed.outputs.has_desktop_rust == 'true'
         run: |
           FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt | sed 's#^desktop/macos/Backend-Rust/##' || true)
           if [ -n "$FILES" ]; then
@@ -263,9 +461,18 @@ jobs:
           cd desktop/macos/Backend-Rust
           cargo check --locked
 
-      # -- Desktop agent runtime --
+  desktop-agent-runtime:
+    name: Desktop Agent Runtime
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_desktop_agent_runtime == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Node.js for desktop agent runtime
-        if: steps.changed.outputs.has_desktop_agent_runtime == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -275,24 +482,30 @@ jobs:
             desktop/macos/pi-mono-extension/package-lock.json
 
       - name: Check desktop agent runtime
-        if: steps.changed.outputs.has_desktop_agent_runtime == 'true'
         run: desktop/macos/scripts/test-tool-surfaces.sh
 
-      # -- Frontend --
+  web-frontend-lint:
+    name: Web Frontend Lint
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_web_lint == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Setup Node.js
-        if: steps.changed.outputs.has_frontend == 'true' || steps.changed.outputs.has_personas == 'true' || steps.changed.outputs.has_web_app == 'true' || steps.changed.outputs.has_admin == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
             web/frontend/package-lock.json
-            web/app/package-lock.json
-            web/admin/package-lock.json
             web/personas-open-source/package-lock.json
 
       - name: Lint Frontend
-        if: steps.changed.outputs.has_frontend == 'true'
+        if: needs.changed-files.outputs.has_frontend == 'true'
         working-directory: ./web/frontend
         run: |
           npm ci
@@ -300,14 +513,34 @@ jobs:
           npm run lint:format -- --check
 
       - name: Lint Personas
-        if: steps.changed.outputs.has_personas == 'true'
+        if: needs.changed-files.outputs.has_personas == 'true'
         working-directory: ./web/personas-open-source
         run: |
           npm ci --legacy-peer-deps
           npm run lint
 
+  web-build:
+    name: Web Build
+    runs-on: ubuntu-latest
+    needs: changed-files
+    if: needs.changed-files.outputs.has_web_build == 'true'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: |
+            web/app/package-lock.json
+            web/admin/package-lock.json
+
       - name: Build Web App
-        if: steps.changed.outputs.has_web_app == 'true'
+        if: needs.changed-files.outputs.has_web_app == 'true'
         working-directory: ./web/app
         env:
           NEXT_PUBLIC_FIREBASE_API_KEY: dummy
@@ -322,7 +555,7 @@ jobs:
           npm run build
 
       - name: Build Admin Dashboard
-        if: steps.changed.outputs.has_admin == 'true'
+        if: needs.changed-files.outputs.has_admin == 'true'
         working-directory: ./web/admin
         env:
           NEXT_PUBLIC_FIREBASE_API_KEY: dummy
