@@ -285,7 +285,7 @@ struct FileIndexingView: View {
             guard !Task.isCancelled else { return }
             guard scanSucceeded else {
                 await MainActor.run {
-                    UserDefaults.standard.set(false, forKey: "hasCompletedFileIndexing")
+                    UserDefaults.standard.set(false, forKey: .hasCompletedFileIndexing)
                     pipelineTask = nil
                 }
                 return

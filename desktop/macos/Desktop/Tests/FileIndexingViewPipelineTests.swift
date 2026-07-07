@@ -30,7 +30,7 @@ final class FileIndexingViewPipelineTests: XCTestCase {
                 of: "guard !Task.isCancelled else { return }",
                 range: scanRange.lowerBound..<source.endIndex),
             let resetRange = source.range(
-                of: "UserDefaults.standard.set(false, forKey: \"hasCompletedFileIndexing\")",
+                of: "UserDefaults.standard.set(false, forKey: .hasCompletedFileIndexing)",
                 range: scanRange.lowerBound..<source.endIndex)
         else {
             return XCTFail("Failed scans must not reset completion after pipeline cancellation")
