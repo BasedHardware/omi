@@ -349,6 +349,9 @@ final class WALService: ObservableObject {
                     if let index = self.wals.firstIndex(where: { $0.id == walId }) {
                         self.wals[index].storage = .disk
                         self.wals[index].filePath = fileName
+                        // Persist immediately so the entry isn't orphaned as
+                        // `.memory` if the app crashes before the next saveWals().
+                        self.saveWals()
                     }
                 }
             } catch {
