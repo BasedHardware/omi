@@ -587,7 +587,7 @@ struct DesktopHomeView: View {
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: useLegacyHomeDesign,
-      homeMode: onDashboard && !useLegacyHomeDesign ? priorHomeMode : nil,
+      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,

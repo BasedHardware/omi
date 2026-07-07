@@ -6,6 +6,8 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
 preconditions:
   - automation_bridge_ready
 

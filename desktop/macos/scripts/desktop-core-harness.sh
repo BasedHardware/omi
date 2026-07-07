@@ -202,6 +202,28 @@ if not payload.get("ok"):
 PY
 }
 
+# Like bridge_health, but also requires the /health bundleIdentifier to match the
+# expected fault bundle — prevents running fault flows against a stale dev stack
+# already listening on $PORT.
+verify_fault_bundle_health() {
+  local port="$1"
+  local expected_bundle="$2"
+  python3 - "$port" "$expected_bundle" <<'PY'
+import json
+import sys
+import urllib.request
+
+port, expected = sys.argv[1], sys.argv[2]
+with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
+    payload = json.loads(response.read().decode("utf-8"))
+if not payload.get("ok"):
+    raise SystemExit(f"bridge unhealthy: {payload}")
+actual = payload.get("bundleIdentifier")
+if actual != expected:
+    raise SystemExit(f"wrong bundle on port {port}: expected {expected}, got {actual}")
+PY
+}
+
 # Probe dev-harness stack health + provider_mode from config-digest.json.
 # Exit 0: healthy offline stack owned by this worktree/instance (JSON on stdout)
 # Exit 1: stack not up / unhealthy / foreign (caller may dev-up)
@@ -501,6 +523,11 @@ FAULT_RUN_STARTED=0
 
 stop_fault_stack() {
   if [[ "$FAULT_RUN_STARTED" -eq 1 ]]; then
+    if [[ -n "$FAULT_RUN_PID" ]]; then
+      kill "$FAULT_RUN_PID" 2>/dev/null || true
+      wait "$FAULT_RUN_PID" 2>/dev/null || true
+      FAULT_RUN_PID=""
+    fi
     pkill -f "${FAULT_BUNDLE}.app" 2>/dev/null || true
     FAULT_RUN_STARTED=0
   fi
@@ -533,10 +560,11 @@ start_fault_stack() {
   ) &
   FAULT_RUN_PID=$!
   FAULT_RUN_STARTED=1
+  local expected_bundle="com.omi.${FAULT_BUNDLE}"
   local attempt
   for attempt in $(seq 1 90); do
-    if bridge_health 2>/dev/null; then
-      echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT"
+    if verify_fault_bundle_health "$PORT" "$expected_bundle" 2>/dev/null; then
+      echo "desktop-core-harness: $FAULT_BUNDLE bridge ready on port $PORT (bundle: $expected_bundle)"
       return 0
     fi
     if ! kill -0 "$FAULT_RUN_PID" 2>/dev/null; then
