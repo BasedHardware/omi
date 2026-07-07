@@ -402,6 +402,17 @@ After making changes, verify them in the live app:
 4. Capture evidence: `agent-flutter screenshot /tmp/evidence.png`
 5. Generate video: `ffmpeg -framerate 1 -pattern_type glob -i '/tmp/e2e-*.png' -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1" -c:v libx264 -pix_fmt yuv420p /tmp/report.mp4`
 
+### Process-in-progress 404 race (#9241)
+
+When WebSocket auto-finalize races `POST /v1/conversations`, the server returns HTTP 404 (`Conversation in progress not found`). That is benign — the app must return `null` and must **not** surface a crash overlay or report to Crashlytics.
+
+1. With auth + backend connected, start a short phone-mic capture, then stop while the listen WebSocket is active.
+2. `agent-flutter snapshot -i --json` — confirm no crash/error dialog after the processing chip dismisses.
+3. Optional: `agent-flutter find type snackbar` should not match a fatal error after stop.
+4. Evidence: `agent-flutter screenshot /tmp/process-in-progress-404.png`
+
+Hermetic regression: `cd app && flutter test test/backend/process_in_progress_conversation_test.dart`.
+
 ## Decision Tree
 
 | Problem | Solution |

@@ -21,17 +21,35 @@ Future<CreateConversationResponse?> processInProgressConversation() async {
     body: jsonEncode({}),
   );
   if (response == null) return null;
+  return interpretProcessInProgressConversationResponse(
+    response,
+    reportUnexpectedFailure: (body) {
+      // TODO: Server returns 304 doesn't recover
+      PlatformManager.instance.crashReporter.reportCrash(
+        Exception('Failed to create conversation'),
+        StackTrace.current,
+        userAttributes: {'response': body},
+      );
+    },
+  );
+}
+
+/// Maps POST /v1/conversations status codes. HTTP 404 is benign when WebSocket
+/// auto-finalize races this call and the in-progress pointer is already gone.
+@visibleForTesting
+CreateConversationResponse? interpretProcessInProgressConversationResponse(
+  http.Response response, {
+  required void Function(String body) reportUnexpectedFailure,
+}) {
   Logger.debug('createConversationServer: ${response.body}');
   if (response.statusCode == 200) {
     return CreateConversationResponse.fromGeneratedWireJson(jsonDecode(response.body) as Map<String, dynamic>);
-  } else {
-    // TODO: Server returns 304 doesn't recover
-    PlatformManager.instance.crashReporter.reportCrash(
-      Exception('Failed to create conversation'),
-      StackTrace.current,
-      userAttributes: {'response': response.body},
-    );
   }
+  if (response.statusCode == 404) {
+    Logger.debug('processInProgressConversation: in-progress conversation not found (likely already finalized)');
+    return null;
+  }
+  reportUnexpectedFailure(response.body);
   return null;
 }
 
