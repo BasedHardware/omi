@@ -258,6 +258,23 @@ def should_spawn_speaker_match(*, speaker_already_mapped: bool, duration: float,
     return not speaker_already_mapped and duration >= min_audio_seconds
 
 
+def build_speaker_id_segment_payload(
+    *, segment_id: str, speaker_id: Any, abs_start: float, abs_end: float, duration: float
+) -> dict:
+    """Payload queued for audio-only speaker identification.
+
+    Deliberately excludes transcript text — the consumer matches on audio
+    embeddings and never reads it, so carrying it only widens the PII surface.
+    """
+    return {
+        'id': segment_id,
+        'speaker_id': speaker_id,
+        'abs_start': abs_start,  # raw start/end
+        'abs_end': abs_end,
+        'duration': duration,
+    }
+
+
 def decide_text_speaker_assignment(
     *,
     existing_person_id: Optional[str],

@@ -2,6 +2,7 @@ from utils.transcribe_decisions import (
     ConversationLifecycleAction,
     TARGET_SAMPLE_RATE,
     USER_SELF_PERSON_ID,
+    build_speaker_id_segment_payload,
     decide_existing_conversation_action,
     decide_lifecycle_action,
     decide_multi_channel_mix,
@@ -498,6 +499,26 @@ def test_speaker_detection_gates():
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=2.0, min_audio_seconds=2.0) is True
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=1.99, min_audio_seconds=2.0) is False
     assert should_spawn_speaker_match(speaker_already_mapped=True, duration=4.0, min_audio_seconds=2.0) is False
+
+
+def test_speaker_id_segment_payload_excludes_transcript_text():
+    # Speaker ID matches on audio embeddings only — transcript text must never
+    # enter the queue payload (PII minimization, issue #9209).
+    payload = build_speaker_id_segment_payload(
+        segment_id='seg-1',
+        speaker_id=3,
+        abs_start=10.0,
+        abs_end=14.5,
+        duration=4.5,
+    )
+    assert payload == {
+        'id': 'seg-1',
+        'speaker_id': 3,
+        'abs_start': 10.0,
+        'abs_end': 14.5,
+        'duration': 4.5,
+    }
+    assert 'text' not in payload
 
 
 def test_text_speaker_assignment_create_speakers_compatibility():

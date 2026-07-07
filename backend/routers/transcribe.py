@@ -123,6 +123,7 @@ from utils.translation_coordinator import TranslationCoordinator
 from utils.transcribe_decisions import (  # async-blockers: no-import-scope; async-blockers: no-changed-range-scope
     ConversationLifecycleAction,
     USER_SELF_PERSON_ID,
+    build_speaker_id_segment_payload,
     decide_existing_conversation_action,
     decide_lifecycle_action,
     decide_multi_channel_mix,
@@ -1835,16 +1836,13 @@ async def _stream_handler(
                     ):
                         try:
                             speaker_id_segment_queue.put_nowait(
-                                {
-                                    'id': segment.id,
-                                    'speaker_id': segment.speaker_id,
-                                    'abs_start': session.first_audio_byte_timestamp
-                                    + segment.start
-                                    - time_offset,  # raw start/end
-                                    'abs_end': session.first_audio_byte_timestamp + segment.end - time_offset,
-                                    'duration': segment.end - segment.start,
-                                    'text': segment.text,  # TODO: remove
-                                }
+                                build_speaker_id_segment_payload(
+                                    segment_id=segment.id,
+                                    speaker_id=segment.speaker_id,
+                                    abs_start=session.first_audio_byte_timestamp + segment.start - time_offset,
+                                    abs_end=session.first_audio_byte_timestamp + segment.end - time_offset,
+                                    duration=segment.end - segment.start,
+                                )
                             )
                         except asyncio.QueueFull:
                             pass  # Drop if queue is full
