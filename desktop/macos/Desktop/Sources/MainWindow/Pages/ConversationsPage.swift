@@ -164,26 +164,12 @@ struct ConversationsPage: View {
   private var mainConversationsView: some View {
     // Title and status controls live in the window toolbar.
     conversationListSection
-      .padding(.top, 6)
   }
 
   private var quickNoteButton: some View {
-    Button {
+    OmiHeaderChip(systemImage: "note.text", title: "Quick Note") {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
-    } label: {
-      HStack(spacing: 5) {
-        Image(systemName: "note.text")
-          .scaledFont(size: 12)
-        Text("Quick Note")
-          .scaledFont(size: 13, weight: .medium)
-      }
-      .foregroundColor(OmiColors.textSecondary)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
     }
-    .buttonStyle(.plain)
   }
 
   // MARK: - Conversation List Section
@@ -191,42 +177,22 @@ struct ConversationsPage: View {
   private var conversationListSection: some View {
     VStack(spacing: 0) {
       // Section header with search bar and filters
-      HStack(spacing: 8) {
-        // Search bar
-        HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
-
-          TextField("Search conversations...", text: $searchModel.query)
-            .textFieldStyle(.plain)
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textPrimary)
-
-          if !searchModel.query.isEmpty {
-            Button(action: {
-              searchModel.clear()
-            }) {
-              Image(systemName: "xmark.circle.fill")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .buttonStyle(.plain)
-          }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 11)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+      HStack(spacing: OmiHeader.controlSpacing) {
+        OmiSearchField(
+          placeholder: "Search conversations...",
+          text: $searchModel.query,
+          isBusy: searchModel.isSearching,
+          onClear: { searchModel.clear() }
+        )
 
         // Filter buttons
         filterButtonsRow
 
         quickNoteButton
       }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 12)
+      .padding(.horizontal, OmiHeader.rowHorizontalPadding)
+      .padding(.top, OmiHeader.rowTopPadding)
+      .padding(.bottom, OmiHeader.rowBottomPadding)
 
       // Folder tabs strip
       FolderTabsStrip(
@@ -399,20 +365,14 @@ struct ConversationsPage: View {
           } else {
             Image(systemName: appState.showStarredOnly ? "star.fill" : "star")
               .scaledFont(size: 12)
+              .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
           }
           Text("Starred")
-            .scaledFont(size: 12, weight: .medium)
+            .scaledFont(size: 13, weight: .medium)
+            .foregroundColor(
+              appState.showStarredOnly ? OmiColors.textPrimary : OmiColors.textSecondary)
         }
-        .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .omiControlSurface(
-          fill: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.16) : OmiColors.backgroundSecondary,
-          radius: 16,
-          stroke: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.36) : OmiColors.border.opacity(0.14)
-        )
+        .omiHeaderControl(isActive: appState.showStarredOnly)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringStarred)
@@ -432,7 +392,7 @@ struct ConversationsPage: View {
           }
           if let date = appState.selectedDateFilter {
             Text(formatFilterDate(date))
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: 13, weight: .medium)
             // Clear button
             Button(action: {
               Task {
@@ -447,19 +407,13 @@ struct ConversationsPage: View {
             .buttonStyle(.plain)
           } else {
             Text("Date")
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: 13, weight: .medium)
           }
         }
-        .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .omiControlSurface(
-          fill: appState.selectedDateFilter != nil
-            ? OmiColors.textPrimary : OmiColors.backgroundSecondary,
-          radius: 16,
-          stroke: appState.selectedDateFilter != nil
-            ? OmiColors.border.opacity(0.28) : OmiColors.border.opacity(0.14)
+        .foregroundColor(
+          appState.selectedDateFilter != nil ? OmiColors.textPrimary : OmiColors.textSecondary
         )
+        .omiHeaderControl(isActive: appState.selectedDateFilter != nil)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringDate)

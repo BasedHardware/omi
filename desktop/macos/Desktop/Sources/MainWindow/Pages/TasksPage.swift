@@ -2873,60 +2873,22 @@ struct TasksPage: View {
     // MARK: - Header View
 
     private var headerView: some View {
-        HStack(spacing: 10) {
-            // Search field
-            HStack(spacing: 8) {
-                if viewModel.isSearching || viewModel.isLoadingFiltered {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Image(systemName: "magnifyingglass")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                TextField("Search tasks...", text: $viewModel.searchText)
-                    .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                if !viewModel.searchText.isEmpty {
-                    Button {
-                        viewModel.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 11)
-            .frame(minHeight: 46)
-            .omiControlSurface(
-                fill: OmiColors.backgroundSecondary, radius: 18,
-                stroke: OmiColors.border.opacity(0.18))
+        HStack(spacing: OmiHeader.controlSpacing) {
+            OmiSearchField(
+                placeholder: "Search tasks...",
+                text: $viewModel.searchText,
+                isBusy: viewModel.isSearching || viewModel.isLoadingFiltered
+            )
 
             // Saved filter view chips
             if !viewModel.savedFilterViews.isEmpty && !viewModel.isMultiSelectMode {
                 ForEach(viewModel.savedFilterViews) { savedView in
-                    let isActive = viewModel.isActiveSavedView(savedView)
-                    Button {
+                    OmiHeaderChip(
+                        title: savedView.name,
+                        isActive: viewModel.isActiveSavedView(savedView)
+                    ) {
                         viewModel.applySavedView(savedView)
-                    } label: {
-                        Text(savedView.name)
-                            .scaledFont(size: 11, weight: .medium)
-                            .foregroundColor(isActive ? .white : OmiColors.textSecondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(isActive ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
-                            )
                     }
-                    .buttonStyle(.plain)
                     .contextMenu {
                         Button(role: .destructive) {
                             viewModel.deleteSavedView(savedView)
@@ -2960,9 +2922,9 @@ struct TasksPage: View {
                 taskSettingsButton
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
+        .padding(.horizontal, OmiHeader.rowHorizontalPadding)
+        .padding(.top, OmiHeader.rowTopPadding)
+        .padding(.bottom, OmiHeader.rowBottomPadding)
         .alert("Save Filter View", isPresented: $showSaveFilterAlert) {
             TextField("View name", text: $saveFilterName)
             Button("Save") {
@@ -2981,36 +2943,18 @@ struct TasksPage: View {
     }
 
     private var saveFilterButton: some View {
-        Button {
+        OmiHeaderIconButton(systemImage: "bookmark") {
             saveFilterName = ""
             showSaveFilterAlert = true
-        } label: {
-            Image(systemName: "bookmark")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(8)
         }
-        .buttonStyle(.plain)
         .help("Save current filters as a view")
     }
 
     private var addTaskButton: some View {
-        Button {
+        OmiHeaderIconButton(systemImage: "plus", isProminent: true) {
             viewModel.inlineCreateAfterTaskId = nil
             viewModel.isInlineCreating = true
-        } label: {
-            Image(systemName: "plus")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(8)
         }
-        .buttonStyle(.plain)
         .help("Add task (⌘N)")
     }
 
@@ -3057,25 +3001,16 @@ struct TasksPage: View {
     }
 
     private var filterDropdownButton: some View {
-        Button {
+        OmiHeaderIconButton(
+            systemImage: "line.3.horizontal.decrease",
+            isActive: viewModel.hasActiveFilters
+        ) {
             pendingSelectedTags = viewModel.selectedTags
             pendingSelectedDynamicTags = viewModel.selectedDynamicTags
             filterSearchText = ""
             showFilterPopover = true
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease")
-                .scaledFont(size: 12)
-            .foregroundColor(viewModel.hasActiveFilters ? OmiColors.textPrimary : OmiColors.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(viewModel.hasActiveFilters ? OmiColors.border : Color.clear, lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
+        .help("Filter tasks")
         .popover(isPresented: $showFilterPopover, arrowEdge: .bottom) {
             filterPopover
         }
@@ -3338,57 +3273,37 @@ struct TasksPage: View {
                     .scaledFont(size: 13, weight: .medium)
             }
             .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.red)
-            )
+            .padding(.horizontal, 14)
+            .frame(height: OmiHeader.controlHeight)
+            .background(Capsule(style: .continuous).fill(Color.red))
         }
         .buttonStyle(.plain)
     }
 
     private var cancelMultiSelectButton: some View {
-        Button {
+        OmiHeaderChip(title: "Cancel") {
             viewModel.toggleMultiSelectMode()
-        } label: {
-            Text("Cancel")
-                .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
-                )
         }
-        .buttonStyle(.plain)
     }
 
 
 
     private var taskSettingsButton: some View {
-        Button {
+        OmiHeaderIconButton(systemImage: "gearshape") {
             NotificationCenter.default.post(
                 name: .navigateToTaskSettings,
                 object: nil
             )
-        } label: {
-            Image(systemName: "gearshape")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
-                )
         }
-        .buttonStyle(.plain)
         .help("Task Settings")
     }
 
     private var chatToggleButton: some View {
-        Button {
+        OmiHeaderIconButton(
+            systemImage: showChatPanel
+                ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right",
+            isActive: showChatPanel
+        ) {
             if showChatPanel {
                 closeChatPanel()
             } else if let selectedId = viewModel.keyboardSelectedTaskId,
@@ -3402,17 +3317,7 @@ struct TasksPage: View {
                     showChatPanel = true
                 }
             }
-        } label: {
-            Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-                .scaledFont(size: 12)
-                .foregroundColor(showChatPanel ? OmiColors.purplePrimary : OmiColors.textSecondary)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(showChatPanel ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)
-                )
         }
-        .buttonStyle(.plain)
         .help(showChatPanel ? "Close chat panel" : "Open task chat")
     }
 
