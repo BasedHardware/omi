@@ -1,0 +1,19 @@
+backend/.gitignore
+  s_ce2d1ff0ceb2f8::t_aa919c7c846fd0 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "fc85c66257572b7d11891b8981cc210e243518f8",
+  "prompts": {},
+  "sessions": {
+    "s_ce2d1ff0ceb2f8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "208856ba-f286-4a3a-8028-b0164d883309",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
