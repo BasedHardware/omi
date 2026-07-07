@@ -1096,7 +1096,8 @@ private struct PageContentView: View {
           homeStatus: viewModelContainer.homeStatusStore,
           selectedIndex: $selectedTabIndex)
       case 1:
-        ConversationsPageHost(appState: appState)
+        ConversationsPageHost(
+          appState: appState, searchModel: viewModelContainer.conversationsSearchModel)
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
@@ -1145,10 +1146,13 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 private struct ConversationsPageHost: View {
   let appState: AppState
+  let searchModel: ConversationsSearchModel
   @State private var selectedConversation: ServerConversation? = nil
 
   var body: some View {
-    ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+    ConversationsPage(
+      appState: appState, selectedConversation: $selectedConversation,
+      searchModel: searchModel)
   }
 }
 

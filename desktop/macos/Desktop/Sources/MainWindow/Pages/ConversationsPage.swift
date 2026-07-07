@@ -2,33 +2,13 @@ import Combine
 import SwiftUI
 import OmiTheme
 
-// MARK: - Search Debouncer
-
-/// Debounces search queries to avoid excessive API calls
-class SearchDebouncer: ObservableObject {
-  /// The input query (set immediately when user types)
-  @Published var inputQuery: String = ""
-  /// The debounced query (updated 250ms after user stops typing)
-  @Published var debouncedQuery: String = ""
-  private var cancellables = Set<AnyCancellable>()
-
-  init() {
-    // Observe input and debounce to output
-    $inputQuery
-      .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
-      .removeDuplicates()
-      .sink { [weak self] value in
-        self?.debouncedQuery = value
-      }
-      .store(in: &cancellables)
-  }
-}
-
 // MARK: - Conversations Page
 
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
   @Binding var selectedConversation: ServerConversation?
+  /// Persistent search state — survives page recreation on tab switches.
+  @ObservedObject var searchModel: ConversationsSearchModel
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
   var embedded: Bool = false
@@ -36,12 +16,6 @@ struct ConversationsPage: View {
   // Compact view mode - persisted preference
   @AppStorage("conversationsCompactView") private var isCompactView = true
 
-  // Search state
-  @State private var searchQuery: String = ""
-  @State private var searchResults: [ServerConversation] = []
-  @State private var isSearching: Bool = false
-  @State private var searchError: String? = nil
-  @StateObject private var searchDebouncer = SearchDebouncer()
 
   // Date picker state
   @State private var showDatePicker: Bool = false
@@ -169,7 +143,7 @@ struct ConversationsPage: View {
       return
     }
 
-    if let conversation = searchResults.first(where: { $0.id == conversationId }) {
+    if let conversation = searchModel.results.first(where: { $0.id == conversationId }) {
       present(conversation)
       return
     }
@@ -243,25 +217,14 @@ struct ConversationsPage: View {
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textTertiary)
 
-          TextField("Search conversations...", text: $searchQuery)
+          TextField("Search conversations...", text: $searchModel.query)
             .textFieldStyle(.plain)
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textPrimary)
-            .onChange(of: searchQuery) { _, newValue in
-              // Feed input to debouncer
-              searchDebouncer.inputQuery = newValue
-            }
-            .onChange(of: searchDebouncer.debouncedQuery) { _, newValue in
-              // Debounced value changed - perform search
-              performSearch(query: newValue)
-            }
 
-          if !searchQuery.isEmpty {
+          if !searchModel.query.isEmpty {
             Button(action: {
-              searchQuery = ""
-              searchDebouncer.inputQuery = ""
-              searchResults = []
-              searchError = nil
+              searchModel.clear()
             }) {
               Image(systemName: "xmark.circle.fill")
                 .scaledFont(size: 13)
@@ -293,7 +256,7 @@ struct ConversationsPage: View {
       .padding(.bottom, 12)
 
       // List - show search results or regular conversations
-      if !searchQuery.isEmpty {
+      if !searchModel.query.isEmpty {
         // Search results view
         searchResultsView
       } else {
@@ -344,7 +307,7 @@ struct ConversationsPage: View {
 
   private var searchResultsView: some View {
     Group {
-      if isSearching {
+      if searchModel.isSearching {
         VStack(spacing: 12) {
           ProgressView()
           Text("Searching...")
@@ -352,7 +315,7 @@ struct ConversationsPage: View {
             .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if let error = searchError {
+      } else if let error = searchModel.searchError {
         VStack(spacing: 12) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
@@ -364,7 +327,7 @@ struct ConversationsPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
-      } else if searchResults.isEmpty {
+      } else if searchModel.results.isEmpty {
         VStack(spacing: 12) {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: 32)
@@ -394,7 +357,7 @@ struct ConversationsPage: View {
   @ViewBuilder
   private var searchResultsContent: some View {
     let content = LazyVStack(spacing: 8) {
-      ForEach(searchResults) { conversation in
+      ForEach(searchModel.results) { conversation in
         ConversationRowView(
           conversation: conversation,
           onTap: {
@@ -432,38 +395,6 @@ struct ConversationsPage: View {
   }
 
   // MARK: - Search
-
-  private func performSearch(query: String) {
-    guard !query.isEmpty else {
-      searchResults = []
-      searchError = nil
-      return
-    }
-
-    isSearching = true
-    searchError = nil
-    log("Search: Starting search for '\(query)'")
-    AnalyticsManager.shared.searchQueryEntered(query: query)
-
-    Task {
-      do {
-        let result = try await APIClient.shared.searchConversations(
-          query: query,
-          page: 1,
-          perPage: 50,
-          includeDiscarded: false
-        )
-        log("Search: Found \(result.items.count) results")
-        searchResults = result.items
-        isSearching = false
-      } catch {
-        logError("Search: Failed", error: error)
-        searchError = error.localizedDescription
-        searchResults = []
-        isSearching = false
-      }
-    }
-  }
 
   // MARK: - Filter Buttons
 
@@ -794,7 +725,9 @@ private struct TranscriptNotesDivider: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-  ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
+  ConversationsPage(
+    appState: AppState(), selectedConversation: .constant(nil),
+    searchModel: ConversationsSearchModel())
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundSecondary)
 }

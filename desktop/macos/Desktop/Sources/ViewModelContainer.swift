@@ -15,6 +15,8 @@ class ViewModelContainer: ObservableObject {
     /// Home status data (counts, connector/MCP statuses) — persistent so Home
     /// renders from cache on every visit instead of refetching.
     let homeStatusStore = HomeStatusStore()
+    /// Conversations search — persistent so a typed query survives navigation.
+    let conversationsSearchModel = ConversationsSearchModel()
     let chatProvider: ChatProvider
     let taskChatCoordinator: TaskChatCoordinator
     private lazy var warmupCoordinator = StartupWarmupCoordinator(
@@ -135,6 +137,7 @@ class ViewModelContainer: ObservableObject {
         memoriesViewModel.resetSessionState()
         appProvider.resetSessionState()
         homeStatusStore.resetSessionState()
+        conversationsSearchModel.resetSessionState()
         isInitialLoadComplete = false
         isLoading = false
         databaseInitFailed = false
