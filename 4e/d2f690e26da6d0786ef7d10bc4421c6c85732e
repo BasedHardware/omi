@@ -1,0 +1,25 @@
+backend/tests/unit/test_person_messaging_enrichment.py
+  s_edfd59e96df44b::t_41dd6ec7fba18e 144-173
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_11c29f4113e866 104-110,117
+  s_edfd59e96df44b::t_f30d63375cbdb4 196-208
+backend/utils/conversations/process_conversation.py
+  s_edfd59e96df44b::t_a720f240ad955c 1042-1046
+  s_edfd59e96df44b::t_af6c48c312dd9a 50
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4ed2f690e26da6d0786ef7d10bc4421c6c85732e",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
