@@ -5584,6 +5584,13 @@ extension APIClient {
     return try await post("v1/tools/calendar-events", body: body, customBaseURL: nil)
   }
 
+  /// Discard a tentative calendar hold created by an availability-aware reply draft.
+  /// Idempotent on the backend (a missing/already-deleted event returns success).
+  func discardCalendarHold(eventID: String) async throws {
+    let encoded = eventID.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? eventID
+    try await delete("v1/calendar/google/events/\(encoded)")
+  }
+
   // MARK: - X (Twitter) Connector
 
   /// Ask the Python backend for the X OAuth authorize URL. The desktop passes

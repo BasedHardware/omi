@@ -3,7 +3,7 @@ from typing import List, Optional
 
 from pydantic import BaseModel, model_validator
 
-from models.draft_common import validate_draft_images
+from models.draft_common import HoldEvent, validate_draft_images
 
 
 class TelegramMessage(BaseModel):
@@ -90,3 +90,14 @@ class TelegramDraftResponse(BaseModel):
     # True when the drafter judged the latest group message wasn't directed at the
     # user: `draft` is empty and the client should show no draft.
     abstain: bool = False
+    # True when the message needs the user rather than an auto-sent reply (it asks
+    # something we can't answer truthfully, needs the user's decision, or requests
+    # sensitive info). `draft` carries a best-guess SUGGESTION; the client must NOT
+    # auto-send it — surface it for review and notify the user. `needs_input_reason`
+    # is a short, user-facing explanation of why.
+    needs_input: bool = False
+    needs_input_reason: Optional[str] = None
+    # Set when an availability-aware reply accepted a proposed time: a tentative "hold"
+    # event was created on the user's Google Calendar. The client surfaces it so the user
+    # can confirm or discard it. None when the reply didn't commit to a time.
+    hold: Optional[HoldEvent] = None

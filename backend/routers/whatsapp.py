@@ -30,8 +30,8 @@ from models.whatsapp import (
     WhatsAppStatus,
 )
 from utils import whatsapp_connector
-from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm import reply_draft, reply_media
+from utils.executors import db_executor, run_blocking
+from utils.llm import reply_media, reply_scheduling
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -68,11 +68,16 @@ def whatsapp_disconnect(uid: str = Depends(auth.get_current_user_uid)):
 async def whatsapp_draft_reply(req: WhatsAppDraftRequest, uid: str = Depends(auth.get_current_user_uid)):
     thread = [m.dict() for m in req.thread]
     media_context = await reply_media.build_media_context(uid, thread)
-    result = await run_blocking(
-        llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent, req.is_group, media_context
+    result, hold = await reply_scheduling.draft_reply_with_scheduling(
+        uid, req.person, thread, req.intent, req.is_group, media_context
     )
     return WhatsAppDraftResponse(
-        draft=result['draft'], ambiguous=result.get('ambiguous', False), abstain=result.get('abstain', False)
+        draft=result['draft'],
+        ambiguous=result.get('ambiguous', False),
+        abstain=result.get('abstain', False),
+        needs_input=result.get('needs_input', False),
+        needs_input_reason=result.get('needs_input_reason'),
+        hold=hold,
     )
 
 

@@ -118,6 +118,9 @@ struct InboxConversationRow: View {
   let avatarData: Data?
   let isSelected: Bool
   let draftReady: Bool
+  /// When true, auto-reply escalated this chat: the message needs the user's input.
+  /// Takes visual priority over `draftReady` — shows a "Needs you" pill instead.
+  var needsInput: Bool = false
   let accent: Color
 
   var body: some View {
@@ -142,8 +145,11 @@ struct InboxConversationRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
           // Show the pill ONLY once a reply has actually been drafted for this
           // chat — never on every awaiting thread. (Awaiting-reply gating lives in the
-          // store, not this row.)
-          if draftReady {
+          // store, not this row.) An escalated chat shows "Needs you" and takes
+          // priority over the plain "Draft ready".
+          if needsInput {
+            InboxNeedsInputBadge()
+          } else if draftReady {
             InboxDraftBadge(accent: accent)
           }
         }
@@ -168,6 +174,87 @@ struct InboxDraftBadge: View {
       .padding(.horizontal, 5)
       .padding(.vertical, 1)
       .background(accent)
+      .clipShape(Capsule())
+      .fixedSize()
+  }
+}
+
+/// Banner shown above the composer when auto-reply escalated this chat: explains why it
+/// didn't auto-send, so the user reviews the pre-filled suggested draft with context.
+struct InboxNeedsInputBanner: View {
+  let reason: String
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "exclamationmark.bubble.fill")
+        .foregroundColor(.orange)
+        .font(.system(size: 12))
+      Text(
+        reason.isEmpty
+          ? "Auto-reply paused — this one needs you. Review the suggested reply below."
+          : "Needs you: \(reason). Review the suggested reply below."
+      )
+      .scaledFont(size: 11, weight: .medium)
+      .foregroundColor(OmiColors.textSecondary)
+      .lineLimit(2)
+      Spacer(minLength: 0)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 8)
+    .background(Color.orange.opacity(0.12))
+  }
+}
+
+/// Banner shown above the composer when an availability-aware reply accepted a proposed
+/// time and Omi added a tentative "hold" to the user's calendar. Confirm keeps it;
+/// Discard deletes it. Shown even after a 1:1 auto-send so the user stays in control.
+struct InboxHoldBanner: View {
+  let hold: DraftHold
+  let accent: Color
+  let onConfirm: () -> Void
+  let onDiscard: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "calendar.badge.clock")
+        .foregroundColor(accent)
+        .font(.system(size: 12))
+      VStack(alignment: .leading, spacing: 1) {
+        Text("Tentative hold added")
+          .scaledFont(size: 11, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+        Text("\(hold.title) · \(hold.whenLabel)")
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.textSecondary)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 0)
+      Button(action: onDiscard) {
+        Text("Discard").scaledFont(size: 11, weight: .medium).foregroundColor(OmiColors.textTertiary)
+      }
+      .buttonStyle(.plain)
+      Button(action: onConfirm) {
+        Text("Confirm").scaledFont(size: 11, weight: .semibold).foregroundColor(accent)
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, 14)
+    .padding(.vertical, 8)
+    .background(accent.opacity(0.10))
+  }
+}
+
+/// "Needs you" pill: auto-reply couldn't safely answer this message and escalated it
+/// for the user to review. Uses an attention color (orange) distinct from the accent
+/// "Draft ready" pill so an escalated chat stands out in the list.
+struct InboxNeedsInputBadge: View {
+  var body: some View {
+    Text("Needs you")
+      .scaledFont(size: 9, weight: .semibold)
+      .foregroundColor(.white)
+      .padding(.horizontal, 5)
+      .padding(.vertical, 1)
+      .background(Color.orange)
       .clipShape(Capsule())
       .fixedSize()
   }

@@ -27,8 +27,8 @@ from models.imessage import (
     IMessageStatus,
 )
 from utils import imessage_connector
-from utils.executors import db_executor, llm_executor, run_blocking
-from utils.llm import reply_draft, reply_media
+from utils.executors import db_executor, run_blocking
+from utils.llm import reply_media, reply_scheduling
 from utils.other import endpoints as auth
 
 router = APIRouter()
@@ -67,11 +67,18 @@ async def imessage_draft_reply(req: IMessageDraftRequest, uid: str = Depends(aut
     # Resolve shared links/images to text (async) before the sync draft step so the
     # drafter understands what a URL is about and what a photo shows.
     media_context = await reply_media.build_media_context(uid, thread)
-    result = await run_blocking(
-        llm_executor, reply_draft.draft_reply, uid, req.person, thread, req.intent, req.is_group, media_context
+    # Availability-aware drafting: grounds a scheduling reply in the real calendar and,
+    # if the reply accepts a proposed time, creates a tentative hold to confirm/discard.
+    result, hold = await reply_scheduling.draft_reply_with_scheduling(
+        uid, req.person, thread, req.intent, req.is_group, media_context
     )
     return IMessageDraftResponse(
-        draft=result['draft'], ambiguous=result.get('ambiguous', False), abstain=result.get('abstain', False)
+        draft=result['draft'],
+        ambiguous=result.get('ambiguous', False),
+        abstain=result.get('abstain', False),
+        needs_input=result.get('needs_input', False),
+        needs_input_reason=result.get('needs_input_reason'),
+        hold=hold,
     )
 
 

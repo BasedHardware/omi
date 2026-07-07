@@ -28,6 +28,16 @@ final class IMessageInboxStore: ObservableObject {
   }
   /// Replies drafted on-demand when the user opened the chat.
   @Published var preDrafts: [String: String] = [:]
+  /// Chats where auto-reply escalated instead of sending: the message needs the user
+  /// (can't be answered truthfully, needs their decision, or asks for sensitive info).
+  /// Keyed by chat.id; the value is the short user-facing reason. The suggested draft is
+  /// kept in `preDrafts` for the composer to pre-fill. Presence here flips the row's
+  /// "Draft ready" pill to "Needs you".
+  @Published var needsInputReasons: [String: String] = [:]
+  /// Tentative calendar holds created when an availability-aware reply accepted a
+  /// proposed time. Keyed by chat.id; the Replies inbox surfaces a Confirm/Discard
+  /// banner for it. Persists after an auto-sent reply so the user can still discard it.
+  @Published var pendingHolds: [String: DraftHold] = [:]
   /// Chat GUIDs the user has opted into automatic replies for. When a new inbound
   /// message arrives in one of these chats, Omi drafts AND sends a reply without
   /// review (sent iMessages can't be unsent — this is strictly opt-in per chat).
@@ -210,6 +220,8 @@ final class IMessageInboxStore: ObservableObject {
         // it first so an outdated draft can't linger if the fresh attempt abstains,
         // fails, or (for a 1:1) sends instead of drafting.
         preDrafts[chat.id] = nil
+        needsInputReasons[chat.id] = nil
+        pendingHolds[chat.id] = nil
         if autoReplyChats.contains(chat.chatGUID) {
           scheduleAutoReply(chat)
         } else {
@@ -239,6 +251,7 @@ final class IMessageInboxStore: ObservableObject {
     guard !draft.isEmpty else { return }
     guard chats.first(where: { $0.id == chat.id })?.bubbles.last?.id == draftedForID else { return }
     preDrafts[chat.id] = draft
+    pendingHolds[chat.id] = resp.hold
   }
 
   /// Draft a reply and send it immediately, without review. Only ever called for
@@ -289,6 +302,21 @@ final class IMessageInboxStore: ObservableObject {
       allowRetry()
       return
     }
+    // Surface any tentative calendar hold regardless of which path we take below
+    // (escalate / group draft / auto-send) so the user can confirm or discard it.
+    pendingHolds[chat.id] = resp.hold
+    // Escalation: the message needs the user, not an auto-sent reply. Keep the
+    // best-guess draft as a SUGGESTION for review, record the reason, and notify —
+    // never auto-send. Keep the once-per-inbound guard (this is a terminal outcome like
+    // a send) so we don't re-notify on every poll of the same message.
+    if resp.needsInput {
+      preDrafts[chat.id] = text
+      needsInputReasons[chat.id] = resp.needsInputReason ?? ""
+      MessagingNeedsInput.notify(
+        personName: chat.displayName, reason: resp.needsInputReason, preview: text,
+        platform: .imessage, chatID: chat.chatGUID)
+      return
+    }
     // Groups are DRAFT-ONLY: never auto-send to a group chat (higher blast radius and
     // different send/rollback semantics). Surface the draft for the user to review
     // and send manually instead of sending it automatically.
@@ -336,9 +364,26 @@ final class IMessageInboxStore: ObservableObject {
     appendSent(text, to: id)
   }
 
+  /// Confirm (keep) or discard a tentative calendar hold surfaced in the Replies inbox.
+  /// Confirm just dismisses the banner; discard also deletes the event on the backend.
+  func resolveHold(chatID: String, discard: Bool) {
+    guard let hold = pendingHolds[chatID] else { return }
+    pendingHolds[chatID] = nil
+    guard discard else { return }
+    Task {
+      do {
+        try await APIClient.shared.discardCalendarHold(eventID: hold.eventID)
+      } catch {
+        NSLog("iMessage discard hold failed for \(chatID): \(error.localizedDescription)")
+      }
+    }
+  }
+
   /// Optimistically append a just-sent message to a specific chat (used by
   /// auto-reply, where the target chat may not be the selected one).
   func appendSent(_ text: String, to chatID: String) {
+    // The user replied — any escalation for this chat is resolved.
+    needsInputReasons[chatID] = nil
     guard let idx = chats.firstIndex(where: { $0.id == chatID }) else { return }
     let chat = chats[idx]
     let bubble = IMessageChatBubble(

@@ -240,8 +240,22 @@ struct WhatsAppDraftResponsePayload: Decodable {
   /// True when the drafter judged the latest group message wasn't directed at the
   /// user: `draft` is empty and no draft should be shown. Defaults false.
   var abstain: Bool = false
+  /// True when the message needs the user rather than an auto-sent reply (asks
+  /// something we can't answer truthfully, needs the user's decision, or requests
+  /// sensitive info). `draft` is a best-guess SUGGESTION — never auto-send it;
+  /// surface it for review and notify the user. Defaults false for older backends.
+  var needsInput: Bool = false
+  /// Short, user-facing reason for the escalation (e.g. "They want to lock in a time").
+  var needsInputReason: String?
+  /// Set when the reply accepted a proposed time: a tentative calendar hold was created
+  /// that the user can confirm or discard. Nil when the reply didn't commit to a time.
+  var hold: DraftHold?
 
-  enum CodingKeys: String, CodingKey { case draft, ambiguous, abstain }
+  enum CodingKeys: String, CodingKey {
+    case draft, ambiguous, abstain, hold
+    case needsInput = "needs_input"
+    case needsInputReason = "needs_input_reason"
+  }
 
   // Decode each field with a fallback so responses that omit `ambiguous`/`abstain`
   // still parse (Swift's synthesized Decodable would throw keyNotFound instead of
@@ -252,6 +266,9 @@ struct WhatsAppDraftResponsePayload: Decodable {
     draft = (try? c.decode(String.self, forKey: .draft)) ?? ""
     ambiguous = (try? c.decode(Bool.self, forKey: .ambiguous)) ?? false
     abstain = (try? c.decode(Bool.self, forKey: .abstain)) ?? false
+    needsInput = (try? c.decode(Bool.self, forKey: .needsInput)) ?? false
+    needsInputReason = try? c.decode(String.self, forKey: .needsInputReason)
+    hold = try? c.decodeIfPresent(DraftHold.self, forKey: .hold)
   }
 }
 

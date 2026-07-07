@@ -26,6 +26,14 @@ final class WhatsAppInboxStore: ObservableObject {
   }
   /// Replies drafted on-demand when the user opened the chat.
   @Published var preDrafts: [String: String] = [:]
+  /// Chats where auto-reply escalated instead of sending: the message needs the user
+  /// (can't be answered truthfully, needs their decision, or asks for sensitive info).
+  /// Keyed by chat.id; the value is the short user-facing reason. The suggested draft is
+  /// kept in `preDrafts` for the composer to pre-fill.
+  @Published var needsInputReasons: [String: String] = [:]
+  /// Tentative calendar holds created when an availability-aware reply accepted a
+  /// proposed time. Keyed by chat.id; the Replies inbox surfaces a Confirm/Discard banner.
+  @Published var pendingHolds: [String: DraftHold] = [:]
   /// Chat IDs the user has opted into automatic replies for. When a new inbound
   /// message arrives in one of these chats, Omi drafts AND sends a reply without
   /// review (sent WhatsApp messages can't be unsent — this is strictly opt-in per
@@ -190,6 +198,8 @@ final class WhatsAppInboxStore: ObservableObject {
         // it first so an outdated draft can't linger if the fresh attempt abstains,
         // fails, or (for a 1:1) sends instead of drafting.
         preDrafts[chat.id] = nil
+        needsInputReasons[chat.id] = nil
+        pendingHolds[chat.id] = nil
         if autoReplyChats.contains(chat.chatID) {
           scheduleAutoReply(chat)
         } else {
@@ -218,6 +228,7 @@ final class WhatsAppInboxStore: ObservableObject {
     guard !draft.isEmpty else { return }
     guard chats.first(where: { $0.id == chat.id })?.bubbles.last?.id == draftedForID else { return }
     preDrafts[chat.id] = draft
+    pendingHolds[chat.id] = resp.hold
   }
 
   /// Draft a reply and send it immediately, without review. Only ever called for
@@ -257,6 +268,19 @@ final class WhatsAppInboxStore: ObservableObject {
     // (and this task wasn't cancelled) right before the irreversible send.
     guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
       NSLog("WhatsApp auto-reply cancelled for \(chat.chatID) before send (toggled off mid-draft)")
+      return
+    }
+    // Surface any tentative calendar hold regardless of which path we take below.
+    pendingHolds[chat.id] = resp.hold
+    // Escalation: the message needs the user, not an auto-sent reply. Keep the
+    // best-guess draft as a SUGGESTION for review, record the reason, and notify —
+    // never auto-send.
+    if resp.needsInput {
+      preDrafts[chat.id] = text
+      needsInputReasons[chat.id] = resp.needsInputReason ?? ""
+      MessagingNeedsInput.notify(
+        personName: chat.displayName, reason: resp.needsInputReason, preview: text,
+        platform: .whatsapp, chatID: chat.chatID)
       return
     }
     // Auto-reply should reliably SEND on draft. `.notConfirmed` means the recipient
@@ -308,6 +332,21 @@ final class WhatsAppInboxStore: ObservableObject {
     }
   }
 
+  /// Confirm (keep) or discard a tentative calendar hold surfaced in the Replies inbox.
+  /// Confirm just dismisses the banner; discard also deletes the event on the backend.
+  func resolveHold(chatID: String, discard: Bool) {
+    guard let hold = pendingHolds[chatID] else { return }
+    pendingHolds[chatID] = nil
+    guard discard else { return }
+    Task {
+      do {
+        try await APIClient.shared.discardCalendarHold(eventID: hold.eventID)
+      } catch {
+        NSLog("WhatsApp discard hold failed for \(chatID): \(error.localizedDescription)")
+      }
+    }
+  }
+
   func load() async {
     isLoading = true
     errorMessage = nil
@@ -340,6 +379,8 @@ final class WhatsAppInboxStore: ObservableObject {
   /// Optimistically append a just-sent message to a specific chat (used by
   /// auto-reply, where the target chat may not be the selected one).
   func appendSent(_ text: String, to chatID: String) {
+    // The user replied — any escalation for this chat is resolved.
+    needsInputReasons[chatID] = nil
     guard let idx = chats.firstIndex(where: { $0.id == chatID }) else { return }
     let chat = chats[idx]
     let bubble = WhatsAppChatBubble(
