@@ -4,6 +4,7 @@ tier: 1
 description: Desktop sidebar navigation — verify core sections load via bridge navigation
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
 preconditions:

@@ -1,7 +1,8 @@
+import ast
 import base64
 import json
 import os
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
 import redis
@@ -23,6 +24,28 @@ r: Any = redis.Redis(
 
 
 T = TypeVar("T")
+
+
+def _decode_redis_value(raw: Union[bytes, str]) -> str:
+    return raw.decode('utf-8') if isinstance(raw, bytes) else raw
+
+
+def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
+    """Deserialize a Redis cache value using JSON, with legacy literal_eval fallback."""
+    if raw is None:
+        return None
+    text = _decode_redis_value(raw)
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        try:
+            return ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            return text
+
+
+def _serialize_cache_value(value: Any) -> str:
+    return json.dumps(value, default=str)
 
 
 def try_catch_decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
@@ -123,25 +146,37 @@ def save_username(username: str, uid: str) -> None:
 
 
 def set_app_usage_count_cache(app_id: str, count: int) -> None:
-    r.set(f'apps:{app_id}:usage_count', count, ex=60 * 15)  # 15 minutes
+    r.set(f'apps:{app_id}:usage_count', _serialize_cache_value(count), ex=60 * 15)  # 15 minutes
 
 
 def get_app_usage_count_cache(app_id: str) -> Optional[int]:
     count = r.get(f'apps:{app_id}:usage_count')
     if not count:
         return None
-    return eval(count)
+    loaded = _deserialize_cache_value(count)
+    if isinstance(loaded, bool):
+        return None
+    if isinstance(loaded, int):
+        return loaded
+    if isinstance(loaded, float):
+        return int(loaded)
+    return None
 
 
 def set_app_money_made_amount_cache(app_id: str, amount: float) -> None:
-    r.set(f'apps:{app_id}:money_made', amount, ex=60 * 15)  # 15 minutes
+    r.set(f'apps:{app_id}:money_made', _serialize_cache_value(amount), ex=60 * 15)  # 15 minutes
 
 
 def get_app_money_made_amount_cache(app_id: str) -> Optional[float]:
     amount = r.get(f'apps:{app_id}:money_made')
     if not amount:
         return None
-    return eval(amount)
+    loaded = _deserialize_cache_value(amount)
+    if isinstance(loaded, bool):
+        return None
+    if isinstance(loaded, (int, float)):
+        return float(loaded)
+    return None
 
 
 def set_app_usage_history_cache(app_id: str, usage: List[Dict[str, Any]]) -> None:
@@ -174,17 +209,20 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
 
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
     raw = r.get(f'plugins:{app_id}:reviews')
-    reviews: Dict[str, Any] = {} if not raw else cast(Dict[str, Any], eval(raw))
+    loaded = _deserialize_cache_value(raw)
+    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
     reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', str(reviews))
+    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
     raw = r.get(f'plugins:{app_id}:reviews')
     if not raw:
         return {}
-    reviews = cast(Dict[str, Any], eval(raw))
-    return cast(Dict[str, Any], reviews.get(uid, {}))
+    loaded = _deserialize_cache_value(raw)
+    if not isinstance(loaded, dict):
+        return {}
+    return cast(Dict[str, Any], loaded.get(uid, {}))
 
 
 def set_user_paid_app(app_id: str, uid: str, ttl: int) -> None:
@@ -234,7 +272,8 @@ def get_app_reviews(app_id: str) -> Dict[str, Any]:
     raw = r.get(f'plugins:{app_id}:reviews')
     if not raw:
         return {}
-    return cast(Dict[str, Any], eval(raw))
+    loaded = _deserialize_cache_value(raw)
+    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
 
 
 def get_apps_reviews(app_ids: List[str]) -> Dict[str, Any]:
@@ -245,7 +284,14 @@ def get_apps_reviews(app_ids: List[str]) -> Dict[str, Any]:
     reviews = r.mget(keys)
     if reviews is None:
         return {}
-    return {app_id: cast(Dict[str, Any], eval(review)) if review else {} for app_id, review in zip(app_ids, reviews)}
+    result: Dict[str, Any] = {}
+    for app_id, review in zip(app_ids, reviews):
+        if not review:
+            result[app_id] = {}
+            continue
+        loaded = _deserialize_cache_value(review)
+        result[app_id] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
+    return result
 
 
 def set_app_installs_count(app_id: str, count: int) -> None:
@@ -289,7 +335,7 @@ def get_cached_signed_url(blob_path: str) -> str:
 
 
 def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
-    r.set(f'users:{uid}:geolocation', str(geolocation))
+    r.set(f'users:{uid}:geolocation', _serialize_cache_value(geolocation))
     r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
@@ -297,7 +343,8 @@ def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
     raw = r.get(f'users:{uid}:geolocation')
     if not raw:
         return None
-    return cast(Dict[str, Any], eval(raw))
+    loaded = _deserialize_cache_value(raw)
+    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
 
 
 # DAILY SUMMARY UID LOOKUP

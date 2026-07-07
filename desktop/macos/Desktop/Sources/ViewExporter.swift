@@ -109,7 +109,7 @@ enum ViewExporter {
 
       (
         "11-desktop-home",
-        { AnyView(DesktopHomeView()) },
+        { AnyView(DesktopHomeView().environmentObject(AppState())) },
         CGSize(width: 1200, height: 800)
       ),
 

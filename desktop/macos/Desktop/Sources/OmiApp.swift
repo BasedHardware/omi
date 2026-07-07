@@ -116,6 +116,7 @@ struct OMIApp: App {
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
+        .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {

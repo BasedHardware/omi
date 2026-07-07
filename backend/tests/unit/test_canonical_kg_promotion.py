@@ -37,6 +37,20 @@ def _refresh_kg_runtime() -> None:
     )
 
 
+def test_set_canonical_memory_kg_extracted_missing_doc_is_idempotent(caplog):
+    from google.api_core.exceptions import NotFound
+
+    from utils.memory.canonical_kg_promotion import set_canonical_memory_kg_extracted
+
+    ref = MagicMock()
+    ref.update.side_effect = NotFound('No document to update')
+    client = MagicMock()
+    client.document.return_value = ref
+
+    assert set_canonical_memory_kg_extracted('uid-abc', 'memory-1', db_client=client) is False
+    assert 'No document to update' not in caplog.text
+
+
 @pytest.fixture(autouse=True)
 def _refresh_kg_runtime_fixture():
     _refresh_kg_runtime()

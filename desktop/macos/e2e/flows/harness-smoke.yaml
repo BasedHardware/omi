@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
+  - desktop/macos/Desktop/Sources/ViewExporter.swift
 preconditions:
   - automation_bridge_ready
 
