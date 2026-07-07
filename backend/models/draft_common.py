@@ -7,7 +7,10 @@ can feed auto-reply. The desktop downscales inline photos and sends at most a co
 so the caps below sit far above any legitimate request while still bounding the input.
 """
 
-from typing import List
+from datetime import datetime
+from typing import List, Optional
+
+from pydantic import BaseModel
 
 MAX_DRAFT_IMAGES = 8
 MAX_IMAGE_B64_CHARS = 5_000_000  # ~3.7 MB decoded per image
@@ -32,3 +35,15 @@ def validate_draft_images(thread: List) -> None:
         raise ValueError(
             f"inline images too large in aggregate: {total} base64 chars (max {MAX_TOTAL_IMAGE_B64_CHARS})"
         )
+
+
+class HoldEvent(BaseModel):
+    """A tentative "hold" event created on the user's Google Calendar when an
+    availability-aware reply accepts a proposed time. Surfaced back to the desktop
+    so the user can confirm or discard it — it is a hold, not a committed event."""
+
+    event_id: str
+    title: str
+    start_time: datetime
+    end_time: datetime
+    html_link: Optional[str] = None

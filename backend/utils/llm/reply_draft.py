@@ -543,13 +543,14 @@ def build_reply_prompt(
     thread_text: str,
     intent: Optional[str],
     is_group: bool,
+    availability_context: str = '',
 ) -> tuple[str, str]:
     """Assemble the candidate-generation prompt as (system, user). The SYSTEM string
     holds only trusted instructions; the USER string holds every untrusted/fenced data
     block (the conversation, the user's own style samples, the person context, Omi
-    context, and resolved media). Pure string assembly — no DB or network — so it can
-    be unit-tested directly. Lists NO example slang: how the user writes is described
-    only via the measured fingerprint and their own samples."""
+    context, resolved media, and calendar availability). Pure string assembly — no DB or
+    network — so it can be unit-tested directly. Lists NO example slang: how the user
+    writes is described only via the measured fingerprint and their own samples."""
     fingerprint_lines = render_fingerprint_lines(fingerprint)
 
     omi_block = (
@@ -566,6 +567,27 @@ def build_reply_prompt(
         else ""
     )
     intent_line = f"WHAT THE USER WANTS THIS REPLY TO DO: {intent}\n\n" if intent else ""
+
+    availability_block = (
+        f"YOUR REAL CALENDAR AVAILABILITY (checked against the user's actual Google Calendar for the "
+        f"time(s) being discussed — use this to answer the scheduling question concretely):\n"
+        f"<availability>\n{_fence(availability_context)}\n</availability>\n\n"
+        if availability_context
+        else ""
+    )
+    # Scoped relaxation of the COMMITMENTS rule: normally the drafter must not commit the
+    # user to a time. When an <availability> block is present it reflects the user's REAL
+    # calendar, so committing to a FREE slot IS grounded and allowed.
+    availability_rule = (
+        f"SCHEDULING — an <availability> block is present, checked against the user's real calendar. Use it "
+        f"to answer {name}'s scheduling question directly: if a proposed time is FREE, you MAY accept it in "
+        f"the user's voice (this is the one case you may commit them to a time, because it's calendar-"
+        f"grounded); if it CONFLICTS, don't accept it — say that time doesn't work and, when an alternative "
+        f"is clearly FREE, offer it. Never claim to be free/busy in a way the <availability> block doesn't "
+        f"support. If the block says the calendar couldn't be verified, stay non-committal.\n\n"
+        if availability_context
+        else ""
+    )
 
     group_rules = (
         (
@@ -704,6 +726,7 @@ def build_reply_prompt(
         f"ID/license — never reveal one, never make one up, and never agree or promise to send it (no 'sure', "
         f"'gimme a sec', 'sending it now'). Deflect or push back in the user's own voice (e.g. 'why?', 'can't "
         f"send that over text', 'call me'), even when the asker is a friend.\n\n"
+        f"{availability_rule}"
         f"{intent_line}"
         f"SHARED MEDIA: links and photos/videos in the chat are resolved for you in the SHARED LINKS & "
         f"IMAGES block of the user message (when available) — use that to understand what's being discussed. "
@@ -720,6 +743,7 @@ def build_reply_prompt(
         f"WHO {name} IS TO THE USER:\n<person_context>\n{context_text}\n</person_context>\n\n"
         f"{omi_block}"
         f"{media_block}"
+        f"{availability_block}"
         f"CONVERSATION (oldest first, newest last):\n<conversation>\n{thread_text}\n</conversation>"
     )
 
@@ -971,6 +995,84 @@ def apply_recount_distillation(omi_context: str, thread: List[dict]) -> str:
     if not recap:
         return omi_context
     return recap + "\n\n" + omi_context
+# --- Escalation: "this one needs the user" -----------------------------------
+# Auto-reply's default is to draft and send. But some inbound messages should NOT
+# be answered by a machine on the user's behalf: ones that ask something the user
+# knows and we don't (answering = fabrication), ones that require the user's own
+# decision/commitment (scheduling, an invite, money, a promise), or ones asking for
+# sensitive info. For those we return the best-guess draft as a SUGGESTION plus a
+# `needs_input` flag + short reason, and the caller notifies the user to review it
+# instead of auto-sending. This mirrors the eval-harness groundedness gate, reframed
+# from "block" to "escalate to the human."
+
+ESCALATION_CATEGORIES = ("unknown", "decision", "sensitive")
+
+_ESCALATION_SYSTEM_PROMPT = """You are a safety gate for an auto-reply assistant that texts on the user's behalf.
+You are given the latest INBOUND message the user received, the CONTEXT the assistant has about the user, and the DRAFT reply the assistant wants to auto-send.
+
+Decide whether this message should be ESCALATED to the user (the human) instead of auto-sent. Escalate ONLY when one of these clearly applies:
+
+- "unknown": the message DEMANDS a SPECIFIC factual answer about the user — a specific yes/no about a real event, a name, a number, a concrete detail of their history/plans — that the CONTEXT does not contain, so the only way to answer specifically is to invent it. A confident-sounding DRAFT is NOT evidence the answer is real; the drafter will invent a plausible one. Escalate these. (E.g. "is she the first girl you were with?", "did you send the wire yet?", "what did the doctor say?" — a made-up specific answer would be a harmful fabrication.)
+- "decision": the message needs the USER'S own choice or commitment — agreeing to a specific time/plan, accepting or declining an invite, committing to pay or send money, making a promise, or a consequential yes/no only the user can decide.
+- "sensitive": the message requests private/sensitive info the assistant must not hand out on its own — passwords, codes, SSN, bank/card numbers, medical or legal specifics.
+
+THE PRECISION TEST — most messages do NOT need the user. Ask: would a normal, light, non-specific reply be totally FINE here? If yes → do NOT escalate. Casual/open questions that a vague honest reply handles are NOT escalations, even though they're about the user's life and the specifics aren't in context: "how was your day/weekend?", "what are you up to?", "how's it going?", "how's the family/gf?", "did you have fun?", "what have you been up to?" — a general reply ("good", "chill", "they're good", "same old") is truthful and fine. Only escalate when a vague reply would be evasive or a lie because the person clearly wants a SPECIFIC answer only the user knows, or it's a real decision/commitment/sensitive request. When unsure and a light reply would pass socially, do NOT escalate.
+
+Respond with ONLY a JSON object, no prose:
+{"escalate": true|false, "category": "unknown"|"decision"|"sensitive"|"none", "reason": "<max 12 words, addressed to the user, e.g. 'They want to lock in a time'>"}"""
+
+
+def _parse_escalation(content: str) -> Optional[dict]:
+    """Extract the escalation verdict JSON object from the model reply. Returns None
+    when nothing parseable is found so the caller can fail open (no escalation)."""
+    t = (content or '').strip()
+    if t.startswith('```'):
+        nl = t.find('\n')
+        if nl != -1:
+            t = t[nl + 1 :]
+        if t.endswith('```'):
+            t = t[:-3]
+    start = t.find('{')
+    end = t.rfind('}')
+    if start == -1 or end == -1 or end < start:
+        return None
+    try:
+        obj = json.loads(t[start : end + 1])
+    except Exception:
+        return None
+    return obj if isinstance(obj, dict) else None
+
+
+def classify_escalation(inbound: str, omi_context: str, draft: str) -> dict:
+    """Decide whether an inbound message needs the user rather than an auto-sent reply.
+
+    Returns ``{'escalate': bool, 'category': str, 'reason': str}``. Fails OPEN (no
+    escalation) on any error or unparseable verdict — escalation is a safety net layered
+    on top of auto-reply, so a classifier hiccup must never block the normal send path.
+    """
+    inbound = (inbound or '').strip()
+    if not inbound:
+        return {'escalate': False, 'category': 'none', 'reason': ''}
+    user_prompt = (
+        f"<inbound_message>\n{_fence(inbound)}\n</inbound_message>\n\n"
+        f"<context>\n{_fence(omi_context) or '(no context)'}\n</context>\n\n"
+        f"<draft>\n{_fence(draft)}\n</draft>"
+    )
+    try:
+        content = _invoke_memories(_ESCALATION_SYSTEM_PROMPT, user_prompt)
+    except Exception as e:
+        logger.warning(f"reply_draft: escalation classify failed, not escalating: {e}")
+        return {'escalate': False, 'category': 'none', 'reason': ''}
+    verdict = _parse_escalation(content)
+    if not verdict or not verdict.get('escalate'):
+        return {'escalate': False, 'category': 'none', 'reason': ''}
+    category = verdict.get('category')
+    if category not in ESCALATION_CATEGORIES:
+        # Escalate=true but an unrecognized/none category is contradictory — treat as
+        # no escalation rather than surface a mislabeled reason.
+        return {'escalate': False, 'category': 'none', 'reason': ''}
+    reason = (verdict.get('reason') or '').strip()[:140]
+    return {'escalate': True, 'category': category, 'reason': reason}
 
 
 def draft_reply(
@@ -980,6 +1082,7 @@ def draft_reply(
     intent: Optional[str] = None,
     is_group: bool = False,
     media_context: str = '',
+    availability_context: str = '',
 ) -> dict:
     thread = _order_thread(thread)
     person = resolve_person(uid, person_ref)
@@ -1048,6 +1151,7 @@ def draft_reply(
         fingerprint=fingerprint,
         omi_context=omi_context,
         media_context=media_context,
+        availability_context=availability_context,
         thread_text=thread_text,
         intent=intent,
         is_group=is_group,
@@ -1079,4 +1183,21 @@ def draft_reply(
     leaked_list = _parse_json_string_list(draft)
     if leaked_list:
         draft = _normalize_draft(leaked_list[0])
-    return {'draft': draft}
+
+    # Escalation gate (1:1 only — groups are already draft-only/reviewed). When the
+    # inbound message needs the user rather than an auto-sent reply, keep the draft as
+    # a SUGGESTION and flag it so the caller notifies the user to review instead of
+    # auto-sending. Only run when we actually produced a draft (nothing to escalate on
+    # an empty one).
+    if draft and not is_group:
+        verdict = classify_escalation(_thread_query(thread), omi_context, draft)
+        if verdict.get('escalate'):
+            return {
+                'draft': draft,
+                'name': name,
+                'needs_input': True,
+                'needs_input_reason': verdict.get('reason', ''),
+            }
+    # `name` (the sanitized display name) is returned so the router can title a calendar
+    # hold when the reply accepts an availability slot.
+    return {'draft': draft, 'name': name}

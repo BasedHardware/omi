@@ -236,6 +236,7 @@ async def create_google_calendar_event(
     description: Optional[str] = None,
     location: Optional[str] = None,
     attendees: Optional[list] = None,
+    status: Optional[str] = None,
 ) -> dict:
     """
     Create a new event in Google Calendar.
@@ -248,6 +249,8 @@ async def create_google_calendar_event(
         description: Optional event description
         location: Optional event location
         attendees: Optional list of attendee email addresses
+        status: Optional event status — 'confirmed' (default when None), 'tentative', or
+            'cancelled'. Used to create a tentative "hold" the user can later confirm.
 
     Returns:
         Created event data
@@ -288,6 +291,9 @@ async def create_google_calendar_event(
 
     if attendees:
         event_body['attendees'] = [{'email': email} for email in attendees]
+
+    if status:
+        event_body['status'] = status
 
     logger.info(f"📅 Creating Google Calendar event: {summary} from {start_time_str} to {end_time_str}")
 

@@ -115,6 +115,19 @@ struct TelegramInboxPage: View {
           .scaledFont(size: 20, weight: .bold)
           .foregroundColor(OmiColors.textPrimary)
         Spacer()
+        if store.connection == .connecting {
+          ProgressView()
+            .controlSize(.small)
+            .help("Refreshing Telegram…")
+        } else {
+          Button(action: { store.refresh() }) {
+            Image(systemName: "arrow.clockwise")
+              .font(.system(size: 14, weight: .semibold))
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          .buttonStyle(.plain)
+          .help("Refresh Telegram")
+        }
       }
       .padding(.horizontal, 16)
       .padding(.vertical, 14)
@@ -132,6 +145,7 @@ struct TelegramInboxPage: View {
                 name: chat.displayName, preview: chat.lastPreview, time: chat.lastDate,
                 avatarData: chat.avatarImageData, isSelected: chat.chatID == store.selectedChatID,
                 draftReady: store.preDrafts[chat.chatID] != nil,
+                needsInput: store.needsInputReasons[chat.chatID] != nil,
                 accent: Self.telegramBlue
               )
               .onTapGesture { store.selectedChatID = chat.chatID }
@@ -189,6 +203,16 @@ struct TelegramInboxPage: View {
         }
       }
 
+      if let reason = store.needsInputReasons[chat.chatID] {
+        InboxNeedsInputBanner(reason: reason)
+      }
+      if let hold = store.pendingHolds[chat.chatID] {
+        InboxHoldBanner(
+          hold: hold, accent: accent,
+          onConfirm: { store.resolveHold(chatID: chat.chatID, discard: false) },
+          onDiscard: { store.resolveHold(chatID: chat.chatID, discard: true) }
+        )
+      }
       InboxComposeBar(
         text: $composeText, placeholder: "Message", accent: accent, canSend: canSend,
         onSend: sendComposed

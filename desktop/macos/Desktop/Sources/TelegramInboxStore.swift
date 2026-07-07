@@ -36,6 +36,14 @@ final class TelegramInboxStore: ObservableObject {
   }
   /// Replies drafted on-demand when the user opened the chat.
   @Published var preDrafts: [String: String] = [:]
+  /// Chats where auto-reply escalated instead of sending: the message needs the user
+  /// (can't be answered truthfully, needs their decision, or asks for sensitive info).
+  /// Keyed by chatID; the value is the short user-facing reason. The suggested draft is
+  /// kept in `preDrafts` for the composer to pre-fill.
+  @Published var needsInputReasons: [String: String] = [:]
+  /// Tentative calendar holds created when an availability-aware reply accepted a
+  /// proposed time. Keyed by chatID; the Replies inbox surfaces a Confirm/Discard banner.
+  @Published var pendingHolds: [String: DraftHold] = [:]
   /// Chat ids the user opted into automatic replies for. When a new inbound
   /// message arrives in one of these chats, Omi drafts AND sends without review
   /// (sent Telegram messages can't be unsent — strictly opt-in per chat).
@@ -112,6 +120,21 @@ final class TelegramInboxStore: ObservableObject {
     }
   }
 
+  /// Manual resync: reconnect the on-device helper and resume listening. Used by the
+  /// "refresh" button when the listener has gone idle and new messages have stopped
+  /// arriving. Relaunches the helper if it died, then re-issues connect + startListening
+  /// (both are safe to receive more than once — the helper re-subscribes idempotently).
+  func refresh() {
+    guard TelegramClientService.shared.start() else {
+      connection = .error("Telegram isn't available in this build yet.")
+      return
+    }
+    guard TelegramClientService.hasSession else { return }
+    connection = .connecting
+    TelegramClientService.shared.connect()
+    TelegramClientService.shared.startListening()
+  }
+
   /// Phone-code login step 1: request a login code for this phone number.
   func sendCode(phone: String) {
     connection = .connecting
@@ -145,6 +168,8 @@ final class TelegramInboxStore: ObservableObject {
     connection = .disconnected
     chats = []
     preDrafts = [:]
+    needsInputReasons = [:]
+    pendingHolds = [:]
     lastLatestMessageID = [:]
   }
 
@@ -220,6 +245,8 @@ final class TelegramInboxStore: ObservableObject {
     // A new inbound arrived → any earlier draft is stale regardless of path. Drop it
     // first so an outdated draft can't linger if the fresh attempt abstains or fails.
     preDrafts[chat.chatID] = nil
+    needsInputReasons[chat.chatID] = nil
+    pendingHolds[chat.chatID] = nil
     if autoReplyChats.contains(chat.chatID) {
       scheduleAutoReply(chat)
     } else {
@@ -277,6 +304,7 @@ final class TelegramInboxStore: ObservableObject {
     guard !draft.isEmpty else { return }
     guard chats.first(where: { $0.chatID == chat.chatID })?.bubbles.last?.id == draftedForID else { return }
     preDrafts[chat.chatID] = draft
+    pendingHolds[chat.chatID] = resp.hold
   }
 
   /// Draft AND send without review. Only ever called for opted-in chats. A send
@@ -299,6 +327,19 @@ final class TelegramInboxStore: ObservableObject {
     // 1:1 — a toggled-off auto-reply must neither send nor surface a draft.
     guard !Task.isCancelled, autoReplyChats.contains(chat.chatID) else {
       NSLog("Telegram auto-reply cancelled for %@ before send (toggled off mid-draft)", chat.chatID)
+      return
+    }
+    // Surface any tentative calendar hold regardless of which path we take below.
+    pendingHolds[chat.chatID] = resp.hold
+    // Escalation: the message needs the user, not an auto-sent reply. Keep the
+    // best-guess draft as a SUGGESTION for review, record the reason, and notify —
+    // never auto-send.
+    if resp.needsInput {
+      preDrafts[chat.chatID] = text
+      needsInputReasons[chat.chatID] = resp.needsInputReason ?? ""
+      MessagingNeedsInput.notify(
+        personName: chat.displayName, reason: resp.needsInputReason, preview: text,
+        platform: .telegram, chatID: chat.chatID)
       return
     }
     // Groups are DRAFT-ONLY: never auto-send to a group chat. Surface the draft for
@@ -335,7 +376,24 @@ final class TelegramInboxStore: ObservableObject {
     await predraft(chat)
   }
 
+  /// Confirm (keep) or discard a tentative calendar hold surfaced in the Replies inbox.
+  /// Confirm just dismisses the banner; discard also deletes the event on the backend.
+  func resolveHold(chatID: String, discard: Bool) {
+    guard let hold = pendingHolds[chatID] else { return }
+    pendingHolds[chatID] = nil
+    guard discard else { return }
+    Task {
+      do {
+        try await APIClient.shared.discardCalendarHold(eventID: hold.eventID)
+      } catch {
+        NSLog("Telegram discard hold failed for %@: %@", chatID, error.localizedDescription)
+      }
+    }
+  }
+
   private func appendSent(_ text: String, to chatID: String) {
+    // The user replied — any escalation for this chat is resolved.
+    needsInputReasons[chatID] = nil
     guard let idx = chats.firstIndex(where: { $0.chatID == chatID }) else { return }
     let chat = chats[idx]
     let bubble = TelegramChatBubble(

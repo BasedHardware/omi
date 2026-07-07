@@ -83,6 +83,7 @@ struct WhatsAppInboxPage: View {
                 name: chat.displayName, preview: chat.lastPreview, time: chat.lastDate,
                 avatarData: chat.avatarImageData, isSelected: chat.id == store.selectedChatID,
                 draftReady: store.preDrafts[chat.id] != nil,
+                needsInput: store.needsInputReasons[chat.id] != nil,
                 accent: Self.whatsappGreen
               )
               .onTapGesture { store.selectedChatID = chat.id }
@@ -205,6 +206,16 @@ private struct ChatDetailView: View {
         }
       }
 
+      if let reason = store.needsInputReasons[chat.id] {
+        InboxNeedsInputBanner(reason: reason)
+      }
+      if let hold = store.pendingHolds[chat.id] {
+        InboxHoldBanner(
+          hold: hold, accent: accent,
+          onConfirm: { store.resolveHold(chatID: chat.id, discard: false) },
+          onDiscard: { store.resolveHold(chatID: chat.id, discard: true) }
+        )
+      }
       InboxComposeBar(
         text: $draft, placeholder: "Message", accent: accent, canSend: canSend,
         onSend: { Task { await send() } }, isDrafting: isDrafting,

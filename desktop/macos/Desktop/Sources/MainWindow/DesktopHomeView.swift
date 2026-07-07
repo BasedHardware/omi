@@ -22,6 +22,8 @@ struct DesktopHomeView: View {
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
   @ObservedObject private var usageLimiter = FloatingBarUsageLimiter.shared
+  // Notification taps on an auto-reply "needs your input" escalation route here.
+  @ObservedObject private var needsInputRouter = MessagingNeedsInputRouter.shared
   @State private var selectedIndex: Int = {
     if OMIApp.launchMode == .rewind { return SidebarNavItem.rewind.rawValue }
     let tier = UserDefaults.standard.integer(forKey: "currentTierLevel")
@@ -986,6 +988,24 @@ struct DesktopHomeView: View {
       {
         selectedIndex = item.rawValue
       }
+    }
+    // An auto-reply "needs your input" notification was tapped: open the right inbox
+    // and select the escalated chat (its suggested draft is already in preDrafts, so
+    // the composer pre-fills for review/edit/send).
+    .onChange(of: needsInputRouter.pendingOpen) { _, target in
+      guard let target else { return }
+      switch target.platform {
+      case .imessage:
+        selectedIndex = SidebarNavItem.replies.rawValue
+        IMessageInboxStore.shared.selectedChatID = target.chatID
+      case .telegram:
+        selectedIndex = SidebarNavItem.telegram.rawValue
+        TelegramInboxStore.shared.selectedChatID = target.chatID
+      case .whatsapp:
+        selectedIndex = SidebarNavItem.whatsapp.rawValue
+        WhatsAppInboxStore.shared.selectedChatID = target.chatID
+      }
+      needsInputRouter.pendingOpen = nil
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
       // Track the previous index when navigating to settings

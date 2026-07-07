@@ -1,0 +1,3 @@
+{
+  "change": "Added a refresh button to the Telegram inbox to manually resync when the connection goes idle"
+}

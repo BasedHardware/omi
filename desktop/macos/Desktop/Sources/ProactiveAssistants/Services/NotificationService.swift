@@ -189,6 +189,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     self.handleScreenCaptureResetAction(source: "notification_click")
                 }
 
+                // Messaging "needs your input" escalation: open the inbox to that chat so
+                // the user can review/edit/send the suggested draft. The routing target is
+                // carried in the notification's userInfo (set by MessagingNeedsInput).
+                let userInfo = response.notification.request.content.userInfo
+                if userInfo["route"] as? String == MessagingNeedsInput.route {
+                    MessagingNeedsInput.handleNotificationTap(userInfo)
+                }
+
             case UNNotificationDismissActionIdentifier:
                 // User explicitly dismissed the notification (X button, swipe, or Clear)
                 print("[\(assistantId)] Notification dismissed: \(title)")
@@ -246,7 +254,8 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
         context: FloatingBarNotificationContext? = nil,
         screenshotData: Data? = nil,
         deliverSystemBanner: Bool = false,
-        respectFrequency: Bool = true
+        respectFrequency: Bool = true,
+        userInfo: [String: String] = [:]
     ) {
         // Rate-limit the screen-capture reset notification to one per broken-capture
         // episode. The recovery loop in ProactiveAssistantsPlugin.attemptAutoReset
@@ -313,16 +322,23 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
                     return
                 }
 
-                self?.deliverNotification(title: title, message: message, assistantId: assistantId, sound: sound)
+                self?.deliverNotification(
+                    title: title, message: message, assistantId: assistantId, sound: sound, userInfo: userInfo)
             }
         }
     }
 
-    private func deliverNotification(title: String, message: String, assistantId: String, sound: NotificationSound) {
+    private func deliverNotification(
+        title: String, message: String, assistantId: String, sound: NotificationSound,
+        userInfo: [String: String] = [:]
+    ) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = message
         content.sound = sound.unSound
+        // Routing payload read back on tap (e.g. open a specific messaging chat). Empty
+        // for ordinary notifications.
+        if !userInfo.isEmpty { content.userInfo = userInfo }
 
         // Use screen capture reset category for reset notifications (adds "Reset Now" button)
         if title == Self.screenCaptureResetTitle {
