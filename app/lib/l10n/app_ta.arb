@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "படம் எடுத்தல் தயார்",
     "raybanMetaImageCaptureUnavailable": "ஆடியோ-மட்டும் பயன்முறையில் கிடைக்காது",
     "raybanMetaCamera": "கேமரா",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta உடன் இணைப்பதில் பிழை: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta உடன் இணைப்பதில் பிழை: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

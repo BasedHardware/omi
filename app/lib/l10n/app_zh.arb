@@ -3157,5 +3157,12 @@
     "raybanMetaImageCaptureReady": "图像采集已就绪",
     "raybanMetaImageCaptureUnavailable": "在纯音频模式下不可用",
     "raybanMetaCamera": "摄像头",
-    "errorConnectingRayBanMeta": "连接 Ray-Ban Meta 时出错：{error}"
+    "errorConnectingRayBanMeta": "连接 Ray-Ban Meta 时出错：{error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

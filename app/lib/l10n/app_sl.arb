@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "Zajem slike pripravljen",
     "raybanMetaImageCaptureUnavailable": "Ni na voljo v načinu samo za zvok",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Napaka pri povezovanju z Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Napaka pri povezovanju z Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

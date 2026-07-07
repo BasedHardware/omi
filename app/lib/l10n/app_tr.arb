@@ -3170,5 +3170,12 @@
     "raybanMetaImageCaptureReady": "Görüntü yakalama hazır",
     "raybanMetaImageCaptureUnavailable": "Yalnızca ses modunda kullanılamaz",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta'ya bağlanırken hata: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta'ya bağlanırken hata: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

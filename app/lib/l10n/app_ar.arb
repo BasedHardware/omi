@@ -3102,5 +3102,12 @@
     "raybanMetaImageCaptureReady": "التقاط الصورة جاهز",
     "raybanMetaImageCaptureUnavailable": "غير متاح في وضع الصوت فقط",
     "raybanMetaCamera": "الكاميرا",
-    "errorConnectingRayBanMeta": "خطأ في الاتصال بـ Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "خطأ في الاتصال بـ Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

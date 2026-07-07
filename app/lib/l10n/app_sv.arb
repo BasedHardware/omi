@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Bildtagning redo",
     "raybanMetaImageCaptureUnavailable": "Inte tillgängligt i läge med endast ljud",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Fel vid anslutning till Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Fel vid anslutning till Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

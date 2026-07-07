@@ -1340,8 +1340,8 @@ class BleFlutterApi: BleFlutterApiProtocol {
 /// Dart → native. Camera/photo capture goes through the Meta Wearables Device
 /// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
 /// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
-/// are safe to call on builds without the DAT SDK — isAvailable() reports
-/// which mode this build supports.
+/// are safe to call on builds without the DAT SDK — getAvailabilityMode()
+/// reports which mode this build supports.
 ///
 /// Generated protocol from Pigeon that represents a handler of messages from Flutter.
 protocol RayBanMetaHostAPI {
@@ -1362,7 +1362,7 @@ protocol RayBanMetaHostAPI {
   /// DAT camera permission for the glasses: resolves 'granted' | 'denied'.
   func requestCameraPermission(completion: @escaping (Result<String, Error>) -> Void)
   /// 'granted' | 'denied' | 'not_determined' | 'unavailable'.
-  func getCameraPermissionStatus() throws -> String
+  func getCameraPermissionStatus(completion: @escaping (Result<String, Error>) -> Void)
   /// Starts capturing the glasses microphone over the Bluetooth HFP route and
   /// streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
   func startAudioCapture() throws
@@ -1532,11 +1532,13 @@ class RayBanMetaHostAPISetup {
     let getCameraPermissionStatusChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getCameraPermissionStatus\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
     if let api = api {
       getCameraPermissionStatusChannel.setMessageHandler { _, reply in
-        do {
-          let result = try api.getCameraPermissionStatus()
-          reply(wrapResult(result))
-        } catch {
-          reply(wrapError(error))
+        api.getCameraPermissionStatus { result in
+          switch result {
+          case .success(let res):
+            reply(wrapResult(res))
+          case .failure(let error):
+            reply(wrapError(error))
+          }
         }
       }
     } else {

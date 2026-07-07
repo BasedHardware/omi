@@ -269,8 +269,8 @@ class RayBanMetaGlasses {
 /// Dart → native. Camera/photo capture goes through the Meta Wearables Device
 /// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
 /// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
-/// are safe to call on builds without the DAT SDK — isAvailable() reports
-/// which mode this build supports.
+/// are safe to call on builds without the DAT SDK — getAvailabilityMode()
+/// reports which mode this build supports.
 @HostApi()
 abstract class RayBanMetaHostAPI {
   /// 'full' (DAT SDK linked + Meta app credentials configured),
@@ -312,6 +312,7 @@ abstract class RayBanMetaHostAPI {
   String requestCameraPermission();
 
   /// 'granted' | 'denied' | 'not_determined' | 'unavailable'.
+  @async
   @SwiftFunction('getCameraPermissionStatus()')
   String getCameraPermissionStatus();
 

@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "Захоп выявы гатовы",
     "raybanMetaImageCaptureUnavailable": "Недаступна ў рэжыме толькі гук",
     "raybanMetaCamera": "Камера",
-    "errorConnectingRayBanMeta": "Памылка падключэння да Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Памылка падключэння да Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

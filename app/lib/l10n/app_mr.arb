@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "प्रतिमा कॅप्चर तयार आहे",
     "raybanMetaImageCaptureUnavailable": "फक्त-ऑडिओ मोडमध्ये अनुपलब्ध",
     "raybanMetaCamera": "कॅमेरा",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta शी कनेक्ट करताना त्रुटी: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta शी कनेक्ट करताना त्रुटी: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

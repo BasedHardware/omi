@@ -101,6 +101,12 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
         private var connectedDeviceId: String?
         private var latestGlasses: [(id: String, name: String)] = []
         private var observerTasks: [Task<Void, Never>] = []
+        private var sessionObserverTask: Task<Void, Never>?
+
+        deinit {
+            observerTasks.forEach { $0.cancel() }
+            sessionObserverTask?.cancel()
+        }
 
         #if canImport(MWDATCamera)
             private var cameraStream: MWDATCamera.Stream?
@@ -179,17 +185,23 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
         }
 
         /// Forwarded from AppDelegate for the Meta AI app registration callback.
+        /// Never blocks the main thread: claims the URL by scheme match and lets
+        /// the SDK consume it asynchronously (registration state changes arrive
+        /// via registrationStateStream either way).
         @discardableResult
         func handleUrl(_ url: URL) -> Bool {
             guard configured else { return false }
-            var handled = false
-            let semaphore = DispatchSemaphore(value: 0)
-            Task {
-                handled = (try? await Wearables.shared.handleUrl(url)) ?? false
-                semaphore.signal()
+            let appLinkScheme = (Bundle.main.object(forInfoDictionaryKey: "MWDAT") as? [String: Any])?["AppLinkURLScheme"] as? String
+            let expectedScheme = appLinkScheme?.replacingOccurrences(of: "://", with: "")
+            guard let scheme = url.scheme, scheme == (expectedScheme ?? "omirayban") else { return false }
+            Task { [weak self] in
+                do {
+                    _ = try await Wearables.shared.handleUrl(url)
+                } catch {
+                    self?.emitError(code: "registration_callback", message: String(describing: error))
+                }
             }
-            semaphore.wait()
-            return handled
+            return true
         }
 
         func getAvailableGlasses(completion: @escaping (Result<[RayBanMetaGlasses], Error>) -> Void) {
@@ -216,7 +228,8 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             session = newSession
             try newSession.start()
 
-            observerTasks.append(Task { [weak self] in
+            sessionObserverTask?.cancel()
+            sessionObserverTask = Task { [weak self] in
                 for await state in newSession.stateStream() {
                     guard let self = self, let deviceId = self.connectedDeviceId else { return }
                     switch state {
@@ -228,11 +241,14 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                         break
                     }
                 }
-            })
+            }
         }
 
         func disconnect() throws {
+            audioCapture.stop()
             try? stopCamera()
+            sessionObserverTask?.cancel()
+            sessionObserverTask = nil
             session?.stop()
             session = nil
             if let deviceId = connectedDeviceId {
@@ -273,18 +289,20 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             }
         }
 
-        func getCameraPermissionStatus() throws -> String {
-            guard configured else { return "not_determined" }
-            var normalized = "not_determined"
-            let semaphore = DispatchSemaphore(value: 0)
+        func getCameraPermissionStatus(completion: @escaping (Result<String, Error>) -> Void) {
+            guard configured else {
+                completion(.success("not_determined"))
+                return
+            }
             Task {
+                let normalized: String
                 if let status = try? await Wearables.shared.checkPermissionStatus(.camera) {
                     normalized = Self.normalizePermission(status)
+                } else {
+                    normalized = "not_determined"
                 }
-                semaphore.signal()
+                DispatchQueue.main.async { completion(.success(normalized)) }
             }
-            semaphore.wait()
-            return normalized
         }
 
         private static func normalizePermission(_ status: PermissionStatus) -> String {
@@ -415,7 +433,9 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
             completion(.success("unavailable"))
         }
 
-        func getCameraPermissionStatus() throws -> String { return "unavailable" }
+        func getCameraPermissionStatus(completion: @escaping (Result<String, Error>) -> Void) {
+            completion(.success("unavailable"))
+        }
 
         func startCamera() throws {
             throw PigeonError(

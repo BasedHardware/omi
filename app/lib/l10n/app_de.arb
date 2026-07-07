@@ -3103,5 +3103,12 @@
     "raybanMetaImageCaptureReady": "Bildaufnahme bereit",
     "raybanMetaImageCaptureUnavailable": "Im Nur-Audio-Modus nicht verfügbar",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Fehler beim Verbinden mit Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Fehler beim Verbinden mit Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

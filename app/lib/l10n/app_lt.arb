@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Vaizdų fiksavimas paruoštas",
     "raybanMetaImageCaptureUnavailable": "Negalima tik garso režimu",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Klaida jungiantis prie Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Klaida jungiantis prie Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

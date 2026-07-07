@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Kuvan kaappaus valmis",
     "raybanMetaImageCaptureUnavailable": "Ei käytettävissä vain ääni -tilassa",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Virhe yhdistettäessä Ray-Ban Metaan: {error}"
+    "errorConnectingRayBanMeta": "Virhe yhdistettäessä Ray-Ban Metaan: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

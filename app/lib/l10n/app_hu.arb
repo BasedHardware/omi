@@ -3231,5 +3231,12 @@
     "raybanMetaImageCaptureReady": "Képrögzítés készen áll",
     "raybanMetaImageCaptureUnavailable": "Nem érhető el csak hang módban",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Hiba a Ray-Ban Meta csatlakoztatásakor: {error}"
+    "errorConnectingRayBanMeta": "Hiba a Ray-Ban Meta csatlakoztatásakor: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

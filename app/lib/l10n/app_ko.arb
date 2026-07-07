@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "이미지 캡처 준비됨",
     "raybanMetaImageCaptureUnavailable": "오디오 전용 모드에서는 사용할 수 없음",
     "raybanMetaCamera": "카메라",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta 연결 오류: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta 연결 오류: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

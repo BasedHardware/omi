@@ -1370,8 +1370,8 @@ class BleFlutterApi(private val binaryMessenger: BinaryMessenger, private val me
  * Dart → native. Camera/photo capture goes through the Meta Wearables Device
  * Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
  * uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
- * are safe to call on builds without the DAT SDK — isAvailable() reports
- * which mode this build supports.
+ * are safe to call on builds without the DAT SDK — getAvailabilityMode()
+ * reports which mode this build supports.
  *
  * Generated interface from Pigeon that represents a handler of messages from Flutter.
  */
@@ -1395,7 +1395,7 @@ interface RayBanMetaHostAPI {
   /** DAT camera permission for the glasses: resolves 'granted' | 'denied'. */
   fun requestCameraPermission(callback: (Result<String>) -> Unit)
   /** 'granted' | 'denied' | 'not_determined' | 'unavailable'. */
-  fun getCameraPermissionStatus(): String
+  fun getCameraPermissionStatus(callback: (Result<String>) -> Unit)
   /**
    * Starts capturing the glasses microphone over the Bluetooth HFP route and
    * streaming PCM16 mono frames to RayBanMetaFlutterAPI.onAudioFrame.
@@ -1594,12 +1594,15 @@ interface RayBanMetaHostAPI {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI.getCameraPermissionStatus$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
-            val wrapped: List<Any?> = try {
-              listOf(api.getCameraPermissionStatus())
-            } catch (exception: Throwable) {
-              PigeonCommunicatorPigeonUtils.wrapError(exception)
+            api.getCameraPermissionStatus{ result: Result<String> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(PigeonCommunicatorPigeonUtils.wrapResult(data))
+              }
             }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

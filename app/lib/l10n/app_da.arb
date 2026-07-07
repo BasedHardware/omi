@@ -3144,5 +3144,12 @@
     "raybanMetaImageCaptureReady": "Billedoptagelse klar",
     "raybanMetaImageCaptureUnavailable": "Ikke tilgængelig i kun-lyd-tilstand",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Fejl ved forbindelse til Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Fejl ved forbindelse til Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

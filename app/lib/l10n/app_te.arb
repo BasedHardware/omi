@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "చిత్ర క్యాప్చర్ సిద్ధంగా ఉంది",
     "raybanMetaImageCaptureUnavailable": "ఆడియో-మాత్రమే మోడ్‌లో అందుబాటులో లేదు",
     "raybanMetaCamera": "కెమెరా",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta కు కనెక్ట్ చేయడంలో లోపం: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta కు కనెక్ట్ చేయడంలో లోపం: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

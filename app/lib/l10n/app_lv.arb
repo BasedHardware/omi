@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Attēlu tveršana gatava",
     "raybanMetaImageCaptureUnavailable": "Nav pieejams tikai audio režīmā",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Kļūda, veidojot savienojumu ar Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Kļūda, veidojot savienojumu ar Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

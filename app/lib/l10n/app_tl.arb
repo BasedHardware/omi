@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "Handa na ang image capture",
     "raybanMetaImageCaptureUnavailable": "Hindi available sa audio-only mode",
     "raybanMetaCamera": "Camera",
-    "errorConnectingRayBanMeta": "Error sa pagkonekta sa Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Error sa pagkonekta sa Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

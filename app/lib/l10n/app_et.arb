@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Pildistamine on valmis",
     "raybanMetaImageCaptureUnavailable": "Pole saadaval ainult heli režiimis",
     "raybanMetaCamera": "Kaamera",
-    "errorConnectingRayBanMeta": "Viga Ray-Ban Metaga ühendamisel: {error}"
+    "errorConnectingRayBanMeta": "Viga Ray-Ban Metaga ühendamisel: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

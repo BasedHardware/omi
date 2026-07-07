@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/rayban_meta_bridge.dart';
+import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
@@ -131,7 +132,7 @@ class RayBanMetaTransport extends DeviceTransport {
       }
 
       if (mode == 'full') {
-        _hostAPI.connect(_deviceId);
+        await _hostAPI.connect(_deviceId);
         // Native pushes onConnectionStateChanged; poll as a fallback so a
         // missed event can't wedge us in `connecting` forever.
         for (var i = 0; i < 20; i++) {
@@ -146,11 +147,13 @@ class RayBanMetaTransport extends DeviceTransport {
         throw Exception('Timed out connecting to Ray-Ban Meta glasses');
       }
 
-      // Audio-only fallback: connected == the glasses' HFP input is present.
+      // Audio-only fallback: connected == a Meta-glasses HFP input is present
+      // (matched precisely — any other HFP device must not masquerade as the
+      // glasses on reconnect).
       final inputs = await _hostAPI.getBluetoothHfpInputNames();
-      if (inputs.isEmpty) {
+      if (!inputs.any(RayBanMetaDiscoverer.looksLikeMetaGlasses)) {
         _updateState(DeviceTransportState.disconnected);
-        throw Exception('No Bluetooth microphone route available for Ray-Ban Meta');
+        throw Exception('Ray-Ban Meta microphone not available over Bluetooth');
       }
       _updateState(DeviceTransportState.connected);
     } catch (e) {
@@ -168,9 +171,9 @@ class RayBanMetaTransport extends DeviceTransport {
     _updateState(DeviceTransportState.disconnecting);
 
     try {
-      _hostAPI.stopAudioCapture();
-      _hostAPI.stopCamera();
-      _hostAPI.disconnect();
+      await _hostAPI.stopAudioCapture();
+      await _hostAPI.stopCamera();
+      await _hostAPI.disconnect();
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error during native disconnect: $e');
     }
@@ -194,7 +197,7 @@ class RayBanMetaTransport extends DeviceTransport {
       }
       if (mode == 'audio_only') {
         final inputs = await _hostAPI.getBluetoothHfpInputNames();
-        return inputs.isNotEmpty;
+        return inputs.any(RayBanMetaDiscoverer.looksLikeMetaGlasses);
       }
       return false;
     } catch (e) {
@@ -259,7 +262,7 @@ class RayBanMetaTransport extends DeviceTransport {
 
   Future<void> startAudioCapture() async {
     try {
-      _hostAPI.startAudioCapture();
+      await _hostAPI.startAudioCapture();
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error starting audio capture: $e');
       rethrow;
@@ -268,7 +271,7 @@ class RayBanMetaTransport extends DeviceTransport {
 
   Future<void> stopAudioCapture() async {
     try {
-      _hostAPI.stopAudioCapture();
+      await _hostAPI.stopAudioCapture();
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error stopping audio capture: $e');
     }
@@ -276,7 +279,7 @@ class RayBanMetaTransport extends DeviceTransport {
 
   Future<void> startCamera() async {
     try {
-      _hostAPI.startCamera();
+      await _hostAPI.startCamera();
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error starting camera: $e');
       rethrow;
@@ -285,7 +288,7 @@ class RayBanMetaTransport extends DeviceTransport {
 
   Future<void> stopCamera() async {
     try {
-      _hostAPI.stopCamera();
+      await _hostAPI.stopCamera();
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error stopping camera: $e');
     }
@@ -293,7 +296,7 @@ class RayBanMetaTransport extends DeviceTransport {
 
   Future<void> capturePhoto() async {
     try {
-      _hostAPI.capturePhoto();
+      await _hostAPI.capturePhoto();
     } catch (e) {
       Logger.debug('RayBanMeta Transport: Error capturing photo: $e');
       rethrow;

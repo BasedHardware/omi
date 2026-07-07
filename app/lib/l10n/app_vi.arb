@@ -3140,5 +3140,12 @@
     "raybanMetaImageCaptureReady": "Đã sẵn sàng chụp ảnh",
     "raybanMetaImageCaptureUnavailable": "Không khả dụng ở chế độ chỉ âm thanh",
     "raybanMetaCamera": "Camera",
-    "errorConnectingRayBanMeta": "Lỗi khi kết nối với Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Lỗi khi kết nối với Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

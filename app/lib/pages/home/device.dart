@@ -206,6 +206,18 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     );
   }
 
+  Future<String>? _rayBanMetaCameraStatusFuture;
+  String? _rayBanMetaCameraStatusDeviceId;
+
+  Future<String> _rayBanMetaCameraStatusMemoized(DeviceProvider provider) {
+    final deviceId = provider.connectedDevice?.id;
+    if (_rayBanMetaCameraStatusFuture == null || _rayBanMetaCameraStatusDeviceId != deviceId) {
+      _rayBanMetaCameraStatusDeviceId = deviceId;
+      _rayBanMetaCameraStatusFuture = _rayBanMetaCameraStatus(provider);
+    }
+    return _rayBanMetaCameraStatusFuture!;
+  }
+
   Future<String> _rayBanMetaCameraStatus(DeviceProvider provider) async {
     try {
       final deviceId = provider.connectedDevice?.id;
@@ -225,6 +237,13 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       if (deviceId == null) return;
       final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
       if (connection is! RayBanMetaDeviceConnection) return;
+      final cameraStatus = await connection.getCameraPermissionStatus();
+      if (cameraStatus != 'granted') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaImageCaptureUnavailable)));
+        return;
+      }
       await connection.capturePhoto();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaPhotoRequested)));
@@ -581,7 +600,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
             FutureBuilder<String>(
-              future: _rayBanMetaCameraStatus(provider),
+              future: _rayBanMetaCameraStatusMemoized(provider),
               builder: (context, snapshot) {
                 final status = snapshot.data;
                 final String label;

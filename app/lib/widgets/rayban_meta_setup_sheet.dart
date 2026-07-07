@@ -38,6 +38,8 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
   final RayBanMetaHostAPI _host = RayBanMetaHostAPI();
   _SetupStep _step = _SetupStep.loading;
   Timer? _registrationPoll;
+  bool _refreshing = false;
+  bool _completed = false;
 
   @override
   void initState() {
@@ -52,6 +54,8 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
   }
 
   Future<void> _refreshStep() async {
+    if (_refreshing || _completed) return;
+    _refreshing = true;
     try {
       final mode = await _host.getAvailabilityMode();
       if (mode != 'full') {
@@ -73,20 +77,24 @@ class _RayBanMetaSetupSheetState extends State<RayBanMetaSetupSheet> {
     } catch (e) {
       Logger.debug('Ray-Ban Meta setup: state refresh failed: $e');
       _setStep(_SetupStep.audioOnly);
+    } finally {
+      _refreshing = false;
     }
   }
 
   void _setStep(_SetupStep step) {
     if (!mounted) return;
     setState(() => _step = step);
-    if (step == _SetupStep.ready) {
+    if (step == _SetupStep.ready && !_completed) {
+      _completed = true;
+      _registrationPoll?.cancel();
       Navigator.of(context).pop(true);
     }
   }
 
   Future<void> _startRegistration() async {
     try {
-      _host.startRegistration();
+      await _host.startRegistration();
       _setStep(_SetupStep.waitingForMetaAi);
       // The Meta AI app takes over; poll until its callback lands.
       _registrationPoll?.cancel();

@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "לכידת תמונה מוכנה",
     "raybanMetaImageCaptureUnavailable": "לא זמין במצב שמע בלבד",
     "raybanMetaCamera": "מצלמה",
-    "errorConnectingRayBanMeta": "שגיאה בהתחברות ל-Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "שגיאה בהתחברות ל-Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

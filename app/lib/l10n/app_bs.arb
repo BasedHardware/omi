@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "Snimanje slike spremno",
     "raybanMetaImageCaptureUnavailable": "Nedostupno u načinu rada samo sa zvukom",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Greška pri povezivanju s Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Greška pri povezivanju s Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

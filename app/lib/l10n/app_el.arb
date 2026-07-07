@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Η λήψη εικόνας είναι έτοιμη",
     "raybanMetaImageCaptureUnavailable": "Μη διαθέσιμο σε λειτουργία μόνο ήχου",
     "raybanMetaCamera": "Κάμερα",
-    "errorConnectingRayBanMeta": "Σφάλμα σύνδεσης με Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Σφάλμα σύνδεσης με Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

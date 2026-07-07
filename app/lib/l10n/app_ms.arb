@@ -3135,5 +3135,12 @@
     "raybanMetaImageCaptureReady": "Tangkapan imej sedia",
     "raybanMetaImageCaptureUnavailable": "Tidak tersedia dalam mod audio sahaja",
     "raybanMetaCamera": "Kamera",
-    "errorConnectingRayBanMeta": "Ralat semasa menyambung ke Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Ralat semasa menyambung ke Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

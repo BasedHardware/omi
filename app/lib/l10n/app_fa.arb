@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "ضبط تصویر آماده است",
     "raybanMetaImageCaptureUnavailable": "در حالت فقط صوتی در دسترس نیست",
     "raybanMetaCamera": "دوربین",
-    "errorConnectingRayBanMeta": "خطا در اتصال به Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "خطا در اتصال به Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

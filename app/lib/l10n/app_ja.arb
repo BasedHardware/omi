@@ -3136,5 +3136,12 @@
     "raybanMetaImageCaptureReady": "画像キャプチャの準備完了",
     "raybanMetaImageCaptureUnavailable": "音声のみモードでは利用できません",
     "raybanMetaCamera": "カメラ",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta への接続エラー: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta への接続エラー: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

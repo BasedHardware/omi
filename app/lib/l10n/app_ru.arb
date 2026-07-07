@@ -3170,5 +3170,12 @@
     "raybanMetaImageCaptureReady": "Съёмка изображений готова",
     "raybanMetaImageCaptureUnavailable": "Недоступно в режиме только со звуком",
     "raybanMetaCamera": "Камера",
-    "errorConnectingRayBanMeta": "Ошибка подключения к Ray-Ban Meta: {error}"
+    "errorConnectingRayBanMeta": "Ошибка подключения к Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -16,7 +16,7 @@ capture + HFP audio. Full mode is required for founder acceptance.
 3. **Developer mode / test channel**: DAT apps cannot ship through the App
    Store yet. Run local development builds, or distribute to your org's
    testers through the Wearables Developer Center beta channel.
-4. Xcode 15.4+ (repo currently builds with Xcode 26), iOS device on iOS 15.2+.
+4. Xcode 16.4+ (per `app/setup.sh`; repo currently builds with Xcode 26), iOS device on iOS 15.2+.
 
 ## Step 1 — DAT Swift package (already in the project)
 
@@ -55,9 +55,11 @@ cp RayBanMetaCredentials.xcconfig.template RayBanMetaCredentials.xcconfig
 # fill in META_APP_ID and META_CLIENT_TOKEN from the Developer Center
 ```
 
-With the file absent the build stays in audio-only mode; with it present,
-`getAvailabilityMode()` returns `full`. Register the exact `omirayban://`
-scheme and your iOS bundle id in the Wearables Developer Center app settings.
+Note: `getAvailabilityMode()` returns `full` whenever the DAT SDK is linked —
+credentials do not gate the mode. This file only supplies the `MetaAppID` /
+`ClientToken` build settings that distribution builds embed in Info.plist.
+Register the exact `omirayban://` scheme and your iOS bundle id in the
+Wearables Developer Center app settings.
 
 Already present in Omi's Info.plist (no action): `NSMicrophoneUsageDescription`,
 `NSBluetoothAlwaysUsageDescription`, `NSCameraUsageDescription`, background

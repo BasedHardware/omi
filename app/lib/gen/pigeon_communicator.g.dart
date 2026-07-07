@@ -1796,8 +1796,8 @@ abstract class BleFlutterApi {
 /// Dart → native. Camera/photo capture goes through the Meta Wearables Device
 /// Access Toolkit (DAT); the toolkit has no microphone API, so audio capture
 /// uses the platform Bluetooth HFP route as Meta's docs prescribe. All methods
-/// are safe to call on builds without the DAT SDK — isAvailable() reports
-/// which mode this build supports.
+/// are safe to call on builds without the DAT SDK — getAvailabilityMode()
+/// reports which mode this build supports.
 class RayBanMetaHostAPI {
   /// Constructor for [RayBanMetaHostAPI].  The [binaryMessenger] named argument is
   /// available for dependency injection.  If it is left null, the default

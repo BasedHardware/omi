@@ -10713,5 +10713,12 @@
     "raybanMetaImageCaptureReady": "تصویر کیپچر تیار ہے",
     "raybanMetaImageCaptureUnavailable": "صرف آڈیو موڈ میں دستیاب نہیں",
     "raybanMetaCamera": "کیمرہ",
-    "errorConnectingRayBanMeta": "Ray-Ban Meta سے جڑنے میں خرابی: {error}"
+    "errorConnectingRayBanMeta": "Ray-Ban Meta سے جڑنے میں خرابی: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }
