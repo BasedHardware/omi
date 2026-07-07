@@ -153,6 +153,10 @@ struct DesktopAutomationExecuteExportRequest: Codable {
   let destination: String
 }
 
+struct DesktopAutomationOpenImportRequest: Codable {
+  let connector: String
+}
+
 /// Describes a semantic action exposed over `GET /actions` so an agent can discover
 /// what it can drive without inspecting the UI tree.
 struct DesktopAutomationActionDescriptor: Codable {
@@ -541,6 +545,32 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       NotificationCenter.default.post(name: .refreshAllData, object: nil)
       return nil
+    }
+
+    // Runs the exact service + outcome mapping the ChatGPT/Claude import
+    // sheets use, so harnesses can assert outcome copy without driving the
+    // TextEditor. Writes real memories on success, like the sheet would.
+    register(
+      name: "memory_log_import_probe",
+      summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
+      params: ["source", "text"]
+    ) { params in
+      guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
+        throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
+      }
+      guard let text = params["text"], !text.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("text must be non-empty")
+      }
+      switch await ConnectorImportOperations.importMemoryLog(text: text, source: source) {
+      case .success(let result, let message):
+        return [
+          "outcome": "success",
+          "message": message,
+          "memories": "\(result.memoryCount ?? 0)",
+        ]
+      case .failure(let message):
+        return ["outcome": "failure", "message": message]
+      }
     }
 
     register(
@@ -1888,6 +1918,37 @@ final class DesktopAutomationBridge {
         return jsonResponse(
           DesktopAutomationResponse(
             ok: true, result: OpenResult(destination: payload.destination), error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500)
+      }
+    case ("POST", "/open-import"):
+      struct OpenResult: Codable { let connector: String }
+      do {
+        let payload = try JSONDecoder().decode(
+          DesktopAutomationOpenImportRequest.self, from: request.body)
+        let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
+        guard knownIDs.contains(payload.connector) else {
+          return jsonResponse(
+            DesktopAutomationResponse<OpenResult>(
+              ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
+            statusCode: 400)
+        }
+        await MainActor.run {
+          NSApp.activate()
+          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+            window.makeKeyAndOrderFront(nil)
+          }
+          NotificationCenter.default.post(
+            name: .desktopAutomationOpenImportRequested, object: nil,
+            userInfo: ["connector": payload.connector])
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        return jsonResponse(
+          DesktopAutomationResponse(
+            ok: true, result: OpenResult(connector: payload.connector), error: nil))
       } catch {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(
