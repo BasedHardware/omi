@@ -34,11 +34,13 @@ run_hermetic() {
   python3 -m pip install -q pyyaml pytest
   python3 scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-rendered-cloud-run
   python3 scripts/validate-backend-runtime-env.py --env prod --check-workflows --check-rendered-cloud-run
+  python3 scripts/check_mcp_oauth_deploy_contract.py
   python3 -m pytest \
     tests/unit/test_backend_runtime_env_validator.py \
     tests/unit/test_repair_cloud_run_traffic.py \
     tests/unit/test_preflight_cloud_run_deploy.py \
-    tests/unit/test_deploy_status_report.py -q
+    tests/unit/test_deploy_status_report.py \
+    tests/unit/test_mcp_oauth_deploy_contract.py -q
 }
 
 run_live() {
