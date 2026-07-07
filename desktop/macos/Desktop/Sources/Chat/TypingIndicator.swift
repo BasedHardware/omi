@@ -20,6 +20,7 @@ struct OmiThinkingMark: View {
           angle = 360
         }
       }
+      .accessibilityElement(children: .ignore)
       .accessibilityLabel("Thinking")
   }
 

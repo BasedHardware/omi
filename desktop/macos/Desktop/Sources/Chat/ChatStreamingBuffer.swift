@@ -40,6 +40,7 @@ final class ChatStreamingBuffer {
     messages: inout [ChatMessage],
     normalizeText: (_ message: ChatMessage, _ text: String) -> String = { _, text in text }
   ) {
+    flushWorkItem?.cancel()
     flushWorkItem = nil
 
     let segments = pendingSegments

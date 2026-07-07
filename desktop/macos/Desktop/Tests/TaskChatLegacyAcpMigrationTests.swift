@@ -84,6 +84,32 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertTrue(message.contentBlocks.isEmpty)
   }
 
+  @MainActor
+  func testTaskChatFailureDoesNotDuplicateSplitPartialTextBlocks() {
+    var message = ChatMessage(
+      id: "assistant-1",
+      text: "Partial answer",
+      sender: .ai,
+      isStreaming: true,
+      contentBlocks: [
+        .text(id: "text-1", text: "Partial "),
+        .thinking(id: "thinking-1", text: "Looking up context"),
+        .text(id: "text-2", text: "answer"),
+      ]
+    )
+
+    TaskChatState.applyFailureTextIfNeeded(to: &message, errorDescription: "OpenClaw failed")
+
+    XCTAssertEqual(message.text, "Partial answer\n\nFailed: OpenClaw failed")
+    XCTAssertEqual(message.contentBlocks.count, 4)
+    guard case .text(_, "Partial ") = message.contentBlocks[0],
+          case .thinking(_, "Looking up context") = message.contentBlocks[1],
+          case .text(_, "answer") = message.contentBlocks[2],
+          case .text(_, "Failed: OpenClaw failed") = message.contentBlocks[3] else {
+      return XCTFail("Expected split partial text to stay in place with only failure text appended")
+    }
+  }
+
   func testTaskChatUserStopDoesNotAppendFailureText() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 

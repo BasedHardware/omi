@@ -16,7 +16,6 @@ struct ChatBubble: View {
   /// without wiring cancellation.
   var onCancelTurn: (() -> Void)? = nil
 
-  @State private var isHovering = false
   @State private var isTimestampHovering = false
   @State private var isExpanded = false
   @State private var showCopied = false
@@ -35,6 +34,7 @@ struct ChatBubble: View {
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
     self.onCancelTurn = onCancelTurn
+    _lastSubmittedRating = State(initialValue: message.rating)
   }
 
   /// Messages longer than this are truncated with a "Show more" button
@@ -207,7 +207,7 @@ struct ChatBubble: View {
         // Rating buttons, copy button, and message metadata
         if message.sender == .ai && !message.isStreaming && message.isSynced {
           messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
-        } else if message.sender == .ai && !message.isStreaming && !message.text.isEmpty {
+        } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
           messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
         } else if !message.isStreaming || !message.text.isEmpty {
           messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
@@ -226,7 +226,6 @@ struct ChatBubble: View {
     }
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
-    .onHover { isHovering = $0 }
   }
 
   @ViewBuilder

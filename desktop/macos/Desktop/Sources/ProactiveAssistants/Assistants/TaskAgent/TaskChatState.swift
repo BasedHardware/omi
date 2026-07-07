@@ -319,7 +319,19 @@ class TaskChatState: ObservableObject {
     }
 
     private static func contentBlocks(_ blocks: [ChatContentBlock], containText needle: String) -> Bool {
-        blocks.contains { block in
+        let combinedText = blocks.compactMap { block in
+            if case .text(_, let text) = block {
+                return text
+            }
+            return nil
+        }
+        .joined()
+
+        if combinedText.contains(needle) {
+            return true
+        }
+
+        return blocks.contains { block in
             if case .text(_, let text) = block {
                 return text.contains(needle)
             }

@@ -140,6 +140,22 @@ final class ToolCallStatusTests: XCTestCase {
     }
   }
 
+  func testManualFlushCancelsScheduledFlush() {
+    let messageId = "assistant-1"
+    var messages = [ChatMessage(id: messageId, text: "", sender: .ai, isStreaming: true)]
+    let buffer = ChatStreamingBuffer(flushInterval: 0.01)
+    let staleFlush = expectation(description: "scheduled flush should be cancelled by manual flush")
+    staleFlush.isInverted = true
+
+    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {
+      staleFlush.fulfill()
+    })
+    buffer.flush(messages: &messages)
+
+    wait(for: [staleFlush], timeout: 0.05)
+    XCTAssertEqual(messages[0].text, "Before tool.")
+  }
+
   func testDuplicateStartForSameToolUseIdUpdatesExistingBlock() {
     var blocks: [ChatContentBlock] = []
 

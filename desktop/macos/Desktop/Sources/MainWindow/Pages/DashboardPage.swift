@@ -684,7 +684,7 @@ struct DashboardPage: View {
                 .font(.system(size: 52, weight: .bold, design: .rounded))
                 .foregroundStyle(HomePalette.ink)
                 .lineLimit(1)
-                .shadow(color: HomePalette.glow.opacity(0.45), radius: 24)
+                .shadow(color: HomePalette.stageGlow.opacity(0.46), radius: 26)
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
@@ -763,27 +763,29 @@ struct DashboardPage: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
         }
-        // Barely-there card so the chat reads as a bounded surface — making it
-        // obvious the canvas around it is clickable (and closes the chat).
-        // The stroke is a soft gradient that dissolves toward the bottom.
+        // Barely-there card so the chat reads as a bounded surface while still
+        // dissolving into the ambient Home canvas.
         .background(
             RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .fill(Color.white.opacity(0.012))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(
+                .fill(
                     LinearGradient(
                         colors: [
-                            HomePalette.hairline.opacity(0.45),
-                            HomePalette.hairline.opacity(0.10),
+                            Color.white.opacity(0.018),
+                            HomePalette.stageGlow.opacity(0.014),
+                            Color.white.opacity(0.006),
                         ],
                         startPoint: .top,
                         endPoint: .bottom
-                    ),
-                    lineWidth: 1
+                    )
                 )
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(HomePalette.stageGlow.opacity(0.10), lineWidth: 1)
+                .blur(radius: 2.5)
+                .opacity(0.65)
+        )
+        .shadow(color: HomePalette.stageGlow.opacity(0.055), radius: 28, y: 8)
         .frame(maxWidth: Self.homeStagePanelMaxWidth)
         .padding(.horizontal, Self.homeStageHorizontalPadding)
     }
@@ -1747,12 +1749,8 @@ private enum HomePalette {
     static let faint = Color(red: 0.36, green: 0.35, blue: 0.33)
     static let hairline = Color(red: 0.155, green: 0.155, blue: 0.172)
     static let green = Color(red: 0.17, green: 0.78, blue: 0.38)
-    // Home ambient glow is PURPLE per Nik's explicit, repeated preference — the rose/red
-    // variant (0.95,0.33,0.45) was disliked. The purple VALUE lives on `.glow` on purpose:
-    // earlier purple fixes kept getting reverted by "HomePalette.purple → .glow" merge
-    // cleanups (e.g. 317424f57), so we put the purple on the name those reverts converge to.
-    // Do NOT change this back to red/rose.
-    static let glow = Color(red: 0.48, green: 0.30, blue: 0.95)      // purple
+    static let stageGlow = Color(red: 0.48, green: 0.30, blue: 0.95)
+    static let glow = stageGlow
 }
 
 private enum HomeRowStatus {
@@ -1875,15 +1873,9 @@ private struct HomeAskBar: View {
                 .font(.system(size: 15))
                 .foregroundStyle(HomePalette.ink)
                 .focused(focus)
-                .onSubmit(onSend)
+                .onSubmit(handleSubmit)
 
-                if isSending && !hasText {
-                    stopButton
-                } else if canSend {
-                    sendButton
-                }
-
-                connectButton
+                actionButton
             }
             .padding(.leading, 16)
             .padding(.trailing, 8)
@@ -1893,17 +1885,17 @@ private struct HomeAskBar: View {
             RoundedRectangle(cornerRadius: 29, style: .continuous)
                 .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: 29, style: .continuous)
-                .stroke(
-                    isDropTargeted
-                        ? Color.white.opacity(0.55)
-                        : (isFocused
-                            ? Color.white.opacity(0.30)
-                            : HomePalette.hairline.opacity(isHovering ? 1 : 0.9)),
-                    lineWidth: 1
-                )
-        )
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 29, style: .continuous)
+                    .stroke(Color.white.opacity(0.42), lineWidth: 1)
+            } else {
+                RoundedRectangle(cornerRadius: 29, style: .continuous)
+                    .stroke(HomePalette.stageGlow.opacity(isFocused ? 0.16 : 0.08), lineWidth: 1)
+                    .blur(radius: 1.8)
+            }
+        }
+        .shadow(color: HomePalette.stageGlow.opacity(isFocused ? 0.11 : 0.045), radius: isFocused ? 22 : 16, y: 8)
         .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
         .contentShape(.rect(cornerRadius: 29))
         .onTapGesture {
@@ -1947,8 +1939,34 @@ private struct HomeAskBar: View {
         }
     }
 
+    private func handleSubmit() {
+        if isSending {
+            onStop()
+        } else if canSend {
+            onSend()
+        }
+    }
+
+    @ViewBuilder
+    private var actionButton: some View {
+        switch actionMode {
+        case .stop:
+            stopButton
+        case .send:
+            sendButton
+        case .connect:
+            connectButton
+        }
+    }
+
+    private var actionMode: HomeAskBarActionMode {
+        if isSending { return .stop }
+        if canSend { return .send }
+        return .connect
+    }
+
     private var sendButton: some View {
-        Button(action: onSend) {
+        Button(action: handleSubmit) {
             ZStack {
                 Circle()
                     .fill(Color.white)
@@ -1993,6 +2011,12 @@ private struct HomeAskBar: View {
     private var connectButton: some View {
         HomeAskBarConnectButton(isActive: isConnectActive, action: onConnect)
     }
+}
+
+private enum HomeAskBarActionMode: Equatable {
+    case connect
+    case send
+    case stop
 }
 
 private struct HomeAskBarConnectButton: View {
@@ -2078,27 +2102,41 @@ private struct HomeCanvasBackground: View {
         ZStack {
             HomePalette.paper
 
-            // One barely-there key light high behind the wordmark, and a faint
-            // horizon lift near the ask bar. Deliberately subtle — the old
-            // mid-screen glow blobs read as splotches on large displays.
+            // Neutral key light high behind the wordmark, with a soft ambient
+            // wash so the redesigned Home stage reads against the dark canvas.
             RadialGradient(
-                colors: [Color.white.opacity(0.045), .clear],
+                colors: [Color.white.opacity(0.040), .clear],
                 center: UnitPoint(x: 0.5, y: 0.16),
                 startRadius: 0,
                 endRadius: 560
             )
 
             RadialGradient(
-                colors: [HomePalette.glow.opacity(0.05), .clear],
-                center: UnitPoint(x: 0.5, y: 0.20),
+                colors: [HomePalette.stageGlow.opacity(0.075), .clear],
+                center: UnitPoint(x: 0.48, y: 0.24),
                 startRadius: 0,
-                endRadius: 720
+                endRadius: 680
+            )
+
+            RadialGradient(
+                colors: [HomePalette.stageGlow.opacity(0.040), .clear],
+                center: UnitPoint(x: 0.20, y: 0.78),
+                startRadius: 100,
+                endRadius: 560
+            )
+
+            RadialGradient(
+                colors: [.clear, HomePalette.paper.opacity(0.88), Color.black.opacity(0.62)],
+                center: UnitPoint(x: 0.50, y: 0.48),
+                startRadius: 470,
+                endRadius: 900
             )
 
             LinearGradient(
                 stops: [
-                    .init(color: .clear, location: 0.62),
-                    .init(color: Color.white.opacity(0.02), location: 0.86),
+                    .init(color: .clear, location: 0.50),
+                    .init(color: HomePalette.stageGlow.opacity(0.026), location: 0.78),
+                    .init(color: Color.white.opacity(0.014), location: 0.90),
                     .init(color: .clear, location: 1.0),
                 ],
                 startPoint: .top,
