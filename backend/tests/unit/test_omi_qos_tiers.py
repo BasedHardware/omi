@@ -106,7 +106,7 @@ _install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticO
 _install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
 _install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
 _install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
-_install_module('utils.byok', get_byok_key=MagicMock(return_value=None))
+_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
 
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
@@ -1181,3 +1181,15 @@ class TestGeminiThinkingBudget:
         finally:
             _llm_cache.clear()
             _llm_cache.update(saved)
+
+    def test_structured_output_route_omits_thinking_budget(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('trends', 'gemini-2.5-flash-lite', 'gemini')
+        assert 'thinking_budget' not in opts
+
+    def test_non_structured_gemini_route_sets_thinking_budget_zero(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
+        assert opts.get('thinking_budget') == 0

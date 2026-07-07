@@ -28,6 +28,7 @@ enum DefaultsKey: String {
     case authIsImpersonating = "auth_isImpersonating"
     case chatBridgeMode = "chatBridgeMode"
     case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+    case onboardingStep = "onboardingStep"
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.

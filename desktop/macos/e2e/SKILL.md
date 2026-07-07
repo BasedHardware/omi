@@ -33,6 +33,15 @@ The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that 
 ```
 Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
 
+### 2a. Desktop core E2E harness (tiered)
+Primary entry for the desktop confidence ladder: `scripts/desktop-core-harness.sh` (see `e2e/CORE_E2E.md`).
+```bash
+./scripts/desktop-core-harness.sh --self-check   # Linux-safe T0 (flow lint + gauntlet hooks)
+./scripts/desktop-core-harness.sh --tier 1 --bundle omi-core-e2e
+./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e   # hermetic: dev-up offline + core matrix
+```
+Typed flows live in `e2e/flows/`; run individually with `scripts/omi-harness run <flow.yaml> --lane bridge`.
+
 ### 2b. Run semantic actions (cursor-free, in-process)
 Beyond navigation, the bridge exposes named **actions** that invoke the app's real
 code paths directly — no synthetic mouse events, so they never grab the cursor (the
@@ -43,6 +52,10 @@ deterministic equivalent of the Flutter app's Marionette driver). Prefer these o
 ./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
 ./scripts/omi-ctl action toggle_transcription enabled=false
 ```
+`omi-ctl actions` returns descriptors with `category`, `surfaces`, `safety`,
+`sideEffects`, `examples`, and `preferSemantic`. Scan those fields before using
+`agent-swift`: prefer actions whose `surfaces` match the screen and whose
+`safety` is `read_only`, `local_artifact`, or `local_ui_state` for routine checks.
 Add new actions in `DesktopAutomationActionRegistry` (`registerBuiltins()` for global
 ones, or `register(name:summary:params:handler:)` from a view model for screen-scoped
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns

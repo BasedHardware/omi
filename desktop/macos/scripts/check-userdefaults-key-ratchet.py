@@ -20,9 +20,9 @@ root, EXCLUDING:
   - non-UserDefaults `forKey:` forms — Dictionary `removeValue(forKey:)` and KVC
     `setValue(_:forKey:)` — which are not defaults keys.
 
-Wiring (see also `scripts/pre-push` and `.github/workflows/lint.yml`):
+Wiring (see also `scripts/pre-push` and `.github/workflows/repo-checks.yml`):
   - Pre-push: run automatically for pushes that touch desktop Swift sources.
-  - CI: a gated step in the Lint workflow.
+  - CI: a gated step in the Repo Checks workflow.
   - Manually:  python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
   - Show the count / offenders:  ... --print
 

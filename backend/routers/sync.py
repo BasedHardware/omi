@@ -70,7 +70,7 @@ from utils.other.storage import (
 )
 
 from utils import encryption
-from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys
+from utils.byok import get_byok_keys, set_byok_keys, has_byok_keys, set_byok_uid
 from utils.cloud_tasks import (
     enqueue_sync_job,
     get_sync_tasks_max_attempts,
@@ -1175,6 +1175,7 @@ async def _run_full_pipeline_background_async(
     """
     concurrency_gate = contextlib.nullcontext() if task_mode else _get_sync_pipeline_semaphore()
     async with concurrency_gate:
+        set_byok_uid(uid if get_byok_keys() else None)
         segmented_paths = set()
         wav_paths = []
         stage_timings = {}
@@ -1472,6 +1473,7 @@ async def _run_full_pipeline_background_async(
                 pass
         finally:
             set_byok_keys({})
+            set_byok_uid(None)
             await run_blocking(storage_executor, _cleanup_files, list(segmented_paths))
             await run_blocking(storage_executor, _cleanup_files, wav_paths)
             try:

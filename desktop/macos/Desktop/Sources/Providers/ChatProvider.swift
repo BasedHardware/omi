@@ -4835,6 +4835,53 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         AnalyticsManager.shared.chatCleared()
     }
 
+    /// Harness-only chat reset that awaits backend deletion before returning.
+    /// Returns an error message when backend deletion fails so E2E flows don't
+    /// proceed against stale persisted messages.
+    func automationResetChatForHarness() async -> String? {
+        guard AppBuild.isNonProduction else { return nil }
+        isClearing = true
+        defer { isClearing = false }
+
+        if isInDefaultChat {
+            let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
+            let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
+            messages = []
+            resetMessagesPagination()
+            AgentRuntimeStatusStore.shared.clear(surface: surface)
+            await invalidateAgentSurface(surface: surface)
+            do {
+                _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
+            } catch {
+                logError("Failed to clear default chat messages for harness reset", error: error)
+                return "failed to clear default chat messages: \(error.localizedDescription)"
+            }
+        } else {
+            let sessionToDelete = currentSession
+            if let session = sessionToDelete {
+                let surface = AgentSurfaceReference.mainChat(chatId: session.id)
+                AgentRuntimeStatusStore.shared.clear(surface: surface)
+                await invalidateAgentSurface(surface: surface)
+            }
+            if let session = sessionToDelete {
+                sessions.removeAll { $0.id == session.id }
+            }
+            currentSession = nil
+            messages = []
+            resetMessagesPagination()
+            if let session = sessionToDelete {
+                do {
+                    try await APIClient.shared.deleteChatSession(sessionId: session.id)
+                } catch {
+                    logError("Failed to delete chat session for harness reset", error: error)
+                    return "failed to delete chat session: \(error.localizedDescription)"
+                }
+            }
+            _ = await createNewSession()
+        }
+        return nil
+    }
+
     // MARK: - App Selection
 
     /// Select a chat app and load its sessions
@@ -4991,8 +5038,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "message_count": "\(messages.count)",
             "messages_json": messagesJSON,
         ]
+        if let lastAssistant = messages.last(where: { $0.sender != .user })?.copyableText {
+            detail["last_assistant_text"] = lastAssistant
+        }
         if let ownerId = runtimeOwnerId {
             detail["owner_id"] = ownerId
+        }
+        let hasStructuredError = currentError != nil
+        let hasLegacyError = !(errorMessage?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        detail["has_error"] = (hasStructuredError || hasLegacyError) ? "true" : "false"
+        if let errorMessage, !errorMessage.isEmpty {
+            detail["error_message"] = errorMessage
+        }
+        if let currentError {
+            detail["current_error"] = String(describing: currentError)
         }
         return detail
     }

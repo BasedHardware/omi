@@ -81,8 +81,10 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
         children: [
           const Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 24),
           const SizedBox(width: 12),
-          Text(context.l10n.deviceOnboardingGoodJob,
-              style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600)),
+          Text(
+            context.l10n.deviceOnboardingGoodJob,
+            style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 20, fontWeight: FontWeight.w600),
+          ),
         ],
       ),
     );
@@ -127,10 +129,7 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(
-          color: Colors.white.withValues(alpha: opacity),
-          width: 1.5,
-        ),
+        border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 1.5),
       ),
     );
   }
@@ -140,10 +139,7 @@ class _TranscriptionDemoStepState extends State<TranscriptionDemoStep> with Sing
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
       child: Text(
         text,
         style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.5),

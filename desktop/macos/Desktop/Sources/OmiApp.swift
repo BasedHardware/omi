@@ -116,6 +116,7 @@ struct OMIApp: App {
     // Main desktop window - same view for both modes, sidebar hidden in rewind mode
     return Window(windowTitle, id: "main") {
       DesktopHomeView()
+        .environmentObject(appState)
         .withFontScaling()
         .overlay(alignment: .bottomTrailing) { WhatsNewToastOverlay() }
         .onAppear {
@@ -256,6 +257,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   func applicationDidFinishLaunching(_ notification: Notification) {
     if ViewExporter.shouldExport() {
       ViewExporter.run()
+      return
+    }
+
+    // Running from the mounted DMG / a translocated mount breaks TCC permissions
+    // and Sparkle updates — install to /Applications and relaunch before any
+    // services start. Returns true when this process is being replaced.
+    if AppInstaller.moveToApplicationsIfNeeded() {
       return
     }
 
@@ -627,17 +635,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     log("AppDelegate: applicationDidFinishLaunching completed")
   }
 
-  /// Start a timer that sends Sentry session snapshots every 5 minutes
-  /// This ensures we have breadcrumbs captured even without errors
+  /// Start a timer that records Sentry session breadcrumbs every 5 minutes.
+  /// Breadcrumbs preserve observability without creating unresolved Sentry issues (#9191).
   private func startSentryHeartbeat() {
     guard !AnalyticsManager.isDevBuild else { return }
     sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      // Capture a session heartbeat event with current breadcrumbs
-      SentrySDK.capture(message: "Session Heartbeat") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "heartbeat", key: "event_type")
-      }
-      log("Sentry: Session heartbeat captured")
+      SentryHeartbeatTelemetry.recordSessionHeartbeat()
+      log("Sentry: Session heartbeat breadcrumb recorded")
     }
   }
 

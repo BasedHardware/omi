@@ -1576,11 +1576,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/c3/ad/02b1b412e43605aa6
 wheels = [{ url = "https://files.pythonhosted.org/packages/67/d8/1bcb5e6508d14c6c9912cd964b286f04392298ffb3e4218f4a1292d64e76/uvicorn-0.30.5-py3-none-any.whl", upload-time = 2024-08-02T10:22:32Z, size = 62805, hashes = { sha256 = "b2d86de274726e9878188fa07576c9ceeff90a839e2b6e25c917fe05f5a6c835" } }]
 
 [[packages]]
-name = "uvloop"
-version = "0.20.0"
-sdist = { url = "https://files.pythonhosted.org/packages/bc/f1/dc9577455e011ad43d9379e836ee73f40b4f99c02946849a44f7ae64835e/uvloop-0.20.0.tar.gz", upload-time = 2024-08-15T19:36:29Z, size = 2329938, hashes = { sha256 = "4603ca714a754fc8d9b197e325db25b2ea045385e8a3ad05d3463de725fdf469" } }
-
-[[packages]]
 name = "watchdog"
 version = "4.0.2"
 sdist = { url = "https://files.pythonhosted.org/packages/4f/38/764baaa25eb5e35c9a043d4c4588f9836edfe52a708950f4b6d5f714fd42/watchdog-4.0.2.tar.gz", upload-time = 2024-08-11T07:38:01Z, size = 126587, hashes = { sha256 = "b4dfbb6c49221be4535623ea4474a4d6ee0a9cef4a80b20c28db4d858b64e270" } }

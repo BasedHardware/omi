@@ -18,7 +18,7 @@ struct DesktopHomeView: View {
   private let minimumWindowHeight: CGFloat = 680
   private static let pageNavigationAnimation = Animation.easeOut(duration: 0.08)
 
-  @StateObject private var appState = AppState()
+  @EnvironmentObject private var appState: AppState
   @StateObject private var viewModelContainer = ViewModelContainer()
   @ObservedObject private var authState = AuthState.shared
   @ObservedObject private var apiKeyService = APIKeyService.shared
@@ -575,6 +575,8 @@ struct DesktopHomeView: View {
     let currentWindow = NSApp.windows.first(where: {
       $0.title.lowercased().hasPrefix("omi") && $0.isVisible
     })
+    let onDashboard = selectedIndex == SidebarNavItem.dashboard.rawValue
+    let priorHomeMode = DesktopAutomationStateStore.shared.current().homeMode
     let snapshot = DesktopAutomationSnapshot(
       bridgeEnabled: true,
       bridgePort: DesktopAutomationLaunchOptions.port,
@@ -585,6 +587,7 @@ struct DesktopHomeView: View {
       selectedSettingsSection: isInSettings ? selectedSettingsSection.rawValue : nil,
       highlightedSettingId: highlightedSettingId,
       usesLegacyHomeDesign: useLegacyHomeDesign,
+      homeMode: onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
@@ -620,10 +623,15 @@ struct DesktopHomeView: View {
       }
     }
 
-    if let sectionRaw = settingsSectionRaw,
-      let section = SettingsContentView.SettingsSection(rawValue: sectionRaw)
-    {
-      selectedSettingsSection = section
+    if let sectionRaw = settingsSectionRaw {
+      // Tolerant match (SET-01): omi-ctl sends the caller's casing verbatim (docs use
+      // lowercase, raw values are Title Case), so a strict rawValue init silently left
+      // navigation on General for every sub-section command.
+      if let section = SettingsContentView.SettingsSection.automationMatch(sectionRaw) {
+        selectedSettingsSection = section
+      } else {
+        log("AutomationNavigation: unknown settings section '\(sectionRaw)'")
+      }
     }
     highlightedSettingId = settingId
 
@@ -1145,5 +1153,6 @@ private struct ConversationsPageHost: View {
 #if canImport(PreviewsMacros)
 #Preview {
   DesktopHomeView()
+    .environmentObject(AppState())
 }
 #endif

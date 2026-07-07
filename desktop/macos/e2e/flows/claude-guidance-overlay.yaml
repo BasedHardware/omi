@@ -1,5 +1,6 @@
 version: 2
 name: claude-guidance-overlay
+tier: 2
 description: Cursor-free dogfood flow for Claude spatial guidance overlays.
 app: non-prod
 covers:

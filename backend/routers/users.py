@@ -150,6 +150,15 @@ class UserStatusResponse(BaseModel):
 class UserProfileResponse(BaseModel):
     model_config = ConfigDict(extra='allow')
 
+    uid: str
+    email: Optional[str] = None
+    name: Optional[str] = None
+    time_zone: Optional[str] = None
+    created_at: Optional[datetime] = None
+    motivation: Optional[str] = None
+    use_case: Optional[str] = None
+    job: Optional[str] = None
+    company: Optional[str] = None
     data_protection_level: Optional[str] = None
     migration_status: Optional[Dict[str, Any]] = None
 
@@ -282,6 +291,7 @@ def get_user_profile_endpoint(uid: str = Depends(auth.get_current_user_uid)):
     profile = get_user_profile(uid)
     if not profile:
         raise HTTPException(status_code=410, detail="User not found")
+    profile.setdefault('uid', uid)
     return profile
 
 

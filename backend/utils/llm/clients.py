@@ -6,6 +6,15 @@ from typing import Any, Dict, List, Optional
 import anthropic
 import httpx
 from cachetools import TTLCache
+
+try:
+    from langchain_core.callbacks import BaseCallbackHandler
+except ImportError:
+
+    class BaseCallbackHandler:
+        pass
+
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -13,6 +22,7 @@ import tiktoken
 
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
+from utils.llm.byok_errors import handle_llm_error
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
@@ -102,6 +112,42 @@ logger = logging.getLogger(__name__)
 _usage_callback = get_usage_callback()
 _GEMINI_OPENAI_BASE_URL = GEMINI_OPENAI_BASE_URL
 
+
+class _LLMErrorCallback(BaseCallbackHandler):
+    """LangChain callback that tags provider errors with platform/BYOK source."""
+
+    def __init__(self, provider: str, model: str = '', feature: str = ''):
+        self.provider = provider
+        self.model = model
+        self.feature = feature
+
+    def on_llm_error(self, error: BaseException, **kwargs) -> None:
+        if isinstance(error, Exception):
+            handle_llm_error(error, self.provider, feature=self.feature, model=self.model)
+
+
+_llm_error_callbacks = {}
+
+
+def _get_llm_error_callback(provider: str, model: str = '', feature: str = '') -> _LLMErrorCallback:
+    key = (provider, model, feature)
+    if key not in _llm_error_callbacks:
+        _llm_error_callbacks[key] = _LLMErrorCallback(provider, model=model, feature=feature)
+    return _llm_error_callbacks[key]
+
+
+def _with_llm_callbacks(kwargs: Dict[str, Any], provider: str, model: str = '', feature: str = '') -> Dict[str, Any]:
+    result = dict(kwargs)
+    callbacks = list(result.get('callbacks') or [])
+    if _usage_callback not in callbacks:
+        callbacks.append(_usage_callback)
+    error_callback = _get_llm_error_callback(provider, model=model, feature=feature)
+    if error_callback not in callbacks:
+        callbacks.append(error_callback)
+    result['callbacks'] = callbacks
+    return result
+
+
 # ---------------------------------------------------------------------------
 # BYOK (Bring Your Own Key)
 #
@@ -134,6 +180,7 @@ class _OpenAIEmbeddingsProxy:
     """Transparent proxy for OpenAIEmbeddings that uses BYOK OpenAI when set."""
 
     __slots__ = ('_model', '_default', '_ctor_kwargs')
+    _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
     def __init__(self, model: str, default: OpenAIEmbeddings, ctor_kwargs: Dict[str, Any]):
         object.__setattr__(self, '_model', model)
@@ -183,9 +230,11 @@ class _OpenAIEmbeddingsProxy:
         try:
             return inst.embed_query(text)
         except Exception as e:
-            if inst is not self._default and self._is_key_failure(e):
-                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                return self._default.embed_query(text)
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_query')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return self._default.embed_query(text)
             raise
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -193,13 +242,47 @@ class _OpenAIEmbeddingsProxy:
         try:
             return inst.embed_documents(texts)
         except Exception as e:
-            if inst is not self._default and self._is_key_failure(e):
-                logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                return self._default.embed_documents(texts)
+            if inst is not self._default:
+                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
+                if self._is_key_failure(e):
+                    logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                    return self._default.embed_documents(texts)
             raise
 
     def __getattr__(self, name: str):
-        return getattr(self._resolve(), name)
+        inst = self._resolve()
+        attr = getattr(inst, name)
+        if name not in self._METHODS_TO_WRAP or not callable(attr):
+            return attr
+        if name.startswith('a'):
+
+            async def _wrapped_async(*args, **kwargs):
+                try:
+                    return await attr(*args, **kwargs)
+                except Exception as e:
+                    if inst is not self._default:
+                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                        if self._is_key_failure(e):
+                            logger.warning(
+                                "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
+                            )
+                            return await getattr(self._default, name)(*args, **kwargs)
+                    raise
+
+            return _wrapped_async
+
+        def _wrapped(*args, **kwargs):
+            try:
+                return attr(*args, **kwargs)
+            except Exception as e:
+                if inst is not self._default:
+                    handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                    if self._is_key_failure(e):
+                        logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
+                        return getattr(self._default, name)(*args, **kwargs)
+                raise
+
+        return _wrapped
 
 
 _BYOK_CACHE_MAX_SIZE = 256
@@ -236,7 +319,10 @@ def _create_byok_client(
     model: str, provider: str, byok_key: str, streaming: bool = False, feature: str = ''
 ) -> Optional[ChatOpenAI]:
     """Create a ChatOpenAI using the user's BYOK key. Returns None if BYOK not supported for this provider."""
-    kwargs: Dict[str, Any] = {'callbacks': [_usage_callback], 'request_timeout': 120, 'max_retries': 1}
+    callback_provider = _effective_byok_provider(model, provider)
+    kwargs: Dict[str, Any] = _with_llm_callbacks(
+        {'request_timeout': 120, 'max_retries': 1}, callback_provider, model=model, feature=feature
+    )
     if supports_cache_retention(model):
         kwargs['extra_body'] = {"prompt_cache_retention": "24h"}
     if streaming:
@@ -273,6 +359,7 @@ def get_anthropic_client() -> anthropic.AsyncAnthropic:
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
     """Explicit factory; equivalent to using the module-level proxies."""
+    kwargs = _with_llm_callbacks(kwargs, 'openai', model=model)
     byok = get_byok_key('openai')
     if byok:
         return _cached_openai_chat(model, byok, kwargs)

@@ -2,6 +2,7 @@ import AVFoundation
 import Cocoa
 import Combine
 import CoreAudio
+import OmiSupport
 
 struct PTTSilentMicRecoveryPolicy {
   static let deadMicPeakThreshold = 5
@@ -129,7 +130,10 @@ class PushToTalkManager: ObservableObject {
     // Realtime hub: wire it to the bar and warm the WS if it's enabled + BYOK-keyed,
     // so the persistent socket is ready before the first PTT (and stays warm after).
     RealtimeHubController.shared.setup(barState: barState)
-    RealtimeHubController.shared.ensureWarm()
+    // Hermetic local harness has no Firebase SDK and no live realtime providers.
+    if !DesktopLocalProfile.isEnabled {
+      RealtimeHubController.shared.ensureWarm()
+    }
     log("PushToTalkManager: setup complete, micPermission=\(hasMicPermission)")
   }
 

@@ -858,6 +858,13 @@ class TestAsyncCoordinatorStructure:
         finally_idx = body.rindex('finally:')
         after_finally = body[finally_idx:]
         assert 'set_byok_keys({})' in after_finally
+        assert 'set_byok_uid(None)' in after_finally
+
+    def test_async_coordinator_sets_byok_uid_from_context(self):
+        """Async coordinator must attach uid when inherited BYOK keys are present."""
+        body = self._get_bg_func_body()
+        setup_section = body[body.index('concurrency_gate =') : body.index('segmented_paths = set()')]
+        assert 'set_byok_uid(uid if get_byok_keys() else None)' in setup_section
 
     def test_async_coordinator_handles_empty_decode(self):
         """Async coordinator must handle empty wav_paths (complete with 0 segments)."""
@@ -1348,6 +1355,7 @@ class TestAsyncCoordinatorBehavioral:
         sys.modules['utils.fair_use'].trigger_classifier_if_needed = MagicMock()
         sys.modules['utils.fair_use'].record_dg_usage_ms = MagicMock()
         sys.modules['utils.byok'].set_byok_keys = MagicMock()
+        sys.modules['utils.byok'].set_byok_uid = MagicMock()
         sys.modules['utils.byok'].get_byok_keys = MagicMock(return_value={})
         sys.modules['utils.analytics'].record_usage = MagicMock()
         sys.modules['utils.request_validation'].parse_sync_filename_timestamp = MagicMock(return_value=1700000000)
@@ -2342,6 +2350,18 @@ class TestBYOKContextPropagation:
         func_body = source[start:next_boundary]
 
         assert 'set_byok_keys({})' in func_body, "Async coordinator must clear BYOK keys in finally"
+        assert 'set_byok_uid(None)' in func_body, "Async coordinator must clear BYOK uid in finally"
+
+    def test_async_coordinator_sets_byok_uid_before_work(self):
+        """Async coordinator must attach the uid to inherited BYOK key context."""
+        source = self._read_sync_source()
+        start = source.index('async def _run_full_pipeline_background_async')
+        next_boundary = source.find('\n@router.', start + 1)
+        if next_boundary == -1:
+            next_boundary = len(source)
+        func_body = source[start:next_boundary]
+
+        assert 'set_byok_uid(uid if get_byok_keys() else None)' in func_body
 
     def test_no_plain_submit_in_sync(self):
         """All executor .submit() calls in sync.py must use submit_with_context."""

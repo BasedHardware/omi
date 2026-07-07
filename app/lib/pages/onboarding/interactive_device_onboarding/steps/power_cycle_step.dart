@@ -41,7 +41,8 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
           });
         }
 
-        final isOff = provider.powerCycleState == PowerCycleSubState.deviceOff ||
+        final isOff =
+            provider.powerCycleState == PowerCycleSubState.deviceOff ||
             provider.powerCycleState == PowerCycleSubState.waitingForReconnect;
         final isReconnected = provider.powerCycleState == PowerCycleSubState.reconnected;
 
@@ -125,10 +126,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
                   child: Container(
                     width: 36,
                     height: 36,
-                    decoration: const BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Color(0xFFEF5350),
-                    ),
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFEF5350)),
                     child: const Icon(Icons.close, color: Colors.white, size: 20),
                   ),
                 ),
@@ -170,10 +168,7 @@ class _PowerCycleStepState extends State<PowerCycleStep> {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 18),
-      decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: statusColor.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(20)),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

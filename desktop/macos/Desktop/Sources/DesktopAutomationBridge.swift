@@ -106,6 +106,8 @@ struct DesktopAutomationSnapshot: Codable {
   var selectedSettingsSection: String?
   var highlightedSettingId: String?
   var usesLegacyHomeDesign: Bool
+  /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
+  var homeMode: String?
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -160,6 +162,142 @@ struct DesktopAutomationActionDescriptor: Codable {
   let summary: String
   /// Names of params the handler reads (hints for the caller; not enforced).
   let params: [String]
+  /// Coarse grouping for scanners and harness UIs.
+  let category: String
+  /// Screens or app surfaces this action is meant to replace AX interaction on.
+  let surfaces: [String]
+  /// Agent-facing risk label; the bridge is still non-production only.
+  let safety: String
+  /// Plain-language effects so callers can prefer read-only probes before clicks.
+  let sideEffects: [String]
+  /// Copy-pasteable examples for `scripts/omi-ctl action ...`.
+  let examples: [String]
+  /// Semantic bridge actions should be preferred over `agent-swift` clicks when covered.
+  let preferSemantic: Bool
+
+  init(
+    name: String,
+    summary: String,
+    params: [String] = [],
+    category: String? = nil,
+    surfaces: [String]? = nil,
+    safety: String? = nil,
+    sideEffects: [String]? = nil,
+    examples: [String] = [],
+    preferSemantic: Bool = true
+  ) {
+    self.name = name
+    self.summary = summary
+    self.params = params
+    self.category = category ?? Self.inferCategory(name)
+    self.surfaces = surfaces ?? Self.inferSurfaces(name)
+    self.safety = safety ?? Self.inferSafety(name)
+    self.sideEffects = sideEffects ?? Self.inferSideEffects(name)
+    self.examples = examples.isEmpty ? [Self.commandExample(name: name, params: params)] : examples
+    self.preferSemantic = preferSemantic
+  }
+
+  private static func inferCategory(_ name: String) -> String {
+    if name.contains("snapshot") || name.contains("probe") || name.contains("state")
+      || name.contains("tail") || name.contains("evidence") || name.contains("qa_export")
+    {
+      return "read"
+    }
+    if name.hasPrefix("capture") {
+      return "capture"
+    }
+    if name.contains("coordinator") {
+      return "coordinator"
+    }
+    if name.contains("ask") || name.contains("chat") || name.contains("omni") {
+      return "chat"
+    }
+    if name.contains("spatial_overlay") || name.contains("debug_bar") || name.contains("subagent") {
+      return "visual"
+    }
+    if name.contains("transcription") || name.contains("refresh") {
+      return "app_control"
+    }
+    return "general"
+  }
+
+  private static func inferSurfaces(_ name: String) -> [String] {
+    if name.hasPrefix("capture_main_window") {
+      return ["main_window"]
+    }
+    if name.hasPrefix("capture_floating_bar") || name.contains("debug_bar") {
+      return ["floating_bar"]
+    }
+    if name.contains("main_chat") {
+      return ["main_chat"]
+    }
+    if name.contains("ask_omi") || name == "ask" || name.contains("floating") || name.contains("subagent") {
+      return ["floating_bar", "ask_omi"]
+    }
+    if name.contains("coordinator") {
+      return ["coordinator"]
+    }
+    if name.contains("spatial_overlay") || name.contains("cloud_connector") {
+      return ["cloud_connector_guidance"]
+    }
+    if name.contains("calendar") {
+      return ["calendar_connector"]
+    }
+    if name.contains("gmail") {
+      return ["gmail_connector"]
+    }
+    if name.contains("apple_notes") || name.contains("local_file") {
+      return ["import_connectors"]
+    }
+    return ["app"]
+  }
+
+  private static func inferSafety(_ name: String) -> String {
+    if name.contains("delete") {
+      return "remote_write"
+    }
+    if name.contains("snapshot") || name.contains("probe") || name.contains("state")
+      || name.contains("tail") || name.contains("evidence") || name.contains("qa_export")
+    {
+      return "read_only"
+    }
+    if name.hasPrefix("capture") {
+      return "local_artifact"
+    }
+    if name.contains("ask") || name.contains("omni") || name.contains("import") {
+      return "network_or_model"
+    }
+    return "local_ui_state"
+  }
+
+  private static func inferSideEffects(_ name: String) -> [String] {
+    if name.contains("delete") {
+      return ["may mutate remote user data"]
+    }
+    if name.hasPrefix("capture") {
+      return ["writes local artifact file"]
+    }
+    if name.contains("ask") || name.contains("omni") {
+      return ["may call model/backend services"]
+    }
+    if name.contains("import") {
+      return ["may read local connector data", "may save imported memory data"]
+    }
+    if name.contains("toggle") || name.contains("debug") || name.contains("open") || name.contains("close")
+      || name.contains("seed") || name.contains("swap") || name.contains("clear")
+    {
+      return ["mutates non-production app state"]
+    }
+    return []
+  }
+
+  private static func commandExample(name: String, params: [String]) -> String {
+    var pieces = ["./scripts/omi-ctl", "action", name]
+    for param in params {
+      pieces.append("\(param)=<value>")
+    }
+    return pieces.joined(separator: " ")
+  }
 }
 
 /// Returned by `POST /action`: what ran, any handler detail, and the resulting state.
@@ -227,6 +365,7 @@ final class DesktopAutomationStateStore {
     selectedSettingsSection: nil,
     highlightedSettingId: nil,
     usesLegacyHomeDesign: false,
+    homeMode: nil,
     showsPrimarySidebar: false,
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,
@@ -351,10 +490,29 @@ final class DesktopAutomationActionRegistry {
   private var didRegisterBuiltins = false
 
   func register(
-    name: String, summary: String, params: [String] = [], handler: @escaping Handler
+    name: String,
+    summary: String,
+    params: [String] = [],
+    category: String? = nil,
+    surfaces: [String]? = nil,
+    safety: String? = nil,
+    sideEffects: [String]? = nil,
+    examples: [String] = [],
+    preferSemantic: Bool = true,
+    handler: @escaping Handler
   ) {
     entries[name] = Entry(
-      descriptor: DesktopAutomationActionDescriptor(name: name, summary: summary, params: params),
+      descriptor: DesktopAutomationActionDescriptor(
+        name: name,
+        summary: summary,
+        params: params,
+        category: category,
+        surfaces: surfaces,
+        safety: safety,
+        sideEffects: sideEffects,
+        examples: examples,
+        preferSemantic: preferSemantic
+      ),
       run: handler)
   }
 
@@ -398,6 +556,131 @@ final class DesktopAutomationActionRegistry {
       NotificationCenter.default.post(
         name: .toggleTranscriptionRequested, object: nil, userInfo: ["enabled": enabled])
       return ["enabled": enabled ? "true" : "false"]
+    }
+
+    register(
+      name: "capture_test_transcript",
+      summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
+      params: ["phase", "text"]
+    ) { params in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      let phase = (params["phase"] ?? "inject").lowercased()
+      switch phase {
+      case "start":
+        return await appState.automationStartCaptureTestSession()
+      case "inject":
+        return await appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
+      case "stop":
+        return await appState.automationStopCaptureTestSession()
+      case "lifecycle":
+        let marker = params["text"] ?? "[[MARKER:capture-lifecycle]]"
+        let startResult = await appState.automationStartCaptureTestSession()
+        if startResult["error"] != nil {
+          return startResult
+        }
+        _ = await appState.automationInjectCaptureTestTranscript(text: marker)
+        return await appState.automationStopCaptureTestSession()
+      default:
+        return ["error": "phase must be start, inject, stop, or lifecycle"]
+      }
+    }
+
+    register(
+      name: "conversation_list_snapshot",
+      summary: "Return conversation list counts and recent titles for harness assertions",
+      params: ["limit"]
+    ) { params in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      let limit = max(1, intParam(params["limit"], default: 5))
+      let titles = appState.conversations.prefix(limit).map { $0.structured.title }
+      let titlesJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: Array(titles)),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        titlesJSON = encoded
+      } else {
+        titlesJSON = "[]"
+      }
+      return [
+        "conversation_count": "\(appState.totalConversationsCount ?? appState.conversations.count)",
+        "loaded_count": "\(appState.conversations.count)",
+        "is_transcribing": appState.isTranscribing ? "true" : "false",
+        "recent_titles_json": titlesJSON,
+      ]
+    }
+
+    register(
+      name: "memories_snapshot",
+      summary: "Return memories page load state for harness assertions",
+      params: []
+    ) { _ in
+      guard AuthState.shared.isSignedIn else {
+        return [
+          "is_signed_in": "false",
+          "load_state": "signed_out",
+          "memory_count_valid": "false",
+        ]
+      }
+      do {
+        // Same local-first path MemoriesViewModel.loadMemories uses: API page → SQLite sync → count.
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        try await MemoryStorage.shared.syncServerMemories(page.memories)
+        let memoryCount = try await MemoryStorage.shared.getLocalMemoriesCount()
+        return [
+          "is_signed_in": "true",
+          "load_state": "loaded",
+          "memory_count": "\(memoryCount)",
+          "api_page_count": "\(page.memories.count)",
+          "memory_count_valid": "true",
+          "has_error": "false",
+        ]
+      } catch {
+        return [
+          "is_signed_in": "true",
+          "load_state": "error",
+          "has_error": "true",
+          "memory_count_valid": "false",
+          "error_message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
+      name: "tasks_snapshot",
+      summary: "Return tasks store counts for harness assertions",
+      params: []
+    ) { _ in
+      guard AuthState.shared.isSignedIn else {
+        return [
+          "is_signed_in": "false",
+          "load_state": "signed_out",
+          "task_count_valid": "false",
+        ]
+      }
+      let store = TasksStore.shared
+      await store.loadTasksIfNeeded()
+      let deadline = Date().addingTimeInterval(30)
+      while store.isLoading, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      let total = store.tasksWithoutDueDate.count + store.overdueTasks.count + store.todaysTasks.count
+      let loadState: String
+      if store.error != nil {
+        loadState = "error"
+      } else if store.isLoading {
+        loadState = "loading"
+      } else {
+        loadState = "loaded"
+      }
+      return [
+        "is_signed_in": "true",
+        "load_state": loadState,
+        "task_count": "\(total)",
+        "overdue_count": "\(store.overdueTasks.count)",
+        "today_count": "\(store.todaysTasks.count)",
+        "task_count_valid": loadState == "loaded" ? "true" : "false",
+        "has_error": store.error != nil ? "true" : "false",
+      ]
     }
 
     // Drive the real push-to-talk state machine headlessly (MIC-01). ptt_start begins
@@ -461,6 +744,44 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
+    // Drive the live onboarding language step exactly as its Continue button
+    // does: set the selection on the on-screen coordinator, run
+    // confirmLanguages() (the real backend save), and advance to the next step
+    // only when the save succeeded — mirroring OnboardingLanguageStepView.
+    register(
+      name: "onboarding_confirm_languages",
+      summary: "Select languages on the live onboarding coordinator and run the real Continue save",
+      params: ["languages"]
+    ) { params in
+      let codes = (params["languages"] ?? "en")
+        .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+      guard let coordinator = await MainActor.run(body: { OnboardingPagedIntroCoordinator.current })
+      else {
+        return ["error": "no live onboarding coordinator (is onboarding on screen?)"]
+      }
+      await MainActor.run { coordinator.selectedLanguageCodes = codes }
+      await coordinator.confirmLanguages()
+      let error = await MainActor.run { coordinator.lastActionError }
+      if error == nil {
+        await MainActor.run { UserDefaults.standard.set(2, forKey: DefaultsKey.onboardingStep) }
+        return ["status": "saved", "advanced_to_step": "2", "languages": codes.joined(separator: ",")]
+      }
+      return ["status": "failed", "error": error ?? "unknown"]
+    }
+
+    // Same code path as the status-menu "Reset Onboarding..." item and the
+    // Settings "Reset & Restart" button — clears onboarding state and restarts
+    // the app. Lets agents exercise the reset→restart→onboarding flow without
+    // driving menus or the cursor.
+    register(
+      name: "reset_onboarding",
+      summary: "Reset onboarding state and restart the app (same path as the Reset Onboarding menu item)"
+    ) { _ in
+      let appState = await MainActor.run { AppState() }
+      appState.resetOnboardingAndRestart()
+      return ["status": "resetting and restarting"]
+    }
+
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
@@ -482,6 +803,59 @@ final class DesktopAutomationActionRegistry {
     ) { params in
       let wait = boolParam(params["wait"], default: true)
       return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
+    }
+
+    // Drive the redesigned Home stage (inline chat / connect tray) without the
+    // cursor. Each posts the notification DashboardPage observes, which calls
+    // the exact functions the on-screen controls call.
+    register(
+      name: "home_open_chat",
+      summary: "Open the inline chat on Home (same path as clicking the ask bar)"
+    ) { _ in
+      NotificationCenter.default.post(name: .homeStageOpenChat, object: nil)
+      return nil
+    }
+
+    register(
+      name: "home_connect_toggle",
+      summary: "Toggle the Connect tray on Home (same path as the ask-bar Connect button)"
+    ) { _ in
+      NotificationCenter.default.post(name: .homeStageToggleConnect, object: nil)
+      return nil
+    }
+
+    register(
+      name: "home_close_panel",
+      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+    ) { _ in
+      NotificationCenter.default.post(name: .homeStageClose, object: nil)
+      return nil
+    }
+
+    register(
+      name: "home_ask",
+      summary: "Send a query through the Home ask bar (opens the inline chat and sends)",
+      params: ["query"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      NotificationCenter.default.post(
+        name: .homeStageAsk, object: nil, userInfo: ["query": query])
+      return ["sent": query]
+    }
+
+    register(
+      name: "home_attach",
+      summary: "Stage a file in the Home ask bar (same wiring as the paperclip/drag-drop)",
+      params: ["path"]
+    ) { params in
+      let path = (params["path"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+        return ["error": "missing or nonexistent 'path'"]
+      }
+      NotificationCenter.default.post(
+        name: .homeStageAttach, object: nil, userInfo: ["path": path])
+      return ["staged": path]
     }
 
     register(
@@ -514,6 +888,24 @@ final class DesktopAutomationActionRegistry {
       bar.isVoiceListening = (s == "listening")
       bar.isThinking = (s == "thinking")
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
+    }
+
+    register(
+      name: "reset_main_chat",
+      summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_main_chat is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      if let error = await provider.automationResetChatForHarness() {
+        return ["error": error]
+      }
+      return ["reset": "true"]
     }
 
     // Send a message through the real main-window chat pipeline (ChatPage),
@@ -606,6 +998,40 @@ final class DesktopAutomationActionRegistry {
       }
       let limit = max(1, intParam(params["limit"], default: 8))
       return await provider.automationKernelTurnTail(limit: limit)
+    }
+
+    register(
+      name: "floating_bar_chat_snapshot",
+      summary: "Export floating-bar chat transcript and stream state for harness assertions",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, intParam(params["limit"], default: 50))
+      return FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: limit)
+    }
+
+    register(
+      name: "wait_floating_bar_chat_idle",
+      summary: "Block until floating-bar chat is not sending or streaming",
+      params: ["timeoutMs", "pollMs"]
+    ) { params in
+      let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
+      let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      while Date() < deadline {
+        var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
+        if detail["error"] == nil,
+           detail["is_sending"] == "false",
+           detail["is_streaming"] == "false"
+        {
+          detail["idle"] = "true"
+          return detail
+        }
+        try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+      }
+      var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
+      detail["error"] = "timeout"
+      detail["timeout_ms"] = "\(timeoutMs)"
+      return detail
     }
 
     register(
@@ -1385,7 +1811,7 @@ final class DesktopAutomationBridge {
     case ("GET", "/capabilities"):
       let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
       let capabilities = DesktopAutomationCapabilities(
-        schemaVersion: 1,
+        schemaVersion: 2,
         routes: [
           "GET /health",
           "GET /state",

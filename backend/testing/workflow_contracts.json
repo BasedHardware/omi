@@ -153,7 +153,10 @@
       "id": "l2_promotion_worker",
       "risk": "high",
       "sources": ["backend/jobs/l2_promotion_worker.py", "backend/jobs/l2_promotion_orchestrator.py"],
-      "tests": ["tests/unit/test_l2_promotion_agent_v2.py"],
+      "tests": [
+        "tests/unit/test_l2_promotion_agent_v2.py",
+        "tests/unit/test_l2_promotion_worker.py"
+      ],
       "checks": [],
       "invariants": [
         "forward and backfill modes have explicit gates",

@@ -399,7 +399,7 @@ class App {
       capabilities: generated.capabilities.toSet(),
       chatPrompt: generated.chatPrompt,
       conversationPrompt: generated.memoryPrompt,
-      reviews: generated.reviews.map(AppReview.fromGenerated).toList(),
+      reviews: generated.reviews?.map(AppReview.fromGenerated).toList() ?? [],
       userReview: generated.userReview == null ? null : AppReview.fromGenerated(generated.userReview!),
       deleted: false,
       enabled: generated.enabled,
@@ -474,6 +474,52 @@ class App {
       score: generated.score,
       official: generated.official ?? false,
       sourceCodeUrl: generated.sourceCodeUrl,
+    );
+  }
+
+  factory App.fromGeneratedCatalogItem(wire.GeneratedAppCatalogItem generated) {
+    return App(
+      category: generated.category,
+      approved: generated.approved,
+      status: generated.status,
+      id: generated.id,
+      email: '',
+      uid: '',
+      name: generated.name,
+      author: generated.author,
+      description: generated.description,
+      image: generated.image,
+      externalIntegration: generated.externalIntegration == null
+          ? null
+          : ExternalIntegration.fromGenerated(generated.externalIntegration!),
+      ratingAvg: generated.ratingAvg,
+      ratingCount: generated.ratingCount,
+      capabilities: (generated.capabilities ?? const <String>[]).toSet(),
+      chatPrompt: null,
+      conversationPrompt: null,
+      reviews: [],
+      userReview: null,
+      deleted: false,
+      enabled: generated.enabled,
+      installs: generated.installs,
+      private: generated.private,
+      usageCount: 0,
+      moneyMade: 0.0,
+      isPaid: generated.isPaid ?? false,
+      paymentPlan: null,
+      price: generated.price ?? 0.0,
+      isUserPaid: false,
+      paymentLink: null,
+      thumbnailIds: [],
+      thumbnailUrls: [],
+      username: null,
+      isPopular: false,
+      chatTools: [],
+      createdAt: null,
+      updatedAt: null,
+      score: null,
+      official: false,
+      sourceCodeUrl: null,
     );
   }
 

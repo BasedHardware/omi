@@ -1,11 +1,12 @@
 version: 2
 name: ptt-microphone-routing
+tier: manual
 description: Push-to-talk microphone routing flow — verify realtime hub PTT capture, warm mic reuse, cancellation cleanup, and fallback routing when another capture owns the selected input
 app: com.omi.computer-macos
 covers:
-  - desktop/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
-  - desktop/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
-  - desktop/Desktop/Sources/AudioCaptureService.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/AudioCaptureService.swift
 preconditions:
   - auth_ready
   - microphone_permission_granted

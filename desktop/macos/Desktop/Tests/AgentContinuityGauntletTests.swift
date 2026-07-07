@@ -1,4 +1,5 @@
 import XCTest
+@testable import Omi_Computer
 
 final class AgentContinuityGauntletTests: XCTestCase {
   func testGauntletRunnerFilesExist() throws {
@@ -53,5 +54,56 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(providerSource.contains("automationSwapTestOwner"))
     XCTAssertTrue(providerSource.contains("automationKernelTurnTail"))
     XCTAssertTrue(providerSource.contains("automationClearOwnerSurfaceState"))
+  }
+
+  @MainActor
+  func testAutomationActionDescriptorsExposeDiscoveryMetadata() throws {
+    let registry = DesktopAutomationActionRegistry.shared
+    registry.register(
+      name: "__metadata_contract_test__",
+      summary: "Read test-only metadata",
+      params: ["limit"],
+      category: "read",
+      surfaces: ["test_surface"],
+      safety: "read_only",
+      sideEffects: [],
+      examples: ["./scripts/omi-ctl action __metadata_contract_test__ limit=1"]
+    ) { _ in
+      ["ok": "true"]
+    }
+    defer { registry.unregister("__metadata_contract_test__") }
+
+    let descriptor = try XCTUnwrap(
+      registry.descriptors().first { $0.name == "__metadata_contract_test__" }
+    )
+    XCTAssertEqual(descriptor.summary, "Read test-only metadata")
+    XCTAssertEqual(descriptor.params, ["limit"])
+    XCTAssertEqual(descriptor.category, "read")
+    XCTAssertEqual(descriptor.surfaces, ["test_surface"])
+    XCTAssertEqual(descriptor.safety, "read_only")
+    XCTAssertEqual(descriptor.examples, ["./scripts/omi-ctl action __metadata_contract_test__ limit=1"])
+    XCTAssertTrue(descriptor.preferSemantic)
+  }
+
+  func testAutomationActionDescriptorInfersUsefulMetadataForBuiltins() throws {
+    let snapshot = DesktopAutomationActionDescriptor(
+      name: "main_chat_snapshot",
+      summary: "Export main-chat state",
+      params: ["limit"]
+    )
+    XCTAssertEqual(snapshot.category, "read")
+    XCTAssertEqual(snapshot.surfaces, ["main_chat"])
+    XCTAssertEqual(snapshot.safety, "read_only")
+    XCTAssertEqual(snapshot.examples, ["./scripts/omi-ctl action main_chat_snapshot limit=<value>"])
+
+    let capture = DesktopAutomationActionDescriptor(
+      name: "capture_floating_bar_png",
+      summary: "Capture the floating bar",
+      params: ["path"]
+    )
+    XCTAssertEqual(capture.category, "capture")
+    XCTAssertEqual(capture.surfaces, ["floating_bar"])
+    XCTAssertEqual(capture.safety, "local_artifact")
+    XCTAssertEqual(capture.sideEffects, ["writes local artifact file"])
   }
 }

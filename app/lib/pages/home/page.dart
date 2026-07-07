@@ -806,8 +806,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 width: 42,
                 height: 42,
                 margin: const EdgeInsets.only(right: 6),
+                alignment: Alignment.center,
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
               ),
             ),
           ],
@@ -853,8 +854,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -863,8 +864,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
