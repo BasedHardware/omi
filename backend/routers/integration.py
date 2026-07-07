@@ -30,7 +30,7 @@ from utils.conversations.location import get_google_maps_location
 from utils.conversations.render import redact_conversation_for_integration
 from utils.conversations.memories import process_external_integration_memory
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.search import search_conversations
+from utils.conversations.search import search_conversations, ConversationSearchUnavailable
 from utils.other.endpoints import check_rate_limit_inline
 from utils.executors import run_blocking, db_executor, postprocess_executor, critical_executor
 import logging
@@ -482,15 +482,18 @@ def search_conversations_via_integration(
             )
 
     # Search conversations
-    search_results = search_conversations(
-        query=search_request.query,
-        page=cast(int, search_request.page),
-        per_page=cast(int, search_request.per_page),
-        uid=uid,
-        include_discarded=cast(bool, search_request.include_discarded),
-        start_date=cast(int, start_timestamp),
-        end_date=cast(int, end_timestamp),
-    )
+    try:
+        search_results = search_conversations(
+            query=search_request.query,
+            page=cast(int, search_request.page),
+            per_page=cast(int, search_request.per_page),
+            uid=uid,
+            include_discarded=cast(bool, search_request.include_discarded),
+            start_date=cast(int, start_timestamp),
+            end_date=cast(int, end_timestamp),
+        )
+    except ConversationSearchUnavailable:
+        raise HTTPException(status_code=503, detail="Conversation search is temporarily unavailable. Please try again.")
 
     # Extract conversation IDs from search results
     conversation_ids = [conv.get('id') for conv in search_results['items']]

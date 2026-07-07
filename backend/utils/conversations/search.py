@@ -3,9 +3,32 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 
+import requests
 import typesense
+from typesense import exceptions as typesense_exceptions
 
 logger = logging.getLogger(__name__)
+
+
+class ConversationSearchUnavailable(Exception):
+    """Raised when hosted Typesense is transiently unreachable (read timeout, connection drop, 5xx).
+
+    Callers on a direct search endpoint should map this to a 503 instead of a 500 traceback;
+    hybrid callers (keyword + vector) fall open to vector-only results (issue #9188).
+    """
+
+
+# Transient upstream failures where the user's data is fine and a later retry may succeed — a read
+# timeout / connection drop / SSL / 5xx from hosted Typesense. typesense re-raises the raw
+# requests.exceptions.* after exhausting node retries, so catch those plus its own 5xx/timeout types.
+# NOT included: RequestMalformed/RequestUnauthorized (bad query/config) — those stay surfaced as bugs.
+_TRANSIENT_SEARCH_ERRORS = (
+    requests.exceptions.RequestException,
+    typesense_exceptions.Timeout,
+    typesense_exceptions.ServerError,
+    typesense_exceptions.ServiceUnavailable,
+    typesense_exceptions.HTTPStatus0Error,
+)
 
 client = typesense.Client(
     {
@@ -78,7 +101,14 @@ def search_conversations(
             'page': page,
         }
 
-        results: Dict[str, Any] = cast(Dict[str, Any], client.collections['conversations'].documents.search(search_parameters))  # type: ignore[reportUnknownMemberType]  # typesense client untyped
+        try:
+            results: Dict[str, Any] = cast(Dict[str, Any], client.collections['conversations'].documents.search(search_parameters))  # type: ignore[reportUnknownMemberType]  # typesense client untyped
+        except _TRANSIENT_SEARCH_ERRORS as e:
+            # Compact one-line bucket instead of a full traceback for an expected upstream blip.
+            logger.warning(
+                "search_conversations upstream unavailable uid=%s service=typesense err=%s", uid, type(e).__name__
+            )
+            raise ConversationSearchUnavailable("conversation search temporarily unavailable") from e
         memories: List[Dict[str, Any]] = []
         for item in results.get('hits', []):
             doc: Dict[str, Any] = item.get('document', {})
@@ -110,6 +140,9 @@ def search_conversations(
             'current_page': page,
             'per_page': per_page,
         }
+    except ConversationSearchUnavailable:
+        # Typed transient-upstream signal — let callers map it to a degraded/503 response.
+        raise
     except Exception as e:
         raise Exception(f"Failed to search conversations: {str(e)}")
 
