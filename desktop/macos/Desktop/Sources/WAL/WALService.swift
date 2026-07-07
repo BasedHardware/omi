@@ -376,11 +376,13 @@ final class WALService: ObservableObject {
 
         let frameCount = frames.count
         let group = DispatchGroup()
+        var writeSucceeded = false
         group.enter()
         DispatchQueue.global(qos: .utility).async {
             do {
                 try fileData.write(to: fileUrl, options: .atomic)
                 log("WALService: Wrote \(frameCount) frames to \(fileName)")
+                writeSucceeded = true
             } catch {
                 log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
             }
@@ -388,7 +390,7 @@ final class WALService: ObservableObject {
         }
         group.wait()
 
-        if let index = wals.firstIndex(where: { $0.id == walId }) {
+        if writeSucceeded, let index = wals.firstIndex(where: { $0.id == walId }) {
             wals[index].storage = .disk
             wals[index].filePath = fileName
         }
