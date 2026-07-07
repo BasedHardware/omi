@@ -34,8 +34,15 @@ Merging `desktop/macos/**` changes to `main` triggers a beta desktop release:
    - Builds universal binary (arm64 + x86_64)
    - Signs with Developer ID, notarizes with Apple
    - Creates DMG + Sparkle ZIP
+   - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing
    - Publishes GitHub release, uploads to GCS, registers in Firestore
 3. **Sparkle beta update** delivers the new version to beta users
+
+Signed artifact smoke scope:
+- Always-on release audit covers bundle identity, version/tag alignment, signing/Keychain entitlements, Sparkle metadata, backend URL leakage, helper/runtime packaging, artifact readability, and local storage package surface.
+- Codemagic uploads `build/desktop-smoke-result.json` with artifact digests and completed checks; promotion tooling should compare this result to the exact release asset before changing channels.
+- Optional live probes (`--launch --network --auth --chat --permissions --storage`) require an isolated release runner and explicit canary env vars; production-bundle launch is fail-closed unless `OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1`, and `--auth` requires `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND` to prove app-level persistence rather than a raw bearer-token curl.
+- Future release gating should split artifact creation from user visibility: create/upload the immutable artifact first, run the live smoke against that artifact, then flip beta/stable appcast/Firestore visibility only after the digest-matched smoke passes.
 
 Stable/prod is manual:
 - Before preparing stable/prod promotion, follow `docs/agent-prod-promotion-runbook.md` for target discovery, curated stable release-log creation, shared-backend coupling, approval shape, and deterministic post-promotion checks. External readiness is handled separately.

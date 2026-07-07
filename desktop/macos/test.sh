@@ -11,6 +11,7 @@ bash tests/test-app-config.sh
 bash tests/test-settings-seed.sh
 bash tests/test-cleanup-omi-tcc.sh
 bash tests/test-omi-harness.sh
+bash tests/test-signed-artifact-smoke.sh
 echo ""
 
 echo "=== Rust Backend Tests ==="
