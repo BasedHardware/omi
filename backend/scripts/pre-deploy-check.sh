@@ -22,7 +22,8 @@ EOF
 }
 
 run_hermetic() {
-  if [[ -f .python-version ]]; then
+  # Local dev only: CI runners use system python3 (see lint.yml) and do not pin .python-version.
+  if [[ -f .python-version && -z "${CI:-}" ]]; then
     expected="$(tr -d '[:space:]' < .python-version)"
     actual="$(python3 --version 2>&1 | awk '{print $2}')"
     if [[ "$actual" != "$expected" ]]; then
