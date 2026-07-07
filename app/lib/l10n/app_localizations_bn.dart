@@ -1713,12 +1713,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4698,10 +4693,7 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription এবং $triggerDescription দ্বারা ট্রিগার।';
   }
 
@@ -7777,6 +7769,9 @@ class AppLocalizationsBn extends AppLocalizations {
   String get viewAll => 'সব দেখুন';
 
   @override
+  String get expand => 'প্রসারিত করুন';
+
+  @override
   String get addTask => 'কাজ যোগ করুন';
 
   @override
@@ -8464,12 +8459,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9313,6 +9303,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get backgroundModeNote => 'আপাতত শুধু Omi ডিভাইসের সাথে কাজ করে এবং ক্রমাগত উন্নত করা হচ্ছে।';
 
   @override
+  String get backgroundModeUnavailable =>
+      'কোনো সামঞ্জস্যপূর্ণ ডিভাইস সংযুক্ত না থাকায় ব্যাকগ্রাউন্ড মোড উপলভ্য নয়। এই ফিচারটি ব্যবহার করতে একটি Omi, OpenGlass বা Friend Pendant ডিভাইস সংযুক্ত করুন।';
+
+  @override
   String get regenerateRecap => 'রিক্যাপ পুনরায় তৈরি করুন';
 
   @override
@@ -9333,4 +9327,181 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'আপনি নিজের ট্রান্সক্রিপশন প্রদানকারী ব্যবহার করেন। এই রেকর্ডিংগুলি সিঙ্ক করলে সেগুলি Omi-এর সার্ভারে ট্রান্সক্রাইব হবে এবং আপনার প্ল্যানের ট্রান্সক্রিপশন সীমার মধ্যে গণনা হবে।';
+
+  @override
+  String get transcribeLaterTitle => 'পরে ট্রান্সক্রাইব করুন';
+
+  @override
+  String get transcribeLaterDescription =>
+      'এখন অডিও রেকর্ড করুন এবং লাইভ না করে পরে নিজের প্রয়োজনমতো ট্রান্সক্রাইব করুন। রেকর্ডিংগুলো আপনার ফোনেই সংরক্ষিত থাকে, এরপর আপনি সেগুলো আপলোড করে কথোপকথন তৈরি করতে পারেন।';
+
+  @override
+  String get transcribeLaterNote =>
+      'আপাতত Omi এবং Limitless ডিভাইসের সঙ্গে কাজ করে। আপনি আপলোড করার সিদ্ধান্ত না নেওয়া পর্যন্ত অডিও আপনার ফোনেই থাকে।';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'আপনার ফোনে জায়গা কম থাকায় রেকর্ডিং সাময়িকভাবে বন্ধ রাখা হয়েছে। কিছু জায়গা খালি করুন অথবা আপনার রেকর্ডিংগুলো আপলোড করুন, তাহলে এটি আপনাআপনি আবার শুরু হবে।';
+
+  @override
+  String get recordingMode => 'রেকর্ডিং মোড';
+
+  @override
+  String get captureModeLater => 'পরে';
+
+  @override
+  String get captureModeLiveDescription => 'আপনি কথা বলার সাথে সাথে রিয়েল-টাইমে ট্রান্সক্রাইব করুন।';
+
+  @override
+  String get captureModeLaterDescription => 'এখন অডিও সংরক্ষণ করুন এবং যখন খুশি ট্রান্সক্রাইব করুন।';
+
+  @override
+  String get unmute => 'আনমিউট করুন';
+
+  @override
+  String get newRecording => 'নতুন রেকর্ডিং';
+
+  @override
+  String get transcribeLaterPaused => 'বিরতি দেওয়া হয়েছে — অডিও রেকর্ড করা হচ্ছে না';
+
+  @override
+  String get memoryThisDevice => 'এই ডিভাইস';
+
+  @override
+  String get memoryThisIphone => 'এই iPhone';
+
+  @override
+  String get memoryThisPhone => 'এই ফোন';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi কীভাবে ব্যবহার করবেন';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'আপনার Omi-তে কথা বলুন';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'কয়েকটি শব্দ বলুন এবং রিয়েল-টাইমে সেগুলো ভেসে উঠতে দেখুন';
+
+  @override
+  String get deviceOnboardingGoodJob => 'দারুণ!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'কথা বলা শুরু করুন...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi-কে একটি প্রশ্ন করুন';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'একবার বোতাম চাপুন, আপনার প্রশ্ন বলুন, তারপর শেষ হলে আবার চাপুন';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'আপনার প্রশ্ন প্রসেস করা হচ্ছে...';
+
+  @override
+  String get deviceOnboardingListening => 'শুনছি...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'বন্ধ করুন';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'চালু করুন';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '৩ সেকেন্ড বোতামটি চেপে ধরে রাখুন';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'আবার চালু করতে বোতামটি চাপুন';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'আলো নিভে না যাওয়া পর্যন্ত বোতামটি শক্ত করে চেপে ধরে রাখুন';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'সংযুক্ত';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'সংযুক্ত হয়েছে!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'সংযোগ বিচ্ছিন্ন';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'বন্ধ করা হচ্ছে...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ডাবল ট্যাপ কাস্টমাইজ করুন';
+
+  @override
+  String get deviceOnboardingEndConversation => 'কথোপকথন শেষ করুন';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'বর্তমান কথোপকথন সংরক্ষণ করে শেষ করুন';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'মিউট / আনমিউট';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'মাইক্রোফোন চালু বা বন্ধ করুন';
+
+  @override
+  String get deviceOnboardingStarConversation => 'চলমান কথোপকথন স্টার করুন';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'কথোপকথনটি গুরুত্বপূর্ণ হিসেবে চিহ্নিত করুন';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'এটি একবার ট্যাপ ছিল — দ্রুত দুবার ট্যাপ করে দেখুন!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'এখনই করে দেখুন! আপনার Omi-তে ডাবল ট্যাপ করুন';
+
+  @override
+  String get deviceOnboardingContinue => 'চালিয়ে যান';
+
+  @override
+  String get deviceOnboardingFinish => 'সম্পন্ন করুন';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'আপনার Omi-কে জানুন';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'আপনার Omi যা যা করতে পারে তার একটি দ্রুত, হাতে-কলমে ভ্রমণ।';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'প্রায় ১ মিনিট';
+
+  @override
+  String get jumpToLatestMessage => 'সর্বশেষ বার্তায় যান';
+
+  @override
+  String get latest => 'সর্বশেষ';
+
+  @override
+  String get flashFirmware => 'ফার্মওয়্যার ফ্ল্যাশ করুন';
+
+  @override
+  String get pendantRecordingTitle => 'পেনড্যান্টে রেকর্ডিং চলছে';
+
+  @override
+  String get pendantRecordingNote =>
+      'আপনার পেনড্যান্ট নিজে থেকেই রেকর্ড করছে। অ্যাপ খোলা থাকাকালীন রেকর্ডিং আপনার ফোনে সিঙ্ক হয়।';
+
+  @override
+  String get pendantSyncingRecordings => 'আপনার পেনড্যান্ট থেকে রেকর্ডিং সিঙ্ক হচ্ছে…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes মিনিট সংরক্ষিত';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'পেনড্যান্টের স্টোরেজ প্রায় পূর্ণ — সিঙ্ক করতে অ্যাপটি খোলা রাখুন।';
 }

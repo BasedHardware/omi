@@ -13,8 +13,9 @@ import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
-import 'package:omi/services/devices/omi_connection.dart';
+import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
@@ -27,6 +28,7 @@ import 'package:omi/widgets/confirmation_dialog.dart';
 
 class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption {
   CaptureProvider? captureProvider;
+  LocalRecordingsProvider? localRecordingsProvider;
 
   bool isConnecting = false;
   bool isConnected = false;
@@ -75,8 +77,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     ServiceManager.instance().device.subscribe(this, this);
   }
 
-  void setProviders(CaptureProvider provider) {
+  void setProviders(CaptureProvider provider, LocalRecordingsProvider recordingsProvider) {
     captureProvider = provider;
+    localRecordingsProvider = recordingsProvider;
     notifyListeners();
   }
 
@@ -248,8 +251,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -385,6 +389,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
 
     captureProvider?.updateRecordingDevice(null);
 
+    // Batch mode: the native writer finalizes the in-progress recording on
+    // disconnect (.bin.part -> .bin). Rescan shortly after the rename completes
+    // so the new recording shows up in the conversations list.
+    Future.delayed(const Duration(seconds: 1), () {
+      localRecordingsProvider?.refresh();
+    });
+
     // Wals
     ServiceManager.instance().wal.getSyncs().sdcard.setDevice(null);
     ServiceManager.instance().wal.getSyncs().flashPage.setDevice(null);
@@ -398,6 +409,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       deviceType: 'omi',
       isConnected: false,
     );
+
+    // Notify interactive device onboarding of disconnect
+    captureProvider?.deviceOnboardingProvider?.onDeviceDisconnected();
   }
 
   Future<(String, bool, String, Map)> shouldUpdateFirmware() async {
@@ -482,6 +496,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     }
 
     onDeviceConnected?.call(device);
+
+    // Notify interactive device onboarding of reconnect
+    captureProvider?.deviceOnboardingProvider?.onDeviceReconnected();
   }
 
   /// Check firmware version to determine multi-file sync support.
@@ -519,7 +536,8 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         final ringStatus = await connection.getRingStatus();
         if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
         Logger.debug(
-            'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)');
+          'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
+        );
         onOfflineDataDetected?.call(device, ringStatus.unreadPackets, ringStatus.usedBytes);
         return;
       }

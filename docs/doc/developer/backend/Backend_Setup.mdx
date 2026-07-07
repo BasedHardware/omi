@@ -143,7 +143,7 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
       </Tab>
       <Tab title="Windows">
         ```powershell
-        copy %APPDATA%\gcloud\application_default_credentials.json google-credentials.json
+        Copy-Item "$env:APPDATA\gcloud\application_default_credentials.json" .\google-credentials.json
         ```
       </Tab>
     </Tabs>
@@ -242,53 +242,72 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
   </Step>
   <Step title="Install System Dependencies" icon="box">
+    The backend Docker images run Python 3.11, so use Python 3.11 locally as well. If your package manager installs a newer default Python, install or select Python 3.11 before creating the virtual environment.
+
     <Tabs>
       <Tab title="macOS">
         ```bash
-        brew install python git ffmpeg opus
+        brew install python@3.11 git ffmpeg opus uv
+        uv --version
         ```
       </Tab>
       <Tab title="Windows">
+        Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then install the remaining system tools and `uv`:
+
         ```powershell
-        choco install python git.install ffmpeg
+        choco install git.install ffmpeg
+        powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+        python --version  # should print 3.11.x
+        uv --version
         ```
-        <Note>Opus is included in Windows 10 version 1903 and above.</Note>
+        <Note>
+          The Python `opuslib` package still needs a native `libopus` DLL on `PATH`. One common setup is MSYS2 UCRT64:
+          install MSYS2, run `pacman -S mingw-w64-ucrt-x86_64-opus`, add `C:\msys64\ucrt64\bin` to `PATH`,
+          then open a new shell and verify with `where.exe opus.dll`.
+        </Note>
       </Tab>
       <Tab title="Linux/Nix">
-        Python, Git, and FFmpeg are typically pre-installed. Install opus via your package manager if needed.
+        Python, Git, and FFmpeg are typically pre-installed. Install opus and `uv` via your package manager if needed, or use the standalone installer:
+
+        ```bash
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        uv --version
+        ```
       </Tab>
     </Tabs>
   </Step>
   <Step title="Set Up Python Virtual Environment" icon="python">
     <Tip>
-    Using a virtual environment is strongly recommended to avoid dependency conflicts.
+    The backend uses `uv`, `.python-version`, and `pylock.toml` for reproducible local and CI installs.
     </Tip>
-
-    ```bash
-    # Create virtual environment (use Python 3.9-3.12)
-    python -m venv venv
-    ```
 
     <Tabs>
       <Tab title="macOS/Linux">
         ```bash
-        source venv/bin/activate
+        # From backend/
+        ./scripts/sync-python-deps.sh
+        source .venv/bin/activate
         ```
       </Tab>
-      <Tab title="Windows">
+      <Tab title="Windows PowerShell">
         ```powershell
-        venv\Scripts\activate
+        # From backend/
+        bash ./scripts/sync-python-deps.sh
+        .venv\Scripts\Activate.ps1
         ```
       </Tab>
     </Tabs>
 
-    You should see `(venv)` at the beginning of your command prompt.
+    You should see `(.venv)` at the beginning of your command prompt.
   </Step>
-  <Step title="Install Python Dependencies" icon="download">
+  <Step title="Update Python Dependencies" icon="download">
+    When intentionally changing backend dependencies, edit the relevant `requirements*.txt` input, then refresh the locks:
+
     ```bash
-    pip install PyOgg
-    pip install -r requirements.txt
+    ./scripts/update-python-lock.sh
     ```
+
+    The refresh preserves already-locked package versions by default. Use `PYLOCK_UPGRADE=1 ./scripts/update-python-lock.sh` only when intentionally upgrading dependency versions.
   </Step>
   <Step title="Create Environment File" icon="file">
     ```bash
@@ -422,12 +441,12 @@ OAuth is required for user authentication. You need to configure both Google and
     Try reinstalling dependencies:
 
     ```bash
-    pip install -r requirements.txt --upgrade --force-reinstall
+    ./scripts/sync-python-deps.sh
     ```
   </Accordion>
   <Accordion title="Virtual environment not activating" icon="terminal">
     - On Windows, you may need to enable script execution: `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
-    - Make sure you're using Python 3.9-3.12
+    - Make sure you're using Python 3.11
   </Accordion>
 </AccordionGroup>
 
@@ -483,7 +502,7 @@ Complete reference for all `.env` variables:
 </Tabs>
 
 <Warning>
-The `ENCRYPTION_SECRET` in `.env.template` is for development only. **Generate a new secure key for production!**
+`.env.template` intentionally leaves `ENCRYPTION_SECRET` blank. Generate a unique securely managed value of at least 32 bytes for every real environment.
 </Warning>
 
 ---
@@ -493,7 +512,8 @@ The `ENCRYPTION_SECRET` in `.env.template` is for development only. **Generate a
 We use `black` for code formatting with a line length of 120 characters.
 
 ```bash
-pip install black
+source .venv/bin/activate
+uv pip install black
 ```
 
 To auto-format on commit, install the pre-commit hook from the repository root:

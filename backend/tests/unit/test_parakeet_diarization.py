@@ -9,11 +9,26 @@ import asyncio
 import os
 
 import numpy as np
+import pytest
 
 os.environ.setdefault('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://fake')  # enables _diarize
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 
 import utils.stt.streaming as st  # noqa: E402
+
+
+def _cosine_distance(a, b):
+    a = np.asarray(a, dtype=np.float32)
+    b = np.asarray(b, dtype=np.float32)
+    denom = np.linalg.norm(a) * np.linalg.norm(b)
+    if denom == 0:
+        return 1.0
+    return float(1.0 - np.sum(a * b) / denom)
+
+
+@pytest.fixture(autouse=True)
+def _patch_compare_embeddings(monkeypatch):
+    monkeypatch.setattr(st, 'compare_embeddings', _cosine_distance)
 
 
 def _dir_vec(idx: int, rng) -> np.ndarray:

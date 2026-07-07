@@ -1,33 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
+import { posthogResults } from '@/lib/posthog';
 export const dynamic = 'force-dynamic';
 
 type RetentionPoint = { day: number; retention: number };
 type CohortRow = { date: string; users: number; data: RetentionPoint[] };
 
-async function posthogQuery(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({
-      query: {
-        kind: 'HogQLQuery',
-        query,
-      },
-    }),
-  });
-
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(`PostHog API error: ${response.status} ${text}`);
-  }
-
-  const raw = await response.json();
-  return Array.isArray(raw.results) ? raw.results : [];
+async function posthogQuery(host: string, projectId: string, apiKey: string, query: string): Promise<any[]> {
+  return (await posthogResults(host, projectId, apiKey, query)) as any[];
 }
 
 export async function GET(request: NextRequest) {
@@ -60,7 +40,7 @@ export async function GET(request: NextRequest) {
           COALESCE(person_id, distinct_id) AS actor_id,
           min(toDate(timestamp)) AS cohort_date
         FROM events
-        WHERE event = 'App Became Active'
+        WHERE timestamp >= today() - INTERVAL ${days} DAY
           ${eventFilter}
         GROUP BY actor_id
         HAVING cohort_date >= today() - INTERVAL ${days} DAY
@@ -95,7 +75,7 @@ export async function GET(request: NextRequest) {
           COALESCE(person_id, distinct_id) AS actor_id,
           toDate(timestamp) AS event_date
         FROM events
-        WHERE event = 'App Became Active'
+        WHERE 1 = 1
           ${eventFilter}
           AND COALESCE(person_id, distinct_id) IN (${actorIds})
           AND timestamp >= today() - INTERVAL ${days} DAY

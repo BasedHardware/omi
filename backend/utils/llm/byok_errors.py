@@ -186,9 +186,7 @@ def _send_byok_llm_error_notification(uid: str, provider: str, reason: str) -> N
         try:
             response = messaging.send_each(batch_messages)
         except Exception as e:
-            logger.error(
-                'BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e
-            )
+            logger.error('BYOK LLM notification send failed uid=%s provider=%s reason=%s: %s', uid, provider, reason, e)
             continue
         for idx, result in enumerate(response.responses):
             if result.success:

@@ -1,15 +1,26 @@
-"""Tests for chat quota enforcement and snapshot logic."""
+"""Tests for chat quota enforcement and snapshot logic.
 
+utils.subscription binds its DB dependencies at import (``import database.users as
+users_db``), and database.users circularly imports utils.subscription, so the fakes
+must be active before the module is exec'd. This is the sanctioned Tier-2 "fake must
+precede import" case: see backend/docs/test_isolation.md and
+testing/import_isolation.load_module_fresh / stub_modules.
+"""
+
+import importlib
 import os
-import sys
-import types
 from datetime import datetime, timezone
-from unittest.mock import patch, MagicMock
+from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ── Stub out heavy dependencies before importing production code ────────────
-_announcements_mod = types.ModuleType("database.announcements")
+from models.users import PlanType, PlanLimits, Subscription
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
+_SUBSCRIPTION_PATH = os.path.join(str(_BACKEND), "utils", "subscription.py")
 
 
 def _compare_versions(a, b):
@@ -22,18 +33,51 @@ def _compare_versions(a, b):
     return len(a_parts) - len(b_parts)
 
 
+# Fake DB / helper modules — plain objects at module scope (no sys.modules mutation).
+# They are installed into sys.modules only inside the module-scoped fixture below
+# (the sanctioned stub_modules seam), so utils.subscription binds these fakes at
+# import time. Tests mutate their attributes to drive behavior.
+_db_users_mod = SimpleNamespace(get_user_valid_subscription=MagicMock(), is_byok_active=MagicMock(return_value=False))
+_db_user_usage_mod = SimpleNamespace(get_monthly_chat_usage=MagicMock())
+
+_announcements_mod = ModuleType("database.announcements")
 _announcements_mod._compare_versions = _compare_versions
+_announcements_mod.compare_versions = _compare_versions
 
-# Create stubs for database modules used by get_chat_quota_snapshot
-_db_users_mod = types.SimpleNamespace(get_user_valid_subscription=MagicMock())
-_db_user_usage_mod = types.SimpleNamespace(get_monthly_chat_usage=MagicMock())
+_byok_mod = ModuleType("utils.byok")
+_byok_mod.get_byok_key = MagicMock(return_value=None)
+_byok_mod.get_byok_keys = MagicMock(return_value={})
 
-sys.modules.setdefault("database._client", types.SimpleNamespace(db=MagicMock()))
-sys.modules["database.users"] = _db_users_mod
-sys.modules["database.user_usage"] = _db_user_usage_mod
-sys.modules.setdefault("database.announcements", _announcements_mod)
+# Loaded fresh by the autouse module fixture; reloaded per-test to pick up env changes.
+_sub_mod_ref = None
 
-from models.users import PlanType, PlanLimits, Subscription
+
+@pytest.fixture(scope="module", autouse=True)
+def _setup_subscription_module():
+    """Install fakes and load utils.subscription fresh for the whole module.
+
+    stub_modules keeps the fakes active for the module's lifetime and restores
+    sys.modules on teardown, so per-test attribute mutations on the fakes are
+    visible to the (re)loaded utils.subscription.
+    """
+    global _sub_mod_ref
+    fakes = {
+        "database.users": _db_users_mod,
+        "database.user_usage": _db_user_usage_mod,
+        "database.announcements": _announcements_mod,
+        "utils.byok": _byok_mod,
+    }
+    with stub_modules(fakes):
+        _sub_mod_ref = load_module_fresh("utils.subscription", _SUBSCRIPTION_PATH)
+        yield
+        _sub_mod_ref = None
+
+
+def _reload_subscription_module():
+    """Reload utils.subscription to pick up env var changes (set via monkeypatch)."""
+    importlib.reload(_sub_mod_ref)
+    return _sub_mod_ref
+
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -45,15 +89,6 @@ def _make_subscription(plan: PlanType) -> Subscription:
         status="active",
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
-
-
-def _reload_subscription_module():
-    """Reload utils.subscription to pick up env var changes."""
-    import importlib
-    import utils.subscription as sub_mod
-
-    importlib.reload(sub_mod)
-    return sub_mod
 
 
 _RESET_AT = 1735689600  # Fixed timestamp for tests
@@ -319,8 +354,8 @@ class TestEnforceChatQuota:
         ):
             sub_mod.enforce_chat_quota("uid123")  # no exception
 
-    def test_enforcement_exceeded_raises_402(self, monkeypatch):
-        """When user exceeds quota, raises HTTPException 402."""
+    def test_enforcement_exceeded_basic_raises_402(self, monkeypatch):
+        """When a free user exceeds quota, raises HTTPException 402."""
         from fastapi import HTTPException
 
         sub_mod = _reload_subscription_module()
@@ -330,10 +365,10 @@ class TestEnforceChatQuota:
             "get_chat_quota_snapshot",
             return_value={
                 'allowed': False,
-                'plan': PlanType.unlimited,
+                'plan': PlanType.basic,
                 'unit': 'questions',
-                'used': 2001,
-                'limit': 2000,
+                'used': 31,
+                'limit': 30,
                 'reset_at': _RESET_AT,
             },
         ):
@@ -342,17 +377,15 @@ class TestEnforceChatQuota:
 
             assert exc_info.value.status_code == 402
             assert exc_info.value.detail['error'] == 'quota_exceeded'
-            assert exc_info.value.detail['plan'] == 'Neo'
-            assert exc_info.value.detail['plan_type'] == 'unlimited'
+            assert exc_info.value.detail['plan'] == 'Free'
+            assert exc_info.value.detail['plan_type'] == 'basic'
             assert exc_info.value.detail['unit'] == 'questions'
-            assert exc_info.value.detail['used'] == 2001
-            assert exc_info.value.detail['limit'] == 2000
+            assert exc_info.value.detail['used'] == 31
+            assert exc_info.value.detail['limit'] == 30
             assert exc_info.value.detail['reset_at'] == _RESET_AT
 
-    def test_enforcement_402_operator_plan(self, monkeypatch):
-        """Operator plan shows correct display name in 402 detail."""
-        from fastapi import HTTPException
-
+    def test_enforcement_allows_operator_overage(self, monkeypatch):
+        """Operator plan exceeds included quota via overage, not 402."""
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -367,16 +400,10 @@ class TestEnforceChatQuota:
                 'reset_at': _RESET_AT,
             },
         ):
-            with pytest.raises(HTTPException) as exc_info:
-                sub_mod.enforce_chat_quota("uid123")
+            sub_mod.enforce_chat_quota("uid123")
 
-            assert exc_info.value.status_code == 402
-            assert exc_info.value.detail['plan'] == 'Operator'
-
-    def test_enforcement_402_architect_cost_based(self, monkeypatch):
-        """Architect plan shows cost_usd unit in 402 detail."""
-        from fastapi import HTTPException
-
+    def test_enforcement_allows_architect_cost_overage(self, monkeypatch):
+        """Architect plan exceeds included cost via overage, not 402."""
         sub_mod = _reload_subscription_module()
 
         with patch.object(
@@ -391,9 +418,4 @@ class TestEnforceChatQuota:
                 'reset_at': _RESET_AT,
             },
         ):
-            with pytest.raises(HTTPException) as exc_info:
-                sub_mod.enforce_chat_quota("uid123")
-
-            assert exc_info.value.status_code == 402
-            assert exc_info.value.detail['unit'] == 'cost_usd'
-            assert exc_info.value.detail['used'] == 400.5
+            sub_mod.enforce_chat_quota("uid123")

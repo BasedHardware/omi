@@ -4,17 +4,25 @@ Tests the Firestore helpers (set/get_user_speaker_embedding), the speech profile
 upload extraction path, and the transcribe.py Firestore loading path.
 """
 
-import os
 import sys
 
 import numpy as np
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 
-os.environ.setdefault("ENCRYPTION_SECRET", "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv")
-sys.modules.setdefault("database._client", MagicMock())
-sys.modules.setdefault("utils.other.storage", MagicMock())
-sys.modules.setdefault("utils.stt.pre_recorded", MagicMock())
+
+def _clear_speech_profile_module():
+    routers_module = sys.modules.get("routers")
+    if routers_module is not None and hasattr(routers_module, "speech_profile"):
+        delattr(routers_module, "speech_profile")
+    sys.modules.pop("routers.speech_profile", None)
+
+
+@pytest.fixture(autouse=True)
+def _cleanup_speech_profile_import():
+    _clear_speech_profile_module()
+    yield
+    _clear_speech_profile_module()
 
 
 # ─── Firestore Helpers ──────────────────────────────────────────────────────

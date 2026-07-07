@@ -1,3 +1,7 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -15,6 +19,16 @@ class AnalyticsManager {
   static final SharedPreferencesUtil _preferences = SharedPreferencesUtil();
   static final Map<String, DateTime> _pendingTimedEvents = {};
   static const Duration _pendingTimedEventTtl = Duration(hours: 1);
+  static const Duration _initTimeout = Duration(seconds: 2);
+  static const int _maxQueuedEvents = 200;
+  static const int _flushBatchSize = 20;
+  static const int _maxDeliveryAttempts = 3;
+  static const List<Duration> _retryDelays = [Duration(seconds: 1), Duration(seconds: 5), Duration(seconds: 30)];
+  static final List<_QueuedAnalyticsEvent> _queuedEvents = [];
+  static bool _flushScheduled = false;
+  static bool _flushInProgress = false;
+  static Timer? _retryTimer;
+  static int _droppedEvents = 0;
 
   /// Inject the analytics adapter at boot. Must be called before [init].
   /// Calling without ever configuring leaves every method as a no-op, which
@@ -25,15 +39,47 @@ class AnalyticsManager {
     _adapter = adapter;
   }
 
-  static Future<void> init() async {
+  static Future<void> init({Duration timeout = _initTimeout}) async {
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
       _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
     }
     final adapter = _adapter;
     if (adapter == null) return;
-    await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
-    await _loadPersonPropertyCache();
+    try {
+      await PlatformService.executeIfSupportedAsync(
+        PlatformService.isAnalyticsSupported,
+        adapter.init,
+      ).timeout(timeout);
+      await _loadPersonPropertyCache();
+      _scheduleFlush();
+    } catch (_) {}
+  }
+
+  static Future<void> flushPending({bool force = false}) => _flushQueuedEvents(force: force);
+
+  @visibleForTesting
+  static int get queuedEventCountForTesting => _queuedEvents.length;
+
+  @visibleForTesting
+  static int get droppedEventCountForTesting => _droppedEvents;
+
+  @visibleForTesting
+  static Duration retryDelayForTesting(int attempts) => _retryDelayForAttempt(attempts);
+
+  @visibleForTesting
+  static void resetForTesting() {
+    _adapter = null;
+    _initStarted = false;
+    _pendingTimedEvents.clear();
+    _lastSentPersonProperty.clear();
+    _personPropertyCacheLoaded = false;
+    _queuedEvents.clear();
+    _flushScheduled = false;
+    _flushInProgress = false;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _droppedEvents = 0;
   }
 
   factory AnalyticsManager() {
@@ -102,11 +148,13 @@ class AnalyticsManager {
           pending[cacheKey] = serialized;
         });
         if (fresh.isEmpty) return;
-        adapter.identify(userId: uid, userProperties: fresh);
-        pending.forEach((cacheKey, serialized) {
-          _lastSentPersonProperty[cacheKey] = serialized;
-          _persistPersonPropertyCacheEntry(cacheKey, serialized);
-        });
+        try {
+          adapter.identify(userId: uid, userProperties: fresh);
+          pending.forEach((cacheKey, serialized) {
+            _lastSentPersonProperty[cacheKey] = serialized;
+            _persistPersonPropertyCacheEntry(cacheKey, serialized);
+          });
+        } catch (_) {}
       });
 
   static const String _personPropertyCachePrefix = '_ph_lastset_';
@@ -158,7 +206,9 @@ class AnalyticsManager {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
-      adapter.enable();
+      try {
+        adapter.enable();
+      } catch (_) {}
       identify();
     });
   }
@@ -167,9 +217,11 @@ class AnalyticsManager {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
-      adapter.disable();
-      adapter.reset();
-      _clearPersonPropertyCache();
+      try {
+        adapter.disable();
+        adapter.reset();
+      } catch (_) {}
+      unawaited(_clearPersonPropertyCache());
     });
   }
 
@@ -179,7 +231,11 @@ class AnalyticsManager {
       if (adapter == null) return;
       final uid = _preferences.uid;
       if (uid.isEmpty) return;
-      adapter.identify(userId: uid);
+      try {
+        adapter.identify(userId: uid);
+      } catch (_) {
+        return;
+      }
       _instance.setPeopleValues();
       setNameAndEmail();
     });
@@ -189,18 +245,19 @@ class AnalyticsManager {
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
-      _clearPersonPropertyCache();
-      adapter.alias(newUserId: newUid);
-      adapter.identify(userId: newUid);
+      unawaited(_clearPersonPropertyCache());
+      try {
+        adapter.alias(newUserId: newUid);
+        adapter.identify(userId: newUid);
+      } catch (_) {
+        return;
+      }
       setNameAndEmail();
     });
   }
 
   void setNameAndEmail() {
-    _setUserPropertiesBatch({
-      '\$name': SharedPreferencesUtil().fullName,
-      '\$email': SharedPreferencesUtil().email,
-    });
+    _setUserPropertiesBatch({'\$name': SharedPreferencesUtil().fullName, '\$email': SharedPreferencesUtil().email});
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -219,8 +276,92 @@ class AnalyticsManager {
         if (start != null) {
           props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
         }
-        adapter.track(eventName: eventName, properties: props);
+        _enqueueEvent(_QueuedAnalyticsEvent(eventName: eventName, properties: props));
       });
+
+  static void _enqueueEvent(_QueuedAnalyticsEvent event) {
+    while (_queuedEvents.length >= _maxQueuedEvents) {
+      _queuedEvents.removeAt(0);
+      _droppedEvents++;
+    }
+    _queuedEvents.add(event);
+    _scheduleFlush();
+  }
+
+  static void _scheduleFlush() {
+    if (_flushScheduled || _flushInProgress || (_retryTimer?.isActive ?? false)) return;
+    _flushScheduled = true;
+    unawaited(
+      Future<void>.microtask(() async {
+        _flushScheduled = false;
+        await _flushQueuedEvents();
+      }),
+    );
+  }
+
+  static Future<void> _flushQueuedEvents({bool force = false}) async {
+    if (_flushInProgress) return;
+    if (force) {
+      _retryTimer?.cancel();
+      _retryTimer = null;
+    } else if (_retryTimer?.isActive ?? false) {
+      return;
+    }
+    var retryLater = false;
+    var flushAgain = false;
+    var retryDelay = _retryDelays.last;
+    _flushInProgress = true;
+    try {
+      final adapter = _adapter;
+      if (adapter == null || !adapter.isInitialized) {
+        retryLater = _queuedEvents.isNotEmpty;
+        retryDelay = _retryDelays.last;
+        return;
+      }
+
+      var delivered = 0;
+      while (_queuedEvents.isNotEmpty && delivered < _flushBatchSize) {
+        final event = _queuedEvents.removeAt(0);
+        try {
+          adapter.track(eventName: event.eventName, properties: event.properties);
+          delivered++;
+        } catch (_) {
+          final retriedEvent = event.nextAttempt();
+          _requeueOrDrop(retriedEvent);
+          retryLater = _queuedEvents.isNotEmpty;
+          retryDelay = _retryDelayForAttempt(event.attempts);
+          return;
+        }
+      }
+      flushAgain = _queuedEvents.isNotEmpty;
+    } finally {
+      _flushInProgress = false;
+      if (retryLater) {
+        _scheduleRetry(retryDelay);
+      } else if (flushAgain) {
+        _scheduleFlush();
+      }
+    }
+  }
+
+  static void _requeueOrDrop(_QueuedAnalyticsEvent event) {
+    if (event.attempts >= _maxDeliveryAttempts) {
+      _droppedEvents++;
+      return;
+    }
+    _queuedEvents.insert(0, event);
+  }
+
+  static Duration _retryDelayForAttempt(int attempts) {
+    final delayIndex = attempts <= 0 ? 0 : attempts;
+    if (delayIndex >= _retryDelays.length) return _retryDelays.last;
+    return _retryDelays[delayIndex];
+  }
+
+  static void _scheduleRetry(Duration delay) {
+    if (_retryTimer?.isActive ?? false) return;
+    _retryTimer = Timer(delay, _scheduleFlush);
+  }
 
   void startTimingEvent(String eventName) =>
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
@@ -246,13 +387,27 @@ class AnalyticsManager {
   void onboardingUserAcquisitionSource(String source) =>
       track('User Acquisition Source', properties: {'source': source});
 
+  // Interactive device onboarding
+  void deviceOnboardingStarted({String source = 'auto'}) =>
+      track('Device Onboarding Started', properties: {'source': source});
+
+  void deviceOnboardingStepCompleted(String step) =>
+      track('Device Onboarding Step Completed', properties: {'step': step});
+
+  void deviceOnboardingCompleted() => track('Device Onboarding Completed');
+
+  void deviceOnboardingAbandoned(int step) => track('Device Onboarding Abandoned', properties: {'step': step});
+
+  void deviceOnboardingDoubleTapConfigured(int action) =>
+      track('Device Onboarding Double Tap Configured', properties: {'action': action});
+
   void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-        'Developer Settings Saved',
-        properties: {
-          'has_webhook_memory_created': hasWebhookConversationCreated,
-          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-        },
-      );
+    'Developer Settings Saved',
+    properties: {
+      'has_webhook_memory_created': hasWebhookConversationCreated,
+      'has_webhook_transcript_received': hasWebhookTranscriptReceived,
+    },
+  );
 
   void pageOpened(String name) => track('$name Opened');
 
@@ -281,6 +436,15 @@ class AnalyticsManager {
   void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
 
   void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
+
+  // Transcribe Later (batch / offline capture)
+  void transcribeLaterToggled({required bool enabled}) =>
+      track('Transcribe Later Toggled', properties: {'enabled': enabled});
+
+  void transcribeLaterRecordingCaptured({int? durationSeconds}) =>
+      track('Transcribe Later Recording Captured', properties: {'duration_seconds': durationSeconds});
+
+  void transcribeLaterRecordingProcessed() => track('Transcribe Later Recording Processed');
 
   // Phone Calls (VoIP)
   void phoneCallPageOpened() => track('Phone Call Page Opened');
@@ -460,19 +624,18 @@ class AnalyticsManager {
     required String chatTargetId,
     required bool isPersonaChat,
     required bool isVoiceInput,
-  }) =>
-      track(
-        'Chat Message Sent',
-        properties: {
-          'message_length': message.length,
-          'message_word_count': message.split(' ').length,
-          'includes_files': includesFiles,
-          'number_of_files': numberOfFiles,
-          'chat_target_id': chatTargetId,
-          'is_persona_chat': isPersonaChat,
-          'is_voice_input': isVoiceInput,
-        },
-      );
+  }) => track(
+    'Chat Message Sent',
+    properties: {
+      'message_length': message.length,
+      'message_word_count': message.split(' ').length,
+      'includes_files': includesFiles,
+      'number_of_files': numberOfFiles,
+      'chat_target_id': chatTargetId,
+      'is_persona_chat': isPersonaChat,
+      'is_voice_input': isVoiceInput,
+    },
+  );
 
   void chatVoiceInputUsed({required String chatTargetId, required bool isPersonaChat}) {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
@@ -493,9 +656,9 @@ class AnalyticsManager {
       track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
 
   void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
-      );
+    'Short Conversation Threshold Changed',
+    properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  );
 
   void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
 
@@ -510,28 +673,28 @@ class AnalyticsManager {
   void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
-        'Conversation Selected For Merge',
-        properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
-      );
+    'Conversation Selected For Merge',
+    properties: {'conversation_id': conversationId, 'total_selected': totalSelected},
+  );
 
   void conversationMergeInitiated(List<String> conversationIds) => track(
-        'Conversation Merge Initiated',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Initiated',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   void conversationMergeCompleted(String mergedConversationId, List<String> removedConversationIds) => track(
-        'Conversation Merge Completed',
-        properties: {
-          'merged_conversation_id': mergedConversationId,
-          'removed_count': removedConversationIds.length,
-          'removed_conversation_ids': removedConversationIds,
-        },
-      );
+    'Conversation Merge Completed',
+    properties: {
+      'merged_conversation_id': mergedConversationId,
+      'removed_count': removedConversationIds.length,
+      'removed_conversation_ids': removedConversationIds,
+    },
+  );
 
   void conversationMergeFailed(List<String> conversationIds) => track(
-        'Conversation Merge Failed',
-        properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
-      );
+    'Conversation Merge Failed',
+    properties: {'conversation_count': conversationIds.length, 'conversation_ids': conversationIds},
+  );
 
   // Important Conversation Share Events
   void importantConversationNotificationReceived(String conversationId) =>
@@ -541,14 +704,14 @@ class AnalyticsManager {
       track('Share To Contacts Sheet Opened', properties: {'conversation_id': conversationId});
 
   void shareToContactsSelected(String conversationId, int contactCount) => track(
-        'Share To Contacts Selected',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts Selected',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void shareToContactsSmsOpened(String conversationId, int contactCount) => track(
-        'Share To Contacts SMS Opened',
-        properties: {'conversation_id': conversationId, 'contact_count': contactCount},
-      );
+    'Share To Contacts SMS Opened',
+    properties: {'conversation_id': conversationId, 'contact_count': contactCount},
+  );
 
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
@@ -685,11 +848,11 @@ class AnalyticsManager {
       track('Delete Account Kept Account', properties: {'step': step, 'reason': reason});
 
   void deleteUser() => PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
-        final adapter = _adapter;
-        if (adapter == null) return;
-        adapter.track(eventName: 'User Deleted');
-        adapter.reset();
-      });
+    final adapter = _adapter;
+    if (adapter == null) return;
+    adapter.track(eventName: 'User Deleted');
+    adapter.reset();
+  });
 
   // Apps Filter
   void appsFilterOpened() => track('Apps Filter Opened');
@@ -1037,6 +1200,10 @@ class AnalyticsManager {
   // ============================================================================
   // AUDIO PLAYBACK TRACKING
   // ============================================================================
+
+  void audioPlaybackFailed({required String conversationId, required String reason}) {
+    track('Audio Playback Failed', properties: {'conversation_id': conversationId, 'reason': reason});
+  }
 
   void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {
     track(
@@ -1755,4 +1922,15 @@ class AnalyticsManager {
     }
     return value.toString();
   }
+}
+
+class _QueuedAnalyticsEvent {
+  const _QueuedAnalyticsEvent({required this.eventName, required this.properties, this.attempts = 0});
+
+  final String eventName;
+  final Map<String, Object> properties;
+  final int attempts;
+
+  _QueuedAnalyticsEvent nextAttempt() =>
+      _QueuedAnalyticsEvent(eventName: eventName, properties: properties, attempts: attempts + 1);
 }

@@ -1,23 +1,26 @@
-import time
 import base64
 import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator, List, Optional, Tuple
 
-from utils.executors import storage_executor
+from fastapi import HTTPException
 
 import database.chat as chat_db
 import database.notifications as notification_db
 import database.users as user_db
 from database.apps import record_app_usage
+from models.app import App, UsageHistoryType
 from models.chat import ChatSession, Message, ResponseMessage, MessageConversation
 from models.notification_message import NotificationMessage
-from utils.conversations.factory import deserialize_conversation
-from models.app import UsageHistoryType
 from models.transcript_segment import TranscriptSegment
+from utils.apps import get_available_app_by_id
+from utils.executors import run_blocking, db_executor
 from utils.conversation_helpers import extract_memory_ids
+from utils.conversations.factory import deserialize_conversation
+from utils.llm.chat import initial_chat_message
+from utils.llm.persona import initial_persona_chat_message
 from utils.notifications import send_notification
-from utils.other.storage import get_syncing_file_temporal_signed_url, delete_syncing_temporal_file
+from utils.other.storage import get_syncing_file_temporal_signed_url, schedule_syncing_temporal_file_deletion
 from utils.retrieval.graph import execute_graph_chat, execute_graph_chat_stream
 from utils.stt.pre_recorded import (
     get_deepgram_model_for_language,
@@ -29,6 +32,62 @@ from utils.llm.usage_tracker import track_usage, set_usage_context, reset_usage_
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def acquire_chat_session(uid: str, app_id: Optional[str] = None):
+    chat_session = chat_db.get_chat_session(uid, app_id=app_id)
+    if chat_session is None:
+        cs = ChatSession(id=str(uuid.uuid4()), created_at=datetime.now(timezone.utc), plugin_id=app_id)
+        chat_session = chat_db.add_chat_session(uid, cs.model_dump())
+    return chat_session
+
+
+def initial_message_util(uid: str, app_id: Optional[str] = None, chat_session_id: Optional[str] = None):
+    logger.info(f'initial_message_util {app_id}')
+
+    # init chat session — use provided session_id if available, otherwise acquire by app_id
+    if chat_session_id:
+        chat_session = chat_db.get_chat_session_by_id(uid, chat_session_id)
+        if chat_session is None:
+            raise HTTPException(status_code=404, detail='Chat session not found')
+    else:
+        chat_session = acquire_chat_session(uid, app_id=app_id)
+
+    # Load previous messages — session-scoped when session_id is provided, app-scoped otherwise
+    if chat_session_id:
+        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, chat_session_id=chat_session_id)))
+    else:
+        prev_messages = list(reversed(chat_db.get_messages(uid, limit=5, app_id=app_id)))
+    logger.info(f'initial_message_util returned {len(prev_messages)} prev messages for {app_id}')
+
+    app = get_available_app_by_id(app_id, uid)
+    app = App(**app) if app else None
+
+    text: str
+    if app and app.is_a_persona():
+        text = initial_persona_chat_message(uid, app, [Message(**msg) for msg in prev_messages])
+    else:
+        prev_messages_str = ''
+        if prev_messages:
+            prev_messages_str = 'Previous conversation history:\n'
+            prev_messages_str += Message.get_messages_as_string([Message(**msg) for msg in prev_messages])
+        logger.info(f'initial_message_util {len(prev_messages_str)} {app_id}')
+        text = initial_chat_message(uid, app, prev_messages_str)
+
+    ai_message = Message(
+        id=str(uuid.uuid4()),
+        text=text,
+        created_at=datetime.now(timezone.utc),
+        sender='ai',
+        app_id=app_id,
+        from_external_integration=False,
+        type='text',
+        memories_id=[],
+        chat_session_id=chat_session['id'],
+    )
+    chat_db.add_message(uid, ai_message.model_dump())
+    chat_db.add_message_to_chat_session(uid, chat_session['id'], ai_message.id)
+    return ai_message
 
 
 def resolve_voice_message_language(uid: str, request_language: Optional[str]) -> str:
@@ -63,12 +122,7 @@ def transcribe_voice_message_segment(
     language: str = 'multi',
 ) -> Tuple[Optional[str], Optional[str]]:
     url = get_syncing_file_temporal_signed_url(path)
-
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
-
-    storage_executor.submit(delete_file)
+    schedule_syncing_temporal_file_deletion(path)
 
     if not language:
         language = resolve_voice_message_language(uid, None)
@@ -178,12 +232,7 @@ def process_voice_message_segment(
     language: str = 'multi',
 ):
     url = get_syncing_file_temporal_signed_url(path)
-
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
-
-    storage_executor.submit(delete_file)
+    schedule_syncing_temporal_file_deletion(path)
 
     if not language:
         language = resolve_voice_message_language(uid, None)
@@ -212,7 +261,7 @@ def process_voice_message_segment(
     message = Message(
         id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
-    chat_db.add_message(uid, message.dict())
+    chat_db.add_message(uid, message.model_dump())
 
     # not support plugin
     app = None
@@ -231,19 +280,19 @@ def process_voice_message_segment(
         type='text',
         memories_id=memories_id,
     )
-    chat_db.add_message(uid, ai_message.dict())
+    chat_db.add_message(uid, ai_message.model_dump())
     ai_message.memories = memories if len(memories) < 5 else memories[:5]
     if app_id:
         record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
 
-    ai_message_resp = ai_message.dict()
+    ai_message_resp = ai_message.model_dump()
 
     ai_message_resp['ask_for_nps'] = ask_for_nps
 
     # send notification
     send_chat_message_notification(uid, "omi", "omi", ai_message.text, ai_message.id)
 
-    return [message.dict(), ai_message_resp]
+    return [message.model_dump(), ai_message_resp]
 
 
 async def process_voice_message_segment_stream(
@@ -252,12 +301,7 @@ async def process_voice_message_segment_stream(
     language: str = 'multi',
 ) -> AsyncGenerator[str, None]:
     url = get_syncing_file_temporal_signed_url(path)
-
-    def delete_file():
-        time.sleep(480)
-        delete_syncing_temporal_file(path)
-
-    storage_executor.submit(delete_file)
+    schedule_syncing_temporal_file_deletion(path)
 
     if not language:
         language = resolve_voice_message_language(uid, None)
@@ -287,14 +331,14 @@ async def process_voice_message_segment_stream(
         id=str(uuid.uuid4()), text=text, created_at=datetime.now(timezone.utc), sender='human', type='text'
     )
 
-    chat_session = chat_db.get_chat_session(uid)
+    chat_session = await run_blocking(db_executor, chat_db.get_chat_session, uid)
     chat_session = ChatSession(**chat_session) if chat_session else None
 
     if chat_session:
         message.chat_session_id = chat_session.id
-        chat_db.add_message_to_chat_session(uid, chat_session.id, message.id)
+        await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, message.id)
 
-    chat_db.add_message(uid, message.dict())
+    await run_blocking(db_executor, chat_db.add_message, uid, message.model_dump())
 
     # stream
     mdata = base64.b64encode(bytes(message.model_dump_json(), 'utf-8')).decode('utf-8')
@@ -304,7 +348,7 @@ async def process_voice_message_segment_stream(
     app = None
     app_id = None
 
-    def process_message(response: str, callback_data: dict):
+    async def process_message(response: str, callback_data: dict):
         memories = callback_data.get('memories_found', [])
         ask_for_nps = callback_data.get('ask_for_nps', False)
         langsmith_run_id = callback_data.get('langsmith_run_id')
@@ -319,7 +363,7 @@ async def process_voice_message_segment_stream(
                     converted_memories.append(deserialize_conversation(m))
                 else:
                     converted_memories.append(m)
-            memories_id = [m.id for m in converted_memories]
+            memories_id = [str(getattr(m, 'id', '')) for m in converted_memories]
         ai_message = Message(
             id=str(uuid.uuid4()),
             text=response,
@@ -333,22 +377,26 @@ async def process_voice_message_segment_stream(
             prompt_commit=prompt_commit,  # LangSmith prompt commit for traceability
         )
 
-        chat_session = chat_db.get_chat_session(uid)
+        chat_session = await run_blocking(db_executor, chat_db.get_chat_session, uid)
         chat_session = ChatSession(**chat_session) if chat_session else None
 
         if chat_session:
             ai_message.chat_session_id = chat_session.id
-            chat_db.add_message_to_chat_session(uid, chat_session.id, ai_message.id)
+            await run_blocking(db_executor, chat_db.add_message_to_chat_session, uid, chat_session.id, ai_message.id)
 
-        chat_db.add_message(uid, ai_message.dict())
+        await run_blocking(db_executor, chat_db.add_message, uid, ai_message.model_dump())
         ai_message.memories = [MessageConversation(**m) for m in (memories if len(memories) < 5 else memories[:5])]
 
         if app_id:
-            record_app_usage(uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id)
+            await run_blocking(
+                db_executor, record_app_usage, uid, app_id, UsageHistoryType.chat_message_sent, message_id=ai_message.id
+            )
 
         return ai_message, ask_for_nps
 
-    messages = list(reversed([Message(**msg) for msg in chat_db.get_messages(uid, limit=10)]))
+    messages = list(
+        reversed([Message(**msg) for msg in await run_blocking(db_executor, chat_db.get_messages, uid, limit=10)])
+    )
     callback_data = {}
     # Set usage context for streaming (can't use 'with' across yields)
     usage_token = set_usage_context(uid, Features.CHAT)
@@ -361,8 +409,8 @@ async def process_voice_message_segment_stream(
             else:
                 response = callback_data.get('answer')
                 if response:
-                    ai_message, ask_for_nps = process_message(response, callback_data)
-                    ai_message_dict = ai_message.dict()
+                    ai_message, ask_for_nps = await process_message(response, callback_data)
+                    ai_message_dict = ai_message.model_dump()
                     response_message = ResponseMessage(**ai_message_dict)
                     response_message.ask_for_nps = ask_for_nps
                     data = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode('utf-8')

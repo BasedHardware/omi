@@ -1,0 +1,87 @@
+name: Backend Unit Tests
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-unit-tests.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-unit-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-unit-tests:
+    name: Backend unit suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Run preflight
+        working-directory: backend
+        run: bash test-preflight.sh
+
+      - name: Type-check backend typed boundary
+        working-directory: backend
+        run: bash scripts/typecheck.sh
+
+      - name: Select backend unit tests
+        id: select-tests
+        working-directory: backend
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            git diff --name-only "${{ github.event.pull_request.base.sha }}" "${{ github.sha }}" > /tmp/backend-changed-files.txt
+            python scripts/select_backend_unit_tests.py \
+              --changed-files /tmp/backend-changed-files.txt \
+              --output /tmp/backend-unit-tests.txt \
+              --reason-output /tmp/backend-unit-tests-reason.txt
+          else
+            python scripts/select_backend_unit_tests.py \
+              --all \
+              --output /tmp/backend-unit-tests.txt \
+              --reason-output /tmp/backend-unit-tests-reason.txt
+          fi
+          echo "reason=$(cat /tmp/backend-unit-tests-reason.txt)" >> "$GITHUB_OUTPUT"
+          echo "count=$(wc -l < /tmp/backend-unit-tests.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      - name: Run backend unit suite
+        working-directory: backend
+        env:
+          BACKEND_UNIT_TEST_FILE_LIST: /tmp/backend-unit-tests.txt
+          BACKEND_FAST_UNIT_MAX_SECONDS: "0.1"
+          BACKEND_PYTEST_FILE_ISOLATION: "1"
+          BACKEND_PYTEST_MARK_EXPR: "not integration and not slow"
+          BACKEND_PYTEST_XDIST: auto
+          BACKEND_PYTEST_WORKERS: auto
+        run: |
+          echo "Selected ${{ steps.select-tests.outputs.count }} backend unit test files: ${{ steps.select-tests.outputs.reason }}"
+          bash test.sh

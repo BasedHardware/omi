@@ -2,19 +2,26 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import type Stripe from 'stripe';
 import { getOptionalStripe } from '@/lib/stripe';
+import { getPayload, setPayload } from '@/lib/payload-cache';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+function cacheKey(): string {
+  return `revenue:v1`;
+}
 
-  try {
+export { cacheKey as revenueCacheKey };
+
+// Thrown when every Stripe leg fails — GET maps it to a 502.
+class AllSourcesFailedError extends Error {}
+
+export async function computeRevenue() {
     const stripe = getOptionalStripe();
     const monthlyPriceId = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const annualPriceId = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
     if (!stripe || !monthlyPriceId || !annualPriceId) {
-      return NextResponse.json({ mrr: 0, arr: 0, unavailable: true });
+      return { mrr: 0, arr: 0, unavailable: true };
     }
 
     // Fetch all active subscriptions with pagination
@@ -63,10 +70,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (results.every((r) => r.status === 'rejected')) {
-      return NextResponse.json(
-        { error: 'All revenue data sources failed' },
-        { status: 502 }
-      );
+      throw new AllSourcesFailedError('All revenue data sources failed');
     }
 
     let monthlyMRR = 0;
@@ -113,12 +117,32 @@ export async function GET(request: NextRequest) {
     const totalMRR = monthlyMRR + annualMRR;
     const totalARR = monthlyARR + annualARR;
 
-    return NextResponse.json({
+    return {
       mrr: totalMRR,
       arr: totalARR,
       partial,
-    });
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const key = cacheKey();
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeRevenue>>>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    const payload = await computeRevenue();
+    await setPayload(key, payload);
+    return NextResponse.json(payload);
   } catch (error) {
+    if (error instanceof AllSourcesFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
     console.error('Error calculating revenue metrics:', error);
     return NextResponse.json(
       { error: 'Failed to calculate revenue metrics' },

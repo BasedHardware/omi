@@ -1713,12 +1713,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4703,10 +4698,7 @@ class AppLocalizationsBs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription i pokrenuto sa $triggerDescription.';
   }
 
@@ -7791,6 +7783,9 @@ class AppLocalizationsBs extends AppLocalizations {
   String get viewAll => 'Prikaži sve';
 
   @override
+  String get expand => 'Proširi';
+
+  @override
   String get addTask => 'Dodaj zadatak';
 
   @override
@@ -8479,12 +8474,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9331,6 +9321,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get backgroundModeNote => 'Zasad radi samo s Omi uređajima i kontinuirano se poboljšava.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Pozadinski način rada nije dostupan jer nije povezan kompatibilan uređaj. Povežite Omi, OpenGlass ili Friend Pendant uređaj da koristite ovu funkciju.';
+
+  @override
   String get regenerateRecap => 'Ponovo generiši rezime';
 
   @override
@@ -9351,4 +9345,184 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkripcija kasnije';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Snimajte zvuk sada, a transkripciju pokrenite kasnije po potrebi umjesto uživo. Snimci se čuvaju na vašem telefonu, a zatim ih otpremite da biste kreirali razgovore.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Za sada radi s Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.';
+
+  @override
+  String get recordingMode => 'Način snimanja';
+
+  @override
+  String get captureModeLater => 'Kasnije';
+
+  @override
+  String get captureModeLiveDescription => 'Transkribirajte u stvarnom vremenu dok govorite.';
+
+  @override
+  String get captureModeLaterDescription => 'Spremite zvuk sada i transkribirajte kad god želite.';
+
+  @override
+  String get unmute => 'Uključi zvuk';
+
+  @override
+  String get newRecording => 'Novi snimak';
+
+  @override
+  String get transcribeLaterPaused => 'Pauzirano — zvuk se ne snima';
+
+  @override
+  String get memoryThisDevice => 'Ovaj uređaj';
+
+  @override
+  String get memoryThisIphone => 'Ovaj iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ovaj telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Kako koristiti Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Govori u svoj Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Izgovori nekoliko riječi i gledaj kako se pojavljuju u stvarnom vremenu';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Odlično!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Počni govoriti...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Postavi Omiju pitanje';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Pritisni dugme jednom, izgovori pitanje, pa pritisni ponovo kad završiš';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Obrađujem tvoje pitanje...';
+
+  @override
+  String get deviceOnboardingListening => 'Slušam...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Isključi';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Uključi';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Drži dugme 3 sekunde';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Pritisni dugme da ga ponovo uključiš';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Čvrsto drži dugme dok se svjetlo ne ugasi';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Povezano';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Povezano!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Nije povezano';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Isključivanje...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Prilagodi dvostruki dodir';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Završi razgovor';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Sačuvaj i završi trenutni razgovor';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Isključi / uključi zvuk';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Uključi ili isključi mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Označi tekući razgovor zvjezdicom';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Označi razgovor kao važan';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To je bio jedan dodir — pokušaj brzo dodirnuti dvaput!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Probaj odmah! Dvaput dodirni svoj Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Nastavi';
+
+  @override
+  String get deviceOnboardingFinish => 'Završi';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Upoznajte svoj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Brz, praktičan obilazak svega što vaš Omi može.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Oko 1 minute';
+
+  @override
+  String get jumpToLatestMessage => 'Idi na najnoviju poruku';
+
+  @override
+  String get latest => 'Najnovije';
+
+  @override
+  String get flashFirmware => 'Instaliraj firmver';
+
+  @override
+  String get pendantRecordingTitle => 'Snimanje na privjesku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Vaš privjesak snima samostalno. Snimci se sinhroniziraju s telefonom dok je aplikacija otvorena.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sinhronizacija snimaka s vašeg privjeska…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min pohranjeno';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pohrana privjeska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije.';
 }

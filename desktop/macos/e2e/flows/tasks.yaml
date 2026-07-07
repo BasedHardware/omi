@@ -1,0 +1,39 @@
+version: 2
+name: tasks
+tier: 2
+description: Tasks page navigation and tasks snapshot via automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Tasks
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 4
+
+  - id: S2
+    name: Refresh data
+    bridge.action:
+      name: refresh_all_data
+
+  - id: S3
+    name: Tasks snapshot
+    bridge.action:
+      name: tasks_snapshot
+    expect:
+      result.detail.is_signed_in: "true"
+      result.detail.load_state: "loaded"
+      result.detail.task_count_valid: "true"
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

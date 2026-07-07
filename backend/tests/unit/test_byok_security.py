@@ -7,35 +7,76 @@ cache key hashing, Gemini URL key removal, quota bypass consistency.
 import hashlib
 import os
 import re
-import sys
+import warnings
 from contextvars import copy_context
+from datetime import timezone
+from pathlib import Path
+from types import ModuleType
 from typing import Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module-level stubs: prevent Firestore/Redis init on import
-# ---------------------------------------------------------------------------
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-for-unit-tests')
 os.environ.setdefault('DEEPGRAM_API_KEY', 'dg-test-fake-for-unit-tests')
 os.environ.setdefault('GOOGLE_API_KEY', 'goog-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-
-sys.modules.setdefault('database._client', MagicMock())
-sys.modules.setdefault('database.redis_db', MagicMock())
-sys.modules.setdefault('database.users', MagicMock())
-sys.modules.setdefault('database.user_usage', MagicMock())
-sys.modules.setdefault('database.llm_usage', MagicMock())
-sys.modules.setdefault('database.announcements', MagicMock())
-sys.modules.setdefault('utils.other.storage', MagicMock())
-
-import warnings
 
 from langchain_openai import ChatOpenAI
+from testing.import_isolation import AutoMockModule, stub_modules
 
 warnings.filterwarnings('ignore', message='.*stream_options.*')
+
+_BACKEND = Path(__file__).resolve().parents[2]
+
+
+def _make_db_fakes() -> dict:
+    fakes: dict = {
+        "database._client": AutoMockModule("database._client"),
+        "database.redis_db": AutoMockModule("database.redis_db"),
+        "database.conversations": AutoMockModule("database.conversations"),
+        "database.memories": AutoMockModule("database.memories"),
+        "database.chat": AutoMockModule("database.chat"),
+        "database.users": AutoMockModule("database.users"),
+        "database.user_usage": AutoMockModule("database.user_usage"),
+        "database.llm_usage": AutoMockModule("database.llm_usage"),
+        "database.announcements": AutoMockModule("database.announcements"),
+        "database.notifications": AutoMockModule("database.notifications"),
+        "database.daily_summaries": AutoMockModule("database.daily_summaries"),
+        "database.app_review_config": AutoMockModule("database.app_review_config"),
+        "database.webhook_health": AutoMockModule("database.webhook_health"),
+        "database.action_items": AutoMockModule("database.action_items"),
+        "utils.other.storage": AutoMockModule("utils.other.storage"),
+    }
+
+    apps = ModuleType("utils.apps")
+    apps.get_available_app_by_id = MagicMock(return_value=None)
+    fakes["utils.apps"] = apps
+
+    stripe_utils = ModuleType("utils.stripe")
+    stripe_utils.cancel_subscription = MagicMock(return_value=True)
+    fakes["utils.stripe"] = stripe_utils
+
+    twilio_service = ModuleType("utils.twilio_service")
+    twilio_service.delete_user_caller_ids = MagicMock()
+    twilio_service.delete_user_caller_ids_strict = MagicMock()
+    fakes["utils.twilio_service"] = twilio_service
+
+    external_integrations = ModuleType("utils.llm.external_integrations")
+    external_integrations.generate_comprehensive_daily_summary = MagicMock()
+    fakes["utils.llm.external_integrations"] = external_integrations
+
+    streaming = ModuleType("utils.stt.streaming")
+    streaming.deepgram_nova3_multi_languages = ['en']
+    fakes["utils.stt.streaming"] = streaming
+
+    return fakes
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _byok_isolation():
+    with stub_modules(_make_db_fakes()):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -280,7 +321,7 @@ class TestGeminiKeyNotInUrl:
 
 
 class TestChatQuotaBYOKBypass:
-    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
     def test_enforce_chat_quota_bypasses_for_byok_with_openai_key(self, mock_users_db, mock_get_key):
         mock_users_db.is_byok_active.return_value = True
@@ -665,7 +706,7 @@ class TestMiddlewareIsolation:
 
 
 class TestQuotaBoundaryTests:
-    @patch('utils.byok.get_byok_key')
+    @patch('utils.subscription.get_byok_key')
     @patch('utils.subscription.users_db')
     def test_chat_quota_bypasses_with_anthropic_key_only(self, mock_users_db, mock_get_key):
         """Anthropic-only BYOK should also bypass chat quota."""

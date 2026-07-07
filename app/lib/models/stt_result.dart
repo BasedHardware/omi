@@ -26,14 +26,76 @@ int _extractSpeakerId(dynamic value) {
   return 0;
 }
 
+String _extractSpeakerLabel(dynamic value, int speakerId) {
+  if (value is String && value.trim().isNotEmpty) {
+    return value.trim();
+  }
+  return 'SPEAKER_$speakerId';
+}
+
+bool _extractBool(dynamic value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1' || normalized == 'yes') return true;
+    if (normalized == 'false' || normalized == '0' || normalized == 'no') return false;
+  }
+  return false;
+}
+
+String? _extractNullableString(dynamic value) {
+  if (value == null) return null;
+  final text = value.toString().trim();
+  return text.isEmpty ? null : text;
+}
+
+List<dynamic>? _extractTranslations(dynamic value) {
+  if (value is List) return value;
+  return null;
+}
+
+dynamic _schemaValue(dynamic json, String? configuredPath, String fallbackPath) {
+  if (configuredPath != null) {
+    return JsonPathNavigator.getValue(json, configuredPath);
+  }
+  return JsonPathNavigator.getValue(json, fallbackPath);
+}
+
 /// A single segment of transcribed text with timing - matches backend TranscriptSegment
 class SttSegment {
   final String text;
   final double start;
   final double end;
+  final String speaker;
   final int speakerId;
+  final bool isUser;
+  final String? personId;
+  final List<dynamic>? translations;
 
-  SttSegment({required this.text, required this.start, required this.end, this.speakerId = 0});
+  SttSegment({
+    required this.text,
+    required this.start,
+    required this.end,
+    String? speaker,
+    this.speakerId = 0,
+    this.isUser = false,
+    this.personId,
+    this.translations,
+  }) : speaker = speaker ?? 'SPEAKER_$speakerId';
+
+  Map<String, dynamic> toTranscriptSegmentJson() {
+    return {
+      'text': text.trim(),
+      'speaker': speaker,
+      'speaker_id': speakerId,
+      'is_user': isUser,
+      'start': start,
+      'end': end,
+      'person_id': personId,
+      if (translations != null) 'translations': translations,
+    };
+  }
 }
 
 class SttTranscriptionResult {
@@ -85,12 +147,30 @@ class SttTranscriptionResult {
             }
           }
 
-          // Extract speaker ID from speaker field
-          final speakerValue = schema.segmentsSpeakerField != null
-              ? JsonPathNavigator.getValue(seg, schema.segmentsSpeakerField)
-              : null;
+          final speakerValue = _schemaValue(seg, schema.segmentsSpeakerField, 'speaker');
+          final speakerIdValue = _schemaValue(seg, schema.segmentsSpeakerIdField, 'speaker_id');
+          final speakerId = speakerIdValue != null
+              ? _extractSpeakerId(speakerIdValue)
+              : _extractSpeakerId(speakerValue);
+          final speaker = _extractSpeakerLabel(speakerValue, speakerId);
+          final isUser = _extractBool(_schemaValue(seg, schema.segmentsIsUserField, 'is_user'));
+          final personId = _extractNullableString(_schemaValue(seg, schema.segmentsPersonIdField, 'person_id'));
+          final translations = _extractTranslations(
+            _schemaValue(seg, schema.segmentsTranslationsField, 'translations'),
+          );
 
-          segments.add(SttSegment(text: text, start: start, end: end, speakerId: _extractSpeakerId(speakerValue)));
+          segments.add(
+            SttSegment(
+              text: text,
+              start: start,
+              end: end,
+              speaker: speaker,
+              speakerId: speakerId,
+              isUser: isUser,
+              personId: personId,
+              translations: translations,
+            ),
+          );
         }
       }
     }
@@ -110,4 +190,33 @@ class SttTranscriptionResult {
 
     return SttTranscriptionResult(segments: segments, rawText: rawText);
   }
+}
+
+List<Map<String, dynamic>> mergeTranscriptSegmentsBySpeaker(Iterable<SttSegment> sourceSegments) {
+  final segments = <Map<String, dynamic>>[];
+
+  for (final segment in sourceSegments) {
+    if (segment.text.trim().isEmpty) continue;
+
+    final segmentJson = segment.toTranscriptSegmentJson();
+    final hasTranslations = segment.translations != null && segment.translations!.isNotEmpty;
+    final lastTranslations = segments.isNotEmpty ? segments.last['translations'] : null;
+    final lastHasTranslations = lastTranslations is List && lastTranslations.isNotEmpty;
+
+    if (segments.isEmpty ||
+        segments.last['speaker'] != segmentJson['speaker'] ||
+        segments.last['speaker_id'] != segmentJson['speaker_id'] ||
+        segments.last['is_user'] != segmentJson['is_user'] ||
+        segments.last['person_id'] != segmentJson['person_id'] ||
+        lastHasTranslations ||
+        hasTranslations) {
+      segments.add(segmentJson);
+    } else {
+      final last = segments.last;
+      last['text'] = '${last['text']} ${segment.text.trim()}';
+      last['end'] = segment.end;
+    }
+  }
+
+  return segments;
 }

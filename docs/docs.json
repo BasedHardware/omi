@@ -27,12 +27,16 @@
             "pages": [
               "doc/developer/AppSetup",
               "doc/developer/Cursor",
+              "doc/developer/agent-control-plane",
+              "doc/developer/agent-control-plane-invariants",
               {
                 "group": "Backend",
                 "pages": [
                   "doc/developer/backend/Backend_Setup",
+                  "doc/developer/backend/prod_hotfix_runbook",
                   "doc/developer/backend/backend_deepdive",
                   "doc/developer/backend/chat_system",
+                  "doc/developer/backend/llm_gateway",
                   "doc/developer/backend/StoringConversations",
                   "doc/developer/backend/transcription",
                   "doc/developer/backend/listen_pusher_pipeline"

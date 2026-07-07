@@ -1,16 +1,24 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
 
 from ._client import db, document_id_from_seed
-from database.redis_db import try_acquire_user_platform_write_lock
+from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
+DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+
+# Conservative low-risk user projections. Do NOT use these policies for
+# entitlement, BYOK, data-protection, privacy-consent, or full user-doc caching.
+_USER_LANGUAGE_CACHE = CachePolicy(namespace='user_language', version=1, ttl_seconds=300)
+_USER_TRANSCRIPTION_PREFS_CACHE = CachePolicy(namespace='user_transcription_prefs', version=1, ttl_seconds=120)
+_USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl_seconds=300)
 
 
 # Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
@@ -49,6 +57,47 @@ def _normalize_platform(raw: Optional[str]) -> tuple[Optional[str], Optional[str
         return None, None
     coarse = _PLATFORM_ALIASES.get(os_value)
     return coarse, os_value
+
+
+def record_client_device(
+    uid: str,
+    *,
+    client_device_id: Optional[str],
+    platform: Optional[str],
+    app_version: Optional[str] = None,
+    label: Optional[str] = None,
+) -> None:
+    """Upsert users/{uid}/client_devices/{client_device_id} from request headers.
+
+    Throttled via Redis (same 10-minute window as record_user_platform). Fail-open telemetry.
+    """
+    if not client_device_id or not platform:
+        return
+
+    try:
+        if not try_acquire_client_device_write_lock(uid, client_device_id):
+            return
+
+        now = datetime.now(timezone.utc)
+        coarse, _os_value = _normalize_platform(platform)
+        doc_ref = db.collection('users').document(uid).collection('client_devices').document(client_device_id)
+        updates = {
+            'platform': platform,
+            'device_class': coarse,
+            'last_seen_at': now,
+        }
+        if app_version:
+            updates['app_version'] = app_version
+        if label:
+            updates['label'] = label
+
+        snapshot = doc_ref.get()
+        if not snapshot.exists:
+            updates['first_seen_at'] = now
+
+        doc_ref.set(updates, merge=True)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("record_client_device failed for uid=%s: %s", uid, e)
 
 
 def record_user_platform(uid: str, raw_platform: Optional[str]) -> None:
@@ -123,7 +172,7 @@ def get_user_profile(uid: str) -> dict:
 
 def get_user_store_recording_permission(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('store_recording_permission', False)
 
 
@@ -135,7 +184,7 @@ def set_user_store_recording_permission(uid: str, value: bool):
 def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     """Check if user has private cloud sync enabled."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('private_cloud_sync_enabled', True)
 
 
@@ -217,14 +266,354 @@ def clear_byok_active(uid: str):
 
 def set_user_deletion_feedback(uid: str, reason: Optional[str], reason_details: Optional[str] = None):
     # Stored in a top-level collection so it survives the user record being deleted.
+    # Use merge=True so a retried delete request does not erase a durable wipe marker
+    # (pending/failed/retrying/deleting_auth) already written to the same document.
     db.collection('account_deletions').document(uid).set(
         {
             'uid': uid,
             'reason': reason or '',
             'reason_details': reason_details or '',
             'timestamp': datetime.now(timezone.utc),
-        }
+        },
+        merge=True,
     )
+
+
+def mark_user_deletion_wipe_started(uid: str):
+    """Mark that the background data wipe has been queued but not yet completed.
+
+    Persisted in the top-level ``account_deletions`` collection so it survives a
+    deploy or pod restart. A reconciliation worker can query for documents where
+    ``wipe_status == 'pending'`` and re-enqueue incomplete wipes.
+
+    The worker transitions the marker to ``'running'`` (via
+    ``mark_user_deletion_wipe_running``) as soon as it actually starts
+    executing, so the reconciler can distinguish a genuinely orphaned queued
+    wipe from one that is actively executing but slow.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'pending', 'wipe_queued_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_running(uid: str):
+    """Transition a queued wipe marker to ``running`` once the worker starts.
+
+    Called by ``background_wipe_user_data`` at the top of the wipe worker.
+    This lets the reconciler distinguish a genuinely orphaned ``pending`` wipe
+    (queued but never picked up — safe to re-enqueue)
+    from a ``running`` wipe (actively executing — only recovered if the claim
+    is stale, i.e. the worker probably crashed).
+
+    Without this, a slow but live wipe could be reclaimed as orphaned after
+    ``stale_after`` (default 10 min) and re-enqueued concurrently, leading to
+    duplicate work where a later failure overwrites a successful completion.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'running', 'wipe_running_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_intent(uid: str):
+    """Persist a non-actionable deletion intent *before* auth deletion.
+
+    Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
+    recovers stale ``'deleting_auth'`` records *after* verifying the Firebase
+    auth user is actually gone, so a crash between this write and the confirmed
+    auth deletion cannot trigger a premature data wipe for a user whose Firebase
+    account still exists.
+
+    Call ``mark_user_deletion_wipe_started`` to transition the marker to the
+    actionable ``'pending'`` state once auth deletion is confirmed.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'deleting_auth', 'wipe_intent_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_completed(uid: str):
+    """Mark the background data wipe as finished."""
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'completed', 'wipe_completed_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def mark_user_deletion_wipe_failed(uid: str):
+    """Mark the background data wipe as failed so a reconciliation worker can retry."""
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+@transactional
+def _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid: str, subscription_id: str | None, error: str):
+    snapshot = doc_ref.get(transaction=transaction)
+    if snapshot.exists:
+        status = (snapshot.to_dict() or {}).get('wipe_status')
+        if status in ('pending', 'retrying', 'running', 'failed', 'completed'):
+            return False
+
+    transaction.set(
+        doc_ref,
+        {
+            'wipe_status': 'billing_failed',
+            'billing_failed_at': datetime.now(timezone.utc),
+            'billing_subscription_id': subscription_id or '',
+            'billing_error': error,
+        },
+        merge=True,
+    )
+    return True
+
+
+def mark_user_deletion_billing_failed(uid: str, subscription_id: str | None, error: str) -> bool:
+    """Record that account deletion is blocked on Stripe cancellation.
+
+    Never clobbers an actionable or terminal wipe state. A billing failure can
+    only block deletion before a destructive wipe has been queued or started.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_billing_failed_txn(transaction, doc_ref, uid, subscription_id, error)
+
+
+def cancel_user_deletion_wipe(uid: str):
+    """Cancel a pending deletion-wipe marker.
+
+    Called when the Firebase auth deletion fails after the marker was already
+    persisted. Without this, the reconciliation worker would later wipe the
+    user's data even though their Firebase account still exists.
+    """
+    db.collection('account_deletions').document(uid).set(
+        {'wipe_status': 'cancelled', 'wipe_cancelled_at': datetime.now(timezone.utc)},
+        merge=True,
+    )
+
+
+def get_pending_deletion_wipes(
+    limit: int = 100,
+    stale_after: timedelta = timedelta(minutes=10),
+    running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
+) -> list[dict]:
+    """Return account_deletions documents whose wipe needs retry.
+
+    Queries ``failed`` records (always actionable), stale ``pending`` records
+    (queued more than ``stale_after`` ago), stale ``deleting_auth`` records
+    (intent written but never transitioned to ``pending`` — usually a crash
+    after ``auth.delete_account()`` succeeded), stale ``running`` records (worker
+    started but hasn't finished within ``running_stale_after`` — probably
+    crashed), and stale ``retrying`` claims (worker probably crashed). Fresh
+    ``pending``, ``deleting_auth``, and ``running`` markers from in-progress
+    deletions are excluded so the reconciler doesn't double-enqueue a wipe that
+    is still running.
+
+    The caller is responsible for verifying the Firebase auth user is actually
+    gone before recovering a ``deleting_auth`` record — this function returns
+    candidates, and ``claim_deletion_wipe`` also age-guards inside a transaction.
+
+    All queries are single-field equality filters on ``wipe_status`` to avoid
+    requiring Firestore composite indexes. Age filtering is done in Python.
+    """
+    stale_cutoff = datetime.now(timezone.utc) - stale_after
+    running_cutoff = datetime.now(timezone.utc) - running_stale_after
+    budget = limit
+
+    failed_docs = db.collection('account_deletions').where('wipe_status', '==', 'failed').limit(budget).stream()
+    result = [doc.to_dict() | {'uid': doc.id} for doc in failed_docs]
+
+    if len(result) < limit:
+        # Over-fetch *all* pending docs and age-filter in Python. A tight
+        # ``.limit(budget)`` would cap the query before stale records beyond the
+        # first page of fresh pending docs, leaving them permanently unqueued.
+        # The ``account_deletions`` collection only holds deletion events so
+        # the full scan is bounded.
+        pending_docs = db.collection('account_deletions').where('wipe_status', '==', 'pending').stream()
+        for doc in pending_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            queued_at = data.get('wipe_queued_at')
+            if queued_at and queued_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        # Recover stale ``running`` markers — the worker started but hasn't
+        # finished within ``running_stale_after``. This is much longer than the
+        # ``pending`` stale window because a legitimately slow wipe (queued
+        # behind other cleanup jobs) can take several minutes; we only want to
+        # reclaim a ``running`` marker when the worker has almost certainly
+        # crashed or the pod was killed mid-execution.
+        running_docs = db.collection('account_deletions').where('wipe_status', '==', 'running').stream()
+        for doc in running_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            running_at = data.get('wipe_running_at')
+            if running_at and running_at < running_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        # Over-fetch all 'deleting_auth' docs and age-filter in Python. A stale
+        # 'deleting_auth' record (intent written but never transitioned to
+        # 'pending') usually means a crash/deploy after auth.delete_account()
+        # succeeded. The reconciler verifies the Firebase user is gone before
+        # recovering these — see reconcile_pending_deletion_wipes.
+        deleting_auth_docs = db.collection('account_deletions').where('wipe_status', '==', 'deleting_auth').stream()
+        for doc in deleting_auth_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            intent_at = data.get('wipe_intent_at')
+            if intent_at and intent_at < stale_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    if len(result) < limit:
+        retrying_docs = db.collection('account_deletions').where('wipe_status', '==', 'retrying').stream()
+        for doc in retrying_docs:
+            if len(result) >= limit:
+                break
+            data = doc.to_dict()
+            claimed_at = data.get('wipe_claimed_at')
+            # Use the longer ``running_stale_after`` window so a queued-but-
+            # not-yet-running retrying claim is not returned as a candidate
+            # before the worker has had a chance to start.
+            if claimed_at and claimed_at < running_cutoff:
+                result.append(data | {'uid': doc.id})
+
+    return result
+
+
+@transactional
+def _claim_deletion_wipe_txn(
+    transaction, doc_ref, stale_after: timedelta, running_stale_after: timedelta
+) -> str | None:
+    """Atomically claim a wipe for re-enqueueing inside a Firestore transaction.
+
+    Transitions ``wipe_status`` from ``failed``, stale ``pending``, stale
+    ``deleting_auth`` (auth user verified gone by caller), stale ``running``
+    (worker crashed mid-execution), or stale ``retrying`` to ``retrying`` so
+    concurrent workers cannot re-enqueue the same wipe. Fresh ``pending``,
+    ``deleting_auth``, and ``running`` markers (recently written by an
+    in-progress deletion) are left untouched to avoid wiping data before
+    Firebase auth deletion succeeds or interrupting a live worker. ``retrying``
+    claims that are not yet stale are also refused (another worker owns them).
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict()
+    status = data.get('wipe_status')
+    now = datetime.now(timezone.utc)
+    if status == 'deleting_auth':
+        # Recoverable only after the caller verified the Firebase auth user is
+        # gone. Re-validate the age inside the transaction so a fresh intent
+        # from an in-progress deletion is never claimed prematurely.
+        intent_at = data.get('wipe_intent_at')
+        if intent_at and intent_at >= now - stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'pending':
+        # Re-validate the pending marker age *inside* the transaction. The
+        # reconciler query may have returned a stale record that was since
+        # refreshed by a new delete request; claiming a fresh marker could
+        # enqueue a wipe before Firebase auth deletion has succeeded.
+        queued_at = data.get('wipe_queued_at')
+        if queued_at and queued_at >= now - stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'running':
+        # A ``running`` marker means the worker started executing. Only reclaim
+        # it if it's stale beyond ``running_stale_after`` — the worker almost
+        # certainly crashed or the pod was killed mid-execution. A fresh or
+        # moderately recent ``running`` marker belongs to a live worker.
+        running_at = data.get('wipe_running_at')
+        if running_at and running_at >= now - running_stale_after:
+            return None
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'failed':
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return snapshot.id
+    if status == 'retrying':
+        claimed_at = data.get('wipe_claimed_at')
+        # Use the longer ``running_stale_after`` window (not ``stale_after``)
+        # because a retrying wipe was just claimed by the reconciler and
+        # enqueued. If the worker queue is delayed, the task may sit queued
+        # beyond ``stale_after`` (10 min) without transitioning to ``running``.
+        # Using the short window would let the periodic reconciler enqueue
+        # another copy every pass, causing duplicate wipes to race.
+        if claimed_at and claimed_at < now - running_stale_after:
+            # Stale claim (worker probably crashed). Re-claim it.
+            transaction.update(doc_ref, {'wipe_claimed_at': now})
+            return snapshot.id
+    return None
+
+
+def claim_deletion_wipe(
+    uid: str,
+    stale_after: timedelta = timedelta(minutes=10),
+    running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER,
+) -> str | None:
+    """Attempt to claim a pending/failed/stale wipe for re-enqueueing.
+
+    Returns the uid if claimed (caller should enqueue the wipe), or ``None`` if
+    another worker already owns a non-stale claim. This prevents the same wipe
+    from being re-enqueued concurrently by multiple workers or scheduler runs.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_txn(transaction, doc_ref, stale_after, running_stale_after)
+
+
+@transactional
+def _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after: timedelta) -> str:
+    """Claim a Cloud Tasks delivery before running an account-deletion wipe.
+
+    The claim intentionally stays in ``retrying`` until the cleanup worker
+    starts and ``background_wipe_user_data`` marks it ``running``. If the HTTP
+    request is cancelled while waiting for a cleanup thread, a later delivery can
+    retry without waiting for the long running-stale lease.
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return 'missing'
+
+    data = snapshot.to_dict()
+    status = data.get('wipe_status')
+    now = datetime.now(timezone.utc)
+
+    if status == 'completed':
+        return 'completed'
+    if status in ('cancelled', 'deleting_auth'):
+        return 'not_actionable'
+    if status == 'running':
+        running_at = data.get('wipe_running_at')
+        if running_at and running_at >= now - running_stale_after:
+            return 'running'
+
+    if status in ('pending', 'retrying', 'failed', 'running'):
+        transaction.update(doc_ref, {'wipe_status': 'retrying', 'wipe_claimed_at': now})
+        return 'claimed'
+
+    return 'not_actionable'
+
+
+def claim_deletion_wipe_for_task(uid: str, running_stale_after: timedelta = DELETION_WIPE_RUNNING_STALE_AFTER) -> str:
+    """Claim an account-deletion wipe for a Cloud Tasks worker.
+
+    Returns one of: ``claimed``, ``running``, ``completed``, ``missing``, or
+    ``not_actionable``. Only ``claimed`` callers may run the destructive wipe.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _claim_deletion_wipe_task_txn(transaction, doc_ref, running_stale_after)
 
 
 def create_person(uid: str, data: dict):
@@ -368,6 +757,37 @@ def get_person_speech_samples_count(uid: str, person_id: str) -> int:
     return len(person_data.get('speech_samples', []))
 
 
+@transactional
+def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> bool:
+    """Atomically remove a sample and its aligned transcript."""
+    snapshot = person_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return False
+
+    person_data = snapshot.to_dict()
+    samples = list(person_data.get('speech_samples', []))
+    transcripts = list(person_data.get('speech_sample_transcripts', []))
+
+    try:
+        idx = samples.index(sample_path)
+    except ValueError:
+        return False
+
+    samples.pop(idx)
+    if idx < len(transcripts):
+        transcripts.pop(idx)
+
+    transaction.update(
+        person_ref,
+        {
+            'speech_samples': samples,
+            'speech_sample_transcripts': transcripts,
+            'updated_at': datetime.now(timezone.utc),
+        },
+    )
+    return True
+
+
 def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
     """
     Remove a speech sample path from person's speech_samples list.
@@ -382,34 +802,8 @@ def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> b
         True if removed, False if person or sample not found
     """
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
-    person_doc = person_ref.get()
-
-    if not person_doc.exists:
-        return False
-
-    person_data = person_doc.to_dict()
-    samples = person_data.get('speech_samples', [])
-    transcripts = person_data.get('speech_sample_transcripts', [])
-
-    # Find index of sample to remove
-    try:
-        idx = samples.index(sample_path)
-    except ValueError:
-        return False  # Sample not found
-
-    # Remove from both arrays by index
-    samples.pop(idx)
-    if idx < len(transcripts):
-        transcripts.pop(idx)
-
-    person_ref.update(
-        {
-            'speech_samples': samples,
-            'speech_sample_transcripts': transcripts,
-            'updated_at': datetime.now(timezone.utc),
-        }
-    )
-    return True
+    transaction = db.transaction()
+    return _remove_sample_transaction(transaction, person_ref, sample_path)
 
 
 def set_user_speaker_embedding(uid: str, embedding: list) -> bool:
@@ -735,7 +1129,7 @@ def set_chat_message_rating_score(
 
 def get_stripe_connect_account_id(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('stripe_account_id', None)
 
 
@@ -751,7 +1145,7 @@ def set_paypal_payment_details(uid: str, data: dict):
 
 def get_paypal_payment_details(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('paypal_details', None)
 
 
@@ -762,7 +1156,7 @@ def set_default_payment_method(uid: str, payment_method_id: str):
 
 def get_default_payment_method(uid: str):
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('default_payment_method', None)
 
 
@@ -869,14 +1263,28 @@ def get_user_language_preference(uid: str) -> str:
     Returns:
         Language code (e.g., 'en', 'vi') or empty string if not set
     """
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
 
-    if user_doc.exists:
-        user_data = user_doc.to_dict()
-        return user_data.get('language', '')
+    def fetch_language():
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get(['language'])
 
-    return ''  # Return empty string if not set
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            return user_data.get('language', '')
+
+        return ''  # Return empty string if not set
+
+    # DESIGN DECISION: cache this typed user projection, not the full users/{uid} doc.
+    #
+    # Rationale:
+    # - Language preference is a low-risk, frequently-read setting used during
+    #   listen startup.
+    # - Full user-doc caching is intentionally avoided because users/{uid} also
+    #   contains entitlement, BYOK, privacy, and data-protection fields.
+    #
+    # Safety: cache is disabled by default, Redis failures fall back to Firestore,
+    # and set_user_language_preference() invalidates this namespace.
+    return get_or_fetch(_USER_LANGUAGE_CACHE, uid, fetch_language)
 
 
 def set_user_language_preference(uid: str, language: str) -> None:
@@ -889,6 +1297,8 @@ def set_user_language_preference(uid: str, language: str) -> None:
     """
     user_ref = db.collection('users').document(uid)
     user_ref.set({'language': language}, merge=True)
+    invalidate(_USER_LANGUAGE_CACHE, uid)
+    invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
 def get_user_onboarding_state(uid: str) -> dict:
@@ -924,17 +1334,34 @@ def get_user_subscription(uid: str) -> Subscription:
     # If subscription doesn't exist for the user, create and return a default free plan.
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
-    sub_to_store = default_subscription.dict()
+    sub_to_store = default_subscription.model_dump()
     sub_to_store.pop('features', None)
     sub_to_store.pop('limits', None)
     user_ref.set({'subscription': sub_to_store}, merge=True)
     return default_subscription
 
 
+def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
+    """Gets the user's stored subscription without creating a default record."""
+    user_ref = db.collection('users').document(uid)
+    user_doc = user_ref.get(['subscription'])
+    if not user_doc.exists:
+        return None
+
+    user_data = user_doc.to_dict()
+    if 'subscription' not in user_data:
+        return None
+
+    sub_data = user_data['subscription']
+    if sub_data.get('plan') == 'free':
+        sub_data['plan'] = PlanType.basic.value
+    return Subscription(**sub_data)
+
+
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:
     """Get user's training data opt-in status."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict()
+    user_data = user_ref.get().to_dict() or {}
     return user_data.get('training_data_opt_in', None)
 
 
@@ -1189,27 +1616,34 @@ def get_user_transcription_preferences(uid: str) -> dict:
     Returns:
         dict with 'single_language_mode' (bool), 'vocabulary' (List[str]), and 'language' (str)
     """
-    user_ref = db.collection('users').document(uid)
-    user_doc = user_ref.get()
 
-    if user_doc.exists:
-        user_data = user_doc.to_dict()
-        prefs = user_data.get('transcription_preferences', {})
+    def fetch_preferences():
+        user_ref = db.collection('users').document(uid)
+        user_doc = user_ref.get(['transcription_preferences', 'language'])
+
+        if user_doc.exists:
+            user_data = user_doc.to_dict()
+            prefs = user_data.get('transcription_preferences', {})
+            return {
+                'single_language_mode': prefs.get('single_language_mode', False),
+                'vocabulary': prefs.get('vocabulary', []),
+                'language': user_data.get('language', ''),
+                'uses_custom_stt': prefs.get('uses_custom_stt', False),
+                'custom_stt_since': prefs.get('custom_stt_since'),
+            }
+
         return {
-            'single_language_mode': prefs.get('single_language_mode', False),
-            'vocabulary': prefs.get('vocabulary', []),
-            'language': user_data.get('language', ''),
-            'uses_custom_stt': prefs.get('uses_custom_stt', False),
-            'custom_stt_since': prefs.get('custom_stt_since'),
+            'single_language_mode': False,
+            'vocabulary': [],
+            'language': '',
+            'uses_custom_stt': False,
+            'custom_stt_since': None,
         }
 
-    return {
-        'single_language_mode': False,
-        'vocabulary': [],
-        'language': '',
-        'uses_custom_stt': False,
-        'custom_stt_since': None,
-    }
+    # DESIGN DECISION: cache this typed user projection, not the full users/{uid} doc.
+    # It includes only transcription startup preferences and language. It does not
+    # include entitlement, BYOK, data-protection, or privacy-consent fields.
+    return get_or_fetch(_USER_TRANSCRIPTION_PREFS_CACHE, uid, fetch_preferences)
 
 
 def get_agent_vm(uid: str) -> Optional[dict]:
@@ -1249,6 +1683,7 @@ def set_user_transcription_preferences(uid: str, single_language_mode: bool = No
 
     if update_data:
         user_ref.update(update_data)
+        invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
 def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
@@ -1269,6 +1704,7 @@ def set_user_custom_stt_usage(uid: str, uses_custom_stt: bool) -> None:
     update_data = {'transcription_preferences.uses_custom_stt': uses_custom_stt}
     update_data['transcription_preferences.custom_stt_since'] = datetime.now(timezone.utc) if uses_custom_stt else None
     user_ref.update(update_data)
+    invalidate(_USER_TRANSCRIPTION_PREFS_CACHE, uid)
 
 
 # ============================================================================
@@ -1367,20 +1803,29 @@ def update_assistant_settings(uid: str, settings: dict) -> dict:
     return existing
 
 
-def get_ai_user_profile(uid: str) -> Optional[dict]:
+def _get_ai_user_profile_from_firestore(uid: str) -> Optional[dict]:
     user_ref = db.collection('users').document(uid)
-    doc = user_ref.get()
+    doc = user_ref.get(['ai_user_profile'])
     if not doc.exists:
         return None
     return doc.to_dict().get('ai_user_profile')
+
+
+def get_ai_user_profile(uid: str) -> Optional[dict]:
+    # DESIGN DECISION: cache only the low-risk ai_user_profile projection.
+    # Avoid full user-doc caching because high-risk entitlement/BYOK/privacy
+    # fields live on the same Firestore document.
+    return get_or_fetch(_USER_AI_PROFILE_CACHE, uid, lambda: _get_ai_user_profile_from_firestore(uid))
 
 
 def update_ai_user_profile(
     uid: str, profile_text: str = None, generated_at=None, data_sources_used: int = None
 ) -> dict:
     """Update AI user profile.  Only writes non-None fields (partial update)."""
-    # Read existing profile and merge updates
-    existing = get_ai_user_profile(uid) or {}
+    # Read existing profile directly from Firestore — never from cache — because
+    # this is a read-modify-write path. Using a stale cached projection here
+    # could overwrite newer profile fields.
+    existing = _get_ai_user_profile_from_firestore(uid) or {}
     if profile_text is not None:
         existing['profile_text'] = profile_text
     if generated_at is not None:
@@ -1389,4 +1834,5 @@ def update_ai_user_profile(
         existing['data_sources_used'] = data_sources_used
     user_ref = db.collection('users').document(uid)
     user_ref.update({'ai_user_profile': existing})
+    invalidate(_USER_AI_PROFILE_CACHE, uid)
     return existing

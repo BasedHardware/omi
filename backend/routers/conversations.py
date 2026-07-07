@@ -1,15 +1,16 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from typing import Optional, List
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 import database.conversations as conversations_db
+import database._client as db_client_module
 import database.action_items as action_items_db
 import database.memories as memories_db
 import database.redis_db as redis_db
 import database.users as users_db
-from database.vector_db import delete_vector, delete_memory_vector
+from database.vector_db import delete_vector, delete_memory_vector, delete_transcript_chunk_vectors
 from utils.other.storage import delete_conversation_audio_files
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -34,17 +35,25 @@ from utils.conversations.render import conversation_to_dict
 from models.conversation_enums import ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
+from models.app import App
 from pydantic import BaseModel
 from models.transcript_segment import TranscriptSegment
 from models.other import Person
+from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
-from utils.conversations.search import search_conversations
+from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
+from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
 from utils.other.storage import get_conversation_recording_if_exists
 from utils.app_integrations import trigger_external_integrations
+from utils.request_validation import NonNegativeOffset, PositiveLimit
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
@@ -71,8 +80,78 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
+def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
+    """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
+    items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
+    the conversation immediately: the client gets an instant open (transcript already present) and
+    polls until `status` flips to `completed`. The `deferred` flag is cleared first so the poll's
+    repeated GETs don't each kick off another enrichment. On enrichment failure the flag is
+    re-armed and status reset to completed so the next open retries cleanly instead of spinning."""
+    conversation_id = conversation.get('id')
+    try:
+        conversations_db.update_conversation(uid, conversation_id, {'deferred': False})
+    except Exception as e:
+        logger.error(f"lazy enrich claim failed uid={uid} conv={conversation_id}: {e}")
+        return conversation
+
+    def _run_enrichment():
+        try:
+            conv_obj = deserialize_conversation(conversation)
+            conv_obj.deferred = False
+            process_conversation(uid, conv_obj.language or 'en', conv_obj, force_process=True, is_reprocess=False)
+            logger.info(f"lazy enrich complete uid={uid} conv={conversation_id}")
+        except Exception as e:
+            logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
+            try:
+                conversations_db.update_conversation(
+                    uid, conversation_id, {'deferred': True, 'status': ConversationStatus.completed.value}
+                )
+            except Exception:
+                pass
+
+    submit_with_context(postprocess_executor, _run_enrichment)
+    # Return immediately — still status=processing, no summary yet; the client polls for completion.
+    conversation['deferred'] = False
+    return conversation
+
+
 class ProcessConversationRequest(BaseModel):
     calendar_meeting_context: Optional[CalendarMeetingContext] = None
+
+
+class SearchConversationsResponse(BaseModel):
+    items: List[Conversation]
+    total_pages: int
+    current_page: int
+    per_page: int
+
+
+class ConversationStatusResponse(BaseModel):
+    status: str
+
+
+class ConversationsCountResponse(BaseModel):
+    count: int
+    sources: List[str] | None = None
+
+
+class ConversationRecordingResponse(BaseModel):
+    has_recording: bool
+
+
+class SharedConversationResponse(Conversation):
+    model_config = {"extra": "allow"}
+
+    people: List[Person] = []
+
+
+class ConversationSuggestedAppsResponse(BaseModel):
+    suggested_apps: List[App]
+    conversation_id: str
+
+
+class ConversationTestPromptResponse(BaseModel):
+    summary: str
 
 
 @router.post("/v1/conversations", response_model=CreateConversationResponse, tags=['conversations'])
@@ -91,7 +170,7 @@ def process_in_progress_conversation(
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
-        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.dict()
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
 
     # Geolocation
     geolocation = redis_db.get_cached_user_geolocation(uid)
@@ -101,6 +180,63 @@ def process_in_progress_conversation(
 
     conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
     conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    messages = asyncio.run(trigger_external_integrations(uid, conversation))
+
+    return CreateConversationResponse(conversation=conversation, messages=messages)
+
+
+@router.post(
+    '/v1/conversations/{conversation_id}/finalize', response_model=CreateConversationResponse, tags=['conversations']
+)
+def finalize_conversation(
+    conversation_id: str,
+    request: ProcessConversationRequest = None,
+    uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:create")),
+):
+    """Finalize exactly one backend conversation.
+
+    Unlike POST /v1/conversations, this does not operate on the user's Redis
+    "current in-progress" pointer, so desktop retry/rotation cannot accidentally
+    finalize a newer recording.
+    """
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = deserialize_conversation(conversation)
+
+    if conversation.status != ConversationStatus.in_progress:
+        return CreateConversationResponse(conversation=conversation, messages=[])
+
+    claim_updates = {}
+    if request and request.calendar_meeting_context:
+        if not conversation.external_data:
+            conversation.external_data = {}
+        conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
+        claim_updates['external_data'] = conversation.external_data
+
+    if not conversations_db.claim_conversation_status(
+        uid,
+        conversation.id,
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=claim_updates or None,
+    ):
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        latest = deserialize_conversation(latest)
+        return CreateConversationResponse(conversation=latest, messages=[])
+
+    conversation.status = ConversationStatus.processing
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation_id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    geolocation = redis_db.get_cached_user_geolocation(uid)
+    if geolocation:
+        geolocation = Geolocation(**geolocation)
+        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+
+    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if conversation.status:
+        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -132,10 +268,25 @@ def reprocess_conversation(
     return processed_conversation
 
 
-@router.get('/v1/conversations', response_model=List[Conversation], tags=['conversations'])
+def _ensure_aware(value: datetime) -> datetime:
+    # FastAPI parses a query datetime as naive or timezone-aware depending on whether the client
+    # included a UTC offset. Normalize to timezone-aware (UTC) so comparing the two ends of a date
+    # range never raises TypeError on mixed awareness (which would surface as a 500).
+    return value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+
+
+@router.get(
+    '/v1/conversations',
+    response_model=List[Conversation],
+    tags=['conversations'],
+    description=(
+        "List responses may omit detail-only fields such as transcript_segments. "
+        "Clients should treat omitted transcript_segments as unknown/not loaded, not as an empty transcript."
+    ),
+)
 def get_conversations(
-    limit: int = 100,
-    offset: int = 0,
+    limit: PositiveLimit = 100,
+    offset: NonNegativeOffset = 0,
     statuses: Optional[str] = "processing,completed",
     include_discarded: bool = True,
     start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
@@ -144,6 +295,8 @@ def get_conversations(
     starred: Optional[bool] = Query(None, description="Filter by starred status"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     logger.info(f'get_conversations {uid} {limit} {offset} {statuses} {folder_id} {starred}')
     # force convos statuses to processing, completed on the empty filter
     if len(statuses) == 0:
@@ -165,31 +318,74 @@ def get_conversations(
     return conversations
 
 
-@router.get('/v1/conversations/count', tags=['conversations'])
+@router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
     include_discarded: bool = Query(False),
+    start_date: Optional[datetime] = Query(None, description="Filter by start date (inclusive)"),
+    end_date: Optional[datetime] = Query(None, description="Filter by end date (inclusive)"),
+    folder_id: Optional[str] = Query(None, description="Filter by folder ID"),
+    starred: Optional[bool] = Query(None, description="Filter by starred status"),
+    sources: Optional[str] = Query(None, description="Comma-separated source filter (e.g. friend,omi)"),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
     status_list = [s.strip() for s in statuses.split(',') if s.strip()] if statuses else []
-    count = conversations_db.get_conversations_count(uid, include_discarded=include_discarded, statuses=status_list)
+    source_list = [s.strip() for s in sources.split(',') if s.strip()] if sources else []
+    if status_list and source_list:
+        # Combining status+source `in` filters would need a composite index; keep them exclusive.
+        raise HTTPException(status_code=400, detail="statuses and sources filters cannot be combined")
+    count = conversations_db.get_conversations_count(
+        uid,
+        include_discarded=include_discarded,
+        statuses=status_list,
+        start_date=start_date,
+        end_date=end_date,
+        folder_id=folder_id,
+        starred=starred,
+        sources=source_list,
+    )
+    if source_list:
+        # Echo the filter so clients can tell this backend applied it (older
+        # backends ignore the unknown param and return the unfiltered total).
+        return {'count': count, 'sources': source_list}
     return {'count': count}
 
 
-@router.get("/v1/conversations/{conversation_id}", response_model=Conversation, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}",
+    response_model=Conversation,
+    tags=['conversations'],
+    description=(
+        "Detail responses include transcript fields when available. Locked or redacted conversations "
+        "may include an empty transcript_segments array even though transcript data exists."
+    ),
+)
 def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'get_conversation_by_id {uid} {conversation_id}')
-    return _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    # Lazy processing: a desktop conversation stored raw (deferred) for a freemium/Neo user is
+    # enriched on first open. Other conversations are returned unchanged.
+    if conversation.get('deferred'):
+        conversation = _enrich_deferred_conversation(uid, conversation)
+    return conversation
 
 
-@router.patch("/v1/conversations/{conversation_id}/title", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+)
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     conversations_db.update_conversation_title(uid, conversation_id, title)
     return {'status': 'Ok'}
 
 
-@router.delete("/v1/conversations/{conversation_id}/calendar-event", tags=['conversations'])
+@router.delete(
+    "/v1/conversations/{conversation_id}/calendar-event",
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def unlink_calendar_event(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """
     Unlink a calendar event from a conversation.
@@ -235,10 +431,10 @@ async def link_calendar_event(
     Link a specific Google Calendar event to an existing conversation.
     Fetches the event details and stores the calendar_event on the conversation.
     """
-    _get_valid_conversation_by_id(uid, conversation_id)
+    await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get Google Calendar access token
-    integration = users_db.get_integration(uid, 'google_calendar')
+    integration = await run_blocking(db_executor, users_db.get_integration, uid, 'google_calendar')
     if not integration or not integration.get('connected'):
         raise HTTPException(status_code=400, detail="Google Calendar not connected")
 
@@ -270,8 +466,12 @@ async def link_calendar_event(
         raise HTTPException(status_code=400, detail="Could not parse calendar event times")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -291,7 +491,7 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     Uses the conversation's started_at/finished_at to find a matching event.
     Returns 404 if no overlapping event is found.
     """
-    conversation = _get_valid_conversation_by_id(uid, conversation_id)
+    conversation = await run_blocking(db_executor, _get_valid_conversation_by_id, uid, conversation_id)
 
     # Get conversation times
     started_at = conversation.get('started_at')
@@ -306,11 +506,16 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     if not started_at:
         raise HTTPException(status_code=400, detail="Conversation has no timestamp information")
 
-    # Parse datetimes if they're strings
-    if isinstance(started_at, str):
-        started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
-    if isinstance(finished_at, str):
-        finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+    # Parse datetimes if they're strings. A stored timestamp that is not valid ISO (legacy or imported
+    # data) would otherwise raise ValueError and surface as a 500; return a clear 400 instead, matching the
+    # missing-timestamp case handled just above.
+    try:
+        if isinstance(started_at, str):
+            started_at = datetime.fromisoformat(started_at.replace('Z', '+00:00'))
+        if isinstance(finished_at, str):
+            finished_at = datetime.fromisoformat(finished_at.replace('Z', '+00:00'))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Conversation has invalid timestamp information")
 
     # Ensure timezone-aware
     if started_at.tzinfo is None:
@@ -325,8 +530,12 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
         raise HTTPException(status_code=404, detail="No overlapping calendar event found")
 
     # Persist to Firestore
-    conversations_db.update_conversation(
-        uid, conversation_id, {'calendar_event': calendar_event.model_dump(mode='json')}
+    await run_blocking(
+        db_executor,
+        conversations_db.update_conversation,
+        uid,
+        conversation_id,
+        {'calendar_event': calendar_event.model_dump(mode='json')},
     )
 
     # Automatically write the conversation link into the calendar event description
@@ -335,7 +544,9 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     return calendar_event
 
 
-@router.patch("/v1/conversations/{conversation_id}/summary", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/summary", tags=['conversations'], response_model=ConversationStatusResponse
+)
 def patch_conversation_summary(
     conversation_id: str, data: UpdateSummaryRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -347,7 +558,11 @@ def patch_conversation_summary(
     return {'status': 'Ok'}
 
 
-@router.patch("/v1/conversations/{conversation_id}/segments/text", tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/segments/text",
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def patch_conversation_segment_text(
     conversation_id: str, data: UpdateSegmentTextRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -379,26 +594,34 @@ def get_conversation_transcripts_by_models(conversation_id: str, uid: str = Depe
     return conversations_db.get_conversation_transcripts_by_model(uid, conversation_id)
 
 
-@router.delete("/v1/conversations/{conversation_id}", status_code=204, tags=['conversations'])
+@router.delete("/v1/conversations/{conversation_id}", response_model=StatusResponse, tags=['conversations'])
 def delete_conversation(
     conversation_id: str,
     background_tasks: BackgroundTasks,
+    # TODO(Q8-gated): ratified default is cascade=true — NOT flipped; needs explicit owner sign-off
+    # before changing production behavior for all users. See test_ws_j_delete_privacy.py +
+    # docs/memory/domain_model.md §Delete/privacy matrix.
     cascade: bool = Query(False),
     uid: str = Depends(auth.get_current_user_uid),
 ):
     logger.info(f'delete_conversation {conversation_id} {uid} cascade={cascade}')
     conversations_db.delete_conversation(uid, conversation_id)
     delete_vector(uid, conversation_id)
+    delete_transcript_chunk_vectors(uid, conversation_id)
 
     if cascade:
         # Delete audio files
         background_tasks.add_task(delete_conversation_audio_files, uid, conversation_id)
 
-        # Delete associated memories and their vectors
-        memory_ids = memories_db.get_memory_ids_for_conversation(uid, conversation_id)
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
-        for memory_id in memory_ids:
-            background_tasks.add_task(delete_memory_vector, uid, memory_id)
+        # Tombstone associated memory evidence and remove vectors for payloads with no remaining active support.
+        db_client = getattr(db_client_module, 'db', None)
+        memory_system = pin_memory_system(uid, db_client=db_client)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+            MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
+        else:
+            deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
+            for memory_id in deletion_result.get('vector_delete_ids', []):
+                delete_memory_vector(uid, memory_id)
 
         # Delete associated action items
         action_items_db.delete_action_items_for_conversation(uid, conversation_id)
@@ -406,29 +629,41 @@ def delete_conversation(
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/recording", response_model=dict, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/recording",
+    response_model=ConversationRecordingResponse,
+    tags=['conversations'],
+)
 def conversation_has_audio_recording(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
     _get_valid_conversation_by_id(uid, conversation_id)
     return {'has_recording': get_conversation_recording_if_exists(uid, conversation_id) is not None}
 
 
-@router.patch("/v1/conversations/{conversation_id}/events", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/events", response_model=ConversationStatusResponse, tags=['conversations']
+)
 def set_conversation_events_state(
     conversation_id: str, data: SetConversationEventsStateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
+    if len(data.events_idx) != len(data.values):
+        raise HTTPException(status_code=422, detail="events_idx and values must have the same length")
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     events = conversation.structured.events
     for i, event_idx in enumerate(data.events_idx):
-        if event_idx >= len(events):
+        if not (0 <= event_idx < len(events)):
             continue
         events[event_idx].created = data.values[i]
 
-    conversations_db.update_conversation_events(uid, conversation_id, [event.dict() for event in events])
+    conversations_db.update_conversation_events(uid, conversation_id, [event.model_dump() for event in events])
     return {"status": "Ok"}
 
 
-@router.patch("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+@router.patch(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
 def set_action_item_status(
     data: SetConversationActionItemsStateRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)
 ):
@@ -436,7 +671,7 @@ def set_action_item_status(
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     for i, action_item_idx in enumerate(data.items_idx):
-        if action_item_idx >= len(action_items):
+        if not (0 <= action_item_idx < len(action_items)):
             continue
 
         action_item = action_items[action_item_idx]
@@ -458,7 +693,7 @@ def set_action_item_status(
             action_item.completed_at = None
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
     # Mirror status updates to the standalone action_items collection
@@ -473,7 +708,7 @@ def set_action_item_status(
             description_to_ids.setdefault(desc, []).append(ai['id'])
 
         for i, action_item_idx in enumerate(data.items_idx):
-            if action_item_idx >= len(action_items):
+            if not (0 <= action_item_idx < len(action_items)):
                 continue
             action_item = action_items[action_item_idx]
             new_completed_status = data.values[i]
@@ -488,7 +723,9 @@ def set_action_item_status(
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}", response_model=dict, tags=['conversations']
+    "/v1/conversations/{conversation_id}/action-items/{action_item_idx}",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
 )
 def update_action_item_description(
     conversation_id: str, data: UpdateActionItemDescriptionRequest, uid=Depends(auth.get_current_user_uid)
@@ -508,7 +745,7 @@ def update_action_item_description(
         raise HTTPException(status_code=404, detail=f"Action item with description '{data.old_description}' not found")
 
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in action_items]
     )
 
     # Mirror description update in the standalone action_items collection
@@ -522,14 +759,18 @@ def update_action_item_description(
     return {"status": "Ok"}
 
 
-@router.delete("/v1/conversations/{conversation_id}/action-items", response_model=dict, tags=['conversations'])
+@router.delete(
+    "/v1/conversations/{conversation_id}/action-items",
+    response_model=ConversationStatusResponse,
+    tags=['conversations'],
+)
 def delete_action_item(data: DeleteActionItemRequest, conversation_id: str, uid=Depends(auth.get_current_user_uid)):
     conversation = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation)
     action_items = conversation.structured.action_items
     updated_action_items = [item for item in action_items if not (item.description == data.description)]
     conversations_db.update_conversation_action_items(
-        uid, conversation_id, [action_item.dict() for action_item in updated_action_items]
+        uid, conversation_id, [action_item.model_dump() for action_item in updated_action_items]
     )
 
     # Mirror deletion in the standalone action_items collection
@@ -596,7 +837,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
     # thinh's note: disabled for now
     # segment_words = len(conversation.transcript_segments[segment_idx].text.split(' '))
@@ -670,7 +911,7 @@ def set_assignee_conversation_segment(
         raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
     # This will be used when we setup recording for conversations, not used for now
     # get the segment with the most words with the speaker_id
@@ -727,7 +968,7 @@ def assign_segments_bulk(
                 raise HTTPException(status_code=400, detail="Invalid assign type")
 
     conversations_db.update_conversation_segments(
-        uid, conversation_id, [segment.dict() for segment in conversation.transcript_segments]
+        uid, conversation_id, [segment.model_dump() for segment in conversation.transcript_segments]
     )
 
     # Trigger speaker sample extraction when assigning to a person
@@ -748,7 +989,11 @@ def assign_segments_bulk(
 # *********************************************
 
 
-@router.patch('/v1/conversations/{conversation_id}/visibility', tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/visibility',
+    tags=['conversations'],
+    response_model=ConversationStatusResponse,
+)
 def set_conversation_visibility(
     conversation_id: str, value: ConversationVisibility, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -765,7 +1010,9 @@ def set_conversation_visibility(
     return {"status": "Ok"}
 
 
-@router.patch('/v1/conversations/{conversation_id}/starred', tags=['conversations'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+)
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
     _get_valid_conversation_by_id(uid, conversation_id)
@@ -773,7 +1020,9 @@ def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Dep
     return {"status": "Ok"}
 
 
-@router.get("/v1/conversations/{conversation_id}/shared", tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/shared", tags=['conversations'], response_model=SharedConversationResponse
+)
 def get_shared_conversation_by_id(conversation_id: str):
     uid = redis_db.get_conversation_uid(conversation_id)
     if not uid:
@@ -795,15 +1044,20 @@ def get_shared_conversation_by_id(conversation_id: str):
 
     # Return conversation with people data
     response_dict = conversation_to_dict(conversation)
-    response_dict['people'] = [p.dict() for p in people]
+    response_dict['people'] = [p.model_dump() for p in people]
     return response_dict
 
 
-@router.post("/v1/conversations/search", response_model=dict, tags=['conversations'])
+@router.post("/v1/conversations/search", response_model=SearchConversationsResponse, tags=['conversations'])
 def search_conversations_endpoint(
     search_request: SearchRequest,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:search")),
 ):
+    if search_request.speaker_id and search_request.speaker_id != 'user':
+        person = users_db.get_person(uid, search_request.speaker_id)
+        if person is None:
+            raise HTTPException(status_code=404, detail="Speaker not found")
+
     # Convert ISO datetime strings to Unix timestamps if provided
     start_timestamp = None
     end_timestamp = None
@@ -820,21 +1074,43 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
-    return search_conversations(
-        query=search_request.query,
-        page=search_request.page,
-        per_page=search_request.per_page,
-        uid=uid,
-        include_discarded=search_request.include_discarded,
-        start_date=start_timestamp,
-        end_date=end_timestamp,
+    try:
+        search_results = search_conversations(
+            query=search_request.query,
+            page=search_request.page,
+            per_page=search_request.per_page,
+            uid=uid,
+            include_discarded=search_request.include_discarded,
+            start_date=start_timestamp,
+            end_date=end_timestamp,
+            speaker_id=search_request.speaker_id,
+        )
+    except ConversationSearchUnavailableError:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
+    conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
+    conversations = conversations_db.get_conversations_by_id_without_photos(
+        uid,
+        conversation_ids,
+        include_discarded=bool(search_request.include_discarded),
     )
+    # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
+    # so search never leaks that a locked conversation matched a query.
+    conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
+    redact_conversations_for_list(conversations)
+    search_results['items'] = conversations
+    search_results['total_pages'] = (
+        search_request.page + 1 if len(conversations) >= search_request.per_page else search_request.page
+    )
+    return search_results
 
 
-@router.get("/v1/conversations/{conversation_id}/suggested-apps", response_model=dict, tags=['conversations'])
+@router.get(
+    "/v1/conversations/{conversation_id}/suggested-apps",
+    response_model=ConversationSuggestedAppsResponse,
+    tags=['conversations'],
+)
 def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
-    from utils.apps import get_available_apps, get_available_app_by_id_with_reviews
-    from models.app import App
+    from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
 
     conversation_data = _get_valid_conversation_by_id(uid, conversation_id)
     conversation = deserialize_conversation(conversation_data)
@@ -846,8 +1122,6 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
         if app_data:
             app = App(**app_data)
             # Add user-specific data
-            from utils.apps import get_is_user_paid_app
-
             app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
             # Add payment link with user reference
@@ -862,10 +1136,14 @@ def get_conversation_suggested_apps(conversation_id: str, uid: str = Depends(aut
 
             suggested_apps.append(app)
 
-    return {"suggested_apps": [app.dict() for app in suggested_apps], "conversation_id": conversation_id}
+    return {"suggested_apps": [app.model_dump() for app in suggested_apps], "conversation_id": conversation_id}
 
 
-@router.post("/v1/conversations/{conversation_id}/test-prompt", response_model=dict, tags=['conversations'])
+@router.post(
+    "/v1/conversations/{conversation_id}/test-prompt",
+    response_model=ConversationTestPromptResponse,
+    tags=['conversations'],
+)
 def test_prompt(
     conversation_id: str,
     request: TestPromptRequest,

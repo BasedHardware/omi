@@ -1,0 +1,679 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+REMOTE="${1:-origin}"
+BASE_BRANCH="${PRE_PUSH_BASE_BRANCH:-main}"
+BASE_REMOTE_REF="refs/remotes/${REMOTE}/${BASE_BRANCH}"
+
+if ! git rev-parse --verify "$BASE_REMOTE_REF" >/dev/null 2>&1; then
+  BASE_REMOTE_REF="refs/remotes/origin/${BASE_BRANCH}"
+fi
+
+if ! git rev-parse --verify "$BASE_REMOTE_REF" >/dev/null 2>&1; then
+  echo "FAIL: cannot find ${REMOTE}/${BASE_BRANCH} or origin/${BASE_BRANCH}. Run git fetch origin ${BASE_BRANCH}." >&2
+  exit 1
+fi
+
+BASE_REF=$(git merge-base "$BASE_REMOTE_REF" HEAD)
+CURRENT_BRANCH=$(git symbolic-ref --short -q HEAD || true)
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+declare -a PUSH_UPDATES=()
+declare -a DIFF_SUMMARIES=()
+while read -r local_ref local_oid remote_ref remote_oid; do
+  [ -n "${local_ref:-}" ] || continue
+  [ "${local_oid:-$ZERO_SHA}" != "$ZERO_SHA" ] || continue
+  PUSH_UPDATES+=("$local_oid:$remote_oid:$remote_ref")
+done
+
+if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
+  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
+else
+  echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+fi
+
+declare -a CHANGED_FILES=()
+if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
+  for update in "${PUSH_UPDATES[@]}"; do
+    IFS=: read -r local_oid remote_oid remote_ref <<<"$update"
+    if [ -z "$remote_oid" ] || [ "$remote_oid" = "$ZERO_SHA" ]; then
+      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
+    elif git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
+      DIFF_BASE="$remote_oid"
+    elif TRACKING_REF="refs/remotes/${REMOTE}/${remote_ref#refs/heads/}" && git rev-parse --verify "$TRACKING_REF" >/dev/null 2>&1; then
+      DIFF_BASE=$(git rev-parse "$TRACKING_REF")
+    else
+      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
+    fi
+    changed_count=$(git diff --name-only --diff-filter=ACM "$DIFF_BASE" "$local_oid" | wc -l | tr -d ' ')
+    DIFF_SUMMARIES+=("${remote_ref:-$local_oid}: ${changed_count} changed file(s) since ${DIFF_BASE:0:12}")
+    while IFS= read -r file; do
+      [ -n "$file" ] && CHANGED_FILES+=("$file")
+    done < <(git diff --name-only --diff-filter=ACM "$DIFF_BASE" "$local_oid")
+  done
+else
+  changed_count=$(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD | wc -l | tr -d ' ')
+  DIFF_SUMMARIES+=("HEAD: ${changed_count} changed file(s) since ${BASE_REF:0:12}")
+  while IFS= read -r file; do
+    [ -n "$file" ] && CHANGED_FILES+=("$file")
+  done < <(git diff --name-only --diff-filter=ACM "$BASE_REF" HEAD)
+fi
+
+if [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
+  declare -a UNIQUE_CHANGED_FILES=()
+  while IFS= read -r file; do
+    [ -n "$file" ] && UNIQUE_CHANGED_FILES+=("$file")
+  done < <(printf '%s\n' "${CHANGED_FILES[@]}" | sort -u)
+  CHANGED_FILES=("${UNIQUE_CHANGED_FILES[@]}")
+fi
+
+echo "Pre-push diff summary:"
+for summary in "${DIFF_SUMMARIES[@]}"; do
+  echo "  ${summary}"
+done
+echo "Unique changed files considered by hooks: ${#CHANGED_FILES[@]}"
+if [ "${PRE_PUSH_DEBUG:-}" = "1" ] && [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
+  printf '  %s\n' "${CHANGED_FILES[@]}"
+fi
+
+CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
+SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
+SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
+FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
+trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
+printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
+# Require backend/.venv/bin/python for all backend Python scripts. The system
+# python3 does not have backend deps (fastapi, pydantic, etc.) and using it
+# silently produces misleading failures. If the venv is missing, tell the
+# developer exactly how to create it.
+BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+if [[ ! -x "$BACKEND_PYTHON" ]]; then
+  echo "FAIL: backend/.venv/bin/python not found." >&2
+  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  exit 1
+fi
+
+run_step() {
+  echo "==> $*"
+  "$@"
+}
+
+changed_matches() {
+  local file
+  local pattern
+
+  for file in "${CHANGED_FILES[@]}"; do
+    for pattern in "$@"; do
+      case "$file" in
+        $pattern)
+          return 0
+          ;;
+      esac
+    done
+  done
+  return 1
+}
+
+check_merge_conflicts() {
+  local failed=0
+  local file
+
+  for file in "${CHANGED_FILES[@]}"; do
+    [ -n "$file" ] || continue
+    if git cat-file -e "HEAD:$file" 2>/dev/null && git grep -n -I -E '^(<<<<<<<|>>>>>>>)' HEAD -- "$file"; then
+      failed=1
+    fi
+  done
+
+  if [ "$failed" -eq 1 ]; then
+    echo "FAIL: unresolved merge conflict markers found in changed files" >&2
+    return 1
+  fi
+}
+
+check_arch_guardrails() {
+  python3 .github/scripts/check_arch_guardrails.py --changed-files "$CHANGED_FILES_LIST"
+}
+
+check_optional_formatters() {
+  local -a dart_files=()
+  local -a python_files=()
+  local -a arb_files=()
+  local -a firmware_files=()
+  local file
+  local -a black_cmd=()
+
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      *.dart)
+        if [[ "$file" != *.gen.dart && "$file" != *.g.dart ]]; then
+          dart_files+=("$file")
+        fi
+        ;;
+      backend/*.py|backend/**/*.py)
+        python_files+=("$file")
+        ;;
+      *.arb)
+        arb_files+=("$file")
+        ;;
+      omi/*.c|omi/*.cc|omi/*.cpp|omi/*.cxx|omi/*.h|omi/*.hpp|omiGlass/*.c|omiGlass/*.cc|omiGlass/*.cpp|omiGlass/*.cxx|omiGlass/*.h|omiGlass/*.hpp)
+        firmware_files+=("$file")
+        ;;
+    esac
+  done
+
+  if [ "${#dart_files[@]}" -gt 0 ]; then
+    if command -v dart >/dev/null 2>&1; then
+      echo "==> dart format --set-exit-if-changed (${#dart_files[@]} file(s))"
+      dart format --line-length 120 --set-exit-if-changed --output=none "${dart_files[@]}"
+    else
+      echo "Skipping Dart format check; dart is not installed."
+    fi
+  fi
+
+  if [ "${#python_files[@]}" -gt 0 ]; then
+    if command -v black >/dev/null 2>&1; then
+      black_cmd=(black)
+    elif python3 -m black --version >/dev/null 2>&1; then
+      black_cmd=(python3 -m black)
+    fi
+
+    if [ "${#black_cmd[@]}" -gt 0 ]; then
+      echo "==> black --check (${#python_files[@]} file(s))"
+      "${black_cmd[@]}" --check --line-length 120 --skip-string-normalization "${python_files[@]}"
+    else
+      echo "Skipping Python format check; black is not installed."
+    fi
+  fi
+
+  if [ "${#arb_files[@]}" -gt 0 ]; then
+    echo "==> ARB JSON formatting (${#arb_files[@]} file(s))"
+    python3 - "${arb_files[@]}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+failed = False
+for raw_path in sys.argv[1:]:
+    path = Path(raw_path)
+    try:
+        original = path.read_text()
+        formatted = json.dumps(json.loads(original), indent=4, ensure_ascii=False) + "\n"
+    except json.JSONDecodeError as exc:
+        print(f"FAIL: {path} is not valid JSON: {exc}", file=sys.stderr)
+        failed = True
+        continue
+    if original != formatted:
+        print(f"FAIL: {path} not formatted with 4-space indent", file=sys.stderr)
+        failed = True
+
+if failed:
+    print("Fix: jq --indent 4 '.' <file> > tmp && mv tmp <file>", file=sys.stderr)
+    sys.exit(1)
+PY
+  fi
+
+  if [ "${#firmware_files[@]}" -gt 0 ]; then
+    if command -v clang-format >/dev/null 2>&1; then
+      echo "==> clang-format --dry-run (${#firmware_files[@]} file(s))"
+      clang-format --dry-run --Werror "${firmware_files[@]}"
+    else
+      echo "Skipping C/C++ format check; clang-format is not installed."
+    fi
+  fi
+}
+
+check_backend_runtime_env_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV:-}" = "1" ]; then
+    echo "Skipping backend runtime env checks because PRE_PUSH_SKIP_BACKEND_RUNTIME_ENV=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/deploy/runtime_env.yaml' \
+    'backend/charts/backend-listen/*_values.yaml' \
+    'backend/charts/backend-listen/**/*_values.yaml' \
+    'backend/scripts/render-backend-runtime-env.py' \
+    'backend/scripts/validate-backend-runtime-env.py' \
+    '.github/workflows/gcp_backend*.yml' \
+    '.github/workflows/gcp_backend*.yaml' \
+    '.github/workflows/lint.yml'
+  then
+    return
+  fi
+
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
+  "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env prod
+}
+
+check_backend_async_blockers_if_needed() {
+  local -a scanner_args=()
+
+  if [ "${PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS:-}" = "1" ]; then
+    echo "Skipping backend async blocker scan because PRE_PUSH_SKIP_BACKEND_ASYNC_BLOCKERS=1."
+    return
+  fi
+
+  if ! changed_matches 'backend/*.py' 'backend/**/*.py' '.github/workflows/lint.yml'; then
+    echo "Skipping backend async blocker scan; no backend Python files changed."
+    return
+  fi
+
+  if [ "${PRE_PUSH_VERBOSE:-}" = "1" ]; then
+    scanner_args+=(--full-report)
+  fi
+
+  "$BACKEND_PYTHON" backend/scripts/scan_async_blockers.py \
+    --dirs backend/routers backend/utils \
+    --diff-base "$BASE_REF" \
+    --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def \
+    "${scanner_args[@]}"
+}
+
+check_module_stub_pollution_if_needed() {
+  local filter_file
+
+  if [ "${PRE_PUSH_SKIP_MODULE_STUB_CHECK:-}" = "1" ]; then
+    echo "Skipping module-stub pollution check because PRE_PUSH_SKIP_MODULE_STUB_CHECK=1."
+    return
+  fi
+
+  if ! changed_matches 'backend/tests/*.py' 'backend/tests/**/*.py' 'backend/testing/*.py' 'backend/scripts/check_module_stub_pollution.py'; then
+    return
+  fi
+
+  # Build a changed-files list limited to backend test + testing files for the scanner.
+  filter_file=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-modstub.XXXXXX")
+  # note: this temp is cleaned by the outer trap? No — add our own.
+  local _cleanup=1
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      backend/tests/*.py|backend/testing/*.py)
+        printf '%s\n' "$file" >> "$filter_file"
+        ;;
+    esac
+  done
+
+  if [ -s "$filter_file" ]; then
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --files "$filter_file"
+  else
+    "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --quiet
+  fi
+  rm -f "$filter_file"
+
+  # Enforce monotone-shrinking allowlist regardless of which files changed.
+  "$BACKEND_PYTHON" backend/scripts/check_module_stub_pollution.py --check-allowlist-monotonic "$BASE_REF"
+}
+
+check_import_time_side_effects_if_needed() {
+  local filter_file
+
+  if [ "${PRE_PUSH_SKIP_IMPORT_PURITY_CHECK:-}" = "1" ]; then
+    echo "Skipping import-time side-effect check because PRE_PUSH_SKIP_IMPORT_PURITY_CHECK=1."
+    return
+  fi
+
+  if ! changed_matches 'backend/*.py' 'backend/**/*.py' 'backend/scripts/scan_import_time_side_effects.py'; then
+    return
+  fi
+
+  filter_file=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-importpure.XXXXXX")
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      backend/*.py|backend/**/*.py)
+        # exclude tests/ and testing/ (not production code); scanner also filters, but
+        # narrowing here keeps the changed-files path fast.
+        case "$file" in
+          backend/tests/*|backend/testing/*) ;;
+          *) printf '%s\n' "$file" >> "$filter_file" ;;
+        esac
+        ;;
+    esac
+  done
+
+  if [ -s "$filter_file" ]; then
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --files "$filter_file"
+  else
+    "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --quiet
+  fi
+  rm -f "$filter_file"
+
+  "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
+}
+
+check_backend_typecheck_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_TYPECHECK:-}" = "1" ]; then
+    echo "Skipping backend type check because PRE_PUSH_SKIP_BACKEND_TYPECHECK=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/pyrightconfig.json' \
+    'backend/scripts/typecheck.sh' \
+    'backend/requirements.txt' \
+    'backend/pylock*.toml' \
+    '.github/workflows/backend-unit-tests.yml' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+
+  (
+    cd backend
+    bash scripts/typecheck.sh
+  )
+}
+
+check_backend_unit_tests_if_needed() {
+  local selected_count
+  local original_selected_count
+  local max_pre_push_tests
+  local reason
+  local file
+
+  if [ "${PRE_PUSH_SKIP_BACKEND_UNIT_TESTS:-}" = "1" ]; then
+    echo "Skipping backend unit tests because PRE_PUSH_SKIP_BACKEND_UNIT_TESTS=1."
+    return
+  fi
+
+  if ! changed_matches 'backend/*.py' 'backend/**/*.py' 'backend/*.yaml' 'backend/**/*.yaml' 'backend/*.yml' 'backend/**/*.yml'; then
+    return
+  fi
+
+  "$BACKEND_PYTHON" backend/scripts/select_backend_unit_tests.py \
+    --changed-files "$CHANGED_FILES_LIST" \
+    --output "$SELECTED_BACKEND_TESTS" \
+    --reason-output "$SELECTED_BACKEND_TESTS_REASON"
+
+  selected_count=$(wc -l < "$SELECTED_BACKEND_TESTS" | tr -d ' ')
+  original_selected_count="$selected_count"
+  reason=$(cat "$SELECTED_BACKEND_TESTS_REASON")
+  if [ "$selected_count" -eq 0 ]; then
+    echo "No backend unit tests selected: $reason"
+    return
+  fi
+
+  max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
+  if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
+    : > "$FAST_BACKEND_TESTS"
+    for file in "${CHANGED_FILES[@]}"; do
+      case "$file" in
+        backend/tests/*.py|backend/tests/**/*.py)
+          printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
+          ;;
+      esac
+    done
+    if [ -s "$FAST_BACKEND_TESTS" ]; then
+      sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
+      selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
+      echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
+      cp "$FAST_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS"
+    else
+      echo "Skipping broad backend unit suite in pre-push: $reason ($selected_count files; cap is $max_pre_push_tests)."
+      echo "Run cd backend && bash test.sh for the full suite, or rely on CI."
+      return
+    fi
+  fi
+
+  echo "Selected $selected_count backend unit test file(s): $reason"
+  (
+    cd backend
+    PYTHON="$BACKEND_PYTHON" bash test-preflight.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
+  )
+}
+
+check_openapi_contract_if_needed() {
+  if [ "${PRE_PUSH_SKIP_OPENAPI_CONTRACT:-}" = "1" ]; then
+    echo "Skipping OpenAPI contract check because PRE_PUSH_SKIP_OPENAPI_CONTRACT=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/**' \
+    'docs/api-reference/openapi.json' \
+    'docs/api-reference/app-client-openapi.json' \
+    'docs/api-reference/integration-public-openapi.json' \
+    'app/lib/backend/http/api/**' \
+    'app/lib/backend/schema/**' \
+    'app/lib/models/announcement.dart' \
+    'app/lib/models/subscription.dart' \
+    'app/lib/models/user_usage.dart' \
+    'desktop/windows/src/renderer/src/lib/omiApi.generated.ts' \
+    'web/app/src/lib/omiApi.generated.ts' \
+    'web/admin/lib/services/omi-api/omiApi.generated.ts' \
+    'web/personas-open-source/src/lib/omiApi.generated.ts' \
+    'docs/docs.json' \
+    '.github/workflows/openapi-contract.yml' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  (
+    cd backend
+    scripts/openapi_runner.sh scripts/export_openapi.py --check ../docs/api-reference/openapi.json
+    scripts/openapi_runner.sh scripts/export_openapi.py --surface app-client --check ../docs/api-reference/app-client-openapi.json
+    scripts/openapi_runner.sh scripts/export_openapi.py --surface integration-public --check ../docs/api-reference/integration-public-openapi.json
+  )
+
+  "$BACKEND_PYTHON" backend/scripts/generate_dart_models.py --all --check
+  "$BACKEND_PYTHON" backend/scripts/generate_ts_openapi_types.py --check
+  "$BACKEND_PYTHON" backend/scripts/generate_swift_openapi_types.py --check
+}
+
+check_workflows_if_needed() {
+  local -a workflow_files=()
+  local -a actionlint_cmd=()
+  local file
+
+  if [ "${PRE_PUSH_SKIP_ACTIONLINT:-}" = "1" ]; then
+    echo "Skipping actionlint because PRE_PUSH_SKIP_ACTIONLINT=1."
+    return
+  fi
+
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      .github/workflows/*.yml|.github/workflows/*.yaml)
+        workflow_files+=("$file")
+        ;;
+    esac
+  done
+
+  if [ "${#workflow_files[@]}" -eq 0 ]; then
+    return
+  fi
+
+  if command -v actionlint >/dev/null 2>&1; then
+    actionlint_cmd=(actionlint)
+  elif command -v go >/dev/null 2>&1; then
+    actionlint_cmd=(go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12)
+  else
+    echo "FAIL: actionlint or go is required to validate changed workflow files." >&2
+    return 1
+  fi
+
+  "${actionlint_cmd[@]}" -shellcheck "" "${workflow_files[@]}"
+}
+
+check_desktop_swift_if_needed() {
+  if [ "${PRE_PUSH_SKIP_DESKTOP_SWIFT:-}" = "1" ]; then
+    echo "Skipping desktop Swift compile because PRE_PUSH_SKIP_DESKTOP_SWIFT=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/*.swift' \
+    'desktop/macos/Desktop/**/*.swift' \
+    'desktop/macos/Desktop/Package.swift' \
+    'desktop/macos/Desktop/Package.resolved' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "FAIL: xcrun is required to compile the desktop Swift package for changed desktop files." >&2
+    echo "Push from macOS with Xcode command line tools installed, or deliberately skip with PRE_PUSH_SKIP_DESKTOP_SWIFT=1 git push." >&2
+    return 1
+  fi
+
+  (
+    cd desktop/macos
+    xcrun swift build -c debug --package-path Desktop
+  )
+}
+
+check_desktop_userdefaults_ratchet_if_needed() {
+  # BL-004 / S-13: fail if new raw inline UserDefaults string keys are added to
+  # the desktop Swift sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop UserDefaults key ratchet because PRE_PUSH_SKIP_DESKTOP_DEFAULTS_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/*.swift' \
+    'desktop/macos/Desktop/Sources/**/*.swift' \
+    'desktop/macos/scripts/check-userdefaults-key-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-userdefaults-key-ratchet.py
+}
+
+check_desktop_async_after_ratchet_if_needed() {
+  # BL-005 / S-14b: fail if new fixed-delay asyncAfter calls are added to the
+  # floating-bar / PTT sources. Pure grep-count ratchet (no toolchain needed).
+  if [ "${PRE_PUSH_SKIP_DESKTOP_ASYNC_AFTER_RATCHET:-}" = "1" ]; then
+    echo "Skipping desktop asyncAfter ratchet because PRE_PUSH_SKIP_DESKTOP_ASYNC_AFTER_RATCHET=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/Desktop/Sources/FloatingControlBar/*.swift' \
+    'desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift' \
+    'desktop/macos/scripts/check-async-after-ratchet.py' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  python3 desktop/macos/scripts/check-async-after-ratchet.py
+}
+
+check_desktop_rust_if_needed() {
+  local -a rust_files=()
+  local file
+
+  if [ "${PRE_PUSH_SKIP_DESKTOP_RUST:-}" = "1" ]; then
+    echo "Skipping desktop Rust checks because PRE_PUSH_SKIP_DESKTOP_RUST=1."
+    return
+  fi
+
+  if ! changed_matches 'desktop/macos/Backend-Rust/*' 'desktop/macos/Backend-Rust/**/*' '.github/workflows/lint.yml'; then
+    return
+  fi
+
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      desktop/macos/Backend-Rust/*.rs|desktop/macos/Backend-Rust/**/*.rs)
+        rust_files+=("${file#desktop/macos/Backend-Rust/}")
+        ;;
+    esac
+  done
+
+  (
+    cd desktop/macos/Backend-Rust
+    if [ "${#rust_files[@]}" -gt 0 ]; then
+      rustfmt --edition 2021 --check "${rust_files[@]}"
+    fi
+    cargo check --locked
+  )
+}
+
+check_desktop_launcher_tests_if_needed() {
+  if [ "${PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS:-}" = "1" ]; then
+    echo "Skipping desktop launcher tests because PRE_PUSH_SKIP_DESKTOP_LAUNCHER_TESTS=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'desktop/macos/run.sh' \
+    'desktop/macos/scripts/dev-instance.sh' \
+    'desktop/macos/scripts/omi-auth-dump.sh' \
+    'desktop/macos/scripts/omi-auth-seed.sh' \
+    'desktop/macos/scripts/omi-settings-seed.sh' \
+    'desktop/macos/tests/test-app-config.sh' \
+    'desktop/macos/tests/test-settings-seed.sh'
+  then
+    return
+  fi
+
+  (
+    cd desktop/macos
+    bash tests/test-app-config.sh
+    bash tests/test-settings-seed.sh
+  )
+}
+
+check_desktop_tool_surfaces_if_needed() {
+  local file
+  for file in "${CHANGED_FILES[@]}"; do
+    case "$file" in
+      desktop/macos/agent/*|desktop/macos/agent/**/*|desktop/macos/pi-mono-extension/*|desktop/macos/pi-mono-extension/**/*|desktop/macos/run.sh|desktop/macos/scripts/prepare-agent-runtime.sh|desktop/macos/scripts/test-tool-surfaces.sh|codemagic.yaml)
+        desktop/macos/scripts/test-tool-surfaces.sh
+        return
+        ;;
+    esac
+  done
+}
+
+check_gauntlet_evidence_if_needed() {
+  if [ "${PRE_PUSH_SKIP_GAUNTLET_EVIDENCE:-}" = "1" ]; then
+    echo "Skipping gauntlet evidence check because PRE_PUSH_SKIP_GAUNTLET_EVIDENCE=1."
+    return
+  fi
+
+  desktop/macos/scripts/check-gauntlet-evidence-at-head.sh warn
+}
+
+run_step check_merge_conflicts
+run_step check_arch_guardrails
+run_step python3 .github/scripts/desktop-changelog.py validate
+
+if [[ "$CURRENT_BRANCH" == changelog/v* ]]; then
+  echo "Skipping desktop changelog entry check on release changelog branch $CURRENT_BRANCH."
+elif [ "${PRE_PUSH_SKIP_DESKTOP_CHANGELOG:-}" = "1" ]; then
+  echo "Skipping desktop changelog entry check because PRE_PUSH_SKIP_DESKTOP_CHANGELOG=1."
+else
+  run_step python3 .github/scripts/check-desktop-changelog.py --base "$BASE_REF" --head HEAD
+fi
+
+run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
+run_step check_backend_runtime_env_if_needed
+run_step check_backend_async_blockers_if_needed
+run_step check_module_stub_pollution_if_needed
+run_step check_import_time_side_effects_if_needed
+run_step check_backend_typecheck_if_needed
+run_step check_backend_unit_tests_if_needed
+run_step check_openapi_contract_if_needed
+run_step check_workflows_if_needed
+run_step check_desktop_swift_if_needed
+run_step check_desktop_userdefaults_ratchet_if_needed
+run_step check_desktop_async_after_ratchet_if_needed
+run_step check_desktop_rust_if_needed
+run_step check_desktop_launcher_tests_if_needed
+run_step check_desktop_tool_surfaces_if_needed
+run_step check_gauntlet_evidence_if_needed
+run_step check_optional_formatters
+
+echo "Fast pre-push checks passed."

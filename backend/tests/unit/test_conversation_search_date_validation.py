@@ -8,8 +8,10 @@ The handler now catches it and returns HTTP 400. These tests mount the conversat
 
 import os
 import sys
+from datetime import datetime, timezone
+from enum import Enum
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault(
@@ -20,6 +22,10 @@ os.environ.setdefault(
 
 class _AutoMockModule(ModuleType):
     """Module stub that returns a MagicMock for any missing attribute."""
+
+    def __init__(self, name):
+        super().__init__(name)
+        self.__path__ = []
 
     def __getattr__(self, name):
         if name.startswith('__') and name.endswith('__'):
@@ -47,6 +53,8 @@ _stubs = [
     'firebase_admin.firestore',
     'google.cloud.firestore',
     'google.cloud.firestore_v1',
+    'utils.request_validation',
+    'utils.other.endpoints',
     'utils.other.storage',
     'utils.conversations.factory',
     'utils.conversations.render',
@@ -55,15 +63,74 @@ _stubs = [
     'utils.conversations.calendar_linking',
     'utils.conversations.calendar_utils',
     'utils.conversations.location',
+    'utils.executors',
     'utils.llm.conversation_processing',
     'utils.speaker_identification',
     'utils.app_integrations',
     'utils.retrieval.tools.calendar_tools',
     'utils.retrieval.tools.google_utils',
 ]
+
+_MISSING = object()
+_saved_modules = {}
+_saved_parent_attrs = {}
+
+
+def _save_module_for_restore(name):
+    if name not in _saved_modules:
+        _saved_modules[name] = sys.modules.get(name, _MISSING)
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        key = (parent_name, attr)
+        if key not in _saved_parent_attrs:
+            previous_attr = parent.__dict__.get(attr, _MISSING) if parent is not None else _MISSING
+            _saved_parent_attrs[key] = (parent, previous_attr)
+
+
+def _register_module(name, module):
+    _save_module_for_restore(name)
+    sys.modules[name] = module
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if not isinstance(parent, _AutoMockModule):
+            parent = _AutoMockModule(parent_name)
+            _register_module(parent_name, parent)
+        setattr(parent, attr, module)
+    return module
+
+
+def _remove_module_for_fresh_import(name):
+    _save_module_for_restore(name)
+    sys.modules.pop(name, None)
+    if '.' in name:
+        parent_name, attr = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            parent.__dict__.pop(attr, None)
+
+
+def _restore_stubbed_modules():
+    for name in sorted(_saved_modules, key=lambda item: item.count('.'), reverse=True):
+        previous = _saved_modules[name]
+        if previous is _MISSING:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = previous
+    for (_parent_name, attr), (parent, previous_attr) in _saved_parent_attrs.items():
+        if parent is None:
+            continue
+        if previous_attr is _MISSING:
+            parent.__dict__.pop(attr, None)
+        else:
+            setattr(parent, attr, previous_attr)
+    _saved_modules.clear()
+    _saved_parent_attrs.clear()
+
+
 for _mod_name in _stubs:
-    if _mod_name not in sys.modules:
-        sys.modules[_mod_name] = _AutoMockModule(_mod_name)
+    _register_module(_mod_name, _AutoMockModule(_mod_name))
 
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 
@@ -83,12 +150,56 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
 _endpoints.get_current_user_uid = _fake_get_current_user_uid
 _endpoints.with_rate_limit = _fake_with_rate_limit
 _endpoints.get_user = MagicMock()
-sys.modules['utils.other.endpoints'] = _endpoints
+_register_module('utils.other.endpoints', _endpoints)
+
+_request_validation = ModuleType('utils.request_validation')
+_request_validation.NonNegativeOffset = int
+_request_validation.PositiveLimit = int
+_register_module('utils.request_validation', _request_validation)
+
+_utils_memory_pkg = ModuleType('utils.memory')
+_utils_memory_pkg.__path__ = []
+_register_module('utils.memory', _utils_memory_pkg)
+
+_memory_service_stub = ModuleType('utils.memory.memory_service')
+setattr(_memory_service_stub, 'MemoryService', MagicMock())
+_register_module('utils.memory.memory_service', _memory_service_stub)
+
+
+class _MemorySystem(str, Enum):
+    LEGACY = 'legacy'
+    CANONICAL = 'canonical'
+
+
+_memory_system_stub = ModuleType('utils.memory.memory_system')
+setattr(_memory_system_stub, 'MemorySystem', _MemorySystem)
+_register_module('utils.memory.memory_system', _memory_system_stub)
+
+_canonical_activation_stub = ModuleType('utils.memory.canonical_activation')
+setattr(_canonical_activation_stub, 'canonical_write_enabled', MagicMock(return_value=False))
+_register_module('utils.memory.canonical_activation', _canonical_activation_stub)
+
+_surface_routing_stub = ModuleType('utils.memory.surface_routing')
+setattr(_surface_routing_stub, 'pin_memory_system', MagicMock())
+_register_module('utils.memory.surface_routing', _surface_routing_stub)
+
+_apps_stub = ModuleType('utils.apps')
+setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
+setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
+_register_module('utils.apps', _apps_stub)
 
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
+from models.conversation import Conversation  # noqa: E402
+from models.conversation_enums import ConversationStatus  # noqa: E402
+from models.structured import Structured  # noqa: E402
 
-from routers import conversations as conv  # noqa: E402
+_remove_module_for_fresh_import('routers.conversations')
+_remove_module_for_fresh_import('routers')
+try:
+    from routers import conversations as conv  # noqa: E402
+finally:
+    _restore_stubbed_modules()
 
 
 def _client():
@@ -113,7 +224,9 @@ def test_bad_end_date_returns_400_not_500():
 
 
 def test_valid_date_is_accepted_and_calls_search():
-    with patch.object(conv, 'search_conversations', return_value={'conversations': []}) as mock_search:
+    with patch.object(
+        conv, 'search_conversations', return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10}
+    ) as mock_search:
         client = _client()
         resp = client.post(
             '/v1/conversations/search',
@@ -121,3 +234,155 @@ def test_valid_date_is_accepted_and_calls_search():
         )
         assert resp.status_code == 200
         assert mock_search.called
+
+
+def test_named_speaker_is_validated_and_forwarded():
+    with (
+        patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}) as mock_get_person,
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ) as mock_search,
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'person-1'})
+
+    assert resp.status_code == 200
+    mock_get_person.assert_called_once_with('test-uid', 'person-1')
+    assert mock_search.call_args.kwargs['speaker_id'] == 'person-1'
+
+
+def test_unknown_speaker_returns_404():
+    with patch.object(conv.users_db, 'get_person', return_value=None):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'missing'})
+
+    assert resp.status_code == 404
+    assert resp.json()['detail'] == 'Speaker not found'
+
+
+def test_user_speaker_does_not_require_person_record():
+    with (
+        patch.object(conv.users_db, 'get_person') as mock_get_person,
+        patch.object(
+            conv,
+            'search_conversations',
+            return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10},
+        ) as mock_search,
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': '', 'speaker_id': 'user'})
+
+    assert resp.status_code == 200
+    mock_get_person.assert_not_called()
+    assert mock_search.call_args.kwargs['speaker_id'] == 'user'
+
+
+def _conversation(conversation_id='conv-1', status=ConversationStatus.in_progress):
+    return Conversation(
+        id=conversation_id,
+        created_at=datetime.now(timezone.utc),
+        started_at=datetime.now(timezone.utc),
+        finished_at=datetime.now(timezone.utc),
+        language='en',
+        structured=Structured(),
+        transcript_segments=[],
+        status=status,
+    )
+
+
+def test_finalize_conversation_processes_target_id_and_clears_matching_redis_pointer():
+    target = _conversation()
+    processed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True) as claim_status,
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation', return_value=processed) as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    claim_status.assert_called_once_with(
+        'test-uid',
+        'conv-1',
+        ConversationStatus.in_progress,
+        ConversationStatus.processing,
+        extra_updates=None,
+    )
+    remove_pointer.assert_called_once_with('test-uid')
+    update_status.assert_called_once_with('test-uid', 'conv-1', ConversationStatus.completed)
+    process.assert_called_once_with('test-uid', 'en', target, force_process=True)
+    assert response.conversation.id == 'conv-1'
+    assert response.conversation.status == ConversationStatus.completed
+
+
+def test_finalize_conversation_does_not_clear_different_redis_pointer():
+    target = _conversation()
+    processed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='newer-conv'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.conversations_db, 'update_conversation_status'),
+        patch.object(conv, 'process_conversation', return_value=processed),
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
+    ):
+        conv.finalize_conversation('conv-1', uid='test-uid')
+
+    remove_pointer.assert_not_called()
+
+
+def test_finalize_conversation_claim_loser_returns_latest_without_side_effects():
+    target = _conversation(status=ConversationStatus.in_progress)
+    latest = _conversation(status=ConversationStatus.processing)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=False) as claim_status,
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation') as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    claim_status.assert_called_once()
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    update_status.assert_not_called()
+    process.assert_not_called()
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.processing
+
+
+def test_finalize_conversation_is_noop_for_completed_conversation():
+    completed = _conversation(status=ConversationStatus.completed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=completed),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    update_status.assert_not_called()
+    process.assert_not_called()
+    assert response.conversation.status == ConversationStatus.completed

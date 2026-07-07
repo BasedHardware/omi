@@ -1,43 +1,8 @@
 import asyncio
 import json
 import struct
-import sys
-import threading
 import unittest
-from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
-
-# Stub heavy deps before import
-for mod in [
-    'google.cloud',
-    'google.cloud.firestore',
-    'google.cloud.firestore_v1',
-    'google.cloud.storage',
-    'google.auth',
-    'google.auth.transport',
-    'google.auth.transport.requests',
-    'google.api_core',
-    'google.api_core.exceptions',
-    'firebase_admin',
-    'firebase_admin.auth',
-    'firebase_admin.firestore',
-    'database.redis_db',
-    'database.auth',
-    'utils.other.storage',
-    'deepgram',
-    'deepgram.clients.live.v1',
-    'fal_client',
-    'opuslib',
-    'silero_vad',
-]:
-    if mod not in sys.modules:
-        sys.modules[mod] = MagicMock()
-
-# Stub deepgram classes needed at import time
-sys.modules['deepgram'].DeepgramClient = MagicMock
-sys.modules['deepgram'].DeepgramClientOptions = MagicMock
-sys.modules['deepgram'].LiveTranscriptionEvents = MagicMock()
-sys.modules['deepgram.clients.live.v1'].LiveOptions = MagicMock
 
 from utils.stt.streaming import (
     STTService,
@@ -205,6 +170,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock._recv_task.cancel()
             audio = b'\x01\x02\x03\x04'
             sock.send(audio)
+            sock._done_event.set()
             await sock.drain_and_close()
             return sent_data
 
@@ -229,6 +195,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock.set_wav_header(b'')
             sock._recv_task.cancel()
             sock.send(b'audio_chunk')
+            sock._done_event.set()
             await sock.drain_and_close()
             return sent_data
 
@@ -756,6 +723,7 @@ class _FakeParakeetWebSocket:
         if data == 'finalize':
             await self._messages.put(json.dumps({'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}))
             await self._messages.put(None)
+            await self._messages.put(None)
 
     async def close(self):
         await self._messages.put(None)
@@ -789,15 +757,16 @@ class TestProcessAudioParakeet(unittest.TestCase):
                     ws, enter_started, allow_enter
                 )
 
-                socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
-                await asyncio.wait_for(enter_started.wait(), timeout=1)
-                await asyncio.sleep(0)
-                self.assertFalse(socket_task.done())
+                with patch('utils.stt.streaming.asyncio.sleep', AsyncMock()):
+                    socket_task = asyncio.create_task(process_audio_parakeet(segments.extend, 'en', 16000, 1))
+                    await asyncio.wait_for(enter_started.wait(), timeout=1)
+                    await asyncio.sleep(0)
+                    self.assertFalse(socket_task.done())
 
-                allow_enter.set()
-                sock = await asyncio.wait_for(socket_task, timeout=1)
-                sock.send(b'pcm')
-                await sock.drain_and_close()
+                    allow_enter.set()
+                    sock = await asyncio.wait_for(socket_task, timeout=1)
+                    sock.send(b'pcm')
+                    await sock.drain_and_close()
 
                 self.assertEqual(ws.sent, [b'pcm', 'finalize'])
                 self.assertEqual(segments, [{'text': 'hello', 'speaker': 'SPEAKER_00', 'start': 0, 'end': 1}])
@@ -806,7 +775,7 @@ class TestProcessAudioParakeet(unittest.TestCase):
             call_args = loop.run_until_complete(run())
             uri = call_args[0][0]
             self.assertEqual(uri, 'ws://parakeet.local/v3/stream?sample_rate=16000')
-            self.assertEqual(call_args.kwargs['extra_headers'], {'authorization': 'secret'})
+            self.assertNotIn('extra_headers', call_args.kwargs)
         finally:
             loop.close()
 
@@ -1278,7 +1247,7 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_default_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1286,7 +1255,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
         self.assertEqual(model, 'nova-3')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['modulate-velma-2'])
     def test_modulate_routes_correctly(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1295,7 +1264,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(lang, 'en')
         self.assertEqual(model, 'velma-2')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['modulate-velma-2'])
     def test_modulate_normalizes_locale(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1303,7 +1272,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(svc, PrerecordedSTTService.MODULATE)
         self.assertEqual(lang, 'pt')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-2'])
     def test_custom_deepgram_model(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1311,7 +1280,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(svc, PrerecordedSTTService.DEEPGRAM)
         self.assertEqual(model, 'nova-2')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_multi_language_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
@@ -1322,7 +1291,7 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-3')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-3'])
     def test_factory_returns_deepgram_by_default(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
 
@@ -1330,7 +1299,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertIsInstance(provider, DeepgramPrerecordedProvider)
         self.assertEqual(provider._model, 'nova-3')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'dg-nova-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['dg-nova-2'])
     def test_factory_returns_deepgram_custom_model(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
 
@@ -1338,7 +1307,7 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
         self.assertIsInstance(provider, DeepgramPrerecordedProvider)
         self.assertEqual(provider._model, 'nova-2')
 
-    @patch('utils.stt.pre_recorded.stt_prerecorded_model', 'modulate-velma-2')
+    @patch('utils.stt.pre_recorded.stt_prerecorded_models', ['modulate-velma-2'])
     def test_factory_returns_modulate(self):
         from utils.stt.pre_recorded import ModulatePrerecordedProvider, get_prerecorded_provider
 

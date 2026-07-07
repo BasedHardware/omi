@@ -249,7 +249,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool get isFetchingConversations => _syncState.isFetchingConversations;
   double get walsSyncedProgress => _syncState.progress;
   double? get syncSpeedKBps => _syncState.speedKBps;
-  List<SyncedConversationPointer> get syncedConversationsPointers => _syncState.syncedConversations;
+  List<SyncedConversationPointer> get syncedConversationsPointers {
+    final sorted = List<SyncedConversationPointer>.from(_syncState.syncedConversations);
+    sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
+    return sorted;
+  }
+
   String? get syncError => _syncState.errorMessage;
   Wal? get failedWal => _syncState.failedWal;
   SyncMethod? get currentSyncMethod => _syncState.syncMethod;

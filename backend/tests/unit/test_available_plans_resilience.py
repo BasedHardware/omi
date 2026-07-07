@@ -5,151 +5,58 @@ with mocked Stripe, so a regression in the per-price try/except blocks
 would be caught.
 """
 
-import os
-import sys
-import types
 from unittest.mock import MagicMock
 
-# --- env vars needed at import time ---
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
+import pytest
+import stripe
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from database import users as users_db
+from routers import payment as payment_router
+
 # Real Stripe dev price IDs
 UNLIM_MONTHLY = "price_1RrxXL1F8wnoWYvwIddzR902"
 UNLIM_ANNUAL = "price_1RrxXL1F8wnoWYvw3kDbWmjs"
 ARCH_MONTHLY = "price_1TAznX1F8wnoWYvwyaSVQbZW"
 ARCH_ANNUAL = "price_1TAznX1F8wnoWYvwN8YmzbiC"
 
-os.environ["STRIPE_UNLIMITED_MONTHLY_PRICE_ID"] = UNLIM_MONTHLY
-os.environ["STRIPE_UNLIMITED_ANNUAL_PRICE_ID"] = UNLIM_ANNUAL
-os.environ["STRIPE_ARCHITECT_MONTHLY_PRICE_ID"] = ARCH_MONTHLY
-os.environ["STRIPE_ARCHITECT_ANNUAL_PRICE_ID"] = ARCH_ANNUAL
 
-# --- Stub heavy infrastructure before importing any project modules ---
+@pytest.fixture(scope="module")
+def ctx():
+    """Build the real router under test with its DB/Stripe seams patched.
 
-# Firestore client
-_mock_client = types.ModuleType("database._client")
-_mock_client.db = MagicMock()
-sys.modules["database._client"] = _mock_client
+    ``routers.payment`` imports cleanly now (Tier-1 import purity done for its
+    chain), so the sanctioned seam is ``monkeypatch.setattr`` on the real
+    ``database.users`` singletons the endpoint calls at request time, plus the
+    real ``stripe`` module attributes. No ``sys.modules`` mutation.
+    """
+    mp = pytest.MonkeyPatch()
+    mp.setenv("STRIPE_UNLIMITED_MONTHLY_PRICE_ID", UNLIM_MONTHLY)
+    mp.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", UNLIM_ANNUAL)
+    mp.setenv("STRIPE_ARCHITECT_MONTHLY_PRICE_ID", ARCH_MONTHLY)
+    mp.setenv("STRIPE_ARCHITECT_ANNUAL_PRICE_ID", ARCH_ANNUAL)
 
-# Firebase admin
-_fb_admin = types.ModuleType("firebase_admin")
-_fb_admin.auth = MagicMock()
-sys.modules["firebase_admin"] = _fb_admin
-sys.modules["firebase_admin.auth"] = _fb_admin.auth
+    # DB helpers the endpoint reaches at request time. Tests reconfigure
+    # ``return_value`` per-case via these persistent MagicMock objects.
+    get_user_subscription = MagicMock(return_value=None)
+    get_stripe_customer_id = MagicMock(return_value=None)
+    mp.setattr(users_db, "get_user_subscription", get_user_subscription)
+    mp.setattr(users_db, "get_stripe_customer_id", get_stripe_customer_id)
 
-# Database submodules
-_db_mod = types.ModuleType("database")
-sys.modules.setdefault("database", _db_mod)
+    mp.setattr(stripe, "api_key", "sk_test_fake")
 
-for _name in [
-    "database.users",
-    "database.notifications",
-    "database.conversations",
-    "database.memories",
-    "database.action_items",
-    "database.redis_db",
-    "database.user_usage",
-    "database.cache",
-    "database.announcements",
-]:
-    _m = types.ModuleType(_name)
-    sys.modules[_name] = _m
-    # Set as attribute on database package so `from database import X` works
-    setattr(_db_mod, _name.split(".")[-1], _m)
+    app = FastAPI()
+    app.include_router(payment_router.router)
+    app.dependency_overrides[payment_router.auth.get_current_user_uid_no_byok_validation] = lambda: "test-user"
+    client = TestClient(app)
 
-# database.announcements needs _compare_versions for should_show_new_plans()
-_announcements_mod = sys.modules["database.announcements"]
-
-
-def _compare_versions(a, b):
-    a_parts = [int(x) for x in a.split('.')]
-    b_parts = [int(x) for x in b.split('.')]
-    for x, y in zip(a_parts, b_parts):
-        if x != y:
-            return 1 if x > y else -1
-    return len(a_parts) - len(b_parts)
-
-
-_announcements_mod._compare_versions = _compare_versions
-# subscription.py imports the public name `compare_versions`.
-_announcements_mod.compare_versions = _compare_versions
-
-# database.users needs the functions payment.py imports by name
-_users_mod = sys.modules["database.users"]
-for _attr in [
-    "get_user_subscription",
-    "get_user_valid_subscription",
-    "update_user_subscription",
-    "get_stripe_connect_account_id",
-    "set_stripe_connect_account_id",
-    "set_paypal_payment_details",
-    "get_default_payment_method",
-    "set_default_payment_method",
-    "get_paypal_payment_details",
-]:
-    setattr(_users_mod, _attr, MagicMock())
-# has_ever_purchased() (via the available-plans endpoint) reads the Stripe
-# customer id; default to None so test users look like never-purchased.
-_users_mod.get_stripe_customer_id = MagicMock(return_value=None)
-
-# database.redis_db
-_redis_mod = sys.modules["database.redis_db"]
-_redis_mod.set_credits_invalidation_signal = MagicMock()
-_redis_mod.r = MagicMock()
-
-# Utils stubs for heavy external deps
-for _name in [
-    "utils.fair_use",
-    "utils.notifications",
-    "utils.apps",
-    "utils.stripe",
-    "utils.other",
-    "utils.other.endpoints",
-    "utils.other.storage",
-]:
-    _m = types.ModuleType(_name)
-    sys.modules[_name] = _m
-
-sys.modules["utils.fair_use"].clear_fair_use_on_upgrade = MagicMock()
-
-_notif_mod = sys.modules["utils.notifications"]
-_notif_mod.send_notification = MagicMock()
-_notif_mod.send_subscription_paid_personalized_notification = MagicMock()
-
-_apps_mod = sys.modules["utils.apps"]
-for _attr in ["find_app_subscription", "get_is_user_paid_app", "paid_app", "set_user_app_sub_customer_id"]:
-    setattr(_apps_mod, _attr, MagicMock())
-
-_stripe_utils = sys.modules["utils.stripe"]
-_stripe_utils.base_url = "http://test"
-_stripe_utils.create_connect_account = MagicMock()
-_stripe_utils.refresh_connect_account_link = MagicMock()
-_stripe_utils.is_onboarding_complete = MagicMock()
-_stripe_utils.create_subscription_checkout_session = MagicMock()
-
-_endpoints_mod = sys.modules["utils.other.endpoints"]
-_endpoints_mod.get_current_user_uid = lambda: "test-user"
-_endpoints_mod.get_current_user_uid_no_byok_validation = lambda: "test-user"
-
-# Ensure utils.other has endpoints attr for `from utils.other import endpoints`
-sys.modules["utils.other"].endpoints = _endpoints_mod
-
-# Stripe — use real module but we'll mock Price.retrieve per-test
-import stripe
-
-stripe.api_key = "sk_test_fake"
-
-# --- Import the real router under test ---
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from routers import payment as payment_router
-
-app = FastAPI()
-app.include_router(payment_router.router)
-app.dependency_overrides[payment_router.auth.get_current_user_uid] = lambda: "test-user"
-client = TestClient(app)
+    yield {
+        "client": client,
+        "get_user_subscription": get_user_subscription,
+        "get_stripe_customer_id": get_stripe_customer_id,
+    }
+    mp.undo()
 
 
 def _make_stripe_price(price_id, amount, interval):
@@ -162,9 +69,9 @@ def _make_stripe_price(price_id, amount, interval):
     return price
 
 
-def test_invalid_architect_price_skips_architect_but_unlimited_remains():
+def test_invalid_architect_price_skips_architect_but_unlimited_remains(ctx):
     """When stripe.Price.retrieve fails for Architect prices, only Unlimited plans are returned."""
-    _users_mod.get_user_subscription.return_value = None
+    ctx["get_user_subscription"].return_value = None
 
     def _mock_retrieve(price_id):
         if price_id in (ARCH_MONTHLY, ARCH_ANNUAL):
@@ -177,7 +84,7 @@ def test_invalid_architect_price_skips_architect_but_unlimited_remains():
 
     stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
 
-    response = client.get("/v1/payments/available-plans")
+    response = ctx["client"].get("/v1/payments/available-plans")
 
     assert response.status_code == 200
     data = response.json()
@@ -195,9 +102,9 @@ def test_invalid_architect_price_skips_architect_but_unlimited_remains():
     assert len(plans) == 2
 
 
-def test_all_valid_prices_returns_all_plans():
+def test_all_valid_prices_returns_all_plans(ctx):
     """When all Stripe prices are valid, all four pricing options are returned."""
-    _users_mod.get_user_subscription.return_value = None
+    ctx["get_user_subscription"].return_value = None
 
     def _mock_retrieve(price_id):
         intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", ARCH_MONTHLY: "month", ARCH_ANNUAL: "year"}
@@ -208,7 +115,7 @@ def test_all_valid_prices_returns_all_plans():
 
     stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
 
-    response = client.get("/v1/payments/available-plans")
+    response = ctx["client"].get("/v1/payments/available-plans")
 
     assert response.status_code == 200
     plans = response.json()["plans"]
@@ -217,7 +124,7 @@ def test_all_valid_prices_returns_all_plans():
     assert len(plans) == 4
 
 
-def test_legacy_unlimited_subscriber_sees_is_active():
+def test_legacy_unlimited_subscriber_sees_is_active(ctx):
     """Legacy Unlimited subscriber gets their plan with is_active=True in catalog."""
     from models.users import Subscription, SubscriptionStatus, PlanType
 
@@ -227,7 +134,7 @@ def test_legacy_unlimited_subscriber_sees_is_active():
         stripe_subscription_id="sub_legacy_123",
         cancel_at_period_end=False,
     )
-    _users_mod.get_user_subscription.return_value = sub
+    ctx["get_user_subscription"].return_value = sub
 
     # Mock Stripe subscription retrieval to return the monthly price
     stripe_sub = MagicMock()
@@ -247,7 +154,7 @@ def test_legacy_unlimited_subscriber_sees_is_active():
 
     stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
 
-    response = client.get("/v1/payments/available-plans")
+    response = ctx["client"].get("/v1/payments/available-plans")
 
     assert response.status_code == 200
     plans = response.json()["plans"]
@@ -259,7 +166,7 @@ def test_legacy_unlimited_subscriber_sees_is_active():
     assert active_plans[0]["interval"] == "month"
 
 
-def test_operator_subscriber_on_old_client_gets_remapped_is_active(monkeypatch):
+def test_operator_subscriber_on_old_client_gets_remapped_is_active(ctx, monkeypatch):
     """Operator subscriber on old client (no platform header) gets price remapped to Unlimited."""
     from models.users import Subscription, SubscriptionStatus, PlanType
 
@@ -272,7 +179,7 @@ def test_operator_subscriber_on_old_client_gets_remapped_is_active(monkeypatch):
         stripe_subscription_id="sub_operator_123",
         cancel_at_period_end=False,
     )
-    _users_mod.get_user_subscription.return_value = sub
+    ctx["get_user_subscription"].return_value = sub
 
     stripe_sub = MagicMock()
     stripe_sub.to_dict.return_value = {
@@ -292,7 +199,7 @@ def test_operator_subscriber_on_old_client_gets_remapped_is_active(monkeypatch):
     stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
 
     # No platform header → old client → adapt_plans_for_legacy_client + price remap
-    response = client.get("/v1/payments/available-plans")
+    response = ctx["client"].get("/v1/payments/available-plans")
 
     assert response.status_code == 200
     plans = response.json()["plans"]
@@ -304,11 +211,11 @@ def test_operator_subscriber_on_old_client_gets_remapped_is_active(monkeypatch):
     assert active_plans[0]["interval"] == "month"
 
 
-def test_all_prices_fail_returns_500():
+def test_all_prices_fail_returns_500(ctx):
     """When every stripe.Price.retrieve call fails, endpoint returns HTTP 500."""
-    _users_mod.get_user_subscription.return_value = None
+    ctx["get_user_subscription"].return_value = None
     stripe.Price.retrieve = MagicMock(side_effect=Exception("Stripe is down"))
 
-    response = client.get("/v1/payments/available-plans")
+    response = ctx["client"].get("/v1/payments/available-plans")
 
     assert response.status_code == 500

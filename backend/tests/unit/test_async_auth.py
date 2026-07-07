@@ -12,7 +12,7 @@ import pytest
 
 def _get_async_functions_with_requests(filepath: str) -> list:
     """Parse a Python file and find async functions using requests.*."""
-    with open(filepath) as f:
+    with open(filepath, encoding='utf-8') as f:
         source = f.read()
     tree = ast.parse(source)
 
@@ -66,7 +66,7 @@ class TestSocialNoBlockingPatterns:
 
     def test_social_no_sync_httpx(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'social.py')
-        with open(filepath) as f:
+        with open(filepath, encoding='utf-8') as f:
             source = f.read()
         tree = ast.parse(source)
 
@@ -98,14 +98,14 @@ class TestSocialNoBlockingPatterns:
 
     def test_social_no_time_sleep(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'social.py')
-        with open(filepath) as f:
+        with open(filepath, encoding='utf-8') as f:
             source = f.read()
         # time.sleep should not exist at all
         assert 'time.sleep' not in source, "social.py still uses time.sleep — use asyncio.sleep"
 
     def test_social_uses_asyncio_sleep(self):
         filepath = os.path.join(BACKEND_DIR, 'utils', 'social.py')
-        with open(filepath) as f:
+        with open(filepath, encoding='utf-8') as f:
             source = f.read()
         assert 'asyncio.sleep' in source, "social.py retry should use asyncio.sleep"
 
@@ -113,7 +113,7 @@ class TestSocialNoBlockingPatterns:
         """social.py must use local httpx.AsyncClient, not shared webhook client,
         because it runs in background threads with separate event loops."""
         filepath = os.path.join(BACKEND_DIR, 'utils', 'social.py')
-        with open(filepath) as f:
+        with open(filepath, encoding='utf-8') as f:
             source = f.read()
         assert 'get_webhook_client' not in source, (
             "social.py should use local httpx.AsyncClient, not shared get_webhook_client() — "
@@ -126,7 +126,7 @@ class TestAppsNoBlockingIO:
 
     def test_apps_no_sync_file_write_in_persona(self):
         filepath = os.path.join(BACKEND_DIR, 'routers', 'apps.py')
-        with open(filepath) as f:
+        with open(filepath, encoding='utf-8') as f:
             source = f.read()
         tree = ast.parse(source)
 

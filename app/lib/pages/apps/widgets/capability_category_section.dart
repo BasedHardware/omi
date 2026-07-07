@@ -131,8 +131,10 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
         return GestureDetector(
           onTap: () async {
             PlatformManager.instance.analytics.pageOpened('App Detail');
+            // Capture before navigating; this card can be disposed while AppDetailPage is open.
+            final appProvider = context.read<AppProvider>();
             await routeToPage(context, AppDetailPage(app: app));
-            context.read<AppProvider>().filterApps();
+            appProvider.filterApps();
           },
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
@@ -193,7 +195,7 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Row(
                           children: [
-                            const FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8B5CF6), size: 9),
+                            FaIcon(FontAwesomeIcons.solidStar, color: Color(0xFF8B5CF6), size: 9),
                             const SizedBox(width: 4),
                             Text(
                               app.getRatingAvg()!,

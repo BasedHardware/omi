@@ -1,0 +1,39 @@
+version: 2
+name: memories
+tier: 2
+description: Memories page navigation and refresh via automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S2
+    name: Refresh data
+    bridge.action:
+      name: refresh_all_data
+
+  - id: S3
+    name: Memories snapshot
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.is_signed_in: "true"
+      result.detail.load_state: "loaded"
+      result.detail.memory_count_valid: "true"
+      # memory_count may be 0 on a fresh profile; happy_path alice seed has 22 default-scope memories.
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

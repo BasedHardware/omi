@@ -14,18 +14,19 @@ import asyncio
 import hashlib
 import logging
 import time
-from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Awaitable, Callable, Dict, List, Optional, Set, Tuple
 
-from models.transcript_segment import TranscriptSegment, Translation, SENTENCE_ENDERS
+from models.transcript_segment import TranscriptSegment, SENTENCE_ENDERS
 from utils.translation import (
     TranslationNeed,
     classify_translation_need,
+    get_cached_translation,
     set_negative_cache,
     TranslationService,
 )
-from utils.executors import sync_executor, run_blocking
-from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language
+from utils.executors import db_executor, sync_executor, run_blocking
+from utils.translation_cache import ConversationLanguageState, should_persist_translation, _normalize_base_language  # type: ignore[reportPrivateUsage]  # internal helper, intentional cross-module use
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ SOFT_BOUNDARY_OPEN_SECONDS = 3.0
 BATCH_WINDOW_SECONDS = 0.25  # 250ms aggregation window
 
 
-def _is_text_stable(text: str, signals: set) -> bool:
+def _is_text_stable(text: str, signals: Set[str]) -> bool:
     """Check if text is considered stable enough for translation."""
     if not text:
         return False
@@ -76,9 +77,9 @@ def _is_text_stable(text: str, signals: set) -> bool:
 
 def _compute_stability_signals(
     text: str, last_update_at: float, now: float, prev_speaker_id: Optional[int], curr_speaker_id: Optional[int]
-) -> set:
+) -> Set[str]:
     """Compute stability signals from text content and timing."""
-    signals = set()
+    signals: Set[str] = set()
     stripped = text.rstrip()
     if stripped and stripped[-1] in SENTENCE_ENDERS:
         signals.add(STABILITY_PUNCTUATION)
@@ -97,23 +98,37 @@ def _compute_stability_signals(
 class TranslationCoordinator:
     """Orchestrates real-time translation for a single WebSocket session.
 
-    Usage in transcribe.py:
-        coordinator = TranslationCoordinator(
-            target_language='en',
-            translation_service=translation_service,
-            on_translation_ready=callback,
-        )
-        # On each segment update:
-        await coordinator.observe(updated_segments, removed_ids, conversation_id)
-        # On session close:
-        await coordinator.flush()
+    ## Architecture
+
+    This coordinator implements SINGLE-PHASE translation: every stable text
+    update is sent in full to the batch translator, which calls Google
+    Translate V3 with the complete segment text. See DD-008 design doc
+    (`deep-dives/DD-008-design-review.md`) for the planned TWO-PHASE
+    architecture (streaming deltas + final full-sentence translation).
+
+    ## Data Flow
+
+    observe() → [stability gates] → batch_buffer → _flush_batch()
+        → translate_units_batch() → [LRU → Redis → API]
+        → on_translation_ready() → Firestore persist + WebSocket push
+
+    ## Cost Note
+
+    Because we send full text (not delta), each evolving segment generates
+    multiple translations of overlapping content. Current cost: ~$4,282/mo
+    for 284M characters. Target (with DD-008 fixes): ~$1,900–2,500/mo.
+
+    ## Key Trade-off
+
+    Translation quality (full context) vs cost (redundant chars).
+    Currently optimized for quality. See DD-008 for path to both.
     """
 
     def __init__(
         self,
         target_language: str,
         translation_service: TranslationService,
-        on_translation_ready: Callable,
+        on_translation_ready: Callable[[str, str, str, str], Awaitable[None]],
         language_state: Optional[ConversationLanguageState] = None,
     ):
         self.target_language = target_language
@@ -125,7 +140,7 @@ class TranslationCoordinator:
         self._segment_states: Dict[str, SegmentState] = {}
         self._version_counter = 0
         self._batch_buffer: List[Tuple[str, str, str, int]] = []  # (segment_id, text, conversation_id, version)
-        self._batch_task: Optional[asyncio.Task] = None
+        self._batch_task: Optional[asyncio.Task[None]] = None
         self._flushing = False
         self._active = True
         self._last_speaker_id: Optional[int] = None  # tracks last speaker for switch detection
@@ -184,10 +199,58 @@ class TranslationCoordinator:
 
             # Prefix-safe check: if prefix changed, reset
             if state.committed_text and not text.startswith(state.committed_text):
-                state.committed_text = ''
-                state.assembled_translation = None
-                state.detected_lang = None
-                self.metrics['prefix_resets'] += 1
+                # Bump version and invalidate batch buffer BEFORE Redis lookup so
+                # any in-flight batch job is rejected immediately as stale.
+                state.version = self._next_version()
+                self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
+                if self._batch_task and not self._batch_task.done():
+                    self._batch_task.cancel()
+                    self._batch_task = None
+
+                # Check if the new merged text was already translated (Redis cache)
+                text_hash = hashlib.md5(text.encode()).hexdigest()
+                redis_cached = await run_blocking(db_executor, get_cached_translation, text_hash, self.target_language)
+                if redis_cached:
+                    # Found in Redis — adopt as committed, skip re-translation
+                    translated_text = redis_cached['text']
+                    detected_lang = redis_cached.get('detected_lang', '')
+                    # Apply cached detected language to conversation state so the
+                    # monolingual gate doesn't incorrectly stay enabled for foreign text.
+                    # Use the same logic as observe() but with known detected_lang.
+                    if detected_lang:
+                        _det_base = _normalize_base_language(detected_lang) or ''
+                        if _det_base and _det_base != self.language_state.target_base:
+                            # Foreign-language cache hit — exit monolingual gate
+                            self.language_state.monolingual = False
+                            self.language_state.consecutive_target = 0
+
+                    # Guard: skip no-op "translations" that would spam UI badges.
+                    if not should_persist_translation(text, translated_text, detected_lang, self.target_language):
+                        state.committed_text = text
+                        state.assembled_translation = translated_text
+                        state.detected_lang = detected_lang
+                        state.version = self._next_version()
+                        state.latest_text = text
+                        state.last_update_at = now
+                        self._batch_buffer = [entry for entry in self._batch_buffer if entry[0] != segment.id]
+                        # Cancel any in-flight batch task to prevent stale overwrite
+                        if self._batch_task and not self._batch_task.done():
+                            self._batch_task.cancel()
+                            self._batch_task = None
+                        self.metrics['prefix_resets'] += 1
+                        continue  # Don't add to batch buffer
+                    state.committed_text = text
+                    state.assembled_translation = translated_text
+                    state.detected_lang = detected_lang
+                    state.latest_text = text
+                    state.last_update_at = now
+                    await self.on_translation_ready(segment.id, translated_text, detected_lang, conversation_id)
+                    continue  # Don't add to batch buffer
+                else:
+                    state.committed_text = ''
+                    state.assembled_translation = None
+                    state.detected_lang = None
+                    self.metrics['prefix_resets'] += 1
 
             # Only translate the new (uncommitted) portion
             new_text = text[len(state.committed_text) :].strip() if state.committed_text else text
@@ -242,6 +305,27 @@ class TranslationCoordinator:
             self.metrics['classify_translates'] += 1
             version = self._next_version()
             state.version = version
+
+            # DESIGN DECISION: We send `text` (full segment text) instead of
+            # `new_text` (the uncommitted delta) to the batch translator.
+            #
+            # Rationale:
+            # - Google Translate V3 translates each content string independently;
+            #   full sentence context improves disambiguation (gender agreement,
+            #   idioms like "estoy de acuerdo" → "I agree", not "acuerdo" → "agreement")
+            # - The assembled_translation IS the final persisted result — it must be
+            #   high quality since it's stored in Firestore and displayed to users
+            #
+            # Trade-off: This means evolving text ("Hola" → "Hola como" → "Hola como estas")
+            # generates unique MD5 cache keys at every step, causing 3–4x redundant
+            # translations per stabilized segment. See DD-008 for cost analysis and
+            # proposed two-phase architecture that preserves quality while reducing cost.
+            #
+            # If you change this to send new_text (delta), you MUST also:
+            # 1. Update assembly stitching logic in _flush_batch()
+            # 2. Ensure stability gates filter out sub-sentence fragments
+            # 3. Update the cache key strategy
+            # 4. Measure translation quality regression in production
             self._batch_buffer.append((segment.id, text, conversation_id, version))
 
         # (Re)start batch aggregation timer
@@ -270,7 +354,7 @@ class TranslationCoordinator:
 
         # Deduplicate and prepare translation units
         # Only translate segments whose version still matches (stale-write protection)
-        valid_units = []
+        valid_units: List[Tuple[str, str, str, int]] = []
         for seg_id, text, conv_id, version in batch:
             state = self._segment_states.get(seg_id)
             if not state or state.version != version:
@@ -281,7 +365,7 @@ class TranslationCoordinator:
             return
 
         # Prepare (unit_id, text) pairs for batch API
-        api_units = [(seg_id, text) for seg_id, text, _, _ in valid_units]
+        api_units: List[Tuple[str, str]] = [(seg_id, text) for seg_id, text, _, _ in valid_units]
 
         self.metrics['batch_api_calls'] += 1
         logger.info(f"translate_coordinator [batch] units={len(api_units)}")
@@ -294,7 +378,7 @@ class TranslationCoordinator:
 
             for seg_id, translated_text, detected_lang in results:
                 # Find the corresponding entry
-                matching = [(s, t, c, v) for s, t, c, v in valid_units if s == seg_id]
+                matching: List[Tuple[str, str, str, int]] = [(s, t, c, v) for s, t, c, v in valid_units if s == seg_id]
                 if not matching:
                     continue
                 _, original_text, conv_id, version = matching[0]
@@ -306,11 +390,17 @@ class TranslationCoordinator:
                 # Check if translation is meaningful
                 target_base = self.target_base
                 if not should_persist_translation(original_text, translated_text, detected_lang, target_base):
-                    # No-op translation — set negative cache
-                    text_hash = hashlib.md5(original_text.encode()).hexdigest()
-                    set_negative_cache(text_hash, self.target_language)
-                    self.metrics['negative_cache_sets'] += 1
-                    state.committed_text = original_text
+                    # Distinguish real no-op (target-language text) from translation failure.
+                    # A failure returns original_text with empty detected_lang — do NOT
+                    # set negative cache or advance committed_text, so the segment can
+                    # be retried on the next cycle.
+                    if detected_lang:
+                        # Genuine no-op: source is already in target language
+                        text_hash = hashlib.md5(original_text.encode()).hexdigest()
+                        set_negative_cache(text_hash, self.target_language)
+                        self.metrics['negative_cache_sets'] += 1
+                        state.committed_text = original_text
+                    # else: translation failure — skip silently, allow retry
                     continue
 
                 # Update state

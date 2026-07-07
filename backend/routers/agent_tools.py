@@ -9,10 +9,11 @@ Endpoints:
 - POST /v1/agent/keepalive     — pings the VM to reset its idle auto-stop timer
 """
 
+import asyncio
 import logging
+from typing import Any
 
 from utils.executors import db_executor, run_blocking
-from datetime import datetime, timezone
 
 import google.auth
 import google.auth.transport.requests
@@ -23,6 +24,7 @@ from pydantic import BaseModel
 from database.users import get_agent_vm
 from utils.other.endpoints import get_current_user_uid, with_rate_limit
 from utils.retrieval.agentic import agent_config_context, CORE_TOOLS
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.tools.app_tools import load_app_tools
 from utils.log_sanitizer import sanitize
 
@@ -31,6 +33,26 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 GCE_PROJECT = "based-hardware"
+
+
+class AgentVmInfo(BaseModel):
+    has_vm: bool
+    status: str | None = None
+
+
+class AgentKeepaliveResponse(BaseModel):
+    ok: bool
+    reason: str | None = None
+
+
+class AgentToolSchema(BaseModel):
+    name: str
+    description: str
+    parameters: dict[str, Any]
+
+
+class AgentToolsResponse(BaseModel):
+    tools: list[AgentToolSchema]
 
 
 # --------------- GCE helpers ---------------
@@ -133,17 +155,17 @@ async def _restart_vm_background(uid: str, vm_name: str, zone: str):
     """Background task: start stopped VM, update Firestore with new IP when ready."""
     try:
         ip = await _start_vm_and_wait(vm_name, zone)
-        _update_firestore_vm(uid, ip, "ready")
+        await run_blocking(db_executor, _update_firestore_vm, uid, ip, "ready")
         logger.info(f"[vm-ensure] VM {vm_name} restarted, ip={ip}")
     except Exception as e:
         logger.error(f"[vm-ensure] Failed to restart VM {vm_name}: {e}")
-        _update_firestore_vm(uid, None, "error")
+        await run_blocking(db_executor, _update_firestore_vm, uid, None, "error")
 
 
 # --------------- endpoints ---------------
 
 
-@router.get("/v1/agent/vm-status")
+@router.get("/v1/agent/vm-status", response_model=AgentVmInfo)
 def get_vm_status(uid: str = Depends(get_current_user_uid)):
     """Return the user's agent VM info from Firestore."""
     vm = get_agent_vm(uid)
@@ -156,7 +178,7 @@ def get_vm_status(uid: str = Depends(get_current_user_uid)):
     }
 
 
-@router.post("/v1/agent/vm-ensure")
+@router.post("/v1/agent/vm-ensure", response_model=AgentVmInfo)
 async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_current_user_uid)):
     """Check VM status; if stopped/terminated, restart it in the background."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)
@@ -181,18 +203,18 @@ async def ensure_vm(background_tasks: BackgroundTasks, uid: str = Depends(get_cu
 
         if gce_status in ("TERMINATED", "STOPPED"):
             logger.info(f"[vm-ensure] VM {vm_name} is {gce_status}, restarting...")
-            _update_firestore_vm(uid, None, "provisioning")
+            await run_blocking(db_executor, _update_firestore_vm, uid, None, "provisioning")
             background_tasks.add_task(_restart_vm_background, uid, vm_name, zone)
             return {"has_vm": True, "status": "provisioning"}
 
         if gce_status == "RUNNING" and fs_status != "ready":
-            _update_firestore_vm(uid, vm.get("ip"), "ready")
+            await run_blocking(db_executor, _update_firestore_vm, uid, vm.get("ip"), "ready")
             return {"has_vm": True, "status": "ready"}
 
     return {"has_vm": True, "status": fs_status}
 
 
-@router.post("/v1/agent/keepalive")
+@router.post("/v1/agent/keepalive", response_model=AgentKeepaliveResponse)
 async def keepalive(uid: str = Depends(get_current_user_uid)):
     """Ping the VM's /ping endpoint to reset its idle auto-stop timer."""
     vm = await run_blocking(db_executor, get_agent_vm, uid)
@@ -238,7 +260,7 @@ def _tool_schema(t) -> dict:
     }
 
 
-@router.get("/v1/agent/tools")
+@router.get("/v1/agent/tools", response_model=AgentToolsResponse)
 def list_tools(uid: str = Depends(get_current_user_uid)):
     """Return all available tool definitions for a user."""
     tools = []
@@ -261,7 +283,12 @@ class ExecuteToolRequest(BaseModel):
     params: dict = {}
 
 
-@router.post("/v1/agent/execute-tool")
+class ExecuteToolResponse(BaseModel):
+    result: str | None = None
+    error: str | None = None
+
+
+@router.post("/v1/agent/execute-tool", response_model=ExecuteToolResponse)
 async def execute_tool(
     body: ExecuteToolRequest,
     uid: str = Depends(with_rate_limit(get_current_user_uid, "agent:execute_tool")),
@@ -302,7 +329,8 @@ async def execute_tool(
         else:
             # Pass config as second arg (LangChain RunnableConfig), not as tool input
             result = target.invoke(params, config=config)
-        return {"result": str(result)}
+        result = preserve_chat_memory_tool_result_boundary(body.tool_name, str(result))
+        return {"result": result}
     except Exception as e:
         logger.error(f"❌ Error executing tool {body.tool_name}: {e}")
         return {"error": str(e)}

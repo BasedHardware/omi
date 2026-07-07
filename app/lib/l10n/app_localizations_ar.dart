@@ -1700,12 +1700,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'أجهزة',
-      one: 'جهاز',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'أجهزة', one: 'جهاز');
     return '$count $_temp0 تم العثور عليها بالقرب منك';
   }
 
@@ -4656,10 +4651,7 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription و$triggerDescription.';
   }
 
@@ -7714,6 +7706,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get viewAll => 'عرض الكل';
 
   @override
+  String get expand => 'توسيع';
+
+  @override
   String get addTask => 'إضافة مهمة';
 
   @override
@@ -9251,6 +9246,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get backgroundModeNote => 'يعمل حاليًا مع أجهزة Omi فقط، ويجري تحسينه باستمرار.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'وضع الخلفية غير متاح لأنه لا يوجد جهاز متوافق متصل. وصّل جهاز Omi أو OpenGlass أو Friend Pendant لاستخدام هذه الميزة.';
+
+  @override
   String get regenerateRecap => 'إعادة إنشاء الملخص';
 
   @override
@@ -9271,4 +9270,180 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.';
+
+  @override
+  String get transcribeLaterTitle => 'التفريغ النصي لاحقًا';
+
+  @override
+  String get transcribeLaterDescription =>
+      'سجّل الصوت الآن وفرّغه نصيًا عند الطلب بدلًا من التفريغ المباشر. تُحفظ التسجيلات على هاتفك، ثم ترفعها لإنشاء المحادثات.';
+
+  @override
+  String get transcribeLaterNote =>
+      'يعمل مع أجهزة Omi وLimitless في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.';
+
+  @override
+  String get recordingMode => 'وضع التسجيل';
+
+  @override
+  String get captureModeLater => 'لاحقًا';
+
+  @override
+  String get captureModeLiveDescription => 'تفريغ نصي فوري أثناء حديثك.';
+
+  @override
+  String get captureModeLaterDescription => 'احفظ الصوت الآن وفرّغه نصيًا متى شئت.';
+
+  @override
+  String get unmute => 'إلغاء الكتم';
+
+  @override
+  String get newRecording => 'تسجيل جديد';
+
+  @override
+  String get transcribeLaterPaused => 'متوقف مؤقتًا — لا يتم تسجيل الصوت';
+
+  @override
+  String get memoryThisDevice => 'هذا الجهاز';
+
+  @override
+  String get memoryThisIphone => 'هذا الـ iPhone';
+
+  @override
+  String get memoryThisPhone => 'هذا الهاتف';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'كيفية استخدام Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'تحدّث إلى Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'قل بضع كلمات وشاهدها تظهر في الوقت الفعلي';
+
+  @override
+  String get deviceOnboardingGoodJob => 'أحسنت!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'ابدأ بالتحدّث...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'اسأل Omi سؤالاً';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'اضغط الزر مرة واحدة، اطرح سؤالك، ثم اضغط مجدداً عند الانتهاء';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'جارٍ معالجة سؤالك...';
+
+  @override
+  String get deviceOnboardingListening => 'يستمع...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'إيقاف التشغيل';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'تشغيل';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'اضغط مع الاستمرار على الزر لمدة 3 ثوانٍ';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'اضغط الزر لإعادة تشغيله';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'اضغط مع الاستمرار على الزر بإحكام حتى ينطفئ الضوء';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'متصل';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'تم الاتصال!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'غير متصل';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'جارٍ الإيقاف...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'تخصيص النقر المزدوج';
+
+  @override
+  String get deviceOnboardingEndConversation => 'إنهاء المحادثة';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'حفظ المحادثة الحالية وإنهاؤها';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'كتم / إلغاء الكتم';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'تشغيل الميكروفون أو إيقافه';
+
+  @override
+  String get deviceOnboardingStarConversation => 'تمييز المحادثة الجارية بنجمة';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'تحديد المحادثة كمهمة';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'كانت تلك نقرة واحدة — جرّب النقر مرتين بسرعة!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'جرّبه الآن! انقر على Omi نقراً مزدوجاً';
+
+  @override
+  String get deviceOnboardingContinue => 'متابعة';
+
+  @override
+  String get deviceOnboardingFinish => 'إنهاء';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'تعرّف على Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'جولة سريعة وعملية على كل ما يمكن أن يفعله جهاز Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'حوالي دقيقة واحدة';
+
+  @override
+  String get jumpToLatestMessage => 'الانتقال إلى أحدث رسالة';
+
+  @override
+  String get latest => 'الأحدث';
+
+  @override
+  String get flashFirmware => 'تحديث البرنامج الثابت';
+
+  @override
+  String get pendantRecordingTitle => 'التسجيل على القلادة';
+
+  @override
+  String get pendantRecordingNote => 'تسجّل قلادتك من تلقاء نفسها. تتم مزامنة التسجيلات مع هاتفك أثناء فتح التطبيق.';
+
+  @override
+  String get pendantSyncingRecordings => 'جارٍ مزامنة التسجيلات من قلادتك…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes دقيقة مخزّنة';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'مساحة تخزين القلادة ممتلئة تقريبًا — أبقِ التطبيق مفتوحًا للمزامنة.';
 }

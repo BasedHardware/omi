@@ -4600,10 +4600,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription，$triggerDescription。';
   }
 
@@ -7631,6 +7628,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get viewAll => '查看全部';
 
   @override
+  String get expand => '展开';
+
+  @override
   String get addTask => '添加任务';
 
   @override
@@ -8307,12 +8307,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '已创建 $count 个对话',
-      one: '已创建 1 个对话',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '已创建 $count 个对话', one: '已创建 1 个对话');
     return '$_temp0';
   }
 
@@ -9033,11 +9028,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音可同步',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音可同步');
     return '$_temp0';
   }
 
@@ -9049,11 +9040,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count 条录音需要关注',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '$count 条录音需要关注');
     return '$_temp0';
   }
 
@@ -9141,6 +9128,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundModeNote => '目前仅支持 Omi 设备，并在持续改进中。';
 
   @override
+  String get backgroundModeUnavailable => '后台模式不可用，因为未连接兼容设备。请连接 Omi、OpenGlass 或 Friend Pendant 设备以使用此功能。';
+
+  @override
   String get regenerateRecap => '重新生成回顾';
 
   @override
@@ -9160,4 +9150,177 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '您使用的是自己的转录服务。同步这些录音会改为在 Omi 的服务器上转录，并计入您套餐的转录额度。';
+
+  @override
+  String get transcribeLaterTitle => '稍后转写';
+
+  @override
+  String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
+
+  @override
+  String get transcribeLaterNote => '目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
+
+  @override
+  String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
+
+  @override
+  String get recordingMode => '录制模式';
+
+  @override
+  String get captureModeLater => '稍后';
+
+  @override
+  String get captureModeLiveDescription => '在你说话时实时转写。';
+
+  @override
+  String get captureModeLaterDescription => '立即保存音频，随时转写。';
+
+  @override
+  String get unmute => '取消静音';
+
+  @override
+  String get newRecording => '新建录音';
+
+  @override
+  String get transcribeLaterPaused => '已暂停 — 当前未在录音';
+
+  @override
+  String get memoryThisDevice => '此设备';
+
+  @override
+  String get memoryThisIphone => '这台 iPhone';
+
+  @override
+  String get memoryThisPhone => '这部手机';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => '如何使用 Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => '对着 Omi 说话';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '说几句话，看它们实时显示出来';
+
+  @override
+  String get deviceOnboardingGoodJob => '做得好！';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '开始说话…';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => '向 Omi 提问';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => '按一下按钮，说出你的问题，说完后再按一下';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '正在处理你的问题…';
+
+  @override
+  String get deviceOnboardingListening => '正在聆听…';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '关机';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '开机';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '长按按钮 3 秒';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => '按下按钮重新开机';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => '用力长按按钮，直到指示灯熄灭';
+
+  @override
+  String get deviceOnboardingStatusConnected => '已连接';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '已连接！';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '已断开';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '正在关机…';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => '自定义双击';
+
+  @override
+  String get deviceOnboardingEndConversation => '结束对话';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '保存并结束当前对话';
+
+  @override
+  String get deviceOnboardingMuteUnmute => '静音 / 取消静音';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => '开启或关闭麦克风';
+
+  @override
+  String get deviceOnboardingStarConversation => '收藏进行中的对话';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '将对话标记为重要';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '那是单击——试着快速点击两次！';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '现在就试试！双击你的 Omi';
+
+  @override
+  String get deviceOnboardingContinue => '继续';
+
+  @override
+  String get deviceOnboardingFinish => '完成';
+
+  @override
+  String get deviceOnboardingIntroTitle => '了解你的 Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => '快速、上手地体验 Omi 的全部功能。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '大约 1 分钟';
+
+  @override
+  String get jumpToLatestMessage => '跳转到最新消息';
+
+  @override
+  String get latest => '最新';
+
+  @override
+  String get flashFirmware => '刷写固件';
+
+  @override
+  String get pendantRecordingTitle => '吊坠录音中';
+
+  @override
+  String get pendantRecordingNote => '你的吊坠会自行录音。应用打开时，录音会同步到手机。';
+
+  @override
+  String get pendantSyncingRecordings => '正在从吊坠同步录音…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes 分钟已存储';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '吊坠存储空间即将用尽——请保持应用打开以同步。';
 }

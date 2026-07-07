@@ -1,0 +1,87 @@
+version: 1
+name: desktop-responsiveness-benchmark
+tier: 3
+description: Fast cursor-free timing for common desktop navigation interactions.
+app: non-prod
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
+
+  - id: S3
+    name: Chat
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 2
+
+  - id: S4
+    name: Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S5
+    name: Tasks
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 4
+
+  - id: S6
+    name: Rewind
+    bridge.navigate:
+      target: rewind
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 7
+
+  - id: S7
+    name: Apps
+    bridge.navigate:
+      target: apps
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 8
+
+  - id: S8
+    name: Settings
+    bridge.navigate:
+      target: settings
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 9
+
+  - id: S9
+    name: Return to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S10
+    name: Assert Logs Are Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"

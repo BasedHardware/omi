@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
+import 'package:omi/services/client_device_service.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -21,6 +22,9 @@ class MemoriesProvider extends ChangeNotifier {
   String _searchQuery = '';
   Set<MemoryCategory> _selectedCategories = {};
   bool _showOnlyManual = false;
+  bool _filterThisDeviceOnly = false;
+  bool _deviceScopeSupported = true;
+  Future<void>? _clientDeviceInitialization;
   List<Tuple2<MemoryCategory, int>> categories = [];
   MemoryCategory? selectedCategory;
 
@@ -33,6 +37,7 @@ class MemoriesProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   Set<MemoryCategory> get selectedCategories => _selectedCategories;
   bool get showOnlyManual => _showOnlyManual;
+  bool get filterThisDeviceOnly => _filterThisDeviceOnly;
   bool get hasPendingMemories => SharedPreferencesUtil().pendingMemories.isNotEmpty;
   int get pendingMemoriesCount => SharedPreferencesUtil().pendingMemories.length;
 
@@ -55,9 +60,33 @@ class MemoriesProvider extends ChangeNotifier {
         categoryMatch = true;
       }
 
-      return matchesSearch && categoryMatch;
-    }).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      // When the server does not support device_scope, legacy memories have no
+      // primary_capture_device/capture_device_ids. Skip the local device filter
+      // in that case to avoid hiding all legacy rows on the "This device" view.
+      final deviceMatch =
+          !_filterThisDeviceOnly ||
+          !_deviceScopeSupported ||
+          ClientDeviceService.instance.memoryMatchesThisDevice(
+            primaryCaptureDevice: memory.primaryCaptureDevice,
+            captureDeviceIds: memory.captureDeviceIds,
+          );
+
+      return matchesSearch && categoryMatch && deviceMatch;
+    }).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  }
+
+  void setFilterThisDeviceOnly(bool enabled) {
+    _filterThisDeviceOnly = enabled;
+    notifyListeners();
+    loadMemories();
+  }
+
+  Future<void> _ensureClientDeviceInitialized() {
+    if (ClientDeviceService.instance.deviceIdHash.isNotEmpty) {
+      return Future.value();
+    }
+    _clientDeviceInitialization ??= ClientDeviceService.instance.initialize();
+    return _clientDeviceInitialization!;
   }
 
   void setShowOnlyManual(bool showOnly) {
@@ -121,6 +150,7 @@ class MemoriesProvider extends ChangeNotifier {
   }
 
   Future<void> init() async {
+    await _ensureClientDeviceInitialized();
     await _loadFilter();
     await loadMemories();
     // Try to sync any pending memories on init
@@ -129,6 +159,8 @@ class MemoriesProvider extends ChangeNotifier {
 
   /// Set the connectivity provider to listen for connection changes
   void setConnectivityProvider(ConnectivityProvider provider) {
+    if (identical(_connectivityProvider, provider)) return;
+    _connectivityProvider?.removeListener(_onConnectivityChanged);
     _connectivityProvider = provider;
     _connectivityProvider?.addListener(_onConnectivityChanged);
   }
@@ -170,7 +202,13 @@ class MemoriesProvider extends ChangeNotifier {
     _loading = true;
     notifyListeners();
 
-    _memories = await getMemories(limit: limit);
+    if (_filterThisDeviceOnly) {
+      await _ensureClientDeviceInitialized();
+    }
+
+    final result = await getMemoriesResult(limit: limit, thisDeviceOnly: _filterThisDeviceOnly);
+    _memories = result.memories;
+    _deviceScopeSupported = result.deviceScopeSupported;
 
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;

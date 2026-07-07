@@ -14,7 +14,7 @@ import importlib.util
 import os
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone, tzinfo
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -89,16 +89,69 @@ _stub_package("utils")
 _stub_package("utils.llm")
 llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
+llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
 llm_clients_stub.parser = MagicMock()
+conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
+conversation_folder_stub.FolderAssignment = MagicMock
+conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=None)
+conversation_folder_stub.build_folders_context = MagicMock(return_value="")
+
+byok_stub = _stub_module("utils.byok")
+byok_stub.has_byok_keys = MagicMock(return_value=False)
+
+gateway_stub = _stub_module("utils.llm.gateway_client")
+gateway_stub.invoke_chat_structured_gateway = MagicMock(return_value=None)
+gateway_stub.record_chat_extraction_gateway_result = MagicMock()
+gateway_stub.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+
+gateway_observability_stub = _stub_module("utils.llm.gateway_observability")
+gateway_observability_stub.record_gateway_shadow_comparison = MagicMock()
+
+conversation_folder_stub = _stub_module("utils.llm.conversation_folder")
+conversation_folder_stub.FolderAssignment = MagicMock()
+conversation_folder_stub.assign_conversation_to_folder = MagicMock(return_value=(None, 0.0, "test stub"))
+conversation_folder_stub.build_folders_context = MagicMock(return_value="")
 
 # Real models (pure pydantic) resolve from the models package directory.
 _stub_package("models")
 sys.modules["models"].__path__ = [str(BACKEND_DIR / "models")]
 
+_conversation_processing_stub = sys.modules.get("utils.llm.conversation_processing")
+if _conversation_processing_stub is not None and not hasattr(_conversation_processing_stub, "_local_started_at_iso"):
+    sys.modules.pop("utils.llm.conversation_processing", None)
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",
 )
+
+# Keep timezone assertions independent of host OS tzdata, which is often absent on Windows test environments.
+
+
+class _JulyOnlyNewYorkTestZone(tzinfo):
+    """Minimal test zone: only the current July DST case needs EDT behavior."""
+
+    def utcoffset(self, dt):
+        return timedelta(hours=-4 if dt is not None and dt.month == 7 else -5)
+
+    def dst(self, dt):
+        return timedelta(hours=1 if dt is not None and dt.month == 7 else 0)
+
+    def tzname(self, dt):
+        return "EDT" if dt is not None and dt.month == 7 else "EST"
+
+
+def _test_zone_info(name):
+    if name == "Pacific/Honolulu":
+        return timezone(timedelta(hours=-10), name)
+    if name == "America/New_York":
+        return _JulyOnlyNewYorkTestZone()
+    if name == "UTC":
+        return timezone.utc
+    raise KeyError(name)
+
+
+conv_proc.ZoneInfo = _test_zone_info
 
 
 # ===========================================================================
@@ -163,9 +216,7 @@ def _capture_structure(fn, **kwargs):
 
     with patch.object(conv_proc, "get_llm", return_value=mock_llm), patch.object(
         conv_proc, "ChatPromptTemplate"
-    ) as mock_prompt_cls, patch.object(conv_proc, "get_user_name", return_value="Test User"), patch.object(
-        conv_proc, "_build_conversation_context", return_value="ctx"
-    ):
+    ) as mock_prompt_cls, patch.object(conv_proc, "_build_conversation_context", return_value="ctx"):
         mock_prompt = MagicMock()
         mock_prompt.__or__ = MagicMock(return_value=mock_chain)
         mock_prompt_cls.from_messages.return_value = mock_prompt

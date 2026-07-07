@@ -172,7 +172,7 @@ class SttProviderConfig {
   final SttProvider provider;
   final String displayName;
   final String description;
-  final IconData icon;
+  final FaIconData icon;
   final bool requiresApiKey;
   final String requestType;
   final SttResponseSchema responseSchema;
@@ -230,7 +230,7 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.multipartForm,
       supportedLanguages: SttLanguages.whisperSupported,
-      supportedModels: const ['whisper-1'],
+      supportedModels: ['whisper-1'],
       defaultLanguage: 'en',
       defaultModel: 'whisper-1',
       responseSchema: SttResponseSchema.openAI,
@@ -260,7 +260,7 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.rawBinary,
       supportedLanguages: SttLanguages.deepgramSupported,
-      supportedModels: const ['nova-3'],
+      supportedModels: ['nova-3'],
       defaultLanguage: 'multi',
       defaultModel: 'nova-3',
       responseSchema: SttResponseSchema.deepgram,
@@ -303,7 +303,7 @@ class SttProviderConfig {
       requiresApiKey: true,
       requestType: SttRequestType.jsonBase64,
       supportedLanguages: SttLanguages.geminiSupported,
-      supportedModels: const ['gemini-2.5-flash', 'gemini-2.5-pro'],
+      supportedModels: ['gemini-2.5-flash', 'gemini-2.5-pro'],
       defaultLanguage: 'en',
       defaultModel: 'gemini-2.0-flash',
       responseSchema: SttResponseSchema.gemini,
@@ -402,22 +402,21 @@ class SttProviderConfig {
 
   /// Available request config templates for custom STT configuration
   static Map<String, Map<String, dynamic>> get requestTemplates => {
-        'OpenAI':
-            get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
-        'Deepgram': get(
-          SttProvider.deepgramLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
-        'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
-        'Google Gemini': get(
-          SttProvider.geminiLive,
-        ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
-        'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
-      };
+    'OpenAI': get(SttProvider.openai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'whisper-1'),
+    'Deepgram': get(
+      SttProvider.deepgramLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'multi', model: 'nova-3'),
+    'Fal.AI': get(SttProvider.falai).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en'),
+    'Google Gemini': get(
+      SttProvider.geminiLive,
+    ).buildRequestConfig(apiKey: 'YOUR_API_KEY', language: 'en', model: 'gemini-2.5-flash'),
+    'Whisper': get(SttProvider.localWhisper).buildRequestConfig(language: 'en'),
+  };
 
   Map<String, dynamic> getFullTemplateJson() => {
-        'request_type': requestType,
-        'response_schema': responseSchema.toJson(),
-      };
+    'request_type': requestType,
+    'response_schema': responseSchema.toJson(),
+  };
 
   /// Build complete request config with API key, language, and model
   /// Returns unified structure: url, request_type, headers, params, audio_field_name

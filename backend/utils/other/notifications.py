@@ -1,18 +1,19 @@
+# async-blockers: no-import-scope
+# async-blockers: no-changed-range-scope  # pre-existing patterns surfaced by type-annotation import changes
 import asyncio
 from datetime import datetime, time, timedelta
+from typing import Any, Dict, List, Tuple
 
 from utils.executors import postprocess_executor, run_blocking
 
 import pytz
 
-import database.chat as chat_db
 import database.conversations as conversations_db
 import database.notifications as notification_db
 from database.redis_db import try_acquire_daily_summary_lock
 from models.notification_message import NotificationMessage
-from models.conversation import Conversation
 from utils.conversations.factory import deserialize_conversation
-from utils.llm.external_integrations import get_conversation_summary, generate_comprehensive_daily_summary
+from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from utils.notifications import send_bulk_notification, send_notification
 from utils.subscription import is_trial_paywalled
 from utils.webhooks import day_summary_webhook
@@ -22,7 +23,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def should_run_job():
+def should_run_job() -> bool:
     """
     Check if the notification cron job should run.
     Always returns True since we now handle all hours dynamically.
@@ -30,7 +31,7 @@ def should_run_job():
     return True
 
 
-async def start_cron_job():
+async def start_cron_job() -> None:
     """
     Main cron job entry point. Runs at the top of every UTC hour.
     """
@@ -39,7 +40,7 @@ async def start_cron_job():
     await send_daily_summary_notification()
 
 
-async def send_daily_summary_notification():
+async def send_daily_summary_notification() -> None:
     """
     Send daily summary notifications to users based on their local hour preference.
 
@@ -63,9 +64,9 @@ async def send_daily_summary_notification():
         return None
 
 
-def _get_timezones_grouped_by_hour() -> dict[int, list[str]]:
+def _get_timezones_grouped_by_hour() -> Dict[int, List[str]]:
     """Group all timezones by their current local hour."""
-    timezones_by_hour = {}
+    timezones_by_hour: Dict[int, List[str]] = {}
     for tz_name in pytz.all_timezones:
         tz = pytz.timezone(tz_name)
         current_hour = datetime.now(tz).hour
@@ -75,7 +76,7 @@ def _get_timezones_grouped_by_hour() -> dict[int, list[str]]:
     return timezones_by_hour
 
 
-def _send_summary_notification(user_data: tuple):
+def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
 
@@ -135,6 +136,7 @@ def _send_summary_notification(user_data: tuple):
         date_str = display_date.strftime('%Y-%m-%d')
 
     # Atomically acquire lock BEFORE expensive LLM work to prevent race condition
+    assert date_str is not None  # set by timezone branch or UTC fallback above
     if not try_acquire_daily_summary_lock(uid, date_str):
         return
 
@@ -150,7 +152,9 @@ def _send_summary_notification(user_data: tuple):
         )
         return
 
-    conversations_data = conversations_db.get_conversations(uid, start_date=start_date_utc, end_date=end_date_utc)
+    conversations_data = conversations_db.get_conversations(
+        uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
+    )
     if not conversations_data or len(conversations_data) == 0:
         return
 
@@ -172,7 +176,7 @@ def _send_summary_notification(user_data: tuple):
 
     # Create notification with deep link to summary page
     daily_summary_title = f"{summary_data.get('day_emoji', '📅')} {summary_data.get('headline', 'Your Daily Summary')}"
-    summary_body = summary_data.get('overview', 'Tap to see your daily summary')
+    summary_body = str(summary_data.get('overview', 'Tap to see your daily summary'))
 
     # Truncate body for notification if too long
     if len(summary_body) > 150:
@@ -197,7 +201,7 @@ def _send_summary_notification(user_data: tuple):
     )
 
 
-async def _send_bulk_summary_notification(users: list):
+async def _send_bulk_summary_notification(users: List[Tuple[Any, ...]]) -> None:
     _BATCH_SIZE = 8
     for i in range(0, len(users), _BATCH_SIZE):
         batch = users[i : i + _BATCH_SIZE]
@@ -208,7 +212,7 @@ async def _send_bulk_summary_notification(users: list):
                 logger.error(f"Daily summary failed for user batch[{i + j}]: {result}")
 
 
-async def send_daily_notification():
+async def send_daily_notification() -> None:
     try:
         morning_alert_title = "omi says"
         morning_alert_body = "Wear your omi and capture your conversations today."
@@ -222,7 +226,7 @@ async def send_daily_notification():
         return None
 
 
-async def _send_notification_for_time(target_time: str, title: str, body: str):
+async def _send_notification_for_time(target_time: str, title: str, body: str) -> Any:
     user_in_time_zone = await _get_users_in_timezone(target_time)
     if not user_in_time_zone:
         logger.info("No users found in time zone")
@@ -231,16 +235,20 @@ async def _send_notification_for_time(target_time: str, title: str, body: str):
     return user_in_time_zone
 
 
-async def _get_users_in_timezone(target_time: str):
+async def _get_users_in_timezone(target_time: str) -> Any:
     timezones_in_time = _get_timezones_at_time(target_time)
     return await notification_db.get_users_token_in_timezones(timezones_in_time)
 
 
-def _get_timezones_at_time(target_time):
-    target_timezones = []
+def _get_timezones_at_time(target_time: str) -> List[str]:
+    # Match on the local hour, not an exact "HH:MM" string. The cron runs at the top of
+    # each UTC hour, so an exact-string match against "08:00" silently excludes every
+    # sub-hour-offset timezone (e.g. India +5:30, Nepal +5:45, Iran +3:30), which read
+    # "08:30"/"08:45". This mirrors _get_timezones_grouped_by_hour, which buckets by hour.
+    target_hour = int(target_time.split(":")[0])
+    target_timezones: List[str] = []
     for tz_name in pytz.all_timezones:
         tz = pytz.timezone(tz_name)
-        current_time = datetime.now(tz).strftime("%H:%M")
-        if current_time == target_time:
+        if datetime.now(tz).hour == target_hour:
             target_timezones.append(tz_name)
     return target_timezones

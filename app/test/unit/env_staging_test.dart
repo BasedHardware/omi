@@ -10,11 +10,9 @@ class _StagingEnvFields implements EnvFields {
   @override
   String? get openAIAPIKey => null;
   @override
-  String? get mixpanelProjectToken => null;
+  String? get posthogApiKey => null;
   @override
   String? get apiBaseUrl => 'https://api.prod.example.com/';
-  @override
-  String? get growthbookApiKey => null;
   @override
   String? get googleMapsApiKey => null;
   @override

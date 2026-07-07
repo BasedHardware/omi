@@ -13,8 +13,11 @@ Usage:
     logger.info(f"Found contact: {sanitize_pii(name)} -> {sanitize_pii(email)}")
 """
 
-import re
+import json
 import logging
+import re
+from collections.abc import Mapping
+from typing import Protocol
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +30,11 @@ _EMAIL_PATTERN = re.compile(r'[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}')
 _TOKEN_CHARS = re.compile(r'[A-Za-z0-9+/_\-]{8,}')
 
 
-def sanitize(value) -> str:
+class _ValidationErrorLike(Protocol):
+    def errors(self, *, include_input: bool = True) -> list[Mapping[str, object]]: ...
+
+
+def sanitize(value: object) -> str:
     """Mask token-like strings and emails while keeping enough for search.
 
     Tokens:
@@ -51,7 +58,26 @@ def sanitize(value) -> str:
     return _TOKEN_CHARS.sub(_mask_token, text)
 
 
-def _mask_email(match: re.Match) -> str:
+def sanitize_validation_error(error: _ValidationErrorLike) -> str:
+    """Return validation diagnostics without logging raw input values.
+
+    Pydantic's default ``ValidationError.__str__`` includes ``input_value``;
+    for LLM/user-derived payloads that can expose private text. Keep only the
+    structural fields needed to debug malformed payloads.
+    """
+    safe_errors: list[dict[str, object | None]] = []
+    for item in error.errors(include_input=False):
+        safe_errors.append(
+            {
+                'type': item.get('type'),
+                'loc': item.get('loc'),
+                'msg': item.get('msg'),
+            }
+        )
+    return sanitize(json.dumps(safe_errors, default=str))
+
+
+def _mask_email(match: re.Match[str]) -> str:
     """Mask email local part, keep domain: john.doe@example.com -> j***e@example.com."""
     email = match.group(0)
     local, domain = email.split('@', 1)
@@ -60,7 +86,7 @@ def _mask_email(match: re.Match) -> str:
     return f'{local[0]}***{local[-1]}@{domain}'
 
 
-def sanitize_pii(value) -> str:
+def sanitize_pii(value: object) -> str:
     """Mask a known PII value (name, email, user text).
 
     Use this instead of sanitize() when the value is KNOWN to be personal data.
@@ -81,7 +107,7 @@ def sanitize_pii(value) -> str:
     text = _EMAIL_PATTERN.sub(_mask_email, text)
     # Mask each word in the text (skip already-masked email domains)
     words = text.split()
-    masked = []
+    masked: list[str] = []
     for word in words:
         # Skip already-masked email addresses (contain @)
         if '@' in word:
@@ -100,7 +126,7 @@ def sanitize_pii(value) -> str:
     return result
 
 
-def _mask_token(match: re.Match) -> str:
+def _mask_token(match: re.Match[str]) -> str:
     """Replace the middle of a long token-like string with ***.
 
     Only masks strings that contain at least one digit or base64 special char (+/).

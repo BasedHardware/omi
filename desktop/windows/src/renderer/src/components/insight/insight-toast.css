@@ -1,0 +1,23 @@
+/* src/renderer/src/components/insight/insight-toast.css */
+body.insight-toast-body { background: transparent !important; overflow: hidden; }
+
+.insight-card {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  color: #f5f5f5;
+  background: rgba(0, 0, 0, 0.45); /* thin wash over the DWM acrylic backdrop */
+  animation: insight-in 180ms ease-out;
+}
+@keyframes insight-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.insight-head { display: flex; align-items: center; gap: 8px; }
+.insight-cat { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #b9b9b9; }
+.insight-x { margin-left: auto; cursor: pointer; color: #b9b9b9; background: none; border: 0; font-size: 14px; -webkit-app-region: no-drag; }
+.insight-headline { font-weight: 600; font-size: 14px; }
+.insight-advice { font-size: 13px; color: #e2e2e2; overflow: hidden; }
+.insight-foot { margin-top: auto; font-size: 11px; color: #9a9a9a; }

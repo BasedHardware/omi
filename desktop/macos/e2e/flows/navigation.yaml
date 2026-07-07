@@ -1,0 +1,67 @@
+version: 2
+name: navigation
+tier: 1
+description: Desktop sidebar navigation — verify core sections load via bridge navigation
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Navigate to Chat
+    bridge.navigate:
+      target: chat
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 2
+
+  - id: S3
+    name: Navigate to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S4
+    name: Navigate to Tasks
+    bridge.navigate:
+      target: tasks
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 4
+
+  - id: S5
+    name: Navigate to Apps
+    bridge.navigate:
+      target: apps
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 8
+
+  - id: S6
+    name: Navigate to Settings
+    bridge.navigate:
+      target: settings
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 9
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"

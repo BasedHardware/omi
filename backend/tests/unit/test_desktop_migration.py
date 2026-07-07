@@ -45,9 +45,35 @@ def _stub_package(name):
     return mod
 
 
+def _remove_module_tree(prefix):
+    for name in list(sys.modules):
+        if name == prefix or name.startswith(prefix + "."):
+            sys.modules.pop(name, None)
+
+
+def _ensure_package_path(name, path):
+    mod = sys.modules.get(name)
+    if not isinstance(mod, types.ModuleType):
+        mod = types.ModuleType(name)
+        sys.modules[name] = mod
+    mod.__path__ = [str(path)]
+    return mod
+
+
 # ---------------------------------------------------------------------------
 # Stub heavy dependencies before any production imports
 # ---------------------------------------------------------------------------
+for module_prefix in [
+    "database",
+    "models",
+    "utils",
+    "routers.chat_sessions",
+    "routers.focus_sessions",
+    "routers.advice",
+    "routers.staged_tasks",
+]:
+    _remove_module_tree(module_prefix)
+
 for mod_name in [
     "firebase_admin",
     "firebase_admin.firestore",
@@ -65,9 +91,15 @@ for mod_name in [
     "sentry_sdk",
     "database.redis_db",
     "database.auth",
+    "utils.chat",
+    "utils.llm",
+    "utils.llm.clients",
 ]:
     if mod_name not in sys.modules:
         _stub_module(mod_name)
+
+sys.modules["utils.chat"].initial_message_util = MagicMock()
+sys.modules["utils.llm.clients"].get_llm = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
@@ -83,17 +115,16 @@ field_filter_stub.FieldFilter = MagicMock()
 sys.modules["google.cloud.firestore_v1"].FieldFilter = field_filter_stub.FieldFilter
 sys.modules["google.cloud.firestore_v1"].transactional = lambda f: f
 
+redis_stub = sys.modules["database.redis_db"]
+redis_stub.r = MagicMock()
+setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
+redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
+
 # Add backend dir to sys.path
 sys.path.insert(0, str(BACKEND_DIR))
 
 # Stub database package and _client
-if "database" not in sys.modules:
-    db_pkg = _stub_package("database")
-    db_pkg.__path__ = [str(BACKEND_DIR / "database")]
-else:
-    db_mod = sys.modules["database"]
-    if not hasattr(db_mod, '__path__'):
-        db_mod.__path__ = [str(BACKEND_DIR / "database")]
+_ensure_package_path("database", BACKEND_DIR / "database")
 
 client_stub = _stub_module("database._client")
 mock_db = MagicMock()
@@ -107,14 +138,12 @@ helpers_stub.prepare_for_write = lambda **kw: (lambda f: f)
 helpers_stub.prepare_for_read = lambda **kw: (lambda f: f)
 
 # Stub models and utils needed by database.users and database.chat
-_stub_package("models")
+_ensure_package_path("models", BACKEND_DIR / "models")
 models_users_stub = _stub_module("models.users")
 models_users_stub.Subscription = MagicMock()
 models_users_stub.PlanLimits = MagicMock()
 models_users_stub.PlanType = MagicMock()
 models_users_stub.SubscriptionStatus = MagicMock()
-models_chat_stub = _stub_module("models.chat")
-models_chat_stub.Message = MagicMock()
 
 _stub_package("utils")
 _stub_package("utils.other")
@@ -126,8 +155,15 @@ utils_enc_stub.decrypt = MagicMock(return_value="decrypted")
 endpoints_stub = _stub_module("utils.other.endpoints")
 endpoints_stub.get_current_user_uid = MagicMock()
 endpoints_stub.with_rate_limit = lambda dep, policy: dep
+endpoints_stub.with_rate_limit_context = lambda dep, policy: dep
 endpoints_stub.timeit = lambda f: f
 _stub_module("utils.observability")
+request_validation_stub = _stub_module("utils.request_validation")
+request_validation_stub.validate_calendar_date = lambda value, field_name='date': value
+redis_stub = _stub_module("database.redis_db")
+redis_stub.r = MagicMock()
+setattr(redis_stub, 'try_acquire_client_device_write_lock', MagicMock(return_value=True))
+redis_stub.try_acquire_user_platform_write_lock = MagicMock(return_value=True)
 
 # ---------------------------------------------------------------------------
 # Import domain-specific database modules
@@ -147,6 +183,10 @@ from routers.chat_sessions import SaveMessageRequest, RateMessageRequest  # noqa
 from routers.focus_sessions import CreateFocusSessionRequest  # noqa: E402
 from routers.advice import CreateAdviceRequest  # noqa: E402
 from routers.staged_tasks import BatchUpdateScoresRequest, BatchScoreEntry  # noqa: E402
+
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.other", BACKEND_DIR / "utils" / "other")
 
 # Cannot import routers.users directly — it pulls in database.conversations → utils.other.hume
 # which has heavy deps. Mirror the models here and verify parity via AST test below.
@@ -1358,7 +1398,7 @@ class TestModelParity:
         """Inline UpdateNotificationSettingsRequest matches routers/users.py definition."""
         import ast
 
-        source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
+        source = (BACKEND_DIR / 'routers' / 'users.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef) and node.name == 'UpdateNotificationSettingsRequest':
@@ -1377,7 +1417,7 @@ class TestModelParity:
         """Inline RecordLlmUsageBucketRequest matches routers/users.py definition."""
         import ast
 
-        source = (BACKEND_DIR / 'routers' / 'users.py').read_text()
+        source = (BACKEND_DIR / 'routers' / 'users.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.ClassDef) and node.name == 'RecordLlmUsageBucketRequest':
@@ -1646,9 +1686,7 @@ class TestInitialMessageEndpoint:
         mock_msg.text = 'Hello! How can I help?'
         mock_msg.id = 'msg-123'
 
-        with patch.dict(
-            'sys.modules', {'routers.chat': MagicMock(initial_message_util=MagicMock(return_value=mock_msg))}
-        ):
+        with patch('routers.chat_sessions.initial_message_util', return_value=mock_msg):
             result = create_initial_message(InitialMessageRequest(session_id='s1', app_id='app1'), uid='u1')
 
         assert result == {'message': 'Hello! How can I help?', 'message_id': 'msg-123'}
@@ -1661,7 +1699,7 @@ class TestInitialMessageEndpoint:
         mock_msg.id = 'msg-456'
         mock_util = MagicMock(return_value=mock_msg)
 
-        with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
+        with patch('routers.chat_sessions.initial_message_util', mock_util):
             create_initial_message(InitialMessageRequest(session_id='s1'), uid='u1')
             mock_util.assert_called_once_with('u1', None, chat_session_id='s1')
 
@@ -1673,7 +1711,7 @@ class TestInitialMessageEndpoint:
         mock_msg.id = 'msg-789'
         mock_util = MagicMock(return_value=mock_msg)
 
-        with patch.dict('sys.modules', {'routers.chat': MagicMock(initial_message_util=mock_util)}):
+        with patch('routers.chat_sessions.initial_message_util', mock_util):
             create_initial_message(InitialMessageRequest(session_id='sess-42', app_id='myapp'), uid='u1')
             mock_util.assert_called_once_with('u1', 'myapp', chat_session_id='sess-42')
 
@@ -1694,10 +1732,12 @@ class TestGenerateTitleEndpoint:
             session_id='s1',
             messages=[TitleMessageInput(text='hi', sender='human'), TitleMessageInput(text='hello', sender='ai')],
         )
-        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+        mock_get_llm = MagicMock(return_value=mock_llm)
+        with patch('routers.chat_sessions.get_llm', mock_get_llm):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'Project Discussion'}
+        mock_get_llm.assert_called_once_with('session_titles')
         mock_update.assert_called_once_with('u1', 's1', title='Project Discussion')
 
     @patch('database.chat.update_chat_session')
@@ -1713,10 +1753,12 @@ class TestGenerateTitleEndpoint:
             session_id='s1',
             messages=[TitleMessageInput(text='hi', sender='human')],
         )
-        with patch.dict('sys.modules', {'utils.llm.clients': MagicMock(llm_mini=mock_llm)}):
+        mock_get_llm = MagicMock(return_value=mock_llm)
+        with patch('routers.chat_sessions.get_llm', mock_get_llm):
             result = generate_session_title(request, uid='u1')
 
         assert result == {'title': 'New Chat'}
+        mock_get_llm.assert_called_once_with('session_titles')
 
 
 class TestChatMessageCount:

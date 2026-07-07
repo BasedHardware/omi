@@ -100,8 +100,30 @@ env:
     value: "nemo"
   - name: PARAKEET_MAX_SPEECH_S
     value: "5"
+  - name: PARAKEET_TORCH_COMPILE
+    value: "true"
+  - name: PARAKEET_CUDA_GRAPHS
+    value: "true"
+  - name: PARAKEET_ATTENTION_MODE
+    value: "auto"
+  - name: PARAKEET_AUTO_ATTN_THRESHOLD
+    value: "300"
+  - name: PARAKEET_LOCAL_ATTN_CONTEXT
+    value: "128,128"
+  - name: PARAKEET_MAX_FILE_DURATION
+    value: "3600"
+  - name: PARAKEET_VRAM_SAFETY_FACTOR
+    value: "0.8"
+  - name: PARAKEET_VRAM_BYTES_PER_T2
+    value: "136.6"
+  - name: PARAKEET_STARVATION_TIMEOUT
+    value: "5.0"
+  - name: PARAKEET_MAX_INFLIGHT
+    value: "2"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://prod-omi-diarizer.prod-omi-backend.svc.cluster.local:8080"
+
+terminationGracePeriodSeconds: 150
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
@@ -125,13 +147,15 @@ livenessProbe:
   periodSeconds: 10
 
 readinessProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
   failureThreshold: 30
   periodSeconds: 10
 
 startupProbe:
-  tcpSocket:
+  httpGet:
+    path: /health
     port: 8080
   failureThreshold: 60
   periodSeconds: 10
@@ -155,26 +179,21 @@ prometheus-adapter:
 autoscaling:
   enabled: true
   minReplicas: 1
-  maxReplicas: 10
+  maxReplicas: 2
   behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 300
     scaleDown:
       stabilizationWindowSeconds: 600
       policies:
-      - type: Percent
-        value: 20
-        periodSeconds: 300
       - type: Pods
         value: 1
-        periodSeconds: 120
-      selectPolicy: Min
-    scaleUp:
-      stabilizationWindowSeconds: 60
-      policies:
-      - type: Pods
-        value: 2
-        periodSeconds: 60
-      selectPolicy: Max
-  streamsPerPod: 60
+        periodSeconds: 600
+  requestsPerPod: 25
   targetGPUUtilization: 70
 
 # Additional volumes on the output Deployment definition.
@@ -207,3 +226,10 @@ affinity:
               operator: In
               values:
                 - prod
+
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0

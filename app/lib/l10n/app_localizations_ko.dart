@@ -4609,10 +4609,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription 및 $triggerDescription.';
   }
 
@@ -7642,6 +7639,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get viewAll => '모두 보기';
 
   @override
+  String get expand => '펼치기';
+
+  @override
   String get addTask => '작업 추가';
 
   @override
@@ -8320,12 +8320,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '대화 $count개 생성됨',
-      one: '대화 1개 생성됨',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '대화 $count개 생성됨', one: '대화 1개 생성됨');
     return '$_temp0';
   }
 
@@ -9049,11 +9044,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String syncCardReadyCount(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '녹음 $count건 동기화 준비됨',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '녹음 $count건 동기화 준비됨');
     return '$_temp0';
   }
 
@@ -9065,11 +9056,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String syncCardNeedsAttention(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '확인이 필요한 녹음 $count개',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: '확인이 필요한 녹음 $count개');
     return '$_temp0';
   }
 
@@ -9157,6 +9144,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get backgroundModeNote => '현재는 Omi 기기에서만 작동하며 지속적으로 개선되고 있습니다.';
 
   @override
+  String get backgroundModeUnavailable =>
+      '호환되는 기기가 연결되어 있지 않아 백그라운드 모드를 사용할 수 없습니다. 이 기능을 사용하려면 Omi, OpenGlass 또는 Friend Pendant 기기를 연결하세요.';
+
+  @override
   String get regenerateRecap => '요약 재생성';
 
   @override
@@ -9176,4 +9167,177 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get syncCustomSttWarningMessage => '직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.';
+
+  @override
+  String get transcribeLaterTitle => '나중에 변환하기';
+
+  @override
+  String get transcribeLaterDescription => '실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.';
+
+  @override
+  String get transcribeLaterNote => '현재는 Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.';
+
+  @override
+  String get transcribeLaterStorageFull => '휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.';
+
+  @override
+  String get recordingMode => '녹음 모드';
+
+  @override
+  String get captureModeLater => '나중에';
+
+  @override
+  String get captureModeLiveDescription => '말하는 동안 실시간으로 변환합니다.';
+
+  @override
+  String get captureModeLaterDescription => '지금 오디오를 저장하고 원할 때 변환하세요.';
+
+  @override
+  String get unmute => '음소거 해제';
+
+  @override
+  String get newRecording => '새 녹음';
+
+  @override
+  String get transcribeLaterPaused => '일시중지됨 — 오디오가 녹음되지 않고 있습니다';
+
+  @override
+  String get memoryThisDevice => '이 기기';
+
+  @override
+  String get memoryThisIphone => '이 iPhone';
+
+  @override
+  String get memoryThisPhone => '이 휴대폰';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi 사용법';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omi에 대고 말해보세요';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '몇 마디 말하면 실시간으로 텍스트가 나타나요';
+
+  @override
+  String get deviceOnboardingGoodJob => '잘했어요!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '말해보세요...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi에게 질문하기';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => '버튼을 한 번 누르고 질문한 뒤, 끝나면 다시 누르세요';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '질문을 처리하는 중...';
+
+  @override
+  String get deviceOnboardingListening => '듣는 중...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '전원 끄기';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '전원 켜기';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => '버튼을 3초간 길게 누르세요';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => '버튼을 눌러 다시 켜세요';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => '불이 꺼질 때까지 버튼을 꾹 누르세요';
+
+  @override
+  String get deviceOnboardingStatusConnected => '연결됨';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '연결되었어요!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '연결 끊김';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '끄는 중...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => '더블 탭 설정하기';
+
+  @override
+  String get deviceOnboardingEndConversation => '대화 종료';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '현재 대화를 저장하고 종료해요';
+
+  @override
+  String get deviceOnboardingMuteUnmute => '음소거 / 해제';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => '마이크를 켜거나 꺼요';
+
+  @override
+  String get deviceOnboardingStarConversation => '진행 중인 대화 즐겨찾기';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '대화를 중요로 표시해요';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '방금 한 번 탭했어요 — 빠르게 두 번 탭해보세요!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '지금 해보세요! Omi를 더블 탭하세요';
+
+  @override
+  String get deviceOnboardingContinue => '계속';
+
+  @override
+  String get deviceOnboardingFinish => '완료';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi 알아보기';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi가 할 수 있는 모든 것을 빠르게 직접 둘러보세요.';
+
+  @override
+  String get deviceOnboardingIntroDuration => '약 1분';
+
+  @override
+  String get jumpToLatestMessage => '최신 메시지로 이동';
+
+  @override
+  String get latest => '최신';
+
+  @override
+  String get flashFirmware => '펌웨어 플래시';
+
+  @override
+  String get pendantRecordingTitle => '펜던트에서 녹음 중';
+
+  @override
+  String get pendantRecordingNote => '펜던트가 자동으로 녹음하고 있습니다. 앱이 열려 있는 동안 녹음이 휴대폰으로 동기화됩니다.';
+
+  @override
+  String get pendantSyncingRecordings => '펜던트에서 녹음을 동기화하는 중…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes분 저장됨';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => '펜던트 저장 공간이 거의 가득 찼습니다. 동기화하려면 앱을 열어 두세요.';
 }

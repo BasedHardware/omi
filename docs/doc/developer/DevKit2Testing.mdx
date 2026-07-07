@@ -54,7 +54,7 @@ If you don't receive code `100` or `200`, the command was not completed.
 ## Testing Process
 
 <Info>
-**Prerequisites:** Python packages from `requirements.txt`, plus `ffmpeg` and `opus` for audio decoding.
+**Prerequisites:** Python packages from `requirements.txt`, plus `ffmpeg` and `opus` for audio decoding. The test scripts live in [`omi/firmware/scripts/devkit/`](https://github.com/BasedHardware/omi/tree/main/omi/firmware/scripts/devkit).
 </Info>
 
 Run these scripts in order:
@@ -64,16 +64,16 @@ Run these scripts in order:
     Run `discover_devices.py` to list all nearby Bluetooth devices. Look for **"Omi"** or **"Omi Devkit 2"** and note the device ID.
   </Step>
   <Step title="Check File Sizes" icon="list">
-    Run `get_info_list.py` — replace line 6 with your device ID. This lists the size of each audio file on the SD card.
+    Run `get_info_list.py` — replace the `device_id` value with your device ID. This lists the size of each audio file on the SD card.
   </Step>
   <Step title="Download Audio" icon="download">
-    Run `get_audio_file.py` — replace line 9 with your device ID. Audio data streams to `my_file.txt` in the current directory.
+    Run `get_audio_file.py` — replace the `device_id` value with your device ID. Audio data streams to `my_file.txt` in the current directory.
   </Step>
   <Step title="Decode Audio" icon="file-audio">
     Run `decode_audio.py` to convert the downloaded data into a WAV file. If successful, you'll have a playable recording of what was spoken near the mic.
   </Step>
   <Step title="(Optional) Delete Audio" icon="trash">
-    Run `delete_audio_file.py` — replace line 6 with your device ID. This clears audio data from the specified file.
+    Run `delete_audio_files.py` — replace the `device_id` value with your device ID. This clears audio data from the specified file.
   </Step>
 </Steps>
 

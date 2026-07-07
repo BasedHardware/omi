@@ -1,0 +1,76 @@
+# Flow: Conversations — List, Detail, Tabs, CRUD
+# Tags: core, conversations
+# Tests: Browse conversations, open detail, switch tabs (Summary/Transcript/Action Items),
+#         star a conversation, use three-dot menu, filter by folder tabs
+# Requires: User signed in with at least 1 existing conversation
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - conversations
+
+---
+
+# Ensure we're on home screen with conversations visible
+- assertVisible: "Conversations"
+- takeScreenshot: "03_conversations_list"
+
+# Verify folder tabs are present
+- assertVisible:
+    text: "All"
+- assertVisible:
+    text: "Starred"
+    optional: true
+
+# Open first conversation
+- tapOn:
+    index: 0
+    text: ".*"
+    below: "Conversations"
+- takeScreenshot: "03_conversations_detail"
+
+# Verify detail page shows Summary tab by default
+- extendedWaitUntil:
+    visible:
+      text: "Summary|Overview"
+    timeout: 5000
+
+# Switch to Transcript tab
+- tapOn: "Transcript"
+- assertVisible:
+    text: "Transcript"
+- takeScreenshot: "03_conversations_transcript"
+
+# Switch to Action Items tab
+- tapOn: "Action Items"
+- takeScreenshot: "03_conversations_action_items"
+
+# Switch back to Summary
+- tapOn: "Summary"
+
+# Open three-dot menu
+- tapOn:
+    id: ".*more.*|.*menu.*"
+    optional: true
+- runFlow:
+    when:
+      visible: "Copy Transcript"
+    commands:
+      - assertVisible: "Copy Transcript"
+      - assertVisible: "Delete Conversation"
+      - takeScreenshot: "03_conversations_menu"
+      # Dismiss menu
+      - back
+
+# Navigate back to home
+- back
+- assertVisible: "Conversations"
+
+# Test Starred folder tab
+- tapOn: "Starred"
+- takeScreenshot: "03_conversations_starred"
+
+# Return to All tab
+- tapOn: "All"
+- assertVisible: "Conversations"
+- takeScreenshot: "03_conversations_all_restored"

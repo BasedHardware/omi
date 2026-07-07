@@ -15,8 +15,10 @@ from utils.http_client import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.async_tasks import gather_safe
+import utils.dev_cache as dev_cache
 
 import database.notifications as notification_db
+import database.dev_api_key as dev_api_key_db
 from database import mem_db
 from database import redis_db
 from database.apps import get_app_by_id_db, record_app_usage
@@ -166,7 +168,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     if conversation.is_locked:
         return []
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_on_conversation_creation() and app.enabled]
     if not filtered_apps:
         return []
@@ -222,15 +224,22 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
 
             if app.uid is not None:
                 if app.uid != uid:
-                    record_app_usage(
+                    await run_blocking(
+                        db_executor,
+                        record_app_usage,
                         uid,
                         app.id,
                         UsageHistoryType.memory_created_external_integration,
                         conversation_id=conversation.id,
                     )
             else:
-                record_app_usage(
-                    uid, app.id, UsageHistoryType.memory_created_external_integration, conversation_id=conversation.id
+                await run_blocking(
+                    db_executor,
+                    record_app_usage,
+                    uid,
+                    app.id,
+                    UsageHistoryType.memory_created_external_integration,
+                    conversation_id=conversation.id,
                 )
 
             try:
@@ -252,7 +261,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
     for key, message in results.items():
         if not message:
             continue
-        messages.append(add_app_message(message, key, uid, conversation.id))
+        messages.append(await run_blocking(db_executor, add_app_message, message, key, uid, conversation.id))
     return messages
 
 
@@ -304,15 +313,43 @@ def _hit_proactive_notification_rate_limits(uid: str, app: App):
         return False
     ttl = redis_db.get_proactive_noti_sent_at_ttl(uid, app.id)
     if ttl > 0:
-        mem_db.set_proactive_noti_sent_at(uid, app.id, int(time.time() + ttl), ttl=ttl)
+        mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(time.time() + ttl), ttl=ttl)
 
     return time.time() - sent_at < PROACTIVE_NOTI_LIMIT_SECONDS
 
 
 def _set_proactive_noti_sent_at(uid: str, app: App):
     ts = time.time()
-    mem_db.set_proactive_noti_sent_at(uid, app, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, app.id, int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app_id=app.id, ts=int(ts), ttl=PROACTIVE_NOTI_LIMIT_SECONDS)
+
+
+def _is_developer(uid: str) -> bool:
+    """A user with at least one developer API key is treated as a developer and
+    is exempt from the daily proactive-notification cap (#3346), so building and
+    testing an app is not throttled. Result is cached (in ``utils.dev_cache``, and
+    invalidated on dev-key changes) to keep the cap check off the Firestore hot
+    path. Fails closed (treats the user as a non-developer, and does not cache the
+    failure) so a lookup error never silently lifts the cap for everyone."""
+    cached = dev_cache.get_cached_developer(uid)
+    if cached is not None:
+        return cached
+    try:
+        result = bool(dev_api_key_db.get_dev_keys_for_user(uid))
+    except Exception as e:
+        logger.warning(f"proactive daily cap: developer check failed uid={uid}, applying cap: {e}")
+        return False
+    dev_cache.set_cached_developer(uid, result)
+    return result
+
+
+def _proactive_daily_cap_reached(uid: str) -> bool:
+    """True when the user has already received the day's allotment of proactive
+    notifications. Counts every proactive source together (mentor + third-party
+    apps) against one per-user daily budget, and exempts developers (#3346)."""
+    if _is_developer(uid):
+        return False
+    return (get_daily_notification_count(uid) or 0) >= MAX_DAILY_NOTIFICATIONS
 
 
 MENTOR_RATE_LIMIT_SECONDS = 300  # 5 minutes between mentor notifications
@@ -348,10 +385,9 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
         logger.info(f"mentor_proactive rate_limited_remote uid={uid}")
         return None
 
-    # 3. Daily cap check
-    daily_count = get_daily_notification_count(uid) or 0
-    if daily_count >= MAX_DAILY_NOTIFICATIONS:
-        logger.info(f"mentor_proactive daily_cap_reached uid={uid} count={daily_count}")
+    # 3. Daily cap check (shared budget across all proactive sources; devs exempt)
+    if _proactive_daily_cap_reached(uid):
+        logger.info(f"mentor_proactive daily_cap_reached uid={uid}")
         return None
 
     # 4. Gather lightweight context (no vector search yet — save for step 2)
@@ -501,8 +537,8 @@ def _process_mentor_proactive_notification(uid: str, conversation_messages: list
 
     # Update rate limit and daily count
     ts = int(time.time())
-    mem_db.set_proactive_noti_sent_at(uid, 'mentor', ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
-    redis_db.set_proactive_noti_sent_at(uid, 'mentor', ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+    mem_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
+    redis_db.set_proactive_noti_sent_at(uid, app_id='mentor', ts=ts, ttl=MENTOR_RATE_LIMIT_SECONDS)
     incr_daily_notification_count(uid)
 
     return notification_text
@@ -517,6 +553,13 @@ def _process_proactive_notification(uid: str, app: App, data):
     # rate limits
     if _hit_proactive_notification_rate_limits(uid, app):
         logger.info(f"App {app.id} is reach rate limits 1 noti per user per {PROACTIVE_NOTI_LIMIT_SECONDS}s {uid}")
+        return None
+
+    # Daily cap: third-party proactive notifications share the same per-user daily
+    # budget as mentor notifications, so a user with several proactive apps cannot
+    # blow past the limit. Developers are exempt (#3346).
+    if _proactive_daily_cap_reached(uid):
+        logger.info(f"App {app.id} proactive daily_cap_reached {uid}")
         return None
 
     max_prompt_char_limit = 128000
@@ -571,6 +614,9 @@ def _process_proactive_notification(uid: str, app: App, data):
     send_app_notification(uid, app.name, app.id, message)
 
     _set_proactive_noti_sent_at(uid, app)
+    # Count this against the user's daily proactive budget so mentor + app
+    # notifications share one ceiling rather than each having their own.
+    incr_daily_notification_count(uid)
     return message
 
 
@@ -593,7 +639,10 @@ async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: 
             return
 
         url = app.external_integration.webhook_url
-        url += f'?sample_rate={sample_rate}&uid={uid}'
+        # The configured webhook_url may already carry a query string (auth token,
+        # routing param), so pick the right separator instead of always using '?'.
+        separator = '&' if '?' in url else '?'
+        url += f'{separator}sample_rate={sample_rate}&uid={uid}'
 
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
@@ -656,14 +705,14 @@ async def _async_trigger_realtime_integrations(
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
 
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime() and app.enabled]
     if not filtered_apps:
         # Return mentor results if any, even if no external apps
         if mentor_results:
             messages = []
             for key, message in mentor_results.items():
-                messages.append(add_app_message(message, key, uid))
+                messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
             return messages
         return {}
 
@@ -707,7 +756,9 @@ async def _async_trigger_realtime_integrations(
             await run_blocking(db_executor, record_app_webhook_success, app.id)
 
             if (app.uid is None or app.uid != uid) and conversation_id is not None:
-                record_app_usage(
+                await run_blocking(
+                    db_executor,
+                    record_app_usage,
                     uid,
                     app.id,
                     UsageHistoryType.transcript_processed_external_integration,
@@ -752,7 +803,7 @@ async def _async_trigger_realtime_integrations(
     for key, message in all_results.items():
         if not message:
             continue
-        messages.append(add_app_message(message, key, uid))
+        messages.append(await run_blocking(db_executor, add_app_message, message, key, uid))
 
     return messages
 
@@ -761,7 +812,7 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
-        app_id=app_id,
+        plugin_id=app_id,
         from_integration='true',
         type='text',
         notification_type='plugin',

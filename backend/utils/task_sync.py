@@ -1,17 +1,20 @@
-from datetime import datetime
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Dict, List
 
 import httpx
 
 import database.users as users_db
 import database.action_items as action_items_db
+from utils.executors import db_executor, run_blocking
 from utils.notifications import send_apple_reminders_sync_push
 import logging
 
 logger = logging.getLogger(__name__)
 
 
-async def auto_sync_action_item(uid: str, action_item: dict, skip_apple_reminders: bool = False) -> dict:
+async def auto_sync_action_item(
+    uid: str, action_item: Dict[str, Any], skip_apple_reminders: bool = False
+) -> Dict[str, Any]:
     """
     Auto-sync a single action item to user's default integration.
 
@@ -24,11 +27,11 @@ async def auto_sync_action_item(uid: str, action_item: dict, skip_apple_reminder
         dict: {"synced": bool, "platform": str, "external_task_id": str, "error": str}
     """
     try:
-        default_app = users_db.get_default_task_integration(uid)
+        default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
             return {"synced": False, "reason": "no_default_integration"}
 
-        integration = users_db.get_task_integration(uid, default_app)
+        integration = await run_blocking(db_executor, users_db.get_task_integration, uid, default_app)
         if not integration:
             return {"synced": False, "reason": "integration_not_found"}
 
@@ -48,9 +51,11 @@ async def auto_sync_action_item(uid: str, action_item: dict, skip_apple_reminder
         return {"synced": False, "error": str(e)}
 
 
-async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, action_item: dict) -> dict:
+async def _sync_to_cloud_service(
+    uid: str, app_key: str, integration: Dict[str, Any], action_item: Dict[str, Any]
+) -> Dict[str, Any]:
     """Create task in external service using existing task_integrations logic."""
-    from routers.task_integrations import _create_task_internal
+    from routers.task_integrations import _create_task_internal  # type: ignore[reportPrivateUsage]  # internal helper reused across modules
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         result = await _create_task_internal(
@@ -64,13 +69,15 @@ async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, acti
 
     if result.get("success"):
         # Mark action item as exported
-        action_items_db.update_action_item(
+        await run_blocking(
+            db_executor,
+            action_items_db.update_action_item,
             uid,
             action_item["id"],
             {
                 "exported": True,
                 "export_platform": app_key,
-                "export_date": datetime.utcnow(),
+                "export_date": datetime.now(timezone.utc),
             },
         )
         return {"synced": True, "platform": app_key, "external_task_id": result.get("external_task_id")}
@@ -78,15 +85,15 @@ async def _sync_to_cloud_service(uid: str, app_key: str, integration: dict, acti
     return {"synced": False, "platform": app_key, "error": result.get("error")}
 
 
-def _sync_to_apple_reminders(uid: str, action_items: list) -> dict:
+def _sync_to_apple_reminders(uid: str, action_items: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Mark items as sync_requested and send a single silent push for Apple Reminders."""
-    item_ids = [item['id'] for item in action_items]
+    item_ids: List[Any] = [item['id'] for item in action_items]
     action_items_db.batch_set_sync_requested(uid, item_ids)
     success = send_apple_reminders_sync_push(user_id=uid, action_items=action_items)
     return {"synced": success, "platform": "apple_reminders", "pending_device": True}
 
 
-async def auto_sync_action_items_batch(uid: str, action_items: list) -> list:
+async def auto_sync_action_items_batch(uid: str, action_items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Batch sync multiple action items. For Apple Reminders, sends a single
     silent push with all items to avoid iOS throttling.
@@ -102,11 +109,11 @@ async def auto_sync_action_items_batch(uid: str, action_items: list) -> list:
         return []
 
     try:
-        default_app = users_db.get_default_task_integration(uid)
+        default_app = await run_blocking(db_executor, users_db.get_default_task_integration, uid)
         if not default_app:
             return [{"synced": False, "reason": "no_default_integration"}] * len(action_items)
 
-        integration = users_db.get_task_integration(uid, default_app)
+        integration = await run_blocking(db_executor, users_db.get_task_integration, uid, default_app)
         if not integration:
             return [{"synced": False, "reason": "integration_not_found"}] * len(action_items)
 
@@ -119,7 +126,7 @@ async def auto_sync_action_items_batch(uid: str, action_items: list) -> list:
             return [result] * len(action_items)
 
         # Cloud services: sync individually
-        results = []
+        results: List[Dict[str, Any]] = []
         for item in action_items:
             result = await _sync_to_cloud_service(uid, default_app, integration, item)
             results.append(result)

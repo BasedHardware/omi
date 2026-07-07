@@ -1718,12 +1718,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'CİHAZ',
-      one: 'CİHAZ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'CİHAZ', one: 'CİHAZ');
     return '$count $_temp0 YAKINLARDA BULUNDU';
   }
 
@@ -4702,10 +4697,7 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ve $triggerDescription.';
   }
 
@@ -7781,6 +7773,9 @@ class AppLocalizationsTr extends AppLocalizations {
   String get viewAll => 'Tümünü gör';
 
   @override
+  String get expand => 'Genişlet';
+
+  @override
   String get addTask => 'Görev ekle';
 
   @override
@@ -9317,6 +9312,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get backgroundModeNote => 'Şimdilik yalnızca Omi cihazlarıyla çalışır ve sürekli geliştirilmektedir.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Arka Plan Modu kullanılamıyor çünkü uyumlu bir cihaz bağlı değil. Bu özelliği kullanmak için bir Omi, OpenGlass veya Friend Pendant cihazı bağlayın.';
+
+  @override
   String get regenerateRecap => 'Özeti yeniden oluştur';
 
   @override
@@ -9337,4 +9336,183 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Kendi transkripsiyon sağlayıcınızı kullanıyorsunuz. Bu kayıtları eşitlemek onları Omi sunucularında yazıya döker ve planınızın transkripsiyon sınırına sayılır.';
+
+  @override
+  String get transcribeLaterTitle => 'Sonradan Transkribe Et';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Şimdilik Omi ve Limitless cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonunda yer azaldığı için kayıt duraklatıldı. Yer aç ya da kayıtlarını yükle; ardından otomatik olarak devam eder.';
+
+  @override
+  String get recordingMode => 'Kayıt modu';
+
+  @override
+  String get captureModeLater => 'Sonra';
+
+  @override
+  String get captureModeLiveDescription => 'Siz konuşurken gerçek zamanlı olarak yazıya dökün.';
+
+  @override
+  String get captureModeLaterDescription => 'Sesi şimdi kaydedin ve istediğiniz zaman yazıya dökün.';
+
+  @override
+  String get unmute => 'Sesi aç';
+
+  @override
+  String get newRecording => 'Yeni kayıt';
+
+  @override
+  String get transcribeLaterPaused => 'Duraklatıldı — ses kaydedilmiyor';
+
+  @override
+  String get memoryThisDevice => 'Bu cihaz';
+
+  @override
+  String get memoryThisIphone => 'Bu iPhone';
+
+  @override
+  String get memoryThisPhone => 'Bu telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi Nasıl Kullanılır';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omi\'nize Konuşun';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Birkaç kelime söyleyin ve gerçek zamanlı olarak göründüklerini izleyin';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Aferin!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Konuşmaya başlayın...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omi\'ye Bir Soru Sorun';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'Düğmeye bir kez basın, sorunuzu söyleyin, bitince tekrar basın';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Sorunuz işleniyor...';
+
+  @override
+  String get deviceOnboardingListening => 'Dinliyor...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kapat';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Aç';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Düğmeyi 3 saniye basılı tutun';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekrar açmak için düğmeye basın';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Işık sönene kadar düğmeyi sıkıca basılı tutun';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Bağlandı';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Bağlandı!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Bağlantı kesildi';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kapatılıyor...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Çift Dokunmayı Özelleştir';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Konuşmayı Bitir';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Mevcut konuşmayı kaydet ve bitir';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Sustur / Sesi Aç';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofonu aç veya kapat';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Devam Eden Konuşmayı Yıldızla';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Konuşmayı önemli olarak işaretle';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Bu tek dokunuştu — hızlıca iki kez dokunmayı deneyin!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Şimdi deneyin! Omi\'nize çift dokunun';
+
+  @override
+  String get deviceOnboardingContinue => 'Devam Et';
+
+  @override
+  String get deviceOnboardingFinish => 'Bitir';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi\'nizi Tanıyın';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi\'nizin yapabileceği her şeyin hızlı ve uygulamalı bir turu.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Yaklaşık 1 dakika';
+
+  @override
+  String get jumpToLatestMessage => 'En son mesaja git';
+
+  @override
+  String get latest => 'En son';
+
+  @override
+  String get flashFirmware => 'Donanım Yazılımını Yükle';
+
+  @override
+  String get pendantRecordingTitle => 'Pendant\'ta kayıt yapılıyor';
+
+  @override
+  String get pendantRecordingNote =>
+      'Pendant\'ın kendi kendine kayıt yapıyor. Uygulama açıkken kayıtlar telefonuna eşitlenir.';
+
+  @override
+  String get pendantSyncingRecordings => 'Pendant\'ından kayıtlar eşitleniyor…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes dk kayıtlı';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pendant\'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.';
 }

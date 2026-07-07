@@ -1,0 +1,36 @@
+version: 2
+name: dashboard
+tier: 2
+description: Dashboard load and refresh via automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Refresh dashboard data
+    bridge.action:
+      name: refresh_all_data
+
+  - id: S3
+    name: Conversation list snapshot
+    bridge.action:
+      name: conversation_list_snapshot
+    expect:
+      ok: true
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

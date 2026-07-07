@@ -10,22 +10,12 @@ import io
 import os
 import struct
 import tempfile
+import wave
+from pathlib import Path
 from unittest.mock import MagicMock, patch, PropertyMock
 
 import numpy as np
 import pytest
-
-# ---------------------------------------------------------------------------
-# Pre-mock heavy imports before importing the module under test
-# ---------------------------------------------------------------------------
-_mock_ort = MagicMock()
-_mock_redis = MagicMock()
-
-import sys
-
-sys.modules.setdefault('onnxruntime', _mock_ort)
-sys.modules.setdefault('database', MagicMock())
-sys.modules.setdefault('database.redis_db', _mock_redis)
 
 from utils.stt import vad
 from utils.stt.vad import (

@@ -2,10 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
 import { getOptionalStripe } from "@/lib/stripe";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
-import { getJsonCache, setJsonCache } from "@/lib/redis";
+import { getPayload, setPayload } from "@/lib/payload-cache";
+import { computeInfraCosts, type InfraCostsPayload } from "@/app/api/omi/stats/infra-costs/route";
 import type Stripe from "stripe";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 3600;
 
 // Per-platform profitability metrics.
 //
@@ -43,7 +45,7 @@ interface DailyPoint {
   total: number;
 }
 
-interface ProfitabilityPayload {
+export interface ProfitabilityPayload {
   days: number;
   users: DailyPoint[];
   cumulativeUsers: DailyPoint[];
@@ -85,8 +87,9 @@ interface ProfitabilityPayload {
   generatedAt: number;
 }
 
-const CACHE_PREFIX = "admin:stats:profitability:v6";
-const CACHE_TTL_SECONDS = 30 * 60;
+function cacheKey(days: number, desktopCost: number, mobileCost: number): string {
+  return `profitability:v1:${days}:${desktopCost}:${mobileCost}`;
+}
 
 // Fallback per-user infra cost when real billing data can't be pulled from
 // the infra-costs endpoint. Calibrated against the team's Apr projection
@@ -94,11 +97,6 @@ const CACHE_TTL_SECONDS = 30 * 60;
 // collection-group scan finishes.
 const DEFAULT_DESKTOP_COST = 0.2;
 const DEFAULT_MOBILE_COST = 0.2;
-
-// Name of the origin-relative infra-costs endpoint. Populates the `cost` and
-// `costPerUser` series with actual daily LLM spend from Firestore plus a
-// platform-proportional share of fixed overhead.
-const INFRA_COSTS_PATH = "/api/omi/stats/infra-costs";
 
 function parseCost(raw: string | null, fallback: number): number {
   if (raw == null) return fallback;
@@ -399,30 +397,20 @@ interface InfraCostsSnapshot {
   overheadMonthlyUsd: number;
 }
 
-// Internal fetch against the `/api/omi/stats/infra-costs` endpoint so we reuse
-// its caching + collection group scan. Sends the incoming admin auth cookie /
-// Authorization header so the call is authenticated at the proxy layer.
-async function fetchInfraCosts(request: NextRequest, days: number): Promise<InfraCostsSnapshot | null> {
+// Compute infra costs directly (no internal HTTP round-trip) so this works off
+// the request path in the precompute cron. Reuses the same collection-group
+// scan + overhead split as the infra-costs route. Uses that route's default
+// overhead (env / hard-coded April projection) by passing -1, which falls
+// through to the default inside parseInfraCostsParams-equivalent logic.
+async function fetchInfraCosts(days: number): Promise<InfraCostsSnapshot | null> {
   try {
-    const url = new URL(INFRA_COSTS_PATH, request.nextUrl.origin);
-    url.searchParams.set("days", String(days));
-    const authHeader = request.headers.get("authorization");
-    const response = await fetch(url, {
-      headers: {
-        ...(authHeader ? { Authorization: authHeader } : {}),
-      },
-      // Next's internal fetch honors cookies; infer by forwarding.
-      cache: "no-store",
-    });
-    if (!response.ok) {
-      console.warn("Infra costs fetch returned", response.status);
-      return null;
-    }
-    const raw = await response.json();
+    const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
+    const overheadMonthly = Number.isFinite(envOverhead) && envOverhead >= 0 ? envOverhead : 57447;
+    const raw: InfraCostsPayload = await computeInfraCosts({ days, overheadMonthly });
     if (!raw?.daily) return null;
     return { daily: raw.daily, overheadMonthlyUsd: raw?.summary?.assumptions?.overheadMonthlyUsd };
   } catch (err) {
-    console.error("Infra costs fetch exception:", err);
+    console.error("Infra costs compute exception:", err);
     return null;
   }
 }
@@ -527,21 +515,20 @@ async function fetchStripeSnapshot(
   return { mrrByPlatform, newPaidByDayByPlatform, activeSubs, partial };
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+export { cacheKey as profitabilityCacheKey };
 
-  try {
-    const { searchParams } = new URL(request.url);
-    const days = Math.min(Math.max(parseInt(searchParams.get("days") || "30", 10), 7), 90);
-    const desktopCost = parseCost(searchParams.get("desktop_cost"), DEFAULT_DESKTOP_COST);
-    const mobileCost = parseCost(searchParams.get("mobile_cost"), DEFAULT_MOBILE_COST);
+// Parse the profitability request params the same way the GET handler does, so
+// the cache key derived from them matches between the route and the precompute
+// cron.
+export function parseProfitabilityParams(searchParams: URLSearchParams): { days: number; desktopCost: number; mobileCost: number } {
+  const days = Math.min(Math.max(parseInt(searchParams.get("days") || "30", 10), 7), 90);
+  const desktopCost = parseCost(searchParams.get("desktop_cost"), DEFAULT_DESKTOP_COST);
+  const mobileCost = parseCost(searchParams.get("mobile_cost"), DEFAULT_MOBILE_COST);
+  return { days, desktopCost, mobileCost };
+}
 
-    const cacheKey = `${CACHE_PREFIX}:${days}:${desktopCost}:${mobileCost}`;
-    const cached = await getJsonCache<ProfitabilityPayload>(cacheKey);
-    if (cached && Date.now() - cached.generatedAt < CACHE_TTL_SECONDS * 1000) {
-      return NextResponse.json(cached);
-    }
+export async function computeProfitability(opts: { days: number; desktopCost: number; mobileCost: number }): Promise<ProfitabilityPayload> {
+  const { days, desktopCost, mobileCost } = opts;
 
     const [tokensRes, signupsRes, desktopUidsRes, mobileUidsRes, desktopActiveRes, mobileActiveRes, infraRes] = await Promise.allSettled([
       buildUserPlatformMapFromTokens(),
@@ -550,7 +537,7 @@ export async function GET(request: NextRequest) {
       fetchMobileUidsFromMixpanel(),
       fetchDesktopActivePerDay(days),
       fetchMobileActivePerDay(days),
-      fetchInfraCosts(request, days),
+      fetchInfraCosts(days),
     ]);
 
     const tokens = tokensRes.status === "fulfilled" ? tokensRes.value : null;
@@ -577,10 +564,7 @@ export async function GET(request: NextRequest) {
       mobileActive == null &&
       stripeRes == null
     ) {
-      return NextResponse.json(
-        { error: "All profitability data sources failed" },
-        { status: 502 },
-      );
+      throw new Error("All profitability data sources failed");
     }
 
     const dateKeys = buildDayKeys(days);
@@ -785,7 +769,30 @@ export async function GET(request: NextRequest) {
       generatedAt: Date.now(),
     };
 
-    await setJsonCache(cacheKey, payload, CACHE_TTL_SECONDS);
+    return payload;
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const { searchParams } = new URL(request.url);
+    const { days, desktopCost, mobileCost } = parseProfitabilityParams(searchParams);
+    const key = cacheKey(days, desktopCost, mobileCost);
+
+    // Cache-first: precompute writes this off the request path. This route is
+    // far too heavy (full fcm_tokens collection-group scan + auth.listUsers
+    // over ~150k users + Mixpanel paging) to recompute on the request path, so
+    // if a precomputed payload exists at any age we serve it immediately.
+    const cached = await getPayload<ProfitabilityPayload>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    // Cold start before the first precompute: compute inline (slow), cache, return.
+    const payload = await computeProfitability({ days, desktopCost, mobileCost });
+    await setPayload(key, payload);
     return NextResponse.json(payload);
   } catch (err: any) {
     console.error("Profitability stats error:", err);

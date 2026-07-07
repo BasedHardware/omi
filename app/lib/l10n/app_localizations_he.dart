@@ -1703,12 +1703,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 נמצאו בקרבה';
   }
 
@@ -4656,10 +4651,7 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ו-is $triggerDescription.';
   }
 
@@ -7706,6 +7698,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get viewAll => 'צפה בהכל';
 
   @override
+  String get expand => 'הרחב';
+
+  @override
   String get addTask => 'הוסף משימה';
 
   @override
@@ -8388,12 +8383,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9236,6 +9226,10 @@ class AppLocalizationsHe extends AppLocalizations {
   String get backgroundModeNote => 'כרגע עובד רק עם מכשירי Omi ומשתפר באופן מתמיד.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'מצב רקע אינו זמין כי לא מחובר מכשיר תואם. חבר מכשיר Omi, OpenGlass או Friend Pendant כדי להשתמש בתכונה הזו.';
+
+  @override
   String get regenerateRecap => 'צור סיכום מחדש';
 
   @override
@@ -9256,4 +9250,180 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'אתה משתמש בספק תמלול משלך. סנכרון ההקלטות האלה יתמלל אותן בשרתי Omi והן ייכללו במגבלת התמלול של התוכנית שלך.';
+
+  @override
+  String get transcribeLaterTitle => 'תמלול מאוחר יותר';
+
+  @override
+  String get transcribeLaterDescription =>
+      'הקלט אודיו עכשיו ותמלל אותו לפי דרישה במקום בזמן אמת. ההקלטות נשמרות בטלפון, ואז אתה מעלה אותן כדי ליצור שיחות.';
+
+  @override
+  String get transcribeLaterNote =>
+      'פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'האחסון בטלפון שלך כמעט מלא, ולכן ההקלטה הושהתה. פנה מקום או העלה את ההקלטות, וההקלטה תתחדש אוטומטית.';
+
+  @override
+  String get recordingMode => 'מצב הקלטה';
+
+  @override
+  String get captureModeLater => 'מאוחר יותר';
+
+  @override
+  String get captureModeLiveDescription => 'תמלול בזמן אמת תוך כדי דיבור.';
+
+  @override
+  String get captureModeLaterDescription => 'שמרו את האודיו עכשיו ותמללו מתי שתרצו.';
+
+  @override
+  String get unmute => 'בטל השתקה';
+
+  @override
+  String get newRecording => 'הקלטה חדשה';
+
+  @override
+  String get transcribeLaterPaused => 'מושהה — האודיו אינו מוקלט';
+
+  @override
+  String get memoryThisDevice => 'המכשיר הזה';
+
+  @override
+  String get memoryThisIphone => 'ה-iPhone הזה';
+
+  @override
+  String get memoryThisPhone => 'הטלפון הזה';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'איך להשתמש ב-Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'דברו אל ה-Omi שלכם';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'אמרו כמה מילים וצפו בהן מופיעות בזמן אמת';
+
+  @override
+  String get deviceOnboardingGoodJob => 'כל הכבוד!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'התחילו לדבר...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'שאלו את Omi שאלה';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'לחצו על הכפתור פעם אחת, אמרו את השאלה, ואז לחצו שוב כשתסיימו';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'מעבד את השאלה שלכם...';
+
+  @override
+  String get deviceOnboardingListening => 'מאזין...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'כיבוי';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'הפעלה';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'החזיקו את הכפתור למשך 3 שניות';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'לחצו על הכפתור כדי להפעיל אותו מחדש';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'החזיקו את הכפתור בחוזקה עד שהנורית תכבה';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'מחובר';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'מחובר!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'מנותק';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'מכבה...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'התאמת הקשה כפולה';
+
+  @override
+  String get deviceOnboardingEndConversation => 'סיום שיחה';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'שמירה וסיום של השיחה הנוכחית';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'השתקה / ביטול השתקה';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'הפעלה או כיבוי של המיקרופון';
+
+  @override
+  String get deviceOnboardingStarConversation => 'סימון שיחה פעילה בכוכב';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'סימון השיחה כחשובה';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'זו הייתה הקשה אחת — נסו להקיש פעמיים במהירות!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'נסו עכשיו! הקישו פעמיים על ה-Omi שלכם';
+
+  @override
+  String get deviceOnboardingContinue => 'המשך';
+
+  @override
+  String get deviceOnboardingFinish => 'סיום';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'הכירו את ה-Omi שלכם';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'סיור מהיר ומעשי בכל מה שה-Omi שלכם יכול לעשות.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'כדקה אחת';
+
+  @override
+  String get jumpToLatestMessage => 'קפוץ להודעה האחרונה';
+
+  @override
+  String get latest => 'האחרון';
+
+  @override
+  String get flashFirmware => 'צריבת קושחה';
+
+  @override
+  String get pendantRecordingTitle => 'מקליט על התליון';
+
+  @override
+  String get pendantRecordingNote => 'התליון שלך מקליט באופן עצמאי. ההקלטות מסתנכרנות לטלפון שלך כשהאפליקציה פתוחה.';
+
+  @override
+  String get pendantSyncingRecordings => 'מסנכרן הקלטות מהתליון שלך…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes דקות מאוחסנות';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.';
 }

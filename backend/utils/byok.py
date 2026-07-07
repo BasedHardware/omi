@@ -16,10 +16,9 @@ validated against enrolled fingerprints so that:
 import hashlib
 import logging
 import threading
-import time
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from typing import Dict, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from cachetools import TTLCache
 from fastapi import HTTPException, Request
@@ -38,11 +37,11 @@ logger = logging.getLogger('byok')
 # ---------------------------------------------------------------------------
 _BYOK_STATE_CACHE_MAX = 1024
 _BYOK_STATE_CACHE_TTL = 30  # seconds
-_byok_state_cache: TTLCache = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)
+_byok_state_cache: TTLCache[str, Dict[str, Any]] = TTLCache(maxsize=_BYOK_STATE_CACHE_MAX, ttl=_BYOK_STATE_CACHE_TTL)
 _byok_state_cache_lock = threading.Lock()
 
 
-def get_cached_byok_state(uid: str) -> dict:
+def get_cached_byok_state(uid: str) -> Dict[str, Any]:
     """Return BYOK state for *uid*, hitting Firestore at most once per TTL window."""
     with _byok_state_cache_lock:
         cached = _byok_state_cache.get(uid)
@@ -131,7 +130,7 @@ class BYOKMiddleware(BaseHTTPMiddleware):
     ``extract_byok_from_websocket`` + ``set_byok_keys`` manually.
     """
 
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Any]]) -> Any:
         keys: Dict[str, str] = {}
         for provider, header in BYOK_HEADERS.items():
             value = request.headers.get(header)

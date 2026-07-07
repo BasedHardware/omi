@@ -1714,12 +1714,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'ZAŘÍZENÍ',
-      one: 'ZAŘÍZENÍ',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'ZAŘÍZENÍ', one: 'ZAŘÍZENÍ');
     return '$count $_temp0 NALEZENO V BLÍZKOSTI';
   }
 
@@ -4686,10 +4681,7 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription a je $triggerDescription.';
   }
 
@@ -7763,6 +7755,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get viewAll => 'Zobrazit vše';
 
   @override
+  String get expand => 'Rozbalit';
+
+  @override
   String get addTask => 'Přidat úkol';
 
   @override
@@ -9306,6 +9301,10 @@ class AppLocalizationsCs extends AppLocalizations {
   String get backgroundModeNote => 'Zatím funguje pouze se zařízeními Omi a průběžně se vylepšuje.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Režim na pozadí není k dispozici, protože není připojeno žádné kompatibilní zařízení. Pro použití této funkce připojte zařízení Omi, OpenGlass nebo Friend Pendant.';
+
+  @override
   String get regenerateRecap => 'Znovu vygenerovat shrnutí';
 
   @override
@@ -9326,4 +9325,183 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Používáte vlastního poskytovatele přepisu. Synchronizace těchto nahrávek je přepíše na serverech Omi a započítají se do limitu přepisu vašeho tarifu.';
+
+  @override
+  String get transcribeLaterTitle => 'Přepsat později';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Nahrávejte zvuk hned a přepisujte ho podle potřeby místo přepisu naživo. Nahrávky se uloží do telefonu a poté je nahrajete na server, aby z nich vznikly konverzace.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Zatím funguje se zařízeními Omi a Limitless. Zvuk zůstává v telefonu, dokud se ho nerozhodnete odeslat.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'V telefonu dochází místo, proto je nahrávání pozastaveno. Uvolněte místo nebo odešlete své nahrávky a nahrávání se automaticky obnoví.';
+
+  @override
+  String get recordingMode => 'Režim nahrávání';
+
+  @override
+  String get captureModeLater => 'Později';
+
+  @override
+  String get captureModeLiveDescription => 'Přepis v reálném čase, jak mluvíte.';
+
+  @override
+  String get captureModeLaterDescription => 'Uložte zvuk nyní a přepište jej, kdykoli budete chtít.';
+
+  @override
+  String get unmute => 'Zapnout zvuk';
+
+  @override
+  String get newRecording => 'Nová nahrávka';
+
+  @override
+  String get transcribeLaterPaused => 'Pozastaveno — zvuk se nenahrává';
+
+  @override
+  String get memoryThisDevice => 'Toto zařízení';
+
+  @override
+  String get memoryThisIphone => 'Tento iPhone';
+
+  @override
+  String get memoryThisPhone => 'Tento telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Jak používat Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Mluvte do svého Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Řekněte pár slov a sledujte, jak se zobrazují v reálném čase';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Skvělá práce!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Začněte mluvit...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Zeptejte se Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Jednou stiskněte tlačítko, položte otázku a po dokončení stiskněte znovu';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Zpracovávám vaši otázku...';
+
+  @override
+  String get deviceOnboardingListening => 'Poslouchám...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Vypnutí';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Zapnutí';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Podržte tlačítko po dobu 3 sekund';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Stisknutím tlačítka zařízení znovu zapnete';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Pevně držte tlačítko, dokud kontrolka nezhasne';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Připojeno';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Připojeno!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Odpojeno';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Vypínám...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Nastavení dvojitého klepnutí';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Ukončit konverzaci';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Uložit a ukončit aktuální konverzaci';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Ztlumit / Zrušit ztlumení';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Zapnout nebo vypnout mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Označit probíhající konverzaci hvězdičkou';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Označit konverzaci jako důležitou';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To bylo jen jedno klepnutí – zkuste klepnout dvakrát rychle za sebou!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Vyzkoušejte to! Dvakrát klepněte na své Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Pokračovat';
+
+  @override
+  String get deviceOnboardingFinish => 'Dokončit';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznejte svůj Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Rychlá praktická prohlídka všeho, co váš Omi umí.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Přibližně 1 minuta';
+
+  @override
+  String get jumpToLatestMessage => 'Přejít na nejnovější zprávu';
+
+  @override
+  String get latest => 'Nejnovější';
+
+  @override
+  String get flashFirmware => 'Nahrát firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Nahrávání na přívěsku';
+
+  @override
+  String get pendantRecordingNote =>
+      'Váš přívěsek nahrává samostatně. Nahrávky se synchronizují s telefonem, dokud je aplikace otevřená.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synchronizace nahrávek z přívěsku…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min uloženo';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Úložiště přívěsku je téměř plné — nechte aplikaci otevřenou, aby proběhla synchronizace.';
 }

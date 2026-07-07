@@ -1,13 +1,14 @@
-"""Regression test for GET /v1/dev/user/memories resilience (issue #7492).
+"""Regression tests for GET /v1/dev/user/memories resilience (issue #7492).
 
 The endpoint declares response_model=List[CleanerMemory] and returned raw Firestore dicts, so a
-single malformed/legacy record (missing a required field or an out-of-enum category) made FastAPI
-raise ResponseValidationError -> HTTP 500 for the whole page (only the offsets containing that record
-failed). The handler now validates each record and skips+logs invalid ones, mirroring GET /v3/memories.
+single malformed/legacy record could make FastAPI raise ResponseValidationError -> HTTP 500 for the
+whole page. The handler now validates each record individually, skips records without required
+identity fields, and coerces legacy optional fields to safe defaults.
 """
 
 import os
 import sys
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
@@ -17,6 +18,8 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
 
 class _AutoMockModule(ModuleType):
     def __getattr__(self, name):
@@ -25,6 +28,46 @@ class _AutoMockModule(ModuleType):
         mock = MagicMock()
         setattr(self, name, mock)
         return mock
+
+
+def _ensure_package_path(name: str, path: Path) -> ModuleType:
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = ModuleType(name)
+        sys.modules[name] = module
+
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _drop_stale_module(name: str, expected_file: Path) -> None:
+    module = sys.modules.get(name)
+    if module is None:
+        return
+
+    module_file = getattr(module, "__file__", None)
+    try:
+        module_path = Path(module_file).resolve() if module_file else None
+    except TypeError:
+        module_path = None
+
+    if module_path == expected_file.resolve():
+        return
+
+    sys.modules.pop(name, None)
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None and getattr(parent, attr_name, None) is module:
+            delattr(parent, attr_name)
 
 
 _stubs = [
@@ -79,10 +122,17 @@ for _mod_name in _stubs:
     if _mod_name not in sys.modules:
         sys.modules[_mod_name] = _AutoMockModule(_mod_name)
 
+sys.modules['database._client'].document_id_from_seed = MagicMock(return_value='memory-id')
+sys.modules['database.vector_db'].upsert_memory_vectors_batch = MagicMock()
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+sys.modules['utils.apps'].update_personas_async = MagicMock()
 
-# utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins.
-_endpoints = ModuleType('utils.other.endpoints')
+# utils.other.endpoints must expose real callables (used in route signatures); provide stand-ins
+# without replacing an existing stub that another test may inspect later.
+_endpoints = sys.modules.get('utils.other.endpoints')
+if _endpoints is None:
+    _endpoints = ModuleType('utils.other.endpoints')
+    sys.modules['utils.other.endpoints'] = _endpoints
 
 
 def _fake_get_current_user_uid():  # pragma: no cover - dependency stand-in
@@ -93,10 +143,30 @@ def _fake_with_rate_limit(dependency, _policy):  # pragma: no cover - returns wr
     return dependency
 
 
-_endpoints.get_current_user_uid = _fake_get_current_user_uid
-_endpoints.with_rate_limit = _fake_with_rate_limit
-_endpoints.get_user = MagicMock()
-sys.modules['utils.other.endpoints'] = _endpoints
+if not hasattr(_endpoints, 'get_current_user_uid'):
+    _endpoints.get_current_user_uid = _fake_get_current_user_uid
+if not hasattr(_endpoints, 'with_rate_limit'):
+    _endpoints.with_rate_limit = _fake_with_rate_limit
+if not hasattr(_endpoints, 'with_rate_limit_context'):
+    setattr(_endpoints, 'with_rate_limit_context', _fake_with_rate_limit)
+if not hasattr(_endpoints, 'check_api_key_rate_limit'):
+    _endpoints.check_api_key_rate_limit = MagicMock()
+if not hasattr(_endpoints, 'get_user'):
+    _endpoints.get_user = MagicMock()
+
+_ensure_package_path("models", BACKEND_DIR / "models")
+_ensure_package_path("routers", BACKEND_DIR / "routers")
+_ensure_package_path("utils", BACKEND_DIR / "utils")
+_ensure_package_path("utils.conversations", BACKEND_DIR / "utils" / "conversations")
+_drop_stale_module("models.conversation", BACKEND_DIR / "models" / "conversation.py")
+_drop_stale_module("models.conversation_enums", BACKEND_DIR / "models" / "conversation_enums.py")
+_drop_stale_module("models.dev_api_key", BACKEND_DIR / "models" / "dev_api_key.py")
+_drop_stale_module("models.folder", BACKEND_DIR / "models" / "folder.py")
+_drop_stale_module("models.geolocation", BACKEND_DIR / "models" / "geolocation.py")
+_drop_stale_module("models.memories", BACKEND_DIR / "models" / "memories.py")
+_drop_stale_module("models.transcript_segment", BACKEND_DIR / "models" / "transcript_segment.py")
+_drop_stale_module("routers.developer", BACKEND_DIR / "routers" / "developer.py")
+_drop_stale_module("utils.conversations.render", BACKEND_DIR / "utils" / "conversations" / "render.py")
 
 from datetime import datetime, timezone  # noqa: E402
 
@@ -106,7 +176,9 @@ from models.memories import MemoryCategory  # noqa: E402  (real model; stubs pre
 from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
-from dependencies import get_uid_with_memories_read  # noqa: E402
+import routers.developer as developer_module  # noqa: E402
+from dependencies import get_developer_memory_default_memory_read_context  # noqa: E402
+from utils.memory.product_authorization import ProductAuthorizationDecision  # noqa: E402
 
 _VALID_CATEGORY = next(iter(MemoryCategory)).value
 
@@ -129,27 +201,87 @@ def _valid_memory(mid):
     }
 
 
-def _invalid_memory(mid):
-    # Legacy/malformed record missing a required CleanerMemory field ('edited').
+def _missing_id_memory(mid):
+    # Malformed record missing the required identity field.
     m = _valid_memory(mid)
+    del m['id']
+    return m
+
+
+def _legacy_memory(mid):
+    # Legacy record with missing/invalid optional fields that should be coerced.
+    m = _valid_memory(mid)
+    m['category'] = 'old-category'
+    m['visibility'] = None
+    m['tags'] = None
+    m['created_at'] = 'not-a-date'
+    m['updated_at'] = {'bad': 'date'}
+    m['manually_added'] = ''
+    m['reviewed'] = None
+    m['user_review'] = 'yes'
     del m['edited']
     return m
 
 
 def _build():
+    auth_context = developer_module.ProductAuthorizationContext(
+        uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
+    )
+    developer_module.authorize_memory_external_default_memory_read = MagicMock(
+        return_value=ProductAuthorizationDecision(
+            allowed=True,
+            context=auth_context,
+            db_client=None,
+            read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
+            reason='test_legacy_safe',
+            observability={'enabled': True},
+            status_code=200,
+        )
+    )
+    developer_module.search_memory_default_developer_memories = MagicMock(
+        return_value=type(
+            'LegacySafeMemoryResult',
+            (),
+            {
+                'read_decision': developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
+                'memories': [],
+                'fallback_reason': 'test_legacy_safe',
+                'should_use_legacy_fallback': True,
+            },
+        )()
+    )
     app = FastAPI()
     app.include_router(developer_router)
-    app.dependency_overrides[get_uid_with_memories_read] = lambda: 'uid1'
+    app.dependency_overrides[get_developer_memory_default_memory_read_context] = lambda: auth_context
     return TestClient(app, raise_server_exceptions=False)
 
 
 def test_invalid_record_is_skipped_not_500():
-    page = [_valid_memory('good1'), _invalid_memory('bad1'), _valid_memory('good2')]
+    page = [_valid_memory('good1'), _missing_id_memory('bad1'), _valid_memory('good2')]
     with patch.object(memories_db, 'get_memories', return_value=page):
         client = _build()
         resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert [m['id'] for m in resp.json()] == ['good1', 'good2']
+
+
+def test_legacy_optional_fields_are_defaulted_not_500():
+    page = [_legacy_memory('legacy1')]
+    with patch.object(memories_db, 'get_memories', return_value=page):
+        client = _build()
+        resp = client.get('/v1/dev/user/memories')
+    assert resp.status_code == 200
+    [memory] = resp.json()
+    assert memory['id'] == 'legacy1'
+    assert memory['category'] == 'interesting'
+    assert memory['visibility'] == 'private'
+    assert memory['tags'] == []
+    assert memory['created_at'] is None
+    assert memory['updated_at'] is None
+    assert memory['manually_added'] is False
+    assert memory['reviewed'] is False
+    assert memory['user_review'] is True
+    assert memory['edited'] is False
 
 
 def test_all_valid_records_returned():
@@ -159,3 +291,16 @@ def test_all_valid_records_returned():
         resp = client.get('/v1/dev/user/memories')
     assert resp.status_code == 200
     assert len(resp.json()) == 2
+
+
+def test_pagination_is_clamped_before_firestore():
+    # Out-of-range pagination is clamped before the Firestore query: a negative offset/limit
+    # would raise (HTTP 500), an oversized/zero limit would stream the whole collection. Mirrors
+    # the mobile /v3/memories hardening. get_memories(uid, limit, offset, categories) is positional.
+    with patch.object(memories_db, 'get_memories', return_value=[]) as m:
+        client = _build()
+        assert client.get('/v1/dev/user/memories?limit=99999&offset=-1').status_code == 200
+        assert client.get('/v1/dev/user/memories?limit=0&offset=5').status_code == 200
+    high = m.call_args_list[0].args
+    assert high[1] == 1000 and high[2] == 0  # limit 99999 -> 1000, offset -1 -> 0
+    assert m.call_args_list[1].args[1] == 1  # limit 0 -> 1

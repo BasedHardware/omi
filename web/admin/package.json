@@ -63,7 +63,7 @@
     "react-dom": "18.2.0",
     "react-hook-form": "^7.53.0",
     "react-resizable-panels": "^2.1.3",
-    "recharts": "^2.12.7",
+    "recharts": "^2.15.4",
     "sonner": "^1.5.0",
     "stripe": "^18.4.0",
     "swr": "^2.3.3",

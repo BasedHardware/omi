@@ -45,7 +45,7 @@ Watch the [announcement video](https://x.com/kodjima33/status/191185246932972781
   <Step title="Clone the Repository">
     ```bash
     git clone https://github.com/BasedHardware/omi.git
-    cd omi/OmiGlass
+    cd omi/omiGlass
     npm install
     ```
 

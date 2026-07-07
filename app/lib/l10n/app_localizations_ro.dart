@@ -1722,12 +1722,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DISPOZITIVE',
-      one: 'DISPOZITIV',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DISPOZITIVE', one: 'DISPOZITIV');
     return '$count $_temp0 GĂSIT(E) ÎN APROPIERE';
   }
 
@@ -4716,10 +4711,7 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription și este $triggerDescription.';
   }
 
@@ -7805,6 +7797,9 @@ class AppLocalizationsRo extends AppLocalizations {
   String get viewAll => 'Vezi tot';
 
   @override
+  String get expand => 'Extinde';
+
+  @override
   String get addTask => 'Adaugă sarcină';
 
   @override
@@ -9351,6 +9346,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get backgroundModeNote => 'Deocamdată funcționează doar cu dispozitive Omi și este îmbunătățit continuu.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Modul de fundal nu este disponibil deoarece nu este conectat niciun dispozitiv compatibil. Conectează un dispozitiv Omi, OpenGlass sau Friend Pendant pentru a folosi această funcție.';
+
+  @override
   String get regenerateRecap => 'Regenerează rezumatul';
 
   @override
@@ -9371,4 +9370,183 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Folosești propriul furnizor de transcriere. Sincronizarea acestor înregistrări le transcrie pe serverele Omi și se iau în calcul pentru limita de transcriere a planului tău.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcrie mai târziu';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Înregistrează audio acum și transcrie-l mai târziu, când vrei, în loc de transcriere în timp real. Înregistrările se salvează pe telefon, apoi le încarci pentru a crea conversații.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Telefonul are spațiu de stocare insuficient, așa că înregistrarea este întreruptă. Eliberează spațiu sau încarcă înregistrările, iar apoi va continua automat.';
+
+  @override
+  String get recordingMode => 'Mod de înregistrare';
+
+  @override
+  String get captureModeLater => 'Mai târziu';
+
+  @override
+  String get captureModeLiveDescription => 'Transcrie în timp real în timp ce vorbești.';
+
+  @override
+  String get captureModeLaterDescription => 'Salvează audio acum și transcrie oricând dorești.';
+
+  @override
+  String get unmute => 'Reactivează sunetul';
+
+  @override
+  String get newRecording => 'Înregistrare nouă';
+
+  @override
+  String get transcribeLaterPaused => 'În pauză — audio nu se înregistrează';
+
+  @override
+  String get memoryThisDevice => 'Acest dispozitiv';
+
+  @override
+  String get memoryThisIphone => 'Acest iPhone';
+
+  @override
+  String get memoryThisPhone => 'Acest telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Cum să folosești Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Vorbește în Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Spune câteva cuvinte și privește-le cum apar în timp real';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Bravo!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Începe să vorbești...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Pune-i o întrebare lui Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Apasă butonul o dată, rostește întrebarea, apoi apasă din nou când ai terminat';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Se procesează întrebarea ta...';
+
+  @override
+  String get deviceOnboardingListening => 'Ascultă...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Oprire';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Pornire';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Ține butonul apăsat 3 secunde';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Apasă butonul pentru a-l porni din nou';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Ține butonul apăsat ferm până se stinge lumina';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Conectat';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Conectat!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Deconectat';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Se oprește...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Personalizează dublul tap';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Încheie conversația';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Salvează și încheie conversația curentă';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Dezactivează / Activează sunetul';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Pornește sau oprește microfonul';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Marchează conversația în curs';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Marchează conversația ca importantă';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'A fost un singur tap — încearcă să atingi de două ori rapid!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Încearcă acum! Atinge Omi de două ori';
+
+  @override
+  String get deviceOnboardingContinue => 'Continuă';
+
+  @override
+  String get deviceOnboardingFinish => 'Termină';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Cunoaște-ți Omi-ul';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Un tur rapid și practic prin tot ce poate face Omi-ul tău.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Aproximativ 1 minut';
+
+  @override
+  String get jumpToLatestMessage => 'Sari la cel mai recent mesaj';
+
+  @override
+  String get latest => 'Recent';
+
+  @override
+  String get flashFirmware => 'Instalați firmware-ul';
+
+  @override
+  String get pendantRecordingTitle => 'Înregistrare pe pandantiv';
+
+  @override
+  String get pendantRecordingNote =>
+      'Pandantivul tău înregistrează singur. Înregistrările se sincronizează cu telefonul cât timp aplicația este deschisă.';
+
+  @override
+  String get pendantSyncingRecordings => 'Se sincronizează înregistrările de pe pandantivul tău…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stocat(e)';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Spațiul de stocare al pandantivului este aproape plin — ține aplicația deschisă pentru sincronizare.';
 }

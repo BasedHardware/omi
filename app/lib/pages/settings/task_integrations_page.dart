@@ -11,11 +11,11 @@ import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/google_tasks_settings_page.dart';
 import 'package:omi/pages/settings/todoist_settings_page.dart';
 import 'package:omi/providers/task_integration_provider.dart';
-import 'package:omi/services/apple_reminders_service.dart';
-import 'package:omi/services/asana_service.dart';
-import 'package:omi/services/clickup_service.dart';
-import 'package:omi/services/google_tasks_service.dart';
-import 'package:omi/services/todoist_service.dart';
+import 'package:omi/services/integrations/apple_reminders_service.dart';
+import 'package:omi/services/integrations/asana_service.dart';
+import 'package:omi/services/integrations/clickup_service.dart';
+import 'package:omi/services/integrations/google_tasks_service.dart';
+import 'package:omi/services/integrations/todoist_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
@@ -80,22 +80,22 @@ extension TaskIntegrationAppExtension on TaskIntegrationApp {
     }
   }
 
-  IconData get icon {
+  FaIconData get icon {
     switch (this) {
       case TaskIntegrationApp.appleReminders:
-        return Icons.checklist_rounded;
+        return FontAwesomeIcons.listCheck;
       case TaskIntegrationApp.googleTasks:
-        return Icons.task_alt;
+        return FontAwesomeIcons.circleCheck;
       case TaskIntegrationApp.clickup:
-        return Icons.rocket_launch;
+        return FontAwesomeIcons.rocket;
       case TaskIntegrationApp.asana:
-        return Icons.analytics_outlined;
+        return FontAwesomeIcons.chartLine;
       case TaskIntegrationApp.trello:
-        return Icons.dashboard_outlined;
+        return FontAwesomeIcons.tableColumns;
       case TaskIntegrationApp.todoist:
-        return Icons.check_circle_outline;
+        return FontAwesomeIcons.circleCheck;
       case TaskIntegrationApp.monday:
-        return Icons.calendar_today;
+        return FontAwesomeIcons.calendarDay;
     }
   }
 
@@ -170,7 +170,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
 
   bool _shouldShowSettingsIcon() {
     final selected = context.read<TaskIntegrationProvider>().selectedApp;
-    final hasSettings = (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
+    final hasSettings =
+        (selected == TaskIntegrationApp.asana && AsanaService().isAuthenticated) ||
         (selected == TaskIntegrationApp.clickup && ClickUpService().isAuthenticated) ||
         (selected == TaskIntegrationApp.todoist && TodoistService().isAuthenticated) ||
         (selected == TaskIntegrationApp.googleTasks && GoogleTasksService().isAuthenticated);
@@ -504,10 +505,12 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
                       )
                     : Container(
                         decoration: BoxDecoration(
-                          color: isAvailable ? app.iconColor.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                          color: isAvailable
+                              ? app.iconColor.withValues(alpha: 0.2)
+                              : Colors.grey.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
+                        child: FaIcon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
                       ),
               ),
             ),
@@ -549,7 +552,7 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
             else
             // Radio button for connected services
             if (isSelected)
-              const FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
+              FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.green, size: 24)
             else
               Container(
                 width: 24,

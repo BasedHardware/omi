@@ -5,10 +5,14 @@ Verifies:
 - transcribe_pcm_bytes language/model selection and error propagation
 """
 
+import importlib.util
 import os
+import shutil as _shutil
 import sys
+import time
+from pathlib import Path
 from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -16,134 +20,401 @@ import pytest
 # Module-level stubs (same pattern as test_sync_transcription_prefs.py)
 # ---------------------------------------------------------------------------
 
-# Stub models package (required before importing utils.stt.pre_recorded)
-_models_pkg = ModuleType('models')
-_models_pkg.__path__ = ['models']
-_models_pkg.__package__ = 'models'
-sys.modules.setdefault('models', _models_pkg)
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 
-for _msub in [
-    'other',
-    'transcript_segment',
-    'chat',
-    'conversation',
-    'notification_message',
-    'app',
-    'memory',
-    'action_item',
-]:
-    _mfull = f'models.{_msub}'
-    if _mfull not in sys.modules:
-        _mm = MagicMock()
-        sys.modules[_mfull] = _mm
-        setattr(_models_pkg, _msub, _mm)
 
-# Stub database package
-_database_pkg = ModuleType('database')
-_database_pkg.__path__ = ['database']
-_database_pkg.__package__ = 'database'
-sys.modules.setdefault('database', _database_pkg)
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, '__path__'):
+        module = ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
 
-for _sub in [
-    '_client',
-    'action_items',
-    'announcements',
-    'apps',
-    'auth',
-    'cache',
-    'cache_manager',
-    'calendar_meetings',
-    'chat',
-    'conversations',
-    'daily_summaries',
-    'dev_api_key',
-    'fair_use',
-    'folders',
-    'goals',
-    'helpers',
-    'import_jobs',
-    'knowledge_graph',
-    'llm_usage',
-    'mcp_api_key',
-    'mem_db',
-    'memories',
-    'notifications',
-    'phone_calls',
-    'redis_db',
-    'redis_pubsub',
-    'screen_activity',
-    'tasks',
-    'trends',
-    'user_usage',
-    'users',
-    'vector_db',
-    'wrapped',
-    'people',
-    'processing_memories',
-    'plugins',
-    'sync_jobs',
-]:
-    _full = f'database.{_sub}'
-    if _full not in sys.modules:
-        _m = MagicMock()
-        sys.modules[_full] = _m
-        setattr(_database_pkg, _sub, _m)
+    if '.' in name:
+        parent_name, attr_name = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
 
-_fb = MagicMock()
-_fb.__path__ = ['firebase_admin']
-sys.modules.setdefault('firebase_admin', _fb)
-sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
-sys.modules.setdefault('firebase_admin.auth', _fb.auth)
+    return module
 
-import google.cloud.storage as _gcs
 
-_gcs.Client = MagicMock
+def _install_module(name):
+    module = ModuleType(name)
+    sys.modules[name] = module
+    if '.' in name:
+        parent_name, attr_name = name.rsplit('.', 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+    return module
 
-os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
-os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-# Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
-# Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
-# be a real function (not MagicMock) or it corrupts decorated function signatures.
-for _ufull in [
-    'utils.llm',
-    'utils.llm.memories',
-    'utils.llm.persona',
-    'utils.llm.chat',
-    'utils.llm.goals',
-    'utils.llm.usage_tracker',
-    'utils.conversations',
-    'utils.conversations.process_conversation',
-    'utils.notifications',
-    'utils.other.storage',
-    'utils.other.chat_file',
-    'utils.apps',
-    'utils.retrieval',
-    'utils.retrieval.graph',
-    'utils.fair_use',
-    'utils.log_sanitizer',
-    'models.fair_use',
-    'models.sync',
-    'models.processing_memory',
-    'models.integrations',
-    'models.goal',
-]:
-    sys.modules.setdefault(_ufull, MagicMock())
+def _attach_existing_module(name):
+    if '.' not in name or name not in sys.modules:
+        return
+    parent_name, attr_name = name.rsplit('.', 1)
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, sys.modules[name])
 
-# Force-import real models.chat (has no project deps, needed for FastAPI response_model)
-import importlib.util as _ilu
 
-_chat_spec = _ilu.spec_from_file_location(
-    'models.chat', os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'chat.py')
-)
-_real_chat = _ilu.module_from_spec(_chat_spec)
-_chat_spec.loader.exec_module(_real_chat)
-sys.modules['models.chat'] = _real_chat
-setattr(_models_pkg, 'chat', _real_chat)
+def _restore_package_paths():
+    _ensure_package('models', BACKEND_DIR / 'models')
+    _ensure_package('database', BACKEND_DIR / 'database')
+    _ensure_package('utils', BACKEND_DIR / 'utils')
+    _ensure_package('utils.stt', BACKEND_DIR / 'utils' / 'stt')
+    for name in [
+        'utils.chat',
+        'utils.stt.pre_recorded',
+        'utils.stt.speaker_embedding',
+        'google.cloud',
+        'google.cloud.storage',
+    ]:
+        _attach_existing_module(name)
+    notifications = sys.modules.get('utils.notifications')
+    if notifications is not None and not hasattr(notifications, 'send_notification'):
+        notifications.send_notification = MagicMock()
+    redis_db = sys.modules.get('database.redis_db')
+    if redis_db is not None:
+        redis_db.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+        redis_db.try_acquire_listen_lock = MagicMock(return_value=True)
+        redis_db.try_acquire_goal_extraction_lock = MagicMock(return_value=True)
+        redis_db.store_chat_share = MagicMock()
+        redis_db.get_chat_share = MagicMock(return_value=None)
 
-# Now safe to import the modules under test
-from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+
+from testing.import_isolation import stub_modules
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _desktop_transcribe_isolation():
+    """Original module-scope stubs (database/utils/models tree + models.chat real
+    load) moved into a fixture so they don't leak across test files. The stubs are
+    load-bearing for runtime (tests exercise utils.chat/transcribe_pcm_bytes which
+    call into database.* / deepgram at runtime). stub_modules-style teardown evicts
+    everything loaded here on exit."""
+    import sys as _sys
+
+    # Full object snapshot, not just a key set: a prior test file may have
+    # imported the real ``utils.stt.speaker_embedding`` / ``utils.conversations.factory``
+    # which this fixture replaces with ModuleType stubs. Evicting only *new* keys
+    # (the original ``_saved_keys = set(_sys.modules)`` approach) leaves those stubs
+    # in place — the real module object is never restored and the hermeticity guard
+    # flags them as leaked stubs shadowing real source. Mirroring the sanctioned
+    # ``stub_modules`` teardown: evict new keys AND restore swapped values.
+    _saved_modules = dict(_sys.modules)
+    _saved_keys = set(_saved_modules)
+    try:
+
+        _restore_package_paths()
+
+        # Stub models package (required before importing utils.stt.pre_recorded)
+        _models_pkg = sys.modules['models']
+
+        for _msub in [
+            'other',
+            'transcript_segment',
+            'chat',
+            'conversation',
+            'notification_message',
+            'app',
+            'memory',
+            'action_item',
+        ]:
+            _mfull = f'models.{_msub}'
+            if _mfull not in sys.modules:
+                _mm = MagicMock()
+                sys.modules[_mfull] = _mm
+                setattr(_models_pkg, _msub, _mm)
+
+        # Stub database package
+        _database_pkg = sys.modules['database']
+
+        for _sub in [
+            '_client',
+            'action_items',
+            'announcements',
+            'apps',
+            'auth',
+            'cache',
+            'cache_manager',
+            'calendar_meetings',
+            'chat',
+            'conversations',
+            'daily_summaries',
+            'dev_api_key',
+            'fair_use',
+            'folders',
+            'goals',
+            'helpers',
+            'import_jobs',
+            'knowledge_graph',
+            'llm_usage',
+            'mcp_api_key',
+            'mem_db',
+            'memories',
+            'notifications',
+            'phone_calls',
+            'redis_db',
+            'redis_pubsub',
+            'screen_activity',
+            'tasks',
+            'trends',
+            'user_usage',
+            'users',
+            'vector_db',
+            'wrapped',
+            'people',
+            'processing_memories',
+            'plugins',
+            'sync_jobs',
+        ]:
+            _full = f'database.{_sub}'
+            if _full not in sys.modules:
+                _m = MagicMock()
+                sys.modules[_full] = _m
+                setattr(_database_pkg, _sub, _m)
+
+        _redis_db_stub = sys.modules['database.redis_db']
+        _redis_db_stub.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+        _redis_db_stub.try_acquire_listen_lock = MagicMock(return_value=True)
+        _redis_db_stub.try_acquire_goal_extraction_lock = MagicMock(return_value=True)
+        _redis_db_stub.store_chat_share = MagicMock()
+        _redis_db_stub.get_chat_share = MagicMock(return_value=None)
+
+        _fb = MagicMock()
+        _fb.__path__ = ['firebase_admin']
+        sys.modules.setdefault('firebase_admin', _fb)
+        sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
+        sys.modules.setdefault('firebase_admin.auth', _fb.auth)
+        if not hasattr(sys.modules['firebase_admin.auth'], 'InvalidIdTokenError'):
+            sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
+
+        _deepgram = ModuleType('deepgram')
+        _deepgram.DeepgramClient = MagicMock
+        _deepgram.DeepgramClientOptions = MagicMock
+        _deepgram.LiveTranscriptionEvents = MagicMock()
+        sys.modules.setdefault('deepgram', _deepgram)
+
+        _fal_client = ModuleType('fal_client')
+        _fal_client.submit = MagicMock()
+        sys.modules.setdefault('fal_client', _fal_client)
+
+        def _parse_options_header(value):
+            if value is None:
+                return b'', {}
+            if isinstance(value, str):
+                value = value.encode('latin-1')
+
+            parts = value.split(b';')
+            disposition = parts[0].strip().lower()
+            options = {}
+            for part in parts[1:]:
+                if b'=' not in part:
+                    continue
+                key, raw_value = part.split(b'=', 1)
+                raw_value = raw_value.strip()
+                if len(raw_value) >= 2 and raw_value[:1] == b'"' and raw_value[-1:] == b'"':
+                    raw_value = raw_value[1:-1]
+                options[key.strip().lower()] = raw_value
+            return disposition, options
+
+        class _QuerystringParser:
+            def __init__(self, callbacks):
+                self.callbacks = callbacks
+                self.data = bytearray()
+
+            def write(self, data):
+                self.data.extend(data)
+
+            def finalize(self):
+                for item in bytes(self.data).split(b'&'):
+                    if not item:
+                        continue
+                    name, _, value = item.partition(b'=')
+                    self.callbacks['on_field_start']()
+                    self.callbacks['on_field_name'](name, 0, len(name))
+                    self.callbacks['on_field_data'](value, 0, len(value))
+                    self.callbacks['on_field_end']()
+                self.callbacks['on_end']()
+
+        class _MultipartParser:
+            def __init__(self, boundary, callbacks):
+                self.boundary = boundary.encode('latin-1') if isinstance(boundary, str) else boundary
+                self.callbacks = callbacks
+                self.data = bytearray()
+
+            def write(self, data):
+                self.data.extend(data)
+
+            def finalize(self):
+                delimiter = b'--' + self.boundary
+                for part in bytes(self.data).split(delimiter):
+                    part = part.strip(b'\r\n')
+                    if not part or part == b'--':
+                        continue
+                    if part.endswith(b'--'):
+                        part = part[:-2].strip(b'\r\n')
+                    if b'\r\n\r\n' not in part:
+                        continue
+
+                    header_blob, body = part.split(b'\r\n\r\n', 1)
+                    self.callbacks['on_part_begin']()
+                    for header in header_blob.split(b'\r\n'):
+                        name, _, value = header.partition(b':')
+                        name = name.strip()
+                        value = value.strip()
+                        self.callbacks['on_header_field'](name, 0, len(name))
+                        self.callbacks['on_header_value'](value, 0, len(value))
+                        self.callbacks['on_header_end']()
+                    self.callbacks['on_headers_finished']()
+                    self.callbacks['on_part_data'](body, 0, len(body))
+                    self.callbacks['on_part_end']()
+                self.callbacks['on_end']()
+
+        def _install_multipart_stub_if_missing():
+            if importlib.util.find_spec('python_multipart') is None and 'python_multipart' not in sys.modules:
+                python_multipart = ModuleType('python_multipart')
+                python_multipart.__version__ = '0.0.20'
+                python_multipart.MultipartParser = _MultipartParser
+                python_multipart.QuerystringParser = _QuerystringParser
+
+                python_multipart_submodule = ModuleType('python_multipart.multipart')
+                python_multipart_submodule.parse_options_header = _parse_options_header
+
+                sys.modules['python_multipart'] = python_multipart
+                sys.modules['python_multipart.multipart'] = python_multipart_submodule
+
+            if importlib.util.find_spec('multipart') is None and 'multipart' not in sys.modules:
+                multipart = ModuleType('multipart')
+                multipart.__version__ = '0.0.20'
+                multipart.MultipartParser = _MultipartParser
+                multipart.QuerystringParser = _QuerystringParser
+
+                multipart_submodule = ModuleType('multipart.multipart')
+                multipart_submodule.parse_options_header = _parse_options_header
+                multipart_submodule.shutil = _shutil
+
+                sys.modules['multipart'] = multipart
+                sys.modules['multipart.multipart'] = multipart_submodule
+
+            try:
+                import starlette.formparsers as formparsers
+            except ImportError:
+                return
+            formparsers.multipart = sys.modules.get('python_multipart') or sys.modules.get('multipart')
+            formparsers.parse_options_header = _parse_options_header
+
+        _install_multipart_stub_if_missing()
+
+        _speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+        _speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+        _speaker_embedding.compare_embeddings = MagicMock(return_value=0.0)
+        _speaker_embedding.extract_embedding_from_bytes = MagicMock()
+        _speaker_embedding.async_extract_embedding_from_bytes = AsyncMock(return_value=None)
+        sys.modules['utils.stt.speaker_embedding'] = _speaker_embedding
+        _attach_existing_module('utils.stt.speaker_embedding')
+
+        _ensure_package('google', BACKEND_DIR / 'tests')
+        _ensure_package('google.cloud', BACKEND_DIR / 'tests')
+        _ensure_package('google.auth', BACKEND_DIR / 'tests')
+        _google_auth_exceptions = _install_module('google.auth.exceptions')
+        _google_auth_exceptions.DefaultCredentialsError = type('DefaultCredentialsError', (Exception,), {})
+        _google_auth_transport = _install_module('google.auth.transport')
+        _google_auth_transport_requests = _install_module('google.auth.transport.requests')
+        _google_auth_transport_requests.Request = MagicMock
+        _ensure_package('google.api_core', BACKEND_DIR / 'tests')
+        _api_core_exceptions = _install_module('google.api_core.exceptions')
+        _api_core_exceptions.AlreadyExists = type('AlreadyExists', (Exception,), {})
+        _api_core_exceptions.Conflict = type('Conflict', (Exception,), {})
+        _api_core_exceptions.NotFound = type('NotFound', (Exception,), {})
+        _gcs = _install_module('google.cloud.storage')
+        _gcs.Client = MagicMock
+        _tasks_v2 = _install_module('google.cloud.tasks_v2')
+        _tasks_v2.CloudTasksClient = MagicMock
+        _ensure_package('google.oauth2', BACKEND_DIR / 'tests')
+        _id_token = _install_module('google.oauth2.id_token')
+        _id_token.verify_oauth2_token = MagicMock()
+        _ensure_package('google.protobuf', BACKEND_DIR / 'tests')
+        _duration_pb2 = _install_module('google.protobuf.duration_pb2')
+        _duration_pb2.Duration = MagicMock
+
+        os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
+        os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
+        os.environ.setdefault(
+            'ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv'
+        )
+        os.makedirs('/tmp', exist_ok=True)
+
+        # Stub transitive imports for utils.chat (avoid pulling in all of utils.llm etc.)
+        # Do NOT stub utils.other.endpoints — it contains the @timeit decorator that must
+        # be a real function (not MagicMock) or it corrupts decorated function signatures.
+        for _ufull in [
+            'utils.llm',
+            'utils.llm.memories',
+            'utils.llm.persona',
+            'utils.llm.chat',
+            'utils.llm.goals',
+            'utils.llm.usage_tracker',
+            'utils.conversations.process_conversation',
+            'utils.notifications',
+            'utils.other.storage',
+            'utils.other.chat_file',
+            'utils.apps',
+            'utils.retrieval',
+            'utils.retrieval.graph',
+            'utils.fair_use',
+            'utils.cloud_tasks',
+            'utils.log_sanitizer',
+            'models.fair_use',
+            'models.sync',
+            'models.processing_memory',
+            'models.integrations',
+            'models.goal',
+        ]:
+            sys.modules.setdefault(_ufull, MagicMock())
+
+        _utils_conversations_pkg = ModuleType('utils.conversations')
+        _utils_conversations_pkg.__path__ = []
+        _utils_conversations_pkg.__package__ = 'utils.conversations'
+        _utils_conversations_factory = ModuleType('utils.conversations.factory')
+        _utils_conversations_factory.deserialize_conversation = MagicMock(side_effect=lambda conversation: conversation)
+        sys.modules['utils.conversations'] = _utils_conversations_pkg
+        sys.modules['utils.conversations.factory'] = _utils_conversations_factory
+        setattr(_utils_conversations_pkg, 'factory', _utils_conversations_factory)
+
+        # Force-import real models.chat (has no project deps, needed for FastAPI response_model)
+        import importlib.util as _ilu
+
+        _chat_spec = _ilu.spec_from_file_location(
+            'models.chat', os.path.join(os.path.dirname(__file__), '..', '..', 'models', 'chat.py')
+        )
+        _real_chat = _ilu.module_from_spec(_chat_spec)
+        _chat_spec.loader.exec_module(_real_chat)
+        sys.modules['models.chat'] = _real_chat
+        setattr(_models_pkg, 'chat', _real_chat)
+
+        # Now safe to import the modules under test
+        from utils.stt.pre_recorded import deepgram_prerecorded_from_bytes
+
+        globals()['deepgram_prerecorded_from_bytes'] = deepgram_prerecorded_from_bytes
+        yield
+    finally:
+        import sys as _sys2
+
+        # evict modules added during the block, restoring process state
+        for _k in list(_sys2.modules.keys() - _saved_keys):
+            _sys2.modules.pop(_k, None)
+
+        # restore existing keys whose object was swapped in place by this fixture
+        # (e.g. ``utils.stt.speaker_embedding`` replaced with a ModuleType stub)
+        for _k, _orig in _saved_modules.items():
+            _cur = _sys2.modules.get(_k)
+            if _cur is not None and _cur is not _orig:
+                _sys2.modules[_k] = _orig
+
 
 # ---------------------------------------------------------------------------
 # deepgram_prerecorded_from_bytes: encoding/language/model options
@@ -301,7 +572,7 @@ class TestTranscribePcmBytes:
     """Verify transcribe_pcm_bytes passes language/model and propagates errors."""
 
     @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_language_model_forwarded(self, mock_get_model, mock_dg, mock_postprocess):
         """stt_language and stt_model should be passed to deepgram_prerecorded_from_bytes."""
@@ -322,7 +593,7 @@ class TestTranscribePcmBytes:
         assert call_kwargs['encoding'] == 'linear16'
         assert text == 'Hola'
 
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_runtime_error_propagates(self, mock_get_model, mock_dg):
         """RuntimeError from Deepgram should propagate (not be caught)."""
@@ -334,7 +605,7 @@ class TestTranscribePcmBytes:
         with pytest.raises(RuntimeError, match='Deepgram failed'):
             transcribe_pcm_bytes(b'\x00' * 100, 'test-uid')
 
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_empty_words_returns_none(self, mock_get_model, mock_dg):
         """Empty word list should return (None, language)."""
@@ -348,7 +619,7 @@ class TestTranscribePcmBytes:
         assert lang == 'en'
 
     @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_multi_language_returns_detected_language(self, mock_get_model, mock_dg, mock_postprocess):
         """Multi-language mode should return the Deepgram-detected language, not hardcoded 'en'."""
@@ -370,7 +641,7 @@ class TestTranscribePcmBytes:
         assert call_kwargs['return_language'] is True
 
     @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_chinese_language_uses_nova3(self, mock_get_model, mock_dg, mock_postprocess):
         """Chinese should use nova-3 model."""
@@ -389,7 +660,7 @@ class TestTranscribePcmBytes:
         assert call_kwargs['language'] == 'zh'
 
     @patch('utils.chat.postprocess_words')
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_whitespace_only_transcript_returns_none(self, mock_get_model, mock_dg, mock_postprocess):
         """Whitespace-only transcript after postprocessing should return (None, language)."""
@@ -405,7 +676,7 @@ class TestTranscribePcmBytes:
         assert text is None
         assert lang == 'en'
 
-    @patch('utils.chat.deepgram_prerecorded_from_bytes')
+    @patch('utils.chat.prerecorded_from_bytes')
     @patch('utils.chat.get_deepgram_model_for_language')
     def test_postprocess_empty_returns_none(self, mock_get_model, mock_dg):
         """postprocess_words returning empty list should return (None, language)."""
@@ -430,14 +701,14 @@ class TestDeepgramPrerecordedFromBytesEdgeCases:
 
     @patch('utils.stt.pre_recorded._deepgram_client')
     def test_retry_raises_after_max_attempts(self, mock_client):
-        """After 3 failed attempts, should raise RuntimeError."""
+        """After the configured retry is exhausted, should raise RuntimeError."""
         mock_client.listen.rest.v.return_value.transcribe_file.side_effect = Exception('connection timeout')
 
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
             deepgram_prerecorded_from_bytes(b'\x00' * 100, encoding='linear16')
 
-        # Should have been called 3 times (attempts 0, 1, 2)
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 3
+        # Should have been called twice (initial attempt + one retry)
+        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
 
     @patch('utils.stt.pre_recorded._deepgram_client')
     def test_return_language_empty_words_returns_detected_lang(self, mock_client):
@@ -462,10 +733,10 @@ class TestDeepgramPrerecordedFromBytesEdgeCases:
         mock_response.to_dict.return_value = {'results': {'channels': []}}
         mock_client.listen.rest.v.return_value.transcribe_file.return_value = mock_response
 
-        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 3 attempts'):
+        with pytest.raises(RuntimeError, match='Deepgram transcription failed after 2 attempts'):
             deepgram_prerecorded_from_bytes(b'\x00' * 100)
 
-        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 3
+        assert mock_client.listen.rest.v.return_value.transcribe_file.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -505,10 +776,35 @@ def _stub_router_deps():
     ]
     for mod in extra_models + extra_database + extra_utils:
         sys.modules.setdefault(mod, MagicMock())
+    opuslib_stub = ModuleType('opuslib')
+    opuslib_stub.Decoder = MagicMock()
+    sys.modules['opuslib'] = opuslib_stub
+    pydub_stub = ModuleType('pydub')
+    pydub_stub.AudioSegment = MagicMock()
+    sys.modules['pydub'] = pydub_stub
+    limiter_stub = ModuleType('utils.voice_duration_limiter')
+    limiter_stub.compute_pcm_duration_ms = lambda byte_count, sample_rate, channels: int(
+        byte_count / (sample_rate * channels * 2) * 1000
+    )
+    limiter_stub.read_wav_duration_ms = MagicMock(return_value=1000)
+    limiter_stub.try_consume_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter_stub.check_budget = MagicMock(return_value=(True, 0, 7200000))
+    limiter_stub.record_actual_duration = MagicMock()
+    sys.modules['utils.voice_duration_limiter'] = limiter_stub
+    subscription_stub = sys.modules.setdefault('utils.subscription', MagicMock())
+    subscription_stub.enforce_chat_quota = MagicMock()
+    subscription_stub.is_trial_paywalled = MagicMock(return_value=False)
     # Ensure redis_db.check_rate_limit returns (True, 99, 0)
     rdb = sys.modules.get('database.redis_db')
     if rdb:
         rdb.check_rate_limit = MagicMock(return_value=(True, 99, 0))
+
+
+def _install_sync_router_stub():
+    sync_router_stub = ModuleType('routers.sync')
+    sync_router_stub.retrieve_file_paths = MagicMock(return_value=[])
+    sync_router_stub.decode_files_to_wav = MagicMock(return_value=[])
+    sys.modules['routers.sync'] = sync_router_stub
 
 
 def _make_chat_client():
@@ -523,6 +819,7 @@ def _make_chat_client():
 
     sys.modules.pop('routers.chat', None)
     sys.modules.pop('routers.sync', None)
+    _install_sync_router_stub()
     spec = importlib.util.spec_from_file_location(
         'routers_chat_test',
         os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'chat.py'),
@@ -1135,6 +1432,9 @@ class TestWsBudgetAndSessionCap:
                             with client.websocket_connect('/v2/voice-message/transcribe-stream') as ws:
                                 # Send 32000 bytes = 1s at 16kHz mono
                                 ws.send_bytes(b'\x00' * 32000)
+                                deadline = time.time() + 1.0
+                                while not mock_dg_socket.send.called and time.time() < deadline:
+                                    time.sleep(0.01)
                             # After WS close, finally block should have called record_actual_duration
                             mock_record.assert_called_once()
                             call_args = mock_record.call_args[0]
@@ -1186,6 +1486,7 @@ class TestNoPerSessionCap:
             _cleanup_chat_client(saved)
 
 
+@pytest.mark.slow
 class TestWsIdleTimeout:
     """Test that WS idle timeout is based on audio frames, not all messages."""
 
@@ -1327,6 +1628,7 @@ class TestMultipartBudgetAggregation:
             _cleanup_chat_client(saved)
 
 
+@pytest.mark.slow
 class TestWsMidSessionBudgetEnforcement:
     """Test that WS closes mid-session when cumulative audio exceeds remaining budget."""
 

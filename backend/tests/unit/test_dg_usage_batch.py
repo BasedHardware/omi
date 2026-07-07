@@ -12,7 +12,7 @@ import pytest
 
 def _read_transcribe_source():
     path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         return f.read()
 
 
@@ -27,18 +27,17 @@ class TestDgUsageBatchingStructure:
         assert len(calls) == 2, f'Expected 2 record_dg_usage_ms calls (flush only), found {len(calls)}'
 
     def test_accumulation_covers_all_stt_providers(self):
-        """All STT provider paths accumulate locally via dg_usage_ms_pending +=."""
+        """All STT provider paths accumulate locally via session.dg_usage_ms_pending +=."""
         source = _read_transcribe_source()
-        accum = re.findall(r'^\s+dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
+        accum = re.findall(r'^\s+session\.dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
         # DG single-channel + multi-channel
         assert len(accum) == 2, f'Expected 2 accumulation points, found {len(accum)}'
 
-    def test_nonlocal_declarations_complete(self):
-        """All nested functions that touch dg_usage_ms_pending declare nonlocal."""
+    def test_accumulator_lives_in_session_state(self):
+        """The DG accumulator is explicit session state, not closure nonlocal state."""
         source = _read_transcribe_source()
-        nonlocals = re.findall(r'nonlocal.*dg_usage_ms_pending', source)
-        # _record_usage_periodically, receive_data, flush_stt_buffer
-        assert len(nonlocals) == 3, f'Expected 3 nonlocal declarations, found {len(nonlocals)}'
+        assert 'dg_usage_ms_pending: int = 0' in source
+        assert not re.findall(r'nonlocal.*dg_usage_ms_pending', source)
 
     def test_flush_resets_accumulator(self):
         """Each flush point resets dg_usage_ms_pending to 0."""
@@ -47,7 +46,7 @@ class TestDgUsageBatchingStructure:
         resets = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            if stripped == 'dg_usage_ms_pending = 0':
+            if stripped == 'session.dg_usage_ms_pending = 0':
                 resets.append(i)
         # periodic flush + session-end flush
         assert len(resets) == 2, f'Expected 2 reset points, found {len(resets)}'
@@ -55,8 +54,10 @@ class TestDgUsageBatchingStructure:
     def test_flush_before_custom_stt_guard(self):
         """DG flush must happen before use_custom_stt:continue guard."""
         source = _read_transcribe_source()
-        flush_pos = source.find('record_dg_usage_ms(uid, dg_usage_ms_pending)')
+        flush_pos = source.find('record_dg_usage_ms(uid, session.dg_usage_ms_pending)')
         guard_pos = source.find('if use_custom_stt:\n')
+        assert flush_pos != -1, 'DG flush call not found'
+        assert guard_pos != -1, 'use_custom_stt guard not found'
         assert flush_pos < guard_pos, 'DG flush must be before use_custom_stt guard'
 
 
@@ -76,11 +77,13 @@ class TestDgUsageBatchingBehavior:
             'database.user_usage',
             'database.conversations',
             'firebase_admin',
+            'firebase_admin.auth',
             'firebase_admin.messaging',
         ]:
             if mod_name not in sys.modules:
                 sys.modules[mod_name] = ModuleType(mod_name)
 
+        sys.modules['firebase_admin'].auth = sys.modules['firebase_admin.auth']
         sys.modules['database._client'].db = MagicMock()
         sys.modules['database.redis_db'].r = MagicMock()
 

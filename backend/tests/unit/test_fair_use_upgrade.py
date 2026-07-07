@@ -9,50 +9,26 @@ Covers:
 """
 
 import os
-import sys
-import types
+import re
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Stub heavy dependencies before importing the module under test
-# ---------------------------------------------------------------------------
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-sys.modules.setdefault('database._client', _db_client)
-
-_redis_mod = types.ModuleType('database.redis_db')
-_mock_redis = MagicMock()
-_redis_mod.r = _mock_redis
-sys.modules.setdefault('database.redis_db', _redis_mod)
-
-sys.modules.setdefault('google.cloud.firestore', MagicMock())
-sys.modules.setdefault('google.cloud.firestore_v1', MagicMock())
-
-# Stub database.fair_use
-_fair_use_db = types.ModuleType('database.fair_use')
-_fair_use_db.get_fair_use_state = MagicMock(return_value={})
-_fair_use_db.update_fair_use_state = MagicMock()
-_fair_use_db.create_fair_use_event = MagicMock(return_value='evt-123')
-_fair_use_db.get_fair_use_events = MagicMock(return_value=[])
-_fair_use_db.get_violation_counts = MagicMock(return_value={'violation_count_7d': 0, 'violation_count_30d': 0})
-sys.modules.setdefault('database.fair_use', _fair_use_db)
-
-# Stub database.users
-_users_db = MagicMock()
-sys.modules.setdefault('database.users', _users_db)
-
-# Stub database.user_usage
-sys.modules.setdefault('database.user_usage', MagicMock())
-
-# Stub notifications
-sys.modules.setdefault('utils.notifications', MagicMock())
-
-# Now import the module under test
 import utils.fair_use as fair_use_mod
 from models.users import PlanType, SubscriptionStatus, Subscription
+
+# Module-level fakes for the db/redis singletons utils.fair_use binds at import.
+# Wired into utils.fair_use per-test by the autouse fixture below (sanctioned
+# monkeypatch.setattr seam — see backend/docs/test_isolation.md).
+_fair_use_db = MagicMock()
+_mock_redis = MagicMock()
+
+
+@pytest.fixture(autouse=True)
+def _wire_fair_use_mocks(monkeypatch):
+    monkeypatch.setattr(fair_use_mod, 'fair_use_db', _fair_use_db)
+    monkeypatch.setattr(fair_use_mod, 'redis_client', _mock_redis)
 
 
 def _make_paid_subscription():
@@ -228,8 +204,16 @@ class TestWebhookClearFairUseSourceLevel:
     PAYMENT_SOURCE_FILE = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'payment.py')
 
     def _read_source(self):
-        with open(self.PAYMENT_SOURCE_FILE) as f:
+        with open(self.PAYMENT_SOURCE_FILE, encoding='utf-8') as f:
             return f.read()
+
+    @staticmethod
+    def _assert_clear_fair_use_called(block):
+        direct_call = r'\bclear_fair_use_on_upgrade\s*\(\s*uid\b'
+        run_blocking_call = r'\brun_blocking\s*\([^)]*\bclear_fair_use_on_upgrade\b[^)]*\buid\b'
+        assert re.search(direct_call, block) or re.search(
+            run_blocking_call, block, re.DOTALL
+        ), "clear_fair_use_on_upgrade is not called with uid"
 
     def test_payment_imports_clear_fair_use_on_upgrade(self):
         """payment.py must import clear_fair_use_on_upgrade."""
@@ -245,7 +229,7 @@ class TestWebhookClearFairUseSourceLevel:
         # The clear call should appear between checkout handler and the next event type
         next_event_idx = source.find("customer.subscription.updated", checkout_idx)
         block = source[checkout_idx:next_event_idx]
-        assert 'clear_fair_use_on_upgrade(uid)' in block
+        self._assert_clear_fair_use_called(block)
 
     def test_subscription_event_calls_clear(self):
         """customer.subscription.* path must call clear_fair_use_on_upgrade."""
@@ -254,13 +238,14 @@ class TestWebhookClearFairUseSourceLevel:
         assert sub_idx != -1, "customer.subscription handler not found"
         next_event_idx = source.find("subscription_schedule.completed", sub_idx)
         block = source[sub_idx:next_event_idx]
-        assert 'clear_fair_use_on_upgrade(uid)' in block
+        self._assert_clear_fair_use_called(block)
 
     def test_schedule_completed_calls_clear(self):
         """subscription_schedule.completed path must call clear_fair_use_on_upgrade."""
         source = self._read_source()
         schedule_idx = source.find("'subscription_schedule.completed'")
         assert schedule_idx != -1, "subscription_schedule handler not found"
-        # Get a reasonable block after the schedule handler
-        block = source[schedule_idx : schedule_idx + 1500]
-        assert 'clear_fair_use_on_upgrade(uid)' in block
+        canceled_idx = source.find("elif schedule_obj.get('status') == 'canceled'", schedule_idx)
+        assert canceled_idx != -1, "subscription_schedule canceled branch not found"
+        block = source[schedule_idx:canceled_idx]
+        self._assert_clear_fair_use_called(block)

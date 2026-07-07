@@ -14,11 +14,14 @@ python-multipart==0.0.27
 pydantic==2.11.10
 pydantic-settings==2.10.1
 pydantic_core==2.33.2
+jsonschema==4.23.0
+jsonschema-specifications==2023.12.1
 
 # Google Cloud
 firebase-admin==6.5.0
 google-cloud-firestore==2.20.0
 google-cloud-storage==2.18.0
+google-cloud-tasks==2.16.4
 google-cloud-translate==3.20.2
 google-auth==2.32.0
 google-api-python-client==2.139.0

@@ -55,7 +55,6 @@ class TestReExportsRemoved:
 
         reexport_symbols = [
             'ActionItem',
-            'ActionItemsExtraction',
             'AudioFile',
             'CalendarMeetingContext',
             'CategoryEnum',
@@ -81,7 +80,8 @@ class TestReExportsRemoved:
     def test_canonical_imports_work(self):
         """All moved symbols import from their canonical modules."""
         from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus
-        from models.structured import Structured, ActionItem, Event, ActionItemsExtraction
+        from models.structured import Structured, ActionItem, Event
+        from models.structured_extraction import ActionItemsExtraction
         from models.audio_file import AudioFile
         from models.calendar_context import CalendarMeetingContext, MeetingParticipant
         from models.conversation_photo import ConversationPhoto
@@ -574,7 +574,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/trends.py').read_text()
+        source = pathlib.Path('utils/llm/trends.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'trends_extractor':
@@ -588,7 +588,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/chat.py').read_text()
+        source = pathlib.Path('utils/llm/chat.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'retrieve_memory_context_params':
@@ -602,7 +602,7 @@ class TestPhase4ConsumerMigration:
         import ast
         import pathlib
 
-        source = pathlib.Path('utils/llm/chat.py').read_text()
+        source = pathlib.Path('utils/llm/chat.py').read_text(encoding='utf-8')
         tree = ast.parse(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.FunctionDef) and node.name == 'obtain_emotional_message':
@@ -622,7 +622,7 @@ class TestPhase4ConsumerMigration:
             'routers/chat.py',
             'utils/chat.py',
         ]:
-            source = pathlib.Path(file_path).read_text()
+            source = pathlib.Path(file_path).read_text(encoding='utf-8')
             assert (
                 'from models.conversation import' not in source
             ), f'{file_path} still imports from models.conversation'
@@ -631,7 +631,7 @@ class TestPhase4ConsumerMigration:
         """Files using TYPE_CHECKING should not have runtime Conversation import."""
         import pathlib
 
-        source = pathlib.Path('utils/retrieval/graph.py').read_text()
+        source = pathlib.Path('utils/retrieval/graph.py').read_text(encoding='utf-8')
         assert 'TYPE_CHECKING' in source, 'graph.py should use TYPE_CHECKING'
         assert 'from __future__ import annotations' in source
 
@@ -700,7 +700,7 @@ class TestPhase4RuntimeBehavior:
         import pathlib
 
         for file_path in ['routers/chat.py', 'utils/chat.py']:
-            source = pathlib.Path(file_path).read_text()
+            source = pathlib.Path(file_path).read_text(encoding='utf-8')
             assert 'extract_memory_ids' in source, f'{file_path} should use extract_memory_ids'
             assert 'from utils.conversation_helpers import extract_memory_ids' in source
 
@@ -757,7 +757,15 @@ class TestPhase4RuntimeBehavior:
         # Mock Firestore
         mock_client = MagicMock()
         saved = sys.modules.get('database._client')
+        saved_firebase_admin = sys.modules.get('firebase_admin')
+        saved_firebase_firestore = sys.modules.get('firebase_admin.firestore')
         sys.modules['database._client'] = MagicMock(db=mock_client, document_id_from_seed=lambda s: f'id-{s}')
+        firebase_admin_stub = MagicMock()
+        firebase_firestore_stub = MagicMock()
+        firebase_firestore_stub.ArrayUnion = lambda values: values
+        firebase_admin_stub.firestore = firebase_firestore_stub
+        sys.modules['firebase_admin'] = firebase_admin_stub
+        sys.modules['firebase_admin.firestore'] = firebase_firestore_stub
 
         try:
             sys.modules.pop('database.trends', None)
@@ -778,4 +786,12 @@ class TestPhase4RuntimeBehavior:
                 sys.modules.pop('database._client', None)
             else:
                 sys.modules['database._client'] = saved
+            if saved_firebase_admin is None:
+                sys.modules.pop('firebase_admin', None)
+            else:
+                sys.modules['firebase_admin'] = saved_firebase_admin
+            if saved_firebase_firestore is None:
+                sys.modules.pop('firebase_admin.firestore', None)
+            else:
+                sys.modules['firebase_admin.firestore'] = saved_firebase_firestore
             sys.modules.pop('database.trends', None)

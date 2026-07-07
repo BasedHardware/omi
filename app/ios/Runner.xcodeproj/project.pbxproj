@@ -20,6 +20,11 @@
 		42A7BA3E2E788BD400138969 /* omiWatchApp.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 42A7BA342E788BD300138969 /* omiWatchApp.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); platformFilter = iphoneos; }; };
 		42A7BA4C2E788F0100138969 /* WatchConnectivity.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */; };
 		42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */; };
+		BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DF0D6 /* LimitlessBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DF0D8 /* LimitlessProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */; };
+		BAADF00DF00DF00DF00DF0DA /* LimitlessFlashDrainEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */; };
 		42B17C642F69B9E100BFDA9D /* BleHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
@@ -126,6 +131,11 @@
 		42A7BA342E788BD300138969 /* omiWatchApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = omiWatchApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42A7BA4B2E788F0100138969 /* WatchConnectivity.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WatchConnectivity.framework; path = System/Library/Frameworks/WatchConnectivity.framework; sourceTree = SDKROOT; };
 		42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiBleManager.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaseBatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessBatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessProtocol.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LimitlessFlashDrainEngine.swift; sourceTree = "<group>"; };
 		42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BleHostApiImpl.swift; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
@@ -337,8 +347,9 @@
 			isa = PBXGroup;
 			children = (
 				42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */,
-				42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */,
-				42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */,
+				BAADF00DF00DF00DF00DFB01 /* Ble */,
+				BAADF00DF00DF00DF00DFB02 /* Batch */,
+				BAADF00DF00DF00DF00DFB03 /* Limitless */,
 				42BABFC02F2A81B100E78A3C /* PhoneCalls */,
 				4255287C2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift */,
 				5FCEB2FF2C2758C000B17EE8 /* RunnerRelease-dev.entitlements */,
@@ -363,6 +374,34 @@
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		BAADF00DF00DF00DF00DFB01 /* Ble */ = {
+			isa = PBXGroup;
+			children = (
+				42B17C612F69B9CF00BFDA9D /* OmiBleManager.swift */,
+				42B17C632F69B9E100BFDA9D /* BleHostApiImpl.swift */,
+			);
+			path = Ble;
+			sourceTree = "<group>";
+		};
+		BAADF00DF00DF00DF00DFB02 /* Batch */ = {
+			isa = PBXGroup;
+			children = (
+				BAADF00DF00DF00DF00DF0D3 /* BaseBatchAudioWriter.swift */,
+				BAADF00DF00DF00DF00DF0D1 /* BatchAudioWriter.swift */,
+				BAADF00DF00DF00DF00DF0D5 /* LimitlessBatchAudioWriter.swift */,
+			);
+			path = Batch;
+			sourceTree = "<group>";
+		};
+		BAADF00DF00DF00DF00DFB03 /* Limitless */ = {
+			isa = PBXGroup;
+			children = (
+				BAADF00DF00DF00DF00DF0D7 /* LimitlessProtocol.swift */,
+				BAADF00DF00DF00DF00DF0D9 /* LimitlessFlashDrainEngine.swift */,
+			);
+			path = Limitless;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -636,6 +675,11 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				42B17C622F69B9CF00BFDA9D /* OmiBleManager.swift in Sources */,
+				BAADF00DF00DF00DF00DF0D2 /* BatchAudioWriter.swift in Sources */,
+				BAADF00DF00DF00DF00DF0D4 /* BaseBatchAudioWriter.swift in Sources */,
+				BAADF00DF00DF00DF00DF0D6 /* LimitlessBatchAudioWriter.swift in Sources */,
+				BAADF00DF00DF00DF00DF0D8 /* LimitlessProtocol.swift in Sources */,
+				BAADF00DF00DF00DF00DF0DA /* LimitlessFlashDrainEngine.swift in Sources */,
 				AB12345678901234567890AB /* AppleRemindersService.swift in Sources */,
 				AB12345678901234567890AC /* AppleHealthService.swift in Sources */,
 				AB12345678901234567890AD /* AudioInterruptionManager.swift in Sources */,

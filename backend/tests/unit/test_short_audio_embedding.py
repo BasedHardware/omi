@@ -5,17 +5,11 @@ with a clear error instead of crashing the pyannote wespeaker fbank model.
 """
 
 import io
-import os
-import struct
-import sys
 import wave
-
-import pytest
-import httpx
 from unittest.mock import MagicMock
 
-# Mock modules that initialize GCP clients at import time
-sys.modules.setdefault("database._client", MagicMock())
+import httpx
+import pytest
 
 from utils.stt.speaker_embedding import (
     MIN_EMBEDDING_AUDIO_DURATION,

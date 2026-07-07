@@ -37,21 +37,7 @@ class LanguageSelectionDialog {
         : null;
     String searchQuery = '';
     List<MapEntry<String, String>> filteredLanguages = List.from(languages);
-    final ScrollController _scrollController = ScrollController();
-
-    // Function to scroll to the selected language
-    void scrollToSelectedLanguage() {
-      if (selectedLanguage != null) {
-        final selectedIndex = filteredLanguages.indexWhere((lang) => lang.value == selectedLanguage);
-        if (selectedIndex != -1 && _scrollController.hasClients) {
-          _scrollController.animateTo(
-            selectedIndex * 56.0, // Approximate height of each list item
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-          );
-        }
-      }
-    }
+    final ScrollController scrollController = ScrollController();
 
     await showDialog(
       context: context,
@@ -108,7 +94,7 @@ class LanguageSelectionDialog {
                         decoration: BoxDecoration(
                           color: const Color(0xFF2A2A2A),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF8E8E93).withOpacity(0.3)),
+                          border: Border.all(color: const Color(0xFF8E8E93).withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           children: [
@@ -155,7 +141,7 @@ class LanguageSelectionDialog {
                               child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
                             )
                           : ListView.builder(
-                              controller: _scrollController,
+                              controller: scrollController,
                               itemCount: filteredLanguages.length,
                               itemBuilder: (context, index) {
                                 final language = filteredLanguages[index];
@@ -167,7 +153,7 @@ class LanguageSelectionDialog {
                                       ? const Icon(Icons.check_circle, color: Colors.deepPurple)
                                       : null,
                                   selected: isSelected,
-                                  selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                                  selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                   onTap: () {
                                     setState(() {
@@ -193,8 +179,8 @@ class LanguageSelectionDialog {
                             final selectedIndex = filteredLanguages.indexWhere(
                               (lang) => lang.value == selectedLanguage,
                             );
-                            if (selectedIndex != -1 && _scrollController.hasClients) {
-                              _scrollController.animateTo(
+                            if (selectedIndex != -1 && scrollController.hasClients) {
+                              scrollController.animateTo(
                                 selectedIndex * 56.0, // Approximate height of each list item
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
@@ -220,22 +206,25 @@ class LanguageSelectionDialog {
                   onPressed: selectedLanguage == null
                       ? null
                       : () async {
+                          final successMsg = context.l10n.languageSetTo(selectedLanguageName!);
+                          final failMsg = context.l10n.failedToSetLanguage;
                           final userProvider = Provider.of<UserProvider>(context, listen: false);
                           final success = await homeProvider.updateUserPrimaryLanguage(
                             selectedLanguage!,
                             userProvider: userProvider,
                           );
-                          if (success && context.mounted) {
+                          if (!context.mounted) return;
+                          if (success) {
                             Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
                             Navigator.of(context).pop();
-                            AppSnackbar.showSnackbarSuccess(context.l10n.languageSetTo(selectedLanguageName!));
+                            AppSnackbar.showSnackbarSuccess(successMsg);
                           } else {
-                            AppSnackbar.showSnackbarError(context.l10n.failedToSetLanguage);
+                            AppSnackbar.showSnackbarError(failMsg);
                           }
                         },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
-                    disabledBackgroundColor: Colors.deepPurple.withOpacity(0.3),
+                    disabledBackgroundColor: Colors.deepPurple.withValues(alpha: 0.3),
                     foregroundColor: Colors.white,
                   ),
                   child: Text(context.l10n.confirm),

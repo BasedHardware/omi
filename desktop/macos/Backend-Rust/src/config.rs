@@ -1,0 +1,204 @@
+// Configuration - Environment variables
+// Copied from Python backend .env
+
+use std::env;
+
+/// Application configuration loaded from environment
+#[derive(Clone)]
+pub struct Config {
+    /// Server port
+    pub port: u16,
+    /// Gemini API key for LLM calls
+    pub gemini_api_key: Option<String>,
+    /// OpenAI API key for server-side TTS proxy calls
+    pub openai_api_key: Option<String>,
+    /// Firebase project ID (used for Firestore)
+    pub firebase_project_id: Option<String>,
+    /// Firebase project ID for auth token validation (defaults to firebase_project_id)
+    /// Set this when OAuth tokens come from a different project than your Firestore
+    pub firebase_auth_project_id: Option<String>,
+    /// Firebase Web API key (for identity toolkit)
+    pub firebase_api_key: Option<String>,
+    /// Base API URL (for OAuth callbacks)
+    pub base_api_url: Option<String>,
+    /// Apple Sign-In Client ID (Services ID)
+    pub apple_client_id: Option<String>,
+    /// Apple Team ID
+    pub apple_team_id: Option<String>,
+    /// Apple Key ID (for client secret JWT)
+    pub apple_key_id: Option<String>,
+    /// Apple Private Key (PEM format)
+    pub apple_private_key: Option<String>,
+    /// Google OAuth Client ID
+    pub google_client_id: Option<String>,
+    /// Google OAuth Client Secret
+    pub google_client_secret: Option<String>,
+    /// Encryption secret for decrypting user data with enhanced protection level
+    pub encryption_secret: Option<Vec<u8>>,
+    /// Redis host for conversation visibility
+    pub redis_host: Option<String>,
+    /// Redis port
+    pub redis_port: u16,
+    /// Redis password
+    pub redis_password: Option<String>,
+    /// PostHog Personal API Key (for querying analytics)
+    pub posthog_api_key: Option<String>,
+    /// PostHog Project ID
+    pub posthog_project_id: String,
+    /// Sentry webhook HMAC-SHA256 secret for signature verification
+    pub sentry_webhook_secret: Option<String>,
+    /// Sentry API auth token for fetching event details
+    pub sentry_auth_token: Option<String>,
+    /// Firestore UID where Sentry feedback action items are created
+    pub sentry_admin_uid: Option<String>,
+    /// Crisp plugin identifier (for REST API authentication)
+    pub crisp_plugin_identifier: Option<String>,
+    /// Crisp plugin key (for REST API authentication)
+    pub crisp_plugin_key: Option<String>,
+    /// Crisp website ID
+    pub crisp_website_id: Option<String>,
+    /// Pinecone API key for vector embeddings
+    pub pinecone_api_key: Option<String>,
+    /// Pinecone host URL (e.g. https://index-name-xxx.svc.environment.pinecone.io)
+    pub pinecone_host: Option<String>,
+    /// GCE project ID for AgentVM provisioning (from GCE_PROJECT_ID, FIREBASE_PROJECT_ID, or GCP_PROJECT_ID)
+    pub gce_project_id: Option<String>,
+    /// GCE source image for AgentVM (from GCE_SOURCE_IMAGE or derived from gce_project_id)
+    pub gce_source_image: Option<String>,
+    /// GCS bucket for agent startup script (from AGENT_GCS_BUCKET)
+    pub agent_gcs_bucket: Option<String>,
+    /// Anthropic API key for chat (server-side only, used by /v2/chat/completions proxy)
+    pub anthropic_api_key: Option<String>,
+    /// Legacy Anthropic key served to old desktop clients via /api-keys (deprecated; remove after major release)
+    pub desktop_legacy_anthropic_key: Option<String>,
+    /// Google Calendar API key (served to desktop clients)
+    pub google_calendar_api_key: Option<String>,
+    /// GitHub Release tag deployed to this backend revision.
+    pub desktop_release_tag: Option<String>,
+    /// Git commit SHA deployed to this backend revision.
+    pub desktop_release_sha: Option<String>,
+    /// Release channel this backend revision serves.
+    pub desktop_release_channel: Option<String>,
+    /// When true, route Gemini calls through Vertex AI instead of AI Studio.
+    /// Uses service account auth (GOOGLE_APPLICATION_CREDENTIALS) instead of API key.
+    pub use_vertex_ai: bool,
+    /// GCP project ID for Vertex AI (falls back to FIREBASE_PROJECT_ID)
+    pub vertex_project_id: Option<String>,
+    /// GCP region for Vertex AI (default: us-central1)
+    pub vertex_location: String,
+}
+
+impl Config {
+    /// Load configuration from environment variables
+    pub fn from_env() -> Self {
+        Self {
+            port: env::var("PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or_else(|| {
+                    eprintln!("WARNING: PORT not set — defaulting to 10201. Set PORT in .env (avoid 8080 to prevent port conflicts).");
+                    10201
+                }),
+            gemini_api_key: env::var("GEMINI_API_KEY").ok(),
+            openai_api_key: env::var("OPENAI_API_KEY").ok(),
+            firebase_project_id: env::var("FIREBASE_PROJECT_ID").ok()
+                .or_else(|| env::var("GCP_PROJECT_ID").ok()),
+            firebase_auth_project_id: env::var("FIREBASE_AUTH_PROJECT_ID").ok(),
+            firebase_api_key: env::var("FIREBASE_API_KEY").ok(),
+            base_api_url: env::var("BASE_API_URL").ok(),
+            apple_client_id: env::var("APPLE_CLIENT_ID").ok(),
+            apple_team_id: env::var("APPLE_TEAM_ID").ok(),
+            apple_key_id: env::var("APPLE_KEY_ID").ok(),
+            apple_private_key: env::var("APPLE_PRIVATE_KEY").ok(),
+            google_client_id: env::var("GOOGLE_CLIENT_ID").ok(),
+            google_client_secret: env::var("GOOGLE_CLIENT_SECRET").ok(),
+            encryption_secret: env::var("ENCRYPTION_SECRET")
+                .ok()
+                .map(|s| s.into_bytes()),
+            redis_host: env::var("REDIS_DB_HOST").ok(),
+            redis_port: env::var("REDIS_DB_PORT")
+                .ok()
+                .and_then(|p| p.parse().ok())
+                .unwrap_or(6379),
+            redis_password: env::var("REDIS_DB_PASSWORD").ok(),
+            posthog_api_key: env::var("POSTHOG_PERSONAL_API_KEY").ok(),
+            posthog_project_id: env::var("POSTHOG_PROJECT_ID")
+                .unwrap_or_else(|_| "302298".to_string()),
+            sentry_webhook_secret: env::var("SENTRY_WEBHOOK_SECRET").ok(),
+            sentry_auth_token: env::var("SENTRY_AUTH_TOKEN").ok(),
+            sentry_admin_uid: env::var("SENTRY_ADMIN_UID").ok(),
+            crisp_plugin_identifier: env::var("CRISP_PLUGIN_IDENTIFIER").ok(),
+            crisp_plugin_key: env::var("CRISP_PLUGIN_KEY").ok(),
+            crisp_website_id: env::var("CRISP_WEBSITE_ID").ok(),
+            pinecone_api_key: env::var("PINECONE_API_KEY").ok(),
+            pinecone_host: env::var("PINECONE_HOST").ok(),
+            gce_project_id: env::var("GCE_PROJECT_ID")
+                .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                .or_else(|_| env::var("GCP_PROJECT_ID"))
+                .ok(),
+            gce_source_image: env::var("GCE_SOURCE_IMAGE").ok().or_else(|| {
+                env::var("GCE_PROJECT_ID")
+                    .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                    .or_else(|_| env::var("GCP_PROJECT_ID"))
+                    .ok()
+                    .map(|proj| format!("projects/{}/global/images/family/omi-agent", proj))
+            }),
+            agent_gcs_bucket: env::var("AGENT_GCS_BUCKET").ok(),
+            anthropic_api_key: env::var("ANTHROPIC_API_KEY").ok(),
+            desktop_legacy_anthropic_key: env::var("DESKTOP_LEGACY_ANTHROPIC_KEY").ok(),
+            google_calendar_api_key: env::var("GOOGLE_CALENDAR_API_KEY").ok(),
+            desktop_release_tag: env::var("OMI_DESKTOP_RELEASE_TAG").ok(),
+            desktop_release_sha: env::var("OMI_DESKTOP_RELEASE_SHA").ok(),
+            desktop_release_channel: env::var("OMI_DESKTOP_RELEASE_CHANNEL").ok(),
+            use_vertex_ai: env::var("USE_VERTEX_AI")
+                .map(|v| v != "false" && v != "0")
+                .unwrap_or(true),
+            vertex_project_id: env::var("GCP_PROJECT_ID")
+                .or_else(|_| env::var("FIREBASE_PROJECT_ID"))
+                .ok(),
+            vertex_location: env::var("GCP_LOCATION")
+                .unwrap_or_else(|_| "us-central1".to_string()),
+        }
+    }
+
+    /// Validate that required configuration is present
+    pub fn validate(&self) -> Result<(), String> {
+        if self.use_vertex_ai {
+            if self.vertex_project_id.is_none() {
+                tracing::warn!("USE_VERTEX_AI=true but GCP_PROJECT_ID/FIREBASE_PROJECT_ID not set");
+            }
+            tracing::info!(
+                "Vertex AI enabled: project={:?}, location={}",
+                self.vertex_project_id,
+                self.vertex_location
+            );
+        } else if self.gemini_api_key.is_none() {
+            tracing::warn!("GEMINI_API_KEY not set - conversation processing will fail");
+        }
+        if self.redis_host.is_none() {
+            tracing::warn!("REDIS_DB_HOST not set - conversation visibility/sharing will not work");
+        }
+        if self.encryption_secret.is_none() {
+            tracing::warn!(
+                "ENCRYPTION_SECRET not set — encrypted user data will not be decryptable"
+            );
+        }
+        Ok(())
+    }
+
+    /// Get Redis connection URL
+    pub fn redis_url(&self) -> Option<String> {
+        self.redis_host.as_ref().map(|host| {
+            if let Some(password) = &self.redis_password {
+                // URL-encode the password to handle special characters
+                let encoded_password = urlencoding::encode(password);
+                format!(
+                    "redis://default:{}@{}:{}",
+                    encoded_password, host, self.redis_port
+                )
+            } else {
+                format!("redis://{}:{}", host, self.redis_port)
+            }
+        })
+    }
+}

@@ -10,7 +10,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/apple_watch_connection.dart';
+import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -260,8 +260,8 @@ class _FoundDevicesState extends State<FoundDevices> {
                       color: provider.batteryPercentage <= 25
                           ? Colors.red
                           : provider.batteryPercentage <= 50
-                              ? Colors.orange
-                              : Colors.green,
+                          ? Colors.orange
+                          : Colors.green,
                     ),
                   ),
                 ),

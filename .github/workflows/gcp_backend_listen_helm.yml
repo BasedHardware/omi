@@ -55,12 +55,26 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
-      - name: Connect to GKE cluster
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Get GKE credentials
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Resolve deployed backend-listen image tag
         run: |
-          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
-          sudo apt-get update && sudo apt-get install google-cloud-cli-gke-gcloud-auth-plugin -y
-          gcloud container clusters get-credentials ${{ vars.GKE_CLUSTER }} --region ${{ env.REGION }} --project ${{ vars.GCP_PROJECT_ID }}
+          IMAGE="$(kubectl -n ${{ vars.ENV }}-omi-backend get deploy/${{ vars.ENV }}-omi-backend-listen -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          TAG="${IMAGE##*:}"
+          if [[ -z "$TAG" || "$TAG" == "$IMAGE" || "$TAG" == "latest" ]]; then
+            echo "backend-listen is not currently pinned to an immutable image tag: ${IMAGE:-<missing>}" >&2
+            echo "Run the backend deploy workflow first so chart-only upgrades preserve a short-SHA image tag." >&2
+            exit 1
+          fi
+          echo "BACKEND_LISTEN_IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
 
       - name: Helm diff (dry run)
         run: |
@@ -71,6 +85,10 @@ jobs:
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
             -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}" \
             --dry-run
 
       # The ExternalSecret resource (which tells external-secrets which GCP
@@ -79,26 +97,33 @@ jobs:
       # never reaches K8s, and the deployment's secretKeyRef resolves to an
       # empty value — code reads os.getenv(...) as None.
       - name: Upgrade backend-secrets Helm chart
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
         run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-secrets \
-            ./backend/charts/backend-secrets \
-            -f ./backend/charts/backend-secrets/${{ vars.ENV }}_omi_backend_secrets_values.yaml
-          # Trigger an immediate sync so newly-listed keys are pulled before the
-          # listen deployment restarts (otherwise its env refs resolve empty).
-          kubectl -n ${{ vars.ENV }}-omi-backend annotate externalsecret \
-            ${{ vars.ENV }}-omi-backend-external-secret \
-            force-sync="$(date +%s)" --overwrite
-          sleep 10
+          python3 -m pip install -q pyyaml
+          backend/scripts/deploy-backend-secrets.sh
 
       - name: Upgrade backend-listen Helm chart
         run: |
           helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-backend-listen \
             ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/backend \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --set "image.tag=${BACKEND_LISTEN_IMAGE_TAG}"
 
       - name: Verify rollout
         run: |
-          kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
 
       - name: Show pod status
         if: always()

@@ -7,12 +7,14 @@ import json
 from pathlib import Path
 
 import httpx
+import pytest
 import respx
 
 from omi_cli import config as cfg
-from omi_cli.errors import CliError
+from omi_cli.errors import CliError, NotFoundError
 from omi_cli.local_client import LocalOmiClient
 from omi_cli.main import app
+from omi_cli.output import Renderer
 
 FAKE_LOCAL_URL = "http://127.0.0.1:47778"
 FAKE_LOCAL_TOKEN = "local_test_token"
@@ -332,3 +334,113 @@ def test_screenshot_writes_base64_output_and_keeps_json_stdout(config_path: Path
     assert payload["screenshot_id"] == "9"
     assert "image_base64" not in payload["result"]
     assert payload["result"]["image_base64_redacted"] is True
+
+
+def test_screenshot_preserves_structured_local_api_error_in_json(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    _configure_local_profile(config_path)
+    output = tmp_path / "pending.jpg"
+    error_payload = {
+        "ok": False,
+        "error": "screenshot_pending",
+        "reason": "The frame is in the active recording segment that has not been flushed to disk yet.",
+        "hint": "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized.",
+        "screenshot_id": 123,
+    }
+
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(422, json=error_payload))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "123", "--output", str(output)])
+
+    assert result.exit_code != 0
+    assert not output.exists()
+    assert isinstance(result.exception, CliError)
+    payload = result.exception.extra
+    assert payload["status_code"] == 422
+    assert payload["ok"] is False
+    assert payload["error"] == "screenshot_pending"
+    assert payload["reason"] == error_payload["reason"]
+    assert payload["hint"] == error_payload["hint"]
+    assert payload["screenshot_id"] == 123
+
+
+def test_non_json_error_escapes_structured_extra_markup(capsys: pytest.CaptureFixture[str]) -> None:
+    Renderer(json_mode=False).error(
+        "Local Omi Desktop API error (422)",
+        extra={"hint": "Use [safe] text", "[danger]": "<value>"},
+    )
+
+    captured = capsys.readouterr()
+    assert "hint: Use [safe] text" in captured.err
+    assert "[danger]: <value>" in captured.err
+
+
+def test_local_api_error_preserves_not_found_subclass(config_path: Path) -> None:
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            return_value=httpx.Response(
+                404,
+                json={"ok": False, "error": "screenshot_not_found", "screenshot_id": "missing"},
+            )
+        )
+        with LocalOmiClient(api_url=FAKE_LOCAL_URL, token=FAKE_LOCAL_TOKEN) as client:
+            with pytest.raises(NotFoundError) as exc_info:
+                client.call_tool("get_screenshot", {"screenshot_id": "missing"})
+
+    assert exc_info.value.extra["status_code"] == 404
+    assert exc_info.value.extra["error"] == "screenshot_not_found"
+    assert exc_info.value.extra["screenshot_id"] == "missing"
+
+
+def test_main_json_screenshot_error_preserves_structured_stderr(
+    config_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    _configure_local_profile(config_path)
+    output = tmp_path / "pending.jpg"
+    error_payload = {
+        "ok": False,
+        "error": "screenshot_pending",
+        "reason": "The frame is in the active recording segment that has not been flushed to disk yet.",
+        "hint": "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized.",
+        "screenshot_id": 123,
+    }
+
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(422, json=error_payload))
+        monkeypatch.setattr(
+            "sys.argv",
+            ["omi", "--json", "local", "screenshot", "123", "--output", str(output)],
+        )
+        from omi_cli.main import main
+
+        with pytest.raises(SystemExit) as exc_info:
+            main()
+
+    assert exc_info.value.code != 0
+    assert not output.exists()
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert payload["status_code"] == 422
+    assert payload["ok"] is False
+    assert payload["error"] == "screenshot_pending"
+    assert payload["reason"] == error_payload["reason"]
+    assert payload["hint"] == error_payload["hint"]
+    assert payload["screenshot_id"] == 123
+
+
+def test_screenshot_non_json_local_api_error_has_status_code(config_path: Path, cli_runner, tmp_path: Path) -> None:
+    _configure_local_profile(config_path)
+    output = tmp_path / "failed.jpg"
+
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(return_value=httpx.Response(500, text="plain failure"))
+        result = cli_runner.invoke(app, ["--json", "local", "screenshot", "123", "--output", str(output)])
+
+    assert result.exit_code != 0
+    assert not output.exists()
+    assert isinstance(result.exception, CliError)
+    payload = result.exception.extra
+    assert result.exception.message == "Local Omi Desktop API error (500)"
+    assert result.exception.detail == "plain failure"
+    assert payload["status_code"] == 500

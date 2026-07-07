@@ -1,7 +1,7 @@
 import io
 import re
 import wave
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import av
 import numpy as np
@@ -64,7 +64,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
     wav_buffer.seek(0)
 
     # Use av to extract trimmed audio with sample-accurate boundaries
-    trimmed_samples = []
+    trimmed_samples: List[Any] = []
     with av.open(wav_buffer, mode='r') as container:
         stream = container.streams.audio[0]
 
@@ -72,7 +72,7 @@ def _trim_pcm_audio(pcm_data: bytes, sample_rate: int, start_sec: float, end_sec
             if frame.pts is None:
                 continue
 
-            frame_time = float(frame.pts * stream.time_base)
+            frame_time = float(frame.pts * cast(Any, stream.time_base))
             frame_duration = frame.samples / sample_rate
             frame_end_time = frame_time + frame_duration
 
@@ -225,9 +225,90 @@ SPEAKER_IDENTIFICATION_PATTERNS = {
 }
 
 # Check all (multi lang)
-patterns_to_check = []
+patterns_to_check: List[str] = []
 for lang_patterns in SPEAKER_IDENTIFICATION_PATTERNS.values():
     patterns_to_check.extend(lang_patterns)
+
+# Pronouns and filler words the introduction patterns can capture from run-on
+# transcripts (e.g. "I'm It was great", "I'm You know...") — never real names (#5223).
+SPEAKER_NAME_STOPWORDS = frozenset(
+    {
+        'it',
+        'you',
+        'they',
+        'them',
+        'he',
+        'she',
+        'we',
+        'us',
+        'me',
+        'him',
+        'her',
+        'his',
+        'hers',
+        'its',
+        'my',
+        'mine',
+        'your',
+        'yours',
+        'our',
+        'ours',
+        'their',
+        'theirs',
+        'this',
+        'that',
+        'these',
+        'those',
+        'here',
+        'there',
+        'what',
+        'who',
+        'when',
+        'where',
+        'why',
+        'how',
+        'which',
+        'the',
+        'and',
+        'but',
+        'not',
+        'yes',
+        'no',
+        'okay',
+        'ok',
+        'yeah',
+        'just',
+        'like',
+        'so',
+        'very',
+        'really',
+        'now',
+        'then',
+        'well',
+        'still',
+        'also',
+        'too',
+        'gonna',
+        'going',
+        'sure',
+        'sorry',
+        'good',
+        'fine',
+        'right',
+        'everyone',
+        'everybody',
+        'someone',
+        'somebody',
+        'nobody',
+        'anyone',
+        'anybody',
+        'something',
+        'nothing',
+        'one',
+        'all',
+        'some',
+    }
+)
 
 
 def detect_speaker_from_text(text: str) -> Optional[str]:
@@ -235,7 +316,7 @@ def detect_speaker_from_text(text: str) -> Optional[str]:
         match = re.search(pattern, text)
         if match:
             name = match.groups()[-1]
-            if name and len(name) >= 2:
+            if name and len(name) >= 2 and name.lower() not in SPEAKER_NAME_STOPWORDS:
                 return name.capitalize()
     return None
 
@@ -289,7 +370,7 @@ async def extract_speaker_samples(
             return
 
         # Collect all chunk timestamps from audio files
-        all_timestamps = []
+        all_timestamps: List[Any] = []
         for af in audio_files:
             timestamps = af.get('chunk_timestamps', [])
             all_timestamps.extend(timestamps)
@@ -299,7 +380,7 @@ async def extract_speaker_samples(
             return
 
         # Build chunks list in expected format
-        chunks = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
+        chunks: List[Dict[str, Any]] = [{'timestamp': ts} for ts in sorted(set(all_timestamps))]
 
         samples_added = 0
         max_samples_to_add = 1 - sample_count
@@ -372,7 +453,7 @@ async def extract_speaker_samples(
                     break
 
             # Collect from first_idx up to abs_end
-            relevant_timestamps = []
+            relevant_timestamps: List[Any] = []
             for chunk in sorted_chunks[first_idx:]:
                 if chunk['timestamp'] <= abs_end:
                     relevant_timestamps.append(chunk['timestamp'])

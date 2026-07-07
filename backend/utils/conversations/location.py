@@ -32,7 +32,7 @@ def get_google_maps_location(latitude: float, longitude: float) -> Optional[Geol
     url = f"https://maps.googleapis.com/maps/api/geocode/json?latlng={latitude},{longitude}&key={key}"
     response = httpx.get(url)
     data = response.json()
-    if data['status'] != 'OK' or not data.get('results'):
+    if data.get('status') != 'OK' or not data.get('results'):
         return None
     place = data['results'][0]
     if not place.get('place_id'):
@@ -85,7 +85,7 @@ async def async_get_google_maps_location(latitude: float, longitude: float) -> O
         logger.error(f'async_get_google_maps_location error: {e}')
         return None
 
-    if data['status'] != 'OK' or not data.get('results'):
+    if data.get('status') != 'OK' or not data.get('results'):
         return None
     place = data['results'][0]
     if not place.get('place_id'):

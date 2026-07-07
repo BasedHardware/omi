@@ -80,7 +80,7 @@ class AppMetadataWidget extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: Colors.transparent,
                                 borderRadius: BorderRadius.circular(12.0),
-                                border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                               ),
                               width: double.infinity,
                               child: Row(
@@ -147,7 +147,7 @@ class AppMetadataWidget extends StatelessWidget {
                                   : Column(
                                       mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
-                                        const FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
+                                        FaIcon(FontAwesomeIcons.camera, color: Colors.grey, size: 24),
                                         const SizedBox(height: 6),
                                         Text(
                                           '${context.l10n.appIconLabel}*',
@@ -166,7 +166,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 child: Container(
                                   padding: const EdgeInsets.all(6.0),
                                   decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                                  child: const FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
+                                  child: FaIcon(FontAwesomeIcons.pen, color: Colors.white, size: 12),
                                 ),
                               ),
                             ),
@@ -193,11 +193,11 @@ class AppMetadataWidget extends StatelessWidget {
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 14.0),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
@@ -293,7 +293,7 @@ class AppMetadataWidget extends StatelessWidget {
                                 decoration: BoxDecoration(
                                   color: Colors.transparent,
                                   borderRadius: BorderRadius.circular(12.0),
-                                  border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 width: double.infinity,
                                 child: Row(
@@ -327,7 +327,7 @@ class AppMetadataWidget extends StatelessWidget {
                               padding: const EdgeInsets.all(16.0),
                               decoration: BoxDecoration(
                                 borderRadius: BorderRadius.circular(12.0),
-                                border: Border.all(color: Colors.grey.withOpacity(0.3), width: 1),
+                                border: Border.all(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                               ),
                               constraints: BoxConstraints(minHeight: MediaQuery.sizeOf(context).height * 0.1),
                               child: Skeletonizer.zone(
@@ -358,11 +358,11 @@ class AppMetadataWidget extends StatelessWidget {
                                 contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
-                                  borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+                                  borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(12.0),
@@ -383,7 +383,10 @@ class AppMetadataWidget extends StatelessWidget {
                             onTap: () async {
                               await context.read<AddAppProvider>().generateDescription();
                             },
-                            child: SvgPicture.asset(Assets.images.aiMagic, color: Colors.white),
+                            child: SvgPicture.asset(
+                              Assets.images.aiMagic,
+                              colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                            ),
                           ),
                         ),
                     ],

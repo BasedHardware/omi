@@ -156,7 +156,7 @@ class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
                         title: Text(language.key, style: const TextStyle(color: Colors.white)),
                         trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.deepPurple) : null,
                         selected: isSelected,
-                        selectedTileColor: Colors.deepPurple.withOpacity(0.2),
+                        selectedTileColor: Colors.deepPurple.withValues(alpha: 0.2),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         onTap: () {
                           setState(() {
@@ -260,6 +260,12 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
         );
       },
     );
+  }
+
+  @override
+  void dispose() {
+    _languageScrollController.dispose();
+    super.dispose();
   }
 
   @override

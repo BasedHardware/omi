@@ -5,15 +5,43 @@ from importlib.util import find_spec
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-sys.modules.setdefault('database._client', MagicMock())
-notification_db_stub = types.ModuleType('database.notifications')
-notification_db_stub.get_all_tokens = MagicMock()
-notification_db_stub.remove_bulk_tokens = MagicMock()
-sys.modules.setdefault('database.notifications', notification_db_stub)
+
+class _Notification:
+    def __init__(self, title: str, body: str):
+        self.title = title
+        self.body = body
+
+
+class _Message:
+    def __init__(self, token: str, notification, data):
+        self.token = token
+        self.notification = notification
+        self.data = data
+
+
+def _ensure_byok_error_notification_deps():
+    import utils.llm.byok_errors as byok_errors
+
+    if byok_errors.notification_db is None:
+        byok_errors.notification_db = SimpleNamespace(
+            get_all_tokens=MagicMock(),
+            remove_bulk_tokens=MagicMock(),
+        )
+    if byok_errors.messaging is None:
+        byok_errors.messaging = SimpleNamespace(
+            Notification=_Notification,
+            Message=_Message,
+            send_each=MagicMock(),
+        )
+
+
+_ensure_byok_error_notification_deps()
 
 
 def _module_available(name: str) -> bool:
@@ -25,64 +53,66 @@ def _module_available(name: str) -> bool:
         return False
 
 
-if not _module_available('cachetools'):
-    cachetools_stub = types.ModuleType('cachetools')
+@pytest.fixture(autouse=True)
+def _install_optional_import_stubs(monkeypatch):
+    if 'database._client' not in sys.modules:
+        monkeypatch.setitem(sys.modules, 'database._client', MagicMock())
+    if 'database.notifications' not in sys.modules:
+        notification_db_stub = types.ModuleType('database.notifications')
+        notification_db_stub.get_all_tokens = MagicMock()
+        notification_db_stub.remove_bulk_tokens = MagicMock()
+        monkeypatch.setitem(sys.modules, 'database.notifications', notification_db_stub)
 
-    class _TTLCache(dict):
-        def __init__(self, *args, **kwargs):
-            super().__init__()
+    if not _module_available('cachetools'):
+        cachetools_stub = types.ModuleType('cachetools')
 
-    cachetools_stub.TTLCache = _TTLCache
-    sys.modules['cachetools'] = cachetools_stub
+        class _TTLCache(dict):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
 
-if not _module_available('fastapi'):
-    fastapi_stub = types.ModuleType('fastapi')
+        cachetools_stub.TTLCache = _TTLCache
+        monkeypatch.setitem(sys.modules, 'cachetools', cachetools_stub)
 
-    class _FastAPIHTTPException(Exception):
-        def __init__(self, status_code: int = 500, detail: str = ''):
-            super().__init__(detail)
-            self.status_code = status_code
-            self.detail = detail
+    if not _module_available('fastapi'):
+        fastapi_stub = types.ModuleType('fastapi')
 
-    fastapi_stub.HTTPException = _FastAPIHTTPException
-    fastapi_stub.Request = MagicMock()
-    sys.modules['fastapi'] = fastapi_stub
+        class _FastAPIHTTPException(Exception):
+            def __init__(self, status_code: int = 500, detail: str = ''):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
 
-if not _module_available('starlette.middleware.base'):
-    starlette_stub = types.ModuleType('starlette')
-    middleware_stub = types.ModuleType('starlette.middleware')
-    base_stub = types.ModuleType('starlette.middleware.base')
-    base_stub.BaseHTTPMiddleware = object
-    sys.modules.setdefault('starlette', starlette_stub)
-    sys.modules.setdefault('starlette.middleware', middleware_stub)
-    sys.modules['starlette.middleware.base'] = base_stub
+        fastapi_stub.HTTPException = _FastAPIHTTPException
+        fastapi_stub.Request = MagicMock()
+        monkeypatch.setitem(sys.modules, 'fastapi', fastapi_stub)
 
-if not _module_available('starlette.websockets'):
-    websockets_stub = types.ModuleType('starlette.websockets')
-    websockets_stub.WebSocket = MagicMock()
-    sys.modules['starlette.websockets'] = websockets_stub
+    if not _module_available('starlette.middleware.base'):
+        starlette_stub = types.ModuleType('starlette')
+        middleware_stub = types.ModuleType('starlette.middleware')
+        base_stub = types.ModuleType('starlette.middleware.base')
+        base_stub.BaseHTTPMiddleware = object
+        if 'starlette' not in sys.modules:
+            monkeypatch.setitem(sys.modules, 'starlette', starlette_stub)
+        if 'starlette.middleware' not in sys.modules:
+            monkeypatch.setitem(sys.modules, 'starlette.middleware', middleware_stub)
+        monkeypatch.setitem(sys.modules, 'starlette.middleware.base', base_stub)
 
-if not _module_available('firebase_admin'):
-    firebase_stub = types.ModuleType('firebase_admin')
-    messaging_stub = types.ModuleType('firebase_admin.messaging')
+    if not _module_available('starlette.websockets'):
+        websockets_stub = types.ModuleType('starlette.websockets')
+        websockets_stub.WebSocket = MagicMock()
+        monkeypatch.setitem(sys.modules, 'starlette.websockets', websockets_stub)
 
-    class _Notification:
-        def __init__(self, title: str, body: str):
-            self.title = title
-            self.body = body
+    if not _module_available('firebase_admin'):
+        firebase_stub = types.ModuleType('firebase_admin')
+        messaging_stub = types.ModuleType('firebase_admin.messaging')
 
-    class _Message:
-        def __init__(self, token: str, notification, data):
-            self.token = token
-            self.notification = notification
-            self.data = data
-
-    messaging_stub.Notification = _Notification
-    messaging_stub.Message = _Message
-    messaging_stub.send_each = MagicMock()
-    firebase_stub.messaging = messaging_stub
-    sys.modules['firebase_admin'] = firebase_stub
-    sys.modules['firebase_admin.messaging'] = messaging_stub
+        messaging_stub.Notification = _Notification
+        messaging_stub.Message = _Message
+        messaging_stub.send_each = MagicMock()
+        firebase_stub.messaging = messaging_stub
+        monkeypatch.setitem(sys.modules, 'firebase_admin', firebase_stub)
+        monkeypatch.setitem(sys.modules, 'firebase_admin.messaging', messaging_stub)
+    _ensure_byok_error_notification_deps()
 
 
 class _HTTPError(Exception):

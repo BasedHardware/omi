@@ -4,14 +4,11 @@ import types
 from importlib.util import find_spec
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
-
-sys.modules.setdefault('database._client', MagicMock())
-llm_usage_stub = types.ModuleType('database.llm_usage')
-llm_usage_stub.record_llm_usage = MagicMock()
-sys.modules.setdefault('database.llm_usage', llm_usage_stub)
 
 
 def _module_available(name: str) -> bool:
@@ -23,42 +20,53 @@ def _module_available(name: str) -> bool:
         return False
 
 
-if not _module_available('cachetools'):
-    cachetools_stub = types.ModuleType('cachetools')
+@pytest.fixture(autouse=True)
+def _install_optional_import_stubs(monkeypatch):
+    if 'database._client' not in sys.modules:
+        monkeypatch.setitem(sys.modules, 'database._client', MagicMock())
+    if 'database.llm_usage' not in sys.modules:
+        llm_usage_stub = types.ModuleType('database.llm_usage')
+        llm_usage_stub.record_llm_usage = MagicMock()
+        monkeypatch.setitem(sys.modules, 'database.llm_usage', llm_usage_stub)
 
-    class _TTLCache(dict):
-        def __init__(self, *args, **kwargs):
-            super().__init__()
+    if not _module_available('cachetools'):
+        cachetools_stub = types.ModuleType('cachetools')
 
-    cachetools_stub.TTLCache = _TTLCache
-    sys.modules['cachetools'] = cachetools_stub
+        class _TTLCache(dict):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
 
-if not _module_available('fastapi'):
-    fastapi_stub = types.ModuleType('fastapi')
+        cachetools_stub.TTLCache = _TTLCache
+        monkeypatch.setitem(sys.modules, 'cachetools', cachetools_stub)
 
-    class _HTTPException(Exception):
-        def __init__(self, status_code: int = 500, detail: str = ''):
-            super().__init__(detail)
-            self.status_code = status_code
-            self.detail = detail
+    if not _module_available('fastapi'):
+        fastapi_stub = types.ModuleType('fastapi')
 
-    fastapi_stub.HTTPException = _HTTPException
-    fastapi_stub.Request = MagicMock()
-    sys.modules['fastapi'] = fastapi_stub
+        class _HTTPException(Exception):
+            def __init__(self, status_code: int = 500, detail: str = ''):
+                super().__init__(detail)
+                self.status_code = status_code
+                self.detail = detail
 
-if not _module_available('starlette.middleware.base'):
-    starlette_stub = types.ModuleType('starlette')
-    middleware_stub = types.ModuleType('starlette.middleware')
-    base_stub = types.ModuleType('starlette.middleware.base')
-    base_stub.BaseHTTPMiddleware = object
-    sys.modules.setdefault('starlette', starlette_stub)
-    sys.modules.setdefault('starlette.middleware', middleware_stub)
-    sys.modules['starlette.middleware.base'] = base_stub
+        fastapi_stub.HTTPException = _HTTPException
+        fastapi_stub.Request = MagicMock()
+        monkeypatch.setitem(sys.modules, 'fastapi', fastapi_stub)
 
-if not _module_available('starlette.websockets'):
-    websockets_stub = types.ModuleType('starlette.websockets')
-    websockets_stub.WebSocket = MagicMock()
-    sys.modules['starlette.websockets'] = websockets_stub
+    if not _module_available('starlette.middleware.base'):
+        starlette_stub = types.ModuleType('starlette')
+        middleware_stub = types.ModuleType('starlette.middleware')
+        base_stub = types.ModuleType('starlette.middleware.base')
+        base_stub.BaseHTTPMiddleware = object
+        if 'starlette' not in sys.modules:
+            monkeypatch.setitem(sys.modules, 'starlette', starlette_stub)
+        if 'starlette.middleware' not in sys.modules:
+            monkeypatch.setitem(sys.modules, 'starlette.middleware', middleware_stub)
+        monkeypatch.setitem(sys.modules, 'starlette.middleware.base', base_stub)
+
+    if not _module_available('starlette.websockets'):
+        websockets_stub = types.ModuleType('starlette.websockets')
+        websockets_stub.WebSocket = MagicMock()
+        monkeypatch.setitem(sys.modules, 'starlette.websockets', websockets_stub)
 
 
 class _HTTPError(Exception):
@@ -165,8 +173,8 @@ def test_llm_error_callback_uses_provider_context():
     openai_stub.OpenAIEmbeddings = _DummyClient
     tiktoken_stub = types.ModuleType('tiktoken')
     tiktoken_stub.encoding_for_model = MagicMock(return_value=_DummyEncoding())
-    structured_stub = types.ModuleType('models.structured')
-    structured_stub.Structured = MagicMock()
+    structured_extraction_stub = types.ModuleType('models.structured_extraction')
+    structured_extraction_stub.StructuredExtraction = MagicMock()
     usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
     usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
 
@@ -178,7 +186,7 @@ def test_llm_error_callback_uses_provider_context():
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
-        'models.structured': structured_stub,
+        'models.structured_extraction': structured_extraction_stub,
         'utils.llm.usage_tracker': usage_tracker_stub,
     }
 
@@ -240,8 +248,8 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
     openai_stub.OpenAIEmbeddings = _DummyClient
     tiktoken_stub = types.ModuleType('tiktoken')
     tiktoken_stub.encoding_for_model = MagicMock(return_value=_DummyEncoding())
-    structured_stub = types.ModuleType('models.structured')
-    structured_stub.Structured = MagicMock()
+    structured_extraction_stub = types.ModuleType('models.structured_extraction')
+    structured_extraction_stub.StructuredExtraction = MagicMock()
     usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
     usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
 
@@ -253,7 +261,7 @@ def test_openai_embeddings_proxy_notifies_on_sync_byok_failure():
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
-        'models.structured': structured_stub,
+        'models.structured_extraction': structured_extraction_stub,
         'utils.llm.usage_tracker': usage_tracker_stub,
     }
 
@@ -310,8 +318,8 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
     openai_stub.OpenAIEmbeddings = _DummyClient
     tiktoken_stub = types.ModuleType('tiktoken')
     tiktoken_stub.encoding_for_model = MagicMock(return_value=MagicMock())
-    structured_stub = types.ModuleType('models.structured')
-    structured_stub.Structured = MagicMock()
+    structured_extraction_stub = types.ModuleType('models.structured_extraction')
+    structured_extraction_stub.StructuredExtraction = MagicMock()
     usage_tracker_stub = types.ModuleType('utils.llm.usage_tracker')
     usage_tracker_stub.get_usage_callback = MagicMock(return_value=object())
 
@@ -323,7 +331,7 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
         'langchain_google_genai': google_genai_stub,
         'langchain_openai': openai_stub,
         'tiktoken': tiktoken_stub,
-        'models.structured': structured_stub,
+        'models.structured_extraction': structured_extraction_stub,
         'utils.llm.usage_tracker': usage_tracker_stub,
     }
 

@@ -1,18 +1,43 @@
-import 'package:json_annotation/json_annotation.dart';
-
-part 'announcement.g.dart';
+import 'package:omi/backend/schema/gen/announcements_wire.g.dart' as wire;
 
 enum AnnouncementType { changelog, feature, announcement }
 
-enum TriggerType {
-  immediate,
-  @JsonValue('version_upgrade')
-  versionUpgrade,
-  @JsonValue('firmware_upgrade')
-  firmwareUpgrade,
+enum TriggerType { immediate, versionUpgrade, firmwareUpgrade }
+
+String _triggerTypeToWire(TriggerType trigger) {
+  switch (trigger) {
+    case TriggerType.immediate:
+      return 'immediate';
+    case TriggerType.versionUpgrade:
+      return 'version_upgrade';
+    case TriggerType.firmwareUpgrade:
+      return 'firmware_upgrade';
+  }
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake)
+TriggerType _triggerTypeFromWire(String? trigger) {
+  switch (trigger) {
+    case 'immediate':
+      return TriggerType.immediate;
+    case 'firmware_upgrade':
+      return TriggerType.firmwareUpgrade;
+    case 'version_upgrade':
+      return TriggerType.versionUpgrade;
+    default:
+      throw FormatException('Unknown announcement trigger: $trigger');
+  }
+}
+
+String _announcementTypeToWire(AnnouncementType type) => type.name;
+
+AnnouncementType _announcementTypeFromWire(String type) {
+  final announcementType = AnnouncementType.values.asNameMap()[type];
+  if (announcementType == null) {
+    throw FormatException('Unknown announcement type: $type');
+  }
+  return announcementType;
+}
+
 class Targeting {
   final String? appVersionMin;
   final String? appVersionMax;
@@ -20,7 +45,6 @@ class Targeting {
   final String? firmwareVersionMax;
   final List<String>? deviceModels;
   final List<String>? platforms;
-  @JsonKey(defaultValue: TriggerType.versionUpgrade)
   final TriggerType trigger;
   final List<String>? testUids;
 
@@ -35,30 +59,77 @@ class Targeting {
     this.testUids,
   });
 
-  factory Targeting.fromJson(Map<String, dynamic> json) => _$TargetingFromJson(json);
-  Map<String, dynamic> toJson() => _$TargetingToJson(this);
+  factory Targeting.fromJson(Map<String, dynamic> json) {
+    return Targeting.fromGenerated(wire.GeneratedTargeting.fromJson(json));
+  }
+
+  factory Targeting.fromGenerated(wire.GeneratedTargeting generated) {
+    return Targeting(
+      appVersionMin: generated.appVersionMin,
+      appVersionMax: generated.appVersionMax,
+      firmwareVersionMin: generated.firmwareVersionMin,
+      firmwareVersionMax: generated.firmwareVersionMax,
+      deviceModels: generated.deviceModels ?? const [],
+      platforms: generated.platforms ?? const [],
+      trigger: _triggerTypeFromWire(generated.trigger),
+      testUids: generated.testUids,
+    );
+  }
+
+  wire.GeneratedTargeting toGenerated() {
+    return wire.GeneratedTargeting(
+      appVersionMin: appVersionMin,
+      appVersionMax: appVersionMax,
+      firmwareVersionMin: firmwareVersionMin,
+      firmwareVersionMax: firmwareVersionMax,
+      deviceModels: deviceModels,
+      platforms: platforms,
+      trigger: _triggerTypeToWire(trigger),
+      testUids: testUids,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 // Display model for controlling announcement presentation
-@JsonSerializable(fieldRename: FieldRename.snake)
 class Display {
-  @JsonKey(defaultValue: 0)
   final int priority;
   final DateTime? startAt;
   final DateTime? expiresAt;
-  @JsonKey(defaultValue: true)
   final bool dismissible;
-  @JsonKey(defaultValue: true)
   final bool showOnce;
 
   Display({this.priority = 0, this.startAt, this.expiresAt, this.dismissible = true, this.showOnce = true});
 
-  factory Display.fromJson(Map<String, dynamic> json) => _$DisplayFromJson(json);
-  Map<String, dynamic> toJson() => _$DisplayToJson(this);
+  factory Display.fromJson(Map<String, dynamic> json) {
+    return Display.fromGenerated(wire.GeneratedDisplay.fromJson(json));
+  }
+
+  factory Display.fromGenerated(wire.GeneratedDisplay generated) {
+    return Display(
+      priority: generated.priority,
+      startAt: generated.startAt,
+      expiresAt: generated.expiresAt,
+      dismissible: generated.dismissible,
+      showOnce: generated.showOnce,
+    );
+  }
+
+  wire.GeneratedDisplay toGenerated() {
+    return wire.GeneratedDisplay(
+      priority: priority,
+      startAt: startAt,
+      expiresAt: expiresAt,
+      dismissible: dismissible,
+      showOnce: showOnce,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
 // Changelog content models
-@JsonSerializable(fieldRename: FieldRename.snake)
 class ChangelogItem {
   final String title;
   final String description;
@@ -66,23 +137,36 @@ class ChangelogItem {
 
   ChangelogItem({required this.title, required this.description, this.icon});
 
-  factory ChangelogItem.fromJson(Map<String, dynamic> json) => _$ChangelogItemFromJson(json);
-  Map<String, dynamic> toJson() => _$ChangelogItemToJson(this);
+  factory ChangelogItem.fromJson(Map<String, dynamic> json) {
+    return ChangelogItem(
+      title: json['title'] as String,
+      description: json['description'] as String,
+      icon: json['icon'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'title': title, 'description': description, 'icon': icon};
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class ChangelogContent {
   final String title;
   final List<ChangelogItem> changes;
 
   ChangelogContent({required this.title, required this.changes});
 
-  factory ChangelogContent.fromJson(Map<String, dynamic> json) => _$ChangelogContentFromJson(json);
-  Map<String, dynamic> toJson() => _$ChangelogContentToJson(this);
+  factory ChangelogContent.fromJson(Map<String, dynamic> json) {
+    return ChangelogContent(
+      title: json['title'] as String,
+      changes: (json['changes'] as List<dynamic>)
+          .map((item) => ChangelogItem.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'title': title, 'changes': changes.map((item) => item.toJson()).toList()};
 }
 
 // Feature content models
-@JsonSerializable(fieldRename: FieldRename.snake)
 class FeatureStep {
   final String title;
   final String description;
@@ -92,34 +176,59 @@ class FeatureStep {
 
   FeatureStep({required this.title, required this.description, this.imageUrl, this.videoUrl, this.highlightText});
 
-  factory FeatureStep.fromJson(Map<String, dynamic> json) => _$FeatureStepFromJson(json);
-  Map<String, dynamic> toJson() => _$FeatureStepToJson(this);
+  factory FeatureStep.fromJson(Map<String, dynamic> json) {
+    return FeatureStep(
+      title: json['title'] as String,
+      description: json['description'] as String,
+      imageUrl: json['image_url'] as String?,
+      videoUrl: json['video_url'] as String?,
+      highlightText: json['highlight_text'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'title': title,
+      'description': description,
+      'image_url': imageUrl,
+      'video_url': videoUrl,
+      'highlight_text': highlightText,
+    };
+  }
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class FeatureContent {
   final String title;
   final List<FeatureStep> steps;
 
   FeatureContent({required this.title, required this.steps});
 
-  factory FeatureContent.fromJson(Map<String, dynamic> json) => _$FeatureContentFromJson(json);
-  Map<String, dynamic> toJson() => _$FeatureContentToJson(this);
+  factory FeatureContent.fromJson(Map<String, dynamic> json) {
+    return FeatureContent(
+      title: json['title'] as String,
+      steps: (json['steps'] as List<dynamic>)
+          .map((item) => FeatureStep.fromJson(item as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'title': title, 'steps': steps.map((step) => step.toJson()).toList()};
 }
 
 // Announcement content models
-@JsonSerializable(fieldRename: FieldRename.snake)
 class AnnouncementCTA {
   final String text;
   final String action;
 
   AnnouncementCTA({required this.text, required this.action});
 
-  factory AnnouncementCTA.fromJson(Map<String, dynamic> json) => _$AnnouncementCTAFromJson(json);
-  Map<String, dynamic> toJson() => _$AnnouncementCTAToJson(this);
+  factory AnnouncementCTA.fromJson(Map<String, dynamic> json) {
+    return AnnouncementCTA(text: json['text'] as String, action: json['action'] as String);
+  }
+
+  Map<String, dynamic> toJson() => {'text': text, 'action': action};
 }
 
-@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class AnnouncementContent {
   final String title;
   final String body;
@@ -128,23 +237,28 @@ class AnnouncementContent {
 
   AnnouncementContent({required this.title, required this.body, this.imageUrl, this.cta});
 
-  factory AnnouncementContent.fromJson(Map<String, dynamic> json) => _$AnnouncementContentFromJson(json);
-  Map<String, dynamic> toJson() => _$AnnouncementContentToJson(this);
+  factory AnnouncementContent.fromJson(Map<String, dynamic> json) {
+    return AnnouncementContent(
+      title: json['title'] as String,
+      body: json['body'] as String,
+      imageUrl: json['image_url'] as String?,
+      cta: json['cta'] == null ? null : AnnouncementCTA.fromJson(json['cta'] as Map<String, dynamic>),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {'title': title, 'body': body, 'image_url': imageUrl, 'cta': cta?.toJson()};
 }
 
 // Main announcement model
-@JsonSerializable(fieldRename: FieldRename.snake, explicitToJson: true)
 class Announcement {
   final String id;
   final AnnouncementType type;
   final DateTime createdAt;
-  @JsonKey(defaultValue: true)
   final bool active;
 
   // Version fields (used by /changelogs endpoint)
   final String? appVersion;
   final String? firmwareVersion;
-  @JsonKey(defaultValue: [])
   final List<String>? deviceModels;
   final DateTime? expiresAt;
 
@@ -169,8 +283,43 @@ class Announcement {
     required this.content,
   });
 
-  factory Announcement.fromJson(Map<String, dynamic> json) => _$AnnouncementFromJson(json);
-  Map<String, dynamic> toJson() => _$AnnouncementToJson(this);
+  factory Announcement.fromJson(Map<String, dynamic> json) {
+    return Announcement.fromGenerated(wire.GeneratedAnnouncement.fromJson(json));
+  }
+
+  factory Announcement.fromGenerated(wire.GeneratedAnnouncement generated) {
+    return Announcement(
+      id: generated.id,
+      type: _announcementTypeFromWire(generated.type),
+      createdAt: generated.createdAt,
+      active: generated.active,
+      appVersion: generated.appVersion,
+      firmwareVersion: generated.firmwareVersion,
+      deviceModels: generated.deviceModels,
+      expiresAt: generated.expiresAt,
+      targeting: generated.targeting == null ? null : Targeting.fromGenerated(generated.targeting!),
+      display: generated.display == null ? null : Display.fromGenerated(generated.display!),
+      content: generated.content,
+    );
+  }
+
+  wire.GeneratedAnnouncement toGenerated() {
+    return wire.GeneratedAnnouncement(
+      id: id,
+      type: _announcementTypeToWire(type),
+      createdAt: createdAt,
+      active: active,
+      appVersion: appVersion,
+      firmwareVersion: firmwareVersion,
+      deviceModels: deviceModels,
+      expiresAt: expiresAt,
+      targeting: targeting?.toGenerated(),
+      display: display?.toGenerated(),
+      content: content,
+    );
+  }
+
+  Map<String, dynamic> toJson() => toGenerated().toJson();
 
   // Type-specific content getters
   ChangelogContent get changelogContent => ChangelogContent.fromJson(content);

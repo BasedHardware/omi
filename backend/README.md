@@ -26,12 +26,12 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
    gcloud auth application-default login --project <project-id>
    ```
    Replace `<project-id>` with your Google Cloud Project ID.
-   This should generate the `application_default_credentials.json` file in the `~/.config/gcloud` directory. This file is read automatically by gcloud in Python.
+   This should generate the `application_default_credentials.json` file in the gcloud config directory (`~/.config/gcloud` on macOS/Linux or `%APPDATA%\gcloud` on Windows). This file is read automatically by gcloud in Python.
 
-4. Install Python
-   - Mac: `brew install python`
-   - Windows: `choco install python`
-   - Nix envdir: It should be pre-installed
+4. Install Python 3.11
+   - Mac: `brew install python@3.11`
+   - Windows: Install Python 3.11 from [python.org](https://www.python.org/downloads/windows/), then verify `python --version` prints `3.11.x`
+   - Nix envdir: It should be pre-installed; verify `python --version` prints `3.11.x`
 
 5. Install `pip` if it doesn't exist (follow instructions on [pip installation page](https://pip.pypa.io/en/stable/installation/))
 
@@ -42,7 +42,9 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
 7. Install `opus` (required for audio processing)
    - Mac: `brew install opus`
-   - Windows: You should already have it if you're on Windows 10 version 1903 and above
+   - Windows: install a native `libopus` build and make sure its DLL directory is on `PATH`
+     - MSYS2 UCRT64 example: `pacman -S mingw-w64-ucrt-x86_64-opus`
+     - Add `C:\msys64\ucrt64\bin` to `PATH`, then verify from a new shell with `where.exe opus.dll`
 
 8. Move to the backend directory: `cd backend`
 
@@ -65,6 +67,9 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
 
     **Option A: Using a virtual environment (recommended)**
     ```bash
+    # Verify Python 3.11 before creating the virtual environment
+    python --version
+
     # Create a virtual environment
     python -m venv venv
 
@@ -85,32 +90,34 @@ This README provides a quick setup guide for the Omi backend. For a comprehensiv
     pip install -r requirements.txt
     ```
 
-13. Sign up on [ngrok](https://ngrok.com/) and follow the steps to configure it
+13. Model assets are local-only. `pretrained_models/` is intentionally ignored; do not commit model binaries or symlinks. Runtime VAD uses the tracked ONNX asset under `utils/stt/assets/`, while live integration tests that reference legacy Silero fixtures need those files placed locally under `pretrained_models/`.
+
+14. Sign up on [ngrok](https://ngrok.com/) and follow the steps to configure it
     - During onboarding, get your authentication token and run `ngrok config add-authtoken <your-token>`
 
-14. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal:
+15. During the onboarding flow, under the `Static Domain` section, Ngrok should provide you with a static domain and a command to point your localhost to that static domain. Replace the port from 80 to 8000 in that command and run it in your terminal:
     ```bash
     ngrok http --domain=example.ngrok-free.app 8000
     ```
 
-15. Start the backend server:
+16. Start the backend server:
     ```bash
     uvicorn main:app --reload --env-file .env
     ```
 
-16. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
+17. Troubleshooting: If you get any error mentioning "no internet connection" while downloading models, add the following lines in the `utils/stt/vad.py` file after the import statements:
     ```python
     import ssl
     ssl._create_default_https_context = ssl._create_unverified_context
     ```
 
-17. Now try running the server again: `uvicorn main:app --reload --env-file .env`
+18. Now try running the server again: `uvicorn main:app --reload --env-file .env`
 
-18. In your Omi app's environment, set `BASE_API_URL` to the URL provided by ngrok (e.g., `https://example.ngrok-free.app`)
+19. In your Omi app's environment, set `BASE_API_URL` to the URL provided by ngrok (e.g., `https://example.ngrok-free.app`)
 
-19. Your app should now be using your local backend
+20. Your app should now be using your local backend
 
-20. If you used a virtual environment, when you're done, deactivate it by running:
+21. If you used a virtual environment, when you're done, deactivate it by running:
     ```bash
     deactivate
     ```

@@ -324,24 +324,31 @@ class GeminiStreamingSttSocket implements IPureSocket {
       _frameBuffer.clear();
       _bufferedBytes = 0;
 
-      Uint8List pcmData = combined;
+      Uint8List? pcmData = combined;
       if (transcoder != null) {
         try {
           pcmData = transcoder!.transcodeFrames([combined]);
-        } catch (_) {}
+        } catch (e) {
+          // Don't ship un-transcoded bytes tagged as PCM — that produces a corrupted stream.
+          // Skip only the tail send; teardown below must still run.
+          CustomSttLogService.instance.error('GeminiStreaming', 'Transcode error (flush): $e');
+          pcmData = null;
+        }
       }
 
-      final realtimeInput = {
-        'realtimeInput': {
-          'mediaChunks': [
-            {'mimeType': 'audio/pcm;rate=$sampleRate', 'data': base64Encode(pcmData)},
-          ],
-        },
-      };
+      if (pcmData != null) {
+        final realtimeInput = {
+          'realtimeInput': {
+            'mediaChunks': [
+              {'mimeType': 'audio/pcm;rate=$sampleRate', 'data': base64Encode(pcmData)},
+            ],
+          },
+        };
 
-      try {
-        _channel!.sink.add(jsonEncode(realtimeInput));
-      } catch (_) {}
+        try {
+          _channel!.sink.add(jsonEncode(realtimeInput));
+        } catch (_) {}
+      }
     }
 
     await Future.delayed(const Duration(milliseconds: 500));
@@ -526,29 +533,7 @@ class PureStreamingSttSocket implements IPureSocket {
         }
 
         // Aggregate words by speaker (matching backend TranscriptSegment format)
-        final segments = <Map<String, dynamic>>[];
-        for (final segment in result.segments) {
-          if (segment.text.trim().isEmpty) continue;
-
-          final speakerId = segment.speakerId;
-          final speaker = 'SPEAKER_$speakerId';
-
-          if (segments.isEmpty || segments.last['speaker'] != speaker) {
-            segments.add({
-              'text': segment.text.trim(),
-              'speaker': speaker,
-              'speaker_id': speakerId,
-              'is_user': false,
-              'start': segment.start,
-              'end': segment.end,
-              'person_id': null,
-            });
-          } else {
-            final last = segments.last;
-            last['text'] = '${last['text']} ${segment.text.trim()}';
-            last['end'] = segment.end;
-          }
-        }
+        final segments = mergeTranscriptSegmentsBySpeaker(result.segments);
 
         if (segments.isNotEmpty) {
           onMessage(jsonEncode(segments));

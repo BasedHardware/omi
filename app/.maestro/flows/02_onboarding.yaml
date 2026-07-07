@@ -1,0 +1,57 @@
+# Flow: Onboarding (first-time user after sign-in)
+# Tags: core, onboarding
+# Tests: Name entry → permissions → device selection → home screen
+# Requires: Fresh sign-in (no prior onboarding completed)
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - onboarding
+
+---
+
+# If onboarding name screen appears, fill in name
+- assertVisible:
+    text: "What should Omi call you?"
+    optional: true
+- runFlow:
+    when:
+      visible: "What should Omi call you?"
+    commands:
+      - tapOn:
+          id: ".*name.*"
+          optional: true
+      - inputText: "Test User"
+      - tapOn: "Continue"
+      - takeScreenshot: "02_onboarding_name"
+
+# Handle notification permission prompt
+- tapOn:
+    text: "Allow"
+    optional: true
+
+# Handle location permission prompt
+- tapOn:
+    text: "While using the app"
+    optional: true
+- tapOn:
+    text: "Allow"
+    optional: true
+
+# Device selection screen — skip or select "No Device"
+- assertVisible:
+    text: "Connect|Device|Skip"
+    optional: true
+- runFlow:
+    when:
+      visible: "Skip"
+    commands:
+      - tapOn: "Skip"
+      - takeScreenshot: "02_onboarding_skip_device"
+
+# Verify landing on home screen
+- extendedWaitUntil:
+    visible:
+      text: "Conversations|Home|What's on your mind"
+    timeout: 15000
+- takeScreenshot: "02_onboarding_complete"

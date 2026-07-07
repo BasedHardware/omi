@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/announcements_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/models/announcement.dart';
 
@@ -33,7 +34,10 @@ Future<List<Announcement>> getAppChangelogs({
   }
 
   final List<dynamic> data = jsonDecode(res.body);
-  return data.map((json) => Announcement.fromJson(json)).toList();
+  return data
+      .map((json) => wire.GeneratedAnnouncement.fromJson(json as Map<String, dynamic>))
+      .map(Announcement.fromGenerated)
+      .toList();
 }
 
 /// Get all pending announcements for the current user.
@@ -71,7 +75,10 @@ Future<List<Announcement>> getPendingAnnouncements({
   }
 
   final List<dynamic> data = jsonDecode(res.body);
-  return data.map((json) => Announcement.fromJson(json)).toList();
+  return data
+      .map((json) => wire.GeneratedAnnouncement.fromJson(json as Map<String, dynamic>))
+      .map(Announcement.fromGenerated)
+      .toList();
 }
 
 /// Dismiss an announcement for the current user.

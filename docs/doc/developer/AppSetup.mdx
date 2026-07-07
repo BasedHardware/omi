@@ -88,16 +88,6 @@ This is the **recommended** way to get started. It sets up your environment to u
         bash setup.sh android
         ```
       </Tab>
-      <Tab title="macOS">
-        ```bash
-        bash setup.sh macos
-        ```
-      </Tab>
-      <Tab title="Windows">
-        ```powershell
-        .\setup\scripts\setup.ps1
-        ```
-      </Tab>
     </Tabs>
   </Step>
   <Step title="Run in simulator" icon="play">
@@ -134,7 +124,7 @@ Manual setup gives you full control, allowing you to use your own backend.
     <AccordionGroup>
       <Accordion title="Example output" icon="terminal">
         ```
-        [✓] Flutter (Channel stable, 3.35.3, on macOS 15.4.1)
+        [✓] Flutter (Channel stable, 3.41.9, on macOS 15.4.1)
         [✓] Android toolchain - develop for Android devices (Android SDK version 36.0.0)
         [✓] Xcode - develop for iOS and macOS (Xcode 16.4)
         [✓] Chrome - develop for the web
@@ -146,7 +136,7 @@ Manual setup gives you full control, allowing you to use your own backend.
       </Accordion>
       <Accordion title="Recommended versions" icon="info-circle">
         This project is tested with specific tool versions. See [`app/setup.sh`](https://github.com/BasedHardware/omi/blob/main/app/setup.sh) for recommended versions:
-        - Flutter 3.35.3
+        - Flutter 3.41.9
         - Xcode 16.4
         - Android SDK Platform 35
         - NDK 28.2.13676358
@@ -204,35 +194,18 @@ Manual setup gives you full control, allowing you to use your own backend.
   <Step title="Setup Firebase" icon="fire">
     Firebase is **mandatory** for the app to run.
 
+    <Warning>
+    The repo ships **prebuilt Firebase configs** for both dev and prod. If you're using Omi's development backend (the common case), they're already in place after `setup.sh` — skip to the next step.
+
+    **Never run `flutterfire configure`** against Omi's bundle IDs — it overwrites the prebuilt prod credentials in `app/ios/Config/Prod/`, `app/lib/firebase_options_prod.dart`, and `app/android/app/src/prod/`.
+    </Warning>
+
+    If you need your **own** Firebase project (custom backend):
+
     1. Follow the official [Firebase Flutter Setup](https://firebase.google.com/docs/flutter/setup) through Step 1
-
     2. For Apple login, [create an identifier](https://developer.apple.com/account/resources/identifiers/list) first
-
-    3. Configure for **production**:
-    ```bash
-    flutterfire config \
-      --out=lib/firebase_options_prod.dart \
-      --ios-bundle-id=YOUR_IOS_BUNDLE_ID \
-      --android-app-id=com.friend.ios \
-      --android-out=android/app/src/prod/ \
-      --ios-out=ios/Config/Prod/ \
-      --macos-bundle-id=YOUR_MACOS_BUNDLE_ID \
-      --macos-out=macos/Config/Prod
-    ```
-
-    4. Configure for **development**:
-    ```bash
-    flutterfire config \
-      --out=lib/firebase_options_dev.dart \
-      --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-      --android-app-id=com.friend.ios.dev \
-      --android-out=android/app/src/dev/ \
-      --ios-out=ios/Config/Dev/ \
-      --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-      --macos-out=macos/Config/Dev
-    ```
-
-    5. Generate SHA1/SHA256 keys for your keystore and add them to Firebase ([StackOverflow guide](https://stackoverflow.com/a/56091158) | [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en))
+    3. Configure `flutterfire config` using **your own** bundle IDs and **your own** project — not Omi's
+    4. Generate SHA1/SHA256 keys for your keystore and add them to Firebase ([StackOverflow guide](https://stackoverflow.com/a/56091158) | [Official Docs](https://support.google.com/firebase/answer/9137403?hl=en))
 
     <Tip>
     If you're facing auth issues, enable Google/Apple sign-in in the Firebase Console under **Authentication → Sign-in method**.

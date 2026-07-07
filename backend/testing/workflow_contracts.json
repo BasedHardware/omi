@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "checks": {
+    "no_large_tuple_results": {
+      "description": "High-risk workflow helpers should use named result objects instead of positional tuples with more than two fields.",
+      "allowlist": [
+        {
+          "path": "backend/utils/memory/legacy_backfill.py",
+          "function": "_bucket_counts_and_samples",
+          "reason": "Inventory helper; migrate when touching bucket reporting."
+        },
+        {
+          "path": "backend/utils/memory/legacy_backfill.py",
+          "function": "_sync_backfill_side_effects",
+          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory/legacy_backfill.py",
+          "function": "_reconcile_backfill_side_effects_for_rows",
+          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory/legacy_backfill.py",
+          "function": "reconcile_backfill_counts",
+          "reason": "Legacy contract from issue 8786; covered by backfill contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory/short_term_promotion.py",
+          "function": "promote_short_term_item_via_apply",
+          "reason": "Existing promotion apply contract; covered by short-term promotion contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory_ingestion/pipeline.py",
+          "function": "_redact_input",
+          "reason": "Existing pipeline stage contract; covered by memory ingestion contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory_ingestion/pipeline.py",
+          "function": "_positive_secret_signals",
+          "reason": "Existing redaction signal contract; covered by memory ingestion contract tests until migrated."
+        },
+        {
+          "path": "backend/utils/memory_ingestion/pipeline.py",
+          "function": "_compile_mutations",
+          "reason": "Existing mutation compilation contract; covered by memory ingestion contract tests until migrated."
+        }
+      ]
+    }
+  },
+  "workflows": [
+    {
+      "id": "legacy_memory_backfill",
+      "risk": "high",
+      "sources": ["backend/utils/memory/legacy_backfill.py", "backend/scripts/backfill_legacy_memories.py"],
+      "tests": ["tests/unit/test_ws_c_backfill.py"],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "completed checkpoints still reconcile side effects",
+        "partial checkpoints resume idempotently",
+        "legacy/domain timestamps are preserved across operational side effects"
+      ]
+    },
+    {
+      "id": "canonical_memory_fanout",
+      "risk": "high",
+      "sources": ["backend/utils/memory/canonical_memory_adapter.py"],
+      "tests": [
+        "tests/unit/test_ws_i_write_convergence.py",
+        "tests/unit/test_ws_j_delete_privacy.py",
+        "tests/unit/test_canonical_kg_promotion.py"
+      ],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "domain writes use injected stores",
+        "derived keyword/vector/KG fanout is either durable or explicitly recoverable"
+      ]
+    },
+    {
+      "id": "sync_cloud_tasks",
+      "risk": "high",
+      "sources": ["backend/routers/sync.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
+      "tests": ["tests/unit/test_sync_v2.py", "tests/unit/test_sync_cloud_tasks.py", "tests/unit/test_audio_merge_tasks.py"],
+      "checks": [],
+      "invariants": [
+        "task retries do not double-count usage or completed segments",
+        "segment failures cannot be reported as completed work"
+      ]
+    },
+    {
+      "id": "vector_repair_outbox",
+      "risk": "high",
+      "sources": [
+        "backend/database/memory_vector_repair_outbox.py",
+        "backend/database/memory_vector_repair_outbox_worker.py",
+        "backend/scripts/vector_repair_outbox_worker_entrypoint.py"
+      ],
+      "tests": [
+        "tests/unit/test_vector_repair_outbox_worker.py",
+        "tests/unit/test_vector_repair_outbox_infra.py"
+      ],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "leased work is recoverable after worker death",
+        "completed and dead-lettered work is never reclaimed"
+      ]
+    },
+    {
+      "id": "account_deletion_wipe",
+      "risk": "high",
+      "sources": ["backend/services/users/account_deletion.py", "backend/routers/users.py"],
+      "tests": [
+        "tests/services/users/test_account_deletion.py",
+        "tests/unit/test_claim_deletion_wipe_txn.py",
+        "tests/unit/test_delete_account_purge_storage.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "irreversible auth deletion has a durable recovery marker",
+        "required derived-data purge failures cannot be marked completed"
+      ]
+    },
+    {
+      "id": "projection_repair",
+      "risk": "high",
+      "sources": ["backend/database/projection_repair.py"],
+      "tests": ["tests/unit/test_memory_ledger.py"],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "repair enqueue is idempotent",
+        "repair processing uses injected stores and has retry/dead-letter accounting"
+      ]
+    },
+    {
+      "id": "short_term_lifecycle",
+      "risk": "high",
+      "sources": [
+        "backend/jobs/short_term_lifecycle_worker.py",
+        "backend/utils/memory/short_term_promotion.py",
+        "backend/utils/memory/canonical_short_term_maintenance_cron.py"
+      ],
+      "tests": [
+        "tests/unit/test_short_term_lifecycle_firestore_store.py",
+        "tests/unit/test_ws_b_short_term_lifecycle.py",
+        "tests/unit/test_canonical_short_term_maintenance_cron.py"
+      ],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "promotion and maintenance reruns are idempotent",
+        "derived side-effect failures are accounted for"
+      ]
+    },
+    {
+      "id": "l2_promotion_worker",
+      "risk": "high",
+      "sources": ["backend/jobs/l2_promotion_worker.py", "backend/jobs/l2_promotion_orchestrator.py"],
+      "tests": ["tests/unit/test_l2_promotion_agent_v2.py"],
+      "checks": [],
+      "invariants": [
+        "forward and backfill modes have explicit gates",
+        "per-item failures are reported without corrupting later work"
+      ]
+    },
+    {
+      "id": "webhook_delivery_health",
+      "risk": "high",
+      "sources": ["backend/utils/webhooks.py", "backend/database/webhook_health.py"],
+      "tests": ["tests/unit/test_async_webhooks.py", "tests/unit/test_webhook_auto_disable.py"],
+      "checks": [],
+      "invariants": [
+        "delivery failures are counted durably",
+        "auto-disable state is endpoint-aware and race-safe"
+      ]
+    },
+    {
+      "id": "memory_ingestion_export_runner",
+      "risk": "high",
+      "sources": ["backend/utils/memory_ingestion/export_runner.py", "backend/utils/memory_ingestion/pipeline.py"],
+      "tests": ["tests/unit/test_memory_ingestion_pipeline.py", "tests/unit/test_production_like_memory_model.py"],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "resume config mismatches fail closed",
+        "failed shards remain visible in run summaries"
+      ]
+    },
+    {
+      "id": "backend_cloud_run_deploy",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/gcp_backend.yml",
+        "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/repair_cloud_run_traffic.py",
+        "backend/scripts/pre-deploy-check.sh"
+      ],
+      "tests": [
+        "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_repair_cloud_run_traffic.py",
+        "tests/unit/test_deploy_status_report.py",
+        "tests/unit/test_backend_runtime_env_validator.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "preflight fails before revision creation when Secret Manager bindings are missing",
+        "traffic shifts only after candidate revisions are Ready=True",
+        "spec.traffic mismatches are repaired or block deploy with an explicit command"
+      ]
+    }
+  ]
+}

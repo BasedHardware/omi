@@ -170,8 +170,14 @@ class PureSocket implements IPureSocket {
         return 'going_away_os_or_background';
       case 1006:
         return 'abnormal_closure';
+      case 1008:
+        return 'policy_violation_or_auth_error';
       case 1011:
         return 'server_error';
+      case 4001:
+        return 'auth_token_refresh_required';
+      case 4004:
+        return 'auth_relogin_required';
       default:
         return 'unknown';
     }

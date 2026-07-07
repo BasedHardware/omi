@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class FairUsePage extends StatefulWidget {
@@ -28,6 +29,11 @@ class _FairUsePageState extends State<FairUsePage> {
     });
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of whether the widget is
+      // still mounted — this only touches the SyncRateLimiter singleton and
+      // must not be skipped if the user navigates away before the response
+      // returns (otherwise a stale cooldown is never cleared).
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted) {
         if (result == null) {
           setState(() {
@@ -63,27 +69,27 @@ class _FairUsePageState extends State<FairUsePage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: Colors.white))
           : _error != null
-              ? _buildError()
-              : _status == null
-                  ? _buildError()
-                  : RefreshIndicator(
-                      onRefresh: _loadStatus,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildStatusBanner(),
-                            _buildUsageSection(),
-                            _buildBudgetSection(),
-                            _buildMessageBanner(),
-                            const SizedBox(height: 24),
-                            _buildAboutFooter(),
-                          ],
-                        ),
-                      ),
-                    ),
+          ? _buildError()
+          : _status == null
+          ? _buildError()
+          : RefreshIndicator(
+              onRefresh: _loadStatus,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildStatusBanner(),
+                    _buildUsageSection(),
+                    _buildBudgetSection(),
+                    _buildMessageBanner(),
+                    const SizedBox(height: 24),
+                    _buildAboutFooter(),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -140,10 +146,7 @@ class _FairUsePageState extends State<FairUsePage> {
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: dotColor.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(12),
-        ),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
         child: Row(
           children: [
             Container(
@@ -234,8 +237,8 @@ class _FairUsePageState extends State<FairUsePage> {
     final barColor = pct >= 100
         ? const Color(0xFFEF4444)
         : pct >= 80
-            ? const Color(0xFFFBBF24)
-            : const Color(0xFF8B5CF6);
+        ? const Color(0xFFFBBF24)
+        : const Color(0xFF8B5CF6);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -340,10 +343,7 @@ class _FairUsePageState extends State<FairUsePage> {
             ],
             if (resetLabel.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(
-                resetLabel,
-                style: const TextStyle(color: Color(0xFF636366), fontSize: 12),
-              ),
+              Text(resetLabel, style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
             ],
           ],
         ),

@@ -98,8 +98,17 @@ cd path/to/servers/src/omi
 npx @modelcontextprotocol/inspector uv run mcp-server-omi
 ```
 
-Running `tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log` will show the logs from the server and may
-help you debug any issues.
+To follow Claude Desktop logs while debugging:
+
+```bash
+# macOS
+tail -n 20 -f ~/Library/Logs/Claude/mcp-server-omi.log
+```
+
+```powershell
+# Windows PowerShell
+Get-Content "$env:APPDATA\Claude\logs\mcp-server-omi.log" -Tail 20 -Wait
+```
 
 ## Advanced
 

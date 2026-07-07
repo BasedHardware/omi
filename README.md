@@ -19,15 +19,35 @@ Trusted by 300,000+ professionals.
 
 ## Quick Start
 
+### macOS
 
-
-```bash
-git clone https://github.com/BasedHardware/omi.git && cd omi/desktop && ./run.sh --yolo
+```sh
+git clone https://github.com/BasedHardware/omi.git && cd omi/desktop/macos && ./run.sh --yolo
 ```
 
 Builds the macOS app, connects to the cloud backend, and launches. No env files, no credentials, no local backend.
 
 > **Requirements:** macOS 14+, [Xcode](https://developer.apple.com/xcode/) (includes Swift & code signing), [Node.js](https://nodejs.org/)
+
+### Windows
+
+```powershell
+git clone https://github.com/BasedHardware/omi.git
+cd omi\desktop\windows
+npm install
+copy .env.example .env
+npm run dev
+```
+
+Starts the Windows desktop app from source using the public config in `.env.example`.
+
+> **Requirements:** [Node.js](https://nodejs.org/)
+
+For development worktrees, run the cheap local setup once:
+
+```bash
+make setup
+```
 
 <details>
   <summary>Full Installation</summary>
@@ -45,7 +65,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 ```bash
 git clone https://github.com/BasedHardware/omi.git
-cd omi/desktop
+cd omi/desktop/macos
 cp Backend-Rust/.env.example Backend-Rust/.env
 ```
 
@@ -55,7 +75,7 @@ cp Backend-Rust/.env.example Backend-Rust/.env
 ./run.sh
 ```
 
-See [desktop/README.md](desktop/README.md) for environment variables and credential setup.
+See [desktop/macos/README.md](desktop/macos/README.md) for environment variables and credential setup.
 
 
 ### Mobile App
@@ -109,7 +129,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 
 | Component | Path | Stack |
 |-----------|------|-------|
-| **macOS app** | [`desktop/`](desktop/) | Swift, SwiftUI, Rust backend |
+| **macOS app** | [`desktop/macos/`](desktop/macos/) | Swift, SwiftUI, Rust backend |
 | Mobile app | [`app/`](app/) | Flutter (iOS & Android) |
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
@@ -124,7 +144,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 ### Getting Started
 - [Introduction](https://docs.omi.me/)
 - [Quick Start Guide](https://docs.omi.me/quickstart)
-- [macOS App Development](desktop/README.md)
+- [macOS App Development](desktop/macos/README.md)
 - [Mobile App Setup](https://docs.omi.me/doc/developer/AppSetup)
 - [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
 - [Contributing](https://docs.omi.me/doc/developer/Contribution)

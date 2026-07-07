@@ -141,6 +141,23 @@ omi --json local sql "SELECT appName, COUNT(*) FROM screenshots GROUP BY appName
 omi --json local task search "taxes" --include-completed
 ```
 
+Agent screen-history workflow:
+
+1. Check availability with `omi --json local status`; look for
+   `screen_history_available`, `screenshot_count`, and `indexed_screenshot_count`.
+2. Discover tool schemas with `omi --json local tools`.
+3. Search OCR/screen history with `omi --json local search-screen "query" --days 7`
+   or run exact SQL against `screenshots` when you need app/window filters.
+4. Use a returned `screenshot_id` with
+   `omi --json local screenshot <id> --output /tmp/omi-shot.jpg`.
+5. Validate the file before handing it to vision tooling, for example
+   `file /tmp/omi-shot.jpg`.
+
+If pixels are not available, JSON-mode errors preserve Desktop's structured
+fields such as `status_code`, `error`, `reason`, `hint`, and `screenshot_id`.
+For example, `screenshot_pending` means the frame is still in the active video
+segment; retry shortly or choose an older screenshot ID from search results.
+
 Task writes should only run after the user clearly asks for that change:
 
 ```bash

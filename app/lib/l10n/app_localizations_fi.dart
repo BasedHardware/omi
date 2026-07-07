@@ -1712,12 +1712,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'LAITETTA',
-      one: 'LAITE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'LAITETTA', one: 'LAITE');
     return '$count $_temp0 LÖYDETTY LÄHISTÖLTÄ';
   }
 
@@ -4692,10 +4687,7 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription ja on $triggerDescription.';
   }
 
@@ -7767,6 +7759,9 @@ class AppLocalizationsFi extends AppLocalizations {
   String get viewAll => 'Näytä kaikki';
 
   @override
+  String get expand => 'Laajenna';
+
+  @override
   String get addTask => 'Lisää tehtävä';
 
   @override
@@ -9306,6 +9301,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get backgroundModeNote => 'Toimii toistaiseksi vain Omi-laitteiden kanssa ja sitä kehitetään jatkuvasti.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Taustatila ei ole käytettävissä, koska yhteensopivaa laitetta ei ole yhdistetty. Yhdistä Omi-, OpenGlass- tai Friend Pendant -laite käyttääksesi tätä ominaisuutta.';
+
+  @override
   String get regenerateRecap => 'Luo yhteenveto uudelleen';
 
   @override
@@ -9326,4 +9325,183 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.';
+
+  @override
+  String get transcribeLaterTitle => 'Litteroi myöhemmin';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Toimii toistaiseksi Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.';
+
+  @override
+  String get recordingMode => 'Tallennustila';
+
+  @override
+  String get captureModeLater => 'Myöhemmin';
+
+  @override
+  String get captureModeLiveDescription => 'Litteroi reaaliajassa puhuessasi.';
+
+  @override
+  String get captureModeLaterDescription => 'Tallenna ääni nyt ja litteroi milloin haluat.';
+
+  @override
+  String get unmute => 'Poista mykistys';
+
+  @override
+  String get newRecording => 'Uusi tallennus';
+
+  @override
+  String get transcribeLaterPaused => 'Keskeytetty – ääntä ei tallenneta';
+
+  @override
+  String get memoryThisDevice => 'Tämä laite';
+
+  @override
+  String get memoryThisIphone => 'Tämä iPhone';
+
+  @override
+  String get memoryThisPhone => 'Tämä puhelin';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Näin käytät Omia';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Puhu Omi-laitteeseesi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Sano muutama sana ja katso, miten ne ilmestyvät reaaliajassa';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Hienosti!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Ala puhua...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Esitä Omille kysymys';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Paina painiketta kerran, esitä kysymyksesi ja paina uudelleen, kun olet valmis';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Käsitellään kysymystäsi...';
+
+  @override
+  String get deviceOnboardingListening => 'Kuunnellaan...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Sammuta';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Käynnistä';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Pidä painiketta pohjassa 3 sekuntia';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Käynnistä se uudelleen painamalla painiketta';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Pidä painiketta tiukasti pohjassa, kunnes valo sammuu';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Yhdistetty';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Yhdistetty!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Yhteys katkaistu';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Sammutetaan...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Mukauta kaksoisnapautus';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Lopeta keskustelu';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Tallenna ja lopeta nykyinen keskustelu';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Mykistä / poista mykistys';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Kytke mikrofoni päälle tai pois';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Tähditä käynnissä olevaa keskustelua';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Merkitse keskustelu tärkeäksi';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Tuo oli yksittäisnapautus – yritä napauttaa kahdesti nopeasti!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Kokeile nyt! Kaksoisnapauta Omi-laitettasi';
+
+  @override
+  String get deviceOnboardingContinue => 'Jatka';
+
+  @override
+  String get deviceOnboardingFinish => 'Valmis';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tutustu Omiisi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Nopea ja käytännönläheinen kierros kaikkeen, mitä Omisi osaa.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Noin 1 minuutti';
+
+  @override
+  String get jumpToLatestMessage => 'Siirry uusimpaan viestiin';
+
+  @override
+  String get latest => 'Uusin';
+
+  @override
+  String get flashFirmware => 'Asenna laiteohjelmisto';
+
+  @override
+  String get pendantRecordingTitle => 'Tallennus riipuksella';
+
+  @override
+  String get pendantRecordingNote =>
+      'Riipuksesi tallentaa itsenäisesti. Tallenteet synkronoituvat puhelimeesi, kun sovellus on auki.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkronoidaan tallenteita riipuksestasi…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min tallennettu';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten.';
 }

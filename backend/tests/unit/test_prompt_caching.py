@@ -9,14 +9,7 @@ Verifies that:
 
 import inspect
 import re
-import sys
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
-
-# Mock modules that initialize GCP clients or require API keys at import time
-sys.modules.setdefault("database._client", MagicMock())
-_mock_clients = MagicMock()
-sys.modules.setdefault("utils.llm.clients", _mock_clients)
 
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.conversation_photo import ConversationPhoto
@@ -257,23 +250,44 @@ class TestPromptCacheRetention:
         from pathlib import Path
 
         clients_path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "clients.py"
-        return clients_path.read_text()
+        return clients_path.read_text(encoding="utf-8")
 
-    def test_qos_gpt51_has_cache_retention(self):
-        """QoS _get_or_create_openai_llm must set prompt_cache_retention=24h for gpt-5.1."""
+    @staticmethod
+    def _import_model_config():
+        """Import model_config.py in isolation (it has only stdlib deps)."""
+        import importlib.util
+        from pathlib import Path
+
+        path = Path(__file__).resolve().parent.parent.parent / "utils" / "llm" / "model_config.py"
+        spec = importlib.util.spec_from_file_location("_omi_model_config_test", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_qos_openai_llm_gates_retention_by_capability(self):
+        """_get_or_create_openai_llm must gate prompt_cache_retention=24h via a capability check."""
         source = self._read_clients_source()
         match = re.search(
-            r"_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h",
+            r"_get_or_create_openai_llm.*?supports_cache_retention\(.*?prompt_cache_retention.*?24h",
             source,
             re.DOTALL,
         )
-        assert match, "_get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
+        assert match, "_get_or_create_openai_llm should gate prompt_cache_retention='24h' by supports_cache_retention()"
 
-    def test_qos_tier_medium_gets_cache_retention(self):
-        """Omi QoS tier medium (gpt-5.1) must set prompt_cache_retention=24h via _get_or_create_openai_llm."""
-        source = self._read_clients_source()
-        match = re.search(r'_get_or_create_openai_llm.*?gpt-5\.1.*?prompt_cache_retention.*?24h', source, re.DOTALL)
-        assert match, "QoS _get_or_create_openai_llm should set prompt_cache_retention='24h' for gpt-5.1"
+    def test_capability_gating_matrix(self):
+        """Capability gating (not exact names): renamed gpt-5 still cached, non-capable models untouched."""
+        mc = self._import_model_config()
+        # A renamed/future gpt-5 family model must still get routing + retention.
+        assert mc.supports_prompt_cache("gpt-5.9-turbo"), "renamed gpt-5 should support prompt_cache_key"
+        assert mc.supports_cache_retention("gpt-5.9-turbo"), "renamed gpt-5 should support 24h retention"
+        # gpt-5.1 must stay retention-capable after the refactor (the original hardcoded case).
+        assert mc.supports_cache_retention("gpt-5.1"), "gpt-5.1 must remain retention-capable"
+        # gpt-4.1 family: routing yes, 24h retention no.
+        assert mc.supports_prompt_cache("gpt-4.1-mini")
+        assert not mc.supports_cache_retention("gpt-4.1-mini")
+        # Non-OpenAI models get neither.
+        assert not mc.supports_prompt_cache("gemini-2.5-flash-lite")
+        assert not mc.supports_cache_retention("gemini-2.5-flash-lite")
 
     def test_cache_retention_not_in_model_kwargs(self):
         """prompt_cache_retention must NOT be in model_kwargs (SDK rejects it there)."""

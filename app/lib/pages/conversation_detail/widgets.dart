@@ -62,8 +62,9 @@ List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int curr
       TextSpan(
         text: text.substring(index, index + searchQuery.length),
         style: TextStyle(
-          backgroundColor:
-              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
+          backgroundColor: isCurrentResult
+              ? Colors.orange.withValues(alpha: 0.9)
+              : Colors.deepPurple.withValues(alpha: 0.6),
           color: Colors.white,
           fontWeight: FontWeight.bold,
         ),
@@ -262,7 +263,7 @@ class GetSummaryWidgets extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: folder != null ? folder.colorValue.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+          color: folder != null ? folder.colorValue.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -465,18 +466,10 @@ class GetSummaryWidgets extends StatelessWidget {
     );
   }
 
-  Widget _buildChip({
-    required String label,
-    IconData? icon,
-    Widget? leadingWidget,
-    VoidCallback? onTap,
-  }) {
+  Widget _buildChip({required String label, IconData? icon, Widget? leadingWidget, VoidCallback? onTap}) {
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.grey.withValues(alpha: 0.16),
-        borderRadius: BorderRadius.circular(12),
-      ),
+      decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(12)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -494,10 +487,7 @@ class GetSummaryWidgets extends StatelessWidget {
     );
 
     if (onTap != null) {
-      return GestureDetector(
-        onTap: onTap,
-        child: chip,
-      );
+      return GestureDetector(onTap: onTap, child: chip);
     }
     return chip;
   }
@@ -900,15 +890,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                     ],
                   )
                 : _isEditing
-                    ? _buildEditor(context, content)
-                    : GestureDetector(
-                        onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
-                        child: ConversationMarkdownWidget(
-                          content: content,
-                          searchQuery: widget.searchQuery,
-                          currentResultIndex: widget.currentResultIndex,
-                        ),
-                      ),
+                ? _buildEditor(context, content)
+                : GestureDetector(
+                    onDoubleTap: widget.onSaveSummary == null ? null : () => _startEditing(content),
+                    child: ConversationMarkdownWidget(
+                      content: content,
+                      searchQuery: widget.searchQuery,
+                      currentResultIndex: widget.currentResultIndex,
+                    ),
+                  ),
           ),
 
           // App info in a more subtle format below the content - only show if content is not empty
@@ -1438,11 +1428,7 @@ class CalendarEventDetailsSheet extends StatefulWidget {
   final CalendarEventLink calendarEvent;
   final Future<void> Function()? onUnlink;
 
-  const CalendarEventDetailsSheet({
-    super.key,
-    required this.calendarEvent,
-    this.onUnlink,
-  });
+  const CalendarEventDetailsSheet({super.key, required this.calendarEvent, this.onUnlink});
 
   @override
   State<CalendarEventDetailsSheet> createState() => _CalendarEventDetailsSheetState();
@@ -1490,34 +1476,41 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
             ),
           ),
           const SizedBox(height: 20),
-          Row(children: [
-            const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                widget.calendarEvent.title,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            const Icon(Icons.access_time, size: 16, color: Colors.white54),
-            const SizedBox(width: 8),
-            Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-          ]),
-          if (widget.calendarEvent.attendees.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Icon(Icons.people_outline, size: 16, color: Colors.white54),
-              const SizedBox(width: 8),
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  widget.calendarEvent.attendees.join(', '),
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  widget.calendarEvent.title,
+                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
                 ),
               ),
-            ]),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              const Icon(Icons.access_time, size: 16, color: Colors.white54),
+              const SizedBox(width: 8),
+              Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
+            ],
+          ),
+          if (widget.calendarEvent.attendees.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.people_outline, size: 16, color: Colors.white54),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.calendarEvent.attendees.join(', '),
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ),
+              ],
+            ),
           ],
           if (widget.calendarEvent.htmlLink != null) ...[
             const SizedBox(height: 16),
@@ -1534,11 +1527,7 @@ class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
           const SizedBox(height: 8),
           // Share with attendees button
           if (widget.calendarEvent.attendeeEmails.isNotEmpty)
-            _ActionRow(
-              icon: Icons.share_outlined,
-              label: 'Share with attendees',
-              onTap: _shareWithAttendees,
-            ),
+            _ActionRow(icon: Icons.share_outlined, label: 'Share with attendees', onTap: _shareWithAttendees),
           // Unlink button
           if (widget.onUnlink != null)
             _ActionRow(
@@ -1581,13 +1570,15 @@ class _ActionRow extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        child: Row(children: [
-          loading
-              ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
-              : Icon(icon, size: 20, color: color),
-          const SizedBox(width: 12),
-          Text(label, style: TextStyle(color: color, fontSize: 15)),
-        ]),
+        child: Row(
+          children: [
+            loading
+                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
+                : Icon(icon, size: 20, color: color),
+            const SizedBox(width: 12),
+            Text(label, style: TextStyle(color: color, fontSize: 15)),
+          ],
+        ),
       ),
     );
   }

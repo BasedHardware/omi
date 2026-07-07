@@ -83,8 +83,9 @@ class SyncRateLimiter extends ChangeNotifier {
   /// also picks the persistence mode (rateLimit persists, backendBusy is
   /// in-memory only).
   void markLimited({int? retryAfterSeconds, RateLimitReason reason = RateLimitReason.rateLimit}) {
-    final requested =
-        (retryAfterSeconds != null && retryAfterSeconds > 0) ? retryAfterSeconds : _defaultCooldownSeconds;
+    final requested = (retryAfterSeconds != null && retryAfterSeconds > 0)
+        ? retryAfterSeconds
+        : _defaultCooldownSeconds;
     final secs = requested > _maxCooldownSeconds ? _maxCooldownSeconds : requested;
     final untilMs = DateTime.now().add(Duration(seconds: secs)).millisecondsSinceEpoch;
     if (reason == RateLimitReason.backendBusy) {
@@ -99,6 +100,16 @@ class SyncRateLimiter extends ChangeNotifier {
   /// Clear the cooldown after any successful upload.
   void clear() {
     _backendBusyUntilMs = 0;
+    SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
+    SharedPreferencesUtil().saveString(_prefKeyReason, '');
+    notifyListeners();
+  }
+
+  /// Clear only the persisted fair-use rate-limit cooldown (HTTP 429),
+  /// preserving any active in-memory backend-busy cooldown. Used when a
+  /// fair-use status refresh confirms the restriction was lifted but the
+  /// backend may still be saturated and should keep its own backoff.
+  void clearRateLimit() {
     SharedPreferencesUtil().saveInt(_prefKeyUntil, 0);
     SharedPreferencesUtil().saveString(_prefKeyReason, '');
     notifyListeners();

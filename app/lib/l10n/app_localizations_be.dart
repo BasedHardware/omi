@@ -1715,12 +1715,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String devicesFoundNearby(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'DEVICES',
-      one: 'DEVICE',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 'DEVICES', one: 'DEVICE');
     return '$count $_temp0 FOUND NEARBY';
   }
 
@@ -4705,10 +4700,7 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription і запушчаны $triggerDescription.';
   }
 
@@ -7791,6 +7783,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get viewAll => 'Паглядзець ўсё';
 
   @override
+  String get expand => 'Разгарнуць';
+
+  @override
   String get addTask => 'Дадаць задачу';
 
   @override
@@ -8480,12 +8475,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String nConversationsCreated(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 's',
-      one: '',
-    );
+    String _temp0 = intl.Intl.pluralLogic(count, locale: localeName, other: 's', one: '');
     return '$count conversation$_temp0 created';
   }
 
@@ -9334,6 +9324,10 @@ class AppLocalizationsBe extends AppLocalizations {
   String get backgroundModeNote => 'Пакуль працуе толькі з прыладамі Omi і пастаянна ўдасканальваецца.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Фонавы рэжым недаступны, бо не падключана сумяшчальная прылада. Падключыце Omi, OpenGlass або Friend Pendant, каб выкарыстоўваць гэту функцыю.';
+
+  @override
   String get regenerateRecap => 'Згенераваць рэзюмэ паўторна';
 
   @override
@@ -9354,4 +9348,184 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get syncCustomSttWarningMessage =>
       'Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.';
+
+  @override
+  String get transcribeLaterTitle => 'Транскрыпцыя пазней';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.';
+
+  @override
+  String get recordingMode => 'Рэжым запісу';
+
+  @override
+  String get captureModeLater => 'Пазней';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрыбаванне ў рэальным часе падчас размовы.';
+
+  @override
+  String get captureModeLaterDescription => 'Захавайце аўдыя зараз і транскрыбуйце калі заўгодна.';
+
+  @override
+  String get unmute => 'Уключыць гук';
+
+  @override
+  String get newRecording => 'Новы запіс';
+
+  @override
+  String get transcribeLaterPaused => 'Прыпынена — аўдыя не запісваецца';
+
+  @override
+  String get memoryThisDevice => 'Гэта прылада';
+
+  @override
+  String get memoryThisIphone => 'Гэты iPhone';
+
+  @override
+  String get memoryThisPhone => 'Гэты тэлефон';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Як карыстацца Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Скажыце нешта свайму Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Скажыце некалькі слоў і паглядзіце, як яны з\'яўляюцца ў рэальным часе';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Выдатна!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Пачніце гаварыць...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Задайце Omi пытанне';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Націсніце кнопку адзін раз, задайце пытанне, а пасля скончыўшы націсніце зноў';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Апрацоўка вашага пытання...';
+
+  @override
+  String get deviceOnboardingListening => 'Слухаю...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Выключыць';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Уключыць';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Утрымлівайце кнопку 3 секунды';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Націсніце кнопку, каб уключыць зноў';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Моцна ўтрымлівайце кнопку, пакуль не патухне індыкатар';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Падключана';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Падключана!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Адключана';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Выключэнне...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Налада двайнога націску';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Завяршыць размову';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Захаваць і завяршыць бягучую размову';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Мікрафон укл./выкл.';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Уключыць або выключыць мікрафон';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Пазначыць бягучую размову';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Пазначыць размову як важную';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Гэта быў адзіночны націск — паспрабуйце націснуць двойчы хутка!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Паспрабуйце цяпер! Двойчы націсніце свой Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Працягнуць';
+
+  @override
+  String get deviceOnboardingFinish => 'Гатова';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Пазнаёмцеся з Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Хуткі практычны агляд усяго, што ўмее ваш Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Каля 1 хвіліны';
+
+  @override
+  String get jumpToLatestMessage => 'Перайсці да апошняга паведамлення';
+
+  @override
+  String get latest => 'Апошні';
+
+  @override
+  String get flashFirmware => 'Усталяваць прашыўку';
+
+  @override
+  String get pendantRecordingTitle => 'Запіс на кулоне';
+
+  @override
+  String get pendantRecordingNote =>
+      'Ваш кулон запісвае самастойна. Запісы сінхранізуюцца з тэлефонам, пакуль праграма адкрыта.';
+
+  @override
+  String get pendantSyncingRecordings => 'Сінхранізацыя запісаў з вашага кулона…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes хв захавана';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Памяць кулона амаль запоўнена — трымайце праграму адкрытай для сінхранізацыі.';
 }

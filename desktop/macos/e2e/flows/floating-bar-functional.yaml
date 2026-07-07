@@ -1,0 +1,67 @@
+version: 2
+name: floating-bar-functional
+tier: 2
+description: Ask Omi open + stubbed typed turn on the floating bar (distinct from perf benchmarks)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Ask Omi
+    bridge.action:
+      name: open_ask_omi
+      params:
+        reset: "true"
+        wait: "true"
+    expect:
+      result.detail.focused: "true"
+
+  - id: S2
+    name: Send stubbed floating-bar query
+    bridge.action:
+      name: ask
+      params:
+        query: "Hermetic floating bar [[MARKER:floating-bar]]"
+    expect:
+      result.detail.sent: "Hermetic floating bar [[MARKER:floating-bar]]"
+
+  - id: S3
+    name: Wait for floating-bar chat idle
+    bridge.action:
+      name: wait_floating_bar_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S4
+    name: Assert stub marker echoed in assistant reply
+    bridge.action:
+      name: floating_bar_chat_snapshot
+      params:
+        limit: "12"
+    expect:
+      result.detail.last_assistant_text: "Stub saw marker: floating-bar"
+
+  - id: S5
+    name: Assert floating bar still open
+    state.expect:
+      state.askOmiOpen: true
+
+  - id: S6
+    name: Close Ask Omi
+    bridge.action:
+      name: close_ask_omi
+      params:
+        wait: "true"
+
+  - id: S7
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
