@@ -37,3 +37,11 @@ class Person(BaseModel):
     tone_notes: Optional[str] = None
     profile_updated_at: Optional[datetime] = None
     message_count: Optional[int] = None
+    # Phase 2: PIL-style structured profile slots projected from person-keyed memories.
+    location: Optional[str] = None
+    title: Optional[str] = None
+    company: Optional[str] = None
+    goals: List[str] = []
+    interests: List[str] = []
+    preferred_channel: Optional[str] = None
+    last_contacted_at: Optional[datetime] = None

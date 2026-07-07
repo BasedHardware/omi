@@ -116,3 +116,26 @@ def test_resolve_single_name_match_resolves():
         resolved = ps.resolve_person('uid', 'Sam')
         assert not ps.is_ambiguous(resolved)
         assert resolved['id'] == 'a'
+
+
+def test_resolve_case_insensitive_name_fallback():
+    """A display name typed with different casing still resolves (Firestore '==' is
+    case-sensitive, so we scan the roster and match on lowercased name)."""
+    person = {'id': 'pM', 'name': 'Mila Finch', 'relationship': 'friend'}
+    with patch.object(ps.users_db, 'get_person', return_value=None), patch.object(
+        ps.users_db, 'get_person_by_handle', return_value=None
+    ), patch.object(ps.users_db, 'get_people_by_name', return_value=[]), patch.object(
+        ps.users_db, 'get_people', return_value=[{'id': 'pX', 'name': 'Bob'}, person]
+    ):
+        r = ps.resolve_person('uid', 'mila finch')
+    assert isinstance(r, dict) and r['id'] == 'pM'
+
+
+def test_resolve_case_insensitive_ambiguous():
+    with patch.object(ps.users_db, 'get_person', return_value=None), patch.object(
+        ps.users_db, 'get_person_by_handle', return_value=None
+    ), patch.object(ps.users_db, 'get_people_by_name', return_value=[]), patch.object(
+        ps.users_db, 'get_people', return_value=[{'id': 'a', 'name': 'Sam'}, {'id': 'b', 'name': 'sam'}]
+    ):
+        r = ps.resolve_person('uid', 'SAM')
+    assert ps.is_ambiguous(r)

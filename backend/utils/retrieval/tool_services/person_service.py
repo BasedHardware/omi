@@ -8,11 +8,13 @@ the reply drafter so both share one implementation.
 """
 
 import logging
+from datetime import datetime
 from typing import Optional, Union
 
 import database.conversations as conversations_db
 import database.memories as memories_db
 import database.users as users_db
+import database.vector_db as vector_db
 from database.entities import person_entity_id
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -41,6 +43,24 @@ class AmbiguousPerson:
 
 def is_ambiguous(resolved) -> bool:
     return isinstance(resolved, AmbiguousPerson)
+
+
+def _as_of(fact: dict) -> str:
+    """Short 'as of' date for a fact — when it was last known true (valid_at), else created_at."""
+    ts = fact.get('valid_at') or fact.get('created_at')
+    if not ts:
+        return ''
+    try:
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        return ts.strftime('%b %Y')
+    except Exception:
+        return ''
+
+
+def _fact_line(fact: dict) -> str:
+    when = _as_of(fact)
+    return f"- {fact.get('content')}" + (f" (as of {when})" if when else "")
 
 
 # Facts and message snippets may quote text written by other people (e.g. iMessage
@@ -78,10 +98,65 @@ def resolve_person(uid: str, name_or_id: str) -> Union[dict, AmbiguousPerson, No
         return matches[0]
     if len(matches) > 1:
         return AmbiguousPerson(name_or_id, len(matches))
+
+    # Case-insensitive fallback: a display name typed with different casing ("mila finch"
+    # vs the stored "Mila Finch") won't match Firestore's case-sensitive '==', so scan the
+    # roster once and match on lowercased name. Still disambiguates on multiple hits.
+    try:
+        lowered = name_or_id.strip().lower()
+        ci = [p for p in (users_db.get_people(uid) or []) if (p.get("name") or "").strip().lower() == lowered]
+    except Exception as e:
+        logger.warning(f"person_service: case-insensitive name resolve failed uid={uid}: {e}")
+        ci = []
+    if len(ci) == 1:
+        return ci[0]
+    if len(ci) > 1:
+        return AmbiguousPerson(name_or_id, len(ci))
     return None
 
 
-def get_person_context(uid: str, name_or_id: str, max_conversations: int = 5, max_memories: int = 20) -> str:
+def search_person_memories(uid: str, person_id: str, query: str, limit: int = 10) -> list:
+    """Semantic search over the facts attributed to one person.
+
+    Runs a low-threshold vector search scoped to this person's ``subject_entity_id``,
+    then hydrates each hit from Firestore, keeping only ACTIVE memories
+    (``invalid_at is None``). Returns hydrated memory dicts (each containing at least
+    ``content``) ordered by the vector-similarity ranking. Fully guarded → ``[]`` on
+    any error or empty input, so callers can treat it as best-effort ranking.
+    """
+    if not person_id or not query:
+        return []
+    try:
+        hits = vector_db.find_similar_memories(
+            uid, query, threshold=0.2, limit=limit, subject_entity_id=person_entity_id(person_id)
+        )
+    except Exception as e:
+        logger.warning(f"person_service: person memory search failed for uid={uid}: {e}")
+        return []
+
+    results = []
+    for hit in hits:
+        memory_id = hit.get('memory_id') if isinstance(hit, dict) else None
+        if not memory_id:
+            continue
+        try:
+            memory = memories_db.get_memory(uid, memory_id)
+        except Exception as e:
+            logger.warning(f"person_service: person memory hydrate failed for uid={uid}: {e}")
+            continue
+        if not memory or memory.get('invalid_at') is not None or not memory.get('content'):
+            continue
+        results.append(memory)
+    return results
+
+
+def get_person_context(
+    uid: str,
+    name_or_id: str,
+    max_conversations: int = 5,
+    max_memories: int = 20,
+    query: Optional[str] = None,
+) -> str:
     person = resolve_person(uid, name_or_id)
     if is_ambiguous(person):
         return person.message()
@@ -105,12 +180,30 @@ def get_person_context(uid: str, name_or_id: str, max_conversations: int = 5, ma
     except Exception as e:
         logger.warning(f"person_service: memories lookup failed for uid={uid}: {e}")
         facts = []
-    fact_lines = [f.get('content') for f in facts if f.get('content')]
-    if fact_lines:
-        lines.append(f"\n## Known facts about {name}")
+    # Keep the fact DICTS (not just content) so each fact can be surfaced with WHEN it was last
+    # known true — a stale fact from old history must read as historical, not current.
+    if query:
+        # Rank by semantic relevance first, then top up with the flat recency-ordered list.
+        ordered = search_person_memories(uid, person_id, query, limit=max_memories) + list(facts)
+    else:
+        ordered = list(facts)
+    fact_dicts = []
+    seen = set()
+    for m in ordered:
+        c = m.get('content')
+        if c and c not in seen:
+            seen.add(c)
+            fact_dicts.append(m)
+    fact_dicts = fact_dicts[:max_memories]
+
+    if fact_dicts:
+        lines.append(
+            f"\n## Known facts about {name} (each tagged with when last known true; OLDER facts may be "
+            f"outdated — treat as historical, not a current certainty)"
+        )
         lines.append(UNTRUSTED_DATA_NOTICE)
         lines.append("<untrusted_facts>")
-        lines.extend(f"- {c}" for c in fact_lines)
+        lines.extend(_fact_line(m) for m in fact_dicts)
         lines.append("</untrusted_facts>")
 
     # Recent conversations involving this person.

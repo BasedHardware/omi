@@ -50,6 +50,7 @@ from utils.memory.product_authorization import (
     authorize_memory_external_default_memory_write,
 )
 from utils.mcp_data import clean_action_item, clean_chat_message, clean_person, clean_screen_activity_row
+from utils.retrieval.tool_services.person_service import get_person_context
 import utils.mcp_action_items as mcp_action_items
 from utils.mcp_memories import (
     collect_filtered_memories,
@@ -733,6 +734,24 @@ class SimplePerson(BaseModel):
 def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     logger.info(f"get_people {uid}")
     return [clean_person(p) for p in users_db.get_people(uid)]
+
+
+@router.get("/v1/mcp/people/context", tags=["mcp"])
+def get_person_context_route(
+    ref: str,
+    query: Optional[str] = None,
+    auth_context: ProductAuthorizationContext = Depends(get_mcp_memory_default_memory_read_context),
+):
+    app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
+    if not app_key_grant.allowed:
+        raise HTTPException(
+            status_code=app_key_grant.status_code,
+            detail=app_key_grant.observability,
+        )
+
+    uid = auth_context.uid
+    logger.info(f"get_person_context {uid} ref={sanitize_pii(ref)} query={sanitize_pii(query) if query else None}")
+    return {"context": get_person_context(uid, ref, query=query)}
 
 
 # ---------------------------------------------------------------------------

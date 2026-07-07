@@ -90,6 +90,29 @@ description: "Complete reference for all Omi MCP tools"
 
     **Returns:** `{ "success": true }`
   </Accordion>
+
+  <Accordion title="get_person_context" icon="user">
+    Assemble everything Omi knows about a specific person the user talks to: the per-person
+    profile (relationship, summary, texting tone, plus structured slots like location / company /
+    goals), facts attributed to that person, and recent conversation snippets. Facts are built
+    from the user's messaging history via per-person extraction, so this is the on-demand "who
+    is X to me" dossier used for grounding replies.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `ref` | string | Yes | Name, person id, or a handle (phone/email) identifying the person |
+    | `query` | string | No | Optional topic to rank the person's facts by semantic relevance |
+
+    **Returns:** `{ "context": "<assembled person dossier as text>" }`. When the name matches
+    more than one person, returns a disambiguation message instead of guessing.
+
+    **Examples:**
+    ```
+    "What do I know about Alice?" → get_person_context with ref: "Alice"
+    "Remind me what's going on with Bob's job" → get_person_context with ref: "Bob", query: "job"
+    ```
+  </Accordion>
 </AccordionGroup>
 
 ---

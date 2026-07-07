@@ -40,6 +40,14 @@ UNTRUSTED_DATA_NOTICE = (
 # Profile fields the LLM may populate; each must be a string when present.
 _PROFILE_STRING_FIELDS = ('relationship', 'profile_summary', 'tone_notes')
 
+# Phase 2: PIL-style structured string slots. Same non-empty discipline as the
+# free-text fields above — persisted only when the LLM returns a non-empty string.
+_PROFILE_STRUCTURED_STRING_FIELDS = ('location', 'title', 'company', 'preferred_channel')
+
+# Phase 2: structured list slots. Persisted only when the LLM returns a non-empty
+# list containing at least one non-empty string; malformed items are dropped.
+_PROFILE_LIST_FIELDS = ('goals', 'interests')
+
 
 def _fence(text: Optional[str]) -> str:
     """Escape untrusted content (transcripts, facts, contact name) before it goes
@@ -151,6 +159,13 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
         "(e.g. 'brother', 'coworker', 'close friend'), or empty string if unclear\",\n"
         f"  \"profile_summary\": \"2-4 sentences: who {name} is, what's going on with them, "
         "and the user's history with them\"\n"
+        f"  ,\"location\": \"where {name} is based (city/region), or empty string if unknown\"\n"
+        f"  ,\"title\": \"{name}'s job title or role, or empty string if unknown\"\n"
+        f"  ,\"company\": \"the organization {name} works at or with, or empty string if unknown\"\n"
+        f"  ,\"goals\": [\"short phrases for {name}'s stated goals or plans; [] if none are clear\"]\n"
+        f"  ,\"interests\": [\"short phrases for {name}'s interests or hobbies; [] if none are clear\"]\n"
+        f"  ,\"preferred_channel\": \"the channel the user usually reaches {name} on "
+        "(e.g. 'imessage', 'telegram', 'whatsapp'), or empty string if unknown\"\n"
         f"{tone_field}"
         "}"
     )
@@ -179,6 +194,23 @@ def generate_person_profile(uid: str, person_id: str, force: bool = False) -> bo
         value = parsed.get(field)
         if isinstance(value, str) and value.strip():
             fields[field] = value.strip()
+
+    # Structured string slots follow the same non-empty discipline: a partial or
+    # malformed response can never erase existing data (missing/blank => skipped).
+    for field in _PROFILE_STRUCTURED_STRING_FIELDS:
+        value = parsed.get(field)
+        if isinstance(value, str) and value.strip():
+            fields[field] = value.strip()
+
+    # Structured lists persist only as non-empty lists of non-empty strings.
+    # Malformed values (non-list, or lists with non-string/blank items) are
+    # dropped so we never persist junk or clobber an existing list with [].
+    for field in _PROFILE_LIST_FIELDS:
+        value = parsed.get(field)
+        if isinstance(value, list):
+            items = [item.strip() for item in value if isinstance(item, str) and item.strip()]
+            if items:
+                fields[field] = items
 
     # Guard the staleness clock: only bump profile_updated_at when the LLM
     # actually produced usable profile content. Otherwise a malformed or empty

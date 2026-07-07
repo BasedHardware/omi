@@ -118,3 +118,87 @@ def test_generate_person_profile_does_not_bump_timestamp_on_empty_llm_output():
     # early-return that would make this test pass without exercising the LLM path.
     invoke_mock.assert_called_once()
     upd.assert_not_called()
+
+
+def _run_profile(llm_json, person=None, convo=None, facts=None):
+    """Helper: run generate_person_profile with a mocked LLM/DB and capture the
+    fields persisted via update_person_profile."""
+    person = person or {'id': 'p1', 'name': 'Alice'}
+    convo = convo if convo is not None else {'transcript_segments': _segments(8)}
+    saved = {}
+
+    def fake_update(uid, person_id, fields):
+        saved.update(fields)
+
+    with patch.object(pp.users_db, 'get_person', return_value=person), patch.object(
+        pp.conversations_db, 'get_conversations_by_person_id', return_value=[convo]
+    ), patch.object(pp.memories_db, 'get_memories_by_subject_entity', return_value=facts or []), patch.object(
+        pp.users_db, 'update_person_profile', side_effect=fake_update
+    ) as upd, patch.object(
+        pp, 'get_llm', return_value=SimpleNamespace(invoke=lambda prompt: SimpleNamespace(content=llm_json))
+    ):
+        updated = pp.generate_person_profile('uid', 'p1', force=True)
+    return updated, saved, upd
+
+
+def test_generate_person_profile_populates_structured_fields():
+    llm_json = (
+        '{"relationship": "coworker", "profile_summary": "Alice leads design.",'
+        ' "tone_notes": "casual", "location": "Berlin", "title": "Design Lead",'
+        ' "company": "Omi", "goals": ["ship v2", "hire two designers"],'
+        ' "interests": ["climbing", "typography"], "preferred_channel": "telegram"}'
+    )
+    updated, saved, _ = _run_profile(llm_json)
+
+    assert updated is True
+    assert saved['location'] == 'Berlin'
+    assert saved['title'] == 'Design Lead'
+    assert saved['company'] == 'Omi'
+    assert saved['goals'] == ['ship v2', 'hire two designers']
+    assert saved['interests'] == ['climbing', 'typography']
+    assert saved['preferred_channel'] == 'telegram'
+    # Existing free-text fields still persist.
+    assert saved['relationship'] == 'coworker'
+    assert saved['profile_summary'] == 'Alice leads design.'
+
+
+def test_generate_person_profile_ignores_malformed_structured_values():
+    # profile_summary present so we DO persist, but every structured slot is
+    # malformed / empty and must be dropped (never persisted, never as junk).
+    llm_json = (
+        '{"profile_summary": "Alice is a friend.",'
+        ' "location": "   ", "title": null, "company": 123,'
+        ' "goals": "not a list", "interests": [null, "  ", 5],'
+        ' "preferred_channel": ""}'
+    )
+    updated, saved, _ = _run_profile(llm_json)
+
+    assert updated is True
+    assert saved['profile_summary'] == 'Alice is a friend.'
+    for key in ('location', 'title', 'company', 'goals', 'interests', 'preferred_channel'):
+        assert key not in saved
+
+
+def test_generate_person_profile_partial_structured_does_not_erase_without_summary():
+    # Structured fields present but NO profile_summary: must not persist anything
+    # and must not bump the staleness clock (guards existing data + retries).
+    llm_json = (
+        '{"relationship": "", "profile_summary": "  ",'
+        ' "location": "Berlin", "goals": ["ship v2"], "title": "Design Lead"}'
+    )
+    updated, saved, upd = _run_profile(llm_json)
+
+    assert updated is False
+    assert saved == {}
+    upd.assert_not_called()
+
+
+def test_generate_person_profile_keeps_valid_lists_drops_empty_lists():
+    # A non-empty valid list persists; an all-blank list is dropped rather than
+    # clobbering an existing value with [].
+    llm_json = '{"profile_summary": "Alice ships things.",' ' "goals": ["ship v2"], "interests": []}'
+    updated, saved, _ = _run_profile(llm_json)
+
+    assert updated is True
+    assert saved['goals'] == ['ship v2']
+    assert 'interests' not in saved

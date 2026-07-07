@@ -18,6 +18,7 @@ import json
 import logging
 import math
 import re
+from datetime import datetime
 from typing import List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -38,7 +39,7 @@ from utils.llm.style_fingerprint import (
 )
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_service import MemoryService
-from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous
+from utils.retrieval.tool_services.person_service import resolve_person, is_ambiguous, search_person_memories
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,27 @@ def _fence(text: Optional[str]) -> str:
     record could have a non-string ``content``/field, and html.escape() TypeErrors on
     non-str. ``str(text) if text else ''`` keeps the old falsy→'' behavior."""
     return html.escape(str(text) if text else '', quote=False)
+
+
+def _as_of(fact: dict) -> str:
+    """Short 'as of' date for a fact — when it was last known true (valid_at), falling back to
+    created_at. Returns '' when unavailable. Used so a stale fact from old history is surfaced
+    with its age instead of as current truth."""
+    ts = fact.get('valid_at') or fact.get('created_at')
+    if not ts:
+        return ''
+    try:
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        return ts.strftime('%b %Y')
+    except Exception:
+        return ''
+
+
+def _fact_line(fact: dict) -> str:
+    content = _fence(fact.get('content'))
+    when = _as_of(fact)
+    return f"- {content}" + (f" (as of {when})" if when else "")
 
 
 def _safe_name(name: Optional[str]) -> str:
@@ -660,16 +682,16 @@ def build_reply_prompt(
         f"plain' guidance is about avoiding AI filler — it is NOT a license to be dismissive when the moment isn't "
         f"light; give the moment the weight the user would give it.\n"
         f"HOW THIS USER TEXTS (measured from their real messages — match it):\n{fingerprint_lines}\n\n"
-        f"GROUNDING — when the context/memory in the user message or the user's own messages establish the "
-        f"answer, ANSWER what {name} asks: directly, specifically, in the user's voice. Using what Omi knows "
-        f"about the user to answer questions is the whole point — never withhold, hedge, or sit on an answer "
-        f"you actually have, and never answer a question with a question or ask {name} why they're asking. "
-        f"USE THE FACT: if the context above contains the specific the question asks for — a place ('San "
-        f"Francisco'), a day ('Friday'), a time ('early August'), a name, a number, a dish, a plan, an event "
-        f"— you MUST state THAT specific in the reply. Hedging ('not sure', 'somewhere around', 'the usual', "
-        f"'we'll see', 'nothing crazy') when the exact answer is sitting in the context is a FAILURE, just as "
-        f"bad as inventing one — it wastes what Omi knows. Prefer the concrete retrieved detail over a vague "
-        f"reply every time the detail is actually there. "
+        f"THE ONE RULE — ONLY SAY WHAT YOU ACTUALLY KNOW. You may state a specific ONLY if it is written in WHAT "
+        f"YOU KNOW (the facts/context above) or in THIS CONVERSATION. If it's there: answer directly and "
+        f"specifically, in the user's voice — that's the whole point. If it is NOT there: you do NOT know it, so "
+        f"keep that part short and vague and NEVER fill in a specific to sound natural — not a name, a place, a "
+        f"time, an event, an activity, a number, a reason/cause, or a yes/no about something that supposedly "
+        f"happened ('sold it', 'met the band', 'the AI ethics talk'). A smooth made-up detail is a lie put in the "
+        f"user's mouth. This one rule also covers: OTHER people (don't say how {name}'s partner/family/friend is "
+        f"if you don't know) and TIME (a fact tagged 'as of' long ago may be false now — don't state an old fact "
+        f"as current). When you don't know, a plain reply is correct and enough: 'not sure', 'honestly been a "
+        f"blur', 'nothing crazy', 'i forget lol'. Never invent to fill the gap.\n\n"
         f"COVER WHAT YOU DID — when {name} asks an open question about what the user did, how something went, or "
         f"how a day, weekend, trip, or event was ('what did you do', 'how was your 4th', 'what have you been up "
         f"to'), and the context shows SEVERAL distinct things the user actually did (multiple activities, places, "
@@ -678,45 +700,7 @@ def build_reply_prompt(
         f"eventful day in a minimizing frame ('nothing crazy', 'chill day', 'stayed in', 'the usual') when the "
         f"context lists several real things is the SAME under-sharing failure as hedging on a single fact — it "
         f"throws away what actually happened. Name the real things (in the user's voice, and as a natural burst "
-        f"of a couple of back-to-back messages if that fits how they text) instead of summarizing them away. "
-        f"What you must NOT do is CONFIRM or DENY things with no basis: facts about the user's life; their "
-        f"opinions, feelings, preferences and stances; actions they took; and REASONS for their own behavior. "
-        f"A made-up \"no\" is as wrong as a made-up \"yes\", and a made-up reason is a fabrication. A "
-        f"DENIAL IS A FACTUAL CLAIM TOO — it is NOT a safe, humble default. Never deny, negate, or downplay "
-        f"something the context/memory or the user's own messages actually show. If what's above shows the "
-        f"user WAS doing, involved in, or planning the very thing {name} is asking about, you must AFFIRM it "
-        f"truthfully in their voice; if the context shows the involvement but not the exact outcome {name} "
-        f"asks about, affirm what it DOES show or briefly ask about the rest — do NOT flip to a \"no\" "
-        f"(\"didn't\", \"nope\", \"skipped it\", \"couldn't make it\", \"not anymore\"). A denial that "
-        f"contradicts the context is the single worst reply here, worse than an over-eager yes. When "
-        f"NOTHING above establishes the answer, do NOT invent one: never state a concrete specific the "
-        f"context didn't give you — a number, score, price, brand or model, place, date, or a specific "
-        f"outcome like how something 'went' — and never assume a person, thing, or event exists that wasn't "
-        f"mentioned. Instead give a brief, natural reply that asserts none of that. A short, vague, "
-        f"non-committal reply is CORRECT here and is NOT deflecting — deflecting is dodging with a question "
-        f"or 'why do you ask', which you must still never do, and never say the user forgot or doesn't "
-        f"remember. Answer what you actually know; for everything else stay vague rather than making "
-        f"something up.\n\n"
-        f"ASSUMED FACTS — the single most common way these drafts go wrong. {name} will often ask as if "
-        f"something about the user's life is ALREADY TRUE: 'how's your girlfriend?', 'how'd the wedding go?', "
-        f"'how's your mom's recovery?', 'still at that job?', 'you still smoking?', 'did you sell the car?', "
-        f"'you still living downtown?'. The question ASSUMING a fact is NOT the same as that fact being "
-        f"established — {name} could be wrong, teasing, or asking about someone else. Unless the context or "
-        f"the user's own messages actually confirm it, you do NOT know it, so you cannot answer it. Do NOT "
-        f"play along and confirm it ('she's good', 'it went well', 'she's recovering'), do NOT invent a denial "
-        f"or a life-change ('nope', 'not anymore', 'we broke up', 'moved out', 'quit that job'), and do NOT "
-        f"tack on a backstory or a plan ('been meaning to', 'still thinking about it'). A made-up yes, a "
-        f"made-up no, and a made-up story are ALL fabrications that put false claims about the user's life in "
-        f"their mouth — the worst thing you can do here. But do NOT swing the other way and CHALLENGE the "
-        f"premise either ('what girlfriend?', 'do I even have a car?', 'who said I moved?') — questioning "
-        f"whether the thing exists is rude and treats {name} as wrong. Instead reply with a short, warm, "
-        f"genuinely non-committal line that neither confirms, denies, nor questions the premise and doesn't "
-        f"ask why — e.g. 'haha you know how it is', 'same old same old', 'man it's a whole story', 'all good "
-        f"over here' — then stop. Weight it by how well the user knows {name}: with a close friend or family "
-        f"member (per the person context / a clear shared history), lean warm and easy and let a relaxed, "
-        f"non-specific reply stand — you needn't spell out or verify the exact detail; with someone they "
-        f"barely know, stay a touch more guarded. Only give a real yes/no or status when the context or the "
-        f"user's own messages truly establish it.\n\n"
+        f"of a couple of back-to-back messages if that fits how they text) instead of summarizing them away.\n\n"
         f"COMMITMENTS — don't agree to plans, invites, times, or obligations on the user's behalf unless the "
         f"user's own recent messages or the stated intent clearly support it. When it's a yes/no or an invite "
         f"and you're not sure what the user wants, keep the reply non-committal — in the user's own voice — "
@@ -995,6 +979,8 @@ def apply_recount_distillation(omi_context: str, thread: List[dict]) -> str:
     if not recap:
         return omi_context
     return recap + "\n\n" + omi_context
+
+
 # --- Escalation: "this one needs the user" -----------------------------------
 # Auto-reply's default is to draft and send. But some inbound messages should NOT
 # be answered by a machine on the user's behalf: ones that ask something the user
@@ -1108,10 +1094,18 @@ def draft_reply(
     facts = []
     if person:
         try:
-            facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
+            # Prefer topic-relevant per-person facts (semantic search scoped to this
+            # person) when there's an inbound query to rank against; otherwise — or if
+            # the search returns nothing — fall back to the flat subject-keyed read so
+            # the no-new-data path stays identical to before.
+            query = _thread_query(thread)
+            if query:
+                facts = search_person_memories(uid, person['id'], query, limit=15)
+            if not facts:
+                facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
         except Exception as e:
             logger.warning(f"reply_draft: facts lookup failed uid={uid}: {e}")
-    facts_text = "\n".join(f"- {_fence(f.get('content'))}" for f in facts if f.get('content'))
+    facts_text = "\n".join(_fact_line(f) for f in facts if f.get('content'))
 
     style_samples = _collect_user_style_samples(uid, person, thread)
     fingerprint = compute_fingerprint(style_samples)
@@ -1135,14 +1129,43 @@ def draft_reply(
         context_bits.append(_fence(summary))
     if tone:
         context_bits.append(f"How the user usually texts {name}: {_fence(tone)}")
+
+    # Structured profile slots (Phase 2) — come from the LLM-built person profile
+    # (untrusted transcripts), so fence every value. Only surface non-empty ones.
+    location = (person or {}).get('location')
+    title = (person or {}).get('title')
+    company = (person or {}).get('company')
+    goals = [g for g in ((person or {}).get('goals') or []) if g]
+    interests = [i for i in ((person or {}).get('interests') or []) if i]
+    if title and company:
+        context_bits.append(f"{name} is a {_fence(title)} at {_fence(company)}.")
+    elif title:
+        context_bits.append(f"{name} is a {_fence(title)}.")
+    elif company:
+        context_bits.append(f"{name} works at {_fence(company)}.")
+    if location:
+        context_bits.append(f"{name} is based in {_fence(location)}.")
+    if goals:
+        context_bits.append(f"{name}'s goals: " + ", ".join(_fence(g) for g in goals))
+    if interests:
+        context_bits.append(f"{name}'s interests: " + ", ".join(_fence(i) for i in interests))
+
     if facts_text:
-        context_bits.append(f"Facts about {name}:\n{facts_text}")
+        context_bits.append(
+            f"Facts about {name} — each tagged with when it was last known true. OLDER facts "
+            f"(months/years ago) may be outdated; never state a stale one as a current certainty:\n{facts_text}"
+        )
     context_text = "\n".join(context_bits) or "(no extra context)"
 
-    omi_context = _relevant_context(uid, thread)
-    # For open "what did you do / how was your X" questions, distill the noisy retrieved context
-    # into a concrete recap so the drafter recounts the real activities instead of hedging on one.
-    omi_context = apply_recount_distillation(omi_context, thread)
+    # Known 1:1 person: ground ONLY on that person's own facts + this conversation (assembled above).
+    # General/self grounding leaked the user's own life and other people's details into person replies
+    # ("Brooklyn Bridge" as an answer to "how's your girl?"). EXCEPTION: an open recount question
+    # ("what did you do this weekend?") is genuinely about the user's own activities, so for that case
+    # pull + distill the user's context. Unknown contacts and group threads use general grounding.
+    if person and not is_group and not _is_recount_question(thread):
+        omi_context = ''
+    else:
+        omi_context = apply_recount_distillation(_relevant_context(uid, thread), thread)
 
     system_prompt, user_prompt = build_reply_prompt(
         name=name,
