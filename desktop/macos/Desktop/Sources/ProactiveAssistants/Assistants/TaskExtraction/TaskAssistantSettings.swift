@@ -14,6 +14,7 @@ class TaskAssistantSettings {
     private let notificationsEnabledKey = "taskNotificationsEnabled"
     private let allowedAppsKey = "taskAllowedApps"
     private let browserKeywordsKey = "taskBrowserKeywords"
+    private let blockedContactIdsKey = "taskBlockedContactIds"
 
     // MARK: - Default Allowed Apps (Whitelist)
 
@@ -358,6 +359,29 @@ class TaskAssistantSettings {
             UserDefaults.standard.set(newValue, forKey: notificationsEnabledKey)
             NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
         }
+    }
+
+    /// AI-Clone contact ids whose incoming messages must NOT be turned into tasks. This is a
+    /// per-person block for message-based task capture (dad's "get groceries" → task); it does
+    /// not affect screen-based extraction. Empty by default (everyone's messages count).
+    var blockedContactIds: Set<String> {
+        get { Set((UserDefaults.standard.array(forKey: blockedContactIdsKey) as? [String]) ?? []) }
+        set {
+            UserDefaults.standard.set(Array(newValue), forKey: blockedContactIdsKey)
+            NotificationCenter.default.post(name: .assistantSettingsDidChange, object: nil)
+        }
+    }
+
+    /// Whether message-based task capture is blocked for this contact id.
+    func isContactBlocked(_ contactId: String) -> Bool {
+        blockedContactIds.contains(contactId)
+    }
+
+    /// Block or unblock a contact from generating tasks from their messages.
+    func setContactBlocked(_ blocked: Bool, contactId: String) {
+        var set = blockedContactIds
+        if blocked { set.insert(contactId) } else { set.remove(contactId) }
+        blockedContactIds = set
     }
 
     /// The full editable set of allowed apps. Initialized from defaults if user hasn't customized.

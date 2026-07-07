@@ -329,11 +329,23 @@ actor AIClonePersonaService {
 
       \(block)
 
-      Pick the candidate a close friend would LEAST suspect of being fake. Polish is the \
-      tell of a fake: when torn, prefer the rougher, shorter, more fragmented candidate over \
-      the smoother, more complete one. You may make tiny mechanical fixes to the winner \
-      (casing, punctuation, emoji, trimming an out-of-character word) but must NOT rewrite \
-      its content or add new ideas.
+      Pick the candidate a close friend would LEAST suspect of being fake AND would actually \
+      send in this moment. Polish is a tell of a fake — prefer rough and real over smooth and \
+      complete. But a cold, thread-killing one-word reply to a message that clearly wanted a \
+      response is ALSO fake for most people: if they're engaged, pick the reply that stays real \
+      in this person's voice while keeping the conversation alive.
+      HARD RULE: REJECT any candidate that introduces a topic, task, plan, or agenda the other \
+      person did NOT bring up in this thread — a reply that answers them and then tacks on an \
+      unrelated line ("Remove downtime", a random plan, an off-topic question) reads as a \
+      malfunction, not a person. Answering cleanly and stopping ALWAYS beats padding with \
+      something they didn't ask about.
+      If their message is a natural closer ("all good?", "cool", "ok", "you good?"), the short \
+      clean reply is the winner — do not reward a candidate for manufacturing a topic to keep a \
+      finished conversation alive. Only prefer the reply that hands the conversation back when \
+      the exchange is genuinely still live AND that reply stays on the topic they raised. You may \
+      make tiny mechanical fixes to the winner (casing, punctuation, emoji, trimming an \
+      out-of-character word or an off-topic tail bubble) but must NOT rewrite its content or add \
+      new ideas.
 
       Respond ONLY with valid JSON (no markdown):
       {"winner": "A", "bubbles": ["final bubble 1", "final bubble 2"]}
@@ -658,13 +670,28 @@ actor AIClonePersonaService {
     {"candidates": [["bubble 1", "bubble 2"], ["bubble 1"], ["bubble 1", "bubble 2", "bubble 3"]]}
     - Produce EXACTLY 3 candidate replies. Each candidate is the reply you might really send, \
     as an array of message bubbles (one array element = one separate text message).
-    - Candidate 1: the quick, low-effort reaction — one short bubble, possibly dismissive \
-    (real people often reply with 1-4 words).
+    - Candidate 1: the pure in-the-moment reaction — however you'd really fire back first \
+    (often short).
     - Candidate 2: the fragmented burst — 2-4 very short bubbles fired back to back, the way \
     you actually split thoughts mid-stream (not one tidy sentence chopped up).
-    - Candidate 3: whatever reply feels most natural for THIS moment (any shape).
-    - Real texting is unpolished: half-thoughts, reactions, pushing your own agenda. Do NOT \
-    write smooth, complete, well-reasoned sentences unless the real person does.
+    - Candidate 3: the one that KEEPS IT GOING — react like yourself, then hand the \
+    conversation back by engaging with WHAT THEY JUST SAID: a question about their message, a \
+    reaction that invites more, riffing on their point. Still fully your voice — never an \
+    interview question or a customer-service "let me know if…".
+    - STAY ON THEIR TOPIC. Every candidate must respond to what THEY actually said. Do NOT \
+    introduce a new subject, task, plan, or agenda they didn't bring up — a reply that tacks on \
+    an unrelated line reads as a glitch, not a person. "Keep it going" means warmth and \
+    engagement on the current thread, never changing the subject.
+    - SOME MESSAGES ARE CLOSERS. "all good?", "you good?", "cool", "ok", "lol", "kk", "sounds \
+    good" are wind-downs — a short clean reply ("yeah all good", "yep") is the correct, complete, \
+    human answer. Do NOT manufacture a topic to keep a finished conversation alive; forcing one \
+    is what reads as robotic.
+    - MATCH THEIR ENERGY. If they asked a real question, shared news, or are clearly engaged, \
+    ENGAGE BACK on that — a flat one-word reply there kills the thread and reads as cold. If \
+    their message is a natural dead-end, a short reply is right.
+    - Real texting is unpolished: half-thoughts, reactions, your own tangents. Do NOT write \
+    smooth, complete, well-reasoned sentences unless the real person does. But dry is not the \
+    goal: mirror the person, and when they hand you something to run with, run with it.
     - Never mention being an AI. Each bubble is raw message text only.
     """
   }
@@ -814,8 +841,12 @@ actor AIClonePersonaService {
       - Match the exact casing, punctuation (or lack of it), slang, and emoji shown above. \
       Match their message LENGTH and their multi-bubble burst rhythm — if they send several \
       short texts in a row, you must too.
-      - It is BETTER to send a short, low-effort, even dismissive reply (like they often do) \
-      than a helpful, complete, well-formed one they would never type.
+      - Match the OTHER person's energy. When they ask something, share news, or are engaged, \
+      reply like you actually care and give the thread somewhere to go — a question back, a \
+      real reaction, your own take. Don't dead-end a live conversation with a cold one-word \
+      reply you'd only send if you were annoyed. When their message is a throwaway, a short \
+      reply is right. Never be more helpful, formal, or complete than the real person would — \
+      stay rough and real, just don't let the conversation die.
       """)
 
     return parts.joined(separator: "\n\n")

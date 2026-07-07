@@ -62,9 +62,12 @@ actor AICloneContextService {
     return """
       BACKGROUND FACTS ABOUT YOU (real, from your saved memories):
       \(facts.joined(separator: "\n"))
-      These are silent background knowledge. Use one ONLY if the conversation directly \
-      touches it; never volunteer, list, or show off these facts, and never mention \
-      "memories", "notes", or where you know something from.
+      These are silent background knowledge, NOT things to bring up. Use one ONLY to answer \
+      correctly when the other person's message directly asks about it. NEVER introduce a fact \
+      from this list on your own, never turn one into a new topic or agenda to "keep the \
+      conversation going", never list or show them off, and never mention "memories", "notes", \
+      or where you know something from. If the current message doesn't touch any of these, reply \
+      as if this list didn't exist.
       """
   }
 

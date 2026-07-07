@@ -12,6 +12,9 @@ export interface RuntimeFailure {
   retryable?: boolean;
 }
 
+type ClassifiedRuntimeFailure = Pick<RuntimeFailure, "code" | "userMessage"> &
+  Partial<Omit<RuntimeFailure, "code" | "userMessage">>;
+
 export class AdapterRuntimeError extends Error {
   readonly failure: RuntimeFailure;
 
@@ -95,7 +98,7 @@ export function failureFromProcessExit(input: {
 function classifyAdapterProcessFailure(
   adapterId: ProductionAdapterId,
   diagnostic: string
-): Partial<RuntimeFailure> | undefined {
+): ClassifiedRuntimeFailure | undefined {
   if (adapterId === "openclaw" && isOpenClawInvalidConfig(diagnostic)) {
     return {
       code: "adapter_config_invalid",

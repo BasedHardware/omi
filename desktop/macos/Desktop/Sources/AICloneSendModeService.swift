@@ -122,6 +122,12 @@ final class AICloneSendModeService: ObservableObject {
     // JSON [KnownContact] — every contact ever registered, so app launch can rebuild
     // listener routing without the AI Clone page being opened.
     static let knownContacts = "aiCloneKnownContacts"
+    // Master switch for automatic commitment→Task extraction from incoming messages.
+    // Absent → ON (the feature is meant to work out of the box once contacts are trained).
+    static let taskCaptureEnabled = "aiCloneTaskCaptureEnabled"
+    // Timestamp of the last app-launch "catch up on messages received while closed" sweep,
+    // so a quick relaunch doesn't re-scan every known contact's history again.
+    static let lastCommitmentBackstop = "aiCloneLastCommitmentBackstop"
   }
 
   /// How many sent entries we keep. The log is a convenience surface, not an audit store.
@@ -160,6 +166,26 @@ final class AICloneSendModeService: ObservableObject {
   private var isListening = false
   /// De-dupes generation for the same incoming message across rapid duplicate poll ticks.
   private var handledIncomingKeys: Set<String> = []
+  /// Per-contact timestamp of the last commitment/task scan, so a burst of incoming texts
+  /// triggers at most one history scan per `commitmentScanDebounce` window.
+  private var lastCommitmentScanAt: [String: Date] = [:]
+  /// Minimum gap between commitment scans for the same contact.
+  private let commitmentScanDebounce: TimeInterval = 90
+  /// Skip the launch backstop if we already ran one within this window (relaunch guard).
+  private let commitmentBackstopCooldown: TimeInterval = 6 * 60 * 60
+  /// Cap how many contacts the launch backstop scans, most-active first, to avoid an
+  /// LLM storm the moment the app opens.
+  private let commitmentBackstopMaxContacts = 8
+
+  /// Whether automatic commitment→Task extraction from incoming messages is on. Defaults to
+  /// true; the user can turn it off if it's too noisy.
+  var isTaskCaptureEnabled: Bool {
+    UserDefaults.standard.object(forKey: Keys.taskCaptureEnabled) as? Bool ?? true
+  }
+
+  func setTaskCaptureEnabled(_ enabled: Bool) {
+    UserDefaults.standard.set(enabled, forKey: Keys.taskCaptureEnabled)
+  }
 
   private init() {
     let defaults = UserDefaults.standard
@@ -290,12 +316,21 @@ final class AICloneSendModeService: ObservableObject {
       }
       updateActiveContacts(entries)
       let actionable = entries.filter { mode(for: $0.contact.id) != .manual }.count
-      if actionable > 0 {
+      // Listeners run when a contact can auto-reply (Draft/Auto) OR when automatic task
+      // capture is on — task capture needs the live incoming feed for every known contact,
+      // not just the ones in a send mode.
+      if actionable > 0 || isTaskCaptureEnabled {
         startListening()
+      }
+      // Catch up on obligations from messages that landed while the app was closed — the live
+      // listener only sees rows added after it starts, so without this a request received
+      // overnight would never become a Task. Bounded + cooldown-guarded so relaunches are cheap.
+      if isTaskCaptureEnabled {
+        runLaunchCommitmentBackstop(contacts: entries.map(\.contact))
       }
       log(
         "AICloneSendModeService: bootstrapped \(entries.count) trained contacts "
-          + "(\(actionable) in Draft/Auto — listeners \(actionable > 0 ? "started" : "idle"))")
+          + "(\(actionable) in Draft/Auto, task capture \(isTaskCaptureEnabled ? "on" : "off"))")
     }
   }
 
@@ -311,6 +346,21 @@ final class AICloneSendModeService: ObservableObject {
     }
     if let data = try? JSONEncoder().encode(Array(known.values)) {
       UserDefaults.standard.set(data, forKey: Keys.knownContacts)
+    }
+  }
+
+  /// Contacts the clone knows about (trained personas / registered), for surfaces like the
+  /// Task-settings blocklist. Prefers the live active set, falling back to the persisted
+  /// known-contacts store so it works before the AI Clone page has been opened. Sorted by name.
+  func knownContactsForSettings() -> [(id: String, displayName: String)] {
+    let source: [(id: String, displayName: String)]
+    if !activeContacts.isEmpty {
+      source = activeContacts.values.map { ($0.contact.id, $0.contact.displayName) }
+    } else {
+      source = Self.loadKnownContacts().values.map { ($0.id, $0.displayName) }
+    }
+    return source.sorted {
+      $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
     }
   }
 
@@ -414,14 +464,21 @@ final class AICloneSendModeService: ObservableObject {
     guard !fromMe else { return }
     let id = contactId(platform: platform, peerKey: peerKey)
     guard let entry = activeContacts[id] else { return }
-    let mode = mode(for: id)
-    guard mode != .manual else { return }
 
-    // De-dupe: the same incoming line shouldn't spawn two drafts if a poll tick repeats.
+    // De-dupe: the same incoming line shouldn't spawn two drafts (or two scans) if a poll
+    // tick repeats.
     let key = "\(id)|\(date.timeIntervalSince1970)|\(text.hashValue)"
     guard !handledIncomingKeys.contains(key) else { return }
     handledIncomingKeys.insert(key)
     if handledIncomingKeys.count > 500 { handledIncomingKeys.removeAll() }
+
+    // Task capture is independent of AI-Clone send mode: even a Manual contact's incoming
+    // requests ("can you send me X", "get groceries") should become Tasks. Debounced so a
+    // burst of texts triggers one scan.
+    maybeExtractCommitments(for: entry.contact)
+
+    let mode = mode(for: id)
+    guard mode != .manual else { return }
 
     switch Self.action(for: mode, isPaused: isPaused) {
     case .ignore:
@@ -430,6 +487,71 @@ final class AICloneSendModeService: ObservableObject {
       generateDraft(for: entry.contact, persona: entry.persona, incoming: text)
     case .autoSend:
       autoRespond(for: entry.contact, persona: entry.persona, incoming: text)
+    }
+  }
+
+  // MARK: - Automatic commitment → Task capture
+
+  /// Fire-and-forget: scan this contact's recent history for open obligations the user owes
+  /// and create real Tasks for any new ones. Runs regardless of send mode; debounced per
+  /// contact so a rapid burst of texts triggers a single scan. All the heavy lifting (LLM
+  /// call, confidence filter, dedup, staged-task creation + promotion) lives in
+  /// `CommitmentExtractionService` — this only decides *when* to run it.
+  func maybeExtractCommitments(for contact: ImportedContact) {
+    guard isTaskCaptureEnabled else { return }
+    // Respect the per-person blocklist in Task settings — some contacts should never turn
+    // their messages into tasks.
+    if TaskAssistantSettings.shared.isContactBlocked(contact.id) {
+      log("AICloneSendModeService: task capture skipped for blocked contact \(contact.displayName)")
+      return
+    }
+    let now = Date()
+    if let last = lastCommitmentScanAt[contact.id], now.timeIntervalSince(last) < commitmentScanDebounce {
+      return
+    }
+    lastCommitmentScanAt[contact.id] = now
+    Task {
+      do {
+        guard
+          let messages = try? await AICloneMessageLoader.loadMessages(for: contact, limit: 200),
+          messages.count >= 4
+        else { return }
+        let outcome = try await CommitmentExtractionService.shared.scanAndCreateTasks(
+          contact: contact, messages: messages)
+        if outcome.created > 0 {
+          log(
+            "AICloneSendModeService: task capture — \(contact.displayName) created \(outcome.created) task(s)")
+        }
+      } catch {
+        log("AICloneSendModeService: task capture failed for \(contact.id): \(error)")
+      }
+    }
+  }
+
+  /// One-shot launch sweep so obligations from messages received while the app was closed are
+  /// still captured (the live poll only sees rows added after it starts). Cooldown-guarded so
+  /// frequent relaunches don't re-scan, and capped to the most-active contacts, staggered, to
+  /// avoid a burst of LLM calls at launch. Per-contact dedup keeps it from re-creating tasks.
+  private func runLaunchCommitmentBackstop(contacts: [ImportedContact]) {
+    let defaults = UserDefaults.standard
+    let lastRun = defaults.object(forKey: Keys.lastCommitmentBackstop) as? Date
+    if let lastRun, Date().timeIntervalSince(lastRun) < commitmentBackstopCooldown {
+      log("AICloneSendModeService: launch task-capture backstop skipped (ran recently)")
+      return
+    }
+    defaults.set(Date(), forKey: Keys.lastCommitmentBackstop)
+
+    let ordered = contacts.sorted { $0.messageCount > $1.messageCount }
+      .prefix(commitmentBackstopMaxContacts)
+    guard !ordered.isEmpty else { return }
+    log("AICloneSendModeService: launch task-capture backstop scanning \(ordered.count) contact(s)")
+    Task {
+      for contact in ordered {
+        maybeExtractCommitments(for: contact)
+        // Space the scans out — CommitmentExtractionService serializes on one LLM bridge, so
+        // this just avoids queueing them all instantly.
+        try? await Task.sleep(nanoseconds: 4_000_000_000)
+      }
     }
   }
 

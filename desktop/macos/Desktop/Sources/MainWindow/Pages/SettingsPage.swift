@@ -156,6 +156,9 @@ struct SettingsContentView: View {
   @State var taskAllowedApps: Set<String>
   @State var taskBrowserKeywords: [String]
   @State var isRescoringTasks = false
+  // Per-person blocklist for message-based task capture (dad's "get groceries" → task).
+  @State var taskBlockedContactIds: Set<String>
+  @State var taskKnownContacts: [(id: String, displayName: String)] = []
 
   // Advice Assistant states
   @State var insightEnabled: Bool
@@ -428,6 +431,9 @@ struct SettingsContentView: View {
       initialValue: TaskAssistantSettings.shared.notificationsEnabled)
     _taskAllowedApps = State(initialValue: TaskAssistantSettings.shared.allowedApps)
     _taskBrowserKeywords = State(initialValue: TaskAssistantSettings.shared.browserKeywords)
+    _taskBlockedContactIds = State(initialValue: TaskAssistantSettings.shared.blockedContactIds)
+    _taskKnownContacts = State(
+      initialValue: AICloneSendModeService.shared.knownContactsForSettings())
     _insightEnabled = State(initialValue: InsightAssistantSettings.shared.isEnabled)
     _insightExtractionInterval = State(
       initialValue: InsightAssistantSettings.shared.extractionInterval)

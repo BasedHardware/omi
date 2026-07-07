@@ -82,24 +82,12 @@ final class FloatingBarUsageLimiter: ObservableObject {
     }
 
     var isLimitReached: Bool {
-        // BYOK users pay their own LLM bill and are never limited. Honor local
-        // BYOK state so a heartbeat-lagged server quota (allowed=false right
-        // after activation) can't block chat for a fully-configured BYOK user.
-        if APIKeyService.isByokActive {
-            return false
-        }
-        guard let quota = serverQuota else {
-            // No server data yet — allow the query (server will enforce).
-            return false
-        }
-        if quota.allowed {
-            // Optimistic delta only applies to question-based quotas.
-            // For cost_usd (Architect/Pro), we can't estimate cost per query
-            // locally — rely on the server snapshot alone.
-            guard quota.unit == "questions", let limit = quota.limit else { return false }
-            return (quota.used + Double(optimisticDelta)) >= limit
-        }
-        return true
+        // Client-side message limit disabled — the backend (which we own) is the
+        // single source of truth for quota. Never block sends optimistically on
+        // the client; if the server truly wants to gate a request it returns a
+        // quota error at request time. This makes every chat surface (main chat,
+        // floating bar, PTT, AI Clone) unlimited from the client's perspective.
+        return false
     }
 
     var remainingQueries: Int {

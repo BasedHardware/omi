@@ -23,6 +23,8 @@ extension SettingsContentView {
       aiSetupSubsection
       advancedCategoryHeader(title: "Profile & Stats", icon: "brain")
       profileAndStatsSubsection
+      advancedCategoryHeader(title: "Tasks", icon: "checklist")
+      messageTaskContactsSubsection
       advancedCategoryHeader(title: "Reset Onboarding", icon: "arrow.counterclockwise")
       resetOnboardingSubsection
       advancedCategoryHeader(title: "Goals", icon: "target")
@@ -36,6 +38,60 @@ extension SettingsContentView {
 
       advancedCategoryHeader(title: "Dev Tools", icon: "hammer")
       devToolsSubsection
+    }
+  }
+
+  // MARK: - Tasks: per-person blocklist for message-based task capture
+
+  /// Lets the user stop specific people's messages from ever being turned into tasks.
+  /// Backed by `TaskAssistantSettings.blockedContactIds`; the contact list comes from the
+  /// AI Clone's known/trained contacts.
+  var messageTaskContactsSubsection: some View {
+    settingsCard(settingId: "advanced.tasks.blockedpeople") {
+      VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 4) {
+          Text("Blocked People")
+            .scaledFont(size: 15, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text(
+            "Messages from these people won't be turned into tasks. Use this for anyone whose texts you don't want tracked."
+          )
+          .scaledFont(size: 12)
+          .foregroundColor(OmiColors.textTertiary)
+        }
+
+        if taskKnownContacts.isEmpty {
+          Text("No message contacts yet — train the AI Clone on a conversation first.")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+        } else {
+          VStack(spacing: 4) {
+            ForEach(taskKnownContacts, id: \.id) { contact in
+              HStack(spacing: 12) {
+                Text(contact.displayName)
+                  .scaledFont(size: 13)
+                  .foregroundColor(OmiColors.textPrimary)
+                Spacer()
+                Toggle(
+                  "",
+                  isOn: Binding(
+                    get: { taskBlockedContactIds.contains(contact.id) },
+                    set: { isBlocked in
+                      TaskAssistantSettings.shared.setContactBlocked(
+                        isBlocked, contactId: contact.id)
+                      taskBlockedContactIds = TaskAssistantSettings.shared.blockedContactIds
+                    }
+                  )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+              }
+              .padding(.vertical, 4)
+            }
+          }
+        }
+      }
     }
   }
 
