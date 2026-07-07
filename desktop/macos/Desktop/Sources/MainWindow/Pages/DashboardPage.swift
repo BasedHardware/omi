@@ -278,6 +278,12 @@ struct DashboardPage: View {
     }
 
     private var listeningModeTitle: String {
+        // Surface the glasses as the visible capture source while they're the mic.
+        if appState.isTranscribing, let name = appState.recordingInputDeviceName,
+            AudioCaptureService.isMetaGlassesName(name)
+        {
+            return "Ray-Ban Meta"
+        }
         switch listeningCaptureMode {
         case .always:
             return "Always"

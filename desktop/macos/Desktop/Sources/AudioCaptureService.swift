@@ -384,6 +384,99 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     /// Get the name of the current default input device (microphone)
+    /// A selectable audio input device.
+    struct InputDeviceInfo: Identifiable, Equatable {
+        let id: AudioDeviceID
+        let uid: String
+        let name: String
+        let isBluetooth: Bool
+    }
+
+    /// Ray-Ban Meta / Oakley Meta glasses expose no vendor API on macOS; the
+    /// input-device name is the only identity signal, so match Meta's product
+    /// names precisely rather than anything containing "glass".
+    static func isMetaGlassesName(_ name: String) -> Bool {
+        let lower = name.lowercased()
+        return lower.contains("ray-ban") || lower.contains("rayban")
+            || lower.contains("oakley meta") || lower.contains("meta glasses")
+    }
+
+    /// Enumerate every device with input channels (HAL walk, same pattern as
+    /// findBuiltInMicDeviceID). Device IDs are not stable across reconnects, so
+    /// persistence must use the UID.
+    static func listInputDevices() -> [InputDeviceInfo] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size
+        ) == noErr else { return [] }
+
+        let count = Int(size) / MemoryLayout<AudioDeviceID>.size
+        guard count > 0 else { return [] }
+        var deviceIDs = [AudioDeviceID](repeating: kAudioObjectUnknown, count: count)
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &deviceIDs
+        ) == noErr else { return [] }
+
+        var result: [InputDeviceInfo] = []
+        for id in deviceIDs where id != kAudioObjectUnknown {
+            guard deviceHasInputChannels(id) else { continue }
+            guard let name = deviceName(for: id), let uid = deviceUID(for: id) else { continue }
+
+            var transport: UInt32 = 0
+            var tsize = UInt32(MemoryLayout<UInt32>.size)
+            var taddr = AudioObjectPropertyAddress(
+                mSelector: kAudioDevicePropertyTransportType,
+                mScope: kAudioObjectPropertyScopeGlobal,
+                mElement: kAudioObjectPropertyElementMain
+            )
+            let isBT = AudioObjectGetPropertyData(id, &taddr, 0, nil, &tsize, &transport) == noErr
+                && (transport == kAudioDeviceTransportTypeBluetooth
+                    || transport == kAudioDeviceTransportTypeBluetoothLE)
+            result.append(InputDeviceInfo(id: id, uid: uid, name: name, isBluetooth: isBT))
+        }
+        return result
+    }
+
+    static func deviceName(for deviceID: AudioDeviceID) -> String? {
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &name) == noErr,
+            let cfName = name?.takeRetainedValue()
+        else { return nil }
+        return cfName as String
+    }
+
+    static func deviceUID(for deviceID: AudioDeviceID) -> String? {
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid) == noErr,
+            let cfUID = uid?.takeRetainedValue()
+        else { return nil }
+        return cfUID as String
+    }
+
+    static func inputDeviceID(forUID uid: String) -> AudioDeviceID? {
+        listInputDevices().first(where: { $0.uid == uid })?.id
+    }
+
+    /// UserDefaults key for the user's explicit microphone choice ("" = system default).
+    static let preferredInputUIDDefaultsKey = "preferredMicrophoneDeviceUID"
+
     static func getCurrentMicrophoneName() -> String? {
         var deviceID: AudioDeviceID = 0
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
