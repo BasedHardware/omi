@@ -66,6 +66,10 @@ After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not 
 saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`
 after `updateWalWithDownloadedData`.
 ```bash
+# Structured WAL state via automation bridge (named test bundle must be running)
+cd desktop/macos && ./scripts/omi-ctl action wal_snapshot
+# Expect pending_count=0 and status synced|uploaded after SD-card sync completes
+
 # After triggering SD sync in a named test bundle:
 rg 'Uploaded WAL|WiFi sync completed|syncToCloud' /private/tmp/omi-dev.log | tail -20
 ```
