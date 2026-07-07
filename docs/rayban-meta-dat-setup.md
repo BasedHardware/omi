@@ -18,16 +18,23 @@ capture + HFP audio. Full mode is required for founder acceptance.
    testers through the Wearables Developer Center beta channel.
 4. Xcode 16.4+ (per `app/setup.sh`; repo currently builds with Xcode 26), iOS device on iOS 15.2+.
 
-## Step 1 — DAT Swift package (already in the project)
+## Step 1 — Link the DAT Swift package (deliberately NOT linked by default)
 
-The Runner project carries an SPM reference to
-`https://github.com/facebook/meta-wearables-dat-ios` (exact 0.8.0; binary
-xcframeworks) with products **MWDATCore** and **MWDATCamera** on the Runner
-target. Nothing to do — `RayBanMetaHostApiImpl.swift` activates its DAT path
-via `#if canImport(MWDATCore)`, and this compiles clean against 0.8.0
-(verified). To bump versions, edit the package requirement in Xcode's Package
-Dependencies. (Optionally add **MWDATMockDevice** to Debug for hardware-free
-testing.)
+The default project ships **without** the Meta package: `MWDATCore.framework`
+embeds SwiftProtobuf, which collides with the copy `mcumgr_flutter` links and
+crashes at launch (see `rayban-meta-troubleshooting.md` → "App crashes at
+launch"). For a DAT development build, link it manually:
+
+1. Open `app/ios/Runner.xcworkspace` → Runner project → **Package
+   Dependencies** → `+` → `https://github.com/facebook/meta-wearables-dat-ios`
+   (exact 0.8.0; binary xcframeworks).
+2. Add products **MWDATCore** and **MWDATCamera** to the **Runner** target.
+   (Optionally **MWDATMockDevice** for hardware-free testing on Debug.)
+
+`RayBanMetaHostApiImpl.swift` activates its DAT path via
+`#if canImport(MWDATCore)` — no source changes needed; the code compiles clean
+against 0.8.0 (verified). Do not commit the linkage until the SwiftProtobuf
+collision is resolved.
 
 ## Step 2 — Credentials (distribution builds only — SKIP for Developer Mode)
 

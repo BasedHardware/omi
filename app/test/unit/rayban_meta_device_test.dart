@@ -58,6 +58,20 @@ void main() {
     });
   });
 
+  group('DeviceLocator.fromJson robustness', () {
+    test('invalid or out-of-range kind falls back instead of throwing', () {
+      final outOfRange = DeviceLocator.fromJson({'kind': 99, 'extras': {}});
+      expect(outOfRange.kind, TransportKind.bluetooth);
+
+      final wrongType = DeviceLocator.fromJson({'kind': 'bogus', 'bluetoothId': 'abc'});
+      expect(wrongType.kind, TransportKind.bluetooth);
+      expect(wrongType.bluetoothId, 'abc');
+
+      final missingId = DeviceLocator.fromJson({'kind': 0});
+      expect(missingId.bluetoothId, '');
+    });
+  });
+
   group('ConversationSource.rayban_meta', () {
     test('parses from backend source string', () {
       expect(ConversationSource.values.asNameMap()['rayban_meta'], ConversationSource.rayban_meta);

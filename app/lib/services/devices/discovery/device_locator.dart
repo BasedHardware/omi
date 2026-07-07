@@ -31,17 +31,24 @@ class DeviceLocator {
   }
 
   factory DeviceLocator.fromJson(Map<String, dynamic> json) {
-    final kind = TransportKind.values[json['kind'] as int];
+    // Persisted kind may be missing, corrupted, or from a newer app version
+    // with more enum members — never throw during device deserialization.
+    final rawKind = json['kind'];
+    final kind = (rawKind is int && rawKind >= 0 && rawKind < TransportKind.values.length)
+        ? TransportKind.values[rawKind]
+        : TransportKind.bluetooth;
+    // Same defensiveness for extras: JSON decoding can yield Map<dynamic, dynamic>.
+    final extras = (json['extras'] as Map?)?.map((k, v) => MapEntry(k.toString(), v as Object?)) ?? <String, Object?>{};
     switch (kind) {
       case TransportKind.bluetooth:
         return DeviceLocator.bluetooth(
-          deviceId: json['bluetoothId'] as String,
-          extras: (json['extras'] as Map<String, dynamic>?) ?? {},
+          deviceId: json['bluetoothId'] as String? ?? '',
+          extras: extras,
         );
       case TransportKind.watchConnectivity:
-        return DeviceLocator.watchConnectivity(extras: (json['extras'] as Map<String, dynamic>?) ?? {});
+        return DeviceLocator.watchConnectivity(extras: extras);
       case TransportKind.metaDat:
-        return DeviceLocator.metaDat(extras: (json['extras'] as Map<String, dynamic>?) ?? {});
+        return DeviceLocator.metaDat(extras: extras);
     }
   }
 }
