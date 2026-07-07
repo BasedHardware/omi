@@ -110,6 +110,37 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("appState.triggerSystemAudioPermission()"))
   }
 
+  @MainActor
+  func testSystemAudioOutcomeMappingAndIdleDowngrade() {
+    // Behavioral contract (BL-047): status follows OBSERVED tap outcomes and
+    // never claims granted while idle.
+    let state = AppState()
+    state.recordSystemAudioCaptureOutcome(.granted)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .granted)
+    XCTAssertTrue(state.hasSystemAudioPermission)
+
+    state.recordSystemAudioCaptureOutcome(.denied)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
+    XCTAssertFalse(state.hasSystemAudioPermission)
+
+    // A stale granted (no live capture) must downgrade to unknown on re-check,
+    // never persist as granted — and idle unknown must not count as a missing
+    // permission (it would permanently suppress the all-granted banner).
+    state.recordSystemAudioCaptureOutcome(.granted)
+    state.checkSystemAudioPermission()
+    XCTAssertEqual(state.systemAudioPermissionStatus, .unknown)
+    XCTAssertFalse(state.hasSystemAudioPermission)
+    XCTAssertFalse(state.missingPermissions.contains("System Audio"))
+
+    // A proven denial DOES count as missing, and persists through re-checks
+    // (denial was observed; only stale grants decay).
+    state.recordSystemAudioCaptureOutcome(.denied)
+    XCTAssertTrue(state.missingPermissions.contains("System Audio"))
+    state.checkSystemAudioPermission()
+    XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
+    XCTAssertTrue(state.missingPermissions.contains("System Audio"))
+  }
+
   func testProductionAuthTokensUseKeychainStorage() throws {
     let src = try source(relativePath: "Sources/AuthService.swift")
 
