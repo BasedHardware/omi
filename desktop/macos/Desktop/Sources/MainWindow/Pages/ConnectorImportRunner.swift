@@ -7,8 +7,11 @@ import Foundation
 ///
 /// Memory-only by design: a run dies with the process, so persisting run
 /// state would show progress for work that no longer exists after relaunch.
-/// A run's terminal state is retained until the next run for the same
-/// connector starts.
+/// A failed run's state is retained until the next run for the same connector
+/// starts, so an error landing while the sheet is closed still surfaces on
+/// reopen. A succeeded run's state is retained only until it has been shown
+/// and dismissed (see `acknowledgeSuccess`); after that the persisted
+/// connector snapshot is the source of truth.
 @MainActor
 final class ConnectorImportRunner: ObservableObject {
     static let shared = ConnectorImportRunner()
