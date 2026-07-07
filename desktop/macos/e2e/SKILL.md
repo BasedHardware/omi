@@ -61,6 +61,18 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+### 2d. Verify SD-card WAL cloud upload (WiFi / BLE)
+After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just
+saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`
+after `updateWalWithDownloadedData`.
+```bash
+# After triggering SD sync in a named test bundle:
+rg 'Uploaded WAL|WiFi sync completed|syncToCloud' /private/tmp/omi-dev.log | tail -20
+```
+Expect log lines like `Uploaded WAL <id>: status=synced` (or `status=uploaded` for
+202-queued jobs). Hermetic regression:
+`cd desktop/macos && xcrun swift test --filter 'WifiSync|SdCardSyncParity'`.
+
 ### 2c. Inject backend faults (failure-path testing)
 The hermetic E2E harness is backend-only, so desktop failure paths (backend 5xx →
 structured `ChatErrorState`, task sortOrder sync failure surfaced/retried not silent,

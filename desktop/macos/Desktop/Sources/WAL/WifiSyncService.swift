@@ -53,6 +53,13 @@ final class WifiSyncService: ObservableObject {
     private let walService = WALService.shared
     private let deviceProvider = DeviceProvider.shared
 
+    /// Test seam: inject a non-singleton WALService in unit tests.
+    var walServiceForTesting: WALService?
+
+    private var activeWalService: WALService {
+        walServiceForTesting ?? walService
+    }
+
     private var tcpConnection: NWConnection?
     private var syncTask: Task<Void, Never>?
     private var statusStreamTask: Task<Void, Never>?
@@ -151,7 +158,7 @@ final class WifiSyncService: ObservableObject {
             }
 
             // Create WAL
-            currentWal = walService.createSdCardWal(
+            currentWal = activeWalService.createSdCardWal(
                 device: device.id,
                 deviceModel: device.type.displayName,
                 codec: codec,
@@ -429,16 +436,30 @@ final class WifiSyncService: ObservableObject {
         guard let wal = currentWal else { return }
 
         // Save downloaded data
-        walService.updateWalWithDownloadedData(
+        activeWalService.updateWalWithDownloadedData(
             walId: wal.id,
             downloadedBytes: totalBytesDownloaded,
             frames: downloadedFrames
         )
 
+        let frameCount = downloadedFrames.count
+
+        // Upload downloaded WALs to cloud before tearing down WiFi sync state,
+        // mirroring StorageSyncService (BLE SD-card path).
+        await activeWalService.syncToCloud()
+
         // Cleanup
         await cleanup()
 
-        logger.info("WiFi sync completed: \(self.downloadedFrames.count) frames")
+        logger.info("WiFi sync completed: \(frameCount) frames")
+    }
+
+    /// Test seam: exercise finishSync without a live device/TCP session.
+    func finishSyncForTesting(wal: WALEntry, frames: [Data], downloadedBytes: Int) async {
+        currentWal = wal
+        downloadedFrames = frames
+        totalBytesDownloaded = downloadedBytes
+        await finishSync()
     }
 
     private func cleanup() async {
