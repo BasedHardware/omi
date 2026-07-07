@@ -1,0 +1,37 @@
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_438d8957298e5e 704-707
+  s_edfd59e96df44b::t_0379b351db3eb1 19
+  s_edfd59e96df44b::t_9943c779979369 74-94
+  s_edfd59e96df44b::t_fd7dd48d3be0d3 458-462
+  s_edfd59e96df44b::t_41c0ec89960a78 658
+backend/utils/retrieval/tool_services/person_service.py
+  s_edfd59e96df44b::t_06c77126fbe2e2 11
+  s_edfd59e96df44b::t_6490fdef8858f4 183-184,186-187,189-203,206
+  s_edfd59e96df44b::t_90a4071a37a30c 48-65
+backend/utils/memory/subject_memory_writer.py
+  s_edfd59e96df44b::t_ac744b12161f01 202,205-207,214
+  s_edfd59e96df44b::t_eb3a776cc386a6 136-141
+  s_edfd59e96df44b::t_72f5bb3782ba49 53
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_b81bdf405e193c 186-188
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_efa74be04aee0c 728-735
+backend/tests/unit/test_subject_memory_writer.py
+  s_edfd59e96df44b::t_73887df704cb2e 231-246
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "6e1ddf35fee217d5d173f9da1b8ba7a07ebf5853",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
