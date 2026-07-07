@@ -104,7 +104,11 @@ enum RealtimeHubTools {
     let strengths = providers
       .map { "\($0.rawValue): \($0.routerBlurb)" }
       .joined(separator: " ")
-    return "Even when the user does not name an agent: if the task clearly matches a connected agent's strength, set provider to it — e.g. background coding, writing/refactoring code, building scripts, or fixing a repo -> \"codex\" (when connected). Strengths: \(strengths) Omit provider for general computer/app/browser/data tasks or whenever unsure — the built-in Omi agent is the safe default."
+    let codexConnected = providers.contains(.codex)
+    let codexRule = codexConnected
+      ? "MANDATORY: if the task is to write, create, edit, refactor, debug, or run ANY code, script, program, or code file — in any language, however small (even a one-line script) — you MUST set provider to \"codex\". Do not use the default agent for coding tasks while codex is connected. "
+      : ""
+    return "Provider selection when the user does NOT name an agent: \(codexRule)For non-code tasks — summaries, questions, lookups, messages, email, calendar, notes, browsing, or acting in the user's apps — OMIT provider entirely; the built-in Omi agent handles those. Connected agent strengths: \(strengths)"
   }
 
   private static func availableDirectedProviderRawValues() -> [String] {
