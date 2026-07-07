@@ -5464,8 +5464,15 @@ extension APIClient {
     if http.statusCode == 404 {
       return SyncJobFetch(outcome: .notFound)
     }
-    // 403 means auth/permission failure, not a missing job — surface as transient
-    // so the caller retries rather than treating the job as gone.
+    // 403 means the caller is not permitted to access this sync job. Unlike a
+    // transient transport failure, re-polling will not resolve it — the upload
+    // path already refreshed auth on 401, so a 403 here is a durable permission
+    // failure. Surface it as `.forbidden` so the reconciler reverts the WAL to
+    // `.miss` for re-upload (the backend dedupes by conversation/timestamp)
+    // instead of polling forever.
+    if http.statusCode == 403 {
+      return SyncJobFetch(outcome: .forbidden)
+    }
     guard http.statusCode == 200 else {
       return SyncJobFetch(outcome: .transient)
     }
@@ -5654,6 +5661,7 @@ struct SyncJobStatusResponse: Codable, Equatable {
 enum SyncJobFetchOutcome: Equatable {
   case ok
   case notFound
+  case forbidden
   case transient
 }
 

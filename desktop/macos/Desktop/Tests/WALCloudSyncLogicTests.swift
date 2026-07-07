@@ -108,4 +108,22 @@ final class WALCloudSyncLogicTests: XCTestCase {
     XCTAssertFalse(changed)
     XCTAssertEqual(wals[0].status, .uploaded)
   }
+
+  func testReconcileForbiddenRevertsToMissForReupload() {
+    // A 403 on the status GET is a durable permission failure, not transient.
+    // The WAL must leave .uploaded (so the reconciler stops polling) and revert
+    // to .miss for re-upload when the file remains on disk.
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-1"
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: SyncJobFetch(outcome: .forbidden),
+      fileExists: { _ in true }
+    )
+    XCTAssertTrue(changed)
+    XCTAssertEqual(wals[0].status, .miss)
+    XCTAssertNil(wals[0].jobId)
+    XCTAssertEqual(wals[0].uploadedAt, 0)
+  }
 }

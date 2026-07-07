@@ -37,7 +37,7 @@ enum WALCloudSyncLogic {
     case .transient:
       return false
 
-    case .notFound:
+    case .notFound, .forbidden:
       var changed = false
       for walId in memberWalIds {
         guard let index = wals.firstIndex(where: { $0.id == walId }) else { continue }
