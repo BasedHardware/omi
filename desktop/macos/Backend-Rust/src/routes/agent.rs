@@ -654,6 +654,14 @@ mod contract_tests {
             "agent VM provisioning must not request public NAT"
         );
 
+        let tags = body["tags"]["items"]
+            .as_array()
+            .expect("provision body must include network tags");
+        assert!(
+            tags.iter().any(|tag| tag == "omi-agent-vm"),
+            "provision body must tag VMs for omi-agent-vm firewall policy"
+        );
+
         let serialized = serde_json::to_string(&body).expect("provision body serializes");
         assert!(
             !serialized.contains("ONE_TO_ONE_NAT"),
@@ -662,6 +670,14 @@ mod contract_tests {
         assert!(
             !serialized.contains("External NAT"),
             "provision body must not contain External NAT access config"
+        );
+        assert!(
+            !serialized.contains("natIP"),
+            "provision body must not expose public IP fields"
+        );
+        assert!(
+            !serialized.contains("accessConfigs"),
+            "provision body must not expose accessConfigs"
         );
     }
 }
