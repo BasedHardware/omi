@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs Swift XCTest suites in isolated, parallel processes.
+# Runs Swift XCTest suites in isolated processes, with opt-in parallelism.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -8,7 +8,7 @@ MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKIP_RATCHET="$SCRIPT_DIR/swift-test-skip-ratchet.py"
 TESTS_ROOT="${OMI_SWIFT_TEST_DISCOVERY_ROOT:-$MACOS_DIR/Desktop/Tests}"
 PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
-WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-2}}"
+WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-1}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 
 fail() {

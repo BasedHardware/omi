@@ -74,7 +74,7 @@ suite="${filter%/}"
 
 case "$suite" in
   AlphaTests|BetaTests)
-    sleep 2
+    sleep 3
     ;;
 esac
 
@@ -99,7 +99,7 @@ if "$RUNNER" >"$TMPDIR/runner.out" 2>"$TMPDIR/runner.err"; then
 fi
 elapsed=$(( $(date +%s) - start ))
 
-if [ "$elapsed" -ge 4 ]; then
+if [ "$elapsed" -ge 6 ]; then
   fail "runner did not execute AlphaTests and BetaTests in parallel; elapsed=${elapsed}s"
 fi
 if ! grep -q -- "--- FAILED: AlphaTests ---" "$TMPDIR/runner.out"; then
