@@ -724,6 +724,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// change the kernel-projected seed so PTT sees the latest main-chat transcript.
   private func reconnectWarmSessionIfSeedStale() {
     guard session != nil else { return }
+    // The seed refresh that precedes this check is async and can take seconds;
+    // a short PTT turn may begin — or even commit — before it lands. Tearing
+    // down mid-turn destroys the session the committed turn is awaiting its
+    // reply on (the reply never arrives). Defer; the next turn re-checks.
+    if inputTurnInProgress || responding {
+      log(
+        "RealtimeHub: voice seed changed but a turn is in flight — deferring reconnect")
+      return
+    }
     let current = voiceSessionSeedContext()
     guard current != sessionVoiceSeedContextSnapshot else { return }
     log(
