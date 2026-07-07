@@ -89,6 +89,9 @@ jobs:
       - name: Check desktop prod promotion policy
         run: python3 .github/scripts/check-desktop-prod-promotion-policy.py
 
+      - name: Test desktop release promotion gate
+        run: python3 .github/scripts/test_check_desktop_release_promotion.py
+
       - name: Check release process guards
         run: python3 .github/scripts/check-release-process-guards.py
 

@@ -106,6 +106,34 @@ fn fixture_lines(body: &str, default_fixture: &str) -> Vec<String> {
     ]
 }
 
+/// Text from the latest user turn in a Gemini `contents` array — ignores model
+/// turns and stale markers echoed in prior assistant replies.
+fn extract_latest_gemini_user_text(body: &str) -> String {
+    let Ok(value) = serde_json::from_str::<Value>(body) else {
+        return String::new();
+    };
+    let Some(contents) = value.get("contents").and_then(|c| c.as_array()) else {
+        return String::new();
+    };
+    for content in contents.iter().rev() {
+        if content.get("role").and_then(|r| r.as_str()) == Some("model") {
+            continue;
+        }
+        let mut texts = Vec::new();
+        if let Some(parts) = content.get("parts").and_then(|p| p.as_array()) {
+            for part in parts {
+                if let Some(text) = part.get("text").and_then(|t| t.as_str()) {
+                    texts.push(text.to_string());
+                }
+            }
+        }
+        if !texts.is_empty() {
+            return texts.join("\n");
+        }
+    }
+    String::new()
+}
+
 fn gemini_stream_lines(text: &str) -> Vec<String> {
     let chunk = json!({
         "candidates": [{
@@ -172,7 +200,8 @@ pub fn stub_chat_completions_response(req: &ChatCompletionRequest) -> Response {
 
 pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
     let body_text = String::from_utf8_lossy(body);
-    let echoed = stub_assistant_text(&body_text);
+    let user_text = extract_latest_gemini_user_text(&body_text);
+    let echoed = stub_assistant_text(&user_text);
     if action == "streamGenerateContent" {
         let lines = gemini_stream_lines(&echoed);
         let stream = stream::iter(
@@ -283,9 +312,26 @@ mod tests {
     }
 
     #[test]
-    fn gemini_non_stream_echoes_markers() {
+    fn gemini_echoes_marker_from_latest_user_content_only() {
+        let body = r#"{"contents":[
+            {"role":"user","parts":[{"text":"Old [[MARKER:stale-marker]]"}]},
+            {"role":"model","parts":[{"text":"Stub saw marker: stale-marker"}]},
+            {"role":"user","parts":[{"text":"Latest [[MARKER:gemini-latest]]"}]}
+        ]}"#;
+        let echoed = stub_assistant_text(&extract_latest_gemini_user_text(body));
+        assert!(!echoed.contains("stale-marker"));
+        assert!(echoed.contains("Stub saw marker: gemini-latest"));
+    }
+
+    #[tokio::test]
+    async fn gemini_non_stream_echoes_markers() {
         let body = Bytes::from(r#"{"contents":[{"parts":[{"text":"[[MARKER:gemini-test]]"}]}]}"#);
         let response = stub_gemini_proxy_response(&body, "generateContent");
         assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let body_text = String::from_utf8(body_bytes.to_vec()).unwrap();
+        assert!(body_text.contains("Stub saw marker: gemini-test"));
     }
 }

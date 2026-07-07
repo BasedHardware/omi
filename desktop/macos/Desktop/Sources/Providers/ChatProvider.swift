@@ -4836,8 +4836,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     /// Harness-only chat reset that awaits backend deletion before returning.
-    func automationResetChatForHarness() async {
-        guard AppBuild.isNonProduction else { return }
+    /// Returns an error message when backend deletion fails so E2E flows don't
+    /// proceed against stale persisted messages.
+    func automationResetChatForHarness() async -> String? {
+        guard AppBuild.isNonProduction else { return nil }
         isClearing = true
         defer { isClearing = false }
 
@@ -4852,6 +4854,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 _ = try await APIClient.shared.deleteMessages(appId: selectedAppId)
             } catch {
                 logError("Failed to clear default chat messages for harness reset", error: error)
+                return "failed to clear default chat messages: \(error.localizedDescription)"
             }
         } else {
             let sessionToDelete = currentSession
@@ -4871,10 +4874,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     try await APIClient.shared.deleteChatSession(sessionId: session.id)
                 } catch {
                     logError("Failed to delete chat session for harness reset", error: error)
+                    return "failed to delete chat session: \(error.localizedDescription)"
                 }
             }
             _ = await createNewSession()
         }
+        return nil
     }
 
     // MARK: - App Selection

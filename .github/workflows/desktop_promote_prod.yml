@@ -105,8 +105,13 @@ jobs:
           TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
           BLESSED_SHA=$(grep '^blessed_sha=' "$GITHUB_OUTPUT" | tail -1 | cut -d= -f2- || true)
           if [ -n "$BLESSED_SHA" ] && [ "$BLESSED_SHA" != "$TARGET_SHA" ]; then
-            echo "blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA)" >&2
-            exit 1
+            if [ "$OVERRIDE_UNBLESSED" = "true" ]; then
+              echo "::warning::blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA); allowed by override_unblessed"
+              echo "::warning::blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA); allowed by override_unblessed" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "blessedSha ($BLESSED_SHA) does not match tag commit ($TARGET_SHA)" >&2
+              exit 1
+            fi
           fi
           CURRENT_SHA=$(git rev-list -n1 "$TRACK_TAG" 2>/dev/null || true)
 

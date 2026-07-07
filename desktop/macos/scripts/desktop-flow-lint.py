@@ -67,7 +67,7 @@ def collect_bridge_action_names(step: dict) -> list[str]:
 def is_typed_flow(flow: dict, steps: list) -> bool:
     if flow.get("tier") == MANUAL_TIER:
         return False
-    if any("do:" in step for step in steps if isinstance(step, dict)):
+    if any("do" in step for step in steps if isinstance(step, dict)):
         return False
     return any(any(key in step for key in TYPED_STEP_KEYS) for step in steps if isinstance(step, dict))
 

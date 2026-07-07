@@ -6,46 +6,16 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from desktop_release_metadata import fail, parse_metadata  # noqa: E402
 
 
 REQUIRED_ASSETS = {"Omi.zip"}
 DMG_ASSETS = {"omi.dmg", "Omi.dmg"}
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+(?:\.\d+)?)\+(?P<build>\d+)-macos$")
-
-
-def fail(message: str) -> None:
-    raise SystemExit(f"FAIL: {message}")
-
-
-def normalize_metadata_line(line: str) -> str:
-    stripped = line.strip()
-    if stripped.startswith("<!--"):
-        stripped = stripped[4:].strip()
-    if stripped.endswith("-->"):
-        stripped = stripped[:-3].strip()
-    return stripped
-
-
-def parse_metadata(body: str) -> dict[str, str]:
-    in_block = False
-    metadata: dict[str, str] = {}
-
-    for line in body.splitlines():
-        stripped = normalize_metadata_line(line)
-        if stripped == "KEY_VALUE_START":
-            in_block = True
-            continue
-        if stripped == "KEY_VALUE_END":
-            return metadata
-        if not in_block or not stripped or stripped.startswith("#"):
-            continue
-        if ":" not in stripped:
-            fail(f"invalid release metadata line: {stripped}")
-        key, value = stripped.split(":", 1)
-        metadata[key.strip()] = value.strip()
-
-    fail("release body is missing KEY_VALUE_START/KEY_VALUE_END metadata block")
 
 
 def write_github_output(path: str | None, values: dict[str, str]) -> None:

@@ -653,7 +653,9 @@ final class DesktopAutomationActionRegistry {
         return ["error": "main ChatProvider not yet initialized"]
       }
       _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
-      await provider.automationResetChatForHarness()
+      if let error = await provider.automationResetChatForHarness() {
+        return ["error": error]
+      }
       return ["reset": "true"]
     }
 
@@ -770,9 +772,7 @@ final class DesktopAutomationActionRegistry {
         var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
         if detail["error"] == nil,
            detail["is_sending"] == "false",
-           detail["is_streaming"] == "false",
-           let lastAssistant = detail["last_assistant_text"],
-           !lastAssistant.isEmpty
+           detail["is_streaming"] == "false"
         {
           detail["idle"] = "true"
           return detail

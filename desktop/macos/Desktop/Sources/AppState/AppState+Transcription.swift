@@ -1252,6 +1252,7 @@ extension AppState {
     isTranscribing = false
     LiveNotesMonitor.shared.endSession()
 
+    var finalizeError: String?
     if let sessionId {
       do {
         try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
@@ -1261,10 +1262,13 @@ extension AppState {
           allowCloudForceProcess: false
         )
       } catch {
-        return ["error": "failed to finalize capture session: \(error.localizedDescription)"]
+        finalizeError = "failed to finalize capture session: \(error.localizedDescription)"
       }
     }
 
+    // Reset cleanup state regardless of finalize outcome so a failed finalize
+    // can't leave `automationCaptureTestSessionActive` stuck true (which made a
+    // retried stop silently report "already_stopped" without ever finalizing).
     speakerSegments = []
     liveSpeakerPersonMap = [:]
     LiveTranscriptMonitor.shared.clear()
@@ -1276,6 +1280,10 @@ extension AppState {
     totalWordCount = 0
     currentTranscript = ""
     automationCaptureTestSessionActive = false
+
+    if let finalizeError {
+      return ["error": finalizeError]
+    }
 
     await loadConversations()
     let afterCount = totalConversationsCount ?? conversations.count

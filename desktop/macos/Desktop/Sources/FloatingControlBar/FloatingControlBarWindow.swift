@@ -2416,7 +2416,9 @@ class FloatingControlBarManager {
         if reset {
             if let provider = sharedFloatingProvider {
                 _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
-                await provider.automationResetChatForHarness()
+                if let error = await provider.automationResetChatForHarness() {
+                    return ["error": error]
+                }
             }
             if window.state.showingAIConversation {
                 window.closeAIConversation()
