@@ -1193,7 +1193,6 @@ struct ImportConnectorSheet: View {
 
     @ObservedObject private var runner = ConnectorImportRunner.shared
     @State private var draftText = ""
-    @State private var validationError: String?
     /// The trimmed draft a run consumed, kept to make success-clearing exact:
     /// only ever wipe the text the run actually imported, never a newer paste.
     @State private var submittedDraft: String?
@@ -1352,7 +1351,7 @@ struct ImportConnectorSheet: View {
                 )
             }
             .buttonStyle(.plain)
-            .disabled(isRunning)
+            .disabled(isRunning || isDraftEmpty)
         }
     }
 
@@ -1422,12 +1421,15 @@ struct ImportConnectorSheet: View {
         }
     }
 
+    private var isDraftEmpty: Bool {
+        draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func startMemoryLogImport() {
+        // The Import button is disabled while the draft is empty; this guard
+        // is the function's precondition, not a reachable UI path.
         let trimmed = draftText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            validationError = "Paste the full response first."
-            return
-        }
+        guard !trimmed.isEmpty else { return }
         let source = memorySource
         draftFocused = false
         submittedDraft = trimmed
@@ -1449,7 +1451,6 @@ struct ImportConnectorSheet: View {
         availabilityText: String? = nil,
         operation: @escaping @MainActor (ConnectorImportRunner.ProgressSink) async -> ConnectorImportOperations.Outcome
     ) {
-        validationError = nil
         let connectorID = connector.id
         let statusStore = statusStore
         ConnectorImportRunner.shared.start(
@@ -1505,10 +1506,6 @@ struct ImportConnectorSheet: View {
                     }
                 }
             }
-        } else if let validationError {
-            Text(validationError)
-                .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(OmiColors.warning)
         } else if let statusMessage = runState?.statusMessage {
             Text(statusMessage)
                 .scaledFont(size: 12, weight: .medium)
