@@ -404,9 +404,18 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     do {
       _ = try await APIClient.shared.updateUserLanguage(primary)
     } catch {
-      logError("Onboarding: saving primary language '\(primary)' to backend failed", error: error)
-      lastActionError = "Couldn't save your language to your account — check your connection and tap Continue again."
-      return
+      // One automatic retry: prod logs show this write failing on transient
+      // 408s/timeouts and stale-token 401s where the immediate second attempt
+      // succeeds. Only surface the error once the retry also fails.
+      logError("Onboarding: saving primary language '\(primary)' failed, retrying once", error: error)
+      try? await Task.sleep(nanoseconds: 1_000_000_000)
+      do {
+        _ = try await APIClient.shared.updateUserLanguage(primary)
+      } catch {
+        logError("Onboarding: saving primary language '\(primary)' to backend failed", error: error)
+        lastActionError = "Couldn't save your language to your account — check your connection and tap Continue again."
+        return
+      }
     }
 
     let nodes: [[String: Any]] = selectedLanguageCodes.map { code in
