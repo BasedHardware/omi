@@ -46,7 +46,7 @@ def test_conversation_wire_dart_is_generated_from_app_client_openapi():
     assert GENERATED_DART_PATH.read_text() == generated
     for schema_name in generate_dart_models.SCHEMA_GROUPS['conversation']['schemas']:
         assert f'class Generated{schema_name}' in generated
-    assert 'items: _required(_readFieldValue<List<Map<String, dynamic>>>' in generated
+    assert 'items: _required(_readFieldValue<List<GeneratedConversation>>' in generated
     assert 'class GeneratedSyncJobStartResponse' in generated
     assert 'class GeneratedSyncJobStatusResponse' in generated
     assert 'result: _readFieldValue<GeneratedSyncLocalFilesResultResponse>' in generated
@@ -265,7 +265,7 @@ def test_apps_wire_dart_is_generated_from_app_client_openapi():
     assert 'id: _required(_readFieldValue<String>' in generated
     assert 'app: _required(_readFieldValue<GeneratedAppDraftGenerationResponse>' in generated
     assert 'requiresOauth: _required(_readFieldValue<bool>' in generated
-    assert 'data: _readFieldValue<List<GeneratedAppBaseModel>>' in generated
+    assert 'data: _readFieldValue<List<GeneratedAppCatalogItem>>' in generated
     assert 'createdAt: _readFieldValue<DateTime>' in generated
 
 

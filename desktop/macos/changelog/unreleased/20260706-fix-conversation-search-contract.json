@@ -1,0 +1,3 @@
+{
+  "change": "Fixed conversation search failing when backend search results used the search index shape instead of the normal conversation row shape"
+}

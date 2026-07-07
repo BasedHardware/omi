@@ -122,7 +122,15 @@ from utils.request_validation import (
     normalize_required_webhook_url,
     parse_form_json,
 )
-from models.app import App, ActionType, AppCreate, AppUpdate, AppBaseModel, AppReview
+from models.app import (
+    App,
+    ActionType,
+    AppCreate,
+    AppUpdate,
+    AppBaseModel,
+    AppReview,
+    AppCatalogItem,
+)
 from utils.other.storage import upload_app_logo, delete_app_logo, upload_app_thumbnail, get_app_thumbnail_url
 from utils.social import (
     get_twitter_profile,
@@ -262,7 +270,7 @@ class AppPagination(PydanticBaseModel):
 class AppCatalogGroup(PydanticBaseModel):
     capability: Optional[AppSelectOption] = None
     category: Optional[AppSelectOption] = None
-    data: List[AppBaseModel] = Field(default_factory=list)
+    data: List[AppCatalogItem] = Field(default_factory=list)
     pagination: Optional[AppPagination] = None
     count: Optional[int] = None
 
@@ -276,7 +284,7 @@ class AppCatalogMeta(PydanticBaseModel):
 
 
 class AppCatalogResponse(PydanticBaseModel):
-    data: List[AppBaseModel] = Field(default_factory=list)
+    data: List[AppCatalogItem] = Field(default_factory=list)
     pagination: Optional[AppPagination] = None
     capability: Optional[AppSelectOption] = None
     category: Optional[AppSelectOption] = None
@@ -295,7 +303,7 @@ class AppSearchFilters(PydanticBaseModel):
 
 
 class AppSearchResponse(PydanticBaseModel):
-    data: List[AppBaseModel] = Field(default_factory=list)
+    data: List[AppCatalogItem] = Field(default_factory=list)
     pagination: AppPagination
     filters: AppSearchFilters
 

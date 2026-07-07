@@ -180,6 +180,7 @@ SCHEMA_GROUPS = {
             'ProactiveNotification',
             'ChatTool',
             'AppBaseModel',
+            'AppCatalogItem',
             'App',
             'AppPaginationLinks',
             'AppPagination',

@@ -1690,7 +1690,7 @@
           },
           "data": {
             "items": {
-              "$ref": "#/components/schemas/AppBaseModel"
+              "$ref": "#/components/schemas/AppCatalogItem"
             },
             "title": "Data",
             "type": "array"
@@ -1707,6 +1707,121 @@
           }
         },
         "title": "AppCatalogGroup",
+        "type": "object"
+      },
+      "AppCatalogItem": {
+        "description": "Desktop app catalog response item for list/search views.",
+        "properties": {
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          },
+          "author": {
+            "default": "",
+            "title": "Author",
+            "type": "string"
+          },
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capabilities",
+            "type": "array"
+          },
+          "category": {
+            "default": "other",
+            "title": "Category",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "external_integration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalIntegration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "image": {
+            "default": "",
+            "title": "Image",
+            "type": "string"
+          },
+          "installs": {
+            "default": 0,
+            "title": "Installs",
+            "type": "integer"
+          },
+          "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Is Paid"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "private": {
+            "default": false,
+            "title": "Private",
+            "type": "boolean"
+          },
+          "rating_avg": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rating Avg"
+          },
+          "rating_count": {
+            "default": 0,
+            "title": "Rating Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "AppCatalogItem",
         "type": "object"
       },
       "AppCatalogMeta": {
@@ -1784,7 +1899,7 @@
           },
           "data": {
             "items": {
-              "$ref": "#/components/schemas/AppBaseModel"
+              "$ref": "#/components/schemas/AppCatalogItem"
             },
             "title": "Data",
             "type": "array"
@@ -2274,7 +2389,7 @@
         "properties": {
           "data": {
             "items": {
-              "$ref": "#/components/schemas/AppBaseModel"
+              "$ref": "#/components/schemas/AppCatalogItem"
             },
             "title": "Data",
             "type": "array"
@@ -12264,8 +12379,7 @@
           },
           "items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/Conversation"
             },
             "title": "Items",
             "type": "array"
@@ -16042,6 +16156,29 @@
       "UserProfileResponse": {
         "additionalProperties": true,
         "properties": {
+          "company": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Company"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
           "data_protection_level": {
             "anyOf": [
               {
@@ -16052,6 +16189,28 @@
               }
             ],
             "title": "Data Protection Level"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "job": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job"
           },
           "migration_status": {
             "anyOf": [
@@ -16064,8 +16223,59 @@
               }
             ],
             "title": "Migration Status"
+          },
+          "motivation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Motivation"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "time_zone": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time Zone"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          },
+          "use_case": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Use Case"
           }
         },
+        "required": [
+          "uid"
+        ],
         "title": "UserProfileResponse",
         "type": "object"
       },
