@@ -1843,7 +1843,6 @@ async def _stream_handler(
                                     - time_offset,  # raw start/end
                                     'abs_end': session.first_audio_byte_timestamp + segment.end - time_offset,
                                     'duration': segment.end - segment.start,
-                                    'text': segment.text,  # TODO: remove
                                 }
                             )
                         except asyncio.QueueFull:
