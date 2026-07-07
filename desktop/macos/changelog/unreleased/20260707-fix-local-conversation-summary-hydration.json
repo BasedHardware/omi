@@ -1,0 +1,3 @@
+{
+  "change": "Fixed on-device desktop conversations staying untitled after backend processing completes."
+}

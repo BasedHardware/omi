@@ -11,8 +11,8 @@ This gate counts `*.swift` files at `desktop/macos/Desktop/Sources/*.swift`
 baseline may only shrink — after organizing files into directories, lower
 BASELINE in the same commit.
 
-Wiring (see also `.github/workflows/lint.yml`):
-  - CI: gated step in the Lint workflow when desktop Swift sources change.
+Wiring (see also `.github/workflows/repo-checks.yml`):
+  - CI: gated step in the Repo Checks workflow when desktop Swift sources change.
   - Manually: python3 desktop/macos/scripts/check-sources-root-layout.py
   - Show offenders: ... --print
 """
