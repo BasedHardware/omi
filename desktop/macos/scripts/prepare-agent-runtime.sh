@@ -146,7 +146,7 @@ download_node_archive() {
   local url="https://nodejs.org/dist/$NODE_VERSION/node-$NODE_VERSION-darwin-$arch.tar.gz"
 
   log "Downloading Node $NODE_VERSION darwin-$arch"
-  curl -L --fail --show-error -o "$out" "$url"
+  curl -L --fail --show-error --retry 8 --retry-all-errors --retry-delay 2 --connect-timeout 20 -o "$out" "$url"
   verify_sha256 "$out" "$sha"
 }
 
