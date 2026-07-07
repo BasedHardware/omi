@@ -1,3 +1,0 @@
-{
-  "change": "Fixed meeting-only listening so ended calls are saved as full conversations instead of staying stuck locally"
-}
