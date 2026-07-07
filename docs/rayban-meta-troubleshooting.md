@@ -71,6 +71,54 @@ should never break.
 
 Expected — DAT 0.8 exposes no battery API; the row is hidden.
 
+## App crashes at launch after linking the DAT SDK (SwiftProtobuf collision)
+
+**Known integration blocker — must be resolved before shipping the DAT build.**
+
+Symptom: with `MWDATCore`/`MWDATCamera` linked, the app crashes on launch
+(`EXC_BAD_ACCESS` / `SIGSEGV` in `swift_getObjectType`, during Flutter plugin
+registration in `didFinishLaunchingWithOptions`), and the console prints, on
+every launch:
+
+```
+objc[…]: Class _TtC13SwiftProtobuf… is implemented in both
+  …/Runner.app/Frameworks/MWDATCore.framework/MWDATCore and …/Runner.app/Runner.
+  This may cause spurious casting failures and mysterious crashes.
+```
+
+Root cause: Meta's `MWDATCore.framework` (a binary xcframework) **statically
+embeds its own copy of SwiftProtobuf and exports its Objective-C classes**. The
+Omi app already links SwiftProtobuf through `mcumgr_flutter` (the nRF MCU
+firmware-update library, `iOSMcuManagerLibrary`). With
+`use_frameworks! :linkage => :static`, SwiftProtobuf's classes end up in both
+the `Runner` executable and `MWDATCore.framework`. Duplicate Objective-C class
+registration corrupts the Swift runtime's type metadata, so a later,
+unrelated Swift plugin's `register(with:)` dereferences null.
+
+Confirmed by removing `mcumgr_flutter` (the app's only SwiftProtobuf consumer —
+`whisper_flutter_new` does not use it): the duplicate disappears (`nm Runner |
+grep -c SwiftProtobuf` → 0) and the launch crash goes away. That removal is not
+shippable, though — it disables Omi CV1 MCU firmware updates.
+
+Fix directions (pick one before enabling the DAT build in production):
+
+1. **Ask Meta to stop exporting SwiftProtobuf** from `MWDATCore` (build it with
+   hidden symbol visibility / a private module, or vendor it under a renamed
+   namespace). This is the clean fix and the right upstream ask — file it on
+   <https://github.com/facebook/meta-wearables-dat-ios/issues>.
+2. **Remove the app's second SwiftProtobuf copy.** Replace `mcumgr_flutter`'s
+   SwiftProtobuf dependency, or isolate MCU-DFU (the only consumer) behind a
+   boundary that doesn't co-link with `MWDATCore` — e.g. load `MWDATCore` only
+   in a build/flavor that excludes `mcumgr_flutter`, or move MCU-DFU to an app
+   extension/process.
+3. **Gate the DAT feature to a dedicated flavor** that excludes
+   `mcumgr_flutter` (Ray-Ban glasses don't do nRF MCU firmware updates anyway),
+   accepting that that flavor can't OTA-update Omi CV1 pendants.
+
+Until one of these lands, keep the DAT SPM package out of the default shipping
+build (the `#if canImport(MWDATCore)` guard already makes the app compile and
+run in audio-only mode without it).
+
 ## Reference
 
 - Meta toolkit docs: <https://wearables.developer.meta.com/docs/develop/>

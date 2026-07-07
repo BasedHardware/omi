@@ -7,11 +7,39 @@ no fake transcripts, no manual uploads.
 ## Preconditions
 
 - [ ] Physical iPhone (iOS 15.2+; tested on current iOS).
-- [ ] Physical Ray-Ban Meta glasses, charged, paired in the Meta AI app.
-- [ ] Meta Wearables Developer Center app credentials; Omi built in **full**
-      mode (`getAvailabilityMode() == 'full'`).
+- [ ] Physical Ray-Ban Meta glasses, charged, paired in the Meta AI app,
+      **Developer Mode enabled** (Meta AI app → Settings → App Info → tap the
+      version 5×), glasses software v20.0+.
+- [ ] SwiftProtobuf collision resolved (see
+      `rayban-meta-troubleshooting.md` → "App crashes at launch"). The DAT SDK
+      cannot ship in the same binary as `mcumgr_flutter` until then.
+- [ ] Omi built in **full** mode (`getAvailabilityMode() == 'full'`): DAT SPM
+      package linked (already committed) + glasses Developer Mode on. No Meta
+      Developer Center credentials are needed for Developer-Mode testing.
 - [ ] Fresh install of this branch's Omi app (dev flavor), signed into an
       account.
+
+## Signing / build environment (read first — this is what blocks on-device runs)
+
+The app must run under its **real identity** or auth and multi-target signing
+break. Do not fall back to a personal Apple team — that forces a different
+bundle id, which cascades into a Firebase project mismatch (auth 401s), a
+Sign-in-with-Apple entitlement loss, and Watch-app/widget bundle-prefix
+signing errors. Instead:
+
+- [ ] Sign with the **Based Hardware Apple team** (`9536L8KLMP`, the committed
+      default). Your Apple ID must have the **Developer** role on that team in
+      App Store Connect — *Customer Support* cannot issue certificates or
+      provisioning profiles (Xcode fails with "No profiles for
+      'com.friend-app-with-wearable.ios12.development' were found"). Have a team
+      admin bump the role once.
+- [ ] Keep the original bundle id (`com.friend-app-with-wearable.ios12.development`)
+      so the committed `based-hardware-dev` Firebase config and
+      `USE_AUTH_CUSTOM_TOKEN`/`USE_WEB_AUTH` flow match (custom-token auth; a
+      natively-minted Firebase token is rejected by `api.omiapi.com` with 401).
+- [ ] Build and install via `flutter run --flavor dev` (or Xcode) — never
+      hand-install a stale `build/ios/iphoneos/Runner.app`; `flutter run`
+      produces the current binary.
 
 ## Acceptance checklist
 
