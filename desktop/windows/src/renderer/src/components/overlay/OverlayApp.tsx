@@ -1,6 +1,6 @@
 // src/renderer/src/components/overlay/OverlayApp.tsx
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useChat } from '../../hooks/useChat'
+import { useChat, type SendOptions } from '../../hooks/useChat'
 import { useAuth } from '../../hooks/useAuth'
 import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { auth } from '../../lib/firebase'
@@ -33,14 +33,17 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // reply is still streaming (which `useChat.send` would no-op). Each send is
   // chained after the prior one resolves and dispatched through the latest `send`.
   const sendRef = useRef(send)
-  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  sendRef.current = send
+  useEffect(() => {
+    sendRef.current = send
+  }, [send])
   const sendChainRef = useRef<Promise<void>>(Promise.resolve())
-  const enqueueSend = useCallback((text: string): void => {
+  const enqueueSend = useCallback((text: string, options?: SendOptions): void => {
     // Single send choke-point (typed Enter + voice commit) — tell onboarding the
     // user asked something in the bar.
     window.omiOverlay.notifyAsked()
-    sendChainRef.current = sendChainRef.current.then(() => sendRef.current(text)).catch(() => {})
+    sendChainRef.current = sendChainRef.current
+      .then(() => sendRef.current(text, options))
+      .catch(() => {})
   }, [])
 
   // Hold-Space-to-talk: a quick Space tap types a space; holding past the threshold
@@ -48,14 +51,15 @@ function OverlayPanel({ replayEnter }: { replayEnter: () => void }): React.JSX.E
   // auto-sends it (queued behind any in-flight reply).
   // Latest draft, read by the window-level (textarea-unfocused) push-to-talk path.
   const draftRef = useRef(draft)
-  // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  draftRef.current = draft
+  useLayoutEffect(() => {
+    draftRef.current = draft
+  }, [draft])
 
   const ptt = usePushToTalk({
     onTranscript: (text) => setDraft(text),
     onCommit: (text) => {
       setDraft('')
-      enqueueSend(text)
+      enqueueSend(text, { speakReply: true })
     },
     // Fires on every completed hold-Space capture, even when transcription was
     // unavailable (quota/1008) or silent. Drives the onboarding voice step so a
