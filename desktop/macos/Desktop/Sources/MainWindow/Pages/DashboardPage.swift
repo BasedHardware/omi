@@ -1182,48 +1182,6 @@ struct DashboardPage: View {
         }
     }
 
-    private var homeMetricsStrip: some View {
-        VStack(spacing: 8) {
-            homeMetricTopRow
-            homeMetricBottomRow
-        }
-        .frame(maxWidth: .infinity)
-    }
-
-    private var homeMetricTopRow: some View {
-        HStack(spacing: 8) {
-            HomeCenterMetricTile(
-                title: "Conversations",
-                value: conversationMetricValue,
-                systemImage: "text.bubble.fill",
-                action: { navigate(to: .conversations) }
-            )
-            HomeCenterMetricTile(
-                title: "Tasks",
-                value: taskMetricValue,
-                systemImage: "checklist",
-                action: { navigate(to: .tasks) }
-            )
-        }
-    }
-
-    private var homeMetricBottomRow: some View {
-        HStack(spacing: 8) {
-            HomeCenterMetricTile(
-                title: "Memories",
-                value: memoryMetricValue,
-                systemImage: "brain",
-                action: { navigate(to: .memories) }
-            )
-            HomeCenterMetricTile(
-                title: "Screenshots",
-                value: screenshotMetricValue,
-                systemImage: "photo.on.rectangle.angled",
-                action: { navigate(to: .rewind) }
-            )
-        }
-    }
-
     private var conversationMetricValue: String {
         formattedCount(conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count)
     }
