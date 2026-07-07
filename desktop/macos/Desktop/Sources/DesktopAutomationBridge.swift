@@ -505,6 +505,31 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "openclaw_connect_cancel",
+      summary: "Cancel an in-flight OpenClaw setup (including the manual-key watch)"
+    ) { _ in
+      OpenClawConnectService.shared.cancel()
+      return ["phase": OpenClawConnectService.shared.phase.automationValue]
+    }
+
+    register(
+      name: "openclaw_set_claude_probe",
+      summary: "Test hook: force the Claude Code availability probe for OpenClaw onboarding (value=available|missing|clear)",
+      params: ["value"]
+    ) { params in
+      let service = OpenClawConnectService.shared
+      switch params["value"] ?? "clear" {
+      case "available": service.claudeCodeAvailabilityOverrideForTesting = true
+      case "missing": service.claudeCodeAvailabilityOverrideForTesting = false
+      default: service.claudeCodeAvailabilityOverrideForTesting = nil
+      }
+      return [
+        "override": params["value"] ?? "clear",
+        "phase": service.phase.automationValue,
+      ]
+    }
+
+    register(
       name: "seed_subagents",
       summary: "Seed synthetic floating-bar subagents for deterministic UI benchmarks",
       params: ["count"]

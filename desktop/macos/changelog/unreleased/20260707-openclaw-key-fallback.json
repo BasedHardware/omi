@@ -1,0 +1,3 @@
+{
+  "change": "Added a bring-your-own-key path for connecting OpenClaw when Claude Code isn't set up — Omi opens Terminal with the setup command pre-typed and connects automatically once you finish"
+}

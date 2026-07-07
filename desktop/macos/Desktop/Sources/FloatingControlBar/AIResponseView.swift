@@ -512,6 +512,20 @@ private struct AgentInstallHelpPromptView: View {
         return false
     }
 
+    /// The command shown in the monospaced block: the manual model-setup
+    /// command when that fallback is active, otherwise the install command.
+    private var displayCommand: String? {
+        if case .needsManualModelSetup(let command) = prompt.status { return command }
+        return prompt.plan.installCommand
+    }
+
+    private var primaryActionIcon: String {
+        if prompt.status.isBusy { return "hourglass" }
+        if isConnected { return "checkmark" }
+        if case .needsManualModelSetup = prompt.status { return "terminal" }
+        return "link"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
@@ -540,7 +554,7 @@ private struct AgentInstallHelpPromptView: View {
             Text(prompt.detailText)
                 .scaledFont(size: 12)
                 .foregroundColor(.white.opacity(0.78))
-                .lineLimit(3)
+                .lineLimit(4)
                 .textSelection(.enabled)
 
             if case .waitingForApproval(let userCode?) = prompt.status, !userCode.isEmpty {
@@ -555,11 +569,11 @@ private struct AgentInstallHelpPromptView: View {
                     .accessibilityLabel("Sign-in code \(userCode)")
             }
 
-            if let command = prompt.plan.installCommand {
+            if let command = displayCommand {
                 Text(command)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.white.opacity(0.58))
-                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                     .padding(.top, 1)
             }
@@ -578,7 +592,7 @@ private struct AgentInstallHelpPromptView: View {
         let isEnabled = prompt.primaryActionEnabled && !isConnected
 
         return HStack(spacing: 6) {
-            Image(systemName: prompt.status.isBusy ? "hourglass" : (isConnected ? "checkmark" : "link"))
+            Image(systemName: primaryActionIcon)
                 .scaledFont(size: 12, weight: .semibold)
             Text(prompt.primaryActionTitle)
                 .scaledFont(size: 12, weight: .semibold)

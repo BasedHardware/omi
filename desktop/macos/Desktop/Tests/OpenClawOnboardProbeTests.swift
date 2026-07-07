@@ -74,4 +74,35 @@ final class OpenClawOnboardProbeTests: XCTestCase {
         XCTAssertNotNil(idx)
         if let idx { XCTAssertEqual(args[idx + 1], "anthropic-cli") }
     }
+
+    /// The no-Claude-Code fallback: a user-runnable Terminal command using an
+    /// OpenRouter API key (real `openclaw onboard` flags), with a placeholder
+    /// the user replaces — the app never handles the key.
+    func testManualModelSetupCommandUsesOpenRouterKeyChoice() {
+        let command = OpenClawConnectService.manualModelSetupCommand
+        XCTAssertTrue(command.hasPrefix("openclaw onboard "))
+        XCTAssertTrue(command.contains("--non-interactive"))
+        XCTAssertTrue(command.contains("--accept-risk"))
+        XCTAssertTrue(command.contains("--auth-choice openrouter-api-key"))
+        XCTAssertTrue(command.contains(
+            "--openrouter-api-key \(OpenClawConnectService.manualSetupKeyPlaceholder)"))
+        XCTAssertTrue(command.contains("--install-daemon"))
+        // Pre-typed via zsh `print -z` inside single quotes and an AppleScript
+        // double-quoted string — the command must not need escaping in either.
+        XCTAssertFalse(command.contains("'"))
+        XCTAssertFalse(command.contains("\""))
+        XCTAssertFalse(command.contains("\\"))
+    }
+
+    func testManualModelSetupPromptStatusDrivesTerminalAction() {
+        let plan = AgentPillsManager.DirectedProvider.openclaw.authenticationPlan
+        var state = AgentInstallPromptState(plan: plan)
+        state.status = .needsManualModelSetup(
+            command: OpenClawConnectService.manualModelSetupCommand)
+        XCTAssertEqual(state.primaryActionTitle, "Open Terminal")
+        XCTAssertEqual(state.primaryAction, .openTerminalSetup)
+        XCTAssertTrue(state.primaryActionEnabled)
+        XCTAssertFalse(state.status.isBusy)
+        XCTAssertEqual(state.status.automationValue, "needsManualModelSetup")
+    }
 }

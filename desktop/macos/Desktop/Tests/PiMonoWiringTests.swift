@@ -65,6 +65,9 @@ final class PiMonoWiringTests: XCTestCase {
     let executable = bin.appendingPathComponent("openclaw")
     try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+    // A bare binary without an onboarded config reports needsAuthentication,
+    // so give this fake install an onboarded config to assert discovery.
+    try writeOnboardedOpenClawConfig(home: home)
 
     let availability = LocalAgentProviderDetector.availability(
       for: .openclaw,
@@ -84,6 +87,7 @@ final class PiMonoWiringTests: XCTestCase {
     let executable = bin.appendingPathComponent("openclaw")
     try "#!/bin/sh\nexit 0\n".write(to: executable, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+    try writeOnboardedOpenClawConfig(home: home)
 
     let availability = LocalAgentProviderDetector.availability(
       for: .openclaw,
@@ -91,6 +95,16 @@ final class PiMonoWiringTests: XCTestCase {
       homeDirectory: home.path)
 
     XCTAssertEqual(availability.status, .available(command: executable.path))
+  }
+
+  /// Minimal config that `OpenClawOnboardProbe.isOnboarded` accepts (Gateway
+  /// port + default model), so detector tests can model an onboarded install.
+  private func writeOnboardedOpenClawConfig(home: URL) throws {
+    let dir = home.appendingPathComponent(".openclaw", isDirectory: true)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    try """
+    {"gateway":{"port":18789},"agents":{"defaults":{"model":{"primary":"anthropic/claude-opus-4-8"}}}}
+    """.write(to: dir.appendingPathComponent("openclaw.json"), atomically: true, encoding: .utf8)
   }
 
   func testLocalAgentProviderDetectorFindsExecutableInPathEnvironment() throws {

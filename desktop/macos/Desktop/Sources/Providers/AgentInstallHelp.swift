@@ -38,6 +38,9 @@ enum AgentInstallPromptAction {
     case beginConnection
     case runSetup
     case openDocs
+    /// Open Terminal with the manual model-setup command pre-typed (OpenClaw
+    /// without Claude Code).
+    case openTerminalSetup
 }
 
 enum AgentInstallStatus: Equatable {
@@ -45,6 +48,10 @@ enum AgentInstallStatus: Equatable {
     case confirming
     case installing
     case waitingForApproval(userCode: String?)
+    /// The provider needs the user to connect a model themselves in Terminal
+    /// (e.g. OpenClaw with no Claude Code credential to reuse). `command` is
+    /// shown in the prompt and pre-typed into Terminal.
+    case needsManualModelSetup(command: String)
     case cancelled
     case docsOpened
     case connected
@@ -65,6 +72,7 @@ enum AgentInstallStatus: Equatable {
         case .confirming: return "confirming"
         case .installing: return "installing"
         case .waitingForApproval: return "waitingForApproval"
+        case .needsManualModelSetup: return "needsManualModelSetup"
         case .cancelled: return "cancelled"
         case .docsOpened: return "docsOpened"
         case .connected: return "connected"
@@ -119,6 +127,10 @@ struct AgentInstallPromptState: Equatable {
                 return "Waiting for approval in your browser… If the page asks for a code, enter the one below."
             }
             return "Waiting for approval in your browser…"
+        case .needsManualModelSetup:
+            return "Claude Code isn't set up on this Mac, so OpenClaw needs its own model key. "
+                + "Get an openrouter.ai API key, run the command below with it, and "
+                + "Omi will connect automatically."
         case .cancelled:
             return "Connection cancelled."
         case .docsOpened:
@@ -146,6 +158,8 @@ struct AgentInstallPromptState: Equatable {
             return "Run setup"
         case .authFailed:
             return "Retry sign-in"
+        case .needsManualModelSetup:
+            return "Open Terminal"
         default:
             return "Connect \(plan.provider.displayName)"
         }
@@ -155,6 +169,8 @@ struct AgentInstallPromptState: Equatable {
         switch status {
         case .confirming:
             return .runSetup
+        case .needsManualModelSetup:
+            return .openTerminalSetup
         default:
             return .beginConnection
         }

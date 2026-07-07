@@ -15,6 +15,11 @@ final class OpenClawConnectService: ObservableObject {
     enum Phase: Equatable {
         case idle
         case onboarding
+        /// Claude Code isn't available on this Mac, so `--auth-choice
+        /// anthropic-cli` has no credential to reuse. The user connects
+        /// OpenClaw to a model themselves (Terminal + their own API key)
+        /// while the app watches for the config to appear.
+        case needsManualModelSetup
         case connected
         case failed(message: String)
 
@@ -24,6 +29,7 @@ final class OpenClawConnectService: ObservableObject {
             switch self {
             case .idle: return "idle"
             case .onboarding: return "onboarding"
+            case .needsManualModelSetup: return "needsManualModelSetup"
             case .connected: return "connected"
             case .failed: return "failed"
             }
@@ -35,11 +41,25 @@ final class OpenClawConnectService: ObservableObject {
     @Published private(set) var phase: Phase = .idle
 
     private var task: Task<Void, Never>?
+    private var manualWatchTask: Task<Void, Never>?
+
+    /// Test-only: forces the Claude Code availability probe to a fixed value
+    /// so the no-Claude-Code fallback can be exercised without touching the
+    /// user's real credentials. Settable only through the local automation
+    /// bridge, which exists on non-prod bundles only.
+    var claudeCodeAvailabilityOverrideForTesting: Bool?
+
+    private var isClaudeCodeAvailableForOnboard: Bool {
+        if let forced = claudeCodeAvailabilityOverrideForTesting { return forced }
+        return LocalAgentProviderDetector.isAvailable(.claudeCode)
+    }
 
     var isOnboarded: Bool { OpenClawOnboardProbe.isOnboarded() }
 
     /// Idempotent, non-interactive onboarding. Installs the Gateway daemon and
-    /// configures the default model via the local Claude credential.
+    /// configures the default model via the local Claude credential. When no
+    /// Claude credential exists, falls back to a user-driven Terminal setup
+    /// with the user's own model API key (see `manualModelSetupCommand`).
     func connect() {
         guard !phase.isBusy else { return }
         guard let executable = openClawExecutablePath() else {
@@ -48,6 +68,14 @@ final class OpenClawConnectService: ObservableObject {
         }
         if isOnboarded {
             phase = .connected
+            return
+        }
+        guard isClaudeCodeAvailableForOnboard else {
+            // No keychain credential, config token, or claude binary —
+            // `anthropic-cli` auth would fail. Hand the model connection to
+            // the user and watch for the onboarded config to appear.
+            phase = .needsManualModelSetup
+            startManualOnboardWatch()
             return
         }
 
@@ -73,7 +101,9 @@ final class OpenClawConnectService: ObservableObject {
     }
 
     func cancel() {
-        guard phase.isBusy else { return }
+        manualWatchTask?.cancel()
+        manualWatchTask = nil
+        guard phase.isBusy || phase == .needsManualModelSetup else { return }
         task?.cancel()
         task = nil
         phase = .idle
@@ -83,7 +113,78 @@ final class OpenClawConnectService: ObservableObject {
     func refreshConnectionState() {
         guard !phase.isBusy else { return }
         if case .failed = phase { return }
+        if phase == .needsManualModelSetup, !isOnboarded { return }
         phase = isOnboarded ? .connected : .idle
+    }
+
+    /// Placeholder the user replaces with their own key in Terminal. The key
+    /// goes straight into OpenClaw's own credential store — the app never
+    /// sees or stores it.
+    static let manualSetupKeyPlaceholder = "YOUR_OPENROUTER_API_KEY"
+
+    /// The Terminal command for connecting OpenClaw to a model without Claude
+    /// Code. `--auth-choice openrouter-api-key` is the broadest single-key
+    /// option `openclaw onboard` supports (one OpenRouter key covers many
+    /// models — the same bring-your-own-key shape as the Hermes fallback);
+    /// the remaining flags mirror `onboardArguments`.
+    static let manualModelSetupCommand: String =
+        "openclaw onboard --non-interactive --accept-risk "
+        + "--auth-choice openrouter-api-key --openrouter-api-key \(manualSetupKeyPlaceholder) "
+        + "--install-daemon --flow quickstart "
+        + "--skip-channels --skip-search --skip-skills --skip-hooks --skip-ui"
+
+    /// Open a fresh Terminal window with the manual setup command pre-typed
+    /// but NOT executed: `print -z` pushes the text into zsh's next prompt
+    /// buffer, so the user swaps in their real API key and presses return
+    /// themselves. (zsh is the macOS default shell; on another shell the
+    /// command is still visible in the prompt UI to copy.)
+    func openTerminalPreloadedWithManualSetup() {
+        // `osascript` subprocess rather than NSAppleScript: NSAppleScript is
+        // main-thread-only and silently flaky off it.
+        let script = """
+        tell application "Terminal"
+            activate
+            do script "print -z '\(Self.manualModelSetupCommand)'"
+        end tell
+        """
+        DispatchQueue.global(qos: .userInitiated).async {
+            let process = Process()
+            let pipe = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", script]
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = pipe
+            do {
+                try process.run()
+                process.waitUntilExit()
+                if process.terminationStatus != 0 {
+                    let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                    NSLog("OpenClawConnect: failed to open Terminal: %@",
+                          String(data: data, encoding: .utf8) ?? "unknown error")
+                }
+            } catch {
+                NSLog("OpenClawConnect: failed to open Terminal: %@", error.localizedDescription)
+            }
+        }
+    }
+
+    /// Poll the on-disk config while the user completes the Terminal setup;
+    /// flips to `.connected` the moment onboarding lands. Bounded (~15 min)
+    /// so an abandoned prompt doesn't poll forever.
+    private func startManualOnboardWatch() {
+        manualWatchTask?.cancel()
+        manualWatchTask = Task { [weak self] in
+            for _ in 0..<450 {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                if Task.isCancelled { return }
+                guard let self, self.phase == .needsManualModelSetup else { return }
+                if OpenClawOnboardProbe.isOnboarded() {
+                    self.log("OpenClawConnect: manual model setup detected — connected")
+                    self.phase = .connected
+                    return
+                }
+            }
+        }
     }
 
     /// The exact arguments used to onboard non-interactively. Kept here (not

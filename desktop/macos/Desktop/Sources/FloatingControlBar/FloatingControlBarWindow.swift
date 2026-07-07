@@ -1829,6 +1829,11 @@ class FloatingControlBarManager {
         switch action {
         case .openDocs:
             openAgentInstallDocs(messageId: messageId, plan: prompt.plan)
+        case .openTerminalSetup:
+            // OpenClaw-without-Claude-Code fallback: pre-type the model setup
+            // command in a fresh Terminal window. The service keeps watching
+            // the config and flips the prompt to connected on its own.
+            OpenClawConnectService.shared.openTerminalPreloadedWithManualSetup()
         case .beginConnection:
             // Sign-in plans open a browser (safe, reversible) — no
             // confirmation step like the shell installer needs.
@@ -2045,6 +2050,16 @@ class FloatingControlBarManager {
                 switch phase {
                 case .idle, .onboarding:
                     break
+                case .needsManualModelSetup:
+                    // No Claude Code to reuse — show the bring-your-own-key
+                    // Terminal path. The subscription stays live: the service
+                    // polls the config and reports .connected when the user
+                    // finishes, which retries the original request below.
+                    window.state.updateAgentInstallPrompt(for: messageId) {
+                        $0.status = .needsManualModelSetup(
+                            command: OpenClawConnectService.manualModelSetupCommand)
+                    }
+                    window.resizeToResponseHeightPublic(animated: true)
                 case .connected:
                     self.agentAuthCancellables[messageId] = nil
                     let retryContext = window.state.agentInstallPrompt(for: messageId)?.retryContext
@@ -2393,7 +2408,14 @@ class FloatingControlBarManager {
             return ["error": "no_install_prompt"]
         }
         handleAgentInstallPromptAction(messageId: message.id, action: prompt.primaryAction)
-        return ["triggered": prompt.primaryAction == .runSetup ? "runSetup" : "beginConnection"]
+        let label: String
+        switch prompt.primaryAction {
+        case .runSetup: label = "runSetup"
+        case .openTerminalSetup: label = "openTerminalSetup"
+        case .openDocs: label = "openDocs"
+        case .beginConnection: label = "beginConnection"
+        }
+        return ["triggered": label]
     }
 
     func openAskOmiForAutomation(reset: Bool, wait: Bool = true) async -> [String: String] {
