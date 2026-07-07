@@ -1527,6 +1527,12 @@ struct ImportConnectorSheet: View {
                 draftText = ""
             }
         }
+        .onDisappear {
+            // A seen success is done with: clear it so the next open shows
+            // the persisted snapshot status instead of stale success text.
+            // Failures stay until the next start so they can't be missed.
+            runner.acknowledgeSuccess(connectorID: connector.id)
+        }
     }
 
     private var connectorActionContent: some View {

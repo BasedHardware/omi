@@ -177,6 +177,62 @@ final class ConnectorImportRunnerTests: XCTestCase {
     XCTAssertEqual(runner.runs["email"]?.statusMessage, "second done")
   }
 
+  func testAcknowledgeSuccessClearsSucceededRun() async {
+    let runner = ConnectorImportRunner()
+
+    let task = runner.start(
+      connectorID: "local-files",
+      progressTitle: "t",
+      progressDetail: "d"
+    ) { _ in
+      .success(message: "done")
+    }
+    await task?.value
+    XCTAssertEqual(runner.runs["local-files"]?.phase, .succeeded)
+
+    runner.acknowledgeSuccess(connectorID: "local-files")
+    XCTAssertNil(runner.runs["local-files"])
+  }
+
+  func testAcknowledgeSuccessKeepsFailedRun() async {
+    let runner = ConnectorImportRunner()
+
+    let task = runner.start(
+      connectorID: "email",
+      progressTitle: "t",
+      progressDetail: "d"
+    ) { _ in
+      .failure(message: "boom")
+    }
+    await task?.value
+
+    runner.acknowledgeSuccess(connectorID: "email")
+    XCTAssertEqual(runner.runs["email"]?.phase, .failed)
+    XCTAssertEqual(runner.runs["email"]?.errorMessage, "boom")
+  }
+
+  func testAcknowledgeSuccessIgnoresRunningRun() async {
+    let runner = ConnectorImportRunner()
+    let release = Gate()
+
+    let task = runner.start(
+      connectorID: "email",
+      progressTitle: "t",
+      progressDetail: "d"
+    ) { _ in
+      await release.wait()
+      return .success(message: "done")
+    }
+
+    runner.acknowledgeSuccess(connectorID: "email")
+    XCTAssertEqual(runner.runs["email"]?.phase, .running)
+    XCTAssertTrue(runner.isRunning("email"))
+
+    await release.open()
+    await task?.value
+    XCTAssertEqual(runner.runs["email"]?.phase, .succeeded)
+  }
+
   func testProgressUpdateAfterCompletionIsDropped() async {
     let runner = ConnectorImportRunner()
     var sink: ConnectorImportRunner.ProgressSink?

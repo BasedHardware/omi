@@ -86,6 +86,16 @@ final class ConnectorImportRunner: ObservableObject {
         return task
     }
 
+    /// Clears a succeeded run's retained state once the user has seen it —
+    /// call when a sheet that displayed the success is dismissed. Failed runs
+    /// are deliberately kept until the next start so an error that lands
+    /// while the sheet is closed still surfaces on reopen.
+    func acknowledgeSuccess(connectorID: String) {
+        guard tasks[connectorID] == nil, runs[connectorID]?.phase == .succeeded else { return }
+        runs[connectorID] = nil
+        runTokens[connectorID] = nil
+    }
+
     private func applyProgress(connectorID: String, runToken: UUID, title: String, detail: String) {
         guard runTokens[connectorID] == runToken, runs[connectorID]?.phase == .running else { return }
         runs[connectorID]?.progressTitle = title
