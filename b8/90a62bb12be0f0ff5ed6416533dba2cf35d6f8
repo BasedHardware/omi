@@ -1,0 +1,22 @@
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_20457e593f58da 650-652
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_9215c7e517212d 29
+  s_edfd59e96df44b::t_c26f304b576055 719-739
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b890a62bb12be0f0ff5ed6416533dba2cf35d6f8",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
