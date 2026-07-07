@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the Home ask bar showing a send button for attachment-only input that silently did nothing"
+}
