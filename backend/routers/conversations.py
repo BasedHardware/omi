@@ -47,7 +47,7 @@ from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
-from utils.conversations.search import search_conversations
+from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
 from utils.speaker_identification import extract_speaker_samples
 from utils.other import endpoints as auth
@@ -1074,16 +1074,19 @@ def search_conversations_endpoint(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid end_date; expected an ISO 8601 datetime string")
 
-    search_results = search_conversations(
-        query=search_request.query,
-        page=search_request.page,
-        per_page=search_request.per_page,
-        uid=uid,
-        include_discarded=search_request.include_discarded,
-        start_date=start_timestamp,
-        end_date=end_timestamp,
-        speaker_id=search_request.speaker_id,
-    )
+    try:
+        search_results = search_conversations(
+            query=search_request.query,
+            page=search_request.page,
+            per_page=search_request.per_page,
+            uid=uid,
+            include_discarded=search_request.include_discarded,
+            start_date=start_timestamp,
+            end_date=end_timestamp,
+            speaker_id=search_request.speaker_id,
+        )
+    except ConversationSearchUnavailableError:
+        raise HTTPException(status_code=503, detail="Search temporarily unavailable")
     conversation_ids = [item.get('id') for item in search_results.get('items', []) if item.get('id')]
     conversations = conversations_db.get_conversations_by_id_without_photos(
         uid,
