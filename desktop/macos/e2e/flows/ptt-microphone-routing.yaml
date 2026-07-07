@@ -1,0 +1,56 @@
+version: 2
+name: ptt-microphone-routing
+description: Push-to-talk microphone routing flow — verify realtime hub PTT capture, warm mic reuse, cancellation cleanup, and fallback routing when another capture owns the selected input
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
+  - desktop/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/Desktop/Sources/AudioCaptureService.swift
+preconditions:
+  - auth_ready
+  - microphone_permission_granted
+
+steps:
+  - id: S1
+    name: Start a push-to-talk turn
+    do: "Hold the configured push-to-talk shortcut long enough to enter listening. Verify the floating bar shows voice listening state and microphone level activity."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S1.webp
+    note: "PushToTalkManager starts AudioCaptureService on shortcut down and streams PCM to the realtime hub when active."
+
+  - id: S2
+    name: Finalize a normal turn and keep capture warm
+    do: "Release the shortcut after speaking. Verify the turn finalizes and the bar enters thinking or voice-response state without reporting a microphone error."
+    verify: true
+    expect:
+      - kind: text_not_visible
+        values: ["Microphone permission denied", "Transcription failed"]
+    evidence:
+      - screenshot: step-S2.webp
+    note: "Normal finalization may park the mic capture briefly so the next PTT turn can reuse the open CoreAudio device."
+
+  - id: S3
+    name: Reuse warm capture on the next turn
+    do: "Start a second push-to-talk turn within two minutes. Verify listening begins immediately and uses the same selected/default microphone route unless another capture owns it."
+    verify: true
+    expect:
+      - kind: interactive_count
+        min: 1
+    evidence:
+      - screenshot: step-S3.webp
+    note: "The parked capture is the manager's own capture and should not force fallback to the built-in mic."
+
+  - id: S4
+    name: Cancel cleanup releases capture
+    do: "Start another push-to-talk turn, then cancel/close it without sending. Verify the bar returns to idle and no recording indicator remains."
+    verify: true
+    expect:
+      - kind: text_not_visible
+        values: ["Transcribing...", "Recording too long"]
+    evidence:
+      - screenshot: step-S4.webp
+    note: "Cancel and teardown paths must discard warm mic parking instead of holding the microphone for the keep-alive window."

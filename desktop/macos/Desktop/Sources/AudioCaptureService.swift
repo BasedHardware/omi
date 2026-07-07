@@ -346,7 +346,6 @@ class AudioCaptureService: @unchecked Sendable {
         resetSilentMicWatchdog()
         guard isCapturing else { return }
 
-        unregisterActiveCapture()
         removePropertyListeners()
 
         // Capture values before clearing state so we can dispatch the heavy
@@ -371,10 +370,13 @@ class AudioCaptureService: @unchecked Sendable {
 
         // AudioDeviceStop can block waiting for the IO thread — run off main thread
         if let procID = procID, devID != kAudioObjectUnknown {
-            audioQueue.async {
+            audioQueue.async { [self] in
                 AudioDeviceStop(devID, procID)
                 AudioDeviceDestroyIOProcID(devID, procID)
+                unregisterActiveCapture()
             }
+        } else {
+            unregisterActiveCapture()
         }
 
         log("AudioCapture: Stopped capturing")
@@ -387,7 +389,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     /// Get the name of the current default input device (microphone)
     /// A selectable audio input device.
-    struct InputDeviceInfo: Identifiable, Equatable {
+    struct InputDeviceInfo: Identifiable, Equatable, Sendable {
         let id: AudioDeviceID
         let uid: String
         let name: String
@@ -477,7 +479,7 @@ class AudioCaptureService: @unchecked Sendable {
     }
 
     /// UserDefaults key for the user's explicit microphone choice ("" = system default).
-    static let preferredInputUIDDefaultsKey = "preferredMicrophoneDeviceUID"
+    static let preferredInputUIDDefaultsKey = DefaultsKey.preferredMicrophoneDeviceUID.rawValue
 
     // MARK: - Active-capture registry
     //
@@ -500,18 +502,25 @@ class AudioCaptureService: @unchecked Sendable {
         Self.activeCapturesLock.unlock()
     }
 
-    /// True when another live capture already holds this device.
-    static func isDeviceActivelyCaptured(_ deviceID: AudioDeviceID) -> Bool {
+    /// True when a live capture already holds this device.
+    static func isDeviceActivelyCaptured(
+        _ deviceID: AudioDeviceID,
+        excluding excludedCapture: AudioCaptureService? = nil
+    ) -> Bool {
         activeCapturesLock.lock()
         defer { activeCapturesLock.unlock() }
-        return activeCaptures.values.contains(deviceID)
+        let excludedID = excludedCapture.map(ObjectIdentifier.init)
+        return activeCaptures.contains { owner, activeDeviceID in
+            activeDeviceID == deviceID && (excludedID.map { owner != $0 } ?? true)
+        }
     }
 
     /// True when any capture is currently running in this process.
-    static func hasActiveCapture() -> Bool {
+    static func hasActiveCapture(excluding excludedCapture: AudioCaptureService? = nil) -> Bool {
         activeCapturesLock.lock()
         defer { activeCapturesLock.unlock() }
-        return !activeCaptures.isEmpty
+        guard let excludedCapture else { return !activeCaptures.isEmpty }
+        return activeCaptures.keys.contains { $0 != ObjectIdentifier(excludedCapture) }
     }
 
     static func getCurrentMicrophoneName() -> String? {
@@ -976,6 +985,7 @@ class AudioCaptureService: @unchecked Sendable {
 
         updateDefaultDeviceListener()
         installDeviceFormatListener()
+        registerActiveCapture(deviceID: deviceID)
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
@@ -1121,6 +1131,7 @@ class AudioCaptureService: @unchecked Sendable {
                 AudioDeviceStop(deviceID, procID)
                 AudioDeviceDestroyIOProcID(deviceID, procID)
             }
+            unregisterActiveCapture()
         }
     }
 }

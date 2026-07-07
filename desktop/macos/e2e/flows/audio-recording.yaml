@@ -6,6 +6,7 @@ covers:
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/Desktop/Sources/AudioCaptureService.swift
   - desktop/Desktop/Sources/AppState.swift
+  - desktop/Desktop/Sources/AppState/AppState+Transcription.swift
 preconditions:
   - auth_ready
 

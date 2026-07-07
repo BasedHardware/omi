@@ -10,6 +10,8 @@ covers:
   - desktop/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/Desktop/Sources/MainWindow/SettingsSidebar.swift
   - desktop/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
 preconditions:
   - auth_ready  # User signed in and onboarding completed. App shows main window.
 
@@ -49,16 +51,16 @@ steps:
 
   - id: S4
     name: Navigate to Transcription section
-    do: "Click 'Transcription' in the Settings sidebar. Verify Language Mode card appears with two options: 'Auto-Detect Multi-Language' and 'Single Language Better Accuracy'. If Single Language is selected, a language picker should be visible."
+    do: "Click 'Transcription' in the Settings sidebar. Verify Language Mode card appears with two options: 'Auto-Detect Multi-Language' and 'Single Language Better Accuracy'. Verify the Microphone card appears with 'System Default' and any available input devices. If Single Language is selected, a language picker should be visible."
     verify: true
     expect:
       - kind: text_visible
-        values: ["Language Mode"]
+        values: ["Language Mode", "Microphone", "System Default"]
       - kind: interactive_count
         min: 3
     evidence:
       - screenshot: step-S4.webp
-    note: "Transcription section has radio-style language mode toggle. Auto-Detect uses multi-language STT. Single Language shows popupbutton picker with language options."
+    note: "Transcription section has radio-style language mode toggle and microphone picker. Auto-Detect uses multi-language STT. Single Language shows popupbutton picker with language options. MicrophonePickerCard refreshes CoreAudio inputs while the view is visible."
 
   - id: S5
     name: Navigate to Notifications section

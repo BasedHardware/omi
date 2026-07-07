@@ -48,7 +48,26 @@ struct MicrophonePickerCard: View {
         }
       }
     }
-    .onAppear { devices = AudioCaptureService.listInputDevices() }
+    .task { await refreshDevicesPeriodically() }
+  }
+
+  @MainActor
+  private func refreshDevicesPeriodically() async {
+    await refreshDevices()
+    while !Task.isCancelled {
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      guard !Task.isCancelled else { return }
+      await refreshDevices()
+    }
+  }
+
+  @MainActor
+  private func refreshDevices() async {
+    let latest = await Task.detached(priority: .utility) {
+      AudioCaptureService.listInputDevices()
+    }.value
+    guard !Task.isCancelled else { return }
+    devices = latest
   }
 
   @ViewBuilder

@@ -187,6 +187,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var prefetchedFloatingAgentStatus = ""
   /// Seed baked into the current warm session's system instructions.
   private var sessionVoiceSeedContextSnapshot = ""
+  /// A seed refresh landed mid-turn; reconnect only after the committed reply is done.
+  private var reconnectWarmSessionWhenTurnCompletes = false
   private var voiceSeedPrefetchTask: Task<Void, Never>?
   private var bargeInContinuityTask: Task<Void, Never>?
   private var pendingBargeInProvider: RealtimeHubProvider?
@@ -724,21 +726,35 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// change the kernel-projected seed so PTT sees the latest main-chat transcript.
   private func reconnectWarmSessionIfSeedStale() {
     guard session != nil else { return }
+    let current = voiceSessionSeedContext()
+    guard current != sessionVoiceSeedContextSnapshot else { return }
     // The seed refresh that precedes this check is async and can take seconds;
     // a short PTT turn may begin — or even commit — before it lands. Tearing
     // down mid-turn destroys the session the committed turn is awaiting its
-    // reply on (the reply never arrives). Defer; the next turn re-checks.
+    // reply on (the reply never arrives). Defer, then reconnect after turn done.
     if inputTurnInProgress || responding {
+      reconnectWarmSessionWhenTurnCompletes = true
       log(
         "RealtimeHub: voice seed changed but a turn is in flight — deferring reconnect")
       return
     }
-    let current = voiceSessionSeedContext()
-    guard current != sessionVoiceSeedContextSnapshot else { return }
     log(
       "RealtimeHub: voice seed changed — reconnecting warm session "
         + "(was \(sessionVoiceSeedContextSnapshot.count) chars, now \(current.count))")
     teardownSession()
+  }
+
+  private func reconnectDeferredWarmSessionIfNeeded() {
+    guard reconnectWarmSessionWhenTurnCompletes else { return }
+    reconnectWarmSessionWhenTurnCompletes = false
+    guard session != nil else { return }
+    let current = voiceSessionSeedContext()
+    guard current != sessionVoiceSeedContextSnapshot else { return }
+    log(
+      "RealtimeHub: deferred voice seed reconnect after turn completion "
+        + "(was \(sessionVoiceSeedContextSnapshot.count) chars, now \(current.count))")
+    teardownSession()
+    ensureWarm()
   }
 
   private func recordTurnToKernel(
@@ -783,6 +799,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     sessionAuth = nil
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceSeedContextSnapshot = ""
+    reconnectWarmSessionWhenTurnCompletes = false
     clearBargeInReplacementState()
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
@@ -1250,6 +1267,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // warm session (and its context) so the next real turn is instant and in-context.
     session?.abandonInputTurn()
     exitVoiceUI(clearResponseGlow: true)
+    reconnectDeferredWarmSessionIfNeeded()
   }
 
   // MARK: - RealtimeHubSessionDelegate
@@ -1867,6 +1885,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
     exitVoiceUI()
+    reconnectDeferredWarmSessionIfNeeded()
   }
 
   private nonisolated static func userExplicitlyRequestedPillManagement(
