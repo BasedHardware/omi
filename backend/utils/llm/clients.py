@@ -1,12 +1,20 @@
 import hashlib
 import logging
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import anthropic
 import httpx
 from cachetools import TTLCache
-from langchain_core.callbacks import BaseCallbackHandler
+
+try:
+    from langchain_core.callbacks import BaseCallbackHandler
+except ImportError:
+
+    class BaseCallbackHandler:
+        pass
+
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
@@ -118,7 +126,7 @@ class _LLMErrorCallback(BaseCallbackHandler):
             handle_llm_error(error, self.provider, feature=self.feature, model=self.model)
 
 
-_llm_error_callbacks: Dict[Tuple[str, str, str], _LLMErrorCallback] = {}
+_llm_error_callbacks = {}
 
 
 def _get_llm_error_callback(provider: str, model: str = '', feature: str = '') -> _LLMErrorCallback:
