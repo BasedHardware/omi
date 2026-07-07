@@ -673,6 +673,8 @@ extension Notification.Name {
   static let homeStageClose = Notification.Name("homeStageClose")
   /// Posted (automation bridge) to send a query through the Home ask bar. userInfo["query"] = text.
   static let homeStageAsk = Notification.Name("homeStageAsk")
+  /// Posted (automation bridge) to stage a file in the Home ask bar. userInfo["path"] = file path.
+  static let homeStageAttach = Notification.Name("homeStageAttach")
   /// Posted to show the over-usage-limit popup. userInfo["reason"] = "transcription" | "chat" | "floating_bar".
   static let showUsageLimitPopup = Notification.Name("showUsageLimitPopup")
   /// Posted to navigate to Rewind settings

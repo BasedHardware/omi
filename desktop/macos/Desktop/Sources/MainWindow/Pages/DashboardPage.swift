@@ -1,6 +1,7 @@
 import Combine
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 import OmiTheme
 
 // MARK: - Dashboard View Model
@@ -475,6 +476,15 @@ struct DashboardPage: View {
                   let query = note.userInfo?["query"] as? String else { return }
             askHomeSuggestion(query)
         }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageAttach)) { note in
+            guard !useLegacyHomeDesign,
+                  let path = note.userInfo?["path"] as? String else { return }
+            // Same wiring the ask bar's paperclip/drag-drop runs after the
+            // OS hands back file URLs.
+            if let attachment = ChatAttachment.from(url: URL(fileURLWithPath: path)) {
+                chatProvider.addAttachments([attachment])
+            }
+        }
     }
 
     private var legacyHome: some View {
@@ -658,18 +668,11 @@ struct DashboardPage: View {
 
     private var homeHubCenterpiece: some View {
         VStack(spacing: 22) {
-            VStack(spacing: 4) {
-                Text("omi.")
-                    .font(.system(size: 52, weight: .bold, design: .rounded))
-                    .foregroundStyle(HomePalette.ink)
-                    .lineLimit(1)
-                    .shadow(color: HomePalette.glow.opacity(0.45), radius: 24)
-
-                Text("What omi knows")
-                    .font(.system(size: 16, weight: .medium, design: .serif))
-                    .foregroundStyle(HomePalette.secondary)
-                    .lineLimit(1)
-            }
+            Text("omi.")
+                .font(.system(size: 52, weight: .bold, design: .rounded))
+                .foregroundStyle(HomePalette.ink)
+                .lineLimit(1)
+                .shadow(color: HomePalette.glow.opacity(0.45), radius: 24)
 
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
@@ -767,19 +770,31 @@ struct DashboardPage: View {
 
     private var homeConnectPanel: some View {
         ScrollView(showsIndicators: false) {
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 12) {
-                    sourceColumnHeader
-                    sourceConstellation
+            // Sources feed omi; omi's memory flows out to the AI destinations —
+            // the chevron between the two cards reads that direction.
+            HStack(alignment: .center, spacing: 12) {
+                homeConnectColumnCard {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sourceColumnHeader
+                        sourceConstellation
+                    }
                 }
-                .frame(maxWidth: .infinity)
 
-                destinationStack
-                    .frame(maxWidth: .infinity)
+                Image(systemName: "chevron.right")
+                    .scaledFont(size: 13, weight: .bold)
+                    .foregroundStyle(HomePalette.secondary)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(HomePalette.tile))
+                    .overlay(Circle().stroke(HomePalette.hairline, lineWidth: 1))
+                    .accessibilityHidden(true)
+
+                homeConnectColumnCard {
+                    destinationStack
+                }
             }
             .padding(.bottom, 4)
         }
-        .padding(24)
+        .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
                 .fill(HomePalette.panel.opacity(0.94))
@@ -799,6 +814,20 @@ struct DashboardPage: View {
         .padding(.horizontal, Self.homeStageHorizontalPadding)
     }
 
+    private func homeConnectColumnCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.white.opacity(0.025))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(HomePalette.hairline.opacity(0.55), lineWidth: 1)
+            )
+    }
+
     // MARK: Ask bar + suggestions
 
     private var homeAskBar: some View {
@@ -808,6 +837,14 @@ struct DashboardPage: View {
             isStopping: chatProvider.isStopping,
             isConnectActive: homeMode == .connect,
             focus: $homeAskFieldFocused,
+            attachments: $chatProvider.pendingAttachments,
+            onAttachmentsAdded: { urls in
+                let toAdd = urls.compactMap { ChatAttachment.from(url: $0) }
+                chatProvider.addAttachments(toAdd)
+            },
+            onAttachmentRemoved: { id in
+                chatProvider.removePendingAttachment(id: id)
+            },
             onSend: sendFromHomeAskBar,
             onStop: { chatProvider.stopAgent(owner: .mainChat) },
             onConnect: toggleHomeConnectPanel,
@@ -863,7 +900,8 @@ struct DashboardPage: View {
 
     private func sendFromHomeAskBar() {
         let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        // Attachments without text are sendable, matching the chat page.
+        guard !text.isEmpty || !chatProvider.pendingAttachments.isEmpty else { return }
         chatProvider.draftText = ""
         openHomeChat()
         AnalyticsManager.shared.chatMessageSent(
@@ -1107,7 +1145,6 @@ struct DashboardPage: View {
                 .foregroundStyle(HomePalette.muted)
                 .lineLimit(1)
         }
-        .frame(height: 62, alignment: .bottomLeading)
     }
 
     private var sourceConstellation: some View {
@@ -1135,9 +1172,9 @@ struct DashboardPage: View {
 
     private var destinationStack: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Use omi memory anywhere")
-                    .font(.system(size: 22, weight: .medium, design: .serif))
+                    .font(.system(size: 20, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
 
                 Text("Bring your memories to the apps you use")
@@ -1145,7 +1182,6 @@ struct DashboardPage: View {
                     .foregroundStyle(HomePalette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .frame(height: 62, alignment: .bottomLeading)
 
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
                 openHomeChat()
@@ -1753,55 +1789,83 @@ extension AnyTransition {
     }
 }
 
-/// The persistent home ask bar: a pill-shaped chat input with a send/stop
-/// action and the Connect toggle living inside the pill.
+/// The persistent home ask bar: a pill-shaped chat input with attachments
+/// (paperclip + drag-drop, same limits as the chat page), a send/stop action,
+/// and the Connect toggle living inside the pill.
 private struct HomeAskBar: View {
     @Binding var text: String
     let isSending: Bool
     let isStopping: Bool
     let isConnectActive: Bool
     var focus: FocusState<Bool>.Binding
+    @Binding var attachments: [ChatAttachment]
+    let onAttachmentsAdded: ([URL]) -> Void
+    let onAttachmentRemoved: (String) -> Void
     let onSend: () -> Void
     let onStop: () -> Void
     let onConnect: () -> Void
     let onActivate: () -> Void
 
     @State private var isHovering = false
+    @State private var isDropTargeted = false
 
     private var hasText: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    /// Matches ChatInputView: attachments without text are sendable.
+    private var canSend: Bool {
+        hasText || !attachments.isEmpty
+    }
+
     private var isFocused: Bool { focus.wrappedValue }
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "sparkles")
-                .scaledFont(size: 14, weight: .semibold)
-                .foregroundStyle(isFocused ? HomePalette.ink : HomePalette.muted)
-
-            TextField(
-                "",
-                text: $text,
-                prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
-            )
-            .textFieldStyle(.plain)
-            .font(.system(size: 15))
-            .foregroundStyle(HomePalette.ink)
-            .focused(focus)
-            .onSubmit(onSend)
-
-            if isSending && !hasText {
-                stopButton
-            } else if hasText {
-                sendButton
+        VStack(spacing: 8) {
+            if !attachments.isEmpty {
+                AttachmentPreviewRow(
+                    attachments: attachments,
+                    onRemove: onAttachmentRemoved
+                )
+                .padding(.top, 10)
+                .padding(.horizontal, 12)
             }
 
-            connectButton
+            HStack(spacing: 10) {
+                Button(action: pickFiles) {
+                    Image(systemName: "paperclip")
+                        .scaledFont(size: 15, weight: .medium)
+                        .foregroundStyle(isFocused ? HomePalette.secondary : HomePalette.muted)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(attachments.count >= kMaxChatAttachments)
+                .help("Attach files")
+
+                TextField(
+                    "",
+                    text: $text,
+                    prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
+                )
+                .textFieldStyle(.plain)
+                .font(.system(size: 15))
+                .foregroundStyle(HomePalette.ink)
+                .focused(focus)
+                .onSubmit(onSend)
+
+                if isSending && !hasText {
+                    stopButton
+                } else if canSend {
+                    sendButton
+                }
+
+                connectButton
+            }
+            .padding(.leading, 16)
+            .padding(.trailing, 8)
+            .frame(height: 58)
         }
-        .padding(.leading, 18)
-        .padding(.trailing, 8)
-        .frame(height: 58)
         .background(
             RoundedRectangle(cornerRadius: 29, style: .continuous)
                 .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
@@ -1809,9 +1873,11 @@ private struct HomeAskBar: View {
         .overlay(
             RoundedRectangle(cornerRadius: 29, style: .continuous)
                 .stroke(
-                    isFocused
-                        ? Color.white.opacity(0.30)
-                        : HomePalette.hairline.opacity(isHovering ? 1 : 0.9),
+                    isDropTargeted
+                        ? Color.white.opacity(0.55)
+                        : (isFocused
+                            ? Color.white.opacity(0.30)
+                            : HomePalette.hairline.opacity(isHovering ? 1 : 0.9)),
                     lineWidth: 1
                 )
         )
@@ -1822,8 +1888,40 @@ private struct HomeAskBar: View {
             focus.wrappedValue = true
         }
         .onHover { isHovering = $0 }
+        .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
         .animation(.easeOut(duration: 0.16), value: isFocused)
-        .animation(.easeOut(duration: 0.16), value: hasText)
+        .animation(.easeOut(duration: 0.16), value: canSend)
+        .animation(.easeOut(duration: 0.16), value: attachments.count)
+    }
+
+    private func pickFiles() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [
+            .image, .jpeg, .png, .gif, .heic, .heif, .webP, .tiff, .bmp,
+            .pdf, .plainText, .json, .commaSeparatedText, .html,
+            .text, .content,
+        ]
+        if panel.runModal() == .OK {
+            let remaining = max(0, kMaxChatAttachments - attachments.count)
+            let urls = Array(panel.urls.prefix(remaining))
+            if !urls.isEmpty {
+                onAttachmentsAdded(urls)
+            }
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        ChatAttachmentDropHandler.collectURLs(from: providers) { [attachments] urls in
+            guard !urls.isEmpty else { return }
+            let remaining = max(0, kMaxChatAttachments - attachments.count)
+            let allowed = Array(urls.prefix(remaining))
+            if !allowed.isEmpty {
+                onAttachmentsAdded(allowed)
+            }
+        }
     }
 
     private var sendButton: some View {
@@ -1967,6 +2065,15 @@ private struct HomeCanvasBackground: View {
                 endRadius: 560
             )
 
+            RadialGradient(
+                colors: [HomePalette.glow.opacity(0.05), .clear],
+                center: UnitPoint(x: 0.5, y: 0.20),
+                startRadius: 0,
+                endRadius: 720
+            )
+
+            HomeMemoryDustField()
+
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.62),
@@ -1978,6 +2085,67 @@ private struct HomeCanvasBackground: View {
             )
         }
         .ignoresSafeArea()
+    }
+}
+
+/// Sparse, slowly drifting points of light — memories surfacing. Quiet enough
+/// to sit behind text, alive enough that the canvas doesn't feel dead.
+/// Freezes while the app is inactive so it costs nothing in the background.
+private struct HomeMemoryDustField: View {
+    @State private var isAppActive = NSApp.isActive
+
+    var body: some View {
+        Group {
+            if isAppActive {
+                TimelineView(.periodic(from: .now, by: 1.0 / 15.0)) { timeline in
+                    HomeMemoryDustCanvas(
+                        time: timeline.date.timeIntervalSinceReferenceDate)
+                }
+            } else {
+                HomeMemoryDustCanvas(time: 1200)
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+            isAppActive = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            isAppActive = false
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HomeMemoryDustCanvas: View {
+    let time: TimeInterval
+
+    var body: some View {
+        Canvas { context, size in
+            for index in 0..<56 {
+                let fi = Double(index)
+                // Deterministic per-index pseudo-randoms (no RNG — resume-safe
+                // and stable across frames).
+                let seedX = abs((sin(fi * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1))
+                let seedY = abs((sin(fi * 78.233) * 12543.123).truncatingRemainder(dividingBy: 1))
+                let seedP = abs((sin(fi * 3.7) * 951.135).truncatingRemainder(dividingBy: 1))
+
+                // Slow upward drift with a gentle horizontal sway.
+                let rawY = (seedY * size.height - time * (3.0 + seedP * 5.0))
+                    .truncatingRemainder(dividingBy: size.height)
+                let y = rawY < 0 ? rawY + size.height : rawY
+                let x = seedX * size.width + sin(time * 0.22 + fi * 1.3) * 7
+
+                let twinkle = 0.5 + 0.5 * sin(time * (0.5 + seedP * 0.8) + fi * 1.7)
+                let alpha = 0.03 + twinkle * (0.04 + seedP * 0.08)
+                let radius = 0.8 + seedP * 1.5
+
+                let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
+                let color = index % 6 == 0
+                    ? HomePalette.glow.opacity(alpha * 1.4)
+                    : Color.white.opacity(alpha)
+                context.fill(Path(ellipseIn: rect), with: .color(color))
+            }
+        }
     }
 }
 

@@ -679,6 +679,20 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "home_attach",
+      summary: "Stage a file in the Home ask bar (same wiring as the paperclip/drag-drop)",
+      params: ["path"]
+    ) { params in
+      let path = (params["path"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !path.isEmpty, FileManager.default.fileExists(atPath: path) else {
+        return ["error": "missing or nonexistent 'path'"]
+      }
+      NotificationCenter.default.post(
+        name: .homeStageAttach, object: nil, userInfo: ["path": path])
+      return ["staged": path]
+    }
+
+    register(
       name: "ask",
       summary: "Send a query to the floating-bar AI (typed path); exercises the full chat pipeline",
       params: ["query"]
