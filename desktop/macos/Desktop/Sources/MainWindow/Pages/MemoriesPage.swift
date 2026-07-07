@@ -1357,6 +1357,7 @@ class MemoriesViewModel: ObservableObject {
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
   let graphViewModel: MemoryGraphViewModel
+  let appState: AppState
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -1379,6 +1380,10 @@ struct MemoriesPage: View {
 
   private var mainMemoriesView: some View {
     VStack(spacing: 0) {
+      PageHeaderView(title: "Memories", showsHomeButton: true, appState: appState)
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+
       // Header (includes search, filters, and action buttons)
       header
 

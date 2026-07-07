@@ -163,23 +163,12 @@ struct ConversationsPage: View {
 
   private var mainConversationsView: some View {
     VStack(spacing: 0) {
-      // Conversations header
-      HStack {
-        Text("Conversations")
-          .scaledFont(size: 18, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-
-        Spacer()
-
-        quickNoteButton
-
-        if !appState.isTranscribing {
-          startRecordingButton
-        }
-      }
-      .padding(.horizontal, 24)
-      .padding(.top, 18)
-      .padding(.bottom, 12)
+      // Shared page header: title + Home chip + Capture/Listening/settings
+      // cluster. Recording start/stop lives in the Listening pill.
+      PageHeaderView(title: "Conversations", showsHomeButton: true, appState: appState)
+        .padding(.horizontal, 24)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
 
       // Conversation list
       conversationListSection
@@ -241,6 +230,8 @@ struct ConversationsPage: View {
 
         // Filter buttons
         filterButtonsRow
+
+        quickNoteButton
       }
       .padding(.horizontal, 24)
       .padding(.vertical, 12)
@@ -664,25 +655,6 @@ struct ConversationsPage: View {
   }
 
   // MARK: - Buttons
-
-  private var startRecordingButton: some View {
-    Button(action: {
-      appState.startTranscription()
-    }) {
-      HStack(spacing: 6) {
-        Image(systemName: "mic.fill")
-          .scaledFont(size: 12)
-        Text("Start Recording")
-          .scaledFont(size: 13, weight: .medium)
-      }
-      .foregroundColor(.black)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
-      .omiControlSurface(
-        fill: OmiColors.textPrimary, radius: 18, stroke: OmiColors.border.opacity(0.2))
-    }
-    .buttonStyle(.plain)
-  }
 
 }
 

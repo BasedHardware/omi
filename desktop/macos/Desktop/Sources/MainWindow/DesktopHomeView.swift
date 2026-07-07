@@ -63,6 +63,15 @@ struct DesktopHomeView: View {
     selectedIndex == SidebarNavItem.settings.rawValue
   }
 
+  /// Pages that render the shared PageHeaderView (title + Home chip +
+  /// Capture/Listening cluster) and therefore skip the legacy chrome bar.
+  private static let pagesWithOwnHeader: Set<Int> = [
+    SidebarNavItem.dashboard.rawValue,
+    SidebarNavItem.conversations.rawValue,
+    SidebarNavItem.tasks.rawValue,
+    SidebarNavItem.memories.rawValue,
+  ]
+
   var body: some View {
     Group {
       if authState.isRestoringAuth {
@@ -899,7 +908,7 @@ struct DesktopHomeView: View {
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
-          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
+          if !useLegacyHomeDesign && !Self.pagesWithOwnHeader.contains(selectedIndex) {
             PageChromeBar(
               onHome: {
                 selectedIndex = SidebarNavItem.dashboard.rawValue
@@ -1105,10 +1114,12 @@ private struct PageContentView: View {
       case 3:
         MemoriesPage(
           viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel)
+          graphViewModel: viewModelContainer.memoryGraphViewModel,
+          appState: appState)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
+          appState: appState,
           chatCoordinator: viewModelContainer.taskChatCoordinator,
           chatProvider: viewModelContainer.chatProvider)
       case 5:

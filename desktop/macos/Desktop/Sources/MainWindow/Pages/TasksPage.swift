@@ -2513,6 +2513,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
     @ObservedObject var viewModel: TasksViewModel
+    let appState: AppState
     var chatProvider: ChatProvider?
 
     // Chat panel state
@@ -2548,8 +2549,12 @@ struct TasksPage: View {
     @State private var isDraggingDivider = false
     @State private var dragStartWidth: Double = 0
 
-    init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
+    init(
+        viewModel: TasksViewModel, appState: AppState, chatCoordinator: TaskChatCoordinator,
+        chatProvider: ChatProvider? = nil
+    ) {
         self.viewModel = viewModel
+        self.appState = appState
         self.chatCoordinator = chatCoordinator
         self.chatProvider = chatProvider
     }
@@ -2746,6 +2751,10 @@ struct TasksPage: View {
 
     private var tasksContent: some View {
         VStack(spacing: 0) {
+            PageHeaderView(title: "Tasks", showsHomeButton: true, appState: appState)
+                .padding(.horizontal, 16)
+                .padding(.top, 18)
+
             // Header with filter toggle and sort
             headerView
 

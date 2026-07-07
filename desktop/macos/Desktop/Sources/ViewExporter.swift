@@ -292,14 +292,17 @@ enum ViewExporter {
         "full-ai-chat", 2,
         { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
-      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }),
+      ("full-memories", 3, { AnyView(MemoriesPage(
+            viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel(),
+            appState: AppState())) }),
       (
         "full-tasks", 4,
         {
           let cp = ChatProvider()
           return AnyView(
             TasksPage(
-              viewModel: TasksViewModel(), chatCoordinator: TaskChatCoordinator(chatProvider: cp),
+              viewModel: TasksViewModel(), appState: AppState(),
+              chatCoordinator: TaskChatCoordinator(chatProvider: cp),
               chatProvider: cp))
         }
       ),
