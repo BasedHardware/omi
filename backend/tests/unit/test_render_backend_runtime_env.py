@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-_SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render-backend-runtime-env.py'
+_SCRIPT = Path(__file__).resolve().parents[2] / 'scripts' / 'render_backend_runtime_env.py'
 _MODULE = runpy.run_path(str(_SCRIPT), run_name='render_backend_runtime_env')
 
 

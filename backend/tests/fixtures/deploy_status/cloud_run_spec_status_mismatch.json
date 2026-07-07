@@ -1,0 +1,38 @@
+{
+  "project": "based-hardware",
+  "region": "us-central1",
+  "services": [
+    {
+      "metadata": {
+        "name": "backend"
+      },
+      "spec": {
+        "traffic": [
+          {
+            "revisionName": "backend-failed-1",
+            "percent": 100
+          }
+        ],
+        "template": {
+          "spec": {
+            "containers": [
+              {
+                "image": "gcr.io/example/backend:abc1234"
+              }
+            ]
+          }
+        }
+      },
+      "status": {
+        "latestCreatedRevisionName": "backend-failed-1",
+        "latestReadyRevisionName": "backend-good-1",
+        "traffic": [
+          {
+            "revisionName": "backend-good-1",
+            "percent": 100
+          }
+        ]
+      }
+    }
+  ]
+}

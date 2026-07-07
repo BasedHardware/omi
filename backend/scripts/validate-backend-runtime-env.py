@@ -55,6 +55,11 @@ def main() -> int:
         help='Validate checked-in Cloud Run workflow env_vars blocks against the manifest.',
     )
     parser.add_argument(
+        '--check-rendered-cloud-run',
+        action='store_true',
+        help='Validate manifest Cloud Run env/secrets against an offline rendered revision shape.',
+    )
+    parser.add_argument(
         '--strict-provisional',
         action='store_true',
         help='Require provisional manifest values to match exactly. By default they only require presence.',
@@ -66,6 +71,7 @@ def main() -> int:
         manifest_path=args.manifest,
         cloud_run_state_path=args.cloud_run_state,
         check_live_cloud_run=args.check_live_cloud_run,
+        check_rendered_cloud_run=args.check_rendered_cloud_run,
         check_workflows=args.check_workflows,
         strict_provisional=args.strict_provisional,
     )
@@ -83,6 +89,7 @@ def validate_runtime_env(
     manifest_path: Path = DEFAULT_MANIFEST,
     cloud_run_state_path: Path | None = None,
     check_live_cloud_run: bool = False,
+    check_rendered_cloud_run: bool = False,
     check_workflows: bool = False,
     strict_provisional: bool = False,
 ) -> list[ValidationError]:
@@ -106,12 +113,64 @@ def validate_runtime_env(
     cloud_run_state = None
     if cloud_run_state_path is not None:
         cloud_run_state = _load_json(cloud_run_state_path)
+    elif check_rendered_cloud_run:
+        cloud_run_state = _build_rendered_cloud_run_state(env_config)
     elif check_live_cloud_run:
         cloud_run_state = _fetch_live_cloud_run_state(env_config)
 
     if cloud_run_state is not None:
         errors.extend(_validate_cloud_run(env_config, cloud_run_state, strict_provisional=strict_provisional))
     return errors
+
+
+def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    service_configs = _as_config_dict(cloud_run.get('services')) or {}
+    network_flags = _rendered_network_flags(env_config)
+    services: ConfigDict = {}
+    for service_name, raw_service_config in service_configs.items():
+        service_config = _as_config_dict(raw_service_config) or {}
+        env_entries: list[ConfigDict] = []
+        for env_name, raw_entry in (service_config.get('env') or {}).items():
+            entry = _as_config_dict(raw_entry)
+            if entry is None:
+                continue
+            if 'value' in entry:
+                if entry.get('provisional') and str(entry['value']).startswith('TBD_'):
+                    env_entries.append({'name': str(env_name), 'value': 'rendered-provisional-placeholder'})
+                    continue
+                env_entries.append({'name': str(env_name), 'value': str(entry['value'])})
+            elif 'env_var' in entry:
+                env_entries.append({'name': str(env_name), 'value': f'__rendered_{env_name}__'})
+        for secret_name, raw_entry in (service_config.get('secrets') or {}).items():
+            entry = _as_config_dict(raw_entry)
+            if entry is None or 'secret' not in entry:
+                continue
+            env_entries.append(
+                {
+                    'name': str(secret_name),
+                    'valueFrom': {
+                        'secretKeyRef': {
+                            'name': str(entry['secret']),
+                            'key': str(entry.get('version', 'latest')),
+                        }
+                    },
+                }
+            )
+        services[str(service_name)] = {'env': env_entries, 'flags': dict(network_flags)}
+    return {'services': services}
+
+
+def _rendered_network_flags(env_config: ConfigDict) -> StringMap:
+    flags = _network_flags(env_config)
+    rendered: StringMap = {}
+    for name, raw_entry in flags.items():
+        entry = _as_config_dict(raw_entry)
+        if entry is not None and 'env_var' in entry:
+            rendered[str(name)] = f'__rendered_flag_{str(name).lstrip("-").replace("-", "_")}__'
+        else:
+            rendered[str(name)] = _expected_flag_value(raw_entry)
+    return rendered
 
 
 def _load_yaml(path: Path) -> ConfigDict:
@@ -503,7 +562,7 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
         if step_dict.get('id') != 'runtime-env':
             continue
         run = step_dict.get('run')
-        if not isinstance(run, str) or 'render-backend-runtime-env.py' not in run:
+        if not isinstance(run, str) or 'render_backend_runtime_env.py' not in run:
             continue
         rendered_env = _extract_renderer_env(run, env=env)
         if rendered_env is None:

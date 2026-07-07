@@ -93,10 +93,14 @@ def main() -> int:
             )
         cloud_run_services = cast(list[str], args.cloud_run_services or list(DEFAULT_CLOUD_RUN_SERVICES))
         expected_traffic = parse_expected_traffic(args.expect_cloud_run_traffic)
+        report_project = args.project or ''
+        report_region = args.region
         section, cloud_findings = render_cloud_run_report(
             cloud_run_state,
             services=cloud_run_services,
             expected_traffic=expected_traffic,
+            project=report_project,
+            region=report_region,
         )
         sections.append(section)
         findings.extend(cloud_findings)
@@ -195,20 +199,24 @@ def render_cloud_run_report(
     *,
     services: list[str],
     expected_traffic: dict[str, str],
+    project: str = '',
+    region: str = DEFAULT_REGION,
 ) -> tuple[str, list[Finding]]:
+    project = project or str(state.get('project') or '')
+    region = str(state.get('region') or region)
     service_map = normalize_cloud_run_services(state)
     fetch_errors = cloud_run_fetch_errors_by_service(state)
     lines = [
         'Cloud Run revision status',
-        '| Service | Latest created | Latest ready | Traffic | Template image | Status |',
-        '|---|---|---|---|---|---|',
+        '| Service | Latest created | Latest ready | Spec traffic | Status traffic | Template image | Status |',
+        '|---|---|---|---|---|---|---|',
     ]
     findings: list[Finding] = []
 
     for service_name in services:
         service = service_map.get(service_name)
         if not service:
-            lines.append(f'| `{service_name}` | - | - | - | - | missing |')
+            lines.append(f'| `{service_name}` | - | - | - | - | - | missing |')
             fetch_error = fetch_errors.get(service_name)
             if fetch_error:
                 findings.append(
@@ -231,12 +239,25 @@ def render_cloud_run_report(
             continue
 
         status = service.get('status', {})
+        spec = service.get('spec', {})
         latest_created = str(status.get('latestCreatedRevisionName') or '')
         latest_ready = str(status.get('latestReadyRevisionName') or '')
-        traffic = cast(list[Any], status.get('traffic') or [])
-        traffic_text = format_cloud_run_traffic(traffic)
+        status_traffic = cast(list[Any], status.get('traffic') or [])
+        spec_traffic = cast(list[Any], spec.get('traffic') or [])
+        status_traffic_text = format_cloud_run_traffic(status_traffic)
+        spec_traffic_text = format_cloud_run_traffic(spec_traffic)
         image = cloud_run_image(service)
         ready_status = 'ok' if latest_ready and latest_ready == latest_created else 'not-ready'
+        findings.extend(
+            traffic_spec_status_findings(
+                service_name=service_name,
+                spec_traffic=spec_traffic,
+                status_traffic=status_traffic,
+                project=project,
+                region=region,
+                latest_ready_revision=latest_ready,
+            )
+        )
         if latest_created and latest_ready != latest_created:
             findings.append(
                 Finding(
@@ -248,7 +269,7 @@ def render_cloud_run_report(
 
         expected_revision = expected_traffic.get(service_name)
         if expected_revision:
-            served = traffic_percent_for_revision(traffic, expected_revision)
+            served = traffic_percent_for_revision(status_traffic, expected_revision)
             if served != 100:
                 findings.append(
                     Finding(
@@ -267,10 +288,62 @@ def render_cloud_run_report(
                 )
 
         lines.append(
-            f'| `{service_name}` | `{latest_created or "-"}` | `{latest_ready or "-"}` | {traffic_text} | `{image}` | {ready_status} |'
+            f'| `{service_name}` | `{latest_created or "-"}` | `{latest_ready or "-"}` | {spec_traffic_text} | {status_traffic_text} | `{image}` | {ready_status} |'
         )
 
     return '\n'.join(lines), findings
+
+
+def traffic_spec_status_findings(
+    *,
+    service_name: str,
+    spec_traffic: list[Any],
+    status_traffic: list[Any],
+    project: str,
+    region: str,
+    latest_ready_revision: str = '',
+) -> list[Finding]:
+    findings: list[Finding] = []
+    spec_revision = primary_traffic_revision(spec_traffic, fallback_revision=latest_ready_revision)
+    status_revision = primary_traffic_revision(status_traffic, fallback_revision=latest_ready_revision)
+    if spec_revision and status_revision and spec_revision != status_revision:
+        repair_command = format_traffic_repair_command(
+            service=service_name,
+            revision=status_revision,
+            project=project,
+            region=region,
+        )
+        findings.append(
+            Finding(
+                'FAIL',
+                service_name,
+                f'spec.traffic ({spec_revision}) != status.traffic ({status_revision}); repair: {repair_command}',
+            )
+        )
+    return findings
+
+
+def primary_traffic_revision(traffic: list[Any], *, fallback_revision: str = '') -> str | None:
+    for raw_target in traffic:
+        if not isinstance(raw_target, dict):
+            continue
+        target = cast(dict[str, Any], raw_target)
+        if int(target.get('percent') or 0) != 100:
+            continue
+        revision_name = target.get('revisionName')
+        if isinstance(revision_name, str) and revision_name:
+            return revision_name
+        if target.get('latestRevision') and fallback_revision:
+            return fallback_revision
+    return None
+
+
+def format_traffic_repair_command(*, service: str, revision: str, project: str, region: str) -> str:
+    project_flag = f' --project={project}' if project else ''
+    return (
+        f'gcloud run services update-traffic {service}{project_flag} '
+        f'--region={region} --to-revisions={revision}=100 --quiet'
+    )
 
 
 def find_bad_pods(deployment_name: str, pods: Any) -> list[Finding]:
@@ -375,7 +448,7 @@ def fetch_cloud_run_state(*, project: str, region: str, services: list[str]) -> 
             fetched.append(json.loads(result.stdout))
         else:
             errors.append({'service': service, 'exitCode': result.returncode})
-    return {'services': fetched, 'errors': errors}
+    return {'services': fetched, 'errors': errors, 'project': project, 'region': region}
 
 
 def kubectl_json(namespace: str, resource: str) -> dict[str, Any]:
