@@ -141,6 +141,36 @@ def test_never_raises_into_caller():
     assert out == {}
 
 
+def test_audio_conversation_enriched_when_sources_none():
+    """With sources=None the source gate is skipped, so a live/audio conversation enriches."""
+    conv = _conv(ConversationSource.omi, ['p_alice'])
+    with patch.object(e, 'get_prompt_memories', return_value=('Me', '')), patch.object(
+        e.users_db, 'get_person', return_value={'id': 'p_alice', 'name': 'Alice'}
+    ), patch.object(e.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        e, 'extract_person_messaging_memories', return_value=[_mem()]
+    ), patch.object(
+        e, 'write_subject_memories', return_value=1
+    ) as write:
+        out = e.enrich_persons_from_conversation('uid1', conv, sources=None)
+    assert out == {'p_alice': 1}
+    assert write.call_args.kwargs['subject_entity_id'] == 'person:p_alice'
+
+
+def test_audio_entry_skips_texting_and_runs_audio():
+    # texting source -> skipped by the audio entry (connector hook handles it, no double)
+    tex = _conv(ConversationSource.imessage, ['p_alice'])
+    with patch.object(e, 'enrich_persons_from_conversation') as inner:
+        out = e.enrich_persons_from_audio_conversation('uid1', tex)
+    assert out == {}
+    inner.assert_not_called()
+    # audio source -> delegates with sources=None
+    aud = _conv(ConversationSource.omi, ['p_alice'])
+    with patch.object(e, 'enrich_persons_from_conversation', return_value={'p_alice': 2}) as inner:
+        out = e.enrich_persons_from_audio_conversation('uid1', aud, language='en')
+    assert out == {'p_alice': 2}
+    assert inner.call_args.kwargs.get('sources', 'MISSING') is None
+
+
 def test_group_conversation_over_cap_is_skipped():
     """Cost guard: a multi-participant window would fire one full-transcript extraction per
     person, so above the participant cap (1 by default) we skip and leave it to the existing

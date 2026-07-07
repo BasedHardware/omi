@@ -101,15 +101,20 @@ def _transcript_artifact_ref(conversation) -> dict:
     }
 
 
-def enrich_persons_from_conversation(uid: str, conversation, language: Optional[str] = None) -> Dict[str, int]:
-    """Extract + persist per-person durable facts for a texting-source conversation.
+def enrich_persons_from_conversation(uid: str, conversation, language: Optional[str] = None, sources=_TEXTING_SOURCES) -> Dict[str, int]:
+    """Extract + persist per-person durable facts for a conversation.
+
+    ``sources`` restricts which conversation sources are enriched: the default limits it to
+    text-messaging (connector ingest), while callers that want to enrich a live/audio
+    conversation Omi captured (process_conversation) pass ``sources=None`` to skip the source
+    gate. Person-keying + the 1:1 participant cap still apply either way.
 
     Returns {person_id: memories_written}. Never raises."""
     results: Dict[str, int] = {}
     try:
         if not _ENRICHMENT_ENABLED:
             return results
-        if _source_value(conversation) not in _TEXTING_SOURCES:
+        if sources is not None and _source_value(conversation) not in sources:
             return results
 
         segments = getattr(conversation, 'transcript_segments', None) or []
@@ -188,3 +193,16 @@ def enrich_persons_from_conversation(uid: str, conversation, language: Optional[
     except Exception as e:
         logger.error(f'person_messaging: enrichment failed uid={uid} conv={getattr(conversation, "id", "?")}: {e}')
     return results
+
+
+def enrich_persons_from_audio_conversation(uid: str, conversation, language: Optional[str] = None) -> Dict[str, int]:
+    """Enrich per-person context from a live/audio conversation Omi captured (any non-texting
+    source) — so anything said about a person in a conversation Omi listens to keeps updating
+    that person's brain, not just their texts. Texting conversations are enriched by the
+    connector ingest hook, so they're skipped here to avoid double extraction. Never raises."""
+    try:
+        if _source_value(conversation) in _TEXTING_SOURCES:
+            return {}
+    except Exception:
+        return {}
+    return enrich_persons_from_conversation(uid, conversation, language=language, sources=None)

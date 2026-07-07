@@ -47,6 +47,7 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.subjects import infer_subject_from_segments
 from database.entities import USER_ENTITY_ID
+from utils.memory.person_messaging_enrichment import enrich_persons_from_audio_conversation
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -1038,6 +1039,11 @@ def process_conversation(
             if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                 submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
         submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+        # Keep each person's brain updated from live/audio conversations too (not just texts):
+        # any non-texting conversation with an identified 1:1 speaker enriches that person.
+        # Texting conversations are enriched by the connector ingest hook, so they're skipped
+        # inside to avoid double extraction.
+        submit_with_context(postprocess_executor, enrich_persons_from_audio_conversation, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
         submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
