@@ -326,6 +326,8 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
+  var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
   var pendingBackendConversationId: String?
   var ignoredRotatedBackendConversationIds: Set<String> = []

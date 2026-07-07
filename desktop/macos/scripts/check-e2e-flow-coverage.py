@@ -174,11 +174,21 @@ def flow_matches(flows: Iterable[FlowCoverage], changed_file: str) -> list[FlowC
 
 
 def harness_command(root: Path, flow: FlowCoverage) -> str:
-    try:
-        rel = flow.flow_path.relative_to(root / "desktop/macos").as_posix()
-    except ValueError:
-        rel = flow.flow_path.as_posix()
-    return f"cd desktop/macos && OMI_APP_NAME=omi-e2e ./scripts/omi-harness run {rel}"
+    data = read_yaml(flow.flow_path)
+    tier = data.get("tier", 2)
+    if tier == "manual":
+        try:
+            rel = flow.flow_path.relative_to(root / "desktop/macos").as_posix()
+        except ValueError:
+            rel = flow.flow_path.as_posix()
+        return (
+            f"cd desktop/macos && python3 scripts/omi-harness run {rel} "
+            f"--lane bridge --port <automation-port>"
+        )
+    return (
+        "cd desktop/macos && ./scripts/desktop-core-harness.sh "
+        f"--tier {tier} --bundle omi-core-e2e --port <automation-port> --keep-stack"
+    )
 
 
 def print_report(root: Path, flows: list[FlowCoverage], changed: list[str], strict: bool) -> int:

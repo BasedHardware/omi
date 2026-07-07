@@ -1,0 +1,3 @@
+{
+  "change": "Gate desktop prod promotion on blessed release metadata, with bless-release.sh orchestration and admin Releases blessed column"
+}

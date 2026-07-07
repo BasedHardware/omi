@@ -2400,7 +2400,7 @@ class FloatingControlBarManager {
         let focused = window.firstResponder is NSTextView
         return AutomationState(
             isVisible: window.isVisible,
-            isAskOmiOpen: window.state.showingAIConversation && !window.state.showingAIResponse,
+            isAskOmiOpen: window.state.showingAIConversation,
             isAskOmiFocused: focused,
             frame: NSStringFromRect(window.frame),
             isVoiceListening: window.state.isVoiceListening,
@@ -2413,9 +2413,17 @@ class FloatingControlBarManager {
         guard let window else {
             return ["error": "floating_bar_window_unavailable"]
         }
-        if reset, window.state.showingAIConversation {
-            window.closeAIConversation()
-            _ = await waitForAskOmiClosed(in: window)
+        if reset {
+            if let provider = sharedFloatingProvider {
+                _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+                if let error = await provider.automationResetChatForHarness() {
+                    return ["error": error]
+                }
+            }
+            if window.state.showingAIConversation {
+                window.closeAIConversation()
+                _ = await waitForAskOmiClosed(in: window)
+            }
         }
 
         let start = ContinuousClock.now
@@ -2471,6 +2479,13 @@ class FloatingControlBarManager {
             "askOmiOpen": window.state.showingAIConversation ? "true" : "false",
             "frame": NSStringFromRect(window.frame),
         ]
+    }
+
+    func automationFloatingBarChatSnapshot(limit: Int) -> [String: String] {
+        guard let provider = sharedFloatingProvider else {
+            return ["error": "floating chat provider unavailable"]
+        }
+        return provider.automationMainChatSnapshot(limit: limit)
     }
 
     func seedSubagentsForAutomation(count: Int) async -> [String: String] {

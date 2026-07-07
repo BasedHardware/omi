@@ -555,6 +555,131 @@ final class DesktopAutomationActionRegistry {
       return ["enabled": enabled ? "true" : "false"]
     }
 
+    register(
+      name: "capture_test_transcript",
+      summary: "Hermetic capture seam: start/inject/stop a test recording session without mic/STT",
+      params: ["phase", "text"]
+    ) { params in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      let phase = (params["phase"] ?? "inject").lowercased()
+      switch phase {
+      case "start":
+        return await appState.automationStartCaptureTestSession()
+      case "inject":
+        return await appState.automationInjectCaptureTestTranscript(text: params["text"] ?? "")
+      case "stop":
+        return await appState.automationStopCaptureTestSession()
+      case "lifecycle":
+        let marker = params["text"] ?? "[[MARKER:capture-lifecycle]]"
+        let startResult = await appState.automationStartCaptureTestSession()
+        if startResult["error"] != nil {
+          return startResult
+        }
+        _ = await appState.automationInjectCaptureTestTranscript(text: marker)
+        return await appState.automationStopCaptureTestSession()
+      default:
+        return ["error": "phase must be start, inject, stop, or lifecycle"]
+      }
+    }
+
+    register(
+      name: "conversation_list_snapshot",
+      summary: "Return conversation list counts and recent titles for harness assertions",
+      params: ["limit"]
+    ) { params in
+      guard let appState = AppState.current else { return ["error": "app state unavailable"] }
+      let limit = max(1, intParam(params["limit"], default: 5))
+      let titles = appState.conversations.prefix(limit).map { $0.structured.title }
+      let titlesJSON: String
+      if let data = try? JSONSerialization.data(withJSONObject: Array(titles)),
+        let encoded = String(data: data, encoding: .utf8)
+      {
+        titlesJSON = encoded
+      } else {
+        titlesJSON = "[]"
+      }
+      return [
+        "conversation_count": "\(appState.totalConversationsCount ?? appState.conversations.count)",
+        "loaded_count": "\(appState.conversations.count)",
+        "is_transcribing": appState.isTranscribing ? "true" : "false",
+        "recent_titles_json": titlesJSON,
+      ]
+    }
+
+    register(
+      name: "memories_snapshot",
+      summary: "Return memories page load state for harness assertions",
+      params: []
+    ) { _ in
+      guard AuthState.shared.isSignedIn else {
+        return [
+          "is_signed_in": "false",
+          "load_state": "signed_out",
+          "memory_count_valid": "false",
+        ]
+      }
+      do {
+        // Same local-first path MemoriesViewModel.loadMemories uses: API page → SQLite sync → count.
+        let page = try await APIClient.shared.getMemoriesPage(limit: 100, offset: 0)
+        try await MemoryStorage.shared.syncServerMemories(page.memories)
+        let memoryCount = try await MemoryStorage.shared.getLocalMemoriesCount()
+        return [
+          "is_signed_in": "true",
+          "load_state": "loaded",
+          "memory_count": "\(memoryCount)",
+          "api_page_count": "\(page.memories.count)",
+          "memory_count_valid": "true",
+          "has_error": "false",
+        ]
+      } catch {
+        return [
+          "is_signed_in": "true",
+          "load_state": "error",
+          "has_error": "true",
+          "memory_count_valid": "false",
+          "error_message": error.localizedDescription,
+        ]
+      }
+    }
+
+    register(
+      name: "tasks_snapshot",
+      summary: "Return tasks store counts for harness assertions",
+      params: []
+    ) { _ in
+      guard AuthState.shared.isSignedIn else {
+        return [
+          "is_signed_in": "false",
+          "load_state": "signed_out",
+          "task_count_valid": "false",
+        ]
+      }
+      let store = TasksStore.shared
+      await store.loadTasksIfNeeded()
+      let deadline = Date().addingTimeInterval(30)
+      while store.isLoading, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+      }
+      let total = store.tasksWithoutDueDate.count + store.overdueTasks.count + store.todaysTasks.count
+      let loadState: String
+      if store.error != nil {
+        loadState = "error"
+      } else if store.isLoading {
+        loadState = "loading"
+      } else {
+        loadState = "loaded"
+      }
+      return [
+        "is_signed_in": "true",
+        "load_state": loadState,
+        "task_count": "\(total)",
+        "overdue_count": "\(store.overdueTasks.count)",
+        "today_count": "\(store.todaysTasks.count)",
+        "task_count_valid": loadState == "loaded" ? "true" : "false",
+        "has_error": store.error != nil ? "true" : "false",
+      ]
+    }
+
     // Drive the real push-to-talk state machine headlessly (MIC-01). ptt_start begins
     // capture like the shortcut key-down; ptt_stop finalizes like a long-hold release.
     // Releasing with no mic audio exercises the empty-batch release path — it must end
@@ -762,6 +887,24 @@ final class DesktopAutomationActionRegistry {
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
+    register(
+      name: "reset_main_chat",
+      summary: "Clear main-window chat messages and start a fresh session (harness flow isolation)",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "reset_main_chat is disabled on production bundles"]
+      }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      if let error = await provider.automationResetChatForHarness() {
+        return ["error": error]
+      }
+      return ["reset": "true"]
+    }
+
     // Send a message through the real main-window chat pipeline (ChatPage),
     // in-process via ViewModelContainer's ChatProvider — no synthetic mouse
     // or keyboard input, so it never touches the user's actual cursor.
@@ -852,6 +995,40 @@ final class DesktopAutomationActionRegistry {
       }
       let limit = max(1, intParam(params["limit"], default: 8))
       return await provider.automationKernelTurnTail(limit: limit)
+    }
+
+    register(
+      name: "floating_bar_chat_snapshot",
+      summary: "Export floating-bar chat transcript and stream state for harness assertions",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, intParam(params["limit"], default: 50))
+      return FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: limit)
+    }
+
+    register(
+      name: "wait_floating_bar_chat_idle",
+      summary: "Block until floating-bar chat is not sending or streaming",
+      params: ["timeoutMs", "pollMs"]
+    ) { params in
+      let timeoutMs = max(1_000, intParam(params["timeoutMs"], default: 180_000))
+      let pollMs = max(100, intParam(params["pollMs"], default: 500))
+      let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
+      while Date() < deadline {
+        var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
+        if detail["error"] == nil,
+           detail["is_sending"] == "false",
+           detail["is_streaming"] == "false"
+        {
+          detail["idle"] = "true"
+          return detail
+        }
+        try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
+      }
+      var detail = FloatingControlBarManager.shared.automationFloatingBarChatSnapshot(limit: 8)
+      detail["error"] = "timeout"
+      detail["timeout_ms"] = "\(timeoutMs)"
+      return detail
     }
 
     register(

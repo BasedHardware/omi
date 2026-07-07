@@ -1,0 +1,68 @@
+name: Desktop Swift CI
+
+on:
+  push:
+    branches: main
+  pull_request:
+    branches: main
+
+jobs:
+  desktop-swift:
+    name: Desktop Swift Build & Tests
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check changed files
+        id: changed
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_BASE="origin/${{ github.base_ref }}"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          FILES=$(git diff --name-only --diff-filter=ACMRD "$DIFF_BASE"...HEAD)
+          echo "$FILES"
+          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$'; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Cache SwiftPM build products
+        if: steps.changed.outputs.should_run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            desktop/macos/Desktop/.build
+          key: ${{ runner.os }}-desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}
+          restore-keys: |
+            ${{ runner.os }}-desktop-swift-
+
+      - name: Install Swift system dependencies
+        if: steps.changed.outputs.should_run == 'true'
+        run: brew install pkg-config webp
+
+      - name: Check desktop e2e flow coverage
+        if: steps.changed.outputs.should_run == 'true'
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            DIFF_BASE="origin/${{ github.base_ref }}"
+          else
+            DIFF_BASE="HEAD~1"
+          fi
+          python3 desktop/macos/scripts/check-e2e-flow-coverage.py --strict --base "$DIFF_BASE"
+
+      - name: Build desktop Swift app
+        if: steps.changed.outputs.should_run == 'true'
+        working-directory: desktop/macos
+        run: xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx
+
+      - name: Test desktop Swift app
+        if: steps.changed.outputs.should_run == 'true'
+        working-directory: desktop/macos
+        run: ./scripts/swift-test-suites.sh

@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
@@ -739,7 +740,8 @@ actor AgentRuntimeProcess {
     }
 
     let authService = await MainActor.run { AuthService.shared }
-    if let token = try? await authService.getIdToken(forceRefresh: preferredAdapterId == .piMono), !token.isEmpty {
+    let forceRefreshToken = preferredAdapterId == .piMono && !DesktopLocalProfile.isEnabled
+    if let token = try? await authService.getIdToken(forceRefresh: forceRefreshToken), !token.isEmpty {
       env["OMI_AUTH_TOKEN"] = token
     } else if preferredAdapterId == .piMono {
       log("AgentRuntimeProcess: pi-mono start refused, Firebase ID token is missing")

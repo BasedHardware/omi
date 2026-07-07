@@ -32,7 +32,7 @@ if ! "$SCRIPT" --root "$TMPDIR" "$covered" "$uncovered" >"$TMPDIR/report.out" 2>
 fi
 grep -q "COVERED   $covered -> chat (chat.yaml)" "$TMPDIR/report.out" || fail "covered file was not reported"
 grep -q "UNCOVERED $uncovered" "$TMPDIR/report.out" || fail "uncovered file was not reported"
-grep -q "OMI_APP_NAME=omi-e2e ./scripts/omi-harness run e2e/flows/chat.yaml" "$TMPDIR/report.out" || \
+grep -q "./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e --port <automation-port> --keep-stack" "$TMPDIR/report.out" || \
   fail "recommended harness command missing"
 
 if "$SCRIPT" --root "$TMPDIR" --strict "$covered" "$uncovered" >"$TMPDIR/strict.out" 2>"$TMPDIR/strict.err"; then

@@ -1181,5 +1181,163 @@ extension AppState {
     )
   }
 
+  // MARK: - Automation capture test seam (non-prod hermetic E2E)
+
+  /// Start a headless capture session without mic/audio — T2 hermetic only.
+  func automationStartCaptureTestSession() async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test session disabled on production bundles"]
+    }
+    if isTranscribing {
+      if automationCaptureTestSessionActive {
+        return [
+          "already_recording": "true",
+          "session_id": currentSessionId.map { "\($0)" } ?? "",
+          "segment_count": "\(totalSegmentCount)",
+        ]
+      }
+      return ["error": "real capture session already active"]
+    }
+    do {
+      let sessionId = try await TranscriptionStorage.shared.startSession(
+        source: currentConversationSource.rawValue,
+        language: AssistantSettings.shared.effectiveTranscriptionLanguage,
+        timezone: TimeZone.current.identifier,
+        inputDeviceName: "harness-capture",
+        clientConversationId: UUID().uuidString.lowercased(),
+        finalizationStrategy: .localSegments
+      )
+      currentSessionId = sessionId
+      recordingStartTime = Date()
+      isTranscribing = true
+      useLocalSTT = true
+      speakerSegments = []
+      totalSegmentCount = 0
+      totalWordCount = 0
+      currentTranscript = ""
+      LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+      automationCaptureTestSessionActive = true
+      return [
+        "started": "true",
+        "session_id": "\(sessionId)",
+        "is_transcribing": "true",
+      ]
+    } catch {
+      return ["error": "failed to start capture session: \(error.localizedDescription)"]
+    }
+  }
+
+  func automationInjectCaptureTestTranscript(text: String) async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test transcript disabled on production bundles"]
+    }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return ["error": "missing transcript text"] }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot inject into non-automation capture session"]
+      }
+      return ["error": "no active capture session"]
+    }
+    guard isTranscribing else { return ["error": "no active capture session"] }
+    let start = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+    let segment = TranscriptionService.BackendSegment(
+      id: UUID().uuidString.lowercased(),
+      text: trimmed,
+      speaker: "SPEAKER_00",
+      speaker_id: 0,
+      is_user: true,
+      person_id: nil,
+      start: max(0, start),
+      end: max(0.1, start + 0.5),
+      translations: nil
+    )
+    handleBackendSegments([segment])
+    if let sessionId = currentSessionId {
+      await persistBackendSegmentsToStorage([segment], sessionId: sessionId)
+    }
+    return [
+      "injected": trimmed,
+      "session_id": currentSessionId.map { "\($0)" } ?? "",
+      "segment_count": "\(totalSegmentCount)",
+      "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+    ]
+  }
+
+  /// Hermetic capture teardown: mirrors the session-finalization portion of
+  /// `stopTranscription()` (finish session, finalize conversation, clear live
+  /// transcript state, reload conversations) without stopping the audio engine
+  /// or cloud STT WebSocket. Keep this in sync when `stopTranscription()` changes.
+  func automationStopCaptureTestSession() async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test session disabled on production bundles"]
+    }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot stop non-automation capture session"]
+      }
+      return [
+        "already_stopped": "true",
+        "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+      ]
+    }
+    guard isTranscribing else {
+      automationCaptureTestSessionActive = false
+      return [
+        "already_stopped": "true",
+        "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+      ]
+    }
+    let beforeCount = totalConversationsCount ?? conversations.count
+    let sessionId = currentSessionId
+    let segmentCount = totalSegmentCount
+
+    isTranscribing = false
+    LiveNotesMonitor.shared.endSession()
+
+    var finalizeError: String?
+    if let sessionId {
+      do {
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        await ConversationFinalizationService.shared.finalizeSession(
+          id: sessionId,
+          reason: .userStop,
+          allowCloudForceProcess: false
+        )
+      } catch {
+        finalizeError = "failed to finalize capture session: \(error.localizedDescription)"
+      }
+    }
+
+    // Reset cleanup state regardless of finalize outcome so a failed finalize
+    // can't leave `automationCaptureTestSessionActive` stuck true (which made a
+    // retried stop silently report "already_stopped" without ever finalizing).
+    speakerSegments = []
+    liveSpeakerPersonMap = [:]
+    LiveTranscriptMonitor.shared.clear()
+    LiveNotesMonitor.shared.clear()
+    recordingStartTime = nil
+    currentSessionId = nil
+    useLocalSTT = false
+    totalSegmentCount = 0
+    totalWordCount = 0
+    currentTranscript = ""
+    automationCaptureTestSessionActive = false
+
+    if let finalizeError {
+      return ["error": finalizeError]
+    }
+
+    await loadConversations()
+    let afterCount = totalConversationsCount ?? conversations.count
+    return [
+      "stopped": "true",
+      "conversation_count_before": "\(beforeCount)",
+      "conversation_count_after": "\(afterCount)",
+      "conversation_count_increased": afterCount > beforeCount ? "true" : "false",
+      "segment_count": "\(segmentCount)",
+    ]
+  }
+
   // MARK: - Conversations
 }
