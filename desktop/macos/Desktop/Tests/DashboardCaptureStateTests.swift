@@ -51,6 +51,10 @@ final class DashboardCaptureStateTests: XCTestCase {
             toolbar.contains(".tint(Color.secondary)"),
             "The settings menu glyph must override the app's purple root tint"
         )
+        // On/off must be readable at a glance: the running state fills the
+        // control, it doesn't hide in a tiny badge.
+        XCTAssertTrue(toolbar.contains("return HomePalette.green.opacity(0.16)"))
+        XCTAssertTrue(toolbar.contains("return Color.yellow.opacity(0.12)"))
     }
 
     func testHomeConnectorButtonsOpenSheetsDirectly() throws {

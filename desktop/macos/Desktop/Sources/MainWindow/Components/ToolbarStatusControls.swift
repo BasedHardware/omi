@@ -124,10 +124,11 @@ struct ToolbarStatusControls: View {
     }
 }
 
-/// A labeled toolbar button whose running state shows as a small badge on
-/// the glyph: green dot = running, amber triangle = needs attention,
-/// nothing = off. The label says what the control is; the badge says how
-/// it's doing.
+/// A labeled toolbar toggle whose state must be readable at a glance:
+/// running = green-tinted capsule fill with a green glyph, needs attention =
+/// amber-tinted fill with a warning badge, off = plain dimmed glyph. Owns
+/// its visuals (`.plain` style) so the toolbar doesn't stack button chrome
+/// on top of the state background.
 struct ToolbarStatusButton: View {
     enum DotState {
         case active
@@ -141,32 +142,49 @@ struct ToolbarStatusButton: View {
     let action: () -> Void
     let helpText: String
 
+    @State private var isHovering = false
+
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: systemImage)
-                    .foregroundStyle(state == .off ? Color.secondary : Color.primary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(glyphColor)
                     .overlay(alignment: .topTrailing) {
-                        switch state {
-                        case .active:
-                            Circle()
-                                .fill(.green)
-                                .frame(width: 5, height: 5)
-                                .offset(x: 4, y: -3)
-                        case .attention:
+                        if state == .attention {
                             Image(systemName: "exclamationmark.triangle.fill")
                                 .font(.system(size: 7))
                                 .foregroundStyle(.yellow)
                                 .offset(x: 6, y: -4)
-                        case .off:
-                            EmptyView()
                         }
                     }
                 Text(title)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(state == .off ? Color.secondary : Color.primary)
             }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Capsule(style: .continuous).fill(backgroundFill))
+            .contentShape(Capsule(style: .continuous))
         }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
         .help(helpText)
+    }
+
+    private var glyphColor: Color {
+        switch state {
+        case .active: return HomePalette.green
+        case .attention: return Color.primary
+        case .off: return Color.secondary
+        }
+    }
+
+    private var backgroundFill: Color {
+        switch state {
+        case .active: return HomePalette.green.opacity(0.16)
+        case .attention: return Color.yellow.opacity(0.12)
+        case .off: return isHovering ? Color.white.opacity(0.07) : Color.clear
+        }
     }
 }
