@@ -287,6 +287,60 @@ def test_build_reply_prompt_has_no_hardcoded_example_slang():
     assert 'commitments' in low
 
 
+def test_build_reply_prompt_injects_user_identity_when_name_given():
+    """The drafter must know WHOSE voice it writes in: given the user's name, the system
+    prompt anchors identity so a group mention of the name ("i miss archit") or a
+    third-person memory ("Archit plans…") is understood as being about the user — never a
+    third party. Guards the 'missing Archit around here too' regression."""
+    fp = sf.compute_fingerprint(_FORMAL_SAMPLES)
+    kwargs = dict(
+        name='Tharun',
+        context_text='(no extra context)',
+        style_block='- ok',
+        fingerprint=fp,
+        omi_context='',
+        media_context='',
+        thread_text='Tharun: god dam i miss archit',
+        intent=None,
+        is_group=True,
+    )
+    system, _ = rd.build_reply_prompt(user_name='Archit Lal', **kwargs)
+    low = system.lower()
+    assert 'your identity' in low
+    assert 'you are archit lal' in low
+    assert 'third person' in low  # explicit ban on self-in-third-person
+    assert 'archit' in low  # first name available for the "when they mention your name" rule
+    # With no name, the identity block is omitted entirely (no dangling placeholder).
+    system_none, _ = rd.build_reply_prompt(user_name='', **kwargs)
+    assert 'your identity' not in system_none.lower()
+
+
+def test_draft_reply_passes_user_name_into_prompt():
+    """draft_reply must look up the user's name (get_user_name) and thread it into the
+    prompt so the identity anchor is populated on the real path."""
+    captured = {}
+
+    def fake_invoke(prompt):
+        captured.setdefault('prompt', _as_text(prompt))
+        return SimpleNamespace(content='"ok"')
+
+    thread = [{'text': 'god dam i miss archit', 'is_from_me': False, 'sender': 'Tharun'}]
+    with patch.object(rd, 'resolve_person', return_value={'id': 'p1', 'name': 'Sage VC'}), patch.object(
+        rd, 'get_user_name', return_value='Archit Lal'
+    ), patch.object(rd.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(
+        rd.conversations_db, 'get_conversations', return_value=[]
+    ), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        rd.draft_reply('uid', 'Sage VC', thread, is_group=True)
+
+    low = captured['prompt'].lower()
+    assert 'your identity' in low
+    assert 'you are archit lal' in low
+
+
 def test_availability_block_and_rule_present_only_when_context_given():
     fp = sf.compute_fingerprint(_FORMAL_SAMPLES)
     kwargs = dict(
@@ -531,10 +585,10 @@ def test_draft_includes_structured_person_fields_when_present():
     assert "Alice's interests: climbing, jazz" in p
 
 
-def test_draft_uses_search_person_memories_when_query_present():
-    """With an inbound message (non-empty thread query), the relevance-ranked
-    person-scoped search supplies the facts block, and the flat subject read is
-    NOT consulted."""
+def test_draft_merges_search_and_subject_person_facts():
+    """With an inbound query, the relevance-ranked person-scoped search and the flat
+    subject-keyed read are MERGED (not XOR): a single weak semantic hit must never shadow
+    the rest of what Omi knows about the person. Both sets appear in the prompt, deduped."""
     person = {'id': 'p1', 'name': 'Alice'}
     captured = {}
 
@@ -542,14 +596,13 @@ def test_draft_uses_search_person_memories_when_query_present():
         captured.setdefault('prompt', _as_text(prompt))  # first call is the drafting prompt (escalation runs after)
         return SimpleNamespace(content='"ok"')
 
-    def fake_flat(*a, **k):
-        raise AssertionError('flat subject read should not be called when search returns hits')
-
     with patch.object(rd, 'resolve_person', return_value=person), patch.object(
         rd, 'search_person_memories', return_value=[{'content': 'Alice just got engaged'}]
     ) as mock_search, patch.object(
-        rd.memories_db, 'get_memories_by_subject_entity', side_effect=fake_flat
-    ), patch.object(
+        rd.memories_db,
+        'get_memories_by_subject_entity',
+        return_value=[{'content': 'Alice loves sushi'}, {'content': 'Alice just got engaged'}],
+    ) as mock_flat, patch.object(
         rd, '_relevant_context', return_value=''
     ), patch.object(
         rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
@@ -557,12 +610,16 @@ def test_draft_uses_search_person_memories_when_query_present():
         rd.draft_reply('uid', 'Alice', [{'text': 'any news?', 'is_from_me': False}])
 
     mock_search.assert_called_once()
+    mock_flat.assert_called_once()
     args, kwargs = mock_search.call_args
-    # Called with the person id and the inbound-derived query.
     assert args[0] == 'uid'
     assert args[1] == 'p1'
     assert 'any news?' in args[2]
+    # Both the semantic hit AND the extra subject-keyed fact are present…
     assert 'Alice just got engaged' in captured['prompt']
+    assert 'Alice loves sushi' in captured['prompt']
+    # …and the duplicate ('Alice just got engaged', in both lists) appears only once.
+    assert captured['prompt'].count('Alice just got engaged') == 1
 
 
 def test_draft_falls_back_to_subject_read_when_search_empty():
@@ -640,19 +697,68 @@ def test_fence_coerces_non_string_content():
     assert rd._fence("<b>") == "&lt;b&gt;"
 
 
-def test_resolved_person_skips_cross_person_general_context():
-    """Identity safety: for a resolved 1:1 person, ground ONLY on their person-keyed facts —
-    the general topic-matched (cross-person) search is NOT used, so a conversation about other
-    people can't be mis-attributed to this contact."""
+def test_resolved_person_always_grounds_on_user_context():
+    """Per the user's explicit call (being specific + true when asked beats the leak risk), a
+    resolved 1:1 person ALWAYS pulls the user's own general context — even for a question about
+    the other person's world — so the reply can be specific when the answer is there. The draft
+    prompt decides what to actually use; the anti-fabrication rule keeps it true."""
     person = {'id': 'p1', 'name': 'Alice', 'relationship': 'friend'}
     with patch.object(rd, 'resolve_person', return_value=person), patch.object(
         rd.memories_db, 'get_memories_by_subject_entity', return_value=[{'content': 'Alice loves sushi'}]
-    ), patch.object(rd, '_relevant_context') as relctx, patch.object(
+    ), patch.object(rd, '_relevant_context', return_value='') as relctx, patch.object(
+        rd, 'search_person_memories', return_value=[]
+    ), patch.object(
         rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"ok"'))
     ):
-        out = rd.draft_reply('uid', 'Alice', [{'text': 'wyd?', 'is_from_me': False}])
-    relctx.assert_not_called()
+        out = rd.draft_reply('uid', 'Alice', [{'text': 'how is your sister doing?', 'is_from_me': False}])
+    relctx.assert_called_once()
     assert out['draft'] == 'ok'
+
+
+def test_resolved_person_grounds_when_question_is_about_the_user():
+    """A known 1:1 contact asking about the USER ('what are you working on?') SHOULD pull the
+    user's own context so the reply shares real specifics instead of being generic — the fix for
+    under-detailed replies. The general grounding search must run in this case."""
+    person = {'id': 'p1', 'name': 'Alice', 'relationship': 'friend'}
+    with patch.object(rd, 'resolve_person', return_value=person), patch.object(
+        rd.memories_db, 'get_memories_by_subject_entity', return_value=[]
+    ), patch.object(rd, 'search_person_memories', return_value=[]), patch.object(
+        rd, '_relevant_context', return_value=''
+    ) as relctx, patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"ok"'))
+    ):
+        out = rd.draft_reply('uid', 'Alice', [{'text': 'what are you working on these days?', 'is_from_me': False}])
+    relctx.assert_called_once()
+    assert out['draft'] == 'ok'
+
+
+def test_is_about_user_matches_user_questions_not_other_person():
+    """The about-user gate: questions about the user's own life/work/status match; questions about
+    the other person or a third party do not (so the context stays blank and can't leak)."""
+    yes = [
+        'what have you been working on lately',
+        "what's new with you",
+        'how you been',
+        'how are you',
+        "how's the startup going",
+        'what you up to',
+        'what did you do this weekend',  # recount is a subset
+        'hru',
+        'sup',
+        'you been busy?',
+        'still working on the startup',
+    ]
+    no = [
+        "how's your girl",
+        "how's your mom",
+        'how is your sister doing',
+        'did you see the game',
+        'happy birthday!!',
+    ]
+    for t in yes:
+        assert rd._is_about_user([{'text': t, 'is_from_me': False}]), t
+    for t in no:
+        assert not rd._is_about_user([{'text': t, 'is_from_me': False}]), t
 
 
 def test_unknown_contact_still_uses_general_context():

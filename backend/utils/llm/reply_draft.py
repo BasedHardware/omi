@@ -27,6 +27,7 @@ import database.vector_db as vector_db
 from database import conversations as conversations_db
 from database import memories as memories_db
 from database._client import db as firestore_db
+from database.auth import get_user_name
 from database.entities import person_entity_id
 from models.conversation_enums import ConversationSource
 from utils.conversations.transcript_chunks import hydrate_chunk_texts
@@ -566,6 +567,7 @@ def build_reply_prompt(
     intent: Optional[str],
     is_group: bool,
     availability_context: str = '',
+    user_name: str = '',
 ) -> tuple[str, str]:
     """Assemble the candidate-generation prompt as (system, user). The SYSTEM string
     holds only trusted instructions; the USER string holds every untrusted/fenced data
@@ -630,10 +632,32 @@ def build_reply_prompt(
         else ""
     )
 
+    # Identity anchor: the drafter must know WHOSE voice it's writing in. The user's own
+    # memories/facts are phrased in the third person ("Archit plans to…"), and in a group
+    # someone may say the user's name ("i miss archit") — without this, the model treats the
+    # user's own name as a third party and replies about itself in the third person.
+    _uname = (user_name or '').strip()
+    _ufirst = _uname.split()[0] if _uname else ''
+    identity_rule = (
+        (
+            f"YOUR IDENTITY — you ARE {_uname}. Every fact, memory, or note about \"{_uname}\""
+            + (f" or \"{_ufirst}\"" if _ufirst and _ufirst.lower() != _uname.lower() else "")
+            + f" or \"the user\" is about YOU, the person writing this message — even though the context "
+            f"writes them in the third person. When anyone in this chat says your name ({_ufirst or _uname}), "
+            f"they are talking TO or ABOUT you — reply as yourself. NEVER refer to yourself in the third "
+            f"person, never talk about {_ufirst or _uname} as if they're someone else, and never agree that "
+            f"{_ufirst or _uname} is missed, away, or absent as though it's another person — if someone says "
+            f"they miss you, answer as the person they miss.\n\n"
+        )
+        if _uname
+        else ""
+    )
+
     system_prompt = (
         f"You are the user's own second brain, writing the user's next text message in their real "
         f"conversation with {name}. This is the user's OWN message in their OWN chat — write it as them. "
         f"Produce the message the user would actually send — no commentary, no reasoning, no quotes.\n\n"
+        f"{identity_rule}"
         f"{UNTRUSTED_DATA_NOTICE}\n\n"
         f"{group_rules}"
         f"WHO YOU'RE REPLYING TO — reply to {name}'s MOST RECENT message, using the whole conversation to "
@@ -927,6 +951,58 @@ def _is_recount_question(thread: List[dict]) -> bool:
     return False
 
 
+# --- "is this question about the USER?" -------------------------------------------------------
+# A known 1:1 draft grounds on the user's own life/work context ONLY when the other person is
+# actually asking about the USER. Otherwise the context stays blank so the reply can't leak the
+# user's unrelated life into a question about the OTHER person's world ("how's your girl?" must not
+# pull the user's memories). This is a SUPERSET of _is_recount_question: it also covers present-
+# focused status questions ("what are you working on", "what's new with you", "how's the startup
+# going", "how've you been") — the exact cases where blanking the context made the reply generic and
+# under-detailed. Structured so "how's your <person>" (girl/mom/family/…) does NOT match — those are
+# about a third party, not the user.
+_ABOUT_USER_WORK_THING = (
+    r"(?:work|working|job|startup|start-up|company|business|projects?|fund|launch|thesis|gig|grind"
+    r"|school|classes|studies|semester|season|team)"
+)
+_ABOUT_USER_PERSON_NOUN = (
+    r"(?:girl|girlfriend|gf|boyfriend|bf|mom|mum|dad|mother|father|parents?|sister|bro(?:ther)?|sis"
+    r"|family|fam|wife|husband|kid|kids|son|daughter|dog|cat|pet|partner|folks|grandma|grandpa|friend"
+    r"|bestie|roommate)"
+)
+_ABOUT_USER_PATTERNS = [
+    r"what(?:'?s|'?re| is| are| ya| you| u| have| ?ve| you been| ya been| u been)?[\w' ]*"
+    r"\b(?:up to|working on|been working|doing|been doing|get up to|got up to|been up to|end up"
+    r"|been making|been building)\b",
+    r"what'?s? (?:new|good|up|going on)\b(?:[\w' ]*\b(?:with (?:you|u|ya)|these days|lately|nowadays)\b)?",
+    r"\b(?:wbu|hbu|hru|wyd|wydd|hyb|sup|wassup|wazzup|zup)\b",
+    r"\banything new\b",
+    r"\byou (?:been )?(?:good|busy|up to much|doing ok|doing good|keeping busy)\b",
+    r"\bstill (?:working on|building|doing|making|on|grinding)\b",
+    r"how(?:'?s| have|'?ve| ?ve| are| r|'?re| has)?\s*(?:have\s+)?(?:you|ya|u)\s*(?:been|doin|doing|holding up)?\b",
+    r"how are (?:you|u|ya|things|ya doing|you doing)\b",
+    r"how'?s? (?:it going|life|everything|things|the grind|your day|your week|your weekend)\b",
+    r"how(?:'?s| is| are| did|'?re| have|'?ve)?\s*(?:your |ur |the |things? with (?:your|the) )?"
+    + _ABOUT_USER_WORK_THING
+    + r"\b",
+    r"how'?s? (?:your |ur |the )?(?!" + _ABOUT_USER_PERSON_NOUN + r"\b)[a-z][\w'-]*\s+"
+    r"(?:going|coming along|coming|treating you|panning out|shaping up)\b",
+]
+_ABOUT_USER_RE = re.compile("|".join(f"(?:{p})" for p in _ABOUT_USER_PATTERNS), re.IGNORECASE)
+
+
+def _is_about_user(thread: List[dict]) -> bool:
+    """True when the latest inbound asks about the USER's own life, work, plans, or status — the
+    case where the draft should be grounded in the user's context and share the real specifics.
+    Superset of _is_recount_question. Deliberately excludes questions about the other person or a
+    third party so a known-1:1 reply never leaks the user's unrelated context."""
+    for m in reversed(thread or []):
+        if m.get('is_from_me'):
+            continue
+        text = m.get('text') or ''
+        return bool(_RECOUNT_RE.search(text) or _ABOUT_USER_RE.search(text))
+    return False
+
+
 def distill_recount_recap(omi_context: str, question: str) -> str:
     """Distill noisy retrieved context into a short, concrete recap of what the user ACTUALLY did,
     relevant to an open recount question. Returns a labeled recap block to inject, or '' when there
@@ -937,15 +1013,17 @@ def distill_recount_recap(omi_context: str, question: str) -> str:
         return ''
     sysp = (
         "You distill noisy, multi-topic conversation summaries into a short list of concrete things "
-        "the USER ACTUALLY DID, so their reply can recount them. The other person asked the user an "
-        "open question about what they did. Extract ONLY concrete activities, places, foods, or events "
-        "the summaries show the USER doing or taking part in that are relevant to the question. "
-        "Include an item only if the summaries show it actually happening or the user doing it; if "
-        "something is merely discussed, considered, or planned with no sign it happened, LEAVE IT OUT. "
-        "Phrase each as a short plain past-tense thing ('grilled burgers', 'played pickleball', "
-        "'watched the fireworks'). Drop other people's businesses/investments, unrelated tangents, and "
-        "meta/app chatter. Return ONLY a short bullet list (one item per line, no commentary). If "
-        "nothing concrete is established, return exactly NONE."
+        "the USER ACTUALLY DID or is ACTIVELY DOING / WORKING ON, so their reply can share them. The "
+        "other person asked the user an open question about their life, day, or work. Extract ONLY "
+        "concrete activities, projects, work, places, foods, or events the summaries show the USER "
+        "doing, working on, building, or taking part in that are relevant to the question. Include an "
+        "item only if the summaries show it real — actually happened, was done, or is genuinely in "
+        "progress; if something is merely wished-for, hypothetical, or vaguely considered with no sign "
+        "it's real, LEAVE IT OUT. Phrase each as a short plain thing (past tense for things done, "
+        "present for ongoing work): 'grilled burgers', 'played pickleball', 'building the onboarding "
+        "redesign', 'gave a talk at the fund summit'. Drop other people's businesses/investments, "
+        "unrelated tangents, and meta/app chatter. Return ONLY a short bullet list (one item per line, "
+        "no commentary). If nothing concrete is established, return exactly NONE."
     )
     usrp = "QUESTION THEY ASKED: " + (question or '').strip() + "\n\nCAPTURED CONTEXT (noisy):\n" + ctx
     try:
@@ -965,10 +1043,11 @@ def distill_recount_recap(omi_context: str, question: str) -> str:
 
 
 def apply_recount_distillation(omi_context: str, thread: List[dict]) -> str:
-    """If the latest inbound is a recount question, prepend a distilled recap to the retrieved
-    context so the drafter recounts the real activities instead of hedging on one. Shared by the
-    product path and the eval harness so both exercise the same behavior. No-op otherwise."""
-    if not (omi_context or '').strip() or not _is_recount_question(thread):
+    """If the latest inbound asks about the user (a recount or a life/work/status question), prepend a
+    distilled recap to the retrieved context so the drafter shares the real specifics instead of
+    hedging into vagueness. Shared by the product path and the eval harness so both exercise the same
+    behavior. No-op otherwise."""
+    if not (omi_context or '').strip() or not _is_about_user(thread):
         return omi_context
     question = ''
     for m in reversed(thread or []):
@@ -999,10 +1078,10 @@ You are given the latest INBOUND message the user received, the CONTEXT the assi
 Decide whether this message should be ESCALATED to the user (the human) instead of auto-sent. Escalate ONLY when one of these clearly applies:
 
 - "unknown": the message DEMANDS a SPECIFIC factual answer about the user — a specific yes/no about a real event, a name, a number, a concrete detail of their history/plans — that the CONTEXT does not contain, so the only way to answer specifically is to invent it. A confident-sounding DRAFT is NOT evidence the answer is real; the drafter will invent a plausible one. Escalate these. (E.g. "is she the first girl you were with?", "did you send the wire yet?", "what did the doctor say?" — a made-up specific answer would be a harmful fabrication.)
-- "decision": the message needs the USER'S own choice or commitment — agreeing to a specific time/plan, accepting or declining an invite, committing to pay or send money, making a promise, or a consequential yes/no only the user can decide.
+- "decision": the message needs the USER'S own choice or commitment — an invitation or plan (accepting/declining/RSVPing to a hangout, dinner, party, call, trip, or meetup, e.g. "wanna come to Georgie's at 8?", "you coming Saturday?", "dinner tonight?", "hop on a call?"), agreeing to a specific time/plan, committing to pay or send money, making a promise, or a consequential yes/no only the user can decide. A person can only accept or decline plans for THEMSELVES — auto-committing them (or auto-declining) is exactly what must not happen. So for ANY invite/plan/commitment, ESCALATE. Crucially: the DRAFT's tone is NOT a signal here — a confident, agreeing draft ("yeah I'm down, see you at 8") is the MOST dangerous case, not a safe one, because it commits the user to a real-world plan they never chose. Never let a committing-sounding draft talk you out of escalating an invite.
 - "sensitive": the message requests private/sensitive info the assistant must not hand out on its own — passwords, codes, SSN, bank/card numbers, medical or legal specifics.
 
-THE PRECISION TEST — most messages do NOT need the user. Ask: would a normal, light, non-specific reply be totally FINE here? If yes → do NOT escalate. Casual/open questions that a vague honest reply handles are NOT escalations, even though they're about the user's life and the specifics aren't in context: "how was your day/weekend?", "what are you up to?", "how's it going?", "how's the family/gf?", "did you have fun?", "what have you been up to?" — a general reply ("good", "chill", "they're good", "same old") is truthful and fine. Only escalate when a vague reply would be evasive or a lie because the person clearly wants a SPECIFIC answer only the user knows, or it's a real decision/commitment/sensitive request. When unsure and a light reply would pass socially, do NOT escalate.
+THE PRECISION TEST — most messages do NOT need the user. Ask: would a normal, light, non-specific reply be totally FINE here? If yes → do NOT escalate. Casual/open questions that a vague honest reply handles are NOT escalations, even though they're about the user's life and the specifics aren't in context: "how was your day/weekend?", "what are you up to?", "how's it going?", "how's the family/gf?", "did you have fun?", "what have you been up to?" — a general reply ("good", "chill", "they're good", "same old") is truthful and fine. The precision test applies to QUESTIONS ABOUT THE USER'S LIFE — it does NOT excuse a "decision" (an invite, plan, commitment, or money/sensitive request): those always escalate no matter how socially smooth a reply would sound, because the user themselves must make the call. Only for a plain question: escalate only when a vague reply would be evasive or a lie because the person clearly wants a SPECIFIC answer only the user knows. When unsure between a casual question and something the user must decide, escalate; when it's clearly just a light question a general reply passes, do NOT escalate.
 
 Respond with ONLY a JSON object, no prose:
 {"escalate": true|false, "category": "unknown"|"decision"|"sensitive"|"none", "reason": "<max 12 words, addressed to the user, e.g. 'They want to lock in a time'>"}"""
@@ -1094,15 +1173,24 @@ def draft_reply(
     facts = []
     if person:
         try:
-            # Prefer topic-relevant per-person facts (semantic search scoped to this
-            # person) when there's an inbound query to rank against; otherwise — or if
-            # the search returns nothing — fall back to the flat subject-keyed read so
-            # the no-new-data path stays identical to before.
+            # Per-person facts: MERGE the topic-relevant semantic hits (scoped to this person)
+            # with the flat subject-keyed read, then dedupe — never let one weak semantic hit
+            # replace the whole known-facts list. A low-threshold semantic search returning a
+            # single loosely-relevant fact used to shadow everything else Omi knows about the
+            # person (XOR), thinning the reply; unioning keeps the full picture. Mirrors
+            # person_service.get_person_context. Semantic hits lead (topic-ranked), subject-keyed
+            # facts fill in the rest, capped so the prompt stays tight.
             query = _thread_query(thread)
-            if query:
-                facts = search_person_memories(uid, person['id'], query, limit=15)
-            if not facts:
-                facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
+            ranked = search_person_memories(uid, person['id'], query, limit=15) if query else []
+            subject_keyed = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
+            seen_facts = set()
+            for f in list(ranked) + list(subject_keyed):
+                content = (f.get('content') or '').strip()
+                if not content or content.lower() in seen_facts:
+                    continue
+                seen_facts.add(content.lower())
+                facts.append(f)
+            facts = facts[:15]
         except Exception as e:
             logger.warning(f"reply_draft: facts lookup failed uid={uid}: {e}")
     facts_text = "\n".join(_fact_line(f) for f in facts if f.get('content'))
@@ -1157,15 +1245,22 @@ def draft_reply(
         )
     context_text = "\n".join(context_bits) or "(no extra context)"
 
-    # Known 1:1 person: ground ONLY on that person's own facts + this conversation (assembled above).
-    # General/self grounding leaked the user's own life and other people's details into person replies
-    # ("Brooklyn Bridge" as an answer to "how's your girl?"). EXCEPTION: an open recount question
-    # ("what did you do this weekend?") is genuinely about the user's own activities, so for that case
-    # pull + distill the user's context. Unknown contacts and group threads use general grounding.
-    if person and not is_group and not _is_recount_question(thread):
-        omi_context = ''
-    else:
-        omi_context = apply_recount_distillation(_relevant_context(uid, thread), thread)
+    # ALWAYS ground on the user's own context (per the user's explicit call: being specific and
+    # true when asked something matters more than the risk of "leaking" the user's own life into a
+    # reply — that leak is acceptable). So known 1:1, unknown, and group threads all pull the user's
+    # relevant memories/conversations/chunks; the draft prompt still only USES a specific to answer
+    # something actually asked, and the anti-fabrication rule keeps it true. `apply_recount_distillation`
+    # additionally distills a concrete recap when the message is about the user (recount/life/work/status),
+    # so those replies share the real specifics instead of hedging into vagueness.
+    omi_context = apply_recount_distillation(_relevant_context(uid, thread), thread)
+
+    # The user's own name, so the drafter writes as them and never treats their own name
+    # (which shows up in third-person memories and in group mentions) as a third party.
+    try:
+        user_name = _safe_name(get_user_name(uid, use_default=False) or '')
+    except Exception as e:
+        logger.warning(f"reply_draft: user name lookup failed uid={uid}: {e}")
+        user_name = ''
 
     system_prompt, user_prompt = build_reply_prompt(
         name=name,
@@ -1178,6 +1273,7 @@ def draft_reply(
         thread_text=thread_text,
         intent=intent,
         is_group=is_group,
+        user_name=user_name,
     )
 
     candidates = _generate_candidates(system_prompt, user_prompt)

@@ -520,7 +520,10 @@ async def draft_reply_with_scheduling(
     hold = None
     draft = result.get('draft')
     # Only try to hold when we produced a real 1:1-style reply grounded in a verified
-    # calendar with concrete proposed slots. Ambiguous/abstained drafts never hold.
+    # calendar with concrete proposed slots. Ambiguous/abstained drafts never hold. An
+    # escalated (needs_input) reply is a SUGGESTION the user hasn't sent yet — creating a
+    # tentative calendar hold before they approve it would orphan the hold if they edit or
+    # discard the reply, so skip the hold until they confirm.
     if (
         draft
         and avail.has_calendar
@@ -528,6 +531,7 @@ async def draft_reply_with_scheduling(
         and avail.proposal.slots
         and not result.get('ambiguous')
         and not result.get('abstain')
+        and not result.get('needs_input')
     ):
         accepted = await run_blocking(llm_executor, judge_accepted_slot, draft, avail.proposal)
         if accepted:

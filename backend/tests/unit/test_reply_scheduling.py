@@ -304,6 +304,28 @@ def test_orchestration_no_hold_when_calendar_absent():
     create.assert_not_awaited()
 
 
+def test_orchestration_no_hold_when_reply_escalated_needs_input():
+    """An escalated (needs_input) reply is an unsent SUGGESTION — creating a tentative calendar
+    hold before the user approves it would orphan the hold if they edit/discard the reply. The
+    hold must be deferred: judge + create_hold are gated out."""
+    with patch.object(rs, 'run_blocking', _passthrough_run_blocking), patch.object(
+        rs, 'build_availability_context', AsyncMock(return_value=_avail_with_slot())
+    ), patch.object(
+        rs,
+        'draft_reply',
+        return_value={'draft': 'yeah 1 works', 'name': 'Sam', 'needs_input': True, 'needs_input_reason': 'x'},
+    ), patch.object(
+        rs, 'judge_accepted_slot', return_value=_slot()
+    ) as judge, patch.object(
+        rs, 'create_hold', AsyncMock()
+    ) as create:
+        result, got = _run(rs.draft_reply_with_scheduling('u', 'Sam', [{'text': 'lunch fri 1?'}], None, False, ''))
+    assert got is None
+    assert result.get('needs_input') is True  # escalation flag still propagates to the caller
+    judge.assert_not_called()
+    create.assert_not_awaited()
+
+
 def test_orchestration_no_hold_when_ambiguous_person():
     with patch.object(rs, 'run_blocking', _passthrough_run_blocking), patch.object(
         rs, 'build_availability_context', AsyncMock(return_value=_avail_with_slot())
