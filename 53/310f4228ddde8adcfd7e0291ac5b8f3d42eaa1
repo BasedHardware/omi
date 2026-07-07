@@ -1,0 +1,83 @@
+backend/.gitignore
+  s_edfd59e96df44b::t_9c26b380a1fa31 7
+backend/models/draft_common.py
+  s_edfd59e96df44b::t_2eb2070bb555e9 10-13,38-49
+backend/models/imessage.py
+  s_edfd59e96df44b::t_de0a4509a11c46 6,95-105
+backend/models/telegram.py
+  s_edfd59e96df44b::t_5be60176fff0f2 6,93-103
+backend/models/whatsapp.py
+  s_edfd59e96df44b::t_d5e74dc8d83bff 6,93-103
+backend/routers/google_calendar.py
+  s_edfd59e96df44b::t_5673a20b5df7ea 17,121-149
+backend/routers/imessage.py
+  s_edfd59e96df44b::t_73c48226410b85 30-31,70-73,76-81
+backend/routers/telegram.py
+  s_edfd59e96df44b::t_f8e1b819f0d213 29,66-67,70-75
+backend/routers/whatsapp.py
+  s_edfd59e96df44b::t_7c1235490b1bfa 33-34,71-72,75-80
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_fee4f287f575e4 81-83,136,173,289-313
+backend/tests/unit/test_reply_draft_escalation.py
+  s_edfd59e96df44b::t_1e565b6f444558 1-225
+backend/tests/unit/test_reply_scheduling.py
+  s_edfd59e96df44b::t_941f4d2e56718e 1-318
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_bd6bbac0ccef81 546,551-553,571-591,729,746,998-1075,1085,1154,1186-1203
+backend/utils/llm/reply_scheduling.py
+  s_edfd59e96df44b::t_30121a3bf15354 1-536
+backend/utils/retrieval/tools/calendar_tools.py
+  s_edfd59e96df44b::t_0fde33d643077a 239,252-253,295-297
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_edfd59e96df44b::t_f7b259e8521cb5 5587-5593
+desktop/macos/Desktop/Sources/DraftHold.swift
+  s_edfd59e96df44b::t_7ffe8d8b411192 1-32
+desktop/macos/Desktop/Sources/IMessageInboxStore.swift
+  s_edfd59e96df44b::t_9e1b3647cf08fb 31-40,223-224,254,305-319,367-381,385-386
+desktop/macos/Desktop/Sources/IMessageModels.swift
+  s_edfd59e96df44b::t_b92d57d5e17f95 207-216,218-222,232-234
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_edfd59e96df44b::t_e598bd47826d05 25-26,992-1009
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_edfd59e96df44b::t_64afe32db4609e 81,170-179
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingInboxKit.swift
+  s_edfd59e96df44b::t_442b5c11d9f9a3 121-123,148-152,182-262
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingNeedsInput.swift
+  s_edfd59e96df44b::t_b96ca3a8efa210 1-92
+desktop/macos/Desktop/Sources/MainWindow/Pages/TelegramInboxPage.swift
+  s_edfd59e96df44b::t_34d77096998c33 118-130,148,206-215
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_edfd59e96df44b::t_bfe3db4fca18ff 86,209-218
+desktop/macos/Desktop/Sources/ProactiveAssistants/Services/NotificationService.swift
+  s_edfd59e96df44b::t_39136a625776d5 192-199,257-258,325-326,331-334,339-341
+desktop/macos/Desktop/Sources/TelegramInboxStore.swift
+  s_edfd59e96df44b::t_9e46bf9acc738a 39-46,123-137,171-172,248-249,307,332-344,379-393,395-396
+desktop/macos/Desktop/Sources/TelegramModels.swift
+  s_edfd59e96df44b::t_9fc9e4799ccab0 212-221,223-227,237-239
+desktop/macos/Desktop/Sources/WhatsAppInboxStore.swift
+  s_edfd59e96df44b::t_89bd94692b9ca9 33-40,215-216,245,287-299,352-366,399-400
+desktop/macos/Desktop/Sources/WhatsAppModels.swift
+  s_edfd59e96df44b::t_005947e5da1267 243-252,254-258,269-271
+desktop/macos/changelog/unreleased/20260705-telegram-refresh-button.json
+  s_edfd59e96df44b::t_88fdbf17f32223 1-3
+desktop/macos/changelog/unreleased/20260706-auto-reply-needs-input.json
+  s_edfd59e96df44b::t_c9fc33da18b689 1-3
+desktop/macos/changelog/unreleased/20260706-messaging-availability-holds.json
+  s_edfd59e96df44b::t_7ab8fac5853474 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "53310f4228ddde8adcfd7e0291ac5b8f3d42eaa1",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
