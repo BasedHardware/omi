@@ -3,7 +3,7 @@
 // Returns OpenAI-compatible SSE from fixture files instead of calling upstream
 // providers. Echoes any [[MARKER:...]] token found in the request body.
 
-use axum::body::Bytes;
+use axum::body::{Body, Bytes};
 use axum::http::{header, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -189,13 +189,14 @@ pub fn stub_chat_completions_response(req: &ChatCompletionRequest) -> Response {
             .into_iter()
             .map(|line| Ok::<_, std::convert::Infallible>(Bytes::from(format!("{line}\n\n")))),
     );
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "text/event-stream")
-        .header(header::CACHE_CONTROL, "no-cache")
-        .body(axum::body::Body::from_stream(stream))
-        .unwrap()
-        .into_response()
+    crate::routes::response_or_500(
+        "llm_stub_chat_completions_stream",
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/event-stream")
+            .header(header::CACHE_CONTROL, "no-cache"),
+        Body::from_stream(stream),
+    )
 }
 
 pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
@@ -209,12 +210,13 @@ pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
                 .into_iter()
                 .map(|line| Ok::<_, std::convert::Infallible>(Bytes::from(format!("{line}\n\n")))),
         );
-        return Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "text/event-stream")
-            .body(axum::body::Body::from_stream(stream))
-            .unwrap()
-            .into_response();
+        return crate::routes::response_or_500(
+            "llm_stub_gemini_stream",
+            Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "text/event-stream"),
+            Body::from_stream(stream),
+        );
     }
     let payload: Value = json!({
         "candidates": [{
@@ -225,12 +227,13 @@ pub fn stub_gemini_proxy_response(body: &Bytes, action: &str) -> Response {
             "finishReason": "STOP"
         }]
     });
-    Response::builder()
-        .status(StatusCode::OK)
-        .header(header::CONTENT_TYPE, "application/json")
-        .body(axum::body::Body::from(payload.to_string()))
-        .unwrap()
-        .into_response()
+    crate::routes::response_or_500(
+        "llm_stub_gemini_json",
+        Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/json"),
+        Body::from(payload.to_string()),
+    )
 }
 
 #[cfg(test)]

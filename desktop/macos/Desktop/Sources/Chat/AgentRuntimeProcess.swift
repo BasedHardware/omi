@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()

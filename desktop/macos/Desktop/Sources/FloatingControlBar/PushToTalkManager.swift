@@ -2,6 +2,7 @@ import AVFoundation
 import Cocoa
 import Combine
 import CoreAudio
+import OmiSupport
 
 struct PTTSilentMicRecoveryPolicy {
   static let deadMicPeakThreshold = 5

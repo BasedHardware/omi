@@ -45,8 +45,8 @@ def test_unblessed_release_fails() -> None:
         },
     )
     result = run_check(release, tag)
-    assert result.returncode != 0
-    assert "blessed" in result.stderr
+    assert result.returncode != 0, result.stderr
+    assert "blessed" in result.stderr, result.stderr
 
 
 def test_blessed_release_passes() -> None:
