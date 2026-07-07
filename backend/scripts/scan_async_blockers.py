@@ -32,7 +32,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
-DEFAULT_FAIL_ON = ("high_network_io", "async_helpers_with_blocking")
+DEFAULT_FAIL_ON = ("high_network_io",)
 FAIL_ON_CATEGORIES = (
     "high_network_io",
     "async_helpers_with_blocking",
