@@ -55,12 +55,21 @@ enum OnboardingMemoryLogSource: String, CaseIterable, Sendable {
 actor OnboardingMemoryLogImportService {
   static let shared = OnboardingMemoryLogImportService()
 
+  /// Distinguishes "the text had nothing durable" (an expected outcome the
+  /// user can fix by pasting the right content) from "the import itself
+  /// broke" (LLM/parse/save failure worth retrying as-is).
+  enum ImportOutcome: Sendable {
+    case imported(memories: Int, profileSummary: String)
+    case noDurableMemories
+    case failed
+  }
+
   func importMemoryLog(
     _ rawText: String,
     source: OnboardingMemoryLogSource
-  ) async -> (memories: Int, profileSummary: String) {
+  ) async -> ImportOutcome {
     let trimmed = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return (0, "") }
+    guard !trimmed.isEmpty else { return .noDurableMemories }
 
     let importPrompt = """
       Analyze this exported \(source.displayName) memory log and extract persistent facts about the user.
@@ -102,7 +111,7 @@ actor OnboardingMemoryLogImportService {
         let parsed = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any]
       else {
         log("OnboardingMemoryLogImportService: Failed to parse \(source.displayName) response")
-        return (0, "")
+        return .failed
       }
 
       let memoryStrings = (parsed["memories"] as? [String] ?? []).filter {
@@ -112,7 +121,7 @@ actor OnboardingMemoryLogImportService {
 
       guard !memoryStrings.isEmpty else {
         log("OnboardingMemoryLogImportService: No durable \(source.displayName) memories found")
-        return (0, profileSummary)
+        return .noDurableMemories
       }
 
       let items = memoryStrings.map { memory in
@@ -143,10 +152,13 @@ actor OnboardingMemoryLogImportService {
         )
       }
 
-      return (saveResult.saved, profileSummary)
+      guard saveResult.saved > 0 else {
+        return .failed
+      }
+      return .imported(memories: saveResult.saved, profileSummary: profileSummary)
     } catch {
       log("OnboardingMemoryLogImportService: \(source.displayName) import failed: \(error)")
-      return (0, "")
+      return .failed
     }
   }
 

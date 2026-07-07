@@ -22,13 +22,30 @@ enum ConnectorImportOperations {
     @MainActor
     static func importMemoryLog(text: String, source: OnboardingMemoryLogSource) async -> Outcome {
         let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(text, source: source)
-        guard result.memories > 0 else {
-            return .failure(message: "No durable memories could be extracted from that import.")
+        return memoryLogOutcome(result, source: source)
+    }
+
+    /// Maps a memory-log service result to a connector outcome, with copy
+    /// that distinguishes "the pasted text had nothing durable" (fix the
+    /// paste) from "the import itself broke" (retry as-is).
+    static func memoryLogOutcome(
+        _ result: OnboardingMemoryLogImportService.ImportOutcome,
+        source: OnboardingMemoryLogSource
+    ) -> Outcome {
+        switch result {
+        case .imported(let memories, _):
+            return .success(
+                SyncResult(sourceCount: nil, memoryCount: memories, newItems: memories),
+                message: "Imported \(memories.formatted()) memories from \(source.displayName)."
+            )
+        case .noDurableMemories:
+            return .failure(
+                message: "No durable memories found in that text. "
+                    + "Make sure you pasted \(source.displayName)'s full response, then import again."
+            )
+        case .failed:
+            return .failure(message: "The import couldn't run. Try again.")
         }
-        return .success(
-            SyncResult(sourceCount: nil, memoryCount: result.memories, newItems: result.memories),
-            message: "Imported \(result.memories.formatted()) memories from \(source.displayName)."
-        )
     }
 
     @MainActor

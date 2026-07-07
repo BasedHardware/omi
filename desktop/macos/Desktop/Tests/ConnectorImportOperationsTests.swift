@@ -65,6 +65,36 @@ final class ConnectorImportOperationsTests: XCTestCase {
     )
   }
 
+  func testMemoryLogImportedMapsToSuccessWithCounts() {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(
+      .imported(memories: 14, profileSummary: "profile"), source: .claude)
+    guard case .success(let result, let message) = outcome else {
+      return XCTFail("expected success, got \(outcome)")
+    }
+    XCTAssertEqual(result.memoryCount, 14)
+    XCTAssertEqual(result.newItems, 14)
+    XCTAssertEqual(message, "Imported 14 memories from Claude.")
+  }
+
+  func testMemoryLogNoDurableMemoriesGuidesPasteFix() {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(.noDurableMemories, source: .chatgpt)
+    guard case .failure(let message) = outcome else {
+      return XCTFail("expected failure, got \(outcome)")
+    }
+    XCTAssertEqual(
+      message,
+      "No durable memories found in that text. Make sure you pasted ChatGPT's full response, then import again."
+    )
+  }
+
+  func testMemoryLogFailedGuidesRetry() {
+    let outcome = ConnectorImportOperations.memoryLogOutcome(.failed, source: .claude)
+    guard case .failure(let message) = outcome else {
+      return XCTFail("expected failure, got \(outcome)")
+    }
+    XCTAssertEqual(message, "The import couldn't run. Try again.")
+  }
+
   func testUserFacingLinesNeverContainAgentSummary() {
     let scan = outcome(hasReadableUserFileTarget: false, deniedUserFolders: ["~/Downloads"])
     let failure = ConnectorImportOperations.localFilesFailureLine(for: scan)
