@@ -114,15 +114,17 @@ private final class SyncUploadURLProtocol: URLProtocol, @unchecked Sendable {
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
-    if let url = request.url {
-      Self.lock.lock()
-      Self.lastRequestURL = url
-      Self.lastRequestMethod = request.httpMethod
-      Self.lock.unlock()
+    guard let url = request.url else {
+      client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+      return
     }
+    Self.lock.lock()
+    Self.lastRequestURL = url
+    Self.lastRequestMethod = request.httpMethod
+    Self.lock.unlock()
     let (statusCode, body, headers) = Self.snapshot()
     let response = HTTPURLResponse(
-      url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: headers)!
+      url: url, statusCode: statusCode, httpVersion: nil, headerFields: headers)!
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: body)
     client?.urlProtocolDidFinishLoading(self)

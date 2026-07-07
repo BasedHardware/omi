@@ -188,7 +188,10 @@ final class WALService: ObservableObject {
     }
 
     private func updatePendingWals() {
-        pendingWals = wals.filter { $0.status == .miss || $0.status == .inProgress }
+        // `.uploaded` stays pending (in-flight) until reconciler transitions it
+        // to `.synced` or back to `.miss`, so it doesn't vanish from the count
+        // while a background job is still processing.
+        pendingWals = wals.filter { $0.status == .miss || $0.status == .inProgress || $0.status == .uploaded }
     }
 
     // MARK: - Frame Recording
@@ -333,22 +336,19 @@ final class WALService: ObservableObject {
 
         let frameCount = frames.count
 
-        // Write to disk on background thread to avoid blocking UI
-        DispatchQueue.global(qos: .utility).async { [weak self] in
-            do {
-                try fileData.write(to: fileUrl, options: .atomic)
-                log("WALService: Wrote \(frameCount) frames to \(fileName)")
+        // Write synchronously — callers (BLE download path, flush) need filePath
+        // set before reading it for cloud upload. The BLE download path already
+        // runs off the main thread; for the flush path the write is small.
+        do {
+            try fileData.write(to: fileUrl, options: .atomic)
+            log("WALService: Wrote \(frameCount) frames to \(fileName)")
 
-                // Update WAL state back on main thread
-                DispatchQueue.main.async {
-                    if let index = self?.wals.firstIndex(where: { $0.id == walId }) {
-                        self?.wals[index].storage = .disk
-                        self?.wals[index].filePath = fileName
-                    }
-                }
-            } catch {
-                log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
+            if let index = wals.firstIndex(where: { $0.id == walId }) {
+                wals[index].storage = .disk
+                wals[index].filePath = fileName
             }
+        } catch {
+            log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
         }
     }
 
@@ -407,7 +407,9 @@ final class WALService: ObservableObject {
         wals[index].storageOffset += downloadedBytes
         wals[index].totalFrames = frames.count
 
-        // Write frames to disk
+        // Write frames to disk synchronously so filePath is set before the caller
+        // (finishSync → syncToCloud) reads it. The BLE download path already runs
+        // off the main thread; writing here avoids the async-write/early-upload race.
         writeFramesToDisk(frames: frames, wal: wals[index])
 
         // Check if download complete
@@ -451,6 +453,31 @@ final class WALService: ObservableObject {
             updatePendingWals()
             saveWals()
         }
+
+        // If jobs are still in-flight (.uploaded) after the immediate reconcile,
+        // schedule a follow-up poll so queued/processing jobs eventually resolve.
+        // Without this, a 202 + still-queued GET leaves WALs stuck in .uploaded.
+        scheduleReconcileRetryIfNeeded()
+    }
+
+    /// One-shot delayed retry that re-runs reconcile for in-flight uploaded jobs.
+    private var reconcileRetryItem: DispatchWorkItem?
+
+    private func scheduleReconcileRetryIfNeeded() {
+        guard wals.contains(where: { $0.status == .uploaded }) else {
+            reconcileRetryItem?.cancel()
+            reconcileRetryItem = nil
+            return
+        }
+        // Already scheduled — let the existing one fire.
+        if reconcileRetryItem != nil { return }
+        let item = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.reconcileRetryItem = nil
+            Task { await self.syncToCloud() }
+        }
+        reconcileRetryItem = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: item)
     }
 
     private func uploadWalToCloud(_ wal: WALEntry) async throws {

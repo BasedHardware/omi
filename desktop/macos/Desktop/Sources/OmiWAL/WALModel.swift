@@ -198,6 +198,15 @@ package struct WALEntry: Codable, Identifiable {
         }
     }
 
+    /// Opus decoder frame size in samples — the `_fsN` token the backend parses
+    /// from the filename (`decode_files_to_wav` → `frame_size`). Must be sample
+    /// count, not byte length, or audio decodes with half-sized buffers.
+    /// Flutter writes `_fs160` (opus) / `_fs320` (opus_fs320).
+    package var samplesPerFrame: Int {
+        guard framesPerSecond > 0 else { return 160 }
+        return sampleRate / framesPerSecond
+    }
+
     /// Expected total frames for the duration
     package var expectedFrames: Int {
         framesPerSecond * seconds
@@ -213,9 +222,10 @@ package struct WALEntry: Codable, Identifiable {
         totalFrames >= expectedFrames || status == .synced
     }
 
-    /// Generate filename for this WAL
+    /// Generate filename for this WAL. The `_fsN` token is the Opus decoder
+    /// frame size in samples (matching Flutter), not the encoded byte length.
     package func generateFileName() -> String {
-        "audio_\(device)_\(codec)_\(sampleRate)_\(channel)_fs\(bytesPerFrame)_\(timerStart).bin"
+        "audio_\(device)_\(codec)_\(sampleRate)_\(channel)_fs\(samplesPerFrame)_\(timerStart).bin"
     }
 }
 

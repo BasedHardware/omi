@@ -18,9 +18,21 @@ final class WALCloudSyncLogicTests: XCTestCase {
   }
 
   func testApplyUploadResultDoesNotSyncWithoutServerAck() {
+    // A WAL that never receives a server ack (no applyUploadResult call) must
+    // stay .miss. This guards against the old stub that marked .synced after a
+    // local parse. The companion tests below prove applyUploadResult *does*
+    // transition on a real 200/202 ack, so this is a meaningful guard.
     var wal = makeWal()
-    // Local parse alone — no applyUploadResult call — must stay miss
     XCTAssertEqual(wal.status, .miss)
+    // Sanity: a server ack transitions away from .miss — covered by other tests,
+    // but asserting here makes the test self-contained and meaningful.
+    WALCloudSyncLogic.applyUploadResult(
+      to: &wal,
+      result: .queued(jobId: "job-test"),
+      now: 1_000
+    )
+    XCTAssertEqual(wal.status, .uploaded)
+    XCTAssertEqual(wal.jobId, "job-test")
   }
 
   func testApplyUploadResult200MarksSynced() {

@@ -5436,12 +5436,13 @@ extension APIClient {
     fileURLs: [URL],
     conversationId: String? = nil
   ) async throws -> UploadLocalFilesResult {
-    var endpoint = "v2/sync-local-files"
+    var components = URLComponents(string: baseURL + "v2/sync-local-files")!
     if let conversationId, !conversationId.isEmpty {
-      let encoded = conversationId.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? conversationId
-      endpoint += "?conversation_id=\(encoded)"
+      components.queryItems = [URLQueryItem(name: "conversation_id", value: conversationId)]
     }
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = components.url else {
+      throw APIError.syncUploadRejected(reason: "Invalid sync-local-files URL")
+    }
     let request = try await buildSyncLocalFilesMultipartRequest(url: url, fileURLs: fileURLs)
     return try await performSyncLocalFilesUpload(request)
   }
@@ -5459,9 +5460,11 @@ extension APIClient {
       return SyncJobFetch(outcome: .transient)
     }
 
-    if http.statusCode == 404 || http.statusCode == 403 {
+    if http.statusCode == 404 {
       return SyncJobFetch(outcome: .notFound)
     }
+    // 403 means auth/permission failure, not a missing job — surface as transient
+    // so the caller retries rather than treating the job as gone.
     guard http.statusCode == 200 else {
       return SyncJobFetch(outcome: .transient)
     }
@@ -5501,16 +5504,19 @@ extension APIClient {
     return request
   }
 
-  private func performSyncLocalFilesUpload(_ request: URLRequest) async throws -> UploadLocalFilesResult {
+  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
     let (data, response) = try await session.data(for: request)
     guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
 
     if http.statusCode == 401 {
+      guard !retriedAuth else {
+        throw APIError.unauthorized
+      }
       var retryRequest = request
       let authService = await MainActor.run { AuthService.shared }
       retryRequest.setValue(
         try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      return try await performSyncLocalFilesUpload(retryRequest)
+      return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
     }
 
     if http.statusCode == 200 {
