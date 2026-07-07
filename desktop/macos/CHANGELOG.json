@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.44",
+      "date": "2026-07-07",
+      "changes": [
+        "Improved the desktop chat loading indicator so it matches the calmer notch thinking animation",
+        "Updated the Home ask bar to use one action button for Connect, Send, and Stop"
+      ]
+    },
+    {
       "version": "0.12.43",
       "date": "2026-07-07",
       "changes": [
