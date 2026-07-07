@@ -677,7 +677,14 @@ def draft_reply(
         context_bits.append(f"Facts about {name}:\n{facts_text}")
     context_text = "\n".join(context_bits) or "(no extra context)"
 
-    omi_context = _relevant_context(uid, thread)
+    # Identity safety: when replying to a SPECIFIC resolved person, ground ONLY on what's
+    # confirmed about THEM (their person-keyed facts, assembled above). Skip the general
+    # memory/conversation search — it is topic-matched across ALL the user's data and would
+    # pull in conversations about OTHER people, mis-attributing them to this contact (e.g.
+    # "met Mila at the times market" when that was someone else). Person identity isn't
+    # reliable enough to trust a topic match as being about this person. Unknown contacts and
+    # group threads (where no single person owns the context) still use the general grounding.
+    omi_context = '' if (person and not is_group) else _relevant_context(uid, thread)
 
     system_prompt, user_prompt = build_reply_prompt(
         name=name,

@@ -698,3 +698,30 @@ def test_fence_coerces_non_string_content():
     assert rd._fence(None) == ""
     assert rd._fence({"a": 1}) == rd._fence(str({"a": 1}))
     assert rd._fence("<b>") == "&lt;b&gt;"
+
+
+def test_resolved_person_skips_cross_person_general_context():
+    """Identity safety: for a resolved 1:1 person, ground ONLY on their person-keyed facts —
+    the general topic-matched (cross-person) search is NOT used, so a conversation about other
+    people can't be mis-attributed to this contact."""
+    person = {'id': 'p1', 'name': 'Alice', 'relationship': 'friend'}
+    with patch.object(rd, 'resolve_person', return_value=person), patch.object(
+        rd.memories_db, 'get_memories_by_subject_entity', return_value=[{'content': 'Alice loves sushi'}]
+    ), patch.object(rd, '_relevant_context') as relctx, patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"ok"'))
+    ):
+        out = rd.draft_reply('uid', 'Alice', [{'text': 'wyd?', 'is_from_me': False}])
+    relctx.assert_not_called()
+    assert out['draft'] == 'ok'
+
+
+def test_unknown_contact_still_uses_general_context():
+    """An unknown contact (no resolved person) still uses the general grounding — there's no
+    person to over-attribute to, and the user's own recall is still useful."""
+    with patch.object(rd, 'resolve_person', return_value=None), patch.object(
+        rd, '_relevant_context', return_value=''
+    ) as relctx, patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"hi"'))
+    ):
+        rd.draft_reply('uid', 'Unknownperson', [{'text': 'hey', 'is_from_me': False}])
+    relctx.assert_called_once()
