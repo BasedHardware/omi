@@ -16,6 +16,10 @@ enum AppInstaller {
   /// Escape hatch for harnesses that intentionally run from unusual paths.
   static let skipEnvironmentKey = "OMI_SKIP_INSTALL_GATE"
 
+  /// Counts consecutive gate-triggered relaunches (shared across copies via the
+  /// bundle-id UserDefaults domain). Reset on any launch that clears the gate.
+  static let relaunchAttemptsKey = "appInstallerRelaunchAttempts"
+
   /// True only for unambiguous not-installed locations: a mounted volume (DMG) or
   /// an App Translocation mount. Deliberately excludes ~/Downloads and dev
   /// checkouts so local builds and named test bundles are never touched.
@@ -45,7 +49,22 @@ enum AppInstaller {
   static func moveToApplicationsIfNeeded() -> Bool {
     guard ProcessInfo.processInfo.environment[skipEnvironmentKey] == nil else { return false }
     let bundleURL = Bundle.main.bundleURL
-    guard isInstallerLocation(bundleURL.path) else { return false }
+    guard isInstallerLocation(bundleURL.path) else {
+      // Clean (installed) launch — the gate is done, reset the loop guard.
+      UserDefaults.standard.removeObject(forKey: relaunchAttemptsKey)
+      return false
+    }
+
+    // Relaunch-loop guard: if the installed copy itself keeps landing back here
+    // (e.g. its quarantine xattr can't be cleared, so macOS translocates every
+    // launch), stop after two attempts and fall back to running in place.
+    let attempts = UserDefaults.standard.integer(forKey: relaunchAttemptsKey)
+    guard attempts < 2 else {
+      log("AppInstaller: \(attempts) relaunch attempts without a clean install — running in place")
+      UserDefaults.standard.removeObject(forKey: relaunchAttemptsKey)
+      showManualInstallHint()
+      return false
+    }
 
     let destination = installedURL(forBundleURL: bundleURL)
     let fileManager = FileManager.default
@@ -60,6 +79,9 @@ enum AppInstaller {
         log(
           "AppInstaller: installed copy (build \(installedBuild ?? "?")) is same or newer than "
             + "DMG copy (build \(sourceBuild ?? "?")) — launching it without overwriting")
+        // A stale quarantined install would be translocated on launch and loop
+        // back into this gate — clear it before handing off.
+        removeQuarantine(at: destination)
         return relaunch(destination)
       }
       do {
@@ -99,6 +121,9 @@ enum AppInstaller {
     do {
       try task.run()
       task.waitUntilExit()
+      if task.terminationStatus != 0 {
+        log("AppInstaller: xattr exited \(task.terminationStatus) clearing quarantine on \(url.path)")
+      }
     } catch {
       logError("AppInstaller: failed to clear quarantine", error: error)
     }
@@ -108,6 +133,8 @@ enum AppInstaller {
   /// pattern as `AppState.restartApp()` so the single-instance lock is free by
   /// the time the new copy takes it).
   private static func relaunch(_ destination: URL) -> Bool {
+    UserDefaults.standard.set(
+      UserDefaults.standard.integer(forKey: relaunchAttemptsKey) + 1, forKey: relaunchAttemptsKey)
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
     task.arguments = ["-c", "sleep 0.5 && open \"\(destination.path)\""]
