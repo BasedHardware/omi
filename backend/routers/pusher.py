@@ -23,7 +23,7 @@ from utils.app_integrations import (
     trigger_external_integrations,
 )
 from utils.conversations.location import async_get_google_maps_location
-from utils.byok import set_byok_keys
+from utils.byok import set_byok_keys, set_byok_uid
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
@@ -119,6 +119,7 @@ async def _process_conversation_task(
     """
     if byok_keys:
         set_byok_keys(byok_keys)
+        set_byok_uid(uid)
     try:
         conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
