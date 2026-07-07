@@ -181,7 +181,8 @@ class AppCatalogItem(BaseModel):
     installs: int = 0
     rating_avg: Optional[float] = None
     rating_count: int = 0
-    is_paid: bool = False
+    external_integration: Optional[ExternalIntegration] = None
+    is_paid: Optional[bool] = False
     price: Optional[float] = None
     enabled: bool = False
 

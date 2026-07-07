@@ -1095,6 +1095,9 @@ def search_conversations_endpoint(
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
+    search_results['total_pages'] = (
+        search_request.page + 1 if len(conversations) >= search_request.per_page else search_request.page
+    )
     return search_results
 
 

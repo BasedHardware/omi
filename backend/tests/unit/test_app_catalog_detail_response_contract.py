@@ -26,6 +26,7 @@ def _app_payload():
         'is_paid': False,
         'price': 0,
         'enabled': True,
+        'external_integration': {'auth_steps': [{'name': 'Connect', 'url': 'https://example.com/oauth'}]},
         'twitter': {'handle': 'legacy-object'},
         'reviews': [{'uid': 'u1', 'rated_at': '2026-07-06T10:00:00Z', 'score': 5, 'review': 'nice'}],
         'chat_tools': [
@@ -66,6 +67,7 @@ def test_v2_apps_catalog_response_uses_desktop_safe_app_items():
         'chat',
     ]
     assert app['rating_avg'] == 4.0
+    assert app['external_integration']['auth_steps'][0]['name'] == 'Connect'
     assert 'twitter' not in app
     assert 'reviews' not in app
     assert 'chat_tools' not in app
@@ -83,8 +85,22 @@ def test_v2_apps_search_response_uses_same_desktop_safe_app_items():
 
     app = response.model_dump()['data'][0]
     assert app['id'] == 'app1'
+    assert app['external_integration']['auth_steps'][0]['name'] == 'Connect'
     assert 'twitter' not in app
     assert 'reviews' not in app
+
+
+def test_v2_apps_catalog_response_tolerates_legacy_null_is_paid():
+    payload = _app_payload()
+    payload['is_paid'] = None
+    response = AppCatalogResponse.model_validate(
+        {
+            'data': [payload],
+            'pagination': {'total': 1, 'count': 1, 'offset': 0, 'limit': 20, 'hasNext': False, 'hasPrevious': False},
+        }
+    )
+
+    assert response.model_dump()['data'][0]['is_paid'] is None
 
 
 def test_v1_app_detail_response_preserves_shared_client_fields():
@@ -99,7 +115,6 @@ def test_v1_app_detail_response_preserves_shared_client_fields():
             'payment_plan': None,
             'username': 'owner',
             'created_at': '2026-07-06T10:00:00Z',
-            'external_integration': {'auth_steps': [{'name': 'Connect', 'url': 'https://example.com/oauth'}]},
         }
     )
 

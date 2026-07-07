@@ -616,7 +616,7 @@ class GeneratedMergeConversationsResponse {
 
 class GeneratedSearchConversationsResponse {
   final int currentPage;
-  final List<Map<String, dynamic>> items;
+  final List<GeneratedConversation> items;
   final int perPage;
   final int totalPages;
 
@@ -630,7 +630,7 @@ class GeneratedSearchConversationsResponse {
   factory GeneratedSearchConversationsResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedSearchConversationsResponse(
       currentPage: _required(_readFieldValue<int>(_readField(json, const ["current_page"]), "current_page", _readInt, requiredField: true, nullable: false), "current_page"),
-      items: _required(_readFieldValue<List<Map<String, dynamic>>>(_readField(json, const ["items"]), "items", _readMapList, requiredField: true, nullable: false), "items"),
+      items: _required(_readFieldValue<List<GeneratedConversation>>(_readField(json, const ["items"]), "items", (value) => _readObjectList(value, GeneratedConversation.fromJson), requiredField: true, nullable: false), "items"),
       perPage: _required(_readFieldValue<int>(_readField(json, const ["per_page"]), "per_page", _readInt, requiredField: true, nullable: false), "per_page"),
       totalPages: _required(_readFieldValue<int>(_readField(json, const ["total_pages"]), "total_pages", _readInt, requiredField: true, nullable: false), "total_pages"),
     );
@@ -639,7 +639,7 @@ class GeneratedSearchConversationsResponse {
   Map<String, dynamic> toJson() {
     return {
       'current_page': currentPage,
-      'items': items,
+      'items': items.map((value) => value.toJson()).toList(),
       'per_page': perPage,
       'total_pages': totalPages,
     };

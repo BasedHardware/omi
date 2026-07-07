@@ -619,7 +619,8 @@ def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = Fa
             data = doc.to_dict()
             if data.get('discarded') and not include_discarded:
                 continue
-            conversations_by_id[str(data.get('id', doc.id))] = data
+            data.setdefault('id', doc.id)
+            conversations_by_id[str(data['id'])] = data
 
     return [
         conversations_by_id[str(conversation_id)]

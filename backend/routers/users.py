@@ -154,7 +154,7 @@ class UserProfileResponse(BaseModel):
     email: Optional[str] = None
     name: Optional[str] = None
     time_zone: Optional[str] = None
-    created_at: Optional[Union[datetime, str]] = None
+    created_at: Optional[datetime] = None
     motivation: Optional[str] = None
     use_case: Optional[str] = None
     job: Optional[str] = None

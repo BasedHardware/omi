@@ -1744,6 +1744,16 @@
             "title": "Enabled",
             "type": "boolean"
           },
+          "external_integration": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExternalIntegration"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1759,9 +1769,16 @@
             "type": "integer"
           },
           "is_paid": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": false,
-            "title": "Is Paid",
-            "type": "boolean"
+            "title": "Is Paid"
           },
           "name": {
             "default": "",
@@ -16154,9 +16171,6 @@
             "anyOf": [
               {
                 "format": "date-time",
-                "type": "string"
-              },
-              {
                 "type": "string"
               },
               {

@@ -28,6 +28,7 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 APICLIENT_SWIFT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'APIClient.swift'
 CONVERSATIONS_ROUTER = ROOT_DIR / 'backend' / 'routers' / 'conversations.py'
+CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 
 # Route prefixes that belong to other service boundaries / protocols and are
 # explicitly out of scope for the Python-backend REST SSoT rollout.
@@ -266,7 +267,18 @@ def test_conversations_search_hydrates_index_hits_before_returning_app_client_ro
     assert 'get_conversations_by_id_without_photos(' in endpoint_source
     assert "if not conversation.get('is_locked')" in endpoint_source
     assert "search_results['items'] = conversations" in endpoint_source
+    assert "search_results['total_pages'] =" in endpoint_source
     assert 'return search_conversations(' not in endpoint_source
+
+
+def test_conversation_id_hydration_backfills_legacy_missing_ids():
+    source = CONVERSATIONS_DB.read_text()
+    helper_start = source.index('def _get_conversations_by_id(')
+    helper_end = source.index('# **************************************', helper_start)
+    helper_source = source[helper_start:helper_end]
+
+    assert "data.setdefault('id', doc.id)" in helper_source
+    assert "conversations_by_id[str(data['id'])] = data" in helper_source
 
 
 def test_desktop_rest_inventory_is_nonempty():
