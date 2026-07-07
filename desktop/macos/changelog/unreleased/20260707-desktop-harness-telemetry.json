@@ -1,3 +1,0 @@
-{
-  "change": "Reduced noisy Sentry session heartbeat issues by switching to breadcrumb telemetry"
-}
