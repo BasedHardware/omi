@@ -117,6 +117,27 @@ final class ConnectorImportOperationsTests: XCTestCase {
     XCTAssertEqual(message, "Connected to X as @omi. Import is still running; check back shortly.")
   }
 
+  func testCompletedXImportWithPostsIncludesHandleAndMemoryClause() {
+    XCTAssertEqual(
+      ConnectorImportOperations.xImportCompletionMessage(
+        handle: "omi",
+        posts: 12,
+        memories: 3,
+        importCompleted: true
+      ),
+      "Imported 12 posts from @omi — 3 memories added. View them in Memories."
+    )
+    XCTAssertEqual(
+      ConnectorImportOperations.xImportCompletionMessage(
+        handle: "omi",
+        posts: 12,
+        memories: 0,
+        importCompleted: true
+      ),
+      "Imported 12 posts from @omi. Extracted memories appear in Memories."
+    )
+  }
+
   func testUserFacingLinesNeverContainAgentSummary() {
     let scan = outcome(hasReadableUserFileTarget: false, deniedUserFolders: ["~/Downloads"])
     let failure = ConnectorImportOperations.localFilesFailureLine(for: scan)
