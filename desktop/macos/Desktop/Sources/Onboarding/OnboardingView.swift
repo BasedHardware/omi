@@ -63,6 +63,7 @@ struct OnboardingView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
+      OnboardingPagedIntroCoordinator.current = introCoordinator
       if let exportStepOverride {
         currentStep = exportStepOverride
       } else {

@@ -104,6 +104,12 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   private let claudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
   private let claudeImportSummaryKey = "onboardingClaudeImportSummary"
 
+  /// The coordinator backing the live onboarding UI, if one is on screen.
+  /// Set by `OnboardingView.onAppear`. Lets the automation bridge drive the
+  /// real onboarding steps (e.g. the language save) against the same instance
+  /// the views render from.
+  static weak var current: OnboardingPagedIntroCoordinator?
+
   init() {
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)

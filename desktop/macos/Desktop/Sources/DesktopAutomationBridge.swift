@@ -616,6 +616,44 @@ final class DesktopAutomationActionRegistry {
       ]
     }
 
+    // Drive the live onboarding language step exactly as its Continue button
+    // does: set the selection on the on-screen coordinator, run
+    // confirmLanguages() (the real backend save), and advance to the next step
+    // only when the save succeeded — mirroring OnboardingLanguageStepView.
+    register(
+      name: "onboarding_confirm_languages",
+      summary: "Select languages on the live onboarding coordinator and run the real Continue save",
+      params: ["languages"]
+    ) { params in
+      let codes = (params["languages"] ?? "en")
+        .split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+      guard let coordinator = await MainActor.run(body: { OnboardingPagedIntroCoordinator.current })
+      else {
+        return ["error": "no live onboarding coordinator (is onboarding on screen?)"]
+      }
+      await MainActor.run { coordinator.selectedLanguageCodes = codes }
+      await coordinator.confirmLanguages()
+      let error = await MainActor.run { coordinator.lastActionError }
+      if error == nil {
+        await MainActor.run { UserDefaults.standard.set(2, forKey: "onboardingStep") }
+        return ["status": "saved", "advanced_to_step": "2", "languages": codes.joined(separator: ",")]
+      }
+      return ["status": "failed", "error": error ?? "unknown"]
+    }
+
+    // Same code path as the status-menu "Reset Onboarding..." item and the
+    // Settings "Reset & Restart" button — clears onboarding state and restarts
+    // the app. Lets agents exercise the reset→restart→onboarding flow without
+    // driving menus or the cursor.
+    register(
+      name: "reset_onboarding",
+      summary: "Reset onboarding state and restart the app (same path as the Reset Onboarding menu item)"
+    ) { _ in
+      let appState = await MainActor.run { AppState() }
+      appState.resetOnboardingAndRestart()
+      return ["status": "resetting and restarting"]
+    }
+
     // Send a typed query through the real floating-bar AI path
     // (openAIInputWithQuery → routeQuery → sendAIQuery → ChatProvider → bridge).
     // Used to drive cache/latency benchmarks without a mic or the cursor.
