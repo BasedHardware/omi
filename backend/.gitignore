@@ -4,3 +4,4 @@
 # local-only bridge that deliberately does blocking I/O in the async path.
 .venv
 dev_live_bridge.py
+.env.harness.local
