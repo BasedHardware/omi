@@ -576,7 +576,7 @@ Future<(List<ServerConversation>, int, int)> searchConversationsServer(
   if (response == null) return (<ServerConversation>[], 0, 0);
   if (response.statusCode == 200) {
     final data = wire.GeneratedSearchConversationsResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final convos = data.items.map<ServerConversation>(ServerConversation.fromJson).toList();
+    final convos = data.items.map((conversation) => ServerConversation.fromGenerated(conversation)).toList();
     return (convos, data.currentPage, data.totalPages);
   }
   return (<ServerConversation>[], 0, 0);
