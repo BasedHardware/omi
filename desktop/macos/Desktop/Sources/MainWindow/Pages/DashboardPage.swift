@@ -251,6 +251,8 @@ struct DashboardPage: View {
     @AppStorage("systemAudioCaptureMode") private var systemAudioCaptureModeRaw =
         AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings.rawValue
     @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+    @State private var homeMode: HomeStageMode = .hub
+    @FocusState private var homeAskFieldFocused: Bool
 
     private var selectedApp: OmiApp? {
         guard let appId = chatProvider.selectedAppId else { return nil }
@@ -291,6 +293,9 @@ struct DashboardPage: View {
     private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
     private static let homeStageMaxWidth: CGFloat = 1120
     private static let homeStageHorizontalPadding: CGFloat = 34
+    private static let homeAskBarMaxWidth: CGFloat = 640
+    private static let homeStagePanelMaxWidth: CGFloat = 780
+    private static let homeStageAnimation = Animation.spring(response: 0.46, dampingFraction: 0.86)
     private static let appsPopupMaxWidth: CGFloat = 1040
     private static let appsPopupMaxHeight: CGFloat = 600
     private static let appsPopupMinWidth: CGFloat = 360
@@ -443,6 +448,33 @@ struct DashboardPage: View {
         .onReceive(NotificationCenter.default.publisher(for: .screenCaptureKitBroken)) { _ in
             syncCaptureState()
         }
+        // Clicking into the ask bar reveals the inline chat; the same is true
+        // when focus lands there via keyboard (Tab / Full Keyboard Access).
+        .onChange(of: homeAskFieldFocused) { _, focused in
+            if focused && !useLegacyHomeDesign && homeMode != .chat {
+                openHomeChat()
+            }
+        }
+        // Automation-bridge entry points (home_open_chat / home_connect_toggle /
+        // home_close_panel / home_ask) — they call the exact functions the
+        // on-screen controls call.
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageOpenChat)) { _ in
+            guard !useLegacyHomeDesign else { return }
+            openHomeChat()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageToggleConnect)) { _ in
+            guard !useLegacyHomeDesign else { return }
+            toggleHomeConnectPanel()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageClose)) { _ in
+            guard !useLegacyHomeDesign else { return }
+            closeHomeStagePanel()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .homeStageAsk)) { note in
+            guard !useLegacyHomeDesign,
+                  let query = note.userInfo?["query"] as? String else { return }
+            askHomeSuggestion(query)
+        }
     }
 
     private var legacyHome: some View {
@@ -534,12 +566,8 @@ struct DashboardPage: View {
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
-                homeRoutingStage
-                    .frame(maxWidth: Self.homeStageMaxWidth)
-                    .padding(.horizontal, Self.homeStageHorizontalPadding)
-                    .frame(width: proxy.size.width)
-                    .frame(height: panelHeight)
-                    .position(x: proxy.size.width / 2, y: panelTop + panelHeight / 2)
+                homeStage
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                     // The popup/sheet overlays are modal: while one is up, the
                     // stage underneath must not be reachable by VoiceOver /
                     // Full Keyboard Access.
@@ -563,10 +591,315 @@ struct DashboardPage: View {
                     panelHeight: panelHeight,
                     panelTop: panelTop
                 )
+
+                // Esc collapses the inline chat / connect tray back to the hub —
+                // but only while no modal overlay owns the key.
+                if homeMode != .hub && !isHomeModalPresented {
+                    OverlayModalEscapeCatcher {
+                        closeHomeStagePanel()
+                    }
+                }
             }
             .animation(.easeOut(duration: 0.2), value: isShowingAppsPopup)
             .animation(.easeOut(duration: 0.2), value: homeConnectSheetIsPresented)
+            .animation(Self.homeStageAnimation, value: homeMode)
         }
+    }
+
+    /// Vertical stage: mode content on top (hub metrics, inline chat, or the
+    /// connect tray), the persistent ask bar anchored beneath it, and the
+    /// suggested questions under the bar while the hub is showing.
+    private var homeStage: some View {
+        VStack(spacing: 0) {
+            ZStack {
+                switch homeMode {
+                case .hub:
+                    homeHubCenterpiece
+                        .transition(.homeHubFade)
+                case .chat:
+                    homeChatPanel
+                        .transition(.homeDropFromTop)
+                case .connect:
+                    homeConnectPanel
+                        .transition(.homeDropFromTop)
+                }
+            }
+            // Hub: the centerpiece sits directly above the ask bar; the chat /
+            // connect panels fill the whole area instead.
+            .frame(
+                maxWidth: .infinity,
+                maxHeight: .infinity,
+                alignment: homeMode == .hub ? .bottom : .center
+            )
+
+            homeAskBar
+                .frame(maxWidth: Self.homeAskBarMaxWidth)
+                .padding(.horizontal, Self.homeStageHorizontalPadding)
+                .padding(.top, homeMode == .hub ? 26 : 16)
+
+            if homeMode == .hub {
+                homeSuggestionList
+                    .frame(maxWidth: Self.homeAskBarMaxWidth)
+                    .padding(.horizontal, Self.homeStageHorizontalPadding)
+                    .padding(.top, 12)
+                    .transition(.homeSuggestionsFade)
+            }
+
+            // Lifts the hub cluster toward the optical center; collapses while
+            // a panel is up so the ask bar anchors at the bottom.
+            Spacer(minLength: 0)
+                .frame(height: homeMode == .hub ? 64 : 0)
+        }
+        .padding(.top, 74)
+        .padding(.bottom, 26)
+    }
+
+    // MARK: Hub centerpiece
+
+    private var homeHubCenterpiece: some View {
+        VStack(spacing: 22) {
+            VStack(spacing: 4) {
+                Text("omi.")
+                    .font(.system(size: 52, weight: .bold, design: .rounded))
+                    .foregroundStyle(HomePalette.ink)
+                    .lineLimit(1)
+                    .shadow(color: HomePalette.glow.opacity(0.45), radius: 24)
+
+                Text("What omi knows")
+                    .font(.system(size: 16, weight: .medium, design: .serif))
+                    .foregroundStyle(HomePalette.secondary)
+                    .lineLimit(1)
+            }
+
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    HomeCenterMetricTile(
+                        title: "Conversations",
+                        value: conversationMetricValue,
+                        systemImage: "text.bubble.fill",
+                        action: { navigate(to: .conversations) }
+                    )
+                    HomeCenterMetricTile(
+                        title: "Tasks",
+                        value: taskMetricValue,
+                        systemImage: "checklist",
+                        action: { navigate(to: .tasks) }
+                    )
+                }
+
+                HStack(spacing: 8) {
+                    HomeCenterMetricTile(
+                        title: "Memories",
+                        value: memoryMetricValue,
+                        systemImage: "brain",
+                        action: { navigate(to: .memories) }
+                    )
+                    HomeCenterMetricTile(
+                        title: "Screenshots",
+                        value: screenshotMetricValue,
+                        systemImage: "photo.on.rectangle.angled",
+                        action: { navigate(to: .rewind) }
+                    )
+                }
+            }
+            .frame(width: 336)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: Inline chat panel
+
+    private var homeChatPanel: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text("Ask omi")
+                    .font(.system(size: 19, weight: .medium, design: .serif))
+                    .foregroundStyle(HomePalette.ink)
+
+                Spacer()
+
+                HomeIconActionButton(title: "Close chat", systemImage: "chevron.down") {
+                    closeHomeStagePanel()
+                }
+            }
+            .padding(.bottom, 2)
+
+            ChatMessagesView(
+                messages: chatProvider.messages,
+                isSending: chatProvider.isSending,
+                hasMoreMessages: chatProvider.hasMoreMessages,
+                isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
+                isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
+                    && !chatProvider.isClearing,
+                app: selectedApp,
+                onLoadMore: { await chatProvider.loadMoreMessages() },
+                onRate: { messageId, rating in
+                    Task { await chatProvider.rateMessage(messageId, rating: rating) }
+                },
+                onCitationTap: { citation in
+                    handleCitationTap(citation)
+                },
+                sessionsLoadError: chatProvider.sessionsLoadError,
+                onRetry: { Task { await chatProvider.retryLoad() } },
+                localSendToken: chatProvider.localSendToken,
+                onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+                welcomeContent: { dashboardChatWelcome }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.05),
+                        .init(color: .black, location: 0.97),
+                        .init(color: .clear, location: 1.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        }
+        .frame(maxWidth: Self.homeStagePanelMaxWidth)
+        .padding(.horizontal, Self.homeStageHorizontalPadding)
+    }
+
+    // MARK: Connect tray
+
+    private var homeConnectPanel: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Connect")
+                        .font(.system(size: 24, weight: .medium, design: .serif))
+                        .foregroundStyle(HomePalette.ink)
+
+                    Text("Feed omi new context — and take its memory everywhere.")
+                        .scaledFont(size: 12, weight: .medium)
+                        .foregroundStyle(HomePalette.muted)
+                }
+
+                Spacer()
+
+                HomeIconActionButton(title: "Close connect", systemImage: "xmark") {
+                    closeHomeStagePanel()
+                }
+            }
+
+            ScrollView(showsIndicators: false) {
+                HStack(alignment: .top, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        sourceColumnHeader
+                        sourceConstellation
+                    }
+                    .frame(maxWidth: .infinity)
+
+                    destinationStack
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.bottom, 4)
+            }
+        }
+        .padding(24)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(HomePalette.panel.opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(HomePalette.hairline.opacity(0.9), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.4), radius: 30, y: 16)
+        .frame(maxWidth: Self.homeStagePanelMaxWidth)
+        .padding(.horizontal, Self.homeStageHorizontalPadding)
+    }
+
+    // MARK: Ask bar + suggestions
+
+    private var homeAskBar: some View {
+        HomeAskBar(
+            text: $chatProvider.draftText,
+            isSending: chatProvider.isSending,
+            isStopping: chatProvider.isStopping,
+            isConnectActive: homeMode == .connect,
+            focus: $homeAskFieldFocused,
+            onSend: sendFromHomeAskBar,
+            onStop: { chatProvider.stopAgent(owner: .mainChat) },
+            onConnect: toggleHomeConnectPanel,
+            onActivate: openHomeChat
+        )
+    }
+
+    private var homeSuggestedQuestions: [String] {
+        let saved = PostOnboardingPromptSuggestions.suggestions()
+        let fallback = [
+            "What should I focus on today to achieve my goals?",
+            "What did I spend my time on this week?",
+            "What's the highest-leverage thing I can do next?",
+        ]
+        return Array((saved.isEmpty ? fallback : saved).prefix(3))
+    }
+
+    private var homeSuggestionList: some View {
+        VStack(spacing: 8) {
+            ForEach(homeSuggestedQuestions, id: \.self) { question in
+                HomeSuggestionRow(text: question) {
+                    askHomeSuggestion(question)
+                }
+            }
+        }
+    }
+
+    // MARK: Stage actions
+
+    private func openHomeChat() {
+        guard homeMode != .chat else { return }
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = .chat
+        }
+    }
+
+    private func toggleHomeConnectPanel() {
+        let target: HomeStageMode = homeMode == .connect ? .hub : .connect
+        if target == .connect {
+            homeAskFieldFocused = false
+        }
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = target
+        }
+    }
+
+    private func closeHomeStagePanel() {
+        homeAskFieldFocused = false
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = .hub
+        }
+    }
+
+    private func sendFromHomeAskBar() {
+        let text = chatProvider.draftText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        chatProvider.draftText = ""
+        openHomeChat()
+        AnalyticsManager.shared.chatMessageSent(
+            messageLength: text.count,
+            hasContext: selectedApp != nil,
+            source: "home_ask_bar"
+        )
+        if chatProvider.isSending {
+            Task { await chatProvider.sendFollowUp(text) }
+        } else {
+            Task { await chatProvider.sendMessage(text) }
+        }
+    }
+
+    private func askHomeSuggestion(_ suggestion: String) {
+        openHomeChat()
+        AnalyticsManager.shared.chatMessageSent(
+            messageLength: suggestion.count,
+            hasContext: selectedApp != nil,
+            source: "home_suggested_question"
+        )
+        Task { await chatProvider.sendMessage(suggestion) }
     }
 
     @ViewBuilder
@@ -777,48 +1110,6 @@ struct DashboardPage: View {
         .frame(height: 36)
     }
 
-    private var homeRoutingStage: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(HomePalette.panel)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 30, style: .continuous)
-                        .stroke(HomePalette.hairline.opacity(0.86), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.42), radius: 34, y: 18)
-
-            HomeMemoryBridgeBackdrop()
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-
-            HStack(alignment: .top, spacing: 28) {
-                VStack(alignment: .leading, spacing: 12) {
-                    sourceColumnHeader
-                    sourceConstellation
-                }
-                .frame(width: 320)
-
-                centerMemoryColumn
-
-                destinationStack
-                    .frame(width: 300)
-            }
-            .padding(26)
-        }
-    }
-
-    private var centerMemoryColumn: some View {
-        HomeCenterMemoryColumn(
-            conversationValue: conversationMetricValue,
-            taskValue: taskMetricValue,
-            memoryValue: memoryMetricValue,
-            screenshotValue: screenshotMetricValue,
-            onConversations: { navigate(to: .conversations) },
-            onTasks: { navigate(to: .tasks) },
-            onMemories: { navigate(to: .memories) },
-            onScreenshots: { navigate(to: .rewind) }
-        )
-    }
-
     private var sourceColumnHeader: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Connect data")
@@ -831,23 +1122,6 @@ struct DashboardPage: View {
                 .lineLimit(1)
         }
         .frame(height: 62, alignment: .bottomLeading)
-    }
-
-    private var centerMemoryHeader: some View {
-        VStack(spacing: 2) {
-            Text("omi.")
-                .font(.system(size: 42, weight: .bold, design: .rounded))
-                .foregroundStyle(HomePalette.ink)
-                .lineLimit(1)
-                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
-
-            Text("What omi knows")
-                .font(.system(size: 15, weight: .medium, design: .serif))
-                .foregroundStyle(HomePalette.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-        }
-        .frame(height: 62, alignment: .bottom)
     }
 
     private var sourceConstellation: some View {
@@ -888,7 +1162,7 @@ struct DashboardPage: View {
             .frame(height: 62, alignment: .bottomLeading)
 
             HomeAIChoiceButton(title: "Ask Omi", usesOmiMark: true) {
-                navigate(to: .chat)
+                openHomeChat()
             }
             HomeAIChoiceButton(title: "Claude / Claude Code", brand: .claude, isConnected: isMCPDestinationConnected(.claude)) {
                 openExportDestination(.claudeCode)
@@ -1478,8 +1752,6 @@ private enum HomePalette {
     // cleanups (e.g. 317424f57), so we put the purple on the name those reverts converge to.
     // Do NOT change this back to red/rose.
     static let glow = Color(red: 0.48, green: 0.30, blue: 0.95)      // purple
-    static let glowSoft = Color(red: 0.28, green: 0.17, blue: 0.57)  // purpleSoft
-    static let flowPink = Color(red: 1.0, green: 0.16, blue: 0.44)
 }
 
 private enum HomeRowStatus {
@@ -1493,149 +1765,275 @@ private enum HomeDestinationProminence {
     case quiet
 }
 
+private enum HomeStageMode: Equatable {
+    case hub
+    case chat
+    case connect
+}
+
+/// Shared "drop from the top" motion for stage panels: a short slide with a
+/// slight top-anchored scale and fade — deliberate, not a full-height fly-in.
+private struct HomeStageDropModifier: ViewModifier {
+    let offsetY: CGFloat
+    let scale: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content
+            .offset(y: offsetY)
+            .scaleEffect(scale, anchor: .top)
+            .opacity(opacity)
+    }
+}
+
+extension AnyTransition {
+    fileprivate static var homeDropFromTop: AnyTransition {
+        .modifier(
+            active: HomeStageDropModifier(offsetY: -46, scale: 0.97, opacity: 0),
+            identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
+        )
+    }
+
+    fileprivate static var homeHubFade: AnyTransition {
+        .modifier(
+            active: HomeStageDropModifier(offsetY: 18, scale: 0.985, opacity: 0),
+            identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
+        )
+    }
+
+    fileprivate static var homeSuggestionsFade: AnyTransition {
+        .modifier(
+            active: HomeStageDropModifier(offsetY: 10, scale: 1, opacity: 0),
+            identity: HomeStageDropModifier(offsetY: 0, scale: 1, opacity: 1)
+        )
+    }
+}
+
+/// The persistent home ask bar: a pill-shaped chat input with a send/stop
+/// action and the Connect toggle living inside the pill.
+private struct HomeAskBar: View {
+    @Binding var text: String
+    let isSending: Bool
+    let isStopping: Bool
+    let isConnectActive: Bool
+    var focus: FocusState<Bool>.Binding
+    let onSend: () -> Void
+    let onStop: () -> Void
+    let onConnect: () -> Void
+    let onActivate: () -> Void
+
+    @State private var isHovering = false
+
+    private var hasText: Bool {
+        !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var isFocused: Bool { focus.wrappedValue }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "sparkles")
+                .scaledFont(size: 14, weight: .semibold)
+                .foregroundStyle(isFocused ? HomePalette.ink : HomePalette.muted)
+
+            TextField(
+                "",
+                text: $text,
+                prompt: Text("Ask omi anything").foregroundColor(HomePalette.muted)
+            )
+            .textFieldStyle(.plain)
+            .font(.system(size: 15))
+            .foregroundStyle(HomePalette.ink)
+            .focused(focus)
+            .onSubmit(onSend)
+
+            if isSending && !hasText {
+                stopButton
+            } else if hasText {
+                sendButton
+            }
+
+            connectButton
+        }
+        .padding(.leading, 18)
+        .padding(.trailing, 8)
+        .frame(height: 58)
+        .background(
+            RoundedRectangle(cornerRadius: 29, style: .continuous)
+                .fill(HomePalette.tile.opacity(isHovering || isFocused ? 1 : 0.92))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 29, style: .continuous)
+                .stroke(
+                    isFocused
+                        ? Color.white.opacity(0.30)
+                        : HomePalette.hairline.opacity(isHovering ? 1 : 0.9),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(isFocused ? 0.45 : 0.34), radius: 24, y: 10)
+        .contentShape(.rect(cornerRadius: 29))
+        .onTapGesture {
+            onActivate()
+            focus.wrappedValue = true
+        }
+        .onHover { isHovering = $0 }
+        .animation(.easeOut(duration: 0.16), value: isFocused)
+        .animation(.easeOut(duration: 0.16), value: hasText)
+    }
+
+    private var sendButton: some View {
+        Button(action: onSend) {
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+
+                Image(systemName: "arrow.up")
+                    .scaledFont(size: 13, weight: .bold)
+                    .foregroundStyle(Color.black)
+            }
+            .frame(width: 34, height: 34)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help("Send")
+        .accessibilityLabel("Send message")
+    }
+
+    private var stopButton: some View {
+        Button(action: onStop) {
+            ZStack {
+                Circle()
+                    .fill(Color.white.opacity(0.14))
+
+                if isStopping {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.6)
+                } else {
+                    Image(systemName: "square.fill")
+                        .scaledFont(size: 10, weight: .bold)
+                        .foregroundStyle(HomePalette.ink)
+                }
+            }
+            .frame(width: 34, height: 34)
+            .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isStopping)
+        .help("Stop")
+        .accessibilityLabel("Stop response")
+    }
+
+    private var connectButton: some View {
+        HomeAskBarConnectButton(isActive: isConnectActive, action: onConnect)
+    }
+}
+
+private struct HomeAskBarConnectButton: View {
+    let isActive: Bool
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .scaledFont(size: 11, weight: .semibold)
+
+                Text("Connect")
+                    .scaledFont(size: 12, weight: .semibold)
+            }
+            .foregroundStyle(isActive ? Color.black : HomePalette.ink)
+            .padding(.horizontal, 13)
+            .frame(height: 34)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isActive ? Color.white : Color.white.opacity(isHovering ? 0.14 : 0.07))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(isActive ? Color.clear : HomePalette.hairline, lineWidth: 1)
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .help("Connect data & use omi anywhere")
+        .accessibilityLabel(isActive ? "Close connect" : "Connect")
+    }
+}
+
+private struct HomeSuggestionRow: View {
+    let text: String
+    let action: () -> Void
+
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 10) {
+                Image(systemName: "sparkles")
+                    .scaledFont(size: 11, weight: .semibold)
+                    .foregroundStyle(isHovering ? Color(hex: 0xE3BF63) : HomePalette.muted)
+
+                Text(text)
+                    .scaledFont(size: 13, weight: .medium)
+                    .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.secondary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "arrow.up.right")
+                    .scaledFont(size: 10, weight: .bold)
+                    .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 42)
+            .frame(maxWidth: .infinity)
+            .background(
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                    .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.55))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 21, style: .continuous)
+                    .stroke(HomePalette.hairline.opacity(isHovering ? 1 : 0.55), lineWidth: 1)
+            )
+            .contentShape(.rect(cornerRadius: 21))
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
+        .accessibilityLabel(text)
+    }
+}
+
 private struct HomeCanvasBackground: View {
     var body: some View {
         ZStack {
             HomePalette.paper
 
+            // One barely-there key light high behind the wordmark, and a faint
+            // horizon lift near the ask bar. Deliberately subtle — the old
+            // mid-screen glow blobs read as splotches on large displays.
             RadialGradient(
-                colors: [
-                    HomePalette.glow.opacity(0.16),
-                    HomePalette.glow.opacity(0.035),
-                    .clear,
-                ],
-                center: .center,
-                startRadius: 30,
-                endRadius: 520
+                colors: [Color.white.opacity(0.045), .clear],
+                center: UnitPoint(x: 0.5, y: 0.16),
+                startRadius: 0,
+                endRadius: 560
             )
-            .blur(radius: 12)
+
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.62),
+                    .init(color: Color.white.opacity(0.02), location: 0.86),
+                    .init(color: .clear, location: 1.0),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
         }
         .ignoresSafeArea()
-    }
-}
-
-private struct HomeMemoryBridgeBackdrop: View {
-    @State private var isAppActive = NSApp.isActive
-
-    var body: some View {
-        Group {
-            if isAppActive {
-                TimelineView(.periodic(from: .now, by: 1.0 / 10.0)) { timeline in
-                    HomeMemoryBridgeBackdropContent(
-                        progress: Self.progress(for: timeline.date)
-                    )
-                }
-            } else {
-                HomeMemoryBridgeBackdropContent(progress: 0.18)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            isAppActive = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            isAppActive = false
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-
-    private static func progress(for date: Date) -> CGFloat {
-        CGFloat(date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 7.0) / 7.0)
-    }
-}
-
-private struct HomeMemoryBridgeBackdropContent: View {
-    let progress: CGFloat
-
-    var body: some View {
-        GeometryReader { proxy in
-            let width = proxy.size.width
-            let height = proxy.size.height
-
-            ZStack {
-                ForEach(0..<5, id: \.self) { index in
-                    HomeFlowCloud(index: index, progress: progress, width: width, height: height)
-                }
-
-                ForEach(0..<14, id: \.self) { index in
-                    HomeFlowParticle(index: index, progress: progress, width: width, height: height)
-                }
-            }
-        }
-    }
-}
-private struct HomeFlowCloud: View {
-    let index: Int
-    let progress: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-
-    var body: some View {
-        let baseX = CGFloat(0.13 + Double(index) * 0.19)
-        let wave = CGFloat(sin(Double(progress) * Double.pi * 2 + Double(index) * 0.82))
-        let drift = CGFloat(cos(Double(progress) * Double.pi * 2 + Double(index) * 0.55))
-        let cloudWidth = width * (index == 2 ? 0.46 : 0.34)
-        let cloudHeight = height * (index == 2 ? 0.42 : 0.32)
-        let opacity = index == 2 ? 0.18 : 0.12
-
-        Ellipse()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        (index % 2 == 0 ? HomePalette.glow : HomePalette.flowPink).opacity(opacity),
-                        HomePalette.glowSoft.opacity(opacity * 0.58),
-                        .clear,
-                    ],
-                    center: .center,
-                    startRadius: 0,
-                    endRadius: cloudWidth * 0.46
-                )
-            )
-            .frame(width: cloudWidth, height: cloudHeight)
-            .position(
-                x: width * baseX + drift * width * 0.020,
-                y: height * (0.47 + wave * 0.052)
-            )
-            .blur(radius: 36)
-            .blendMode(.screen)
-    }
-}
-
-private struct HomeFlowParticle: View {
-    let index: Int
-    let progress: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-
-    var body: some View {
-        let base = CGFloat(index) / 14.0
-        let wrapped = (base + progress).truncatingRemainder(dividingBy: 1)
-        let wave = CGFloat(sin(Double(wrapped) * Double.pi * 2 + Double(index) * 0.72))
-        let fade = min(max((wrapped < 0.5 ? wrapped : 1 - wrapped) * 2.4, 0), 1)
-        let lane = CGFloat((index % 5) - 2) * 0.018
-        let x = width * (-0.06 + wrapped * 1.12)
-        let y = height * (0.49 + lane + wave * 0.052)
-        let size = CGFloat(26 + (index % 4) * 9)
-        let opacity = 0.04 + fade * 0.16
-
-        Ellipse()
-            .fill(
-                RadialGradient(
-                    colors: [
-                        (index % 3 == 0 ? HomePalette.flowPink : HomePalette.glow).opacity(opacity),
-                        HomePalette.glowSoft.opacity(opacity * 0.46),
-                        .clear,
-                    ],
-                    center: .center,
-                    startRadius: 2,
-                    endRadius: size
-                )
-            )
-            .frame(width: size * 2.3, height: size * 1.12)
-            .position(x: x, y: y)
-            .rotationEffect(.degrees(Double(wave) * 9))
-            .blur(radius: 15)
-            .blendMode(.screen)
     }
 }
 
@@ -2449,85 +2847,6 @@ private struct HomeSourceTile: View {
     }
 }
 
-private struct HomeCenterMemoryColumn: View {
-    let conversationValue: String
-    let taskValue: String
-    let memoryValue: String
-    let screenshotValue: String
-    let onConversations: () -> Void
-    let onTasks: () -> Void
-    let onMemories: () -> Void
-    let onScreenshots: () -> Void
-
-    var body: some View {
-        content
-    }
-
-    private var content: AnyView {
-        let stack = VStack(spacing: 18) {
-            header
-            metrics
-        }
-        // Group the title directly above the cards and center the unit in a
-        // column the same height as the side lists.
-        let columnHeight = CGFloat(422)
-        let framed = stack.frame(width: CGFloat(340), height: columnHeight, alignment: Alignment.center)
-        return AnyView(framed)
-    }
-
-    private var header: AnyView {
-        AnyView(VStack(spacing: 2) {
-            Text("omi.")
-                .font(.system(size: 42, weight: .bold, design: .rounded))
-                .foregroundStyle(HomePalette.ink)
-                .lineLimit(1)
-                .shadow(color: HomePalette.glow.opacity(0.42), radius: 20)
-
-            Text("What omi knows")
-                .font(.system(size: 15, weight: .medium, design: .serif))
-                .foregroundStyle(HomePalette.secondary)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-        }
-        .frame(height: 62, alignment: .bottom))
-    }
-
-    private var metrics: AnyView {
-        AnyView(VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                HomeCenterMetricTile(
-                    title: "Conversations",
-                    value: conversationValue,
-                    systemImage: "text.bubble.fill",
-                    action: onConversations
-                )
-                HomeCenterMetricTile(
-                    title: "Tasks",
-                    value: taskValue,
-                    systemImage: "checklist",
-                    action: onTasks
-                )
-            }
-
-            HStack(spacing: 8) {
-                HomeCenterMetricTile(
-                    title: "Memories",
-                    value: memoryValue,
-                    systemImage: "brain",
-                    action: onMemories
-                )
-                HomeCenterMetricTile(
-                    title: "Screenshots",
-                    value: screenshotValue,
-                    systemImage: "photo.on.rectangle.angled",
-                    action: onScreenshots
-                )
-            }
-        }
-        .frame(maxWidth: .infinity))
-    }
-}
-
 private struct HomeCenterMetricTile: View {
     let title: String
     let value: String
@@ -2538,42 +2857,44 @@ private struct HomeCenterMetricTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
                 HStack {
                     Image(systemName: systemImage)
-                        .scaledFont(size: 12, weight: .semibold)
+                        .scaledFont(size: 11, weight: .semibold)
                         .foregroundStyle(HomePalette.ink)
 
                     Spacer(minLength: 8)
 
                     Image(systemName: "arrow.up.right")
-                        .scaledFont(size: 9, weight: .bold)
-                        .foregroundStyle(isHovering ? HomePalette.flowPink : HomePalette.faint)
+                        .scaledFont(size: 8, weight: .bold)
+                        .foregroundStyle(isHovering ? HomePalette.ink : HomePalette.faint)
                 }
 
+                Spacer(minLength: 0)
+
                 Text(value)
-                    .font(.system(size: 20, weight: .medium, design: .serif))
+                    .font(.system(size: 17, weight: .medium, design: .serif))
                     .foregroundStyle(HomePalette.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
 
                 Text(title)
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: 10, weight: .medium)
                     .foregroundStyle(HomePalette.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 82, maxHeight: 82, alignment: .topLeading)
+            .padding(9)
+            .frame(maxWidth: .infinity, minHeight: 66, maxHeight: 66, alignment: .topLeading)
             .background(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
                     .fill(isHovering ? HomePalette.tileHover : HomePalette.tile.opacity(0.92))
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .stroke(isHovering ? HomePalette.flowPink.opacity(0.5) : HomePalette.hairline.opacity(0.82), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .stroke(isHovering ? HomePalette.hairline : HomePalette.hairline.opacity(0.82), lineWidth: 1)
             )
-            .contentShape(.rect(cornerRadius: 15))
+            .contentShape(.rect(cornerRadius: 13))
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }

@@ -639,6 +639,45 @@ final class DesktopAutomationActionRegistry {
       return await FloatingControlBarManager.shared.closeAskOmiForAutomation(wait: wait)
     }
 
+    // Drive the redesigned Home stage (inline chat / connect tray) without the
+    // cursor. Each posts the notification DashboardPage observes, which calls
+    // the exact functions the on-screen controls call.
+    register(
+      name: "home_open_chat",
+      summary: "Open the inline chat on Home (same path as clicking the ask bar)"
+    ) { _ in
+      NotificationCenter.default.post(name: .homeStageOpenChat, object: nil)
+      return nil
+    }
+
+    register(
+      name: "home_connect_toggle",
+      summary: "Toggle the Connect tray on Home (same path as the ask-bar Connect button)"
+    ) { _ in
+      NotificationCenter.default.post(name: .homeStageToggleConnect, object: nil)
+      return nil
+    }
+
+    register(
+      name: "home_close_panel",
+      summary: "Collapse Home back to the hub (same as Esc / the close buttons)"
+    ) { _ in
+      NotificationCenter.default.post(name: .homeStageClose, object: nil)
+      return nil
+    }
+
+    register(
+      name: "home_ask",
+      summary: "Send a query through the Home ask bar (opens the inline chat and sends)",
+      params: ["query"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      NotificationCenter.default.post(
+        name: .homeStageAsk, object: nil, userInfo: ["query": query])
+      return ["sent": query]
+    }
+
     register(
       name: "ask",
       summary: "Send a query to the floating-bar AI (typed path); exercises the full chat pipeline",
