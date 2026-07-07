@@ -1,0 +1,65 @@
+backend/models/other.py
+  s_edfd59e96df44b::t_834ddb0f8a869e 40-47
+backend/routers/mcp.py
+  s_edfd59e96df44b::t_cfea7d71a02269 53,739-756
+backend/tests/unit/test_kg_user_type_mismatch.py
+  s_edfd59e96df44b::t_262a3eb9730968 564-632
+backend/tests/unit/test_person_backfill.py
+  s_edfd59e96df44b::t_16403939f7ab37 1-97
+backend/tests/unit/test_person_messaging_enrichment.py
+  s_edfd59e96df44b::t_f33c35d919968b 1-231
+backend/tests/unit/test_person_messaging_extractor.py
+  s_edfd59e96df44b::t_084c05e171f1f9 1-102
+backend/tests/unit/test_person_profile.py
+  s_edfd59e96df44b::t_60f16b046a4f7f 121-204
+backend/tests/unit/test_person_service.py
+  s_edfd59e96df44b::t_204fec86206bc8 119-141
+backend/tests/unit/test_person_service_search.py
+  s_edfd59e96df44b::t_5a9f1150604dd6 1-275
+backend/tests/unit/test_reply_draft.py
+  s_edfd59e96df44b::t_2c9fe6fc15f9a4 285-286,495-624,641-676
+backend/tests/unit/test_subject_memory_writer.py
+  s_edfd59e96df44b::t_cf36af285a6e46 1-246
+backend/utils/conversations/process_conversation.py
+  s_edfd59e96df44b::t_c96b2375c1ef0d 49-50,576-582,585-586,1042-1046
+backend/utils/imessage_connector.py
+  s_edfd59e96df44b::t_34d2be089754c4 54-55,388-396,514-522
+backend/utils/llm/person_messaging.py
+  s_edfd59e96df44b::t_73bc382faf4984 1-103
+backend/utils/llm/person_profile.py
+  s_edfd59e96df44b::t_e3a2180584b3b5 43-50,162-168,198-214
+backend/utils/llm/reply_draft.py
+  s_edfd59e96df44b::t_0d7d141b5edaf2 21,42,67-87,685-694,703,982-983,1097-1105,1108,1132-1152,1154-1157,1160-1168
+backend/utils/memory/person_backfill.py
+  s_edfd59e96df44b::t_026702676ab2f8 1-103
+backend/utils/memory/person_messaging_enrichment.py
+  s_edfd59e96df44b::t_df94be243292bf 1-211
+backend/utils/memory/subject_memory_writer.py
+  s_edfd59e96df44b::t_4d7d062a0b936f 1-245
+backend/utils/prompts.py
+  s_edfd59e96df44b::t_64f679b9503946 574-637
+backend/utils/retrieval/tool_services/person_service.py
+  s_edfd59e96df44b::t_aae83979f599c9 11,17,48-65,101-114,118-159,183-203,206
+backend/utils/telegram_connector.py
+  s_edfd59e96df44b::t_5d303676c9741a 61-62,268-276,379-386
+backend/utils/whatsapp_connector.py
+  s_edfd59e96df44b::t_e625ae02c34bbe 61-62,268-276,379-386
+docs/doc/developer/mcp/tools.mdx
+  s_edfd59e96df44b::t_f1f2af0a9b4c96 93-115
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "1f63046712457afa10d9513586fcb830a878738f",
+  "prompts": {},
+  "sessions": {
+    "s_edfd59e96df44b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f2a514c9-a655-43eb-b870-b8cc602ade29",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
