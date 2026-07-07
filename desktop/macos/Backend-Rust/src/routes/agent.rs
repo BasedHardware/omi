@@ -493,29 +493,23 @@ async fn start_stopped_vm(
     Ok(ip)
 }
 
-/// Create a GCE VM from the omi-agent image family.
-/// Returns the external IP of the created VM.
-async fn create_gce_vm(
-    firestore: &crate::services::FirestoreService,
+/// Build the GCE instances.insert request body for a new agent VM.
+/// Agent VMs use private networking only — no public NAT / external IP.
+fn build_gce_vm_insert_body(
     vm_name: &str,
     auth_token: &str,
-    project: &str,
     source_image: &str,
     gcs_bucket: &str,
-) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
-    let zone = "us-central1-a";
-
+    zone: &str,
+) -> serde_json::Value {
     // Startup script: pull the real startup.sh from GCS and run it.
     // All logic lives in GCS so it can be updated without reprovisioning VMs.
-    let startup_script = format!("#!/bin/bash\ncurl -sf https://storage.googleapis.com/{}/startup.sh -o /tmp/omi-startup.sh \\\n  && bash /tmp/omi-startup.sh\n", gcs_bucket);
-
-    // GCE instances.insert REST API
-    let url = format!(
-        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
-        project, zone
+    let startup_script = format!(
+        "#!/bin/bash\ncurl -sf https://storage.googleapis.com/{}/startup.sh -o /tmp/omi-startup.sh \\\n  && bash /tmp/omi-startup.sh\n",
+        gcs_bucket
     );
 
-    let body = serde_json::json!({
+    serde_json::json!({
         "name": vm_name,
         "machineType": format!("zones/{}/machineTypes/e2-small", zone),
         "disks": [{
@@ -528,11 +522,7 @@ async fn create_gce_vm(
             }
         }],
         "networkInterfaces": [{
-            "network": "global/networks/default",
-            "accessConfigs": [{
-                "type": "ONE_TO_ONE_NAT",
-                "name": "External NAT"
-            }]
+            "network": "global/networks/default"
         }],
         "tags": {
             "items": ["omi-agent-vm"]
@@ -546,7 +536,28 @@ async fn create_gce_vm(
                 "value": auth_token
             }]
         }
-    });
+    })
+}
+
+/// Create a GCE VM from the omi-agent image family.
+/// Returns the external IP of the created VM.
+async fn create_gce_vm(
+    firestore: &crate::services::FirestoreService,
+    vm_name: &str,
+    auth_token: &str,
+    project: &str,
+    source_image: &str,
+    gcs_bucket: &str,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let zone = "us-central1-a";
+
+    // GCE instances.insert REST API
+    let url = format!(
+        "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances",
+        project, zone
+    );
+
+    let body = build_gce_vm_insert_body(vm_name, auth_token, source_image, gcs_bucket, zone);
 
     // Use Firestore's authenticated request builder (same service account)
     let response = firestore
@@ -620,4 +631,37 @@ pub fn agent_routes() -> Router<AppState> {
     Router::new()
         .route("/v2/agent/provision", post(provision_agent_vm))
         .route("/v2/agent/status", get(get_agent_status))
+}
+
+#[cfg(test)]
+mod contract_tests {
+    use super::build_gce_vm_insert_body;
+
+    #[test]
+    fn contract_create_gce_vm_provision_json_has_no_public_nat() {
+        let body = build_gce_vm_insert_body(
+            "omi-agent-contract",
+            "omi-test-token",
+            "projects/test/global/images/family/omi-agent",
+            "omi-agent-artifacts",
+            "us-central1-a",
+        );
+
+        let network = &body["networkInterfaces"][0];
+        assert_eq!(network["network"], "global/networks/default");
+        assert!(
+            network.get("accessConfigs").is_none(),
+            "agent VM provisioning must not request public NAT"
+        );
+
+        let serialized = serde_json::to_string(&body).expect("provision body serializes");
+        assert!(
+            !serialized.contains("ONE_TO_ONE_NAT"),
+            "provision body must not contain ONE_TO_ONE_NAT"
+        );
+        assert!(
+            !serialized.contains("External NAT"),
+            "provision body must not contain External NAT access config"
+        );
+    }
 }
