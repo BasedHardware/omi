@@ -4,7 +4,9 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-logging.basicConfig(level=logging.INFO)
+from pusher.logging_config import configure_logging
+
+configure_logging(logging.INFO)
 
 import firebase_admin
 from fastapi import FastAPI
