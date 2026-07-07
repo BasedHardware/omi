@@ -8,6 +8,7 @@ the reply drafter so both share one implementation.
 """
 
 import logging
+from datetime import datetime
 from typing import Optional, Union
 
 import database.conversations as conversations_db
@@ -42,6 +43,24 @@ class AmbiguousPerson:
 
 def is_ambiguous(resolved) -> bool:
     return isinstance(resolved, AmbiguousPerson)
+
+
+def _as_of(fact: dict) -> str:
+    """Short 'as of' date for a fact — when it was last known true (valid_at), else created_at."""
+    ts = fact.get('valid_at') or fact.get('created_at')
+    if not ts:
+        return ''
+    try:
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        return ts.strftime('%b %Y')
+    except Exception:
+        return ''
+
+
+def _fact_line(fact: dict) -> str:
+    when = _as_of(fact)
+    return f"- {fact.get('content')}" + (f" (as of {when})" if when else "")
 
 
 # Facts and message snippets may quote text written by other people (e.g. iMessage
@@ -161,28 +180,30 @@ def get_person_context(
     except Exception as e:
         logger.warning(f"person_service: memories lookup failed for uid={uid}: {e}")
         facts = []
-    flat_lines = [f.get('content') for f in facts if f.get('content')]
-
+    # Keep the fact DICTS (not just content) so each fact can be surfaced with WHEN it was last
+    # known true — a stale fact from old history must read as historical, not current.
     if query:
-        # Rank the facts block by semantic relevance to the query first, then top up
-        # with the flat recency-ordered list (deduped), preserving the untrusted fencing
-        # emitted below. Falls back cleanly to the flat list when search returns nothing.
-        ranked_lines = [m.get('content') for m in search_person_memories(uid, person_id, query, limit=max_memories)]
-        fact_lines = []
-        seen = set()
-        for c in ranked_lines + flat_lines:
-            if c and c not in seen:
-                seen.add(c)
-                fact_lines.append(c)
-        fact_lines = fact_lines[:max_memories]
+        # Rank by semantic relevance first, then top up with the flat recency-ordered list.
+        ordered = search_person_memories(uid, person_id, query, limit=max_memories) + list(facts)
     else:
-        fact_lines = flat_lines
+        ordered = list(facts)
+    fact_dicts = []
+    seen = set()
+    for m in ordered:
+        c = m.get('content')
+        if c and c not in seen:
+            seen.add(c)
+            fact_dicts.append(m)
+    fact_dicts = fact_dicts[:max_memories]
 
-    if fact_lines:
-        lines.append(f"\n## Known facts about {name}")
+    if fact_dicts:
+        lines.append(
+            f"\n## Known facts about {name} (each tagged with when last known true; OLDER facts may be "
+            f"outdated — treat as historical, not a current certainty)"
+        )
         lines.append(UNTRUSTED_DATA_NOTICE)
         lines.append("<untrusted_facts>")
-        lines.extend(f"- {c}" for c in fact_lines)
+        lines.extend(_fact_line(m) for m in fact_dicts)
         lines.append("</untrusted_facts>")
 
     # Recent conversations involving this person.

@@ -50,6 +50,7 @@ def _resolve_subject_memories(
     extractor_id: str,
     is_locked: bool,
     language: Optional[str],
+    occurred_at=None,
 ):
     """Run per-fact conflict resolution and build `MemoryDB` objects keyed to the subject.
 
@@ -132,6 +133,12 @@ def _resolve_subject_memories(
             subject_attribution=subject_attribution,
         )
         memory_db_obj.is_locked = is_locked
+        # Temporal validity: stamp the fact with WHEN it was actually true — the source
+        # conversation's time, not extraction time. A backfill of old messages must record the
+        # fact as old (e.g. "training for nationals" from 2 years ago), so retrieval can caveat
+        # or down-weight it instead of surfacing a stale fact as current truth.
+        if occurred_at is not None:
+            memory_db_obj.valid_at = occurred_at
         # Corroboration is durability: a fact that supersedes an existing one has now been
         # seen more than once, so promote it out of the short-term tier it was born into.
         if supersede_ids:
@@ -192,16 +199,19 @@ def write_subject_memories(
     extractor_id: str = 'person_messaging_extractor',
     is_locked: bool = False,
     language: Optional[str] = None,
+    occurred_at=None,
 ) -> int:
     """Persist `memories` attributed to `subject_entity_id`, deduped/superseded against that
-    subject's existing active facts. Routes canonical vs legacy exactly like
-    process_conversation. Returns the number of memories written."""
+    subject's existing active facts. `occurred_at` (the source conversation's time) is stamped
+    as each fact's `valid_at` so callers can tell how old the information is. Routes canonical
+    vs legacy exactly like process_conversation. Returns the number of memories written."""
     if not memories:
         return 0
 
     parsed_memories, invalidations = _resolve_subject_memories(
         uid,
         memories,
+        occurred_at=occurred_at,
         subject_entity_id=subject_entity_id,
         subject_attribution=subject_attribution,
         source_id=source_id,

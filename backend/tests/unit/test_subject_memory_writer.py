@@ -228,3 +228,19 @@ def test_none_subject_candidate_is_ignored():
     assert count == 1
     resolve.assert_not_called()
     invalidate.assert_not_called()
+
+
+def test_occurred_at_stamps_valid_at():
+    """The source conversation's time is stamped as the fact's valid_at, so a backfilled
+    old fact records WHEN it was true (not extraction time)."""
+    from datetime import datetime, timezone
+    when = datetime(2023, 3, 1, tzinfo=timezone.utc)
+    memories = [_mem('Alice trained for nationals')]
+    with patch.object(w, 'find_similar_memories', return_value=[]), patch.object(
+        w, 'memory_system_request_scope', _scope(w.MemorySystem.LEGACY)
+    ), patch.object(w, 'canonical_write_enabled', return_value=False), patch.object(
+        w.memories_db, 'save_memories'
+    ) as save_memories, patch.object(w, 'upsert_memory_vector'), patch.object(w, 'record_usage'):
+        w.write_subject_memories('uid1', memories, occurred_at=when, **_write())
+    saved = save_memories.call_args[0][1]
+    assert saved and saved[0]['valid_at'] == when

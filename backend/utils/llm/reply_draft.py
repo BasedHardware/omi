@@ -16,6 +16,7 @@ import html
 import json
 import logging
 import re
+from datetime import datetime
 from typing import List, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -68,6 +69,27 @@ def _fence(text: Optional[str]) -> str:
     record could have a non-string ``content``/field, and html.escape() TypeErrors on
     non-str. ``str(text) if text else ''`` keeps the old falsy→'' behavior."""
     return html.escape(str(text) if text else '', quote=False)
+
+
+def _as_of(fact: dict) -> str:
+    """Short 'as of' date for a fact — when it was last known true (valid_at), falling back to
+    created_at. Returns '' when unavailable. Used so a stale fact from old history is surfaced
+    with its age instead of as current truth."""
+    ts = fact.get('valid_at') or fact.get('created_at')
+    if not ts:
+        return ''
+    try:
+        if isinstance(ts, str):
+            ts = datetime.fromisoformat(ts.replace('Z', '+00:00'))
+        return ts.strftime('%b %Y')
+    except Exception:
+        return ''
+
+
+def _fact_line(fact: dict) -> str:
+    content = _fence(fact.get('content'))
+    when = _as_of(fact)
+    return f"- {content}" + (f" (as of {when})" if when else "")
 
 
 def _safe_name(name: Optional[str]) -> str:
@@ -433,6 +455,11 @@ def build_reply_prompt(
         f"NOTHING above establishes it, give a short, natural reply in the user's voice and move on — but "
         f"still NEVER interrogate them back, and NEVER say the user forgot or doesn't remember. Answer what "
         f"you know; just don't put words, opinions, actions, or reasons in their mouth for what you don't.\n\n"
+        f"TIME & STALENESS — facts about {name} are tagged with when they were last known true (\"as of "
+        f"<date>\"). Information can be old: a fact from many months or years ago may no longer hold (a job, "
+        f"a city, a plan, who they were dating, what they were training for). NEVER assert a stale fact as a "
+        f"current certainty. If an old fact is relevant, either leave it out or reference it tentatively as "
+        f"something that WAS true — do not state it as if it's happening now.\n\n"
         f"COMMITMENTS — don't agree to plans, invites, times, or obligations on the user's behalf unless the "
         f"user's own recent messages or the stated intent clearly support it. When it's a yes/no or an invite "
         f"and you're not sure what the user wants, keep the reply non-committal — in the user's own voice — "
@@ -628,7 +655,7 @@ def draft_reply(
                 facts = memories_db.get_memories_by_subject_entity(uid, person_entity_id(person['id']), limit=15)
         except Exception as e:
             logger.warning(f"reply_draft: facts lookup failed uid={uid}: {e}")
-    facts_text = "\n".join(f"- {_fence(f.get('content'))}" for f in facts if f.get('content'))
+    facts_text = "\n".join(_fact_line(f) for f in facts if f.get('content'))
 
     style_samples = _collect_user_style_samples(uid, person, thread)
     fingerprint = compute_fingerprint(style_samples)
@@ -674,7 +701,10 @@ def draft_reply(
         context_bits.append(f"{name}'s interests: " + ", ".join(_fence(i) for i in interests))
 
     if facts_text:
-        context_bits.append(f"Facts about {name}:\n{facts_text}")
+        context_bits.append(
+            f"Facts about {name} — each tagged with when it was last known true. OLDER facts "
+            f"(months/years ago) may be outdated; never state a stale one as a current certainty:\n{facts_text}"
+        )
     context_text = "\n".join(context_bits) or "(no extra context)"
 
     # Identity safety: when replying to a SPECIFIC resolved person, ground ONLY on what's

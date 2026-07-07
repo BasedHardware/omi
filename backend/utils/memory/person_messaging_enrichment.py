@@ -183,6 +183,9 @@ def enrich_persons_from_conversation(uid: str, conversation, language: Optional[
                     source_id=source_id,
                     artifact_ref=artifact_ref,
                     language=language,
+                    # When the fact was actually true = this conversation's time. Critical for
+                    # backfill of old history so a years-old fact isn't stored as current.
+                    occurred_at=last_contact_at,
                 )
                 results[person_id] = written
             except Exception as e:

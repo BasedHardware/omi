@@ -725,3 +725,11 @@ def test_unknown_contact_still_uses_general_context():
     ):
         rd.draft_reply('uid', 'Unknownperson', [{'text': 'hey', 'is_from_me': False}])
     relctx.assert_called_once()
+
+
+def test_fact_line_includes_as_of_date():
+    from datetime import datetime, timezone
+    dated = {'content': 'trains for nationals', 'valid_at': datetime(2023, 3, 1, tzinfo=timezone.utc)}
+    undated = {'content': 'likes sushi'}
+    assert rd._fact_line(dated) == '- trains for nationals (as of Mar 2023)'
+    assert rd._fact_line(undated) == '- likes sushi'
