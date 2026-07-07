@@ -761,16 +761,53 @@ def test_is_about_user_matches_user_questions_not_other_person():
         assert not rd._is_about_user([{'text': t, 'is_from_me': False}]), t
 
 
-def test_unknown_contact_still_uses_general_context():
-    """An unknown contact (no resolved person) still uses the general grounding — there's no
-    person to over-attribute to, and the user's own recall is still useful."""
+def test_grounds_only_when_message_asks_something():
+    """Grounding is pulled only when the latest inbound actually asks/requests something (the
+    user's "be specific IF ASKED" steer). A question grounds; a bare greeting does not — so a
+    'hey' reply isn't polluted with a fact-dump that tempts the model off the user's voice."""
+    # A real question → general grounding runs.
     with patch.object(rd, 'resolve_person', return_value=None), patch.object(
         rd, '_relevant_context', return_value=''
-    ) as relctx, patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
-        rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"hi"'))
+    ) as relctx_q, patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"idk"'))
     ):
-        rd.draft_reply('uid', 'Unknownperson', [{'text': 'hey', 'is_from_me': False}])
-    relctx.assert_called_once()
+        rd.draft_reply('uid', 'Unknownperson', [{'text': 'what have you been up to?', 'is_from_me': False}])
+    relctx_q.assert_called_once()
+
+    # A bare greeting → NO grounding (nothing was asked).
+    with patch.object(rd, 'resolve_person', return_value=None), patch.object(
+        rd, '_relevant_context', return_value=''
+    ) as relctx_g, patch.object(rd.conversations_db, 'get_conversations', return_value=[]), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=lambda p: SimpleNamespace(content='"hey"'))
+    ):
+        rd.draft_reply('uid', 'Unknownperson', [{'text': 'heyyy stranger', 'is_from_me': False}])
+    relctx_g.assert_not_called()
+
+
+def test_asks_something_gate():
+    """`_asks_something`: questions/requests/invites ground; greetings/reactions/statements don't."""
+    asks = [
+        'what have you been up to',
+        'you free tonight?',
+        'wanna grab dinner',
+        'can you send me the doc',
+        'where do you live now',
+        'how was your weekend',
+        'lmk when you land',
+        'you coming saturday',
+    ]
+    no_ask = [
+        'heyyy stranger',
+        'lol that was so funny',
+        'oops',
+        "*you're",
+        'that movie was insane',
+        'good night',
+    ]
+    for t in asks:
+        assert rd._asks_something([{'text': t, 'is_from_me': False}]), t
+    for t in no_ask:
+        assert not rd._asks_something([{'text': t, 'is_from_me': False}]), t
 
 
 def test_fact_line_includes_as_of_date():

@@ -673,12 +673,14 @@ def build_reply_prompt(
         f"WRITE LIKE A HUMAN TEXTING, NOT AN AI. Say one clear thing, no filler, no throat-clearing, no "
         f"restating the question, no wrap-up. If a candidate reads polished, formal, or 'assistant-like', it "
         f"is WRONG. Never use em dashes or fancy punctuation unless the user's own samples clearly do.\n"
-        f"LENGTH — write the way the user naturally would HERE, sized to the moment. A quick reaction to a "
-        f"one-liner can be a word or two; but when {name} sends a real, substantial message — a question, an "
-        f"update, something they clearly put thought into — a curt one-liner back is WRONG and reads as "
-        f"dismissive. Engage with what {name} actually said and give a real, substantive reply; it's fine to "
-        f"run a few sentences when the conversation calls for it. Do NOT force the reply short, and do NOT pad "
-        f"it either — match the substance of what's being said, not a fixed length.\n"
+        f"LENGTH & VOICE COME FIRST — match how THIS user actually texts (their measured length above and "
+        f"their own samples) before anything else, in BOTH directions. If their messages are short — a few "
+        f"words, one line — your reply MUST be that short too, EVEN when answering a real question: compress "
+        f"the answer into their style (a short phrase or a quick comma list), never a paragraph of polished "
+        f"prose. If their messages are fuller sentences, match THAT — don't clip them into terse fragments. A "
+        f"reply that is longer, shorter, smoother, or more elaborate than their own typical message is WRONG "
+        f"even if every word is true — it reads as a bot, not them. Don't pad, and don't be dismissive either — "
+        f"say the real thing, exactly the way they'd say it, at the length they'd say it.\n"
         f"BURST — real people sometimes reply as a burst of a few back-to-back messages rather than one. If the "
         f"USER's own chunking in the conversation above shows they do that (consecutive lines from them), you "
         f"may split your reply into a few messages on separate lines to match their rhythm. If they usually "
@@ -716,15 +718,24 @@ def build_reply_prompt(
         f"if you don't know) and TIME (a fact tagged 'as of' long ago may be false now — don't state an old fact "
         f"as current). When you don't know, a plain reply is correct and enough: 'not sure', 'honestly been a "
         f"blur', 'nothing crazy', 'i forget lol'. Never invent to fill the gap.\n\n"
-        f"COVER WHAT YOU DID — when {name} asks an open question about what the user did, how something went, or "
-        f"how a day, weekend, trip, or event was ('what did you do', 'how was your 4th', 'what have you been up "
-        f"to'), and the context shows SEVERAL distinct things the user actually did (multiple activities, places, "
-        f"foods, or events), recount the material ones the way the user would in a text — do NOT cherry-pick one "
-        f"detail and drop the rest, and do NOT compress a full day into 'nothing much'. Wrapping a genuinely "
-        f"eventful day in a minimizing frame ('nothing crazy', 'chill day', 'stayed in', 'the usual') when the "
-        f"context lists several real things is the SAME under-sharing failure as hedging on a single fact — it "
-        f"throws away what actually happened. Name the real things (in the user's voice, and as a natural burst "
-        f"of a couple of back-to-back messages if that fits how they text) instead of summarizing them away.\n\n"
+        f"DON'T INVENT A PERSONALITY OR A VIBE — never manufacture a feeling, reaction, opinion, joke, cutesy "
+        f"characterization, or relationship sentiment the user didn't actually express. No 'missed your texts', "
+        f"'been thinking about you', 'haha playing the grammar cop', no forced enthusiasm, no little bit or "
+        f"quip added to sound natural or charming. Making up a vibe, a joke, or an emotion is the SAME failure "
+        f"as making up a fact — it puts words the user would never say in their mouth. If you don't have their "
+        f"real reaction, give the plainest minimal reply in their voice ('lol', 'my bad', 'oops', 'ok', or "
+        f"just answer the question) — flat and real beats clever and fake.\n\n"
+        f"COVER WHAT YOU DID, SPECIFICALLY — when {name} asks an open question about what the user did/has been "
+        f"up to or how a day/week/trip/event was, and the context shows real things the user did, NAME THE "
+        f"ACTUAL SPECIFIC THINGS with their TIMING — the real projects, events, places, people, outcomes AND "
+        f"when they happened ('won a hackathon with maher last weekend', 'india trip next month', 'gave the "
+        f"fund summit talk yesterday'). Vague filler is a FAILURE: never answer 'work stuff mostly', 'the "
+        f"usual', 'same grind', 'just some meetings', 'nothing much' when the context lists real specifics — "
+        f"that throws away what actually happened, which is exactly what the person asked. Say the specific "
+        f"things, IN THE USER'S OWN VOICE AND LENGTH: if they text short, a quick specific list in their style "
+        f"('omi ai features, hackathon w maher last weekend, india trip soon'); if they write fuller, match "
+        f"that. Never inflate a terse texter into a paragraph, never flatten a fuller writer into fragments — "
+        f"but always keep the real specifics and their timing.\n\n"
         f"COMMITMENTS — don't agree to plans, invites, times, or obligations on the user's behalf unless the "
         f"user's own recent messages or the stated intent clearly support it. When it's a yes/no or an invite "
         f"and you're not sure what the user wants, keep the reply non-committal — in the user's own voice — "
@@ -784,19 +795,27 @@ def _build_selection_prompt(name: str, style_block: str, thread_text: str, candi
         f"they haven't clearly agreed to. Reject anything polished or assistant-like, and reject any "
         f"candidate that fabricates a stance, action, or reason the user never expressed, or that invents a "
         f"concrete specific the conversation never provided (a number, score, price, brand or model, place, "
-        f"date, named outcome, or the existence of a person/thing/event). REJECT any candidate that DENIES, "
+        f"date, named outcome, or the existence of a person/thing/event). ALSO REJECT any candidate that "
+        f"manufactures a FEELING, reaction, joke, cutesy characterization, or relationship sentiment the user "
+        f"didn't express ('missed you', 'been thinking about you', 'playing the grammar cop', forced "
+        f"enthusiasm) — an invented vibe is as wrong as an invented fact. REJECT any candidate that DENIES, "
         f"negates, or downplays something the context or the user's own messages actually show (a "
         f"\"no\"/\"didn't\"/\"not anymore\" that contradicts the context is a fabrication, not a safe "
         f"default); when the context shows the user was involved in what's being asked, prefer the candidate "
         f"that affirms it or asks over any that denies it. When the context DOES contain the specific asked "
         f"for (a place, day, time, name, number, dish, plan), PREFER the candidate that states that real "
         f"retrieved specific over any vaguer/hedging one — using a fact you have beats hedging. When {name} "
-        f"asked an open question about what the user did or how a day/event was AND the context shows SEVERAL "
-        f"distinct real things the user did, PREFER the candidate that COVERS the material ones over a shorter "
-        f"one that names just one and drops the rest or compresses them into 'nothing much' — under-sharing a "
-        f"genuinely eventful answer is a failure, and this coverage preference OVERRIDES the 'shorter is better' "
-        f"preference. Only between "
-        f"a vague reply and one that states an UNESTABLISHED specific, pick the vague one. Return the index of the best candidate."
+        f"asked an open question about what the user did or how a day/event was AND the context shows real "
+        f"things the user did, STRONGLY prefer the candidate that names the actual SPECIFIC things (real "
+        f"projects/events/people/places) WITH their timing over any that gives vague filler — reject 'work "
+        f"stuff mostly', 'the usual', 'same grind', 'just some meetings', 'nothing much' when the context has "
+        f"real specifics: that vagueness is the failure the user hates. The winner must ALSO match the user's "
+        f"length and voice — a terse texter's specifics come as a short lowercase list ('omi features, "
+        f"hackathon w maher last weekend'), not a paragraph; between two candidates that both name the "
+        f"specifics, pick the one truer to the user's voice/length, but a candidate that DROPS the specifics "
+        f"never beats one that keeps them. Only between a vague reply and one that states an UNESTABLISHED "
+        f"specific, pick the vague one. Reject any candidate that reads like an assistant (polished, "
+        f"multi-sentence prose for a terse texter). Return the index of the best candidate."
     )
     user_prompt = (
         f"Here are the user's own real messages, showing exactly how they text:\n"
@@ -1003,6 +1022,32 @@ def _is_about_user(thread: List[dict]) -> bool:
     return False
 
 
+# Does the latest inbound actually ASK or request something? The user's steer is "be specific IF
+# ASKED" — so we only pull grounding context for a question/request. A greeting, a reaction, or a
+# plain statement doesn't need Omi's facts; injecting them there just tempts the model to embellish
+# and drift off the user's real (often terse) voice.
+_ASKS_RE = re.compile(
+    r"\?|"
+    r"^\s*(?:what|whats|wat|how|hows|where|wheres|when|whens|why|who|whos|which|whose|hru|wyd|wbu|hbu|sup|wassup)\b|"
+    r"\b(?:do you|did you|are you|is it|was it|have you|you been|you gonna|you gunna|you still|you free|"
+    r"you coming|you down|you around|you get|you got|can you|could you|would you|should i|"
+    r"wanna|lmk|let me know|tell me|send me|remind me|you think|thoughts)\b",
+    re.IGNORECASE,
+)
+
+
+def _asks_something(thread: List[dict]) -> bool:
+    """True when the latest inbound poses a question, request, or invite the reply should actually
+    answer — the only case we ground on the user's context. Non-questions (greetings, reactions,
+    statements) reply in the user's plain voice with no injected facts."""
+    for m in reversed(thread or []):
+        if m.get('is_from_me'):
+            continue
+        text = m.get('text') or ''
+        return bool(_ASKS_RE.search(text) or _RECOUNT_RE.search(text) or _ABOUT_USER_RE.search(text))
+    return False
+
+
 def distill_recount_recap(omi_context: str, question: str) -> str:
     """Distill noisy retrieved context into a short, concrete recap of what the user ACTUALLY did,
     relevant to an open recount question. Returns a labeled recap block to inject, or '' when there
@@ -1019,11 +1064,14 @@ def distill_recount_recap(omi_context: str, question: str) -> str:
         "doing, working on, building, or taking part in that are relevant to the question. Include an "
         "item only if the summaries show it real — actually happened, was done, or is genuinely in "
         "progress; if something is merely wished-for, hypothetical, or vaguely considered with no sign "
-        "it's real, LEAVE IT OUT. Phrase each as a short plain thing (past tense for things done, "
-        "present for ongoing work): 'grilled burgers', 'played pickleball', 'building the onboarding "
-        "redesign', 'gave a talk at the fund summit'. Drop other people's businesses/investments, "
-        "unrelated tangents, and meta/app chatter. Return ONLY a short bullet list (one item per line, "
-        "no commentary). If nothing concrete is established, return exactly NONE."
+        "it's real, LEAVE IT OUT. Be SPECIFIC — name the actual thing (project, event, place, person, "
+        "outcome), not a vague category: 'won a hackathon with Maher', not 'did some stuff'. And keep "
+        "the TIMING the context shows — when it happened or is happening (the dates and 'today / "
+        "yesterday / last week / this weekend / soon' tags on each item): 'gave a talk at the fund "
+        "summit yesterday', 'grilled burgers on the 4th', 'india trip next month', 'building the "
+        "onboarding redesign this week'. Drop other people's businesses/investments, unrelated "
+        "tangents, and meta/app chatter. Return ONLY a short bullet list (one item per line, no "
+        "commentary). If nothing concrete is established, return exactly NONE."
     )
     usrp = "QUESTION THEY ASKED: " + (question or '').strip() + "\n\nCAPTURED CONTEXT (noisy):\n" + ctx
     try:
@@ -1039,7 +1087,10 @@ def distill_recount_recap(omi_context: str, question: str) -> str:
         # A single item isn't a recount — the raw context already conveys it; don't override.
         return ''
     recap = "\n".join(f"- {i}" for i in items)
-    return "THINGS THE USER ACTUALLY DID (recount these, in their voice):\n" + recap
+    return (
+        "THINGS THE USER ACTUALLY DID, WITH WHEN (recount the real ones with their timing, in the "
+        "user's voice — name the specific things, don't flatten them to 'work stuff'):\n" + recap
+    )
 
 
 def apply_recount_distillation(omi_context: str, thread: List[dict]) -> str:
@@ -1245,14 +1296,17 @@ def draft_reply(
         )
     context_text = "\n".join(context_bits) or "(no extra context)"
 
-    # ALWAYS ground on the user's own context (per the user's explicit call: being specific and
-    # true when asked something matters more than the risk of "leaking" the user's own life into a
-    # reply — that leak is acceptable). So known 1:1, unknown, and group threads all pull the user's
-    # relevant memories/conversations/chunks; the draft prompt still only USES a specific to answer
-    # something actually asked, and the anti-fabrication rule keeps it true. `apply_recount_distillation`
-    # additionally distills a concrete recap when the message is about the user (recount/life/work/status),
-    # so those replies share the real specifics instead of hedging into vagueness.
-    omi_context = apply_recount_distillation(_relevant_context(uid, thread), thread)
+    # Ground on the user's own context ONLY when the message actually asks/requests something (the
+    # user's steer: "be specific IF ASKED"). Leaking the user's own life is fine, so there's no
+    # per-person gate — but a greeting/reaction/plain statement gets NO injected facts, because
+    # dumping context there just tempts the model to embellish and drift off the user's real voice.
+    # When it IS a question, pull the relevant memories/conversations/chunks; the anti-fabrication
+    # rule keeps it true, and `apply_recount_distillation` distills a concrete recap for
+    # recount/life/work/status questions so the answer shares the real specifics.
+    if _asks_something(thread):
+        omi_context = apply_recount_distillation(_relevant_context(uid, thread), thread)
+    else:
+        omi_context = ''
 
     # The user's own name, so the drafter writes as them and never treats their own name
     # (which shows up in third-person memories and in group mentions) as a third party.

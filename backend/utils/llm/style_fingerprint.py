@@ -199,9 +199,11 @@ def render_fingerprint_lines(fp: StyleFingerprint) -> str:
     # the moment (short for a quick reaction, longer for a real message) — never a hard "keep it short".
     if fp.short_reply_rate >= 0.4:
         length = (
-            f"messages run short-to-medium — about {fp.median_words} word(s) typical, {round(fp.short_reply_rate * 100)}% "
-            f"are 1-2 words, but they range up to ~{hi}. A one-word reaction is fine for a one-liner; give a fuller "
-            f"reply when the message actually calls for it. Don't pad, don't force it short"
+            f"this user texts SHORT — about {fp.median_words} word(s) typical and {round(fp.short_reply_rate * 100)}% "
+            f"of their messages are 1-2 words. Keep replies this short: a word or a brief phrase. EVEN when "
+            f"answering a real question that has several specifics to give, stay terse — a short lowercase "
+            f"phrase or a quick comma list of the real things, never polished prose or a paragraph. Match "
+            f"their brevity; don't pad and don't inflate"
         )
     else:
         length = (
