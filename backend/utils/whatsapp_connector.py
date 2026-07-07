@@ -59,6 +59,7 @@ from utils.imessage_connector import (
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, start_background_task
 from utils.llm.person_profile import generate_person_profile
 from utils.memory.person_messaging_enrichment import enrich_persons_from_conversation
+from utils.memory.person_backfill import maybe_backfill_on_first_sync
 from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
@@ -373,6 +374,14 @@ async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngest
         start_background_task(
             _enrich_conversations(uid, req.language, created_conversations, list(people_ids)),
             name=f'whatsapp_enrich_{uid}',
+        )
+
+    # First sync: enrich the whole roster once (atomic once-per-user guard inside). Heavy,
+    # so it runs in the background threadpool and never blocks the response.
+    if people_ids:
+        start_background_task(
+            run_blocking(postprocess_executor, maybe_backfill_on_first_sync, uid, req.language or 'en'),
+            name=f'whatsapp_backfill_{uid}',
         )
 
     skipped = ledger_skipped + race_skipped
