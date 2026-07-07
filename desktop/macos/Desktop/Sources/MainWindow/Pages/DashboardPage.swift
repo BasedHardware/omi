@@ -576,6 +576,18 @@ struct DashboardPage: View {
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
+                // Clicking anywhere outside the chat / connect panel collapses
+                // back to the hub (panels and the ask bar consume their own
+                // clicks above this catcher).
+                if homeMode != .hub {
+                    Color.black.opacity(0.001)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            closeHomeStagePanel()
+                        }
+                }
+
                 homeStage
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     // The popup/sheet overlays are modal: while one is up, the
@@ -720,10 +732,6 @@ struct DashboardPage: View {
                     .foregroundStyle(HomePalette.ink)
 
                 Spacer()
-
-                HomeIconActionButton(title: "Close chat", systemImage: "chevron.down") {
-                    closeHomeStagePanel()
-                }
             }
             .padding(.bottom, 2)
 
@@ -2072,8 +2080,6 @@ private struct HomeCanvasBackground: View {
                 endRadius: 720
             )
 
-            HomeMemoryDustField()
-
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0.62),
@@ -2085,67 +2091,6 @@ private struct HomeCanvasBackground: View {
             )
         }
         .ignoresSafeArea()
-    }
-}
-
-/// Sparse, slowly drifting points of light — memories surfacing. Quiet enough
-/// to sit behind text, alive enough that the canvas doesn't feel dead.
-/// Freezes while the app is inactive so it costs nothing in the background.
-private struct HomeMemoryDustField: View {
-    @State private var isAppActive = NSApp.isActive
-
-    var body: some View {
-        Group {
-            if isAppActive {
-                TimelineView(.periodic(from: .now, by: 1.0 / 15.0)) { timeline in
-                    HomeMemoryDustCanvas(
-                        time: timeline.date.timeIntervalSinceReferenceDate)
-                }
-            } else {
-                HomeMemoryDustCanvas(time: 1200)
-            }
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            isAppActive = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
-            isAppActive = false
-        }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-    }
-}
-
-private struct HomeMemoryDustCanvas: View {
-    let time: TimeInterval
-
-    var body: some View {
-        Canvas { context, size in
-            for index in 0..<56 {
-                let fi = Double(index)
-                // Deterministic per-index pseudo-randoms (no RNG — resume-safe
-                // and stable across frames).
-                let seedX = abs((sin(fi * 12.9898) * 43758.5453).truncatingRemainder(dividingBy: 1))
-                let seedY = abs((sin(fi * 78.233) * 12543.123).truncatingRemainder(dividingBy: 1))
-                let seedP = abs((sin(fi * 3.7) * 951.135).truncatingRemainder(dividingBy: 1))
-
-                // Slow upward drift with a gentle horizontal sway.
-                let rawY = (seedY * size.height - time * (3.0 + seedP * 5.0))
-                    .truncatingRemainder(dividingBy: size.height)
-                let y = rawY < 0 ? rawY + size.height : rawY
-                let x = seedX * size.width + sin(time * 0.22 + fi * 1.3) * 7
-
-                let twinkle = 0.5 + 0.5 * sin(time * (0.5 + seedP * 0.8) + fi * 1.7)
-                let alpha = 0.03 + twinkle * (0.04 + seedP * 0.08)
-                let radius = 0.8 + seedP * 1.5
-
-                let rect = CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2)
-                let color = index % 6 == 0
-                    ? HomePalette.glow.opacity(alpha * 1.4)
-                    : Color.white.opacity(alpha)
-                context.fill(Path(ellipseIn: rect), with: .color(color))
-            }
-        }
     }
 }
 
