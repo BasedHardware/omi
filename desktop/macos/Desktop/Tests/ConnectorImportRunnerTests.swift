@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 
 @testable import Omi_Computer
@@ -76,6 +77,32 @@ final class ConnectorImportRunnerTests: XCTestCase {
     XCTAssertEqual(runner.runs["calendar"]?.phase, .failed)
     XCTAssertEqual(runner.runs["calendar"]?.errorMessage, "boom")
     XCTAssertNil(runner.runs["calendar"]?.statusMessage)
+  }
+
+  func testCompletionPublishesTerminalStateWithMessageAtomically() async {
+    let runner = ConnectorImportRunner()
+    var terminalSnapshots: [ConnectorImportRunner.RunState] = []
+
+    let cancellable = runner.$runs.sink { runs in
+      guard let state = runs["email"], state.phase != .running else { return }
+      terminalSnapshots.append(state)
+    }
+
+    let task = runner.start(
+      connectorID: "email",
+      progressTitle: "t",
+      progressDetail: "d"
+    ) { _ in
+      .success(message: "done")
+    }
+
+    await task?.value
+
+    XCTAssertEqual(terminalSnapshots.count, 1)
+    XCTAssertEqual(terminalSnapshots.first?.phase, .succeeded)
+    XCTAssertEqual(terminalSnapshots.first?.statusMessage, "done")
+    XCTAssertNil(terminalSnapshots.first?.errorMessage)
+    _ = cancellable
   }
 
   func testDuplicateStartIsIgnoredWhileRunning() async {

@@ -106,15 +106,18 @@ final class ConnectorImportRunner: ObservableObject {
     }
 
     private func finish(connectorID: String, runToken: UUID, outcome: RunOutcome) {
-        guard runTokens[connectorID] == runToken else { return }
+        guard runTokens[connectorID] == runToken, var state = runs[connectorID] else { return }
         tasks[connectorID] = nil
         switch outcome {
         case .success(let message):
-            runs[connectorID]?.phase = .succeeded
-            runs[connectorID]?.statusMessage = message
+            state.phase = .succeeded
+            state.statusMessage = message
+            state.errorMessage = nil
         case .failure(let message):
-            runs[connectorID]?.phase = .failed
-            runs[connectorID]?.errorMessage = message
+            state.phase = .failed
+            state.statusMessage = nil
+            state.errorMessage = message
         }
+        runs[connectorID] = state
     }
 }

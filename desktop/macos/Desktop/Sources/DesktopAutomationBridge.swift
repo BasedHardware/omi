@@ -1850,6 +1850,7 @@ final class DesktopAutomationBridge {
           "POST /conversation/open",
           "POST /action",
           "POST /visual/export",
+          "POST /open-import",
         ],
         lanes: ["bridge", "visual", "ui"],
         waits: ["state", "log", "trace"],
@@ -1926,16 +1927,24 @@ final class DesktopAutomationBridge {
       }
     case ("POST", "/open-import"):
       struct OpenResult: Codable { let connector: String }
+      let payload: DesktopAutomationOpenImportRequest
       do {
-        let payload = try JSONDecoder().decode(
+        payload = try JSONDecoder().decode(
           DesktopAutomationOpenImportRequest.self, from: request.body)
-        let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
-        guard knownIDs.contains(payload.connector) else {
-          return jsonResponse(
-            DesktopAutomationResponse<OpenResult>(
-              ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
-            statusCode: 400)
-        }
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 400)
+      }
+      let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
+      guard knownIDs.contains(payload.connector) else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
+          statusCode: 400)
+      }
+      do {
         await MainActor.run {
           NSApp.activate()
           if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {

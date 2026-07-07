@@ -95,6 +95,28 @@ final class ConnectorImportOperationsTests: XCTestCase {
     XCTAssertEqual(message, "The import couldn't run. Try again.")
   }
 
+  func testCompletedXImportWithZeroPostsDoesNotSayStillRunning() {
+    let message = ConnectorImportOperations.xImportCompletionMessage(
+      handle: "omi",
+      posts: 0,
+      memories: 0,
+      importCompleted: true
+    )
+
+    XCTAssertEqual(message, "Connected to X as @omi. No posts or bookmarks were ready to import.")
+  }
+
+  func testIncompleteXImportWithZeroPostsStillShowsRunningFallback() {
+    let message = ConnectorImportOperations.xImportCompletionMessage(
+      handle: "omi",
+      posts: 0,
+      memories: 0,
+      importCompleted: false
+    )
+
+    XCTAssertEqual(message, "Connected to X as @omi. Import is still running; check back shortly.")
+  }
+
   func testUserFacingLinesNeverContainAgentSummary() {
     let scan = outcome(hasReadableUserFileTarget: false, deniedUserFolders: ["~/Downloads"])
     let failure = ConnectorImportOperations.localFilesFailureLine(for: scan)

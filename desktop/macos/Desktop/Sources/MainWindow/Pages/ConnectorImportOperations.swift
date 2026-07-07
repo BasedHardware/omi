@@ -89,7 +89,11 @@ enum ConnectorImportOperations {
                         : "Couldn't start the X connection."
                 )
             }
-            NSWorkspace.shared.open(url)
+            guard NSWorkspace.shared.open(url) else {
+                return .failure(
+                    message: "Couldn't open the X authorization page. Check your default browser, then try again."
+                )
+            }
             progress.update(
                 title: "Waiting for X authorization",
                 detail: "Approve access in your browser. This window updates automatically."
@@ -115,28 +119,27 @@ enum ConnectorImportOperations {
             // backend marks syncing complete (or counts stop growing).
             var posts = linked.postCount ?? 0
             var memories = linked.memoryCount ?? 0
+            var importCompleted = linked.syncing == false
             for _ in 0..<90 {
                 let status = try? await APIClient.shared.xConnectionStatus()
                 posts = status?.postCount ?? posts
                 memories = status?.memoryCount ?? memories
+                importCompleted = status?.syncing == false || importCompleted
                 progress.update(
                     title: "Importing your X data",
                     detail: "Saved \(posts.formatted()) posts · \(memories.formatted()) memories so far…"
                 )
-                // Done once the backend clears the syncing flag and we have data.
-                if status?.syncing == false && posts > 0 { break }
+                // Done once the backend clears the syncing flag, even if the account has no importable posts.
+                if importCompleted { break }
                 try? await Task.sleep(for: .seconds(2))
             }
 
-            let message: String
-            if posts > 0 {
-                let memClause = memories > 0
-                    ? " — \(memories.formatted()) memories added. View them in Memories."
-                    : ". Extracted memories appear in Memories."
-                message = "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
-            } else {
-                message = "Connected to X as @\(handle). Import is still running; check back shortly."
-            }
+            let message = xImportCompletionMessage(
+                handle: handle,
+                posts: posts,
+                memories: memories,
+                importCompleted: importCompleted
+            )
             return .success(
                 SyncResult(sourceCount: posts, memoryCount: memories > 0 ? memories : nil, newItems: posts),
                 message: message
@@ -144,6 +147,19 @@ enum ConnectorImportOperations {
         } catch {
             return .failure(message: error.localizedDescription)
         }
+    }
+
+    static func xImportCompletionMessage(handle: String, posts: Int, memories: Int, importCompleted: Bool) -> String {
+        if posts > 0 {
+            let memClause = memories > 0
+                ? " — \(memories.formatted()) memories added. View them in Memories."
+                : ". Extracted memories appear in Memories."
+            return "Imported \(posts.formatted()) posts from @\(handle)\(memClause)"
+        }
+        if importCompleted {
+            return "Connected to X as @\(handle). No posts or bookmarks were ready to import."
+        }
+        return "Connected to X as @\(handle). Import is still running; check back shortly."
     }
 
     private static func appURLScheme() -> String {
