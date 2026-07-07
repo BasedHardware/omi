@@ -177,6 +177,7 @@ class AppCatalogItem(BaseModel):
     author: str = ''
     capabilities: List[str] = Field(default_factory=list)
     approved: bool = False
+    status: str = 'approved'
     private: bool = False
     installs: int = 0
     rating_avg: Optional[float] = None

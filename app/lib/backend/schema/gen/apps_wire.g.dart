@@ -787,6 +787,7 @@ class GeneratedAppCatalogItem {
   final bool private;
   final double? ratingAvg;
   final int ratingCount;
+  final String status;
 
   const GeneratedAppCatalogItem({
     this.approved = false,
@@ -805,6 +806,7 @@ class GeneratedAppCatalogItem {
     this.private = false,
     this.ratingAvg,
     this.ratingCount = 0,
+    this.status = "approved",
   });
 
   factory GeneratedAppCatalogItem.fromJson(Map<String, dynamic> json) {
@@ -825,6 +827,7 @@ class GeneratedAppCatalogItem {
       private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
       ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true),
       ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
     );
   }
 
@@ -846,6 +849,7 @@ class GeneratedAppCatalogItem {
       'private': private,
       'rating_avg': ratingAvg,
       'rating_count': ratingCount,
+      'status': status,
     };
   }
 }
