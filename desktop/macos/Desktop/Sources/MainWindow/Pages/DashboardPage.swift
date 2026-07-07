@@ -791,30 +791,28 @@ struct DashboardPage: View {
     // MARK: Connect tray
 
     private var homeConnectPanel: some View {
-        ScrollView(showsIndicators: false) {
-            // Sources feed omi; omi's memory flows out to the AI destinations —
-            // the chevron between the two cards reads that direction.
-            HStack(alignment: .center, spacing: 12) {
-                homeConnectColumnCard {
-                    VStack(alignment: .leading, spacing: 12) {
-                        sourceColumnHeader
-                        sourceConstellation
-                    }
-                }
-
-                Image(systemName: "chevron.right")
-                    .scaledFont(size: 13, weight: .bold)
-                    .foregroundStyle(HomePalette.secondary)
-                    .frame(width: 30, height: 30)
-                    .background(Circle().fill(HomePalette.tile))
-                    .overlay(Circle().stroke(HomePalette.hairline, lineWidth: 1))
-                    .accessibilityHidden(true)
-
-                homeConnectColumnCard {
-                    destinationStack
+        // Sources feed omi; omi's memory flows out to the AI destinations —
+        // the chevron between the two cards reads that direction. The tray
+        // hugs its content: no scroll filler below the columns.
+        HStack(alignment: .center, spacing: 12) {
+            homeConnectColumnCard {
+                VStack(alignment: .leading, spacing: 12) {
+                    sourceColumnHeader
+                    sourceConstellation
                 }
             }
-            .padding(.bottom, 4)
+
+            Image(systemName: "chevron.right")
+                .scaledFont(size: 13, weight: .bold)
+                .foregroundStyle(HomePalette.secondary)
+                .frame(width: 30, height: 30)
+                .background(Circle().fill(HomePalette.tile))
+                .overlay(Circle().stroke(HomePalette.hairline, lineWidth: 1))
+                .accessibilityHidden(true)
+
+            homeConnectColumnCard {
+                destinationStack
+            }
         }
         .padding(18)
         .background(
