@@ -639,12 +639,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private func startSentryHeartbeat() {
     guard !AnalyticsManager.isDevBuild else { return }
     sentryHeartbeatTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
-      // Capture a session heartbeat event with current breadcrumbs
-      SentrySDK.capture(message: "Session Heartbeat") { scope in
-        scope.setLevel(.info)
-        scope.setTag(value: "heartbeat", key: "event_type")
-      }
-      log("Sentry: Session heartbeat captured")
+      // Record the session heartbeat as a breadcrumb, not a captured event.
+      // `SentrySDK.capture(message:)` created a distinct Sentry issue every 5 min
+      // (millions of unresolved events / thousands of users) that buried real
+      // crashes. A breadcrumb keeps the same observability — it rides along with
+      // any subsequent error event — without generating its own issue.
+      let breadcrumb = Breadcrumb(level: .info, category: "heartbeat")
+      breadcrumb.message = "Session Heartbeat"
+      SentrySDK.addBreadcrumb(breadcrumb)
+      log("Sentry: Session heartbeat breadcrumb recorded")
     }
   }
 
