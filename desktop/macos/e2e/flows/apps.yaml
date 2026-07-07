@@ -4,6 +4,8 @@ description: Apps/Integrations marketplace flow — browse apps, filter by categ
 app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/IntegrationsPage.swift
+  - desktop/Desktop/Sources/BrowserGoogleSession.swift
+  - desktop/Desktop/Sources/GmailReaderService.swift
 preconditions:
   - auth_ready
 
