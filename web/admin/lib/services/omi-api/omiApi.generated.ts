@@ -2837,6 +2837,17 @@ export interface UserUsageResponse {
   yearly?: UsageStats | null;
 }
 
+export interface UserWebhookHealthResponse {
+  disabled: boolean;
+  failure_count: number;
+  has_data: boolean;
+  last_error?: string | null;
+  last_failure_at?: number | null;
+  last_status?: number | null;
+  last_success_at?: number | null;
+  type: string;
+}
+
 export interface UserWebhookUrlResponse {
   url?: string | null;
 }
@@ -3314,6 +3325,7 @@ export interface OmiApiSchemas {
   "UserStatusResponse": UserStatusResponse;
   "UserSubscriptionResponse": UserSubscriptionResponse;
   "UserUsageResponse": UserUsageResponse;
+  "UserWebhookHealthResponse": UserWebhookHealthResponse;
   "UserWebhookUrlResponse": UserWebhookUrlResponse;
   "UserWebhooksStatusResponse": UserWebhooksStatusResponse;
   "ValidationError": ValidationError;
@@ -5974,6 +5986,17 @@ export interface OmiApiPaths {
       responses: {
         "200": UserStatusResponse;
         "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/developer/webhook/{wtype}/health": {
+    get: {
+      operationId: "get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get";
+      responses: {
+        "200": UserWebhookHealthResponse;
+        "401": void;
+        "404": void;
         "422": HTTPValidationError;
       };
     };
@@ -11073,6 +11096,21 @@ export async function enable_user_webhook_endpoint_v1_users_developer_webhook__w
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get(path: { wtype: WebhookType }, init?: OmiApiClientInit): Promise<UserWebhookHealthResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/developer/webhook/${path.wtype}/health`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_user_webhooks_status_v1_users_developer_webhooks_status_get(init?: OmiApiClientInit): Promise<UserWebhooksStatusResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/developer/webhooks/status`;
@@ -12413,4 +12451,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 344 client methods generated.

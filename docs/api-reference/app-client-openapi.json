@@ -16725,6 +16725,78 @@
         "title": "UserUsageResponse",
         "type": "object"
       },
+      "UserWebhookHealthResponse": {
+        "properties": {
+          "disabled": {
+            "title": "Disabled",
+            "type": "boolean"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "has_data": {
+            "title": "Has Data",
+            "type": "boolean"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "last_failure_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Failure At"
+          },
+          "last_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Status"
+          },
+          "last_success_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Success At"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "has_data",
+          "failure_count",
+          "disabled"
+        ],
+        "title": "UserWebhookHealthResponse",
+        "type": "object"
+      },
       "UserWebhookUrlResponse": {
         "properties": {
           "url": {
@@ -39052,6 +39124,95 @@
           }
         ],
         "summary": "Enable User Webhook Endpoint",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/developer/webhook/{wtype}/health": {
+      "get": {
+        "description": "Delivery health for a developer webhook: failure count, last success/failure timestamps\n(unix seconds), last HTTP status, last error, and whether it was auto-disabled after sustained\nfailures. Fields are zeroed / false / null when nothing has been recorded yet.",
+        "operationId": "get_user_webhook_health_endpoint_v1_users_developer_webhook__wtype__health_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "wtype",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/WebhookType"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserWebhookHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get User Webhook Health Endpoint",
         "tags": [
           "v1"
         ]
