@@ -148,46 +148,48 @@ final class DashboardCaptureStateTests: XCTestCase {
     }
 
     func testHomeStatusRefreshUsesSharedActivationThrottle() throws {
-        let source = try dashboardSource()
-        let normalizedSource = normalizedWhitespace(source)
-        let method = try methodBody(named: "refreshHomeStatusData", in: source)
+        let dashboard = try dashboardSource()
+        let store = try homeStatusStoreSource()
+        let normalizedDashboard = normalizedWhitespace(dashboard)
+        let refresh = try methodBody(named: "refresh", in: store)
 
-        XCTAssertTrue(source.contains("@State private var lastHomeStatusRefreshAt = Date.distantPast"))
-        XCTAssertTrue(normalizedSource.contains("syncCaptureState() reportHomeAutomationMode() Task { await refreshHomeStatusData(force: true) }"))
-        XCTAssertTrue(
-            normalizedSource.contains(
-                "viewModel.refreshGoals() appState.checkAllPermissions() syncCaptureState() Task { await refreshHomeStatusData(force: false) }"
-            )
-        )
-        XCTAssertTrue(method.contains("PollingConfig.shouldAllowActivationRefresh"))
-        XCTAssertTrue(method.contains("lastRefresh: lastHomeStatusRefreshAt"))
-        XCTAssertTrue(method.contains("lastHomeStatusRefreshAt = now"))
-        XCTAssertTrue(method.contains("async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()"))
-        XCTAssertTrue(method.contains("async let screenshots: Void = loadScreenshotCount()"))
-        XCTAssertTrue(method.contains("async let knowledgeCounts: Void = loadKnowledgeCounts()"))
-        XCTAssertTrue(method.contains("async let exportStatuses: Void = loadMemoryExportStatuses()"))
-        XCTAssertFalse(source.contains("memoryExportStatusActiveRefreshThrottle"))
-        XCTAssertFalse(source.contains("lastMemoryExportStatusRefreshAt"))
-        XCTAssertFalse(source.contains("loadMemoryExportStatuses(force:"))
+        // The cooldown lives on the session-persistent HomeStatusStore, not
+        // on page @State — page views are recreated on every tab switch, so
+        // view-held state can never throttle revisits (each visit refetched).
+        XCTAssertTrue(store.contains("private var lastRefreshAt = Date.distantPast"))
+        XCTAssertFalse(dashboard.contains("lastHomeStatusRefreshAt"))
+        // Home renders from the cached store; appear and app-activation both
+        // go through the throttled path — no forced refetch per visit.
+        XCTAssertTrue(normalizedDashboard.contains("Task { await homeStatus.refresh(force: false) }"))
+        XCTAssertFalse(dashboard.contains("refresh(force: true)"))
+        XCTAssertTrue(refresh.contains("PollingConfig.shouldAllowActivationRefresh"))
+        XCTAssertTrue(refresh.contains("lastRefreshAt = now"))
+        XCTAssertTrue(refresh.contains("guard !isRefreshing else { return }"))
+        XCTAssertTrue(refresh.contains("async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()"))
+        XCTAssertTrue(refresh.contains("async let screenshots: Void = loadScreenshotCount()"))
+        XCTAssertTrue(refresh.contains("async let knowledgeCounts: Void = loadKnowledgeCounts()"))
+        XCTAssertTrue(refresh.contains("async let exportStatuses: Void = loadMemoryExportStatuses()"))
+        XCTAssertFalse(store.contains("memoryExportStatusActiveRefreshThrottle"))
+        XCTAssertFalse(store.contains("loadMemoryExportStatuses(force:"))
     }
 
     func testMemoryExportStatusesRefreshInsideHomeStatusGate() throws {
-        let source = try dashboardSource()
-        let method = try methodBody(named: "loadMemoryExportStatuses", in: source)
+        let store = try homeStatusStoreSource()
+        let method = try methodBody(named: "loadMemoryExportStatuses", in: store)
 
         XCTAssertTrue(method.contains("let statuses = await MemoryExportService.shared.allStatuses()"))
         XCTAssertTrue(method.contains("memoryExportStatuses = statuses"))
         XCTAssertFalse(method.contains("PollingConfig.shouldAllowActivationRefresh"))
-        XCTAssertFalse(method.contains("lastHomeStatusRefreshAt"))
+        XCTAssertFalse(method.contains("lastRefreshAt"))
         XCTAssertFalse(method.contains("memoryExportStatusActiveRefreshThrottle"))
     }
 
     func testOmiDeviceHistorySkipsNetworkAfterStickyFlag() throws {
-        let source = try dashboardSource()
-        let method = try methodBody(named: "loadKnowledgeCounts", in: source)
-        let helper = try methodBody(named: "loadOmiDeviceHistory", in: source)
+        let store = try homeStatusStoreSource()
+        let method = try methodBody(named: "loadKnowledgeCounts", in: store)
+        let helper = try methodBody(named: "loadOmiDeviceHistory", in: store)
 
-        XCTAssertTrue(method.contains("let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }"))
+        XCTAssertTrue(method.contains("let shouldLoadDeviceHistory = !accountHasOmiDeviceConversations"))
         XCTAssertTrue(method.contains("async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil"))
         XCTAssertTrue(helper.contains("APIClient.shared.hasOmiDeviceConversations()"))
         XCTAssertTrue(method.contains("UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)"))
@@ -309,6 +311,14 @@ final class DashboardCaptureStateTests: XCTestCase {
         return try String(contentsOf: dashboardURL, encoding: .utf8)
     }
 
+    private func homeStatusStoreSource() throws -> String {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let storeURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Stores/HomeStatusStore.swift")
+        return try String(contentsOf: storeURL, encoding: .utf8)
+    }
+
     private func appsSource() throws -> String {
         try source(named: "AppsPage.swift")
     }
@@ -322,7 +332,7 @@ final class DashboardCaptureStateTests: XCTestCase {
     }
 
     private func methodBody(named name: String, in source: String) throws -> String {
-        let pattern = #"private func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
+        let pattern = #"(?:private )?func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
         let regex = try NSRegularExpression(pattern: pattern)
         let range = NSRange(source.startIndex..<source.endIndex, in: source)
         let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))

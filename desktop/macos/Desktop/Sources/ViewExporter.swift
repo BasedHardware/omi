@@ -59,7 +59,7 @@ enum ViewExporter {
               appState: AppState(),
               appProvider: AppProvider(),
               chatProvider: ChatProvider(),
-              memoriesViewModel: MemoriesViewModel(),
+              memoriesViewModel: MemoriesViewModel(), homeStatus: HomeStatusStore(),
               selectedIndex: .constant(0)))
         },
         CGSize(width: 900, height: 700)
@@ -282,7 +282,7 @@ enum ViewExporter {
               appState: AppState(),
               appProvider: AppProvider(),
               chatProvider: ChatProvider(),
-              memoriesViewModel: previewMemoriesViewModel(),
+              memoriesViewModel: previewMemoriesViewModel(), homeStatus: HomeStatusStore(),
               selectedIndex: .constant(0)))
         }
       ),

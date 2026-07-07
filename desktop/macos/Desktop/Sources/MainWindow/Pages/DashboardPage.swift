@@ -218,8 +218,8 @@ struct DashboardPage: View {
     @ObservedObject var appProvider: AppProvider
     @ObservedObject var chatProvider: ChatProvider
     @ObservedObject var memoriesViewModel: MemoriesViewModel
+    @ObservedObject var homeStatus: HomeStatusStore
     @ObservedObject private var deviceProvider = DeviceProvider.shared
-    @StateObject private var importConnectorStatusStore = ImportConnectorStatusStore()
     @Binding var selectedIndex: Int
     @State private var citedConversation: ServerConversation? = nil
     @State private var selectedCatalogApp: OmiApp?
@@ -231,18 +231,6 @@ struct DashboardPage: View {
     @State private var appsPopupInitialSection: AppsCatalogInitialSection = .imports
     @State private var appsPopupPresentationID = UUID()
     @State private var isLoadingCitation = false
-    @State private var screenshotCount: Int?
-    // True totals for the "What omi knows" tiles. Without these the tiles showed
-    // only the loaded page (~50 conversations, ~100 memories), badly undercounting.
-    @State private var conversationCount: Int?
-    @State private var memoryCount: Int?
-    @State private var taskCount: Int?
-    // Wearable used on this account (any friend/omi-sourced conversation).
-    // Seeded from UserDefaults so the badge is instant on later launches.
-    @State private var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
-        forKey: DashboardPage.omiDeviceHistoryDefaultsKey)
-    @State private var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
-    @State private var lastHomeStatusRefreshAt = Date.distantPast
     @State private var isCaptureMonitoring = false
     @State private var isTogglingCapture = false
     @State private var isTogglingListening = false
@@ -291,7 +279,6 @@ struct DashboardPage: View {
         }
     }
 
-    private static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
     private static let homeStageMaxWidth: CGFloat = 1120
     private static let homeStageHorizontalPadding: CGFloat = 34
     private static let homeAskBarMaxWidth: CGFloat = 640
@@ -344,23 +331,23 @@ struct DashboardPage: View {
 
     private var hasOmiDeviceHistory: Bool {
         deviceProvider.connectedDevice != nil || deviceProvider.pairedDevice != nil
-            || accountHasOmiDeviceConversations
+            || homeStatus.accountHasOmiDeviceConversations
     }
 
     /// Real persisted import-connector state (UserDefaults-backed via ImportConnectorStatusStore).
     private func isImportConnectorConnected(_ connectorID: String) -> Bool {
         guard let connector = ImportConnector.all.first(where: { $0.id == connectorID }) else { return false }
-        return importConnectorStatusStore.snapshot(for: connector).isConnected
+        return homeStatus.importConnectorStatusStore.snapshot(for: connector).isConnected
     }
 
     private func isMCPDestinationConnected(_ destination: MemoryExportDestination) -> Bool {
         switch destination {
         case .claude, .claudeCode:
-            return [.claude, .claudeCode].contains { memoryExportStatuses[$0]?.hasConnection == true }
+            return [.claude, .claudeCode].contains { homeStatus.memoryExportStatuses[$0]?.hasConnection == true }
         case .chatgpt, .codex:
-            return [.chatgpt, .codex].contains { memoryExportStatuses[$0]?.hasConnection == true }
+            return [.chatgpt, .codex].contains { homeStatus.memoryExportStatuses[$0]?.hasConnection == true }
         default:
-            return memoryExportStatuses[destination]?.hasConnection == true
+            return homeStatus.memoryExportStatuses[destination]?.hasConnection == true
         }
     }
 
@@ -394,7 +381,7 @@ struct DashboardPage: View {
             ImportConnectorSheet(
                 connector: connector,
                 appState: appState,
-                statusStore: importConnectorStatusStore,
+                statusStore: homeStatus.importConnectorStatusStore,
                 onDismiss: {
                     selectedImportConnector = nil
                 }
@@ -404,7 +391,7 @@ struct DashboardPage: View {
         .dismissableSheet(item: legacySelectedExportDestination) { destination in
             ConnectDestinationSheet(
                 destination: destination,
-                statuses: $memoryExportStatuses,
+                statuses: $homeStatus.memoryExportStatuses,
                 onDismiss: {
                     selectedExportDestination = nil
                 }
@@ -433,13 +420,13 @@ struct DashboardPage: View {
             }
             syncCaptureState()
             reportHomeAutomationMode()
-            Task { await refreshHomeStatusData(force: true) }
+            Task { await homeStatus.refresh(force: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             viewModel.refreshGoals()
             appState.checkAllPermissions()
             syncCaptureState()
-            Task { await refreshHomeStatusData(force: false) }
+            Task { await homeStatus.refresh(force: false) }
         }
         .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
             syncCaptureState()
@@ -1105,7 +1092,7 @@ struct DashboardPage: View {
             ImportConnectorSheet(
                 connector: connector,
                 appState: appState,
-                statusStore: importConnectorStatusStore,
+                statusStore: homeStatus.importConnectorStatusStore,
                 onDismiss: {
                     dismissHomeConnectSheet()
                 }
@@ -1113,7 +1100,7 @@ struct DashboardPage: View {
         } else if let destination = selectedExportDestination {
             ConnectDestinationSheet(
                 destination: destination,
-                statuses: $memoryExportStatuses,
+                statuses: $homeStatus.memoryExportStatuses,
                 onDismiss: {
                     dismissHomeConnectSheet()
                 }
@@ -1238,22 +1225,22 @@ struct DashboardPage: View {
     }
 
     private var conversationMetricValue: String {
-        formattedCount(conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count)
+        formattedCount(homeStatus.conversationCount ?? appState.totalConversationsCount ?? appState.conversations.count)
     }
 
     private var taskMetricValue: String {
-        formattedCount(taskCount ?? incompleteTaskCount)
+        formattedCount(homeStatus.taskCount ?? incompleteTaskCount)
     }
 
     private var memoryMetricValue: String {
-        let count = memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
+        let count = homeStatus.memoryCount ?? (memoriesViewModel.totalMemoriesCount > 0
             ? memoriesViewModel.totalMemoriesCount
             : memoriesViewModel.memories.count)
         return formattedCount(count)
     }
 
     private var screenshotMetricValue: String {
-        screenshotCount.map(formattedCount) ?? "—"
+        homeStatus.screenshotCount.map(formattedCount) ?? "—"
     }
 
     private func navigate(to item: SidebarNavItem) {
@@ -1426,75 +1413,6 @@ struct DashboardPage: View {
         ProactiveAssistantsPlugin.shared.refreshScreenRecordingPermission()
         screenAnalysisEnabled = AssistantSettings.shared.screenAnalysisEnabled
         isCaptureMonitoring = ProactiveAssistantsPlugin.shared.isMonitoring
-    }
-
-    private func loadScreenshotCount() async {
-        let stats = await RewindIndexer.shared.getStats()
-        await MainActor.run {
-            screenshotCount = stats?.total
-        }
-    }
-
-    /// Refreshes Home-only status tiles and connector rows. Forced loads run
-    /// when the Home view is recreated; activation-triggered loads share the
-    /// app-wide cooldown so Cmd-Tab bursts do not rescan configs or hit count
-    /// endpoints repeatedly while Home is still mounted.
-    private func refreshHomeStatusData(force: Bool) async {
-        let shouldRefresh = await MainActor.run {
-            let now = Date()
-            if !force,
-               !PollingConfig.shouldAllowActivationRefresh(
-                   now: now,
-                   lastRefresh: lastHomeStatusRefreshAt
-               ) {
-                return false
-            }
-            lastHomeStatusRefreshAt = now
-            return true
-        }
-        guard shouldRefresh else { return }
-
-        async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()
-        async let screenshots: Void = loadScreenshotCount()
-        async let knowledgeCounts: Void = loadKnowledgeCounts()
-        async let exportStatuses: Void = loadMemoryExportStatuses()
-        _ = await (importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
-    }
-
-    private func loadMemoryExportStatuses() async {
-        let statuses = await MemoryExportService.shared.allStatuses()
-        await MainActor.run {
-            memoryExportStatuses = statuses
-        }
-    }
-
-    /// Load the true totals behind the "What omi knows" tiles. Conversations come
-    /// from the server count endpoint (not stored locally); memories and tasks are
-    /// counted from the synced local DB — the same totals the detail pages show.
-    private func loadKnowledgeCounts() async {
-        async let convos = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
-        async let mems = try? MemoryStorage.shared.getLocalMemoriesCount()
-        // Open tasks only (matches the "Tasks" label and the old tile's intent —
-        // the old value just under-counted, capping each bucket at a 7-day window).
-        async let tasks = try? ActionItemStorage.shared.getLocalActionItemsCount(completed: false)
-        let shouldLoadDeviceHistory = await MainActor.run { !accountHasOmiDeviceConversations }
-        async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil
-        let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
-        await MainActor.run {
-            if let c { conversationCount = c }
-            if let m { memoryCount = m }
-            if let t { taskCount = t }
-            // Sticky: device history never un-happens; keep the badge across
-            // launches and network failures once observed.
-            if d == true {
-                accountHasOmiDeviceConversations = true
-                UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
-            }
-        }
-    }
-
-    private func loadOmiDeviceHistory() async -> Bool? {
-        try? await APIClient.shared.hasOmiDeviceConversations()
     }
 
     private func formattedCount(_ count: Int) -> String {
@@ -4112,7 +4030,7 @@ private struct HomeAIButton: View {
         appState: AppState(),
         appProvider: AppProvider(),
         chatProvider: ChatProvider(),
-        memoriesViewModel: MemoriesViewModel(),
+        memoriesViewModel: MemoriesViewModel(), homeStatus: HomeStatusStore(),
         selectedIndex: .constant(0)
     )
     .frame(width: 800, height: 600)
