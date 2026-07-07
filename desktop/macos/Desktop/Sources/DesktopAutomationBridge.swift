@@ -160,6 +160,142 @@ struct DesktopAutomationActionDescriptor: Codable {
   let summary: String
   /// Names of params the handler reads (hints for the caller; not enforced).
   let params: [String]
+  /// Coarse grouping for scanners and harness UIs.
+  let category: String
+  /// Screens or app surfaces this action is meant to replace AX interaction on.
+  let surfaces: [String]
+  /// Agent-facing risk label; the bridge is still non-production only.
+  let safety: String
+  /// Plain-language effects so callers can prefer read-only probes before clicks.
+  let sideEffects: [String]
+  /// Copy-pasteable examples for `scripts/omi-ctl action ...`.
+  let examples: [String]
+  /// Semantic bridge actions should be preferred over `agent-swift` clicks when covered.
+  let preferSemantic: Bool
+
+  init(
+    name: String,
+    summary: String,
+    params: [String] = [],
+    category: String? = nil,
+    surfaces: [String]? = nil,
+    safety: String? = nil,
+    sideEffects: [String]? = nil,
+    examples: [String] = [],
+    preferSemantic: Bool = true
+  ) {
+    self.name = name
+    self.summary = summary
+    self.params = params
+    self.category = category ?? Self.inferCategory(name)
+    self.surfaces = surfaces ?? Self.inferSurfaces(name)
+    self.safety = safety ?? Self.inferSafety(name)
+    self.sideEffects = sideEffects ?? Self.inferSideEffects(name)
+    self.examples = examples.isEmpty ? [Self.commandExample(name: name, params: params)] : examples
+    self.preferSemantic = preferSemantic
+  }
+
+  private static func inferCategory(_ name: String) -> String {
+    if name.contains("snapshot") || name.contains("probe") || name.contains("state")
+      || name.contains("tail") || name.contains("evidence") || name.contains("qa_export")
+    {
+      return "read"
+    }
+    if name.hasPrefix("capture") {
+      return "capture"
+    }
+    if name.contains("coordinator") {
+      return "coordinator"
+    }
+    if name.contains("ask") || name.contains("chat") || name.contains("omni") {
+      return "chat"
+    }
+    if name.contains("spatial_overlay") || name.contains("debug_bar") || name.contains("subagent") {
+      return "visual"
+    }
+    if name.contains("transcription") || name.contains("refresh") {
+      return "app_control"
+    }
+    return "general"
+  }
+
+  private static func inferSurfaces(_ name: String) -> [String] {
+    if name.hasPrefix("capture_main_window") {
+      return ["main_window"]
+    }
+    if name.hasPrefix("capture_floating_bar") || name.contains("debug_bar") {
+      return ["floating_bar"]
+    }
+    if name.contains("main_chat") {
+      return ["main_chat"]
+    }
+    if name.contains("ask_omi") || name == "ask" || name.contains("floating") || name.contains("subagent") {
+      return ["floating_bar", "ask_omi"]
+    }
+    if name.contains("coordinator") {
+      return ["coordinator"]
+    }
+    if name.contains("spatial_overlay") || name.contains("cloud_connector") {
+      return ["cloud_connector_guidance"]
+    }
+    if name.contains("calendar") {
+      return ["calendar_connector"]
+    }
+    if name.contains("gmail") {
+      return ["gmail_connector"]
+    }
+    if name.contains("apple_notes") || name.contains("local_file") {
+      return ["import_connectors"]
+    }
+    return ["app"]
+  }
+
+  private static func inferSafety(_ name: String) -> String {
+    if name.contains("delete") {
+      return "remote_write"
+    }
+    if name.contains("snapshot") || name.contains("probe") || name.contains("state")
+      || name.contains("tail") || name.contains("evidence") || name.contains("qa_export")
+    {
+      return "read_only"
+    }
+    if name.hasPrefix("capture") {
+      return "local_artifact"
+    }
+    if name.contains("ask") || name.contains("omni") || name.contains("import") {
+      return "network_or_model"
+    }
+    return "local_ui_state"
+  }
+
+  private static func inferSideEffects(_ name: String) -> [String] {
+    if name.contains("delete") {
+      return ["may mutate remote user data"]
+    }
+    if name.hasPrefix("capture") {
+      return ["writes local artifact file"]
+    }
+    if name.contains("ask") || name.contains("omni") {
+      return ["may call model/backend services"]
+    }
+    if name.contains("import") {
+      return ["may read local connector data", "may save imported memory data"]
+    }
+    if name.contains("toggle") || name.contains("debug") || name.contains("open") || name.contains("close")
+      || name.contains("seed") || name.contains("swap") || name.contains("clear")
+    {
+      return ["mutates non-production app state"]
+    }
+    return []
+  }
+
+  private static func commandExample(name: String, params: [String]) -> String {
+    var pieces = ["./scripts/omi-ctl", "action", name]
+    for param in params {
+      pieces.append("\(param)=<value>")
+    }
+    return pieces.joined(separator: " ")
+  }
 }
 
 /// Returned by `POST /action`: what ran, any handler detail, and the resulting state.
@@ -351,10 +487,29 @@ final class DesktopAutomationActionRegistry {
   private var didRegisterBuiltins = false
 
   func register(
-    name: String, summary: String, params: [String] = [], handler: @escaping Handler
+    name: String,
+    summary: String,
+    params: [String] = [],
+    category: String? = nil,
+    surfaces: [String]? = nil,
+    safety: String? = nil,
+    sideEffects: [String]? = nil,
+    examples: [String] = [],
+    preferSemantic: Bool = true,
+    handler: @escaping Handler
   ) {
     entries[name] = Entry(
-      descriptor: DesktopAutomationActionDescriptor(name: name, summary: summary, params: params),
+      descriptor: DesktopAutomationActionDescriptor(
+        name: name,
+        summary: summary,
+        params: params,
+        category: category,
+        surfaces: surfaces,
+        safety: safety,
+        sideEffects: sideEffects,
+        examples: examples,
+        preferSemantic: preferSemantic
+      ),
       run: handler)
   }
 
@@ -1385,7 +1540,7 @@ final class DesktopAutomationBridge {
     case ("GET", "/capabilities"):
       let descriptors = await DesktopAutomationActionRegistry.shared.descriptors()
       let capabilities = DesktopAutomationCapabilities(
-        schemaVersion: 1,
+        schemaVersion: 2,
         routes: [
           "GET /health",
           "GET /state",

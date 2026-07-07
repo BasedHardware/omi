@@ -43,6 +43,10 @@ deterministic equivalent of the Flutter app's Marionette driver). Prefer these o
 ./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
 ./scripts/omi-ctl action toggle_transcription enabled=false
 ```
+`omi-ctl actions` returns descriptors with `category`, `surfaces`, `safety`,
+`sideEffects`, `examples`, and `preferSemantic`. Scan those fields before using
+`agent-swift`: prefer actions whose `surfaces` match the screen and whose
+`safety` is `read_only`, `local_artifact`, or `local_ui_state` for routine checks.
 Add new actions in `DesktopAutomationActionRegistry` (`registerBuiltins()` for global
 ones, or `register(name:summary:params:handler:)` from a view model for screen-scoped
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
