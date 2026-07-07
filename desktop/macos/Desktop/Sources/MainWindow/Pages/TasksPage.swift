@@ -2904,10 +2904,12 @@ struct TasksPage: View {
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(8)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 11)
+            .frame(minHeight: 46)
+            .omiControlSurface(
+                fill: OmiColors.backgroundSecondary, radius: 18,
+                stroke: OmiColors.border.opacity(0.18))
 
             // Saved filter view chips
             if !viewModel.savedFilterViews.isEmpty && !viewModel.isMultiSelectMode {
@@ -4917,7 +4919,7 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : Color.clear)))
+                .fill(isKeyboardSelected ? OmiColors.backgroundQuaternary.opacity(0.55) : (isHovering || isDragging ? OmiColors.backgroundRaised : (isNewlyCreated ? OmiColors.backgroundQuaternary.opacity(0.45) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
