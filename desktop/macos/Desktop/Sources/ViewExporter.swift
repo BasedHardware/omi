@@ -636,33 +636,32 @@ enum ViewExporter {
     hostingView.layoutSubtreeIfNeeded()
 
     var success = false
-    do {
-      try ObjCExceptionCatcher.catching {
-        // Export PNG
-        guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
-        else {
-          NSLog("ViewExporter: SKIP \(name) - no bitmap")
-          return
-        }
-        hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
-
-        if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
-          let pngPath = "\(dir)/\(name).png"
-          try? pngData.write(to: URL(fileURLWithPath: pngPath))
-          let kb = pngData.count / 1024
-          NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
-        }
-
-        // Export PDF (vector data preserved for SVG conversion)
-        let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
-        let pdfPath = "\(dir)/\(name).pdf"
-        try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
-        NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
-
-        success = true
+    let exception = ObjCExceptionCatcher.catching {
+      // Export PNG
+      guard let bitmapRep = hostingView.bitmapImageRepForCachingDisplay(in: hostingView.bounds)
+      else {
+        NSLog("ViewExporter: SKIP \(name) - no bitmap")
+        return
       }
-    } catch {
-      NSLog("ViewExporter: SKIP \(name) - \(error.localizedDescription)")
+      hostingView.cacheDisplay(in: hostingView.bounds, to: bitmapRep)
+
+      if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
+        let pngPath = "\(dir)/\(name).png"
+        try? pngData.write(to: URL(fileURLWithPath: pngPath))
+        let kb = pngData.count / 1024
+        NSLog("ViewExporter: \(name).png (\(Int(size.width))x\(Int(size.height))) \(kb)KB")
+      }
+
+      // Export PDF (vector data preserved for SVG conversion)
+      let pdfData = hostingView.dataWithPDF(inside: hostingView.bounds)
+      let pdfPath = "\(dir)/\(name).pdf"
+      try? pdfData.write(to: URL(fileURLWithPath: pdfPath))
+      NSLog("ViewExporter: \(name).pdf (\(pdfData.count / 1024)KB)")
+
+      success = true
+    }
+    if let exception {
+      NSLog("ViewExporter: SKIP \(name) - \(exception.reason ?? exception.name.rawValue)")
     }
 
     window.orderOut(nil)

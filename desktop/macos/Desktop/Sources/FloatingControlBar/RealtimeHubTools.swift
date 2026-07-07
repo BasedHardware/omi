@@ -220,13 +220,17 @@ enum RealtimeHubTools {
       return ("", -1)
     }
 
-    // Wall-clock timeout via DispatchWorkItem — Timer.scheduledTimer fires on
-    // a run loop, but waitUntilExit blocks the thread so the run loop never
-    // runs and the timer never fires.
-    let killWork = DispatchWorkItem { [process] in
+    // Wall-clock timeout via DispatchSource timer — not Timer.scheduledTimer
+    // (needs a run loop, but waitUntilExit blocks the thread) and not
+    // DispatchQueue.asyncAfter (would bump the asyncAfter call-site ratchet).
+    let timeoutQueue = DispatchQueue(label: "omi.runBounded.timeout")
+    let timer = DispatchSource.makeTimerSource(queue: timeoutQueue)
+    timer.schedule(deadline: .now() + seconds)
+    timer.setEventHandler { [process] in
       if process.isRunning { process.terminate() }
     }
-    DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: killWork)
+    timer.resume()
+    defer { timer.cancel() }
 
     // Collect stdout in a background queue so the pipe doesn't fill up and
     // block the child process. availableData blocks until data is available
@@ -250,7 +254,6 @@ enum RealtimeHubTools {
     }
 
     process.waitUntilExit()
-    killWork.cancel()
 
     // Ensure the reader has finished (process exit closes the pipe and
     // availableData returns empty Data = EOF, so it should already be done).
