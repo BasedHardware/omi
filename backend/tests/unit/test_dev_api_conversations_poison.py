@@ -151,10 +151,19 @@ from fastapi import FastAPI  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 import routers.developer as developer_module  # noqa: E402
 from routers.developer import router as developer_router  # noqa: E402
-from dependencies import get_uid_with_conversations_read  # noqa: E402
+from dependencies import ApiKeyAuth, get_auth_with_conversations_read  # noqa: E402
 
 _NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _VALID_CATEGORY = next(iter(CategoryEnum)).value
+
+
+def _read_auth():
+    return ApiKeyAuth(
+        uid='uid1',
+        scopes=['conversations:read'],
+        app_id='test-app',
+        key_id='test-key',
+    )
 
 
 def _valid(cid):
@@ -170,7 +179,7 @@ def _valid(cid):
 def _build():
     app = FastAPI()
     app.include_router(developer_router)
-    app.dependency_overrides[get_uid_with_conversations_read] = lambda: 'uid1'
+    app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
     return TestClient(app, raise_server_exceptions=False)
 
 
@@ -190,13 +199,13 @@ def test_pagination_is_clamped_before_firestore():
     # Out-of-range pagination is clamped before the Firestore query: a negative offset/limit
     # would otherwise raise (HTTP 500) and an oversized/zero limit would stream the whole
     # collection. Call the handler directly (the TestClient async path is flaky on Windows; the
-    # clamp is what matters). get_conversations(uid, limit, offset, ...) is positional.
+    # clamp is what matters).
     with patch.object(conversations_db, 'get_conversations', return_value=[]) as m, patch.object(
         developer_module, 'populate_folder_names', lambda *a, **k: None
     ), patch.object(developer_module, 'populate_speaker_names', lambda *a, **k: None):
-        developer_module.get_conversations(uid='uid1', limit=99999, offset=-1)
-        developer_module.get_conversations(uid='uid1', limit=99999, offset=0, include_transcript=True)
-        developer_module.get_conversations(uid='uid1', limit=0, offset=5)
+        developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=-1)
+        developer_module.get_conversations(uid=_read_auth(), limit=99999, offset=0, include_transcript=True)
+        developer_module.get_conversations(uid=_read_auth(), limit=0, offset=5)
     high = m.call_args_list[0].args
     assert high[1] == 100 and high[2] == 0  # limit 99999 -> 100, offset -1 -> 0
     assert m.call_args_list[1].args[1] == 25  # transcript reads cap tighter

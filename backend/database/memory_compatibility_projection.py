@@ -10,8 +10,8 @@ and never falls back to the legacy reader.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
+from typing import Any, NoReturn, cast
 
 from google.cloud import firestore
 
@@ -32,15 +32,15 @@ _MAX_LIMIT = 500
 _DOCUMENT_ID_ORDER = "__name__"
 
 
-def _fail(reason: V3ProjectionFailureReason) -> None:
+def _fail(reason: V3ProjectionFailureReason) -> NoReturn:
     raise V3ProjectionReadError(reason)
 
 
-def _as_dict(snapshot) -> dict[str, Any] | None:
+def _as_dict(snapshot: Any) -> dict[str, Any] | None:
     if snapshot is None or getattr(snapshot, "exists", False) is False:
         return None
-    data = snapshot.to_dict()
-    return data if isinstance(data, dict) else None
+    raw: object = snapshot.to_dict()
+    return cast(dict[str, Any], raw) if isinstance(raw, dict) else None
 
 
 def _int_field(data: dict[str, Any], field: str, reason: V3ProjectionFailureReason) -> int:
@@ -60,7 +60,7 @@ def _str_field(data: dict[str, Any], field: str, reason: V3ProjectionFailureReas
 def _validate_state(data: dict[str, Any] | None, request: V3ProjectionReadRequest) -> V3ProjectionState:
     if data is None:
         _fail(V3ProjectionFailureReason.MISSING_PROJECTION_STATE)
-    if not isinstance(data, dict):
+    if not isinstance(cast(object, data), dict):
         _fail(V3ProjectionFailureReason.MALFORMED_PROJECTION_STATE)
     if data.get("schema_version") != V3_COMPATIBILITY_PROJECTION_SCHEMA_VERSION:
         _fail(V3ProjectionFailureReason.UNSUPPORTED_PROJECTION_SCHEMA)
@@ -136,11 +136,6 @@ def _validate_state(data: dict[str, Any] | None, request: V3ProjectionReadReques
     )
 
 
-def _created_at_ms(value: datetime) -> int:
-    dt = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
-    return int(dt.timestamp() * 1000)
-
-
 def _validate_item_fences(item: dict[str, Any], memory_id: str, state: V3ProjectionState) -> bool:
     if item.get("deleted") is True or item.get("tombstoned") is True:
         return False
@@ -183,7 +178,7 @@ def _memory_payload(item: dict[str, Any], memory_id: str, state: V3ProjectionSta
     payload = item.get("memorydb")
     if not isinstance(payload, dict):
         _fail(V3ProjectionFailureReason.INVALID_PROJECTION_PAYLOAD)
-    payload = dict(payload)
+    payload = dict(cast(dict[str, Any], payload))
     payload.setdefault("id", memory_id)
     payload.setdefault("uid", state.uid)
     required_fields = {
@@ -227,9 +222,9 @@ def _memory_payload(item: dict[str, Any], memory_id: str, state: V3ProjectionSta
     return payload
 
 
-def _apply_query_order(query):
+def _apply_query_order(query: Any) -> Any:
     try:
-        document_id_field = firestore.FieldPath.document_id()
+        document_id_field = firestore.FieldPath.document_id()  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType,reportUnknownVariableType]  # firestore.FieldPath absent from stubs; runtime-guarded by except fallback to "__name__"
     except AttributeError:
         document_id_field = _DOCUMENT_ID_ORDER
     return query.order_by("created_at", direction=firestore.Query.DESCENDING).order_by(
@@ -237,7 +232,7 @@ def _apply_query_order(query):
     )
 
 
-def _apply_cursor(query, cursor: V3ProjectionCursor | None):
+def _apply_cursor(query: Any, cursor: V3ProjectionCursor | None) -> Any:
     if cursor is None:
         return query
     return query.start_after({"created_at": cursor.created_at, _DOCUMENT_ID_ORDER: cursor.memory_id})
@@ -250,10 +245,12 @@ def _validate_request(request: V3ProjectionReadRequest) -> None:
         _fail(V3ProjectionFailureReason.LIMIT_OUT_OF_RANGE)
 
 
-def read_v3_compatibility_projection_page(*, db_client, request: V3ProjectionReadRequest) -> V3ProjectionPage:
+def read_v3_compatibility_projection_page(
+    *, db_client: firestore.Client, request: V3ProjectionReadRequest
+) -> V3ProjectionPage:
     _validate_request(request)
     paths = MemoryCollections(uid=request.uid)
-    state_snapshot = db_client.document(paths.v3_compatibility_projection_state).get()
+    state_snapshot = db_client.document(paths.v3_compatibility_projection_state).get()  # type: ignore[reportUnknownMemberType]  # firestore DocumentReference.get stub has unknown transaction param
     state = _validate_state(_as_dict(state_snapshot), request)
 
     query = db_client.collection(paths.v3_compatibility_projection_items)
@@ -273,7 +270,7 @@ def read_v3_compatibility_projection_page(*, db_client, request: V3ProjectionRea
         if len(items) == request.limit:
             break
 
-    next_cursor = None
+    next_cursor: V3ProjectionCursor | None = None
     if len(snapshots) > request.limit and last_visible is not None:
         next_cursor = V3ProjectionCursor(
             created_at=last_visible[0],

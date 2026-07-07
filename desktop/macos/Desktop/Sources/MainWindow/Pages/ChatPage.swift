@@ -1,6 +1,7 @@
 import AppKit
 import MarkdownUI
 import SwiftUI
+import OmiTheme
 
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
@@ -381,7 +382,7 @@ struct ChatPage: View {
       sessionsLoadError: chatProvider.sessionsLoadError,
       onRetry: { Task { await chatProvider.retryLoad() } },
       localSendToken: chatProvider.localSendToken,
-      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent() },
+      onCancelTurn: { [weak chatProvider] in chatProvider?.stopAgent(owner: .mainChat) },
       welcomeContent: { welcomeMessage }
     )
   }
@@ -457,7 +458,7 @@ struct ChatPage: View {
         Task { await chatProvider.sendFollowUp(text) }
       },
       onStop: {
-        chatProvider.stopAgent()
+        chatProvider.stopAgent(owner: .mainChat)
       },
       isSending: chatProvider.isSending,
       isStopping: chatProvider.isStopping,
@@ -538,6 +539,7 @@ struct ChatBubble: View {
   @State private var isExpanded = false
   @State private var showCopied = false
   @State private var showRatingFeedback = false
+  @State private var showInfoPopover = false
   @State private var lastSubmittedRating: Int?
   /// Cached grouped content blocks — pre-computed on init to avoid recreating
   /// `[ContentBlockGroup]` on every SwiftUI layout pass.
@@ -659,6 +661,9 @@ struct ChatBubble: View {
               TypingIndicator()
             }
           }
+          if !message.displayResources.isEmpty {
+            ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
+          }
         } else if isDuplicate && !isExpanded {
           // Collapsed duplicate message
           Button(action: { isExpanded = true }) {
@@ -680,8 +685,19 @@ struct ChatBubble: View {
         } else {
           // User messages or AI messages without content blocks (loaded from Firestore)
           VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 6) {
-            if message.sender == .user && !message.attachments.isEmpty {
-              MessageAttachmentsView(attachments: message.attachments)
+            // User attachments read as "here's what I'm sending" and belong
+            // above the text; AI-generated artifacts are the result of the
+            // reply and always sit below it.
+            let resourceStrip = message.displayResources.isEmpty
+              ? nil
+              : ChatResourceStrip(
+                resources: message.displayResources,
+                density: .full,
+                alignment: message.sender == .user ? .trailing : .leading
+              )
+
+            if message.sender == .user, let resourceStrip {
+              resourceStrip
             }
 
             if !message.text.isEmpty {
@@ -704,6 +720,10 @@ struct ChatBubble: View {
                   .foregroundColor(.white)
               }
               .buttonStyle(.plain)
+            }
+
+            if message.sender != .user, let resourceStrip {
+              resourceStrip
             }
           }
         }
@@ -765,6 +785,10 @@ struct ChatBubble: View {
 
       if includeCopyButton {
         copyButton
+      }
+
+      if includeCopyButton, message.metadata != nil {
+        infoButton
       }
 
       Text(message.createdAt, format: .dateTime.hour().minute())
@@ -849,6 +873,25 @@ struct ChatBubble: View {
     .buttonStyle(.plain)
     .help("Copy message")
   }
+
+  /// Response Context popover — same developer info the floating bar shows
+  /// (model, screenshot, prompt context counts, tools). Only fresh responses
+  /// carry metadata; it is in-memory only and not persisted across restarts.
+  @ViewBuilder
+  private var infoButton: some View {
+    Button(action: { showInfoPopover.toggle() }) {
+      Image(systemName: "info.circle")
+        .scaledFont(size: 11)
+        .foregroundColor(showInfoPopover ? OmiColors.textPrimary : OmiColors.textTertiary)
+    }
+    .buttonStyle(.plain)
+    .help("View response context")
+    .popover(isPresented: $showInfoPopover, arrowEdge: .bottom) {
+      if let metadata = message.metadata {
+        MessageMetadataPopover(metadata: metadata)
+      }
+    }
+  }
 }
 
 extension ChatBubble: Equatable {
@@ -861,90 +904,6 @@ extension ChatBubble: Equatable {
       && lhs.message.rating == rhs.message.rating
       && lhs.app?.id == rhs.app?.id
       && lhs.isDuplicate == rhs.isDuplicate
-  }
-}
-
-// MARK: - Message Attachments
-
-/// Renders the attachments saved on a user message bubble: image thumbnails
-/// for images, document chips for everything else. Tapping an image opens it
-/// in Quick Look (via Finder) so the user can inspect what they sent.
-struct MessageAttachmentsView: View {
-  let attachments: [ChatAttachment]
-
-  var body: some View {
-    LazyVGrid(columns: gridColumns, alignment: .trailing, spacing: 6) {
-      ForEach(attachments) { att in
-        attachmentTile(att)
-      }
-    }
-    .frame(maxWidth: 360, alignment: .trailing)
-  }
-
-  private var gridColumns: [GridItem] {
-    let count = min(max(attachments.count, 1), 2)
-    return Array(repeating: GridItem(.flexible(), spacing: 6), count: count)
-  }
-
-  @ViewBuilder
-  private func attachmentTile(_ att: ChatAttachment) -> some View {
-    if att.isImage {
-      imageTile(att)
-        .frame(height: 140)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-    } else {
-      HStack(spacing: 8) {
-        Image(systemName: "doc")
-          .scaledFont(size: 18)
-          .foregroundColor(OmiColors.textSecondary)
-        VStack(alignment: .leading, spacing: 2) {
-          Text(att.fileName)
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.textPrimary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-          Text(att.mimeType)
-            .scaledFont(size: 10)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      .background(OmiColors.backgroundTertiary.opacity(0.9))
-      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-  }
-
-  @ViewBuilder
-  private func imageTile(_ att: ChatAttachment) -> some View {
-    // Local data wins (instant) — fall back to the server thumbnail URL after a reload.
-    if let data = att.data, let img = NSImage(data: data) {
-      Image(nsImage: img).resizable().scaledToFill()
-    } else if let urlString = att.thumbnailURL, let url = URL(string: urlString) {
-      AsyncImage(url: url) { phase in
-        switch phase {
-        case .success(let image):
-          image.resizable().scaledToFill()
-        case .failure:
-          fallbackPlaceholder
-        default:
-          ProgressView()
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(OmiColors.backgroundTertiary.opacity(0.5))
-        }
-      }
-    } else {
-      fallbackPlaceholder
-    }
-  }
-
-  private var fallbackPlaceholder: some View {
-    ZStack {
-      OmiColors.backgroundTertiary.opacity(0.6)
-      Image(systemName: "photo")
-        .scaledFont(size: 26)
-        .foregroundColor(OmiColors.textTertiary)
-    }
   }
 }
 
@@ -1034,11 +993,15 @@ struct ToolCallsGroup: View {
     Self.hasRunningTool(in: calls)
   }
 
-  /// True iff at least one tool in the group is `.stalled`. Drives the
-  /// message-level banner.
+  /// True iff at least one tool in the group is `.stalled` and is not a
+  /// tool we expect to run long (shell, file writes, web fetches, agents).
+  /// Drives the message-level "taking longer than usual" banner, which we
+  /// suppress for long-by-design work so it doesn't cry wolf.
   private var hasStalledTool: Bool {
     calls.contains { block in
-      if case .toolCall(_, _, .stalled, _, _, _) = block { return true }
+      if case .toolCall(_, let name, .stalled, _, _, _) = block {
+        return !ChatContentBlock.isSlowExpectedTool(name)
+      }
       return false
     }
   }
@@ -1051,9 +1014,12 @@ struct ToolCallsGroup: View {
     var hasSlow = false
     var hasRunning = false
     for block in calls {
-      if case .toolCall(_, _, let status, _, _, _) = block {
+      if case .toolCall(_, let name, let status, _, _, _) = block {
         switch status {
-        case .stalled: hasStalled = true
+        case .stalled:
+          // Long-by-design tools surface as "slow" (spinner), never the
+          // alarming stalled triangle.
+          if ChatContentBlock.isSlowExpectedTool(name) { hasSlow = true } else { hasStalled = true }
         case .failed: hasFailed = true
         case .slow: hasSlow = true
         case .running: hasRunning = true

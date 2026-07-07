@@ -7,7 +7,7 @@ IMPORT_MARKERS = ("import_kind", "sourceType: \"gmail\"", "sourceType: \"apple_n
 IMPORTER_NAME_MARKERS = ("Import", "ReaderService", "OnboardingPagedIntroCoordinator")
 ALLOWLIST = {
     DESKTOP_SOURCES / "APIClient.swift",
-    DESKTOP_SOURCES / "OnboardingImportEvidenceService.swift",
+    DESKTOP_SOURCES / "Onboarding" / "OnboardingImportEvidenceService.swift",
 }
 
 
@@ -55,6 +55,6 @@ def test_import_evidence_client_targets_import_endpoint():
 
 
 def test_import_evidence_service_does_not_default_source_account_hash_to_device_hash():
-    source = (DESKTOP_SOURCES / "OnboardingImportEvidenceService.swift").read_text(encoding="utf-8")
+    source = (DESKTOP_SOURCES / "Onboarding" / "OnboardingImportEvidenceService.swift").read_text(encoding="utf-8")
     assert "sourceAccountHash: String? = nil" in source
     assert "deviceIdHash" not in source

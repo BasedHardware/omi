@@ -44,6 +44,56 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertFalse(json.contains("id=123"))
   }
 
+  func testSilentTurnRecordsRecoveryActionAndResult() throws {
+    DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+      source: "omni_stt",
+      mode: "hold",
+      audioSeconds: 1.2,
+      voicedSeconds: 0,
+      peak: 0,
+      rms: 0,
+      deviceDescription: "built-in microphone",
+      micPermissionGranted: true,
+      hubActive: false,
+      recoveryAction: "capture_rebuild",
+      recoveryResult: "attempted")
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let snapshot = try XCTUnwrap(snapshots.last)
+
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "capture_rebuild")
+    XCTAssertEqual(snapshot["recovery_result"] as? String, "attempted")
+  }
+
+  func testSilentTurnRecoveryFieldsDefaultToNone() throws {
+    DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
+      source: "hub",
+      mode: "hold",
+      audioSeconds: 1.2,
+      voicedSeconds: nil,
+      peak: 0,
+      rms: 0,
+      deviceDescription: "built-in microphone",
+      micPermissionGranted: true,
+      hubActive: true)
+
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    let snapshot = try XCTUnwrap(snapshots.last)
+
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "none")
+    XCTAssertEqual(snapshot["recovery_result"] as? String, "not_attempted")
+  }
+
   func testShortSilentTurnsDoNotAdvanceWatchdogCounter() throws {
     for _ in 0..<3 {
       DesktopDiagnosticsManager.shared.recordPTTSilentTurn(
@@ -69,5 +119,74 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertTrue(snapshots.allSatisfy { $0["event"] as? String == "ptt_audio_capture_silent_turn" })
     XCTAssertTrue(snapshots.allSatisfy { $0["watchdog_eligible"] as? Bool == false })
     XCTAssertTrue(snapshots.allSatisfy { $0["consecutive_silent_turns"] as? Int == 0 })
+  }
+
+  func testExpectedIdleTeardownUsesSeparateHealthEvent() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: "gemini",
+      category: RealtimeHubCloseCategory.expectedIdleTeardown.rawValue,
+      aliveFor: 180,
+      activeTurn: false,
+      authMode: .managed,
+      failureClass: nil)
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_provider_expected_idle_teardown")
+    XCTAssertEqual(snapshot["provider"] as? String, "gemini")
+    XCTAssertEqual(snapshot["category"] as? String, "expected_idle_teardown")
+    XCTAssertEqual(snapshot["auth_mode"] as? String, "managed")
+    XCTAssertEqual(snapshot["active_turn"] as? Bool, false)
+  }
+
+  func testProviderCloseFallsBackToFailureClassInsteadOfUnclassified() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: "openai",
+      category: nil,
+      aliveFor: 7,
+      activeTurn: true,
+      authMode: .byok,
+      failureClass: .providerTransient(provider: .openai))
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_provider_session_error")
+    XCTAssertEqual(snapshot["category"] as? String, "provider_transient")
+    XCTAssertEqual(snapshot["failure_class"] as? String, "provider_transient")
+    XCTAssertEqual(snapshot["auth_mode"] as? String, "byok")
+  }
+
+  func testTokenMintFailureIncludesHttpStatusWhenKnown() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
+      provider: "gemini",
+      reason: "backend_transient",
+      phase: "warm",
+      httpStatusCode: 503,
+      backendRoute: "/v2/realtime/session",
+      upstreamStatusCode: 503,
+      providerCode: "UNAVAILABLE",
+      retryable: true)
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_token_mint_failed")
+    XCTAssertEqual(snapshot["provider"] as? String, "gemini")
+    XCTAssertEqual(snapshot["reason"] as? String, "backend_transient")
+    XCTAssertEqual(snapshot["phase"] as? String, "warm")
+    XCTAssertEqual(snapshot["http_status_code"] as? Int, 503)
+    XCTAssertEqual(snapshot["backend_route"] as? String, "/v2/realtime/session")
+    XCTAssertEqual(snapshot["upstream_status_code"] as? Int, 503)
+    XCTAssertEqual(snapshot["provider_code"] as? String, "UNAVAILABLE")
+    XCTAssertEqual(snapshot["retryable"] as? Bool, true)
+  }
+
+  private func latestSnapshot() throws -> [String: Any] {
+    let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
+    defer { try? FileManager.default.removeItem(at: url) }
+
+    let data = try Data(contentsOf: url)
+    let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
+    return try XCTUnwrap(snapshots.last)
   }
 }

@@ -47,4 +47,15 @@ describe('GraphSimulation', () => {
     expect(sim.consumeNewlyAdded()).toEqual(['language_en'])
     expect(sim.consumeNewlyAdded()).toEqual([]) // consumed
   })
+
+  it('reports whether frame-by-frame settling still needs rendering', () => {
+    const sim = new GraphSimulation('user')
+    sim.setGraph(g2)
+
+    expect(sim.settleFrame()).toBe(true)
+
+    sim.settle(300)
+
+    expect(sim.settleFrame()).toBe(false)
+  })
 })

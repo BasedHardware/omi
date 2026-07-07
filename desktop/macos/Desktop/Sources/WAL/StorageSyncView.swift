@@ -1,4 +1,6 @@
 import SwiftUI
+import OmiTheme
+import OmiWAL
 
 // MARK: - Storage Sync View
 

@@ -28,15 +28,6 @@ _SENSITIVE_KEYS = {
 }
 
 
-def _safe_id(value: Any) -> str:
-    if value is None:
-        return 'missing'
-    raw = str(value)
-    if not raw:
-        return 'missing'
-    return raw[:12]
-
-
 def _sanitized_decision(decision: Dict[str, Any]) -> Dict[str, Any]:
     return {
         'memory_layer': decision.get('memory_layer') or 'unknown',

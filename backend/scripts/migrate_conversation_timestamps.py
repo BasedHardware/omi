@@ -30,6 +30,7 @@ import argparse
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from google.cloud import firestore
 
@@ -38,15 +39,15 @@ from database._client import db, get_users_uid
 TIMESTAMP_FIELDS = ('created_at', 'started_at', 'finished_at')
 
 
-def parse_iso(value: str):
+def parse_iso(value: str) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(value.replace('Z', '+00:00'))
     except (ValueError, AttributeError):
         return None
 
 
-def build_updates(data: dict) -> dict:
-    updates = {}
+def build_updates(data: Dict[str, Any]) -> Dict[str, datetime]:
+    updates: Dict[str, datetime] = {}
     for field in TIMESTAMP_FIELDS:
         value = data.get(field)
         if isinstance(value, str):
@@ -56,7 +57,7 @@ def build_updates(data: dict) -> dict:
     return updates
 
 
-def process_user(uid: str, dry_run: bool, full_scan: bool) -> dict:
+def process_user(uid: str, dry_run: bool, full_scan: bool) -> Dict[str, Any]:
     """Fix string-typed timestamps for one user's conversations."""
     fixed = 0
     try:
@@ -68,7 +69,7 @@ def process_user(uid: str, dry_run: bool, full_scan: bool) -> dict:
             .stream()
         )
         for conv in convs:
-            data = conv.to_dict() or {}
+            data: Dict[str, Any] = conv.to_dict() or {}
             updates = build_updates(data)
             if not updates:
                 if not full_scan and isinstance(data.get('created_at'), datetime):
@@ -84,7 +85,7 @@ def process_user(uid: str, dry_run: bool, full_scan: bool) -> dict:
         return {'uid': uid, 'fixed': fixed, 'status': f'error: {e}'}
 
 
-def main():
+def main() -> int:
     parser = argparse.ArgumentParser(description='Rewrite ISO-string conversation timestamps to Firestore Timestamps')
     parser.add_argument('--dry-run', action='store_true', help='Only print what would change')
     parser.add_argument('--uid', help='Process a single user by uid instead of all users')
@@ -107,7 +108,7 @@ def main():
             uids = uids[: args.limit]
     print(f'Processing {len(uids)} user(s) with {args.workers} workers')
 
-    results = []
+    results: List[Dict[str, Any]] = []
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = [executor.submit(process_user, uid, args.dry_run, args.full_scan) for uid in uids]
         for i, future in enumerate(futures):
@@ -118,7 +119,7 @@ def main():
 
     convs_fixed = sum(r['fixed'] for r in results)
     users_with_fixes = sum(1 for r in results if r['fixed'])
-    errors = [r for r in results if r['status'].startswith('error')]
+    errors: List[Dict[str, Any]] = [r for r in results if r['status'].startswith('error')]
 
     print('=' * 60)
     print(f'users_scanned={len(results)} users_with_fixes={users_with_fixes} convs_fixed={convs_fixed}', end='')

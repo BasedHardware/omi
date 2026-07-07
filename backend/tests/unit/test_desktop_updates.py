@@ -77,6 +77,45 @@ class TestParseDesktopVersion:
         assert result["version"] == "11.3.0+11003"
         assert result["build"] == "11003"
 
+    # --- Regression anchor for issue #5285 ---
+    #
+    # https://github.com/BasedHardware/omi/issues/5285 — the appcast endpoint
+    # silently dropped newer 2-component release tags (e.g. ``v11.0+11000-macos``)
+    # because the patch group was mandatory, breaking desktop auto-updates. The
+    # fix made the patch component optional (defaulting to "0"). These cases pin
+    # that behavior so the regex can never regress to requiring a patch component
+    # while still accepting the legacy 3-component form.
+    @pytest.mark.parametrize(
+        "tag, expected_version, expected_patch",
+        [
+            # The exact 2-component tags called out in issue #5285 (patch omitted).
+            ("v11.0+11000-macos", "11.0.0+11000", "0"),
+            ("v11.3+11003-macos", "11.3.0+11003", "0"),
+            # The legacy 3-component form must keep parsing (guard vs. over-correction).
+            ("v1.0.77+464-desktop-cm", "1.0.77+464", "77"),
+        ],
+    )
+    def test_issue_5285_supported_tags_parse(self, tag, expected_version, expected_patch):
+        result = _parse_desktop_version(tag)
+        assert result is not None, f"expected {tag!r} to parse (issue #5285)"
+        assert result["version"] == expected_version
+        assert result["patch"] == expected_patch
+
+    @pytest.mark.parametrize(
+        "tag",
+        [
+            "v11+11000-macos",  # missing minor component
+            "v11.0-macos",  # missing +build component
+            "v11.0+11000",  # missing platform suffix
+            "v11.0+11000-ios",  # unsupported platform
+            "not-a-version",
+            "",
+        ],
+    )
+    def test_issue_5285_malformed_tags_return_none(self, tag):
+        # Making patch optional must not loosen the rest of the grammar.
+        assert _parse_desktop_version(tag) is None
+
 
 # --- _parse_changelog_to_changes ---
 

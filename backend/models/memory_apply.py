@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
 from models.memory_contracts import (
@@ -221,7 +221,7 @@ def _materialize_memory_item(
     promotion: Optional[Dict[str, Any]] = None,
 ) -> MemoryItem:
     now = datetime.now(timezone.utc)
-    tier = patch.initial_tier if isinstance(patch.initial_tier, MemoryTier) else MemoryTier(patch.initial_tier)
+    tier = patch.initial_tier
     expires_at = default_short_term_expiry(now) if tier == MemoryTier.short_term else None
     status = MemoryItemStatus.active
     processing_state = ProcessingState.processed
@@ -262,7 +262,7 @@ def _materialize_memory_item(
     )
 
 
-def _resolved_update_content(existing: MemoryItem, patch: DurableMemoryPatch) -> str:
+def _resolved_update_content(existing: MemoryItem, patch: DurableMemoryPatch) -> Optional[str]:
     """Preserve existing content when patch omits or blanks memory_text."""
     if patch.memory_text is not None and patch.memory_text.strip():
         return patch.memory_text
@@ -281,7 +281,7 @@ def _apply_update_memory_item(
 ) -> MemoryItem:
     now = datetime.now(timezone.utc)
     if patch.target_tier is not None:
-        tier = patch.target_tier if isinstance(patch.target_tier, MemoryTier) else MemoryTier(patch.target_tier)
+        tier = patch.target_tier
     else:
         tier = existing.tier
     content = _resolved_update_content(existing, patch)
@@ -332,7 +332,7 @@ def _apply_update_memory_item(
 
 
 def _stale_operation(operation: MemoryOperation) -> MemoryOperation:
-    data = operation.model_dump()
+    data = operation.dict()
     data.update({"status": MemoryOperationStatus.stale_generation, "updated_at": datetime.now(timezone.utc)})
     return MemoryOperation(**data)
 
@@ -516,7 +516,7 @@ def apply_long_term_patch_transaction(
             promotion=promotion_metadata,
         )
         if extra_item_updates:
-            memory_item = MemoryItem(**{**memory_item.model_dump(), **extra_item_updates})
+            memory_item = MemoryItem(**{**memory_item.dict(), **extra_item_updates})
     outbox_events = [
         MemoryOutboxEvent(
             event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),

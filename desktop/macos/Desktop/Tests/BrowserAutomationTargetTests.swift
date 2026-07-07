@@ -40,7 +40,7 @@ final class BrowserAutomationTargetTests: XCTestCase {
     XCTAssertNotNil(MemoryExportDestination.claude.assistedOverlayHint)
     XCTAssertNil(MemoryExportDestination.gemini.assistedOverlayHint)
     XCTAssertEqual(MemoryExportDestination.claude.assistedSetupFields(key: "k")?.count, 4)
-    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 7)
+    XCTAssertEqual(MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?.count, 8)
     // Prod ChatGPT client is public PKCE — the secret row must stay blank.
     XCTAssertEqual(
       MemoryExportDestination.chatgpt.assistedSetupFields(key: "k")?

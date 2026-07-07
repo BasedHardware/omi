@@ -115,6 +115,9 @@ final class RealtimeHubSession: NSObject {
   /// one. Set on activityEnd (commit); cleared on this turn's `turnComplete`, on a
   /// server `interrupted`, or when a new turn interrupts (beginInputTurn interrupting).
   private var geminiResponsePending = false
+  private var pendingOpenAIToolCallIds = Set<String>()
+  private var pendingGeminiToolCallIds = Set<String>()
+  private var geminiSyntheticToolCallCounter = 0
 
   // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
   // commit, reported at finishTurn (only for ephemeral sessions; BYOK pays the provider
@@ -221,6 +224,7 @@ final class RealtimeHubSession: NSObject {
           self.openAIResponseActive = false
           self.openAIResponseCreatePending = false
           self.openAIActiveResponseID = nil
+          self.pendingOpenAIToolCallIds.removeAll()
         }
         // Drop any uncommitted mic input so it can't leak into the next turn.
         self.send(json: ["type": "input_audio_buffer.clear"])
@@ -264,6 +268,57 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  /// TEST SEAM (ptt_test_turn only, bridge is non-prod-only): inject the probe text as
+  /// realtime user input so the model answers the forced transcript instead of the
+  /// fixture audio — the harness feeds a sine tone, and without this the model replies
+  /// to a beep in whatever language it hallucinates. Gemini: text rides the open
+  /// activity window (same rule as video frames). OpenAI: a user message item is
+  /// appended before the audio commit.
+  /// TEST SEAM (ptt_test_turn only): queue-synced snapshot of whether this session can
+  /// accept in-turn input right now. Gemini needs the speech-activity window open;
+  /// OpenAI only needs the socket. The headless turn waits on this before injecting
+  /// text/committing — beginTurn may defer activityStart during a seed-stale reconnect,
+  /// and an activityEnd without a window is a Gemini policy-close (1008).
+  func activityWindowOpen() async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async {
+        continuation.resume(
+          returning: self.isOpen && (self.provider == .openai || self.activityOpen))
+      }
+    }
+  }
+
+  func sendTestTextInput(_ text: String) async -> Bool {
+    await withCheckedContinuation { continuation in
+      q.async { [weak self] in
+        guard let self, self.isOpen else {
+          continuation.resume(returning: false)
+          return
+        }
+        switch self.provider {
+        case .gemini:
+          guard self.activityOpen else {
+            log("\(self.tag): test text input dropped — no open activity window")
+            continuation.resume(returning: false)
+            return
+          }
+          self.send(json: ["realtimeInput": ["text": text]])
+        case .openai:
+          self.send(json: [
+            "type": "conversation.item.create",
+            "item": [
+              "type": "message",
+              "role": "user",
+              "content": [["type": "input_text", "text": text]],
+            ],
+          ])
+        }
+        log("\(self.tag): test text input sent (\(text.count) chars)")
+        continuation.resume(returning: true)
+      }
+    }
+  }
+
   /// End the user's PTT turn and ask the model to respond.
   /// Start a new PTT turn. Gemini: open a fresh speech-activity window (must be
   /// done EVERY turn on a warm session). OpenAI: no-op (input_audio_buffer based).
@@ -276,6 +331,7 @@ final class RealtimeHubSession: NSObject {
       // Gemini events that arrive before replacement or on non-provider interruptions.
       if interrupting {
         self.geminiResponsePending = false
+        self.pendingGeminiToolCallIds.removeAll()
       }
       guard !self.activityOpen else { return }
       self.activityOpen = true
@@ -296,9 +352,11 @@ final class RealtimeHubSession: NSObject {
       log("\(self.tag): turn committed")
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.removeAll()
         self.send(json: ["type": "input_audio_buffer.commit"])
         self.requestResponse(audio: true)
       case .gemini:
+        self.pendingGeminiToolCallIds.removeAll()
         self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         self.activityOpen = false
         self.geminiResponsePending = true  // expect a spoken reply for THIS turn
@@ -316,8 +374,10 @@ final class RealtimeHubSession: NSObject {
       self.geminiResponsePending = false
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.removeAll()
         self.send(json: ["type": "input_audio_buffer.clear"])
       case .gemini:
+        self.pendingGeminiToolCallIds.removeAll()
         if self.activityOpen, self.isOpen {
           self.send(json: ["realtimeInput": ["activityEnd": [:]]])
         }
@@ -334,12 +394,18 @@ final class RealtimeHubSession: NSObject {
       guard let self else { return }
       switch self.provider {
       case .openai:
+        self.pendingOpenAIToolCallIds.remove(callId)
         self.send(json: [
           "type": "conversation.item.create",
           "item": ["type": "function_call_output", "call_id": callId, "output": output],
         ])
-        self.requestResponse(audio: true)
+        if self.pendingOpenAIToolCallIds.isEmpty {
+          self.requestResponse(audio: true)
+        } else {
+          log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
+        }
       case .gemini:
+        self.pendingGeminiToolCallIds.remove(callId)
         self.send(json: [
           "toolResponse": [
             "functionResponses": [["id": callId, "name": name, "response": ["result": output]]]
@@ -413,27 +479,60 @@ final class RealtimeHubSession: NSObject {
     }
   }
 
+  /// Whether the provider's input transcription accepts an explicit language hint.
+  /// OpenAI's whisper transcription does; Gemini Live's inputAudioTranscription has no
+  /// language field at all (native-audio models pick per utterance — the misdetect bug).
+  var supportsInputTranscriptionLanguage: Bool { provider == .openai }
+
+  /// ISO 639-1 hint applied to committed input transcription (OpenAI only).
+  private var inputTranscriptionLanguage: String?
+
+  /// Set (or clear, with nil) the input transcription language for this turn. Sends a
+  /// full idempotent session.update — partial nested updates have murkier merge
+  /// semantics, and the payload is deterministic anyway. Call BEFORE commitInputTurn();
+  /// both hop to `q`, so FIFO ordering guarantees the update lands first. All state
+  /// mutation happens on `q` (same discipline as every other send-path member).
+  func setInputTranscriptionLanguage(_ code: String?) {
+    guard provider == .openai else { return }
+    q.async { [weak self] in
+      guard let self else { return }
+      guard code != self.inputTranscriptionLanguage else { return }
+      self.inputTranscriptionLanguage = code
+      log("\(self.tag): input transcription language → \(code ?? "auto")")
+      guard self.isOpen else { return }  // pre-open: sendSessionSetup includes it
+      self.send(json: self.openAISessionPayload())
+    }
+  }
+
+  private func openAISessionPayload() -> [String: Any] {
+    var transcription: [String: Any] = ["model": "whisper-1"]
+    if let inputTranscriptionLanguage {
+      transcription["language"] = inputTranscriptionLanguage
+    }
+    return [
+      "type": "session.update",
+      "session": [
+        "type": "realtime",
+        "instructions": instructions,
+        "output_modalities": ["audio"],
+        "audio": [
+          "input": [
+            "format": ["type": "audio/pcm", "rate": 24000],
+            "turn_detection": NSNull(),  // PTT controls turns
+            "transcription": transcription,
+          ],
+          "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
+        ],
+        "tools": RealtimeHubTools.openAITools,
+        "tool_choice": "auto",
+      ],
+    ]
+  }
+
   private func sendSessionSetup() {
     switch provider {
     case .openai:
-      send(json: [
-        "type": "session.update",
-        "session": [
-          "type": "realtime",
-          "instructions": instructions,
-          "output_modalities": ["audio"],
-          "audio": [
-            "input": [
-              "format": ["type": "audio/pcm", "rate": 24000],
-              "turn_detection": NSNull(),  // PTT controls turns
-              "transcription": ["model": "whisper-1"],
-            ],
-            "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
-          ],
-          "tools": RealtimeHubTools.openAITools,
-          "tool_choice": "auto",
-        ],
-      ])
+      send(json: openAISessionPayload())
     case .gemini:
       // AUDIO modality: the only currently-available Live models are native-audio
       // (TEXT is rejected with close 1007). The spoken reply (24k PCM) is played by
@@ -448,6 +547,12 @@ final class RealtimeHubSession: NSObject {
           "generationConfig": [
             "responseModalities": ["AUDIO"], "temperature": 0.3,
             "mediaResolution": "MEDIA_RESOLUTION_HIGH",
+            // Pin the spoken voice — with no speechConfig Gemini picks its own default,
+            // which differs from the OpenAI hub voice (marin) and can change across
+            // model revisions. Charon: deep, calm, "informative" — closest match to marin.
+            "speechConfig": [
+              "voiceConfig": ["prebuiltVoiceConfig": ["voiceName": "Charon"]]
+            ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
           "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
@@ -716,6 +821,7 @@ final class RealtimeHubSession: NSObject {
         continue
       }
       dispatchedToolItems.insert(callId)
+      pendingOpenAIToolCallIds.insert(callId)
       let name = (item["name"] as? String) ?? openAIFunctionNames[callId] ?? ""
       let argsStr = (item["arguments"] as? String) ?? "{}"
       if !name.isEmpty {
@@ -749,8 +855,10 @@ final class RealtimeHubSession: NSObject {
       }
       for call in calls {
         let name = call["name"] as? String ?? ""
-        // Gemini may omit id for single calls; synthesize one for our bookkeeping.
-        let callId = call["id"] as? String ?? name
+        // Gemini may omit ids; synthesize unique ones so same-name calls in one turn
+        // do not collapse controller/session pending-tool bookkeeping.
+        let callId = call["id"] as? String ?? nextGeminiSyntheticToolCallId(name: name)
+        pendingGeminiToolCallIds.insert(callId)
         let args = call["args"] as? [String: Any] ?? [:]
         let argsJSON =
           (try? JSONSerialization.data(withJSONObject: args)).flatMap {
@@ -765,6 +873,7 @@ final class RealtimeHubSession: NSObject {
       // Barge-in: drop the pending reply so its trailing audio + bookkeeping turnComplete
       // are ignored; the new turn (already started via activityStart) re-arms on commit.
       geminiResponsePending = false
+      pendingGeminiToolCallIds.removeAll()
       log("\(tag): server confirmed interrupt")
     }
     // NOTE: do NOT finish on generationComplete — Gemini sends it while the spoken audio
@@ -789,6 +898,10 @@ final class RealtimeHubSession: NSObject {
       }
     }
     if (sc["turnComplete"] as? Bool) == true {
+      guard pendingGeminiToolCallIds.isEmpty else {
+        log("\(tag): deferring Gemini turnComplete with \(pendingGeminiToolCallIds.count) tool result(s) pending")
+        return
+      }
       // Only finish the turn we're actually awaiting a reply for. A turnComplete that
       // closes an interrupted/abandoned generation (pending=false) is ignored, so it
       // can't prematurely end the live turn.
@@ -798,6 +911,11 @@ final class RealtimeHubSession: NSObject {
         finishTurn()
       }
     }
+  }
+
+  private func nextGeminiSyntheticToolCallId(name: String) -> String {
+    geminiSyntheticToolCallCounter += 1
+    return "\(name):\(geminiSyntheticToolCallCounter)"
   }
 
   // MARK: - Send (on q)

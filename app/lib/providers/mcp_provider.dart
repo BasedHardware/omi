@@ -38,7 +38,7 @@ class McpProvider with ChangeNotifier {
       newKey = await McpApi.createMcpApiKey(name);
       if (newKey != null) {
         // Add the new key to the top of the list, as the API returns keys sorted by creation date.
-        _keys.insert(0, newKey);
+        _keys.insert(0, McpApiKey.fromJson(newKey.toJson()));
       }
     } catch (e) {
       _error = e.toString();

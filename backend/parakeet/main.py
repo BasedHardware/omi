@@ -12,13 +12,14 @@ import wave as _wave
 import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Any, Dict, List, Optional, cast
 
 gc.disable()
 
 from fastapi import FastAPI, Form, UploadFile, File, WebSocket, WebSocketDisconnect, Query, HTTPException
 from fastapi.responses import JSONResponse
-from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
+from prometheus_client import Counter, Gauge, Histogram
+from prometheus_client import make_asgi_app  # type: ignore[reportUnknownVariableType]  # prometheus_client partially typed
 
 from gpu_worker import GPUWorker, AudioDurationExceededError
 from batch_engine import BatchEngine, QueueFullError
@@ -27,7 +28,7 @@ from transcribe import (
     transcribe_file_v2,
     set_gpu_worker,
     INFERENCE_MODE,
-    _transcribe_from_gpu_result,
+    _transcribe_from_gpu_result,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]  # upstream transcribe partially typed
 )
 from stream_handler import StreamSession, warmup_rnnt_decoder
 
@@ -89,7 +90,7 @@ _max_file_duration_sec = float(os.getenv("PARAKEET_MAX_FILE_DURATION", "0"))
 
 def _get_audio_duration_from_bytes(data: bytes) -> float:
     try:
-        info = sf.info(_io.BytesIO(data))
+        info = cast(Any, sf.info(_io.BytesIO(data)))  # type: ignore[reportUnknownMemberType]  # soundfile partially typed
         return info.duration
     except Exception:
         pass
@@ -108,14 +109,14 @@ def _duration_limit_detail(audio_dur: float) -> str:
     return f"Audio duration {audio_dur:.0f}s exceeds limit ({_max_file_duration_sec:.0f}s)"
 
 
-def _on_batch_complete(queue_durations, inference_seconds, batch_size):
+def _on_batch_complete(queue_durations: List[float], inference_seconds: float, batch_size: int) -> None:
     for qd in queue_durations:
         QUEUE_DURATION.observe(qd)
     INFERENCE_DURATION.observe(inference_seconds)
     BATCH_SIZE_HIST.observe(batch_size)
 
 
-def _on_gpu_oom():
+def _on_gpu_oom() -> None:
     GPU_OOM_TOTAL.inc()
 
 
@@ -159,7 +160,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/metrics", make_asgi_app())
+app.mount("/metrics", cast(Any, make_asgi_app()))
 
 
 def _write_file(path: str, data: bytes) -> None:
@@ -174,8 +175,8 @@ def _remove_file(path: str) -> None:
         pass
 
 
-@app.post("/v1/transcribe")
-async def transcribe(file: UploadFile = File(...)):
+@app.post("/v1/transcribe", response_model=None)
+async def transcribe(file: UploadFile = File(...)) -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None and not gpu_worker.is_ready:
         REQUESTS_TOTAL.labels(endpoint="v1_transcribe", status="error").inc()
         return JSONResponse(status_code=503, content={"detail": "Model loading, try again shortly"})
@@ -200,9 +201,9 @@ async def transcribe(file: UploadFile = File(...)):
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))
-            result = await batch_engine.submit(file_path, timestamps=True, owns_file=True)
-            PENDING_REQUESTS.set(len(batch_engine._pending))
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=True))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
             return JSONResponse(content=_transcribe_from_gpu_result(result))
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
@@ -227,14 +228,14 @@ async def transcribe(file: UploadFile = File(...)):
             await loop.run_in_executor(_io_pool, _remove_file, file_path)
 
 
-@app.post("/v2/transcribe")
+@app.post("/v2/transcribe", response_model=None)
 async def transcribe_v2(
     file: UploadFile = File(...),
     diarize: bool = Form(True),
     min_speakers: Optional[int] = Query(None, gt=0),
     max_speakers: Optional[int] = Query(None, gt=0),
     num_speakers: Optional[int] = Query(None, gt=0),
-):
+) -> JSONResponse | Dict[str, Any]:
     if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
         raise HTTPException(status_code=422, detail="min_speakers cannot be greater than max_speakers")
     if gpu_worker is not None and not gpu_worker.is_ready:
@@ -261,31 +262,43 @@ async def transcribe_v2(
         await loop.run_in_executor(_io_pool, _write_file, file_path, data)
 
         if batch_engine is not None:
-            PENDING_REQUESTS.set(len(batch_engine._pending))
-            gpu_result = await batch_engine.submit(file_path, timestamps=True, owns_file=False)
-            PENDING_REQUESTS.set(len(batch_engine._pending))
-            result = await loop.run_in_executor(
-                _diarize_pool,
-                functools.partial(
-                    transcribe_file_v2,
-                    file_path,
-                    gpu_result=gpu_result,
-                    diarize=diarize,
-                    min_speakers=min_speakers,
-                    max_speakers=max_speakers,
-                    num_speakers=num_speakers,
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            gpu_result = cast(Dict[str, Any], await batch_engine.submit(file_path, timestamps=True, owns_file=False))  # type: ignore[reportUnknownMemberType]  # batch_engine.submit partially typed
+            PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+            result = cast(
+                Dict[str, Any],
+                await loop.run_in_executor(
+                    _diarize_pool,
+                    cast(
+                        Any,
+                        functools.partial(
+                            transcribe_file_v2,
+                            file_path,
+                            gpu_result=gpu_result,
+                            diarize=diarize,
+                            min_speakers=min_speakers,
+                            max_speakers=max_speakers,
+                            num_speakers=num_speakers,
+                        ),
+                    ),
                 ),
             )
         else:
-            result = await loop.run_in_executor(
-                _diarize_pool,
-                functools.partial(
-                    transcribe_file_v2,
-                    file_path,
-                    diarize=diarize,
-                    min_speakers=min_speakers,
-                    max_speakers=max_speakers,
-                    num_speakers=num_speakers,
+            result = cast(
+                Dict[str, Any],
+                await loop.run_in_executor(
+                    _diarize_pool,
+                    cast(
+                        Any,
+                        functools.partial(
+                            transcribe_file_v2,
+                            file_path,
+                            diarize=diarize,
+                            min_speakers=min_speakers,
+                            max_speakers=max_speakers,
+                            num_speakers=num_speakers,
+                        ),
+                    ),
                 ),
             )
         return result
@@ -331,7 +344,7 @@ async def stream_transcribe(
                 continue
 
             if "bytes" in msg:
-                segments = await session.feed(msg["bytes"])
+                segments = cast(List[Any], await session.feed(msg["bytes"]))
                 for seg in segments:
                     await websocket.send_json(seg)
             elif "text" in msg:
@@ -343,7 +356,7 @@ async def stream_transcribe(
         logger.error(f"v3/stream error: {e}")
     finally:
         try:
-            final_segments = await session.flush()
+            final_segments = cast(List[Any], await session.flush())
             for seg in final_segments:
                 try:
                     await websocket.send_json(seg)
@@ -356,8 +369,8 @@ async def stream_transcribe(
         session.cleanup()
 
 
-@app.get("/health")
-async def health_check():
+@app.get("/health", response_model=None)
+async def health_check() -> JSONResponse | Dict[str, Any]:
     if gpu_worker is not None:
         ready = gpu_worker.is_ready
         body = {
@@ -372,8 +385,8 @@ async def health_check():
 
 
 @app.get("/batch/metrics")
-async def batch_metrics():
+async def batch_metrics() -> Dict[str, Any]:
     if batch_engine is not None:
-        PENDING_REQUESTS.set(len(batch_engine._pending))
-        return batch_engine.metrics
+        PENDING_REQUESTS.set(len(batch_engine._pending))  # type: ignore[reportPrivateUsage]  # batch_engine internal queue
+        return cast(Dict[str, Any], batch_engine.metrics)  # type: ignore[reportUnknownMemberType]  # batch_engine.metrics partially typed
     return {}

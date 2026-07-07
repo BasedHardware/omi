@@ -59,20 +59,22 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             backgroundColor: const Color(0xFF0D0D0D),
             elevation: 0,
             centerTitle: true,
-            title: Text(context.l10n.sync,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600)),
+            title: Text(
+              context.l10n.sync,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
             leading: IconButton(
-              icon: const FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
+              icon: FaIcon(FontAwesomeIcons.chevronLeft, color: Colors.white, size: 18),
               onPressed: () => Navigator.of(context).pop(),
             ),
             actions: [
               IconButton(
-                icon: const FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
+                icon: FaIcon(FontAwesomeIcons.circleInfo, color: Color(0xFF8E8E93), size: 18),
                 onPressed: () => _showInfoSheet(context),
               ),
               if (pendingWals.isNotEmpty || syncedWals.isNotEmpty)
                 IconButton(
-                  icon: const FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
+                  icon: FaIcon(FontAwesomeIcons.ellipsis, color: Color(0xFF8E8E93), size: 18),
                   onPressed: () => _showManageStorageSheet(context, syncProvider),
                 ),
             ],
@@ -89,10 +91,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                       const SizedBox(height: 16),
                       _buildConversationsCard(syncProvider),
                     ],
-                    if (syncState.hasError) ...[
-                      const SizedBox(height: 16),
-                      _buildErrorCard(syncState, syncProvider),
-                    ],
+                    if (syncState.hasError) ...[const SizedBox(height: 16), _buildErrorCard(syncState, syncProvider)],
                     const SizedBox(height: 32),
                     _buildStorageSettings(userProvider),
                     if (hasAnyRecording) ...[
@@ -123,8 +122,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     final attention = p.needsAttentionWalsCount;
     final uploaded = p.uploadedWals.length;
     final readyToBackUp = p.displaySortedWals
-        .where((w) =>
-            w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying)
+        .where(
+          (w) =>
+              w.syncDisplayState == WalSyncDisplayState.waiting || w.syncDisplayState == WalSyncDisplayState.retrying,
+        )
         .length;
     final hasAnyRecording = p.allWals.isNotEmpty;
 
@@ -189,10 +190,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -239,11 +237,11 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(100),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
         ),
-        child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500)),
       ),
     );
   }
@@ -265,7 +263,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
               width: 36,
               height: 36,
               decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: const Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
+              child: Center(child: FaIcon(FontAwesomeIcons.check, color: Colors.green, size: 14)),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -295,21 +293,27 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       ),
       child: Row(
         children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
+          FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(syncState.errorMessage ?? context.l10n.syncFailed,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13)),
+            child: Text(
+              syncState.errorMessage ?? context.l10n.syncFailed,
+              style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+            ),
           ),
           const SizedBox(width: 8),
           GestureDetector(
             onTap: () => syncProvider.retrySync(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              decoration:
-                  BoxDecoration(color: Colors.red.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
-              child: Text(context.l10n.retry,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(100),
+              ),
+              child: Text(
+                context.l10n.retry,
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
+              ),
             ),
           ),
         ],
@@ -330,8 +334,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 10),
-          child: Text(context.l10n.storageSection,
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            context.l10n.storageSection,
+            style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
         Container(
           decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
@@ -342,9 +348,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 label: context.l10n.storeAudioOnPhone,
                 isOn: isPhoneOn,
                 onTap: () {
-                  Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const LocalStoragePage()))
-                      .then((_) => setState(() {}));
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const LocalStoragePage())).then((_) => setState(() {}));
                 },
               ),
               const Divider(height: 1, color: Color(0xFF3C3C43), indent: 52),
@@ -363,7 +369,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   }
 
   Widget _settingRow({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required bool isOn,
     required VoidCallback onTap,
@@ -378,8 +384,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
-              child:
-                  Text(label, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400)),
+              child: Text(
+                label,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+              ),
             ),
             Text(
               isOn ? context.l10n.on : context.l10n.off,
@@ -448,10 +456,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
 
     return Container(
       padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(10),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(10)),
       child: Row(
         children: [
           chip(WalDisplayFilter.all, context.l10n.all),
@@ -571,9 +576,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       onTap: () {
         final syncProvider = context.read<SyncProvider>();
         if (syncProvider.isSyncing && wal.storage == WalStorage.sdcard) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)),
-          );
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(SnackBar(content: Text(context.l10n.syncInProgress), duration: const Duration(seconds: 2)));
           return;
         }
         Navigator.of(context).push(MaterialPageRoute(builder: (_) => WalItemDetailPage(wal: wal)));
@@ -629,8 +634,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: Text(context.l10n.retry,
-              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            context.l10n.retry,
+            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
       );
     }
@@ -640,22 +647,22 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   /// Row subtitle (color, icon, label). Colors stay restrained: grey for
   /// neutral/active, amber for auto-retry, red for failed/corrupted. Purple
   /// is reserved for actions and the spinner — not body text.
-  (Color, IconData, String) _rowVisual(WalSyncDisplayState state) {
+  (Color, FaIconData, String) _rowVisual(WalSyncDisplayState state) {
     switch (state) {
       case WalSyncDisplayState.synced:
-        return (Colors.grey.shade500, Icons.cloud_done_rounded, context.l10n.syncStatusConversationCreated);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusConversationCreated);
       case WalSyncDisplayState.syncing:
-        return (Colors.grey.shade300, Icons.sync_rounded, context.l10n.syncStatusBackingUp);
+        return (Colors.grey.shade300, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusBackingUp);
       case WalSyncDisplayState.uploaded:
-        return (Colors.grey.shade400, Icons.cloud_sync_rounded, context.l10n.syncStatusUploaded);
+        return (Colors.grey.shade400, FontAwesomeIcons.cloud, context.l10n.syncStatusUploaded);
       case WalSyncDisplayState.waiting:
-        return (Colors.grey.shade500, Icons.cloud_upload_outlined, context.l10n.syncStatusWaiting);
+        return (Colors.grey.shade500, FontAwesomeIcons.cloudArrowUp, context.l10n.syncStatusWaiting);
       case WalSyncDisplayState.retrying:
-        return (Colors.orangeAccent, Icons.autorenew_rounded, context.l10n.syncStatusRetrying);
+        return (Colors.orangeAccent, FontAwesomeIcons.arrowsRotate, context.l10n.syncStatusRetrying);
       case WalSyncDisplayState.failed:
-        return (Colors.redAccent, Icons.error_outline_rounded, context.l10n.syncStatusFailed);
+        return (Colors.redAccent, FontAwesomeIcons.circleExclamation, context.l10n.syncStatusFailed);
       case WalSyncDisplayState.corrupted:
-        return (Colors.redAccent, Icons.warning_amber_rounded, context.l10n.syncStatusFileUnavailable);
+        return (Colors.redAccent, FontAwesomeIcons.triangleExclamation, context.l10n.syncStatusFileUnavailable);
     }
   }
 
@@ -686,13 +693,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                   ),
                 ),
                 const SizedBox(height: 22),
-                Text(l.howSyncingWorks,
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600)),
-                const SizedBox(height: 10),
                 Text(
-                  l.syncFlowIntro,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45),
+                  l.howSyncingWorks,
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
                 ),
+                const SizedBox(height: 10),
+                Text(l.syncFlowIntro, style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.45)),
                 const SizedBox(height: 22),
                 _syncFlowStep(1, l.syncStepUpload, l.syncStepUploadDesc),
                 const SizedBox(height: 16),
@@ -700,10 +706,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
                 const SizedBox(height: 16),
                 _syncFlowStep(3, l.syncStepBackedUp, l.syncStepBackedUpDesc),
                 const SizedBox(height: 22),
-                Text(
-                  l.syncFailureFootnote,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45),
-                ),
+                Text(l.syncFailureFootnote, style: TextStyle(color: Colors.grey.shade500, fontSize: 13, height: 1.45)),
               ],
             ),
           ),
@@ -728,7 +731,10 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+              Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+              ),
               const SizedBox(height: 3),
               Text(desc, style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.45)),
             ],
@@ -760,8 +766,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           if (confirmed == true && context.mounted) {
             await provider.deleteAllSyncedWals();
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.syncedFilesDeleted), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.syncedFilesDeleted), backgroundColor: Colors.green));
             }
           }
         },
@@ -777,8 +784,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           if (confirmed == true && context.mounted) {
             await provider.deleteAllPendingWals();
             if (context.mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(context.l10n.pendingFilesDeleted), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.pendingFilesDeleted), backgroundColor: Colors.green));
             }
           }
         },
@@ -795,8 +803,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             await provider.deleteAllSyncedWals();
             await provider.deleteAllPendingWals();
             if (context.mounted) {
-              ScaffoldMessenger.of(context)
-                  .showSnackBar(SnackBar(content: Text(context.l10n.allFilesDeleted), backgroundColor: Colors.green));
+              ScaffoldMessenger.of(
+                context,
+              ).showSnackBar(SnackBar(content: Text(context.l10n.allFilesDeleted), backgroundColor: Colors.green));
             }
           }
         },
@@ -928,7 +937,7 @@ class _ManageStorageSheet extends StatelessWidget {
 }
 
 class _StorageRow extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;
@@ -971,7 +980,10 @@ class _StorageRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500)),
+                    Text(
+                      title,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
+                    ),
                     const SizedBox(width: 8),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),

@@ -4,25 +4,93 @@ import XCTest
 @testable import Omi_Computer
 
 final class AgentPillLifecycleTests: XCTestCase {
-  func testFloatingPillUsesBackgroundAgentPrompt() throws {
+  @MainActor
+  func testVoiceResponseWaitingDrivesGlowUntilPlaybackOrClear() {
+    let state = FloatingControlBarState()
+
+    XCTAssertFalse(state.isVoiceResponseGlowActive)
+
+    state.beginVoiceResponseWaiting()
+    XCTAssertTrue(state.isVoiceResponseWaiting)
+    XCTAssertFalse(state.isVoiceResponseActive)
+    XCTAssertTrue(state.isVoiceResponseGlowActive)
+
+    state.isVoiceResponseActive = true
+    XCTAssertFalse(state.isVoiceResponseWaiting)
+    XCTAssertTrue(state.isVoiceResponseActive)
+    XCTAssertTrue(state.isVoiceResponseGlowActive)
+
+    state.clearVoiceResponseState()
+    XCTAssertFalse(state.isVoiceResponseWaiting)
+    XCTAssertFalse(state.isVoiceResponseActive)
+    XCTAssertFalse(state.isVoiceResponseGlowActive)
+  }
+
+  func testFloatingPillSpawnsCanonicalBackgroundAgentRun() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(source.contains("You are running inside a visible floating background agent pill."))
-    XCTAssertTrue(source.contains("Do the requested work now; do not merely acknowledge"))
-    XCTAssertTrue(source.contains("systemPromptSuffix: systemPromptSuffix ?? Self.backgroundAgentSystemPromptSuffix"))
-    XCTAssertTrue(source.contains("Do not call spawn_agent or delegate_agent just to hand off this same task."))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
+    XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill)"))
+    XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
+  }
+
+  func testFinishedAgentArtifactsAreDeliveredToParentChatSurfaces() throws {
+    let agentPillSource = try agentPillSource()
+    let windowSource = try floatingControlBarWindowSource()
+    let chatProviderSource = try chatProviderSource()
+
+    XCTAssertTrue(agentPillSource.contains("FloatingControlBarManager.shared.recordAgentArtifactCompletion("))
+    XCTAssertTrue(agentPillSource.contains("resources: resources"))
+    XCTAssertTrue(windowSource.contains("func recordAgentArtifactCompletion("))
+    XCTAssertTrue(windowSource.contains("historyChatProvider?.appendAssistantMessage("))
+    XCTAssertTrue(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    XCTAssertTrue(chatProviderSource.contains("resources: [ChatResource] = []"))
+    XCTAssertTrue(chatProviderSource.contains("sender: .ai,"))
+    XCTAssertTrue(chatProviderSource.contains("resources: resources"))
+  }
+
+  func testArtifactDeliveryClearsFloatingTypingState() throws {
+    let windowSource = try floatingControlBarWindowSource()
+    let responseSource = try aiResponseViewSource()
+
+    XCTAssertTrue(windowSource.contains("chatCancellable?.cancel()"))
+    XCTAssertTrue(windowSource.contains("completedMessage.isStreaming = false"))
+    XCTAssertTrue(windowSource.contains("window.state.currentAIMessage = completedMessage"))
+    XCTAssertFalse(windowSource.contains("window.state.currentAIMessage = nil\n        window.state.displayedQuery = \"\""))
+    XCTAssertTrue(responseSource.contains("} else if isLoading {"))
+    XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
+  }
+
+  func testVoiceAgentKickoffUsesCachedPhrasePack() throws {
+    let agentPillSource = try agentPillSource()
+    let voiceServiceSource = try floatingBarVoicePlaybackServiceSource()
+
+    XCTAssertTrue(agentPillSource.contains("FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()"))
+    XCTAssertFalse(agentPillSource.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(phrase)"))
+
+    XCTAssertTrue(voiceServiceSource.contains("static let backgroundAgentKickoffPhrases: [String]"))
+    XCTAssertTrue(voiceServiceSource.contains("\"I'll get an agent on that.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"Starting an agent for that now.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"Got it. I'm handing this to an agent.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"I'll have an agent work on that.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"I'm getting an agent started.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"I'll have an agent take it from here.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"Got it. I'm starting an agent now.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"I'll put an agent on that.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"An agent is getting started on that.\""))
+    XCTAssertTrue(voiceServiceSource.contains("\"I'm kicking off an agent now.\""))
+    XCTAssertTrue(voiceServiceSource.contains("background-agent-kickoff-v1"))
+    XCTAssertTrue(voiceServiceSource.contains("cachedOrSynthesizedBackgroundAgentKickoffAudio"))
   }
 
   func testFloatingPillPromptRemovesNestedSpawnCapabilities() throws {
     let source = try chatProviderSource()
 
-    XCTAssertTrue(source.contains("legacyClientScope == AgentLegacyClientScope.floatingPill"))
-    XCTAssertTrue(source.contains("private var cachedFloatingPillSystemPrompt: String = \"\""))
-    XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = floatingPillSystemPrompt"))
+    XCTAssertTrue(source.contains("isFloatingPillSurface(resolvedSurface)"))
+    XCTAssertTrue(source.contains("buildFloatingBarSystemPrompt("))
+    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "run_agent_and_wait"]"#))
     XCTAssertTrue(source.contains("cachedFloatingPillSystemPrompt = \"\""))
-    XCTAssertTrue(source.contains("if cachedFloatingPillSystemPrompt.isEmpty"))
-    XCTAssertTrue(source.contains("systemPrompt = cachedFloatingPillSystemPrompt"))
-    XCTAssertTrue(source.contains(#"excludingToolNames: ["spawn_agent", "delegate_agent"]"#))
     XCTAssertTrue(source.contains("let scopedToolPrompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(excluding: excludedToolNames)"))
     XCTAssertTrue(source.contains(#".replacingOccurrences(of: "{user_name}", with: promptUserName)"#))
   }
@@ -47,25 +115,26 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
     let source = try floatingControlBarWindowSource()
 
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directive.provider)"))
+    XCTAssertTrue(source.contains("let resolvedProvider = decision.directedProvider ?? directedProvider"))
+    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: resolvedProvider)"))
     XCTAssertTrue(source.contains("guard availability.isAvailable else"))
-    XCTAssertTrue(source.contains("floating-agent-provider-unavailable"))
+    XCTAssertTrue(source.contains("provider-unavailable"))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
     XCTAssertFalse(source.contains("completeVisibleProviderSetupPrompt("))
-    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(directive.provider.setupNeededStatus)"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(resolvedProvider.setupNeededStatus)"))
   }
 
   func testSubagentChatSpawnRequestCreatesSiblingAgent() throws {
     let source = try floatingControlBarViewSource()
     let agentPillSource = try agentPillSource()
 
-    XCTAssertTrue(source.contains("if let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
-    XCTAssertTrue(source.contains("bridgeHarnessOverride: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(source.contains("if staged.isEmpty, let handoff = AgentPillsManager.floatingAgentHandoff(for: trimmed)"))
+    XCTAssertTrue(source.contains("harnessOverride: pill.bridgeHarnessOverride"))
     XCTAssertTrue(source.contains("state.present(.agent(sibling.id))"))
     XCTAssertTrue(agentPillSource.contains("let bridgeHarnessOverride: AgentHarnessMode?"))
     XCTAssertTrue(agentPillSource.contains("bridgeHarnessOverride: AgentHarnessMode? = nil"))
     XCTAssertTrue(agentPillSource.contains("self.bridgeHarnessOverride = bridgeHarnessOverride"))
-    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
+    XCTAssertTrue(agentPillSource.contains("let pill = AgentPill(id: pillId, query: query, model: model, bridgeHarnessOverride: bridgeHarnessOverride)"))
   }
 
   func testSubagentChatRendersMarkdownAndLargeBackHitTarget() throws {
@@ -301,7 +370,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("private static let askOmiSettleDelay: TimeInterval = 0.16"))
     XCTAssertTrue(windowSource.contains("let currentTopCenteredFrame = NSRect("))
     XCTAssertTrue(windowSource.contains("abs(frame.midX - targetFrame.midX) > 0.5"))
-    XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseActive"))
+    XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseGlowActive"))
     XCTAssertTrue(windowSource.contains("FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)"))
     XCTAssertTrue(windowSource.contains("static func notchAgentListHeight(agentCount: Int) -> CGFloat"))
     XCTAssertTrue(windowSource.contains("+ notchAgentListBottomMargin"))
@@ -315,15 +384,29 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarWindowSource()
 
     XCTAssertTrue(source.contains("let handoff = AgentPillsManager.floatingAgentHandoff(for: message)"))
-    XCTAssertTrue(source.contains("AgentPillsManager.shared.spawnFromHandoff("))
-    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    handoff,\n                    pill: pill"))
-    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                    .init(originalRequest: message, agentTask: message),\n                    pill: pill"))
+    XCTAssertTrue(source.contains("await resolveDelegationAndDispatch("))
+    XCTAssertTrue(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertTrue(source.contains("completeVisibleAgentHandoff(\n                .init(originalRequest: originalRequest, agentTask: brief),\n                pill: pill"))
     XCTAssertTrue(source.contains("let toolUseId = \"floating-agent-\\(pill.id.uuidString)\""))
     XCTAssertTrue(source.contains("name: \"spawn_agent\""))
     XCTAssertTrue(source.contains("status: .completed"))
     XCTAssertTrue(source.contains("id: \\(pill.id.uuidString)"))
     XCTAssertTrue(source.contains("completeVisibleAgentResponse("))
     XCTAssertFalse(source.contains("barWindow.closeAIConversation()"))
+  }
+
+  func testSubagentSiblingSpawnUsesDelegationExecutor() throws {
+    let viewSource = try floatingControlBarViewSource()
+    let executorURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/AgentDelegationExecutor.swift")
+    let executorSource = try String(contentsOf: executorURL, encoding: .utf8)
+
+    XCTAssertTrue(viewSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    XCTAssertTrue(viewSource.contains("harnessOverride: pill.bridgeHarnessOverride"))
+    XCTAssertTrue(viewSource.contains("manager.continueAgent(from: pill, text: trimmed)"))
+    XCTAssertTrue(executorSource.contains("harnessOverride ?? task.directedProvider?.harnessMode"))
   }
 
   func testSpawnAgentToolCallOpensSubagentChat() throws {
@@ -405,7 +488,10 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(agentSource.contains("@Published var conversationMessages: [ChatMessage] = []"))
     XCTAssertTrue(agentSource.contains("pill.conversationMessages = displayMessages"))
-    XCTAssertTrue(agentSource.contains("message.sender == .user || !trimmed.isEmpty || message.isStreaming || !message.contentBlocks.isEmpty"))
+    XCTAssertTrue(agentSource.contains("return message.sender == .user"))
+    XCTAssertTrue(agentSource.contains("|| !trimmed.isEmpty"))
+    XCTAssertTrue(agentSource.contains("|| message.isStreaming"))
+    XCTAssertTrue(agentSource.contains("|| !message.contentBlocks.isEmpty"))
     XCTAssertTrue(viewSource.contains("private var displayedMessages: [ChatMessage]"))
     XCTAssertTrue(viewSource.contains("ChatMessage(id: \"\\(pill.id.uuidString)-query\", text: pill.query, sender: .user)"))
     XCTAssertTrue(viewSource.contains("Text(trimmed)"))
@@ -418,6 +504,52 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(viewSource.contains("message.text"))
     XCTAssertTrue(viewSource.contains("contentChangeToken: scrollContentToken"))
     XCTAssertTrue(viewSource.contains("state.reportContentHeight(height, for: .agent(pill.id))"))
+  }
+
+  func testFloatingSubagentWorkingStateUsesStreamingAssistantMessage() throws {
+    let agentSource = try agentPillSource()
+    let viewSource = try floatingControlBarViewSource()
+
+    XCTAssertTrue(agentSource.contains("Self.ensureStreamingAssistantMessage(for: pill)"))
+    XCTAssertTrue(agentSource.contains("private static func ensureStreamingAssistantMessage(for pill: AgentPill)"))
+    XCTAssertTrue(agentSource.contains("var streamingMessage = ChatMessage(text: \"\", sender: .ai)"))
+    XCTAssertTrue(agentSource.contains("streamingMessage.isStreaming = true"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages.append(streamingMessage)"))
+    XCTAssertTrue(agentSource.contains("private static func clearStreamingAssistantMessage(for pill: AgentPill)"))
+    XCTAssertTrue(agentSource.contains("completedMessage.isStreaming = false"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages.removeAll { $0.id == aiMessage.id }"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages[index] = finalMessage"))
+    XCTAssertTrue(viewSource.contains("} else if trimmed.isEmpty && message.isStreaming && message.displayResources.isEmpty {"))
+    XCTAssertTrue(viewSource.contains("TypingIndicator()"))
+  }
+
+  func testSharedChatMessagesOpenAndSendFollowLatest() throws {
+    let source = try chatMessagesViewSource()
+
+    XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
+    XCTAssertTrue(source.contains("scrollToBottom(proxy: proxy)\n        scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
+    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
+    XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
+    XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
+    XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
+    XCTAssertTrue(source.contains("scrollMode = .followingBottom\n        hasActivityBelow = false\n        userIsScrolling = false"))
+    XCTAssertFalse(source.contains("Find the last user message"))
+  }
+
+  func testFloatingSubagentChatSettlesToLatestOnOpenContentAndResize() throws {
+    let viewSource = try floatingControlBarViewSource()
+    let scrollSource = try chatScrollBehaviorSource()
+
+    XCTAssertTrue(viewSource.contains("ChatScrollContainer("))
+    XCTAssertTrue(viewSource.contains("bottomAnchorId: \"agentBottom\""))
+    XCTAssertTrue(viewSource.contains("contentChangeToken: scrollContentToken"))
+    XCTAssertTrue(scrollSource.contains("@State private var lastViewportSize: CGSize = .zero"))
+    XCTAssertTrue(scrollSource.contains(".background(viewportResizeDetector(proxy: proxy))"))
+    XCTAssertTrue(scrollSource.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
+    XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow(proxy: proxy)"))
+    XCTAssertTrue(scrollSource.contains("for delay in [0.05, 0.16, 0.32]"))
+    XCTAssertFalse(viewSource.contains("private func agentChatViewportResizeDetector"))
+    XCTAssertFalse(viewSource.contains("private func scrollToBottomSettled(_ proxy: ScrollViewProxy)"))
   }
 
   func testActiveSubagentChatDoesNotDependOnMainChatHeight() throws {
@@ -441,7 +573,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("private func trimForNewPillIfNeeded()"))
     XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done && $0.id != activeChatPillID })"))
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
-    XCTAssertTrue(viewSource.contains("if pill.status == .done"))
+    XCTAssertTrue(viewSource.contains("if pill.status.isFinished"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
   }
 
@@ -466,15 +598,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("if let victimID = pills.first(where: { $0.id != activeChatPillID })?.id {"))
   }
 
-  func testLocalSpeechGlowUsesLocalSpeechActiveNotIsSpeaking() throws {
+  func testRealtimeHubGlowUsesSharedVoicePlaybackService() throws {
     let source = try realtimeHubControllerSource()
 
-    // The glow-clear deferral must track localSpeechActive (set synchronously
-    // in speak) rather than speech.isSpeaking, which is racy — isSpeaking is
-    // false until the synthesizer starts the queued utterance.
-    XCTAssertTrue(source.contains("private var localSpeechActive = false"))
-    XCTAssertTrue(source.contains("if clearResponseGlow || (!audioReceivedThisTurn && !localSpeechActive)"))
-    XCTAssertTrue(source.contains("localSpeechActive = true"))
+    // RealtimeHub owns turn orchestration, but selected app voice playback owns
+    // speech synthesis and its fallback state. The glow must defer while the
+    // shared playback service is speaking instead of tracking a second local
+    // synthesizer inside RealtimeHub.
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.isSpeaking"))
+    XCTAssertTrue(source.contains("if clearResponseGlow || (!audioReceivedThisTurn && !FloatingBarVoicePlaybackService.shared.isSpeaking)"))
+    XCTAssertFalse(source.contains("private var localSpeechActive = false"))
+    XCTAssertFalse(source.contains("AVSpeechSynthesizer"))
   }
 
   func testRealtimeHubKeepsSpeechFallbackArmedWhenNativeAudioDoesNotSchedule() throws {
@@ -493,13 +627,13 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
     let source = try realtimeHubControllerSource()
 
-    // beginTurn must check localSpeechActive (not just speech.isSpeaking) when
-    // stopping speech, so a barge-in before the synthesizer starts playback
-    // still cancels the prior turn's reply. localSpeechActive must be reset
-    // AFTER the stopSpeaking call, not before.
-    XCTAssertTrue(source.contains("if localSpeechActive || speech.isSpeaking {"))
-    XCTAssertTrue(source.contains("speech.stopSpeaking(at: .immediate)\n      localSpeechActive = false\n    }"))
-    XCTAssertFalse(source.contains("audioReceivedThisTurn = false\n    localSpeechActive = false\n    suppressAssistantOutputForCurrentTurn = false"))
+    // beginTurn must interrupt the shared playback service so queued OpenAI
+    // one-shots, cached kickoff samples, and Apple fallback speech all stop
+    // through one owner.
+    XCTAssertTrue(source.contains("let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking"))
+    XCTAssertTrue(source.contains("FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()"))
+    XCTAssertFalse(source.contains("speech.stopSpeaking(at: .immediate)"))
+    XCTAssertFalse(source.contains("localSpeechActive = false"))
   }
 
   func testRealtimeBargeInTracksLocalPlaybackNotOnlyServerTurn() throws {
@@ -510,7 +644,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     // an explicit owner so the next PTT is classified correctly and non-barge-in
     // starts do not blindly stop the player.
     XCTAssertTrue(source.contains("private var realtimePlaybackActive = false"))
-    XCTAssertTrue(source.contains("let bargeIn = responding || realtimePlaybackActive || localSpeechActive || speech.isSpeaking"))
+    XCTAssertTrue(source.contains("let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking"))
+    XCTAssertTrue(source.contains("let bargeIn = responding || realtimePlaybackActive || voicePlaybackActive"))
     XCTAssertTrue(source.contains("if bargeIn {\n      pcmPlayer?.stop()"))
     XCTAssertTrue(source.contains("audioReceivedThisTurn = true\n    realtimePlaybackActive = true"))
     XCTAssertTrue(source.contains("private var realtimePlaybackEpoch = 0"))
@@ -529,26 +664,38 @@ final class AgentPillLifecycleTests: XCTestCase {
     // OpenAI can cancel a response in-session. Gemini cannot reliably cancel a
     // streaming reply, so barge-in must replace the session. Managed Gemini
     // tokens are single-use, so the replacement session remints before it
-    // connects and holds early PTT audio/commit during that remint gap.
+    // connects and holds early PTT audio during that remint gap. If the user
+    // releases before the replacement is ready, the commit is deferred onto the
+    // replacement session instead of dropping captured speech.
     XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
     XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
     XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
-    XCTAssertTrue(hubSource.contains("private var bargeInReplacementInFlight = false"))
-    XCTAssertTrue(hubSource.contains("private var bargeInReplacementPendingCommit = false"))
-    XCTAssertTrue(hubSource.contains("private var bargeInReplacementAudioBuffer: [Data] = []"))
-    XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn() -> Bool"))
-    XCTAssertTrue(hubSource.contains("case .ephemeral:\n      remintReplacementSessionForBargeIn(provider: provider)"))
+    XCTAssertTrue(hubSource.contains("private struct PendingBargeInReplacementTurn"))
+    XCTAssertTrue(hubSource.contains("private var pendingBargeInReplacement: PendingBargeInReplacementTurn?"))
+    XCTAssertTrue(hubSource.contains("func commitTurn() -> RealtimeHubCommitResult"))
+    XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn(interruptedTurn: InterruptedTurnPayload?) -> Bool"))
+    XCTAssertTrue(hubSource.contains("case .ephemeral:\n            self.remintReplacementSessionForBargeIn(provider: provider)"))
     XCTAssertTrue(hubSource.contains("token = try await APIClient.shared.mintRealtimeToken(provider: providerParam)"))
     XCTAssertTrue(hubSource.contains("startReplacementSessionForBargeIn(provider: provider, auth: .ephemeral(token))"))
-    XCTAssertTrue(hubSource.contains("bargeInReplacementAudioBuffer.append(pcm16k)"))
-    XCTAssertTrue(hubSource.contains("bargeInReplacementPendingCommit = true"))
+    XCTAssertTrue(hubSource.contains("barge-in replacement queued behind existing token mint"))
+    XCTAssertTrue(hubSource.contains("finishBargeInReplacementAfterSessionStart(provider: provider)"))
+    XCTAssertTrue(hubSource.contains("pendingBargeInReplacement?.audioBuffer.append(pcm16k)"))
+    XCTAssertTrue(hubSource.contains("barge-in replacement not ready at commit"))
+    XCTAssertTrue(hubSource.contains("pending.pendingCommit = true"))
+    XCTAssertTrue(hubSource.contains("return .deferredForReplacement"))
+    XCTAssertTrue(hubSource.contains("return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
     XCTAssertTrue(hubSource.contains("session?.sendVideoFrame(speculativeScreenshot, mime: \"image/jpeg\")"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
     XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
-    XCTAssertTrue(hubSource.contains("} else {\n        responding = false\n        exitVoiceUI(clearResponseGlow: true)\n      }"))
+    XCTAssertTrue(hubSource.contains("responding = false\n      exitVoiceUI(clearResponseGlow: true)\n      return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("let providerResponseInFlight = responding"))
+    XCTAssertTrue(hubSource.contains("private var turnGeneration: UInt64 = 0"))
+    XCTAssertTrue(hubSource.contains("let screenshotTurnGeneration = turnGeneration"))
+    XCTAssertTrue(hubSource.contains("guard self.turnGeneration == screenshotTurnGeneration else { return }"))
+    XCTAssertTrue(hubSource.contains("captureInterruptedTurnPayloadIfNeeded()"))
+    XCTAssertTrue(hubSource.contains("completeBargeInReplacementAfterContinuity("))
     XCTAssertTrue(hubSource.contains("var replacementSessionOwnsInputTurn = false"))
     XCTAssertTrue(hubSource.contains("case .freshSession:"))
     XCTAssertTrue(hubSource.contains("replace the connection and let the fresh session buffer this new turn while it opens"))
@@ -568,6 +715,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("return eventResponseID == expected"))
     XCTAssertFalse(sessionSource.contains("guard let expected = openAIActiveResponseID else { return true }"))
     XCTAssertTrue(sessionSource.contains("ignoring stale response.done"))
+    XCTAssertTrue(sessionSource.contains("private var pendingOpenAIToolCallIds = Set<String>()"))
+    XCTAssertTrue(sessionSource.contains("pendingOpenAIToolCallIds.insert(callId)"))
+    XCTAssertTrue(sessionSource.contains("waiting for \\(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s)"))
+    XCTAssertTrue(sessionSource.contains("private var pendingGeminiToolCallIds = Set<String>()"))
+    XCTAssertTrue(sessionSource.contains("pendingGeminiToolCallIds.insert(callId)"))
+    XCTAssertTrue(sessionSource.contains("deferring Gemini turnComplete with"))
+    XCTAssertTrue(sessionSource.contains("nextGeminiSyntheticToolCallId(name: name)"))
+    XCTAssertFalse(sessionSource.contains("let callId = call[\"id\"] as? String ?? name"))
   }
 
   func testCredentialHealthRetryAndFailoverInvariants() throws {
@@ -595,14 +750,19 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(
       hubSource.contains("let shouldRedactProviderMessage: Bool"),
       "Credential close logs must redact raw provider auth/quota payloads")
+    XCTAssertTrue(
+      hubSource.contains("private func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
+      "Provider switching must be centralized and limited to stable credential/quota failures")
+    XCTAssertFalse(
+      hubSource.contains("if aliveFor < 10, failoverToAlternateProvider() { return }\n    // Re-warm"),
+      "Transient fast closes should not switch voice providers")
   }
 
   func testSpeechSynthesizerDidCancelClearsGlow() throws {
-    let source = try realtimeHubControllerSource()
+    let source = try floatingBarVoicePlaybackServiceSource()
 
-    // The AVSpeechSynthesizerDelegate must implement didCancel so non-explicit
-    // cancellation paths (system interruption, stopSpeaking) always release the
-    // response glow instead of leaving it stuck.
+    // The single voice playback service owns AVSpeechSynthesizerDelegate and
+    // must still clear glow on non-explicit cancellation paths.
     XCTAssertTrue(source.contains("func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
     XCTAssertTrue(source.contains("self.localSpeechActive = false"))
   }
@@ -675,8 +835,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingControlBarWindowSource()
 
     // Legacy PTT collapse must use the glow-adjusted compact size when
-    // isVoiceResponseActive is still true.
-    XCTAssertTrue(source.contains("let compactSize: NSSize = state.isVoiceResponseActive"))
+    // either response playback or post-PTT waiting glow is still true.
+    XCTAssertTrue(source.contains("let compactSize: NSSize = state.isVoiceResponseGlowActive"))
     XCTAssertTrue(source.contains("responseGlowWindowSizeForCurrentScreen(forSurfaceSize: Self.minBarSize)"))
     XCTAssertTrue(source.contains("compactSize: compactSize"))
   }
@@ -794,10 +954,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     let statusStoreSource = try agentRuntimeStatusStoreSource()
 
     XCTAssertTrue(source.contains("if pill.status.isFinished {\n            return\n        }"))
-    XCTAssertTrue(source.contains("guard !pill.status.isFinished || projection.status.isTerminal else { return }"))
+    XCTAssertTrue(source.contains("if pill.status.isFinished, pill.viewedAt != nil"))
     XCTAssertTrue(source.contains("let activity = Self.describeActivity(for: aiMessage)"))
-    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordLocalSuccess("))
-    XCTAssertTrue(statusStoreSource.contains("func recordLocalSuccess(surface: AgentSurfaceReference, statusText: String? = nil)"))
+    XCTAssertFalse(source.contains("AgentRuntimeStatusStore.shared.recordPresentationCompletion("))
+    XCTAssertFalse(statusStoreSource.contains("func recordPresentationCompletion("))
+    XCTAssertFalse(statusStoreSource.contains("func recordLocalSuccess("))
     XCTAssertTrue(statusStoreSource.contains("if !terminal, projectionsBySurface[surface.key]?.status.isTerminal == true {\n      return\n    }"))
   }
 
@@ -820,10 +981,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     let logoMarkSource = try agentProviderLogoMarkSource()
     let viewSource = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("let hasBridgeHarnessOverride = bridgeHarnessOverride != nil"))
-    XCTAssertTrue(source.contains("if !hasBridgeHarnessOverride {\n                provider.modelOverride = floating.modelOverride\n            }"))
-    XCTAssertTrue(source.contains("model: Self.modelForSend(pill: pill, provider: provider)"))
-    XCTAssertTrue(source.contains("provider.hasBridgeHarnessOverride ? nil : pill.model"))
+    XCTAssertTrue(source.contains("let modelForSpawn = bridgeHarnessOverride == nil"))
+    XCTAssertTrue(source.contains("model: modelForSpawn"))
+    XCTAssertTrue(source.contains("model: pill.bridgeHarnessOverride == nil ? pill.model : nil"))
+    XCTAssertTrue(source.contains("harnessMode: bridgeHarnessOverride"))
     XCTAssertTrue(viewSource.contains("AgentProviderLogoMark("))
     XCTAssertTrue(viewSource.contains("provider: pill.bridgeHarnessOverride"))
     XCTAssertTrue(logoMarkSource.contains("private static let hermesLogo = load(\"hermes_logo_flat\")"))
@@ -840,6 +1001,27 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(logoMarkSource.contains("} else if provider != nil {"))
     XCTAssertTrue(logoMarkSource.contains("Text(\"🤖\")"))
     XCTAssertTrue(logoMarkSource.contains("statusColor\n                    .mask("))
+  }
+
+  func testCanonicalPillLifecycleQueuesFollowUpsAndCancelsActiveDismissals() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]"))
+    XCTAssertTrue(source.contains("private struct PendingAgentFollowUp"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))"))
+    XCTAssertTrue(source.contains("Queued follow-up until the agent starts"))
+    XCTAssertTrue(source.contains("Queued follow-up until the current run stops"))
+    XCTAssertTrue(source.contains("let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []"))
+    XCTAssertTrue(source.contains("text: queuedFollowUps.map(\\.text).joined(separator: \"\\n\\n\")"))
+    XCTAssertTrue(source.contains("attachments: queuedFollowUps.flatMap(\\.attachments)"))
+    XCTAssertTrue(source.contains("switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)"))
+    XCTAssertTrue(source.contains("case .cancelled:\n                        return"))
+    XCTAssertTrue(source.contains("private enum ActiveRunCancellationResult"))
+    XCTAssertTrue(source.contains("private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult"))
+    XCTAssertTrue(source.contains("let shouldCancelRun = pill?.status.isFinished == false"))
+    XCTAssertTrue(source.contains("pendingFollowUpsByPill[pillID] = nil"))
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)"))
+    XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordLocalFailure("))
   }
 
   func testProviderMarkRoutingIsCentralized() throws {
@@ -915,6 +1097,50 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatPageSource.contains(".table { configuration in"))
     XCTAssertTrue(chatPageSource.contains(".markdownTableBorderStyle"))
     XCTAssertTrue(chatPageSource.contains(".markdownTableBackgroundStyle"))
+  }
+
+  func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
+    let source = try omiAppSource()
+    let loggerSource = try loggerSource()
+
+    XCTAssertTrue(source.contains("options.enableAutoSessionTracking = !isDev"))
+    XCTAssertTrue(source.contains("options.enableCrashHandler = !isDev"))
+    XCTAssertTrue(source.contains("options.enableAppHangTracking = !isDev"))
+    XCTAssertTrue(source.contains("options.enableWatchdogTerminationTracking = !isDev"))
+    XCTAssertTrue(source.contains("options.appHangTimeoutInterval = isDev ? 0 : 3.0"))
+    XCTAssertTrue(source.contains("guard !AnalyticsManager.isDevBuild else { return }"))
+    XCTAssertTrue(source.contains("if !AnalyticsManager.isDevBuild {\n      SentrySDK.capture(message: \"App Terminating\")"))
+    XCTAssertTrue(loggerSource.contains("if !isDevBuild {\n    let breadcrumb = Breadcrumb(level: .info, category: \"app\")"))
+    XCTAssertTrue(loggerSource.contains("guard !isDevBuild else { return }"))
+  }
+
+  func testFloatingVoicePlaybackIgnoresStaleBargeInCallbacks() throws {
+    let source = try floatingBarVoicePlaybackServiceSource()
+
+    XCTAssertTrue(source.contains("private var playbackGeneration: UInt64 = 0"))
+    XCTAssertTrue(source.contains("private var localSpeechActive = false"))
+    XCTAssertTrue(source.contains("if localSpeechActive { return true }"))
+    XCTAssertTrue(source.contains("localSpeechActive = true\n    let utterance = AVSpeechUtterance"))
+    XCTAssertTrue(source.contains("playbackGeneration &+= 1"))
+    XCTAssertTrue(source.contains("let generation = playbackGeneration"))
+    XCTAssertTrue(source.contains("guard self.playbackGeneration == generation else { return }"))
+    XCTAssertTrue(source.contains("guard self.audioPlayer === player else { return }"))
+    XCTAssertTrue(source.contains("speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
+    XCTAssertTrue(source.contains("self.localSpeechActive = false\n      self.clearFloatingPillResponseGlowIfIdle()"))
+  }
+
+  func testFloatingBarResizeCoalescesNoopFrames() throws {
+    let source = try floatingControlBarWindowSource()
+
+    XCTAssertTrue(source.contains("private static let frameNoopEpsilon: CGFloat = 0.5"))
+    XCTAssertTrue(source.contains("private var pendingFrameAnimationTarget: NSRect?"))
+    XCTAssertTrue(source.contains("let wasResizable = styleMask.contains(.resizable)"))
+    XCTAssertTrue(source.contains("let alreadyAnimatingToTarget = pendingFrameAnimationTarget.map"))
+    XCTAssertTrue(source.contains("if alreadyAtTarget, wasResizable == makeResizable"))
+    XCTAssertTrue(source.contains("if alreadyAnimatingToTarget, wasResizable == makeResizable"))
+    XCTAssertTrue(source.contains("frameAnimationToken += 1"))
+    XCTAssertTrue(source.contains("pendingFrameAnimationTarget = frame"))
+    XCTAssertTrue(source.contains("private static func framesEquivalent(_ lhs: NSRect, _ rhs: NSRect) -> Bool"))
   }
 
   private func agentPillSource() throws -> String {
@@ -1088,6 +1314,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
+  private func chatMessagesViewSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
   private func agentRuntimeStatusStoreSource() throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -1125,6 +1359,30 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/StreamingPCMPlayer.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func omiAppSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/OmiApp.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func floatingBarVoicePlaybackServiceSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func loggerSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Logger.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

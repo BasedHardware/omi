@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:omi/backend/http/shared.dart';
+import 'package:omi/backend/schema/gen/wrapped_task_integrations_wire.g.dart' as wire;
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -12,10 +13,15 @@ class TaskIntegrationsResponse {
   TaskIntegrationsResponse({required this.integrations, this.defaultApp});
 
   factory TaskIntegrationsResponse.fromJson(Map<String, dynamic> json) {
-    return TaskIntegrationsResponse(
-      integrations: json['integrations'] as Map<String, dynamic>? ?? {},
-      defaultApp: json['default_app'] as String?,
-    );
+    return TaskIntegrationsResponse.fromGenerated(wire.GeneratedTaskIntegrationsResponse.fromJson(json));
+  }
+
+  factory TaskIntegrationsResponse.fromGenerated(wire.GeneratedTaskIntegrationsResponse generated) {
+    return TaskIntegrationsResponse(integrations: generated.integrations, defaultApp: generated.defaultApp);
+  }
+
+  wire.GeneratedTaskIntegrationsResponse toGenerated() {
+    return wire.GeneratedTaskIntegrationsResponse(integrations: integrations, defaultApp: defaultApp);
   }
 }
 
@@ -27,7 +33,9 @@ Future<TaskIntegrationsResponse?> getTaskIntegrations() async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return TaskIntegrationsResponse.fromJson(jsonDecode(body));
+    return TaskIntegrationsResponse.fromGenerated(
+      wire.GeneratedTaskIntegrationsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>),
+    );
   } else {
     Logger.debug('getTaskIntegrations error ${response.statusCode}');
     return null;
@@ -104,8 +112,8 @@ Future<String?> getOAuthUrl(String appKey) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return data['auth_url'] as String?;
+    final data = wire.GeneratedOAuthUrlResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
+    return data.authUrl;
   } else {
     Logger.debug('getOAuthUrl error ${response.statusCode}');
     return null;
@@ -136,7 +144,7 @@ Future<Map<String, dynamic>?> createTaskViaIntegration(
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    return jsonDecode(body) as Map<String, dynamic>;
+    return wire.GeneratedCreateTaskResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).toJson();
   } else {
     Logger.debug('createTaskViaIntegration error ${response.statusCode}');
     return null;
@@ -156,8 +164,7 @@ Future<List<Map<String, dynamic>>?> getAsanaWorkspaces() async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['workspaces'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedAsanaWorkspacesResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).workspaces ?? [];
   } else {
     Logger.debug('getAsanaWorkspaces error ${response.statusCode}');
     return null;
@@ -177,8 +184,7 @@ Future<List<Map<String, dynamic>>?> getAsanaProjects(String workspaceGid) async 
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['projects'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedAsanaProjectsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).projects ?? [];
   } else {
     Logger.debug('getAsanaProjects error ${response.statusCode}');
     return null;
@@ -198,8 +204,7 @@ Future<List<Map<String, dynamic>>?> getClickUpTeams() async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['teams'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedClickUpTeamsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).teams ?? [];
   } else {
     Logger.debug('getClickUpTeams error ${response.statusCode}');
     return null;
@@ -219,8 +224,7 @@ Future<List<Map<String, dynamic>>?> getClickUpSpaces(String teamId) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['spaces'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedClickUpSpacesResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).spaces ?? [];
   } else {
     Logger.debug('getClickUpSpaces error ${response.statusCode}');
     return null;
@@ -240,8 +244,7 @@ Future<List<Map<String, dynamic>>?> getClickUpLists(String spaceId) async {
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
-    var data = jsonDecode(body);
-    return (data['lists'] as List).cast<Map<String, dynamic>>();
+    return wire.GeneratedClickUpListsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>).lists ?? [];
   } else {
     Logger.debug('getClickUpLists error ${response.statusCode}');
     return null;

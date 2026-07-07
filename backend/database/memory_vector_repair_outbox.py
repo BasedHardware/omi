@@ -26,7 +26,7 @@ def build_vector_repair_purge_outbox_records(
     The stable record id is the idempotency contract for retrying the same stale
     vector observation.
     """
-    if not isinstance(uid, str) or not uid.strip():
+    if not uid.strip():
         raise ValueError("uid is required")
     if not candidates:
         return []
@@ -84,7 +84,7 @@ def build_vector_repair_purge_outbox_records(
     return records
 
 
-def write_vector_repair_purge_outbox_records(*, db_client, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def write_vector_repair_purge_outbox_records(*, db_client: Any, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Persist prepared vector repair/purge records with stable ids.
 
     The function is deliberately small and fake-friendly. Callers may inject a

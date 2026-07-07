@@ -6,7 +6,7 @@
 // Issue #6624: Model allowlist, body size limit, request body validation.
 
 use axum::{
-    body::Bytes,
+    body::{Body, Bytes},
     extract::{DefaultBodyLimit, Path, State},
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
@@ -19,6 +19,7 @@ use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
 use crate::AppState;
 
+use super::llm_stub::{llm_stub_enabled, stub_gemini_proxy_response};
 use super::rate_limit::{self, RateDecision};
 
 // Allowed Gemini API actions (suffix after model name)
@@ -63,6 +64,10 @@ enum ProxyError {
     UpstreamTimeout,
 }
 
+fn response_or_500(builder: axum::http::response::Builder, body: Body) -> Response {
+    crate::routes::response_or_500("gemini_proxy", builder, body)
+}
+
 impl IntoResponse for ProxyError {
     fn into_response(self) -> Response {
         match self {
@@ -73,19 +78,21 @@ impl IntoResponse for ProxyError {
                 let body = rate_limit::rate_limit_error_json(
                     "Resource exhausted: rate limit exceeded. Please try again later.",
                 );
-                Response::builder()
-                    .status(StatusCode::TOO_MANY_REQUESTS)
-                    .header("content-type", "application/json")
-                    .header("retry-after", "60")
-                    .body(axum::body::Body::from(body))
-                    .unwrap()
+                response_or_500(
+                    Response::builder()
+                        .status(StatusCode::TOO_MANY_REQUESTS)
+                        .header("content-type", "application/json")
+                        .header("retry-after", "60"),
+                    Body::from(body),
+                )
             }
-            ProxyError::UpstreamTimeout => Response::builder()
-                .status(StatusCode::GATEWAY_TIMEOUT)
-                .header("content-type", "application/json")
-                .header("retry-after", "30")
-                .body(axum::body::Body::from(upstream_timeout_json()))
-                .unwrap(),
+            ProxyError::UpstreamTimeout => response_or_500(
+                Response::builder()
+                    .status(StatusCode::GATEWAY_TIMEOUT)
+                    .header("content-type", "application/json")
+                    .header("retry-after", "30"),
+                Body::from(upstream_timeout_json()),
+            ),
         }
     }
 }
@@ -216,6 +223,10 @@ async fn gemini_proxy(
 
     // Validate the action is in our allowlist
     let action = extract_gemini_action(&path);
+    if llm_stub_enabled() {
+        return Ok(stub_gemini_proxy_response(&body, action));
+    }
+
     if !is_gemini_action_allowed(action) {
         tracing::warn!(
             "gemini_proxy: blocked action '{}' in path '{}'",
@@ -287,7 +298,13 @@ async fn gemini_proxy(
     // Vertex AI requires our service account — can't mix with user's API key.
     // Skip Vertex-specific transforms (embedContent→predict) since AI Studio
     // handles embedContent natively.
-    let byok_key = byok_gemini_key.unwrap();
+    // `is_byok` guarantees this is `Some`, but return 500 instead of panicking if
+    // the invariant ever breaks (e.g. under refactor) so a request can't drop the
+    // connection with no response.
+    let Some(byok_key) = byok_gemini_key else {
+        tracing::error!("gemini_proxy: BYOK key unexpectedly missing on BYOK path");
+        return Err(ProxyError::Status(StatusCode::INTERNAL_SERVER_ERROR));
+    };
     tracing::info!("gemini_proxy: using BYOK Gemini key for uid={}", user.uid);
 
     let url = build_gemini_url(&path, byok_key);
@@ -529,6 +546,9 @@ async fn gemini_stream_proxy(
 
     // Validate the action
     let action = extract_gemini_action(&path);
+    if llm_stub_enabled() {
+        return Ok(stub_gemini_proxy_response(&body, action));
+    }
     if !is_gemini_action_allowed(action) {
         tracing::warn!("gemini_stream_proxy: blocked action '{}'", action);
         return Err(ProxyError::Status(StatusCode::FORBIDDEN));
@@ -599,7 +619,12 @@ async fn gemini_stream_proxy(
     }
 
     // BYOK path: always use AI Studio with user's key, skip Vertex AI.
-    let byok_key = byok_gemini_key.unwrap();
+    // `is_byok` guarantees this is `Some`; return 500 rather than panic if the
+    // invariant ever breaks under refactor.
+    let Some(byok_key) = byok_gemini_key else {
+        tracing::error!("gemini_stream_proxy: BYOK key unexpectedly missing on BYOK path");
+        return Err(ProxyError::Status(StatusCode::INTERNAL_SERVER_ERROR));
+    };
     tracing::info!(
         "gemini_stream_proxy: using BYOK Gemini key for uid={}",
         user.uid
@@ -619,13 +644,14 @@ async fn gemini_stream_proxy(
         StatusCode::from_u16(upstream.status().as_u16()).unwrap_or(StatusCode::BAD_GATEWAY);
 
     let stream = upstream.bytes_stream();
-    let body = axum::body::Body::from_stream(stream);
+    let body = Body::from_stream(stream);
 
-    Ok(Response::builder()
-        .status(status)
-        .header("content-type", "text/event-stream")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(status)
+            .header("content-type", "text/event-stream"),
+        body,
+    ))
 }
 
 /// Non-BYOK streaming Gemini proxy: server key with Vertex AI / AI Studio routing.
@@ -730,13 +756,14 @@ async fn gemini_stream_server_key(
 
     // Stream the response body through
     let stream = upstream.bytes_stream();
-    let body = axum::body::Body::from_stream(stream);
+    let body = Body::from_stream(stream);
 
-    Ok(Response::builder()
-        .status(status)
-        .header("content-type", "text/event-stream")
-        .body(body)
-        .unwrap())
+    Ok(response_or_500(
+        Response::builder()
+            .status(status)
+            .header("content-type", "text/event-stream"),
+        body,
+    ))
 }
 
 /// Extract the action from a Gemini API path (e.g., "models/gemini-3-flash:generateContent" → "generateContent")

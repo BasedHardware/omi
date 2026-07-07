@@ -235,6 +235,10 @@ class $AssetsImagesGen {
   AssetGenImage get omiWithRope =>
       const AssetGenImage('assets/images/omi-with-rope.webp');
 
+  /// File path: assets/images/omi-without-rope-green-charging.webp
+  AssetGenImage get omiWithoutRopeGreenCharging =>
+      const AssetGenImage('assets/images/omi-without-rope-green-charging.webp');
+
   /// File path: assets/images/omi-without-rope-turned-off.webp
   AssetGenImage get omiWithoutRopeTurnedOff =>
       const AssetGenImage('assets/images/omi-without-rope-turned-off.webp');
@@ -374,6 +378,7 @@ class $AssetsImagesGen {
     omiGlass,
     omiWithRopeNoPadding,
     omiWithRope,
+    omiWithoutRopeGreenCharging,
     omiWithoutRopeTurnedOff,
     omiWithoutRope,
     onboardingBg1,

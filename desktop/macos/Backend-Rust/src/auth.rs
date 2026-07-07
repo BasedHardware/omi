@@ -392,6 +392,7 @@ impl FirebaseAuth {
 #[derive(Debug, Clone)]
 pub struct AuthUser {
     pub uid: String,
+    #[allow(dead_code)] // populated from the Firebase token but not currently read
     pub name: Option<String>,
     pub email: Option<String>,
 }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { ArrowDown, Send } from 'lucide-react'
 import type { User } from 'firebase/auth'
 import { auth, onAuthStateChanged } from '../lib/firebase'
-import { useAppState } from '../state/AppStateProvider'
+import { useAppState } from '../state/appState'
 import { QuickTaskWidget } from '../components/home/QuickTaskWidget'
 import { QuickGoalsWidget } from '../components/home/QuickGoalsWidget'
 import { Markdown } from '../components/Markdown'
@@ -237,6 +237,7 @@ export function Home(): React.JSX.Element {
   // widgets up. Resets to centered if the thread is ever cleared.
   useEffect(() => {
     if (!started) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
       setSplit(false)
       setShowThread(false)
       return

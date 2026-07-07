@@ -1,8 +1,7 @@
 import logging
-import math
 import os
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import Any, Dict, List, Optional, cast
 
 import typesense
 
@@ -23,7 +22,7 @@ client = typesense.Client(
 )
 
 
-def _utc_iso(ts) -> str:
+def _utc_iso(ts: int) -> str:
     """Convert a stored unix timestamp to a timezone-aware UTC ISO 8601 string (with a +00:00 offset).
 
     Typesense stores created_at/started_at/finished_at as unix timestamps. Rendering them with
@@ -40,10 +39,10 @@ def search_conversations(
     page: int = 1,
     per_page: int = 10,
     include_discarded: bool = True,
-    start_date: int = None,
-    end_date: int = None,
-    speaker_id: str = None,
-) -> Dict:
+    start_date: Optional[int] = None,
+    end_date: Optional[int] = None,
+    speaker_id: Optional[str] = None,
+) -> Dict[str, Any]:
     try:
         stripped_query = query.strip() if query else ''
         has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
@@ -79,19 +78,19 @@ def search_conversations(
             'page': page,
         }
 
-        results = client.collections['conversations'].documents.search(search_parameters)
-        memories = []
-        for item in results['hits']:
-            doc = item['document']
+        results: Dict[str, Any] = cast(Dict[str, Any], client.collections['conversations'].documents.search(search_parameters))  # type: ignore[reportUnknownMemberType]  # typesense client untyped
+        memories: List[Dict[str, Any]] = []
+        for item in results.get('hits', []):
+            doc: Dict[str, Any] = item.get('document', {})
             # Exclude locked conversations entirely to prevent inference leaks
             if doc.get('is_locked', False):
                 continue
             try:
                 # Convert all three into locals first, then assign, so a hit that fails partway is
                 # never left half-converted.
-                created_at = _utc_iso(doc['created_at'])
-                started_at = _utc_iso(doc['started_at'])
-                finished_at = _utc_iso(doc['finished_at'])
+                created_at = _utc_iso(int(doc['created_at']))
+                started_at = _utc_iso(int(doc['started_at']))
+                finished_at = _utc_iso(int(doc['finished_at']))
             except (KeyError, TypeError, ValueError, OverflowError, OSError) as e:
                 # One malformed/legacy indexed doc (missing, null, or out-of-range timestamp) must not
                 # 500 the whole search page; skip just this hit (mirrors the per-record tolerance in
@@ -119,8 +118,8 @@ def keyword_search_conversation_ids(
     uid: str,
     query: str,
     limit: int = 5,
-    start_date: int = None,
-    end_date: int = None,
+    start_date: Optional[int] = None,
+    end_date: Optional[int] = None,
 ) -> List[str]:
     """Typesense keyword search returning only conversation ids, for hybrid (keyword + vector) retrieval.
 
@@ -138,7 +137,8 @@ def keyword_search_conversation_ids(
             start_date=start_date,
             end_date=end_date,
         )
-        return [item['id'] for item in results.get('items', []) if item.get('id')]
+        items: List[Dict[str, Any]] = results.get('items', [])
+        return [str(item['id']) for item in items if item.get('id')]
     except Exception as e:
         logger.warning("keyword_search_conversation_ids failed for uid=%s, falling back to vector-only: %s", uid, e)
         return []

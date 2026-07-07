@@ -59,6 +59,19 @@ enum DesktopBackendEnvironment {
     return productionPythonAPIURL
   }
 
+  static func authBaseURL(
+    environmentValue: String? = currentEnvironmentValue("OMI_AUTH_API_URL")
+  ) -> String {
+    if let url = normalizedURL(environmentValue) {
+      return url
+    }
+
+    // Desktop Apple Sign-In uses the shared Services ID. The registered web
+    // callback is on api.omi.me, so beta must not inherit the dev data backend
+    // host for OAuth unless a local/dev auth URL is explicitly supplied.
+    return productionPythonAPIURL
+  }
+
   static func rustBackendURL(
     environmentValue: String? = currentEnvironmentValue("OMI_DESKTOP_API_URL"),
     launchEnvironmentValue: String? = ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]

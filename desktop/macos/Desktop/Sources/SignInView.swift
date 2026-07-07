@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 struct SignInView: View {
     @ObservedObject var authState: AuthState

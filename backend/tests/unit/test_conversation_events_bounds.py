@@ -110,6 +110,21 @@ def router():
         "database.action_items": _pkg("database.action_items"),
         "database.memories": _pkg("database.memories"),
         "database.redis_db": _pkg("database.redis_db"),
+        "database.cache": _pkg("database.cache"),
+        "database.apps": _pkg("database.apps"),
+        "database.folders": _pkg("database.folders"),
+        "database.trends": _pkg("database.trends"),
+        "database.calendar_meetings": _pkg("database.calendar_meetings"),
+        "database.tasks": _pkg("database.tasks"),
+        "database.goals": _pkg("database.goals"),
+        "database.llm_usage": _pkg("database.llm_usage"),
+        "database.chat": _pkg("database.chat"),
+        "database.notifications": _pkg("database.notifications"),
+        "database.fair_use": _pkg("database.fair_use"),
+        "database.webhook_health": _pkg("database.webhook_health"),
+        "database.mem_db": _pkg("database.mem_db"),
+        "utils.apps": _pkg("utils.apps"),
+        "utils.conversations.merge_conversations": _pkg("utils.conversations.merge_conversations"),
         "database.users": _pkg("database.users"),
         "database.vector_db": _pkg("database.vector_db"),
         # firebase
@@ -167,7 +182,7 @@ class _FakeEvent:
     def __init__(self):
         self.created = False
 
-    def dict(self):
+    def model_dump(self):
         return {"created": self.created}
 
 

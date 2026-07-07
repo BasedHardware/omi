@@ -9,11 +9,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     var id: Int64?
 
     var taskId: String                    // action_items backendId
-    var acpSessionId: String?             // Legacy ACP adapter-native session ID for resume/adoption
     var messageId: String                 // UUID from ChatMessage.id
     var sender: String                    // "user" or "ai"
     var messageText: String
     var contentBlocksJson: String?        // JSON-encoded content blocks for AI messages
+    var resourcesJson: String?            // JSON-encoded attachment/artifact resources
     var embedding: Data?                  // 3072 Float32s for vector search (Gemini)
 
     var createdAt: Date
@@ -28,11 +28,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     init(
         id: Int64? = nil,
         taskId: String,
-        acpSessionId: String? = nil,
         messageId: String,
         sender: String,
         messageText: String,
         contentBlocksJson: String? = nil,
+        resourcesJson: String? = nil,
         embedding: Data? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date(),
@@ -41,11 +41,11 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     ) {
         self.id = id
         self.taskId = taskId
-        self.acpSessionId = acpSessionId
         self.messageId = messageId
         self.sender = sender
         self.messageText = messageText
         self.contentBlocksJson = contentBlocksJson
+        self.resourcesJson = resourcesJson
         self.embedding = embedding
         self.createdAt = createdAt
         self.updatedAt = updatedAt
@@ -60,7 +60,7 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     // MARK: - ChatMessage Conversion
 
     /// Create a record from a ChatMessage for a given task
-    static func from(_ message: ChatMessage, taskId: String, acpSessionId: String? = nil) -> TaskChatMessageRecord {
+    static func from(_ message: ChatMessage, taskId: String) -> TaskChatMessageRecord {
         let senderStr = message.sender == .user ? "user" : "ai"
 
         // Encode content blocks as JSON for AI messages
@@ -68,14 +68,15 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
         if message.sender == .ai && !message.contentBlocks.isEmpty {
             blocksJson = encodeContentBlocks(message.contentBlocks)
         }
+        let resourcesJson = ChatResource.encodeResourcesForPersistence(message.displayResources)
 
         return TaskChatMessageRecord(
             taskId: taskId,
-            acpSessionId: acpSessionId,
             messageId: message.id,
             sender: senderStr,
             messageText: message.text,
             contentBlocksJson: blocksJson,
+            resourcesJson: resourcesJson,
             createdAt: message.createdAt,
             updatedAt: Date()
         )
@@ -85,6 +86,9 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
     func toChatMessage() -> ChatMessage {
         let chatSender: ChatSender = sender == "user" ? .user : .ai
         let blocks = contentBlocksJson.flatMap { Self.decodeContentBlocks($0) } ?? []
+        let resources = ChatResource.hydrateFileStates(
+            resourcesJson.flatMap { ChatResource.decodeResourcesFromPersistence($0) } ?? []
+        )
 
         return ChatMessage(
             id: messageId,
@@ -92,9 +96,12 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
             createdAt: createdAt,
             sender: chatSender,
             isStreaming: false,
-            contentBlocks: blocks
+            contentBlocks: blocks,
+            resources: resources
         )
     }
+
+    // Resource JSON encoding lives on ChatResource (protocol layer).
 
     // MARK: - Content Block Serialization
 
@@ -252,8 +259,8 @@ actor TaskChatMessageStorage {
 
     /// Save a ChatMessage for a task (convenience)
     @discardableResult
-    func saveMessage(_ message: ChatMessage, taskId: String, acpSessionId: String? = nil) async throws -> TaskChatMessageRecord {
-        let record = TaskChatMessageRecord.from(message, taskId: taskId, acpSessionId: acpSessionId)
+    func saveMessage(_ message: ChatMessage, taskId: String) async throws -> TaskChatMessageRecord {
+        let record = TaskChatMessageRecord.from(message, taskId: taskId)
         let db = try await ensureInitialized()
         let result = try await db.write { database -> TaskChatMessageRecord in
             let record = record
@@ -273,19 +280,6 @@ actor TaskChatMessageStorage {
                 .filter(Column("taskId") == taskId)
                 .order(Column("createdAt").asc)
                 .fetchAll(database)
-        }
-    }
-
-    /// Get the ACP session ID for a task (from the most recent message)
-    func getACPSessionId(forTaskId taskId: String) async throws -> String? {
-        let db = try await ensureInitialized()
-        return try await db.read { database in
-            try TaskChatMessageRecord
-                .filter(Column("taskId") == taskId)
-                .filter(Column("acpSessionId") != nil)
-                .order(Column("createdAt").desc)
-                .fetchOne(database)?
-                .acpSessionId
         }
     }
 

@@ -1,4 +1,6 @@
 import SwiftUI
+import OmiSupport
+import OmiTheme
 
 /// Rewind-only view for when the app is launched with --mode=rewind
 /// Shows just the Rewind page without the sidebar, with a settings button overlay

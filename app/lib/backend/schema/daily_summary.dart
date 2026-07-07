@@ -1,3 +1,11 @@
+import 'package:omi/backend/schema/gen/users_wire.g.dart' as wire;
+// Phase 4.1 — none of these classes typedef to their GeneratedDailySummary* types.
+// The generated fields are all nullable (String?/bool?/int?/double?) while these
+// classes coerce them to non-null with defaults (?? '', ?? 'medium', ?? false,
+// ?? 0, ?? 0.0). DayStats.formattedDuration and DailySummary.formattedDate are
+// computed getters, and DailySummary.fromJson carries a degraded try/catch fallback.
+// All are kept as deliberate adapters.
+
 class ActionItemSummary {
   final String description;
   final String priority; // high, medium, low
@@ -12,11 +20,15 @@ class ActionItemSummary {
   });
 
   factory ActionItemSummary.fromJson(Map<String, dynamic> json) {
+    return ActionItemSummary.fromGenerated(wire.GeneratedDailySummaryActionItem.fromJson(json));
+  }
+
+  factory ActionItemSummary.fromGenerated(wire.GeneratedDailySummaryActionItem generated) {
     return ActionItemSummary(
-      description: _toString(json['description']) ?? '',
-      priority: _toString(json['priority']) ?? 'medium',
-      sourceConversationId: _toString(json['source_conversation_id']),
-      completed: json['completed'] == true,
+      description: generated.description ?? '',
+      priority: generated.priority ?? 'medium',
+      sourceConversationId: generated.sourceConversationId,
+      completed: generated.completed ?? false,
     );
   }
 }
@@ -30,11 +42,15 @@ class TopicHighlight {
   TopicHighlight({required this.topic, required this.emoji, required this.summary, this.conversationIds = const []});
 
   factory TopicHighlight.fromJson(Map<String, dynamic> json) {
+    return TopicHighlight.fromGenerated(wire.GeneratedDailySummaryTopicHighlight.fromJson(json));
+  }
+
+  factory TopicHighlight.fromGenerated(wire.GeneratedDailySummaryTopicHighlight generated) {
     return TopicHighlight(
-      topic: _toString(json['topic']) ?? '',
-      emoji: _toString(json['emoji']) ?? '💡',
-      summary: _toString(json['summary']) ?? '',
-      conversationIds: (json['conversation_ids'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? [],
+      topic: generated.topic ?? '',
+      emoji: generated.emoji ?? '💡',
+      summary: generated.summary ?? '',
+      conversationIds: generated.conversationIds ?? [],
     );
   }
 }
@@ -46,10 +62,11 @@ class UnresolvedQuestion {
   UnresolvedQuestion({required this.question, this.conversationId});
 
   factory UnresolvedQuestion.fromJson(Map<String, dynamic> json) {
-    return UnresolvedQuestion(
-      question: _toString(json['question']) ?? '',
-      conversationId: _toString(json['conversation_id']),
-    );
+    return UnresolvedQuestion.fromGenerated(wire.GeneratedDailySummaryUnresolvedQuestion.fromJson(json));
+  }
+
+  factory UnresolvedQuestion.fromGenerated(wire.GeneratedDailySummaryUnresolvedQuestion generated) {
+    return UnresolvedQuestion(question: generated.question ?? '', conversationId: generated.conversationId);
   }
 }
 
@@ -60,10 +77,11 @@ class DecisionMade {
   DecisionMade({required this.decision, this.conversationId});
 
   factory DecisionMade.fromJson(Map<String, dynamic> json) {
-    return DecisionMade(
-      decision: _toString(json['decision']) ?? '',
-      conversationId: _toString(json['conversation_id']),
-    );
+    return DecisionMade.fromGenerated(wire.GeneratedDailySummaryDecisionMade.fromJson(json));
+  }
+
+  factory DecisionMade.fromGenerated(wire.GeneratedDailySummaryDecisionMade generated) {
+    return DecisionMade(decision: generated.decision ?? '', conversationId: generated.conversationId);
   }
 }
 
@@ -74,10 +92,11 @@ class KnowledgeNugget {
   KnowledgeNugget({required this.insight, this.conversationId});
 
   factory KnowledgeNugget.fromJson(Map<String, dynamic> json) {
-    return KnowledgeNugget(
-      insight: _toString(json['insight']) ?? '',
-      conversationId: _toString(json['conversation_id']),
-    );
+    return KnowledgeNugget.fromGenerated(wire.GeneratedDailySummaryKnowledgeNugget.fromJson(json));
+  }
+
+  factory KnowledgeNugget.fromGenerated(wire.GeneratedDailySummaryKnowledgeNugget generated) {
+    return KnowledgeNugget(insight: generated.insight ?? '', conversationId: generated.conversationId);
   }
 }
 
@@ -89,10 +108,14 @@ class DayStats {
   DayStats({this.totalConversations = 0, this.totalDurationMinutes = 0, this.actionItemsCount = 0});
 
   factory DayStats.fromJson(Map<String, dynamic> json) {
+    return DayStats.fromGenerated(wire.GeneratedDailySummaryDayStats.fromJson(json));
+  }
+
+  factory DayStats.fromGenerated(wire.GeneratedDailySummaryDayStats generated) {
     return DayStats(
-      totalConversations: _toInt(json['total_conversations']) ?? 0,
-      totalDurationMinutes: _toInt(json['total_duration_minutes']) ?? 0,
-      actionItemsCount: _toInt(json['action_items_count']) ?? 0,
+      totalConversations: generated.totalConversations ?? 0,
+      totalDurationMinutes: generated.totalDurationMinutes ?? 0,
+      actionItemsCount: generated.actionItemsCount ?? 0,
     );
   }
 
@@ -116,12 +139,16 @@ class LocationPin {
   LocationPin({required this.latitude, required this.longitude, this.address, this.conversationId, this.time});
 
   factory LocationPin.fromJson(Map<String, dynamic> json) {
+    return LocationPin.fromGenerated(wire.GeneratedDailySummaryLocationPin.fromJson(json));
+  }
+
+  factory LocationPin.fromGenerated(wire.GeneratedDailySummaryLocationPin generated) {
     return LocationPin(
-      latitude: _toDouble(json['latitude']) ?? 0.0,
-      longitude: _toDouble(json['longitude']) ?? 0.0,
-      address: _toString(json['address']),
-      conversationId: _toString(json['conversation_id']),
-      time: _toString(json['time']),
+      latitude: generated.latitude ?? 0.0,
+      longitude: generated.longitude ?? 0.0,
+      address: generated.address,
+      conversationId: generated.conversationId,
+      time: generated.time,
     );
   }
 }
@@ -166,49 +193,38 @@ class DailySummary {
   });
 
   factory DailySummary.fromJson(Map<String, dynamic> json) {
-    DateTime createdAt;
     try {
-      final createdAtValue = json['created_at'];
-      if (createdAtValue is String) {
-        createdAt = DateTime.parse(createdAtValue);
-      } else {
-        createdAt = DateTime.now();
-      }
-    } catch (e) {
-      createdAt = DateTime.now();
+      return DailySummary.fromGenerated(wire.GeneratedDailySummaryResponse.fromJson(json));
+    } catch (_) {
+      // Degraded fallback: generated parser failed on malformed data.
+      // Return a minimal summary with defaults rather than hand-parsing partial JSON.
+      return DailySummary(
+        id: '',
+        date: '',
+        createdAt: DateTime.now(),
+        headline: 'Your Day in Review',
+        overview: '',
+        dayEmoji: '📅',
+        stats: DayStats(),
+      );
     }
+  }
 
+  factory DailySummary.fromGenerated(wire.GeneratedDailySummaryResponse generated, {DateTime? createdAt}) {
     return DailySummary(
-      id: _toString(json['id']) ?? '',
-      date: _toString(json['date']) ?? '',
-      createdAt: createdAt,
-      headline: _toString(json['headline']) ?? 'Your Day in Review',
-      overview: _toString(json['overview']) ?? '',
-      dayEmoji: _toString(json['day_emoji']) ?? '📅',
-      stats: json['stats'] != null && json['stats'] is Map<String, dynamic>
-          ? DayStats.fromJson(json['stats'])
-          : DayStats(),
-      highlights: _parseList<TopicHighlight>(
-        json['highlights'],
-        (e) => TopicHighlight.fromJson(e as Map<String, dynamic>),
-      ),
-      actionItems: _parseList<ActionItemSummary>(
-        json['action_items'],
-        (e) => ActionItemSummary.fromJson(e as Map<String, dynamic>),
-      ),
-      unresolvedQuestions: _parseList<UnresolvedQuestion>(
-        json['unresolved_questions'],
-        (e) => UnresolvedQuestion.fromJson(e as Map<String, dynamic>),
-      ),
-      decisionsMade: _parseList<DecisionMade>(
-        json['decisions_made'],
-        (e) => DecisionMade.fromJson(e as Map<String, dynamic>),
-      ),
-      knowledgeNuggets: _parseList<KnowledgeNugget>(
-        json['knowledge_nuggets'],
-        (e) => KnowledgeNugget.fromJson(e as Map<String, dynamic>),
-      ),
-      locations: _parseList<LocationPin>(json['locations'], (e) => LocationPin.fromJson(e as Map<String, dynamic>)),
+      id: generated.id ?? '',
+      date: generated.date ?? '',
+      createdAt: createdAt ?? generated.createdAt ?? DateTime.now(),
+      headline: generated.headline ?? 'Your Day in Review',
+      overview: generated.overview ?? '',
+      dayEmoji: generated.dayEmoji ?? '📅',
+      stats: generated.stats == null ? DayStats() : DayStats.fromGenerated(generated.stats!),
+      highlights: generated.highlights?.map(TopicHighlight.fromGenerated).toList() ?? [],
+      actionItems: generated.actionItems?.map(ActionItemSummary.fromGenerated).toList() ?? [],
+      unresolvedQuestions: generated.unresolvedQuestions?.map(UnresolvedQuestion.fromGenerated).toList() ?? [],
+      decisionsMade: generated.decisionsMade?.map(DecisionMade.fromGenerated).toList() ?? [],
+      knowledgeNuggets: generated.knowledgeNuggets?.map(KnowledgeNugget.fromGenerated).toList() ?? [],
+      locations: generated.locations?.map(LocationPin.fromGenerated).toList() ?? [],
     );
   }
 
@@ -236,37 +252,5 @@ class DailySummary {
       return '${months[month - 1]} $day, ${parts[0]}';
     }
     return date;
-  }
-}
-
-// Helper functions for safe type conversion
-String? _toString(dynamic value) {
-  if (value == null) return null;
-  return value.toString();
-}
-
-int? _toInt(dynamic value) {
-  if (value == null) return null;
-  if (value is int) return value;
-  if (value is double) return value.toInt();
-  if (value is String) return int.tryParse(value);
-  return null;
-}
-
-double? _toDouble(dynamic value) {
-  if (value == null) return null;
-  if (value is double) return value;
-  if (value is int) return value.toDouble();
-  if (value is String) return double.tryParse(value);
-  return null;
-}
-
-List<T> _parseList<T>(dynamic value, T Function(dynamic) parser) {
-  if (value == null) return [];
-  if (value is! List) return [];
-  try {
-    return value.map((e) => parser(e)).toList();
-  } catch (e) {
-    return [];
   }
 }

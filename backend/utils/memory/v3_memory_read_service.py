@@ -226,11 +226,3 @@ def plan_v3_memory_read(service_input: V3MemoryReadServiceInput) -> V3MemoryRead
         body=service_input.page_body,
         legacy_fallback_allowed=decision.legacy_fallback_allowed,
     )
-
-
-# Neutral symbol aliases (memory names remain valid via shim)
-V3_READ_SOURCE = V3_READ_SOURCE
-V3_READ_MODE = V3_READ_MODE
-V3MemoryReadRequest = V3MemoryReadRequest
-V3MemoryReadServiceInput = V3MemoryReadServiceInput
-V3MemoryReadServiceResult = V3MemoryReadServiceResult

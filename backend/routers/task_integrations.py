@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+from models.shared import StatusResponse
 import os
 import secrets
 import ast
@@ -116,13 +117,14 @@ def validate_and_consume_oauth_state(state_token: Optional[str]) -> Optional[Dic
         return None
 
     state_key = f"oauth_state:{state_token}"
-    state_data_str = redis_db.r.get(state_key)
+    # Atomic get-and-delete: an OAuth state is single-use, so consuming it must be one operation.
+    # A separate GET then DELETE lets two concurrent callbacks carrying the same state both read the
+    # value before either delete runs, weakening replay protection. GETDEL removes it atomically, so
+    # only one caller ever receives the value.
+    state_data_str = redis_db.r.getdel(state_key)
 
     if not state_data_str:
         return None
-
-    # Delete immediately to prevent replay
-    redis_db.r.delete(state_key)
 
     try:
         state_data = ast.literal_eval(state_data_str.decode() if isinstance(state_data_str, bytes) else state_data_str)
@@ -181,6 +183,31 @@ class DefaultTaskIntegrationResponse(BaseModel):
     default_app: Optional[str] = Field(description="Default task integration app key")
 
 
+class TaskIntegrationMutationResponse(BaseModel):
+    status: str
+    app_key: str
+
+
+class AsanaWorkspacesResponse(BaseModel):
+    workspaces: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class AsanaProjectsResponse(BaseModel):
+    projects: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ClickUpTeamsResponse(BaseModel):
+    teams: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ClickUpSpacesResponse(BaseModel):
+    spaces: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class ClickUpListsResponse(BaseModel):
+    lists: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 # *****************************
 # ********** ROUTES ***********
 # *****************************
@@ -209,7 +236,9 @@ def set_default_task_integration(request: DefaultTaskIntegrationRequest, uid: st
     return DefaultTaskIntegrationResponse(default_app=request.app_key)
 
 
-@router.put("/v1/task-integrations/{app_key}", tags=['task-integrations'])
+@router.put(
+    "/v1/task-integrations/{app_key}", tags=['task-integrations'], response_model=TaskIntegrationMutationResponse
+)
 def save_task_integration(app_key: str, data: TaskIntegrationData, uid: str = Depends(auth.get_current_user_uid)):
     """Save or update a task integration connection."""
     # Convert Pydantic model to dict, excluding None values
@@ -232,8 +261,6 @@ def delete_task_integration(app_key: str, uid: str = Depends(auth.get_current_us
     default_app = users_db.get_default_task_integration(uid)
     if default_app == app_key:
         users_db.set_default_task_integration(uid, '')
-
-    return {"status": "ok"}
 
 
 # *****************************
@@ -727,7 +754,9 @@ async def create_task_via_integration(
 # *****************************
 
 
-@router.get("/v1/task-integrations/asana/workspaces", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/asana/workspaces", response_model=AsanaWorkspacesResponse, tags=['task-integrations']
+)
 async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's Asana workspaces"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
@@ -767,7 +796,11 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
 
 
-@router.get("/v1/task-integrations/asana/projects/{workspace_gid}", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/asana/projects/{workspace_gid}",
+    response_model=AsanaProjectsResponse,
+    tags=['task-integrations'],
+)
 async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get projects in an Asana workspace"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'asana')
@@ -807,7 +840,7 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
         raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/teams", tags=['task-integrations'])
+@router.get("/v1/task-integrations/clickup/teams", response_model=ClickUpTeamsResponse, tags=['task-integrations'])
 async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     """Get user's ClickUp teams"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
@@ -847,7 +880,9 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
         raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/spaces/{team_id}", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/clickup/spaces/{team_id}", response_model=ClickUpSpacesResponse, tags=['task-integrations']
+)
 async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get spaces in a ClickUp team"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')
@@ -887,7 +922,9 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
         raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
 
 
-@router.get("/v1/task-integrations/clickup/lists/{space_id}", tags=['task-integrations'])
+@router.get(
+    "/v1/task-integrations/clickup/lists/{space_id}", response_model=ClickUpListsResponse, tags=['task-integrations']
+)
 async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Get lists in a ClickUp space"""
     data = await run_blocking(db_executor, users_db.get_task_integration, uid, 'clickup')

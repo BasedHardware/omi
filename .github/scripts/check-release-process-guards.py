@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def main() -> int:
     errors: list[str] = []
     errors.extend(check_desktop_codemagic_release())
+    errors.extend(check_mobile_codemagic_release_triggers())
     errors.extend(check_docs_workflow_scripts())
     errors.extend(check_python_cli_release_version_source())
     errors.extend(check_react_native_release_tags())
@@ -40,6 +41,15 @@ def check_desktop_codemagic_release() -> list[str]:
     if "omi-desktop-swift-release:" not in text:
         errors.append("codemagic.yaml is missing the omi-desktop-swift-release workflow")
 
+    planner = ROOT / ".github/scripts/plan-desktop-release.py"
+    planner_text = planner.read_text(encoding="utf-8")
+    if "AUTO_RELEASE_QUIET_SECONDS = 10 * 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep a 10 minute quiet window before auto-tagging")
+    if "latest_change_age is None" not in planner_text:
+        errors.append("desktop auto-release planner must fail closed when latest change age cannot be determined")
+    if "RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60" not in planner_text:
+        errors.append("desktop auto-release planner must keep the recent-tag lease for Codemagic checks")
+
     if "os.environ['BUILD_NAME']" in text or 'os.environ["BUILD_NAME"]' in text:
         errors.append("desktop Firestore bridge reads BUILD_NAME, but desktop release sets VERSION")
 
@@ -56,6 +66,7 @@ def check_desktop_codemagic_release() -> list[str]:
         "desktop/macos/scripts/prepare-agent-runtime.sh",
         "desktop/macos/scripts/prepare-desktop-bundle-native-deps.sh",
         "desktop/macos/scripts/audit-desktop-bundle-deps.sh",
+        "desktop/macos/scripts/smoke-signed-desktop-artifact.sh",
         "desktop/macos/scripts/test-tool-surfaces.sh",
         "desktop/macos/Desktop/Omi-Release.entitlements",
         "desktop/macos/Desktop/Node.entitlements",
@@ -66,6 +77,98 @@ def check_desktop_codemagic_release() -> list[str]:
     for required_file in required_files:
         if not (ROOT / required_file).exists():
             errors.append(f"desktop release references missing file: {required_file}")
+
+    desktop_workflow_match = re.search(
+        r"\n  omi-desktop-swift-release:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)",
+        text,
+        flags=re.DOTALL,
+    )
+    if desktop_workflow_match is None:
+        errors.append("codemagic.yaml is missing the omi-desktop-swift-release workflow body")
+        desktop_workflow_body = ""
+    else:
+        desktop_workflow_body = desktop_workflow_match.group("body")
+
+    smoke_index = desktop_workflow_body.find("Smoke signed desktop artifact")
+    release_index = desktop_workflow_body.find("Create GitHub release")
+    if smoke_index == -1:
+        errors.append("desktop release must run the signed artifact smoke before publishing the GitHub release")
+    elif release_index == -1 or smoke_index > release_index:
+        errors.append("desktop signed artifact smoke must run before Create GitHub release")
+    if "scripts/smoke-signed-desktop-artifact.sh" not in desktop_workflow_body:
+        errors.append("desktop release smoke step must invoke scripts/smoke-signed-desktop-artifact.sh")
+
+    smoke_script = ROOT / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
+    if smoke_script.exists():
+        smoke_text = smoke_script.read_text(encoding="utf-8")
+        for required_fragment in (
+            "keychain-access-groups",
+            "OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH",
+            "OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND",
+            "OMI_SIGNED_ARTIFACT_SMOKE_AUTH_HEADER",
+            "result-json",
+            "sha256",
+            "TeamIdentifier",
+            "Runtime Version",
+            "https://api.omi.me/v2/desktop/appcast.xml",
+            "audit-desktop-bundle-deps.sh",
+        ):
+            if required_fragment not in smoke_text:
+                errors.append(f"signed artifact smoke is missing required guard fragment: {required_fragment}")
+
+    automation_bridge = ROOT / "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift"
+    if automation_bridge.exists():
+        automation_text = automation_bridge.read_text(encoding="utf-8")
+        if "guard AppBuild.isNonProduction else" not in automation_text:
+            errors.append("desktop automation bridge must stay disabled for the production bundle")
+
+    for required_fragment in (
+        "--result-json \"$BUILD_DIR/desktop-smoke-result.json\"",
+        "build/desktop-smoke-result.json",
+    ):
+        if required_fragment not in desktop_workflow_body:
+            errors.append(f"desktop release is missing signed smoke result artifact fragment: {required_fragment}")
+
+    return errors
+
+
+def check_mobile_codemagic_release_triggers() -> list[str]:
+    errors: list[str] = []
+    codemagic = ROOT / "codemagic.yaml"
+    codemagic_text = codemagic.read_text(encoding="utf-8")
+
+    for workflow_id in ("ios-internal-auto", "android-internal-auto"):
+        pattern = rf"\n  {re.escape(workflow_id)}:\n(?P<body>.*?)(?=\n  [A-Za-z0-9_-]+:\n|\Z)"
+        match = re.search(pattern, codemagic_text, flags=re.DOTALL)
+        if match is None:
+            errors.append(f"codemagic.yaml is missing {workflow_id}")
+            continue
+        body = match.group("body")
+        if re.search(r"\n    triggering:\n(?:(?!\n    [A-Za-z_]).)*\n      events:\n(?:(?!\n    [A-Za-z_]).)*\n        - push\b", body, flags=re.DOTALL):
+            errors.append(f"{workflow_id} must not directly trigger on push; GitHub paths filtering dispatches it")
+
+    workflow = ROOT / ".github/workflows/mobile_internal_auto.yml"
+    if not workflow.exists():
+        errors.append("mobile internal auto deploys must be dispatched by .github/workflows/mobile_internal_auto.yml")
+        return errors
+
+    workflow_text = workflow.read_text(encoding="utf-8")
+    if not re.search(r"(?m)^\s*-\s*['\"]?app/\*\*['\"]?\s*$", workflow_text):
+        errors.append("mobile_internal_auto.yml must gate pushes to app/** paths")
+    if "group: mobile-internal-auto-${{ matrix.workflow_id }}-${{ github.ref }}" not in workflow_text:
+        errors.append("mobile_internal_auto.yml must give each matrix workflow its own concurrency group")
+    token_check_index = workflow_text.find("Validate Codemagic API token")
+    debounce_index = workflow_text.find("Debounce mobile internal deploys")
+    if token_check_index == -1 or debounce_index == -1 or token_check_index > debounce_index:
+        errors.append("mobile_internal_auto.yml must validate CODEMAGIC_API_TOKEN before the push debounce")
+    for required in (
+        "paths:",
+        "https://api.codemagic.io/builds",
+        "ios-internal-auto",
+        "android-internal-auto",
+    ):
+        if required not in workflow_text:
+            errors.append(f"mobile_internal_auto.yml is missing required release guard fragment: {required}")
 
     return errors
 

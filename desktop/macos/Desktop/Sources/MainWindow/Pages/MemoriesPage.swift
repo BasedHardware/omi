@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import OmiTheme
 
 /// Memory categories for filtering. Mirrors the mobile app: filtering is driven
 /// purely by the backend `category` field (no tag-derived pseudo-categories), so
@@ -288,6 +289,10 @@ class MemoriesViewModel: ObservableObject {
     canonicalLifecycleExposed ? token.layerFilter.allowedLayers : nil
   }
 
+  private func includeExplicitLifecycleRows(for token: MemoryScopeToken) -> Bool {
+    canonicalLifecycleExposed
+  }
+
   private func displayMemories(_ values: [ServerMemory], for token: MemoryScopeToken) -> [ServerMemory] {
     displayMemories(values, lifecycleExposed: canonicalLifecycleExposed)
   }
@@ -297,7 +302,7 @@ class MemoriesViewModel: ObservableObject {
   }
 
   private func displayMemories(_ values: [ServerMemory], lifecycleExposed: Bool) -> [ServerMemory] {
-    lifecycleExposed ? values : values.map { $0.hidingLifecycleExposure() }
+    lifecycleExposed ? values : values.filter { !$0.tierIsExplicit }
   }
 
   private struct MemoryPageFetchResult {
@@ -338,7 +343,11 @@ class MemoriesViewModel: ObservableObject {
     } else {
       do {
         let loaded = try await MemoryStorage.shared.getLocalMemories(
-          limit: pageSize, offset: 0, tiers: layers(for: token))
+          limit: pageSize,
+          offset: 0,
+          tiers: layers(for: token),
+          includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+        )
         guard isCurrentScope(token) else { return }
         memories = displayCacheMemories(loaded, for: token)
         currentOffset = loaded.count
@@ -441,7 +450,8 @@ class MemoriesViewModel: ObservableObject {
       let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
         limit: reloadLimit,
         offset: 0,
-        tiers: layers(for: token)
+        tiers: layers(for: token),
+        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
       )
       guard isCurrentScope(token) else { return }
       if let fetchedLifecycleExposure {
@@ -529,7 +539,8 @@ class MemoriesViewModel: ObservableObject {
       let mergedMemories = try await MemoryStorage.shared.getLocalMemories(
         limit: reloadLimit,
         offset: 0,
-        tiers: layers(for: token)
+        tiers: layers(for: token),
+        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
       )
       guard isCurrentScope(token) else { return }
       log(
@@ -566,12 +577,20 @@ class MemoriesViewModel: ObservableObject {
       var counts: [MemoryTag: Int] = [:]
 
       // Get total count (no filters) and store for "All" badge
-      let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount(tiers: activeLayerFilter)
+      let includeExplicitLifecycleRows = canonicalLifecycleExposed
+      let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount(
+        tiers: activeLayerFilter,
+        includeExplicitLifecycleRows: includeExplicitLifecycleRows
+      )
       totalMemoriesCount = totalCount
 
       // One count per backend category (mirrors mobile).
       for tag in MemoryTag.allCases {
-        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(category: tag.rawValue, tiers: activeLayerFilter)
+        counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(
+          category: tag.rawValue,
+          tiers: activeLayerFilter,
+          includeExplicitLifecycleRows: includeExplicitLifecycleRows
+        )
       }
 
       tagCounts = counts
@@ -607,7 +626,8 @@ class MemoriesViewModel: ObservableObject {
         limit: 10000,
         matchAnyTag: nil,
         matchAnyCategory: matchAnyCategory.isEmpty ? nil : matchAnyCategory,
-        tiers: layers(for: token)
+        tiers: layers(for: token),
+        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
       )
 
       guard isCurrentScope(token) else { return }
@@ -711,7 +731,8 @@ class MemoriesViewModel: ObservableObject {
       let results = try await MemoryStorage.shared.searchLocalMemories(
         query: query,
         limit: 10000,
-        tiers: layers(for: token)
+        tiers: layers(for: token),
+        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
       )
       guard isCurrentScope(token) else { return }
       searchResults = displayCacheMemories(results, for: token)
@@ -773,7 +794,8 @@ class MemoriesViewModel: ObservableObject {
           try await MemoryStorage.shared.getLocalMemories(
             limit: self.pageSize,
             offset: 0,
-            tiers: tokenTiers
+            tiers: tokenTiers,
+            includeExplicitLifecycleRows: self.includeExplicitLifecycleRows(for: token)
           )
         }
         group.addTask {
@@ -845,7 +867,8 @@ class MemoriesViewModel: ObservableObject {
           displayMemories = try await MemoryStorage.shared.getLocalMemories(
             limit: pageSize,
             offset: 0,
-            tiers: layers(for: token)
+            tiers: layers(for: token),
+            includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
           )
         }
         guard isCurrentScope(token) else {
@@ -1046,7 +1069,8 @@ class MemoriesViewModel: ObservableObject {
       let moreFromCache = try await MemoryStorage.shared.getLocalMemories(
         limit: pageSize,
         offset: requestedOffset,
-        tiers: layers(for: token)
+        tiers: layers(for: token),
+        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
       )
 
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }

@@ -30,6 +30,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any, Dict, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
 DEFAULT_FAIL_ON = ("high_network_io",)
 FAIL_ON_CATEGORIES = (
@@ -42,9 +43,14 @@ FAIL_ON_CATEGORIES = (
 )
 
 
-def get_db_imports(source):
-    db_names = set()
-    db_module_aliases = set()
+def _node_lineno(node: ast.AST) -> int:
+    """Best-effort line number for an arbitrary AST node."""
+    return cast(int, getattr(node, "lineno", 0))
+
+
+def get_db_imports(source: str) -> Tuple[Set[str], Set[str]]:
+    db_names: Set[str] = set()
+    db_module_aliases: Set[str] = set()
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and 'database' in node.module:
@@ -61,8 +67,8 @@ def get_db_imports(source):
     return db_names, db_module_aliases
 
 
-def get_storage_imports(source):
-    names = set()
+def get_storage_imports(source: str) -> Set[str]:
+    names: Set[str] = set()
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.module and 'storage' in node.module:
@@ -71,19 +77,19 @@ def get_storage_imports(source):
     return names
 
 
-def _walk_body(node):
+def _walk_body(node: ast.AsyncFunctionDef) -> Iterator[ast.AST]:
     for stmt in node.body:
         yield from ast.walk(stmt)
 
 
-def has_await(node):
+def has_await(node: ast.AsyncFunctionDef) -> bool:
     for child in _walk_body(node):
         if isinstance(child, ast.Await):
             return True
     return False
 
 
-def get_route_info(decorators):
+def get_route_info(decorators: Sequence[ast.AST]) -> Tuple[str, Any]:
     for dec in decorators:
         if isinstance(dec, ast.Call) and isinstance(dec.func, ast.Attribute):
             method = dec.func.attr.upper()
@@ -92,7 +98,7 @@ def get_route_info(decorators):
     return "?", "?"
 
 
-def _get_offloaded_lines(node):
+def _get_offloaded_lines(node: ast.AsyncFunctionDef) -> Set[int]:
     """Find line numbers of calls inside recognized executor wrappers.
 
     These are lambda bodies and nested def functions passed as arguments to
@@ -100,7 +106,7 @@ def _get_offloaded_lines(node):
     utils.executors.run_blocking(). Calls inside those are already offloaded and
     should not be flagged.
     """
-    offloaded = set()
+    offloaded: Set[int] = set()
     for child in ast.walk(node):
         if not isinstance(child, ast.Call):
             continue
@@ -112,36 +118,40 @@ def _get_offloaded_lines(node):
         for arg in child.args + [kw.value for kw in child.keywords]:
             if isinstance(arg, ast.Lambda):
                 for n in ast.walk(arg.body):
-                    offloaded.add(n.lineno if hasattr(n, 'lineno') else 0)
+                    offloaded.add(_node_lineno(n))
             elif isinstance(arg, ast.Name):
                 offloaded.add(arg.lineno)
     return offloaded
 
 
-def _collect_nested_func_lines(node):
+def _collect_nested_func_lines(node: ast.AsyncFunctionDef) -> Set[int]:
     """Collect line numbers inside nested def/lambda within an async function.
 
     Calls inside nested sync functions are not directly on the event loop,
     even if those functions are defined inside if/for/try blocks.
     """
-    nested = set()
+    nested: Set[int] = set()
     for child in ast.walk(node):
         if child is node:
             continue
         if isinstance(child, (ast.FunctionDef, ast.Lambda)):
             for n in ast.walk(child):
-                if hasattr(n, 'lineno'):
-                    nested.add(n.lineno)
+                nested.add(_node_lineno(n))
     return nested
 
 
-def scan_async_function(node, db_names, db_module_aliases, storage_names):
+def scan_async_function(
+    node: ast.AsyncFunctionDef,
+    db_names: Set[str],
+    db_module_aliases: Set[str],
+    storage_names: Set[str],
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Set[int]]:
     """Scan an async function body for blocking calls on the event loop."""
-    db_calls = []
-    file_io = []
-    network_io = []
-    sleeps = []
-    body_call_lines = set()
+    db_calls: List[Dict[str, Any]] = []
+    file_io: List[Dict[str, Any]] = []
+    network_io: List[Dict[str, Any]] = []
+    sleeps: List[Dict[str, Any]] = []
+    body_call_lines: Set[int] = set()
 
     offloaded = _get_offloaded_lines(node)
     nested = _collect_nested_func_lines(node)
@@ -182,8 +192,8 @@ def scan_async_function(node, db_names, db_module_aliases, storage_names):
     return db_calls, file_io, network_io, sleeps, body_call_lines
 
 
-def collect_py_files(dirs):
-    files = []
+def collect_py_files(dirs: Sequence[str]) -> List[str]:
+    files: List[str] = []
     for d in dirs:
         for root, _, fnames in os.walk(d):
             for fname in sorted(fnames):
@@ -192,15 +202,16 @@ def collect_py_files(dirs):
     return sorted(files)
 
 
-def _line_span(node):
+def _line_span(node: ast.AsyncFunctionDef) -> Tuple[int, int]:
     start_line = node.lineno
     if node.decorator_list:
         start_line = min(dec.lineno for dec in node.decorator_list)
-    return start_line, getattr(node, "end_lineno", node.lineno)
+    end_line = cast(int, getattr(node, "end_lineno", node.lineno))
+    return start_line, end_line
 
 
-def scan_dirs(dirs):
-    results = {
+def scan_dirs(dirs: Sequence[str]) -> Dict[str, Any]:
+    results: Dict[str, Any] = {
         "high_network_io": [],
         "medium_file_io": [],
         "no_await_should_be_def": [],
@@ -247,7 +258,7 @@ def scan_dirs(dirs):
 
             if is_endpoint:
                 method, path = get_route_info(node.decorator_list)
-                entry = {
+                entry: Dict[str, Any] = {
                     "file": fpath,
                     "line": start_line,
                     "end_line": end_line,
@@ -303,17 +314,17 @@ def scan_dirs(dirs):
     return results
 
 
-def _normalize_path(path):
+def _normalize_path(path: str) -> str:
     return path.replace(os.sep, "/")
 
 
-def _diff_paths(dirs):
+def _diff_paths(dirs: Sequence[str]) -> List[str]:
     return [_normalize_path(d.rstrip("/")) for d in dirs]
 
 
-def changed_scope(diff_base, dirs):
+def changed_scope(diff_base: str, dirs: Sequence[str]) -> Dict[str, Any]:
     """Return changed line ranges and import-changed files for diff-scoped failures."""
-    cmd = [
+    cmd: List[str] = [
         "git",
         "diff",
         "--unified=0",
@@ -323,12 +334,13 @@ def changed_scope(diff_base, dirs):
         *_diff_paths(dirs),
     ]
     proc = subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE)
-    ranges_by_file = {}
-    import_changed_files = set()
-    current_file = None
+    ranges_by_file: Dict[str, List[Tuple[int, int]]] = {}
+    import_changed_files: Set[str] = set()
+    current_file: Optional[str] = None
     hunk_re = re.compile(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
 
-    for line in proc.stdout.splitlines():
+    stdout_text = proc.stdout or ""
+    for line in stdout_text.splitlines():
         if line.startswith("+++ b/"):
             current_file = line.removeprefix("+++ b/")
             ranges_by_file.setdefault(current_file, [])
@@ -339,8 +351,12 @@ def changed_scope(diff_base, dirs):
             match = hunk_re.match(line)
             if not match:
                 continue
-            start = int(match.group(1))
-            count = int(match.group(2) or "1")
+            start_str = match.group(1)
+            count_str = match.group(2)
+            if start_str is None:
+                continue
+            start = int(start_str)
+            count = int(count_str or "1")
             if count == 0:
                 # Deletion-only hunks have an empty new-side range (for example
                 # ``+42,0``). Keep the adjacent post-delete line in scope so
@@ -370,14 +386,14 @@ def changed_scope(diff_base, dirs):
     return {"ranges": ranges_by_file, "import_changed_files": import_changed_files}
 
 
-def _read_source_for_scope(file_path):
+def _read_source_for_scope(file_path: str) -> str:
     try:
         return Path(file_path).read_text(encoding="utf-8")
     except OSError:
         return ""
 
 
-def finding_in_changed_scope(finding, scope):
+def finding_in_changed_scope(finding: Dict[str, Any], scope: Dict[str, Any]) -> bool:
     file_path = _normalize_path(finding["file"])
     if file_path in scope["import_changed_files"]:
         return True
@@ -393,12 +409,12 @@ def finding_in_changed_scope(finding, scope):
     return any(start <= changed_end and end >= changed_start for changed_start, changed_end in file_ranges)
 
 
-def _finding_qualifies(category, finding):
+def _finding_qualifies(category: str, finding: Dict[str, Any]) -> bool:
     return True
 
 
-def normalize_fail_on(values):
-    categories = []
+def normalize_fail_on(values: Sequence[str]) -> Tuple[str, ...]:
+    categories: List[str] = []
     for value in values:
         for category in value.split(","):
             category = category.strip()
@@ -412,8 +428,12 @@ def normalize_fail_on(values):
     return tuple(dict.fromkeys(categories))
 
 
-def selected_failures(results, fail_on, scope=None):
-    failures = []
+def selected_failures(
+    results: Dict[str, Any],
+    fail_on: Tuple[str, ...],
+    scope: Optional[Dict[str, Any]] = None,
+) -> List[Tuple[str, Dict[str, Any]]]:
+    failures: List[Tuple[str, Dict[str, Any]]] = []
     for category in fail_on:
         for finding in results.get(category, []):
             if not _finding_qualifies(category, finding):
@@ -424,7 +444,7 @@ def selected_failures(results, fail_on, scope=None):
     return failures
 
 
-def print_report(results):
+def print_report(results: Dict[str, Any]) -> None:
     s = results["summary"]
     print(f"=== FastAPI Async Blocker Audit ===")
     print(f"Endpoints scanned: {s['total_def_endpoints']} def + {s['total_async_endpoints']} async def")
@@ -461,7 +481,7 @@ def print_report(results):
 
     if results["no_await_should_be_def"]:
         print(f"--- STRUCTURAL: async def with 0 await (should be def) ---")
-        by_file = {}
+        by_file: Dict[str, List[Dict[str, Any]]] = {}
         for e in results["no_await_should_be_def"]:
             f = e['file'].split('/')[-1]
             by_file.setdefault(f, []).append(e)
@@ -481,7 +501,53 @@ def print_report(results):
         print()
 
 
-def main():
+def _finding_calls(finding: Dict[str, Any]) -> List[Dict[str, Any]]:
+    if "calls" in finding:
+        return finding["calls"]
+    return (
+        finding.get("network_io", [])
+        + finding.get("file_io", [])
+        + finding.get("sleeps", [])
+        + finding.get("db_calls", [])
+        + finding.get("all_blocking", [])
+    )
+
+
+def print_selected_report(
+    results: Dict[str, Any],
+    failures: List[Tuple[str, Dict[str, Any]]],
+    fail_on: Sequence[str],
+    diff_base: str,
+    full_report: bool,
+) -> None:
+    s: Dict[str, Any] = results["summary"]
+    scope_label = (
+        f"changed function/decorator ranges and import-changed files since {diff_base}"
+        if diff_base
+        else "all scanned functions"
+    )
+
+    print("=== FastAPI Async Blocker Gate ===")
+    print(f"Endpoints scanned: {s['total_def_endpoints']} def + {s['total_async_endpoints']} async def")
+    print(f"Fail-on policy: {', '.join(fail_on) if fail_on else '(none)'}")
+    print(f"Fail-on scope: {scope_label}")
+    print(f"Selected blocking findings: {len(failures)}")
+
+    if failures:
+        print()
+        print("--- Blocking findings selected for this push ---")
+        for category, finding in failures:
+            label = finding.get("endpoint") or finding.get("function") or "async def"
+            calls = ", ".join(f"{c['call']}:{c['line']}" for c in _finding_calls(finding))
+            detail = f" | {calls}" if calls else ""
+            print(f"  {category}: {finding['file']}:{finding['line']} | {label}{detail}")
+    elif not full_report:
+        total_known = sum(s[category] for category in FAIL_ON_CATEGORIES if category in s)
+        print(f"Known findings outside this push's fail scope: {total_known}")
+        print("Full audit suppressed; rerun with --full-report or PRE_PUSH_VERBOSE=1 for legacy findings.")
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(description="Scan FastAPI routers for async blocking patterns")
     parser.add_argument(
         "--dirs",
@@ -505,8 +571,13 @@ def main():
         "--diff-base",
         help=(
             "Only fail findings whose function/decorator line range intersects lines changed since this git ref, "
-            "or findings in files with changed imports. The full report is still printed."
+            "or findings in files with changed imports."
         ),
+    )
+    parser.add_argument(
+        "--full-report",
+        action="store_true",
+        help="Print every finding from the full async audit, including legacy findings outside the fail scope.",
     )
     args = parser.parse_args()
     if args.dirs == ["backend/routers", "backend/utils"] and not os.path.isdir("backend/routers"):
@@ -526,18 +597,10 @@ def main():
         json.dump(results, sys.stdout, indent=2)
         print()
     else:
-        print_report(results)
-        scope_label = (
-            f"changed function/decorator ranges and import-changed files since {args.diff_base}"
-            if args.diff_base
-            else "all scanned functions"
-        )
-        print(f"Fail-on policy: {', '.join(fail_on) if fail_on else '(none)'}")
-        print(f"Fail-on scope: {scope_label}")
-        print(f"Selected blocking findings: {len(failures)}")
-        for category, finding in failures:
-            label = finding.get("endpoint") or finding.get("function") or "async def"
-            print(f"  {category}: {finding['file']}:{finding['line']} | {label}")
+        print_selected_report(results, failures, fail_on, args.diff_base, args.full_report)
+        if args.full_report:
+            print()
+            print_report(results)
 
     sys.exit(1 if failures else 0)
 

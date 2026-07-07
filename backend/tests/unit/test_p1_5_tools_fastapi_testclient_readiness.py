@@ -2,7 +2,10 @@ import importlib.util
 import json
 import subprocess
 import sys
+import pytest
 from pathlib import Path
+
+pytestmark = pytest.mark.slow
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / 'backend' / 'scripts' / 'p1_5_tools_fastapi_testclient_readiness.py'

@@ -1,5 +1,5 @@
 import SwiftUI
-
+import OmiTheme
 /// A token that callers pass when the local user sends a message.
 /// This allows ChatMessagesView to distinguish genuine user sends from
 /// messages arriving via polling, sync, or other sources — without
@@ -25,8 +25,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     var sessionsLoadError: String? = nil
     var onRetry: (() -> Void)? = nil
     /// Token that increments each time the local user sends a message.
-    /// ChatMessagesView uses this to anchor the new user message near the
-    /// top of the viewport (one-shot) before the assistant streams below.
+    /// ChatMessagesView uses this to follow the latest message immediately
+    /// after the local user row is inserted.
     /// Pass nil when the caller cannot distinguish local sends (e.g. TaskChatPanel
     /// with its own send path).
     var localSendToken: LocalSendToken? = nil
@@ -72,6 +72,11 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Tracks work items for delayed initial bottom scrolls so they can be
     /// canceled on user scroll or disappear.
     @State private var initialScrollWorkItems: [DispatchWorkItem] = []
+    /// Last visible scroll viewport size. When a chat panel opens, sidebars
+    /// resize, or the window is dragged wider/taller, SwiftUI can lay out the
+    /// transcript after our first scroll request; this lets us re-follow the
+    /// latest message while still respecting explicit user scrolls.
+    @State private var lastScrollViewportSize: CGSize = .zero
 
     // MARK: - Local Send Anchoring
 
@@ -82,7 +87,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     // MARK: - Saved Restore
 
     /// Whether the initial history load for this conversation has been handled.
-    /// Prevents re-anchoring on subsequent messages.count changes after restore.
+    /// Prevents repeated initial bottom settling on subsequent messages.count changes.
     @State private var initialRestoreHandled = false
 
     // MARK: - Prepend Preservation (Load Earlier Messages)
@@ -202,12 +207,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         .onDisappear {
             cancelAllPendingScrolls()
         }
+        .background(viewportResizeDetector(proxy: proxy))
     }
 
     // MARK: - Message Count Change Handler
 
     /// Central handler for messages.count changes. Handles:
-    /// - Initial restore (scroll to last user message on first load)
+    /// - Initial restore (scroll to latest message on first load)
     /// - New messages arriving while following
     /// - New messages arriving while scrolled away (activity indicator)
     /// - Prepend detection (load earlier)
@@ -227,10 +233,6 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             // --- New live messages arriving ---
             if scrollMode == .followingBottom {
                 scrollToBottom(proxy: proxy)
-            } else if scrollMode == .anchoringTurn {
-                // While anchored to the new turn, keep the prompt stable and
-                // surface that live activity is arriving below.
-                hasActivityBelow = true
             } else {
                 // freeScrolling — new content arrived below
                 hasActivityBelow = true
@@ -242,73 +244,42 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         switch scrollMode {
         case .followingBottom:
             throttledScrollToBottom(proxy: proxy)
-        case .freeScrolling, .anchoringTurn:
+        case .freeScrolling:
             hasActivityBelow = true
         }
     }
 
     // MARK: - Initial Restore
 
-    /// On the first load of a saved conversation, scroll to the last user
-    /// message rather than absolute bottom. This lets the user see their
-    /// last question and the beginning of the AI response, with more context
-    /// above. Fallback: for chats with no user messages or only one turn,
-    /// just go to bottom.
+    /// On the first load of a saved conversation, follow the latest message.
+    /// Chat surfaces should open at the live edge; if the reader wants older
+    /// context, explicit scroll input switches the mode to free-scrolling.
     private func handleInitialRestore(proxy: ScrollViewProxy) {
         guard !initialRestoreHandled else { return }
         initialRestoreHandled = true
 
-        // Find the last user message
-        let lastUserMsg = messages.last { $0.sender == .user }
-
-        if let anchorMsg = lastUserMsg, messages.count > 2 {
-            scrollMode = .anchoringTurn
-            hasActivityBelow = true
-            // Scroll so the last user message appears near the top of the
-            // viewport. We use a small delay to let the LazyVStack render.
-            let anchorId = anchorMsg.id
-            let work = DispatchWorkItem { [self] in
-                guard scrollMode == .followingBottom || scrollMode == .anchoringTurn else { return }
-                proxy.scrollTo(anchorId, anchor: .top)
-            }
-            initialScrollWorkItems.append(work)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
-        } else {
-            // Fallback: no user messages, or very short chat — scroll to bottom
-            scrollMode = .followingBottom
-            hasActivityBelow = false
-            scrollToBottom(proxy: proxy)
-        }
+        scrollMode = .followingBottom
+        hasActivityBelow = false
+        scrollToBottom(proxy: proxy)
+        scheduleInitialScroll(proxy: proxy, delay: 0.05)
+        scheduleInitialScroll(proxy: proxy, delay: 0.18)
+        scheduleInitialScroll(proxy: proxy, delay: 0.45)
     }
 
     // MARK: - Local Send / Turn Anchoring
 
-    /// Called when the local send token increments. Anchors the newest user
-    /// message near the top of the viewport so the assistant response streams
-    /// below it, giving the user a stable reading frame.
+    /// Called when the local send token increments. Follow the latest message
+    /// so the newly inserted user row and streamed assistant response stay in
+    /// view unless the user explicitly scrolls away.
     private func handleLocalSend(proxy: ScrollViewProxy) {
         guard !messages.isEmpty else { return }
 
-        // Find the most recently added user message
-        let lastUserMsg = messages.last { $0.sender == .user }
-        guard let anchorMsg = lastUserMsg else {
-            // No user message found (shouldn't happen on a local send, but be safe)
-            scrollMode = .followingBottom
-            scrollToBottom(proxy: proxy)
-            return
-        }
-
         cancelAllPendingScrolls()
-        scrollMode = .anchoringTurn
-
-        let anchorId = anchorMsg.id
-        // Small delay to let SwiftUI commit the new message into the LazyVStack
-        let work = DispatchWorkItem { [self] in
-            guard scrollMode == .anchoringTurn else { return }
-            proxy.scrollTo(anchorId, anchor: .top)
-        }
-        initialScrollWorkItems.append(work)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: work)
+        scrollMode = .followingBottom
+        hasActivityBelow = false
+        userIsScrolling = false
+        scrollToBottom(proxy: proxy)
+        scheduleInitialScroll(proxy: proxy, delay: 0.1)
     }
 
     // MARK: - Prepend Preservation
@@ -337,6 +308,28 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     }
 
     // MARK: - Scheduled Scrolls
+
+    private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy) {
+        guard size.width > 0, size.height > 0 else { return }
+        guard size != lastScrollViewportSize else { return }
+        lastScrollViewportSize = size
+
+        guard scrollMode == .followingBottom, !userIsScrolling, !messages.isEmpty else { return }
+        scrollToBottom(proxy: proxy)
+        scheduleInitialScroll(proxy: proxy, delay: 0.08)
+    }
+
+    private func viewportResizeDetector(proxy: ScrollViewProxy) -> some View {
+        GeometryReader { geometry in
+            Color.clear
+                .onAppear {
+                    handleViewportSizeChange(geometry.size, proxy: proxy)
+                }
+                .onChange(of: geometry.size) { _, newSize in
+                    handleViewportSizeChange(newSize, proxy: proxy)
+                }
+        }
+    }
 
     /// Schedules a delayed bottom scroll that is mode-aware and cancelable.
     private func scheduleInitialScroll(proxy: ScrollViewProxy, delay: TimeInterval) {
@@ -475,7 +468,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 // again; only atBottom == false is ambiguous (it can be a
                 // geometry/layout change, not user intent) and must NOT switch
                 // to .freeScrolling on its own.
-                if atBottom && (scrollMode == .freeScrolling || scrollMode == .anchoringTurn) {
+                if atBottom && scrollMode == .freeScrolling {
                     cancelAllPendingScrolls()
                     userIsScrolling = false
                     scrollMode = .followingBottom
@@ -483,14 +476,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 }
             }
             UserScrollDetector {
-                if scrollMode == .anchoringTurn {
-                    // If user scrolls during turn anchoring, cancel the anchor
-                    // and go to free-scrolling immediately.
-                    scrollMode = .freeScrolling
-                    cancelAllPendingScrolls()
-                } else {
-                    scrollMode = .freeScrolling
-                }
+                scrollMode = .freeScrolling
                 userIsScrolling = true
                 hasActivityBelow = false
                 cancelAllPendingScrolls()
@@ -500,7 +486,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                 userScrollEndWorkItem = endWork
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: endWork)
             } onScrollSettledAtBottom: {
-                guard scrollMode == .freeScrolling || scrollMode == .anchoringTurn else { return }
+                guard scrollMode == .freeScrolling else { return }
                 cancelAllPendingScrolls()
                 userIsScrolling = false
                 scrollMode = .followingBottom
@@ -511,10 +497,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     @ViewBuilder
     private func scrollToBottomButton(proxy: ScrollViewProxy) -> some View {
-        // Show when: free-scrolled, OR anchoring turn (give user escape hatch),
-        // AND there are messages, AND either there's activity below or we're
-        // in a non-following mode.
-        if (scrollMode == .freeScrolling || scrollMode == .anchoringTurn) && !messages.isEmpty {
+        // Show when free-scrolled AND there are messages, AND either there's
+        // activity below or we're in a non-following mode.
+        if scrollMode == .freeScrolling && !messages.isEmpty {
             Button {
                 cancelAllPendingScrolls()
                 userIsScrolling = false

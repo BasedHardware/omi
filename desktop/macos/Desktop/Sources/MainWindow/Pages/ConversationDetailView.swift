@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {

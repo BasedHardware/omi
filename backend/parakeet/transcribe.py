@@ -2,39 +2,47 @@ import io
 import os
 import logging
 import wave as _wave
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import httpx
 import numpy as np
-from langdetect import detect as langdetect_detect
+from langdetect import detect as _langdetect_detect_raw  # type: ignore[reportUnknownVariableType]  # langdetect ships partial type info
 from langdetect.lang_detect_exception import LangDetectException
 from scipy.cluster.hierarchy import linkage, fcluster
 
 logger = logging.getLogger(__name__)
 
-BATCH_MODEL_NAME = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
-STREAM_MODEL_NAME = os.getenv("PARAKEET_STREAM_MODEL", "")
-INFERENCE_MODE = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
+BATCH_MODEL_NAME: str = os.getenv("PARAKEET_MODEL", "nvidia/parakeet-tdt-0.6b-v3")
+STREAM_MODEL_NAME: str = os.getenv("PARAKEET_STREAM_MODEL", "")
+INFERENCE_MODE: str = os.getenv("PARAKEET_INFERENCE_MODE", "nemo")
 
-_stream_model = None
-_nim_url = None
-_gpu_worker = None
-
-try:
-    import nemo.collections.asr as nemo_asr
-except ImportError:
-    nemo_asr = None
+_stream_model: Optional[Any] = None
+_nim_url: Optional[str] = None
+_gpu_worker: Optional[Any] = None
 
 try:
-    import torch as _torch
+    import nemo.collections.asr as _nemo_asr  # type: ignore[reportMissingImports]  # nemo_toolkit not installed in dev venv
 except ImportError:
-    _torch = None
+    _nemo_asr = None
+
+try:
+    import torch as _torch_mod  # type: ignore[reportMissingImports]  # torch not installed in dev venv
+except ImportError:
+    _torch_mod = None
+
+# Untyped / uninstalled libraries aliased as Any so member access does not
+# cascade into reportUnknownMemberType warnings.
+nemo_asr: Any = _nemo_asr
+_torch: Any = cast(Any, _torch_mod)
+# langdetect ships partial type information; alias to Any for a clean str return.
+langdetect_detect: Any = cast(Any, _langdetect_detect_raw)
 
 
-def has_builtin_embedding():
-    return _gpu_worker is not None and _gpu_worker.is_ready and _gpu_worker._embedding_model is not None
+def has_builtin_embedding() -> bool:
+    return bool(_gpu_worker is not None and _gpu_worker.is_ready and _gpu_worker._embedding_model is not None)
 
 
-def wav_bytes_to_waveform(wav_bytes: bytes):
+def wav_bytes_to_waveform(wav_bytes: bytes) -> Tuple[Any, int]:
     buf = io.BytesIO(wav_bytes)
     with _wave.open(buf, "rb") as wf:
         sr = wf.getframerate()
@@ -52,22 +60,22 @@ def wav_bytes_to_waveform(wav_bytes: bytes):
         raise ValueError(f"Unsupported WAV sample width: {sw} bytes")
     if nch > 1:
         samples = samples.reshape(-1, nch).mean(axis=1)
-    waveform = _torch.from_numpy(samples).unsqueeze(0)
+    waveform: Any = _torch.from_numpy(samples).unsqueeze(0)
     return waveform, sr
 
 
-def set_gpu_worker(worker) -> None:
+def set_gpu_worker(worker: Any) -> None:
     global _gpu_worker
     _gpu_worker = worker
 
 
-def _load_nemo_model(model_name: str):
+def _load_nemo_model(model_name: str) -> Any:
     if nemo_asr is None:
         raise RuntimeError("nemo_toolkit[asr] is not installed")
 
     logger.info(f"Loading NeMo model: {model_name}")
 
-    model_classes = [
+    model_classes: List[Any] = [
         nemo_asr.models.ASRModel,
     ]
     try:
@@ -83,13 +91,15 @@ def _load_nemo_model(model_name: str):
     except AttributeError:
         pass
 
-    use_bf16 = os.getenv("PARAKEET_BF16", "1") == "1" and _torch.cuda.is_available() and _torch.cuda.is_bf16_supported()
+    use_bf16: Any = (
+        os.getenv("PARAKEET_BF16", "1") == "1" and _torch.cuda.is_available() and _torch.cuda.is_bf16_supported()
+    )
 
-    last_err = None
+    last_err: Optional[BaseException] = None
     for cls in model_classes:
         try:
             logger.info(f"Trying {cls.__name__}.from_pretrained({model_name})")
-            model = cls.from_pretrained(model_name=model_name, map_location="cpu")
+            model: Any = cls.from_pretrained(model_name=model_name, map_location="cpu")
             if use_bf16:
                 logger.info(f"Converting {model_name} to BF16 (halves GPU memory)")
                 model = model.to(_torch.bfloat16)
@@ -107,7 +117,7 @@ def _load_nemo_model(model_name: str):
     raise RuntimeError(f"Could not load model {model_name} with any NeMo class: {last_err}")
 
 
-def _init_stream_model():
+def _init_stream_model() -> None:
     global _stream_model
     if not STREAM_MODEL_NAME:
         logger.info("No PARAKEET_STREAM_MODEL set, streaming will be unavailable")
@@ -115,7 +125,7 @@ def _init_stream_model():
     _stream_model = _load_nemo_model(STREAM_MODEL_NAME)
 
 
-def _init_nim():
+def _init_nim() -> None:
     global _nim_url
     _nim_url = os.getenv("NIM_INFERENCE_URL", "http://localhost:9000")
     logger.info(f"NIM inference endpoint: {_nim_url}")
@@ -127,16 +137,17 @@ else:
     _init_stream_model()
 
 
-def _transcribe_from_gpu_result(result: dict) -> dict:
-    text = result.get("text", "")
-    segments = []
-    timestamp = result.get("timestamp", {})
-    for s in timestamp.get("segment", []) or []:
+def _transcribe_from_gpu_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    text: Any = result.get("text", "")
+    segments: List[Dict[str, Any]] = []
+    timestamp: Any = result.get("timestamp", {})
+    for s in cast(List[Any], timestamp.get("segment", []) or []):
+        seg: Dict[str, Any] = cast(Dict[str, Any], s)
         segments.append(
             {
-                "text": s.get("segment", ""),
-                "start": float(s.get("start", 0.0)),
-                "end": float(s.get("end", 0.0)),
+                "text": seg.get("segment", ""),
+                "start": float(seg.get("start", 0.0)),
+                "end": float(seg.get("end", 0.0)),
             }
         )
     if not segments and text:
@@ -144,16 +155,19 @@ def _transcribe_from_gpu_result(result: dict) -> dict:
     return {"text": text, "segments": segments}
 
 
-def transcribe_file(file_path: str):
+def transcribe_file(file_path: str) -> Dict[str, Any]:
     if INFERENCE_MODE == "nim":
         return _transcribe_nim(file_path)
     return _transcribe_via_gpu_worker(file_path)
 
 
-def _transcribe_via_gpu_worker(file_path: str):
+def _transcribe_via_gpu_worker(file_path: str) -> Dict[str, Any]:
     if _gpu_worker is None:
         raise RuntimeError("GPU worker not initialized — call set_gpu_worker() first")
-    results = _gpu_worker.submit_sync({"audio_paths": [file_path], "timestamps": True, "batch_size": 1})
+    results: List[Dict[str, Any]] = cast(
+        List[Dict[str, Any]],
+        _gpu_worker.submit_sync({"audio_paths": [file_path], "timestamps": True, "batch_size": 1}),
+    )
     if results and len(results) > 0:
         return _transcribe_from_gpu_result(results[0])
     return {"text": "", "segments": []}
@@ -161,14 +175,14 @@ def _transcribe_via_gpu_worker(file_path: str):
 
 def transcribe_file_v2(
     file_path: str,
-    gpu_result: dict = None,
+    gpu_result: Optional[Dict[str, Any]] = None,
     diarize: bool = True,
-    min_speakers: int = None,
-    max_speakers: int = None,
-    num_speakers: int = None,
-):
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
+    num_speakers: Optional[int] = None,
+) -> Dict[str, Any]:
     if gpu_result is not None:
-        base = _transcribe_from_gpu_result(gpu_result)
+        base: Dict[str, Any] = _transcribe_from_gpu_result(gpu_result)
     else:
         base = transcribe_file(file_path)
 
@@ -188,8 +202,8 @@ def transcribe_file_v2(
     return base
 
 
-SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
-SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
+SPEAKER_EMBEDDING_URL: str = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
+SPEAKER_MATCH_THRESHOLD: float = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 MIN_SEGMENT_DURATION = 0.6
 
 
@@ -197,12 +211,12 @@ def detect_language_from_text(text: str) -> str:
     if not text or len(text.strip()) < 10:
         return 'en'
     try:
-        return langdetect_detect(text)
+        return cast(str, langdetect_detect(text))
     except LangDetectException:
         return 'en'
 
 
-def _transcribe_nim(file_path: str):
+def _transcribe_nim(file_path: str) -> Dict[str, Any]:
 
     with open(file_path, "rb") as f:
         audio_bytes = f.read()
@@ -217,16 +231,17 @@ def _transcribe_nim(file_path: str):
                 data={"language": nim_language},
             )
         resp.raise_for_status()
-        data = resp.json()
+        data: Dict[str, Any] = cast(Dict[str, Any], resp.json())
 
-        text = data.get("text", "") or ""
-        segments = []
-        for s in data.get("segments", []) or []:
+        text: Any = data.get("text", "") or ""
+        segments: List[Dict[str, Any]] = []
+        for s in cast(List[Any], data.get("segments", []) or []):
+            seg: Dict[str, Any] = cast(Dict[str, Any], s)
             segments.append(
                 {
-                    "text": s.get("text", s.get("segment", "")),
-                    "start": float(s.get("start", 0.0)),
-                    "end": float(s.get("end", 0.0)),
+                    "text": seg.get("text", seg.get("segment", "")),
+                    "start": float(seg.get("start", 0.0)),
+                    "end": float(seg.get("end", 0.0)),
                 }
             )
         if not segments and text:
@@ -240,11 +255,11 @@ def _transcribe_nim(file_path: str):
 
 def _diarize_segments(
     file_path: str,
-    base: dict,
-    min_speakers: int = None,
-    max_speakers: int = None,
-    num_speakers: int = None,
-) -> dict:
+    base: Dict[str, Any],
+    min_speakers: Optional[int] = None,
+    max_speakers: Optional[int] = None,
+    num_speakers: Optional[int] = None,
+) -> Dict[str, Any]:
     if not SPEAKER_EMBEDDING_URL and not has_builtin_embedding():
         for seg in base["segments"]:
             seg["speaker"] = "SPEAKER_0"
@@ -367,7 +382,7 @@ def _extract_segment_wav(wav_bytes: bytes, start: float, end: float) -> bytes:
     return out.getvalue()
 
 
-def _get_embedding(wav_bytes: bytes):
+def _get_embedding(wav_bytes: bytes) -> Any:
     if has_builtin_embedding():
         emb = _get_embedding_builtin(wav_bytes)
         if emb is not None:
@@ -377,13 +392,13 @@ def _get_embedding(wav_bytes: bytes):
     return None
 
 
-def _get_embedding_builtin(wav_bytes: bytes):
+def _get_embedding_builtin(wav_bytes: bytes) -> Any:
     try:
         waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
         dur = waveform.shape[1] / sample_rate
         if dur < MIN_SEGMENT_DURATION:
             return None
-        emb = _gpu_worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+        emb: Any = cast(Any, _gpu_worker).submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
         if emb is None:
             return None
         emb = np.array(emb, dtype=np.float32)
@@ -395,7 +410,7 @@ def _get_embedding_builtin(wav_bytes: bytes):
         return None
 
 
-def _get_embedding_http(wav_bytes: bytes):
+def _get_embedding_http(wav_bytes: bytes) -> Any:
     try:
         with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
             resp = client.post(
@@ -403,7 +418,7 @@ def _get_embedding_http(wav_bytes: bytes):
                 files={"file": ("segment.wav", wav_bytes, "audio/wav")},
             )
         resp.raise_for_status()
-        result = resp.json()
+        result: Any = resp.json()
 
         if isinstance(result, list):
             emb = np.array(result, dtype=np.float32)

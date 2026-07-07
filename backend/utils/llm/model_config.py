@@ -74,6 +74,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-nano', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4-mini', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -124,6 +126,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -173,6 +177,8 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
         'memory_conflict': ('gpt-4.1-mini', 'openai'),
         'memory_category': ('gpt-4.1-mini', 'openai'),
         'knowledge_graph': ('gpt-4.1-mini', 'openai'),
+        'memory_l1': ('gpt-4.1-mini', 'openai'),
+        'memory_l2': ('gpt-4.1-mini', 'openai'),
         # OpenAI — chat
         'chat_responses': ('gpt-5.4', 'openai'),
         'chat_extraction': ('gpt-4.1-mini', 'openai'),
@@ -205,7 +211,7 @@ MODEL_QOS_PROFILES: Dict[str, Dict[str, Tuple[str, str]]] = {
 
 # Pinned features — (model, provider) fixed regardless of profile or env override.
 _PINNED_FEATURES: Dict[str, Tuple[str, str]] = {
-    'fair_use': ('gpt-5.1', 'openai'),
+    'fair_use': (os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1').strip() or 'gpt-5.1', 'openai'),
 }
 
 # Resolve active profile once at startup.
@@ -252,8 +258,10 @@ _STRUCTURED_OUTPUT_FEATURES = {
     'external_structure',
     'trends',
 }
+STRUCTURED_OUTPUT_FEATURES = _STRUCTURED_OUTPUT_FEATURES
 
 _DEFAULT_CONFIG: Tuple[str, str] = ('gpt-4.1-mini', 'openai')
+DEFAULT_CONFIG = _DEFAULT_CONFIG
 
 # Future migration point for features that should call the gateway via an auto
 # lane. Keep empty until a ticket explicitly wires and verifies shadow/live
@@ -269,6 +277,14 @@ def _get_model_config(feature: str) -> Tuple[str, str]:
     if feature in _PINNED_FEATURES:
         return _PINNED_FEATURES[feature]
     return _active_profile.get(feature, _DEFAULT_CONFIG)
+
+
+def get_model_config(feature: str) -> Tuple[str, str]:
+    """Get the (model, provider) tuple for a feature.
+
+    Resolution order: pinned > active profile > fallback.
+    """
+    return _get_model_config(feature)
 
 
 def get_model(feature: str) -> str:
@@ -377,3 +393,19 @@ def get_byok_profile() -> Dict[str, Tuple[str, str]]:
 
 def get_byok_profile_name() -> str:
     return _byok_profile_name
+
+
+def get_openrouter_temperatures() -> Dict[str, float]:
+    return _OPENROUTER_TEMPERATURES
+
+
+def get_pinned_features() -> Dict[str, Tuple[str, str]]:
+    return _PINNED_FEATURES
+
+
+def get_anthropic_only_features() -> set[str]:
+    return _ANTHROPIC_ONLY_FEATURES
+
+
+def get_perplexity_only_features() -> set[str]:
+    return _PERPLEXITY_ONLY_FEATURES

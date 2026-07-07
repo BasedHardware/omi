@@ -1,15 +1,24 @@
 import Foundation
 import Network
 
+enum LocalAgentAPIError: LocalizedError {
+  case tokenStorageUnavailable
+
+  var errorDescription: String? {
+    switch self {
+    case .tokenStorageUnavailable:
+      return "Couldn't save the local agent token securely."
+    }
+  }
+}
+
 enum LocalAgentAPISettings {
   static let defaultPort: UInt16 = 47778
 
   private static let enabledKey = "localAgentAPIEnabled"
-  // Local-agent tokens currently live in app preferences so setup prompts can
-  // be generated without a Keychain prompt. The API is loopback-only, but the
-  // token is still readable by same-user processes; use Keychain if this scope
-  // expands beyond local desktop automation.
   private static let tokenKey = "localAgentAPIToken"
+  private static let tokenKeychainService = "com.omi.desktop.local-agent-api"
+  private static let tokenKeychainAccount = "local-agent-api-token"
   private static let portKey = "localAgentAPIPort"
 
   static var isEnabled: Bool {
@@ -34,29 +43,49 @@ enum LocalAgentAPISettings {
   }
 
   static func storedToken() -> String? {
+    if let token = DesktopKeychainStore.string(service: tokenKeychainService, account: tokenKeychainAccount) {
+      return token
+    }
     let token = UserDefaults.standard.string(forKey: tokenKey) ?? ""
-    return token.isEmpty ? nil : token
+    guard !token.isEmpty else { return nil }
+    if DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) {
+      UserDefaults.standard.removeObject(forKey: tokenKey)
+      log("LocalAgentAPISettings: migrated token from UserDefaults to Keychain")
+      return token
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
+    log("LocalAgentAPISettings: failed to migrate token to Keychain")
+    return nil
   }
 
-  static func ensureToken() -> String {
+  static func ensureToken() throws -> String {
     if let token = storedToken() {
       return token
     }
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
-    UserDefaults.standard.set(token, forKey: tokenKey)
+    guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
+      log("LocalAgentAPISettings: failed to save token to Keychain")
+      throw LocalAgentAPIError.tokenStorageUnavailable
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
     return token
   }
 
-  static func createNewToken() -> String {
+  static func createNewToken() throws -> String {
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
-    UserDefaults.standard.set(token, forKey: tokenKey)
+    guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
+      isEnabled = false
+      log("LocalAgentAPISettings: failed to save replacement token to Keychain")
+      throw LocalAgentAPIError.tokenStorageUnavailable
+    }
+    UserDefaults.standard.removeObject(forKey: tokenKey)
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token
   }
 
-  static func enable() -> String {
-    let token = ensureToken()
+  static func enable() throws -> String {
+    let token = try ensureToken()
     isEnabled = true
     LocalAgentAPIServer.shared.startIfNeeded()
     return token
@@ -201,6 +230,10 @@ final class LocalAgentAPIServer {
   }
 
   private func route(_ request: LocalHTTPRequest) async -> LocalHTTPResponse {
+    guard acceptsLoopbackHostAndOrigin(request.headers) else {
+      return errorResponse("invalid_host_or_origin", statusCode: 403)
+    }
+
     if request.method == "GET", request.path == "/health" || request.path == "/" {
       return jsonResponse([
         "ok": true,
@@ -255,6 +288,34 @@ final class LocalAgentAPIServer {
     let result = await ChatToolExecutor.execute(
       ToolCall(name: executorToolName, arguments: arguments, thoughtSignature: nil))
     return toolResponse(name: toolName, result: result)
+  }
+
+  private func acceptsLoopbackHostAndOrigin(_ headers: [String: String]) -> Bool {
+    if let host = headers["host"], !isAllowedLoopbackHost(host) {
+      return false
+    }
+    if let origin = headers["origin"], !origin.isEmpty {
+      guard let url = URL(string: origin), let host = url.host, let port = url.port else {
+        return false
+      }
+      guard (url.scheme == "http" || url.scheme == "https"), port == Int(LocalAgentAPISettings.port) else {
+        return false
+      }
+      guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
+        return false
+      }
+    }
+    return true
+  }
+
+  private func isAllowedLoopbackHost(_ hostHeader: String) -> Bool {
+    let value = hostHeader.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let allowed = [
+      "127.0.0.1:\(LocalAgentAPISettings.port)",
+      "localhost:\(LocalAgentAPISettings.port)",
+      "[::1]:\(LocalAgentAPISettings.port)",
+    ]
+    return allowed.contains(value)
   }
 
   private func authenticate(_ authorization: String?) -> Bool {

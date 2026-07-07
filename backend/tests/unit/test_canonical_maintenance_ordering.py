@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import importlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
@@ -25,6 +26,18 @@ from utils.memory.short_term_promotion import (
 )
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _refresh_short_term_promotion_runtime():
+    short_term_promotion = importlib.import_module("utils.memory.short_term_promotion")
+    globals().update(
+        {
+            "CanonicalShortTermLifecycleReport": short_term_promotion.CanonicalShortTermLifecycleReport,
+            "ShortTermPromotionReport": short_term_promotion.ShortTermPromotionReport,
+            "run_canonical_short_term_maintenance": short_term_promotion.run_canonical_short_term_maintenance,
+        }
+    )
 
 
 def test_maintenance_runs_consolidation_before_promotion():

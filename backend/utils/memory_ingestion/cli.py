@@ -4,6 +4,7 @@ import argparse
 import asyncio
 
 from utils.memory_ingestion.adapters.offline_input import read_pipeline_inputs, write_pipeline_outputs
+from utils.memory_ingestion.models import MemoryPipelineOutput
 from utils.memory_ingestion.pipeline import CoreMemoryPipeline
 
 
@@ -15,7 +16,7 @@ async def _run(args: argparse.Namespace) -> None:
         model_client = ProductionLikeMemoryModelClient(max_events_per_call=args.max_events_per_call)
     pipeline = CoreMemoryPipeline(model_client=model_client, private_fingerprint_key=args.private_fingerprint_key)
     inputs = read_pipeline_inputs(args.input)
-    outputs = []
+    outputs: list[MemoryPipelineOutput] = []
     for pipeline_input in inputs:
         outputs.append(await pipeline.run(pipeline_input))
     write_pipeline_outputs(args.output, outputs)

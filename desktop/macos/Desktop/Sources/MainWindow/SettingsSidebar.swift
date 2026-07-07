@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 // MARK: - Search Data Model
 
@@ -83,6 +84,12 @@ struct SettingsSearchItem: Identifiable {
       name: "Language Mode", subtitle: "Choose single or multi-language transcription",
       keywords: ["language", "multilingual", "single language"], section: .transcription,
       icon: "waveform", settingId: "transcription.languagemode"),
+    SettingsSearchItem(
+      name: "Voice Assistant Languages",
+      subtitle: "Languages you speak to Omi over push-to-talk",
+      keywords: ["voice", "push to talk", "ptt", "language", "russian", "multilingual"],
+      section: .transcription, icon: "person.wave.2",
+      settingId: "transcription.voicelanguages"),
     SettingsSearchItem(
       name: "Custom Vocabulary",
       subtitle: "Improve recognition of names, brands, and technical terms",

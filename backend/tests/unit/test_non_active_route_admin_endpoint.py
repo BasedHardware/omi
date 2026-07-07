@@ -59,8 +59,8 @@ fastapi_stub.Request = type("Request", (), {})
 _ADMIN_ROUTER_STUB_NAMES = (
     "fastapi",
     "database._client",
+    "database.vector_db",
     "utils.other.endpoints",
-    "routers.memory_admin",
     "routers.memory_admin",
 )
 
@@ -68,30 +68,24 @@ _ADMIN_ROUTER_STUB_NAMES = (
 @pytest.fixture(scope="module", autouse=True)
 def _memory_admin_router_import_isolation():
     saved = snapshot_sys_modules(_ADMIN_ROUTER_STUB_NAMES)
-    for name in ("routers.memory_admin", "routers.memory_admin"):
-        sys.modules.pop(name, None)
+    sys.modules.pop("routers.memory_admin", None)
     install_memory_product_router_stubs(fastapi_stub, types.ModuleType("utils.other.endpoints"))
     from database.memory_non_active_routes import NonActiveRoute
     from utils.memory.non_active_route_audit import NonActiveRouteAuditReport
 
     import routers.memory_admin as memory_admin
-    import routers.memory_admin as memory_admin
 
     globals()["NonActiveRoute"] = NonActiveRoute
     globals()["NonActiveRouteAuditReport"] = NonActiveRouteAuditReport
     globals()["memory_admin"] = memory_admin
-    globals()["memory_admin"] = memory_admin
     yield
     restore_sys_modules(saved)
-    for name in ("routers.memory_admin", "routers.memory_admin"):
-        sys.modules.pop(name, None)
-    globals()["memory_admin"] = None
+    sys.modules.pop("routers.memory_admin", None)
     globals()["memory_admin"] = None
 
 
 NonActiveRoute = None
 NonActiveRouteAuditReport = None
-memory_admin = None
 memory_admin = None
 
 

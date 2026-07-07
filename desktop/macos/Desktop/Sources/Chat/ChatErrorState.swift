@@ -31,7 +31,7 @@ enum BridgeUnavailableReason: Equatable, Sendable {
 /// The five recoverable error states the chat UI renders inline.
 ///
 /// Anything that does NOT map to a case here (e.g. `BridgeError.encodingError`,
-/// `.quotaExceeded`, `.agentError`) is intentionally left to the existing
+/// `.quotaExceeded`, opaque `.agentError`) is intentionally left to the existing
 /// `errorMessage` banner / sheets. The `from(_:)` factory returns `nil` in
 /// those cases so callers can fall through.
 enum ChatErrorState: Equatable, Sendable {
@@ -120,10 +120,13 @@ extension ChatErrorState {
   ///   - `.restarting`           → `.bridgeUnavailable(.unknown)`
   ///   - `.authMissing`          → `.authRequired`
   ///
+  /// Cases conditionally handled:
+  ///   - `.agentError` session-token auth strings → `.authRequired`
+  ///
   /// Cases intentionally returning `nil` (fall through to existing banner):
   ///   - `.encodingError`        (internal error, retry won't help)
   ///   - `.quotaExceeded`        (paywall — kept as separate sheet)
-  ///   - `.agentError`           (varied; existing banner already classifies)
+  ///   - opaque `.agentError`    (varied; existing banner already classifies)
   ///   - `.agentRuntimeFailure`  (already carries runtime-specific copy)
   ///   - `.requestAlreadyActive` (the existing banner explains the active turn)
   static func from(_ bridgeError: BridgeError) -> ChatErrorState? {
@@ -142,7 +145,9 @@ extension ChatErrorState {
       return .bridgeUnavailable(reason: .unknown)
     case .authMissing:
       return .authRequired
-    case .encodingError, .quotaExceeded, .agentError, .agentRuntimeFailure, .requestAlreadyActive:
+    case .agentError(let message):
+      return BridgeError.agentError(message).isSessionAuthenticationFailure ? .authRequired : nil
+    case .encodingError, .quotaExceeded, .agentRuntimeFailure, .requestAlreadyActive:
       return nil
     }
   }
