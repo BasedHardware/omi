@@ -1194,7 +1194,7 @@ private struct AICloneContactRow: View {
           RoundedRectangle(cornerRadius: 8).stroke(OmiColors.border, lineWidth: 1))
       }
       .buttonStyle(.plain)
-      .help("\(result.iterationsRun) iteration(s) • tap for held-out pairs")
+      .help("\(result.iterationsRun) iteration\(result.iterationsRun == 1 ? "" : "s") • click for held-out pairs")
 
     case .failed(let message):
       HStack(spacing: 6) {
@@ -1535,7 +1535,7 @@ private struct AICloneLiveChatView: View {
           HStack(spacing: 6) {
             Image(systemName: "sparkles")
               .font(.system(size: 11, weight: .semibold))
-            Text("Suggest reply")
+            Text("Suggest Reply")
               .scaledFont(size: 12, weight: .semibold)
           }
           .foregroundColor(hasIncoming ? OmiColors.textPrimary : OmiColors.textQuaternary)
@@ -1994,7 +1994,7 @@ private struct AIClonePracticeChatView: View {
         HStack(spacing: 4) {
           Image(systemName: "paperplane.fill")
             .font(.system(size: 9, weight: .semibold))
-          Text("Send for real")
+          Text("Send for Real")
             .scaledFont(size: 11, weight: .semibold)
         }
         .foregroundColor(OmiColors.textSecondary)
