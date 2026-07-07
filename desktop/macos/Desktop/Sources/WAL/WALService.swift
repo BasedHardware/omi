@@ -336,19 +336,61 @@ final class WALService: ObservableObject {
 
         let frameCount = frames.count
 
-        // Write synchronously — callers (BLE download path, flush) need filePath
-        // set before reading it for cloud upload. The BLE download path already
-        // runs off the main thread; for the flush path the write is small.
-        do {
-            try fileData.write(to: fileUrl, options: .atomic)
-            log("WALService: Wrote \(frameCount) frames to \(fileName)")
+        // Write to disk on background thread to avoid blocking the main actor.
+        // The completion handler hops back to main to set filePath — callers that
+        // need filePath set before proceeding should use writeFramesToDiskAndWait.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            do {
+                try fileData.write(to: fileUrl, options: .atomic)
+                log("WALService: Wrote \(frameCount) frames to \(fileName)")
 
-            if let index = wals.firstIndex(where: { $0.id == walId }) {
-                wals[index].storage = .disk
-                wals[index].filePath = fileName
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if let index = self.wals.firstIndex(where: { $0.id == walId }) {
+                        self.wals[index].storage = .disk
+                        self.wals[index].filePath = fileName
+                    }
+                }
+            } catch {
+                log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
             }
-        } catch {
-            log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
+        }
+    }
+
+    /// Synchronous variant that writes off-main but blocks the caller until the
+    /// file is on disk and filePath is set. Used by the BLE SD-card download path
+    /// (which already runs off-main) where syncToCloud must read filePath next.
+    private func writeFramesToDiskAndWait(frames: [Data], wal: WALEntry) {
+        guard let walDir = walDirectory else { return }
+
+        let fileName = wal.generateFileName()
+        let fileUrl = walDir.appendingPathComponent(fileName)
+        let walId = wal.id
+
+        var fileData = Data()
+        for frame in frames {
+            var length = UInt32(frame.count).littleEndian
+            fileData.append(Data(bytes: &length, count: 4))
+            fileData.append(frame)
+        }
+
+        let frameCount = frames.count
+        let group = DispatchGroup()
+        group.enter()
+        DispatchQueue.global(qos: .utility).async {
+            do {
+                try fileData.write(to: fileUrl, options: .atomic)
+                log("WALService: Wrote \(frameCount) frames to \(fileName)")
+            } catch {
+                log("WALService: Failed to write frames to disk: \(error.localizedDescription)")
+            }
+            group.leave()
+        }
+        group.wait()
+
+        if let index = wals.firstIndex(where: { $0.id == walId }) {
+            wals[index].storage = .disk
+            wals[index].filePath = fileName
         }
     }
 
@@ -407,10 +449,10 @@ final class WALService: ObservableObject {
         wals[index].storageOffset += downloadedBytes
         wals[index].totalFrames = frames.count
 
-        // Write frames to disk synchronously so filePath is set before the caller
-        // (finishSync → syncToCloud) reads it. The BLE download path already runs
-        // off the main thread; writing here avoids the async-write/early-upload race.
-        writeFramesToDisk(frames: frames, wal: wals[index])
+        // Write frames to disk and wait for completion so filePath is set before
+        // the caller (finishSync → syncToCloud) reads it. The write itself runs
+        // off-main; the BLE download path that calls this is already off-main.
+        writeFramesToDiskAndWait(frames: frames, wal: wals[index])
 
         // Check if download complete
         if wals[index].storageOffset >= wals[index].storageTotalBytes {

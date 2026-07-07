@@ -69,24 +69,17 @@ enum WALCloudSyncLogic {
         }
         return changed
       }
-      // failed — revert to miss for re-upload when file remains.
-      // partial_failure is treated as completed: the job processed its successful
-      // segments and already created/updated memories for them, so requeuing the
-      // entire WAL would resend already-processed audio.
-      let treatAsCompleted = status.status == "partial_failure"
+      // failed / partial_failure — revert to miss for re-upload when file remains.
+      // We requeue both cases: for partial_failure, the failed segments may be
+      // retryable on the next upload (transient backend failures). Re-uploading
+      // successful segments is safe — the backend dedupes by conversation/timestamp.
       var changed = false
       for walId in memberWalIds {
         guard let index = wals.firstIndex(where: { $0.id == walId }) else { continue }
         changed = true
         wals[index].jobId = nil
         wals[index].uploadedAt = 0
-        if treatAsCompleted {
-          wals[index].status = .synced
-        } else if fileExists(wals[index]) {
-          wals[index].status = .miss
-        } else {
-          wals[index].status = .corrupted
-        }
+        wals[index].status = fileExists(wals[index]) ? .miss : .corrupted
       }
       return changed
     }
