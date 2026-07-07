@@ -106,11 +106,11 @@ def get_quiet_hours_settings(uid: str = Depends(auth.get_current_user_uid)):
     )
 
 
-@router.patch('/v1/users/quiet-hours-settings')
+@router.patch('/v1/users/quiet-hours-settings', response_model=FcmTokenResponse)
 def update_quiet_hours_settings(
     data: QuietHoursSettingsUpdate,
     uid: str = Depends(auth.get_current_user_uid),
-):
+) -> FcmTokenResponse:
     """Set the user's quiet-hours window for proactive notifications.
 
     Hours are local (0-23); start_hour == end_hour means no active window. While the current
@@ -120,7 +120,7 @@ def update_quiet_hours_settings(
         notification_db.set_quiet_hours(uid, data.enabled, data.start_hour, data.end_hour)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {'status': 'Ok'}
+    return FcmTokenResponse(status='Ok')
 
 
 # ******************************************************

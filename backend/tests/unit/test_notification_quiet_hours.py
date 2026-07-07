@@ -237,7 +237,7 @@ class TestQuietHoursEndpoints:
         with patch.object(notifications_router.notification_db, "set_quiet_hours", side_effect=fake_set):
             data = notifications_router.QuietHoursSettingsUpdate(enabled=True, start_hour=23, end_hour=6)
             result = notifications_router.update_quiet_hours_settings(data=data, uid="u1")
-        assert result == {"status": "Ok"}
+        assert result.status == "Ok"
         assert captured == {"uid": "u1", "enabled": True, "start_hour": 23, "end_hour": 6}
 
     def test_patch_maps_value_error_to_400(self):

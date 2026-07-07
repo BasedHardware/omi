@@ -6358,7 +6358,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "update_quiet_hours_settings_v1_users_quiet_hours_settings_patch";
       responses: {
-        "200": unknown;
+        "200": FcmTokenResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11729,7 +11729,7 @@ export async function get_quiet_hours_settings_v1_users_quiet_hours_settings_get
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function update_quiet_hours_settings_v1_users_quiet_hours_settings_patch(body: QuietHoursSettingsUpdate, init?: OmiApiClientInit): Promise<unknown> {
+export async function update_quiet_hours_settings_v1_users_quiet_hours_settings_patch(body: QuietHoursSettingsUpdate, init?: OmiApiClientInit): Promise<FcmTokenResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/quiet-hours-settings`;
   const _search = "";

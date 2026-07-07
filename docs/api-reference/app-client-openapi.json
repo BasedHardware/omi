@@ -42387,7 +42387,9 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/FcmTokenResponse"
+                }
               }
             },
             "description": "Successful Response"
