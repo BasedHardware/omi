@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
 preconditions:
   - automation_bridge_ready
 

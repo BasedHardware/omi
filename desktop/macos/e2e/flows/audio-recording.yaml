@@ -5,6 +5,7 @@ description: Audio recording flow — verify microphone permission, Start Record
 app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/Stores/ConversationsSearchModel.swift
   - desktop/Desktop/Sources/AudioCaptureService.swift
   - desktop/Desktop/Sources/Audio/AudioSourceManager.swift
   - desktop/Desktop/Sources/AppState.swift
