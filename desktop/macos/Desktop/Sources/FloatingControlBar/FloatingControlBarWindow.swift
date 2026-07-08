@@ -2127,9 +2127,8 @@ class FloatingControlBarManager {
     }
 
     private var window: FloatingControlBarWindow?
-    /// On notched displays the notch is not shown at launch — it reveals only
-    /// after the user's first Push-to-Talk press. Tracks whether that reveal has
-    /// happened this session so `showInitial()` can gate the launch presentation.
+    /// Tracks whether the deferred notch reveal has happened this session for
+    /// explicit opt-in contexts such as onboarding/demo/minimal mode.
     private var hasRevealedNotchThisSession = false
     private var snoozeTimer: Timer?
     private var recordingCancellable: AnyCancellable?
@@ -2586,13 +2585,34 @@ class FloatingControlBarManager {
         }
     }
 
-    /// Launch-time presentation. On notched displays the notch stays hidden until
-    /// the user's first Push-to-Talk press (which calls `show()`); on other
-    /// displays it behaves exactly like `show()`.
-    func showInitial() {
+    /// Apply the product-level launch presentation policy.
+    ///
+    /// Normal signed-in Desktop launch must show the floating bar when enabled;
+    /// deferred reveal is reserved for explicit opt-in contexts such as onboarding
+    /// or a future minimal mode.
+    func presentForLaunch(context: FloatingBarLaunchContext) {
+        let presentation = FloatingBarLaunchPolicy.presentation(
+            isEnabled: isEnabled,
+            context: context,
+            displayHasNotch: window?.usesNotchIslandForCurrentScreen == true
+        )
+
+        switch presentation {
+        case .hidden:
+            return
+        case .showImmediately:
+            show()
+        case .deferUntilFirstPushToTalk:
+            showDeferredUntilFirstPushToTalk()
+        }
+    }
+
+    /// Opt-in presentation for contexts where the notch should stay hidden until
+    /// the user's first Push-to-Talk press (which calls `show()`).
+    func showDeferredUntilFirstPushToTalk() {
         if window?.usesNotchIslandForCurrentScreen == true, !hasRevealedNotchThisSession {
             isEnabled = true
-            log("FloatingControlBarManager: showInitial() — notch hidden until first Push-to-Talk")
+            log("FloatingControlBarManager: showDeferredUntilFirstPushToTalk() — notch hidden until first Push-to-Talk")
             return
         }
         show()

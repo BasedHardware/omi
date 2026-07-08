@@ -224,12 +224,12 @@ struct DesktopHomeView: View {
                 sessionUserId: UserDefaults.standard.string(forKey: "auth_userId")
               )
 
-              // Set up floating control bar (only show if user hasn't disabled it)
+              // Set up floating control bar. Product invariant: normal signed-in
+              // launches must show the enabled bar immediately; hide-until-PTT is
+              // only for explicit onboarding/demo/minimal-mode contexts.
               FloatingControlBarManager.shared.setup(
                 appState: appState, chatProvider: viewModelContainer.chatProvider)
-              if FloatingControlBarManager.shared.isEnabled {
-                FloatingControlBarManager.shared.showInitial()
-              }
+              FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)
 
               // Set up push-to-talk voice input
               if let barState = FloatingControlBarManager.shared.barState {

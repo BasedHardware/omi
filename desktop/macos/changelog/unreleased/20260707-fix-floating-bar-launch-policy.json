@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Restored normal launch visibility for the enabled floating bar on notched Macs while keeping deferred reveal scoped to explicit opt-in contexts."
+  ]
+}
