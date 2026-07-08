@@ -27,6 +27,7 @@ enum DefaultsKey: String {
     case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
     case authIsImpersonating = "auth_isImpersonating"
     case chatBridgeMode = "chatBridgeMode"
+    case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
     case onboardingStep = "onboardingStep"
 }
 

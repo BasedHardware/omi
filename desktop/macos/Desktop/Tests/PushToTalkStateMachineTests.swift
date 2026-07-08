@@ -34,15 +34,32 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertTrue(source.contains("capture.detectSilentMicOnAnyTransport = true"))
   }
 
-  func testLateMicCaptureStartStopsInsteadOfLeakingIntoIdlePTT() throws {
+  func testLateMicCaptureStartParksWarmInsteadOfLeakingIntoIdlePTT() throws {
     let source = try pushToTalkManagerSource()
 
     XCTAssertTrue(source.contains("let generation = micCaptureGeneration"))
     XCTAssertTrue(source.contains("guard self.micCaptureGeneration == generation, self.shouldKeepMicCaptureAlive else { return }"))
-    XCTAssertTrue(source.contains("capture.stopCapture()"))
+    XCTAssertTrue(source.contains("self.parkMicCapture(capture, lease: lease, overrideID: overrideDeviceID)"))
     XCTAssertTrue(source.contains("self.audioCaptureService === capture"))
-    XCTAssertTrue(source.contains("PushToTalkManager: mic capture start completed after turn ended — stopped"))
+    XCTAssertTrue(source.contains("PushToTalkManager: mic capture start completed after turn ended — parked warm"))
     XCTAssertTrue(source.contains("guard self.micCaptureGeneration == generation else {"))
+  }
+
+  func testWarmMicReuseRestoresLeaseAndCancelDiscardsParking() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("activeMicLease = parked.lease"))
+    XCTAssertTrue(source.contains("activeMicOverrideID = overrideDeviceID"))
+    XCTAssertTrue(source.contains("stopAudioTranscription(parkWarm: false)"))
+    XCTAssertTrue(source.contains("private func stopAudioTranscription(parkWarm: Bool = true)"))
+  }
+
+  func testPTTContentionIgnoresManagersOwnParkedCapture() throws {
+    let source = try pushToTalkManagerSource()
+
+    XCTAssertTrue(source.contains("let parkedCapture = parkedMicCapture?.service"))
+    XCTAssertTrue(source.contains("isDeviceActivelyCaptured(defaultInput, excluding: parkedCapture)"))
+    XCTAssertTrue(source.contains("hasActiveCapture(excluding: parkedCapture)"))
   }
 
   private func pushToTalkManagerSource() throws -> String {

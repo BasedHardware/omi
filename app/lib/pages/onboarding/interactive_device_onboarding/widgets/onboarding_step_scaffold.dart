@@ -30,8 +30,8 @@ class OnboardingProgressDots extends StatelessWidget {
             color: isActive
                 ? Colors.white
                 : isCompleted
-                    ? Colors.white.withValues(alpha: 0.5)
-                    : Colors.white.withValues(alpha: 0.2),
+                ? Colors.white.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.2),
           ),
         );
       }),

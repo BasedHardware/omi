@@ -6,6 +6,8 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Transcription.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/MicrophonePickerCard.swift
 preconditions:
   - automation_bridge_ready
 
@@ -35,6 +37,10 @@ steps:
       activateApp: false
     wait:
       state.selectedSettingsSection: Transcription
+
+  - id: S3a
+    name: Verify transcription microphone picker coverage
+    note: "Transcription settings include MicrophonePickerCard with System Default plus live CoreAudio input-device refresh while the view is visible."
 
   - id: S4
     name: Open Privacy section

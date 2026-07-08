@@ -423,7 +423,7 @@ class PushToTalkManager: ObservableObject {
       followUpPill = nil
       AgentPillsManager.shared.recordingPillID = nil
     }
-    stopAudioTranscription()
+    stopAudioTranscription(parkWarm: false)
     state = .idle
     barState?.isThinking = false
     transcriptSegments = []
@@ -1435,6 +1435,8 @@ class PushToTalkManager: ObservableObject {
       parked.lease.renew(generation: generation, batchMode: batchMode)
       parked.service.resetSilentMicWatchdog()
       audioCaptureService = parked.service
+      activeMicLease = parked.lease
+      activeMicOverrideID = overrideDeviceID
       micCaptureStartInFlight = false
       if let diagnosticRecoveryAction {
         DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged(
@@ -1606,6 +1608,7 @@ class PushToTalkManager: ObservableObject {
 
   private func preferredPTTInputOverrideDeviceID() -> AudioDeviceID? {
     guard let builtIn = AudioCaptureService.findBuiltInMicDeviceID() else { return nil }
+    let parkedCapture = parkedMicCapture?.service
     if AudioCaptureService.isDefaultOutputBluetooth() {
       return builtIn
     }
@@ -1618,11 +1621,11 @@ class PushToTalkManager: ObservableObject {
     if let defaultInput = AudioCaptureService.currentDefaultInputDeviceID(),
       defaultInput != builtIn
     {
-      if AudioCaptureService.isDeviceActivelyCaptured(defaultInput) {
+      if AudioCaptureService.isDeviceActivelyCaptured(defaultInput, excluding: parkedCapture) {
         log("PushToTalkManager: default input is held by another capture — using built-in mic")
         return builtIn
       }
-      if AudioCaptureService.hasActiveCapture(),
+      if AudioCaptureService.hasActiveCapture(excluding: parkedCapture),
         AudioCaptureService.isBluetoothTransport(deviceID: defaultInput)
       {
         log("PushToTalkManager: Bluetooth input while another capture is live — using built-in mic")
@@ -1660,11 +1663,11 @@ class PushToTalkManager: ObservableObject {
     activeMicOverrideID = nil
   }
 
-  private func stopAudioTranscription() {
+  private func stopAudioTranscription(parkWarm: Bool = true) {
     hubWaitTask?.cancel()
     hubWaitTask = nil
     isWaitingForHub = false
-    stopMicCapture()
+    stopMicCapture(parkWarm: parkWarm)
     transcriptionService?.stop()
     transcriptionService = nil
     realtimeOmniService?.stop()
