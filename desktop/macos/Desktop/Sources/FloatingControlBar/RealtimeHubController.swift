@@ -1085,7 +1085,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingBargeInReplacement = nil
     if pending.pendingBegin {
       pending.pendingBegin = false
-      session?.beginInputTurn(interrupting: false)
+      if let live = session {
+        live.beginInputTurn(interrupting: false)
+        attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+      }
     }
     flushBargeInReplacementAudioBuffer(pending.audioBuffer)
     if pending.pendingCommit {
@@ -1255,7 +1258,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         self.ensureWarm()
         if ownsInputTurn {
           if await self.waitUntilActive(timeout: 15) {
-            self.session?.beginInputTurn(interrupting: interrupting)
+            if let live = self.session {
+              live.beginInputTurn(interrupting: interrupting)
+              self.attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+            }
             await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
           } else {
             self.inputTurnActivityStartPending = true
@@ -1268,7 +1274,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     } else {
       ensureWarm()
       if !replacementSessionOwnsInputTurn {
-        session?.beginInputTurn(interrupting: providerResponseInFlight)
+        if let live = session {
+          live.beginInputTurn(interrupting: providerResponseInFlight)
+          attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+        }
         Task { @MainActor in
           await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
         }
@@ -1388,25 +1397,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if s.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       s.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
     }
-    attachGeminiScreenFrameBeforeCommitIfNeeded(session: s)
     s.commitInputTurn()
     return .accepted
   }
 
-  private func attachGeminiScreenFrameBeforeCommitIfNeeded(session s: RealtimeHubSession) {
+  private func attachGeminiScreenFrameAfterActivityStartIfNeeded(session s: RealtimeHubSession) {
     guard sessionProvider == .gemini else { return }
     guard !geminiScreenFrameSentThisTurn else { return }
     guard CGPreflightScreenCaptureAccess() else {
-      log("RealtimeHub[\(providerTag)]: skipping in-turn screen frame — screen permission not granted")
+      log("RealtimeHub[\(providerTag)]: skipping early screen frame — screen permission not granted")
       return
     }
     guard let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG() else {
-      log("RealtimeHub[\(providerTag)]: skipping in-turn screen frame — capture failed")
+      log("RealtimeHub[\(providerTag)]: skipping early screen frame — capture failed")
       return
     }
     geminiScreenFrameSentThisTurn = true
     s.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: false)
-    log("RealtimeHub[\(providerTag)]: attached in-turn screen frame before commit (\(shot.count) bytes)")
+    log("RealtimeHub[\(providerTag)]: attached early in-turn screen frame after activityStart (\(shot.count) bytes)")
   }
 
   private func screenshotToolResultTextForCurrentProvider(capturedBytes: Int?) -> String {
@@ -1415,7 +1423,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       return capturedBytes == nil ? "Could not capture the screen." : "Screen captured."
     case .gemini:
       if geminiScreenFrameSentThisTurn {
-        return "The current screen frame was already attached to this voice turn before commit. Use that image for current screen details."
+        return "The current screen frame was already attached near the start of this voice turn. Use that image for current screen details."
       }
       return "Could not attach a new screenshot after the Gemini voice turn closed. Ask the user to try again if current screen pixels are required."
     case .none:
@@ -1501,7 +1509,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if inputTurnInProgress,
       inputTurnActivityStartPending || sessionProvider == .gemini
     {
-      session?.beginInputTurn(interrupting: pendingInputTurnInterrupting)
+      if let live = session {
+        live.beginInputTurn(interrupting: pendingInputTurnInterrupting)
+        attachGeminiScreenFrameAfterActivityStartIfNeeded(session: live)
+      }
       inputTurnActivityStartPending = false
       Task { @MainActor in
         await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)

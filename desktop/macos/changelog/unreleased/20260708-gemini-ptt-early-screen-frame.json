@@ -1,0 +1,4 @@
+{
+  "type": "fixed",
+  "change": "Attach Gemini push-to-talk screen frames immediately after activity start instead of at commit so current-screen questions have time to ground on the image"
+}
