@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Idempotently apply the agent VM public-8080 deny firewall from IaC.
+# Idempotently apply the agent VM port-8080 firewall rules from IaC.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -15,15 +15,15 @@ if ! command -v gcloud >/dev/null 2>&1; then
   exit 1
 fi
 
-read_rule() {
+read_rules() {
   python3 - "$RULE_FILE" <<'PY'
+import json
 import sys
 from pathlib import Path
 
 import yaml
 
-data = yaml.safe_load(Path(sys.argv[1]).read_text())
-required = (
+RULE_REQUIRED = (
     "name",
     "project",
     "network",
@@ -34,73 +34,113 @@ required = (
     "sourceRanges",
     "targetTags",
 )
-missing = [key for key in required if key not in data]
-if missing:
-    raise SystemExit(f"firewall IaC missing keys: {', '.join(missing)}")
-if data["action"] != "DENY":
-    raise SystemExit("agent VM firewall contract requires action=DENY")
-print(
-    data["name"],
-    data["project"],
-    data["network"],
-    data["priority"],
-    data["direction"],
-    data["action"],
-    ",".join(data["sourceRanges"]),
-    ",".join(data["targetTags"]),
-    data.get("description", ""),
-    sep="\t",
-)
+PRIVATE_RANGES = {"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+
+
+def _rules(data: dict) -> list[dict]:
+    rules = data.get("firewallRules")
+    if not isinstance(rules, list) or not rules:
+        raise SystemExit("firewall IaC must define non-empty firewallRules[]")
+    return rules
+
+
+def _has_tcp_8080(rule: dict) -> bool:
+    return any(
+        entry.get("protocol") == "tcp" and "8080" in (entry.get("ports") or [])
+        for entry in rule.get("rules", [])
+    )
+
+
+def _validate(rule: dict) -> None:
+    missing = [key for key in RULE_REQUIRED if key not in rule]
+    if missing:
+        raise SystemExit(f"firewall IaC rule missing keys: {', '.join(missing)}")
+    if rule["direction"] != "INGRESS":
+        raise SystemExit(f"{rule['name']}: agent VM firewall contract requires direction=INGRESS")
+    if "omi-agent-vm" not in rule["targetTags"]:
+        raise SystemExit(f"{rule['name']}: targetTags must include omi-agent-vm")
+    if not _has_tcp_8080(rule):
+        raise SystemExit(f"{rule['name']}: rules must include tcp:8080")
+
+
+def _validate_contract(rules: list[dict]) -> None:
+    for rule in rules:
+        _validate(rule)
+    allow_private = [rule for rule in rules if rule["name"] == "omi-agent-vm-allow-private-8080"]
+    deny_public = [rule for rule in rules if rule["name"] == "omi-agent-vm-deny-public-8080"]
+    if len(allow_private) != 1 or len(deny_public) != 1:
+        raise SystemExit("firewall IaC must define one private ALLOW and one public DENY rule")
+    allow = allow_private[0]
+    deny = deny_public[0]
+    if allow["action"] != "ALLOW":
+        raise SystemExit("private rule must use action=ALLOW")
+    if deny["action"] != "DENY":
+        raise SystemExit("public rule must use action=DENY")
+    if not PRIVATE_RANGES.issubset(set(allow["sourceRanges"])):
+        raise SystemExit("private allow rule must include RFC1918 source ranges")
+    if "0.0.0.0/0" not in deny["sourceRanges"]:
+        raise SystemExit("public deny rule must include 0.0.0.0/0")
+    if int(allow["priority"]) >= int(deny["priority"]):
+        raise SystemExit("private allow rule priority must be higher than public deny priority")
+
+
+data = yaml.safe_load(Path(sys.argv[1]).read_text())
+rules = _rules(data)
+_validate_contract(rules)
+for rule in rules:
+    print(json.dumps(rule, separators=(",", ":")))
 PY
 }
 
-IFS=$'\t' read -r NAME PROJECT NETWORK PRIORITY DIRECTION ACTION SOURCE_RANGES TARGET_TAGS DESCRIPTION < <(read_rule)
-
-RULES_ARGS=()
-while IFS= read -r rule; do
-  RULES_ARGS+=("$rule")
-done < <(
-  python3 - "$RULE_FILE" <<'PY'
+rule_args() {
+  python3 - "$1" <<'PY'
+import json
 import sys
-from pathlib import Path
 
-import yaml
-
-data = yaml.safe_load(Path(sys.argv[1]).read_text())
-for entry in data["rules"]:
+rule = json.loads(sys.argv[1])
+args = []
+for entry in rule["rules"]:
     protocol = entry["protocol"]
     ports = entry.get("ports") or []
-    if ports:
-        print(f"{protocol}:{','.join(ports)}")
-    else:
-        print(protocol)
+    args.append(f"{protocol}:{','.join(ports)}" if ports else protocol)
+print(",".join(args))
 PY
-)
+}
 
-if gcloud compute firewall-rules describe "$NAME" --project="$PROJECT" >/dev/null 2>&1; then
-  echo "updating existing firewall rule $NAME (project=$PROJECT)"
-  gcloud compute firewall-rules update "$NAME" \
-    --project="$PROJECT" \
-    --network="$NETWORK" \
-    --priority="$PRIORITY" \
-    --direction="$DIRECTION" \
-    --action="$ACTION" \
-    --rules="$(IFS=,; echo "${RULES_ARGS[*]}")" \
-    --source-ranges="$SOURCE_RANGES" \
-    --target-tags="$TARGET_TAGS" \
-    ${DESCRIPTION:+--description="$DESCRIPTION"}
-else
-  echo "creating firewall rule $NAME (project=$PROJECT)"
-  gcloud compute firewall-rules create "$NAME" \
-    --project="$PROJECT" \
-    --network="$NETWORK" \
-    --priority="$PRIORITY" \
-    --direction="$DIRECTION" \
-    --action="$ACTION" \
-    --rules="$(IFS=,; echo "${RULES_ARGS[*]}")" \
-    --source-ranges="$SOURCE_RANGES" \
-    --target-tags="$TARGET_TAGS" \
-    ${DESCRIPTION:+--description="$DESCRIPTION"}
-fi
+while IFS= read -r RULE_JSON; do
+  NAME=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["name"])' "$RULE_JSON")
+  PROJECT=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["project"])' "$RULE_JSON")
+  NETWORK=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["network"])' "$RULE_JSON")
+  PRIORITY=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["priority"])' "$RULE_JSON")
+  DIRECTION=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["direction"])' "$RULE_JSON")
+  ACTION=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["action"])' "$RULE_JSON")
+  SOURCE_RANGES=$(python3 -c 'import json,sys; print(",".join(json.loads(sys.argv[1])["sourceRanges"]))' "$RULE_JSON")
+  TARGET_TAGS=$(python3 -c 'import json,sys; print(",".join(json.loads(sys.argv[1])["targetTags"]))' "$RULE_JSON")
+  DESCRIPTION=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1]).get("description", ""))' "$RULE_JSON")
+  RULES_CSV=$(rule_args "$RULE_JSON")
 
-echo "agent VM firewall applied: $NAME"
+  GCLOUD_ARGS=(
+    "$NAME"
+    --project="$PROJECT"
+    --network="$NETWORK"
+    --priority="$PRIORITY"
+    --direction="$DIRECTION"
+    --action="$ACTION"
+    --rules="$RULES_CSV"
+    --source-ranges="$SOURCE_RANGES"
+    --target-tags="$TARGET_TAGS"
+  )
+  if [[ -n "$DESCRIPTION" ]]; then
+    GCLOUD_ARGS+=(--description="$DESCRIPTION")
+  fi
+
+  if gcloud compute firewall-rules describe "$NAME" --project="$PROJECT" >/dev/null 2>&1; then
+    echo "updating existing firewall rule $NAME (project=$PROJECT)"
+    gcloud compute firewall-rules update "${GCLOUD_ARGS[@]}"
+  else
+    echo "creating firewall rule $NAME (project=$PROJECT)"
+    gcloud compute firewall-rules create "${GCLOUD_ARGS[@]}"
+  fi
+done < <(read_rules)
+
+echo "agent VM firewall applied: $RULE_FILE"

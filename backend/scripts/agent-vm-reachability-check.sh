@@ -10,10 +10,10 @@ usage() {
 Usage: backend/scripts/agent-vm-reachability-check.sh [--live PROJECT]
 
 Hermetic (default):
-  - validate firewall IaC denies public tcp:8080 for tag omi-agent-vm
+  - validate firewall IaC allows private tcp:8080 before denying public tcp:8080
 
 Live (--live, requires gcloud auth):
-  - describe the applied firewall rule in GCP and assert the same contract
+  - describe the applied firewall rules in GCP and enforce the same contract
 EOF
 }
 
@@ -33,35 +33,57 @@ import yaml
 
 rule_file = Path(sys.argv[1])
 project = sys.argv[2]
-expected = yaml.safe_load(rule_file.read_text())
-name = expected["name"]
+expected_rules = yaml.safe_load(rule_file.read_text())["firewallRules"]
 
-raw = subprocess.check_output(
-    [
-        "gcloud",
-        "compute",
-        "firewall-rules",
-        "describe",
-        name,
-        "--project",
-        project,
-        "--format=json",
-    ],
-    text=True,
-)
-live = json.loads(raw)
 
-assert live.get("direction") == expected["direction"], live.get("direction")
-assert live.get("priority") == expected["priority"], live.get("priority")
-assert live.get("denied"), "live rule must use denied[] (DENY action)"
-denied = live["denied"]
-assert any(
-    entry.get("IPProtocol") == "tcp" and "8080" in (entry.get("ports") or [])
-    for entry in denied
-), denied
-assert live.get("sourceRanges") == expected["sourceRanges"], live.get("sourceRanges")
-assert live.get("targetTags") == expected["targetTags"], live.get("targetTags")
-print(f"live firewall contract ok: {name} (project={project})")
+def fail(message: str) -> None:
+    raise SystemExit(f"live firewall contract failed: {message}")
+
+
+def expect_equal(name: str, field: str, actual, expected) -> None:
+    if actual != expected:
+        fail(f"{name}: {field} expected {expected!r}, got {actual!r}")
+
+
+def expect_tcp_8080(name: str, live_rule: dict) -> None:
+    entries = live_rule.get("allowed") or live_rule.get("denied") or []
+    if not any(entry.get("IPProtocol") == "tcp" and "8080" in (entry.get("ports") or []) for entry in entries):
+        fail(f"{name}: missing tcp:8080 rule in allowed/denied entries: {entries!r}")
+
+
+def describe(name: str) -> dict:
+    raw = subprocess.check_output(
+        [
+            "gcloud",
+            "compute",
+            "firewall-rules",
+            "describe",
+            name,
+            "--project",
+            project,
+            "--format=json",
+        ],
+        text=True,
+    )
+    return json.loads(raw)
+
+for expected in expected_rules:
+    name = expected["name"]
+    live = describe(name)
+    expect_equal(name, "direction", live.get("direction"), expected["direction"])
+    expect_equal(name, "priority", live.get("priority"), expected["priority"])
+    expect_equal(name, "sourceRanges", live.get("sourceRanges"), expected["sourceRanges"])
+    expect_equal(name, "targetTags", live.get("targetTags"), expected["targetTags"])
+    if expected["action"] == "ALLOW":
+        if not live.get("allowed"):
+            fail(f"{name}: live rule must use allowed[] (ALLOW action)")
+    elif expected["action"] == "DENY":
+        if not live.get("denied"):
+            fail(f"{name}: live rule must use denied[] (DENY action)")
+    else:
+        fail(f"{name}: unsupported action {expected['action']!r}")
+    expect_tcp_8080(name, live)
+print(f"live firewall contract ok: {len(expected_rules)} rules (project={project})")
 PY
 }
 

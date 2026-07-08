@@ -13,22 +13,37 @@ FIREWALL_IAC = REPO_ROOT / "backend" / "charts" / "agent-vm-firewall" / "firewal
 AGENT_RS = REPO_ROOT / "desktop" / "macos" / "Backend-Rust" / "src" / "routes" / "agent.rs"
 
 
-def _load_firewall_contract() -> dict:
-    return yaml.safe_load(FIREWALL_IAC.read_text())
+def _load_firewall_rules() -> list[dict]:
+    return yaml.safe_load(FIREWALL_IAC.read_text())["firewallRules"]
 
 
-def test_firewall_iac_denies_public_8080_for_omi_agent_vm_tag():
-    rule = _load_firewall_contract()
+def _rule(name: str) -> dict:
+    matches = [rule for rule in _load_firewall_rules() if rule["name"] == name]
+    assert len(matches) == 1, f"expected exactly one firewall rule named {name}"
+    return matches[0]
 
-    assert rule["action"] == "DENY"
-    assert rule["direction"] == "INGRESS"
-    assert "0.0.0.0/0" in rule["sourceRanges"]
-    assert rule["targetTags"] == ["omi-agent-vm"]
 
-    denied_tcp_8080 = any(
-        entry.get("protocol") == "tcp" and "8080" in (entry.get("ports") or []) for entry in rule["rules"]
-    )
-    assert denied_tcp_8080, "firewall IaC must deny tcp:8080 from the public internet"
+def _denies_tcp_8080(rule: dict) -> bool:
+    return any(entry.get("protocol") == "tcp" and "8080" in (entry.get("ports") or []) for entry in rule["rules"])
+
+
+def test_firewall_iac_allows_private_8080_before_public_deny_for_omi_agent_vm_tag():
+    allow = _rule("omi-agent-vm-allow-private-8080")
+    deny = _rule("omi-agent-vm-deny-public-8080")
+
+    assert allow["action"] == "ALLOW"
+    assert allow["direction"] == "INGRESS"
+    assert set(allow["sourceRanges"]) >= {"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+    assert allow["targetTags"] == ["omi-agent-vm"]
+    assert _denies_tcp_8080(allow), "private firewall IaC must allow tcp:8080 from private ranges"
+
+    assert deny["action"] == "DENY"
+    assert deny["direction"] == "INGRESS"
+    assert "0.0.0.0/0" in deny["sourceRanges"]
+    assert deny["targetTags"] == ["omi-agent-vm"]
+    assert _denies_tcp_8080(deny), "firewall IaC must deny tcp:8080 from the public internet"
+
+    assert allow["priority"] < deny["priority"], "private allow must outrank the 0.0.0.0/0 deny"
 
 
 def _provision_insert_body_source() -> str:
@@ -44,6 +59,7 @@ def test_provision_rust_contract_test_guards_public_ip_exposure():
 
     assert "fn build_gce_vm_insert_body" in source
     assert "contract_create_gce_vm_provision_json_has_no_public_nat" in source
+    assert "contract_agent_vm_ip_uses_private_network_ip" in source
     assert '"items": ["omi-agent-vm"]' in insert_body
     assert "ONE_TO_ONE_NAT" not in insert_body
     assert "accessConfigs" not in insert_body

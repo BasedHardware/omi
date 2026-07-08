@@ -16,6 +16,14 @@ fn local_harness_agent_disabled() -> bool {
     std::env::var("ENVIRONMENT").as_deref() == Ok("local-dev-harness")
 }
 
+fn extract_private_vm_ip(instance: &serde_json::Value) -> Result<String, String> {
+    instance["networkInterfaces"][0]["networkIP"]
+        .as_str()
+        .filter(|ip| !ip.trim().is_empty())
+        .map(str::to_string)
+        .ok_or_else(|| "GCE instance response missing private networkIP".to_string())
+}
+
 /// POST /v2/agent/provision
 /// Idempotent — if user already has a VM, returns existing info.
 /// Creates a GCE VM from the omi-agent image family for this user.
@@ -329,11 +337,17 @@ async fn get_agent_status(
                             {
                                 if let Ok(resp) = resp.send().await {
                                     if let Ok(instance) = resp.json::<serde_json::Value>().await {
-                                        let ip = instance["networkInterfaces"][0]["accessConfigs"]
-                                            [0]["natIP"]
-                                            .as_str()
-                                            .unwrap_or("unknown")
-                                            .to_string();
+                                        let ip = match extract_private_vm_ip(&instance) {
+                                            Ok(ip) => ip,
+                                            Err(e) => {
+                                                tracing::warn!(
+                                                    "Could not recover private IP for VM {}: {}",
+                                                    vm_name,
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        };
                                         let now = chrono::Utc::now().to_rfc3339();
                                         let _ = firestore
                                             .set_agent_vm(
@@ -472,7 +486,8 @@ async fn start_stopped_vm(
         }
     }
 
-    // Get the VM's (possibly new) external IP
+    // Get the VM's (possibly new) private VPC IP. Agent VMs intentionally have
+    // no public NAT, and agent-proxy reaches them over private networking.
     let instance_url = format!(
         "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
         project, zone, vm_name
@@ -485,10 +500,7 @@ async fn start_stopped_vm(
         .await?;
 
     let instance: serde_json::Value = instance_resp.json().await?;
-    let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
+    let ip = extract_private_vm_ip(&instance)?;
 
     Ok(ip)
 }
@@ -540,7 +552,7 @@ fn build_gce_vm_insert_body(
 }
 
 /// Create a GCE VM from the omi-agent image family.
-/// Returns the external IP of the created VM.
+/// Returns the private VPC IP of the created VM.
 async fn create_gce_vm(
     firestore: &crate::services::FirestoreService,
     vm_name: &str,
@@ -602,7 +614,8 @@ async fn create_gce_vm(
         }
     }
 
-    // Get the VM's external IP
+    // Get the VM's private VPC IP. There is no accessConfigs/natIP when the VM
+    // is provisioned without a public NAT.
     let instance_url = format!(
         "https://compute.googleapis.com/compute/v1/projects/{}/zones/{}/instances/{}",
         project, zone, vm_name
@@ -615,10 +628,7 @@ async fn create_gce_vm(
         .await?;
 
     let instance: serde_json::Value = instance_resp.json().await?;
-    let ip = instance["networkInterfaces"][0]["accessConfigs"][0]["natIP"]
-        .as_str()
-        .unwrap_or("unknown")
-        .to_string();
+    let ip = extract_private_vm_ip(&instance)?;
 
     Ok(ip)
 }
@@ -635,7 +645,7 @@ pub fn agent_routes() -> Router<AppState> {
 
 #[cfg(test)]
 mod contract_tests {
-    use super::build_gce_vm_insert_body;
+    use super::{build_gce_vm_insert_body, extract_private_vm_ip};
 
     #[test]
     fn contract_create_gce_vm_provision_json_has_no_public_nat() {
@@ -678,6 +688,27 @@ mod contract_tests {
         assert!(
             !serialized.contains("accessConfigs"),
             "provision body must not expose accessConfigs"
+        );
+    }
+
+    #[test]
+    fn contract_agent_vm_ip_uses_private_network_ip() {
+        let instance = serde_json::json!({
+            "networkInterfaces": [{
+                "networkIP": "10.128.0.42"
+            }]
+        });
+
+        assert_eq!(extract_private_vm_ip(&instance).unwrap(), "10.128.0.42");
+
+        let public_nat_only = serde_json::json!({
+            "networkInterfaces": [{
+                "accessConfigs": [{"natIP": "203.0.113.10"}]
+            }]
+        });
+        assert!(
+            extract_private_vm_ip(&public_nat_only).is_err(),
+            "agent VM readiness must not fall back to public natIP/unknown"
         );
     }
 }

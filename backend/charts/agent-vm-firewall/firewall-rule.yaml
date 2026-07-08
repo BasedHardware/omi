@@ -1,8 +1,8 @@
-# GCP firewall rule: deny public internet ingress to agent VM port 8080 (#7326).
+# GCP firewall rules for agent VM port 8080 exposure control (#7326).
 #
 # Agent VMs are tagged `omi-agent-vm` at provision time (desktop Backend-Rust
-# build_gce_vm_insert_body). This rule is defense-in-depth when a VM still has
-# an external IP or a broad default-allow ingress rule would otherwise reach 8080.
+# build_gce_vm_insert_body). Keep the private allow rule higher priority than
+# the public deny rule: a 0.0.0.0/0 DENY also matches internal VPC sources.
 #
 # Apply (idempotent):
 #   backend/scripts/apply-agent-vm-firewall.sh
@@ -10,18 +10,36 @@
 # Verify before desktop-backend deploy:
 #   backend/scripts/agent-vm-reachability-check.sh
 #   backend/scripts/agent-vm-reachability-check.sh --live based-hardware
-name: omi-agent-vm-deny-public-8080
-project: based-hardware
-network: default
-priority: 1000
-direction: INGRESS
-action: DENY
-rules:
-  - protocol: tcp
-    ports:
-      - "8080"
-sourceRanges:
-  - 0.0.0.0/0
-targetTags:
-  - omi-agent-vm
-description: Deny public internet ingress to agent VM HTTP/WS port 8080 (#7326)
+firewallRules:
+  - name: omi-agent-vm-allow-private-8080
+    project: based-hardware
+    network: default
+    priority: 900
+    direction: INGRESS
+    action: ALLOW
+    rules:
+      - protocol: tcp
+        ports:
+          - "8080"
+    sourceRanges:
+      - 10.0.0.0/8
+      - 172.16.0.0/12
+      - 192.168.0.0/16
+    targetTags:
+      - omi-agent-vm
+    description: Allow private VPC ingress from agent-proxy to agent VM HTTP/WS port 8080 (#7326)
+  - name: omi-agent-vm-deny-public-8080
+    project: based-hardware
+    network: default
+    priority: 1000
+    direction: INGRESS
+    action: DENY
+    rules:
+      - protocol: tcp
+        ports:
+          - "8080"
+    sourceRanges:
+      - 0.0.0.0/0
+    targetTags:
+      - omi-agent-vm
+    description: Deny public internet ingress to agent VM HTTP/WS port 8080 (#7326)
