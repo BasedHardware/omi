@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingShortcutSteps.swift
+  s_897886a34066e7::t_d4aaaf5ab991ed 327-334
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "867482473c2903a822900f6586b2ea2c1e19193a",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
