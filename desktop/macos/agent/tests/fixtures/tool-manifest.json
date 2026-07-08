@@ -3822,9 +3822,7 @@
           "description": "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access"
         }
       },
-      "required": [
-        "type"
-      ],
+      "required": [],
       "additionalProperties": false
     },
     "annotations": {

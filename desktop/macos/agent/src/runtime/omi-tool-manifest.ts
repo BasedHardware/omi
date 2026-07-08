@@ -1078,7 +1078,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
             "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access",
         },
       },
-      ["type"],
     ),
     annotations: localWrite,
     timeoutClass: "normal",
