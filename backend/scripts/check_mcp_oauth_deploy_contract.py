@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Validate prod MCP OAuth env wiring for backend-listen deploys."""
+"""Validate prod MCP OAuth env wiring for backend-listen and api.omi.me deploys."""
 
 from __future__ import annotations
 
+import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,13 @@ REQUIRED_MCP_OAUTH_KEYS = (
     "MCP_OAUTH_CHATGPT_REDIRECT_URIS",
     "MCP_OAUTH_PUBLIC_CLIENT_ID",
     "MCP_OAUTH_PUBLIC_REDIRECT_URIS",
+    "MCP_OAUTH_CLAUDE_CLIENT_ID",
+    "MCP_OAUTH_CLAUDE_CLIENT_NAME",
+    "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
+    "MCP_OAUTH_CLIENTS_JSON",
+)
+
+REQUIRED_CLAUDE_OAUTH_KEYS = (
     "MCP_OAUTH_CLAUDE_CLIENT_ID",
     "MCP_OAUTH_CLAUDE_CLIENT_NAME",
     "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
@@ -53,11 +62,93 @@ def _secret_keys_from_secrets_values(values: dict[str, Any]) -> set[str]:
     return keys
 
 
+def _prod_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
+    environments = manifest.get("environments", {})
+    prod = environments.get("prod", {}) if isinstance(environments, dict) else {}
+    return prod if isinstance(prod, dict) else {}
+
+
 def _runtime_env_keys(manifest: dict[str, Any]) -> set[str]:
-    prod = manifest.get("environments", {}).get("prod", {})
-    gke = prod.get("gke", {}).get("backend-listen", {})
-    env = gke.get("env", {})
+    gke = _prod_manifest(manifest).get("gke", {}).get("backend-listen", {})
+    env = gke.get("env", {}) if isinstance(gke, dict) else {}
     return set(env.keys()) if isinstance(env, dict) else set()
+
+
+def _cloud_run_secret_keys(manifest: dict[str, Any], service_name: str) -> set[str]:
+    cloud_run = _prod_manifest(manifest).get("cloud_run", {})
+    services = cloud_run.get("services", {}) if isinstance(cloud_run, dict) else {}
+    service = services.get(service_name, {}) if isinstance(services, dict) else {}
+    secrets = service.get("secrets", {}) if isinstance(service, dict) else {}
+    return set(secrets.keys()) if isinstance(secrets, dict) else set()
+
+
+def _cloud_run_secret_binding(manifest: dict[str, Any], service_name: str, key: str) -> dict[str, Any]:
+    cloud_run = _prod_manifest(manifest).get("cloud_run", {})
+    services = cloud_run.get("services", {}) if isinstance(cloud_run, dict) else {}
+    service = services.get(service_name, {}) if isinstance(services, dict) else {}
+    secrets = service.get("secrets", {}) if isinstance(service, dict) else {}
+    binding = secrets.get(key, {}) if isinstance(secrets, dict) else {}
+    return binding if isinstance(binding, dict) else {}
+
+
+def _csv_values(raw: object) -> list[str]:
+    if isinstance(raw, list):
+        return [str(item).strip() for item in raw if str(item).strip()]
+    if raw is None:
+        return []
+    return [item.strip() for item in str(raw).split(",") if item.strip()]
+
+
+def _clients_json_entries(raw_clients: str) -> list[dict[str, Any]]:
+    parsed = json.loads(raw_clients)
+    if isinstance(parsed, dict):
+        return [
+            {"client_id": str(client_id), **config} for client_id, config in parsed.items() if isinstance(config, dict)
+        ]
+    if isinstance(parsed, list):
+        return [entry for entry in parsed if isinstance(entry, dict)]
+    return []
+
+
+def _validate_live_env_consistency() -> list[str]:
+    """Cross-check actual env values when the deploy/preflight environment provides them.
+
+    The checked-in manifest can only verify secret bindings. When this script runs
+    with real env values, ensure the aggregate JSON and Claude-specific fallback
+    vars describe the same Claude OAuth client, so get_client() cannot silently
+    prefer a stale JSON registration over the per-client deploy contract.
+    """
+
+    raw_clients = os.getenv("MCP_OAUTH_CLIENTS_JSON", "")
+    if not raw_clients:
+        return []
+
+    errors: list[str] = []
+    claude_client_id = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_ID", "").strip()
+    claude_client_name = os.getenv("MCP_OAUTH_CLAUDE_CLIENT_NAME", "").strip()
+    claude_redirect_uris = _csv_values(os.getenv("MCP_OAUTH_CLAUDE_REDIRECT_URIS", ""))
+    try:
+        entries = _clients_json_entries(raw_clients)
+    except json.JSONDecodeError as exc:
+        return [f"MCP_OAUTH_CLIENTS_JSON is not valid JSON: {exc}"]
+
+    if not claude_client_id:
+        return []
+
+    matching = next((entry for entry in entries if str(entry.get("client_id", "")).strip() == claude_client_id), None)
+    if matching is None:
+        errors.append("MCP_OAUTH_CLIENTS_JSON missing Claude client from MCP_OAUTH_CLAUDE_CLIENT_ID")
+        return errors
+
+    json_name = str(matching.get("name", "")).strip()
+    if claude_client_name and json_name and json_name != claude_client_name:
+        errors.append("MCP_OAUTH_CLIENTS_JSON Claude name differs from MCP_OAUTH_CLAUDE_CLIENT_NAME")
+
+    json_redirect_uris = _csv_values(matching.get("allowed_redirect_uris") or matching.get("redirect_uris"))
+    if claude_redirect_uris and json_redirect_uris and set(json_redirect_uris) != set(claude_redirect_uris):
+        errors.append("MCP_OAUTH_CLIENTS_JSON Claude redirect URIs differ from MCP_OAUTH_CLAUDE_REDIRECT_URIS")
+
+    return errors
 
 
 def validate_mcp_oauth_deploy_contract() -> list[str]:
@@ -67,6 +158,7 @@ def validate_mcp_oauth_deploy_contract() -> list[str]:
     secrets_values = _load_yaml(SECRETS_VALUES)
 
     runtime_keys = _runtime_env_keys(manifest)
+    cloud_run_backend_secret_keys = _cloud_run_secret_keys(manifest, "backend")
     listen_keys = _env_names_from_listen_values(listen_values)
     secret_keys = _secret_keys_from_secrets_values(secrets_values)
 
@@ -76,15 +168,16 @@ def validate_mcp_oauth_deploy_contract() -> list[str]:
         if key not in secret_keys:
             errors.append(f"backend-secrets prod values missing secretKey {key}")
 
-    for key in (
-        "MCP_OAUTH_CLAUDE_CLIENT_ID",
-        "MCP_OAUTH_CLAUDE_CLIENT_NAME",
-        "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
-        "MCP_OAUTH_CLIENTS_JSON",
-    ):
+    for key in REQUIRED_CLAUDE_OAUTH_KEYS:
         if key not in runtime_keys:
             errors.append(f"runtime_env.yaml prod gke/backend-listen missing env {key}")
+        if key not in cloud_run_backend_secret_keys:
+            errors.append(f"runtime_env.yaml prod cloud_run/backend missing secret {key}")
+        binding = _cloud_run_secret_binding(manifest, "backend", key)
+        if binding and binding.get("secret") != key:
+            errors.append(f"runtime_env.yaml prod cloud_run/backend secret {key} must bind Secret Manager key {key}")
 
+    errors.extend(_validate_live_env_consistency())
     return errors
 
 

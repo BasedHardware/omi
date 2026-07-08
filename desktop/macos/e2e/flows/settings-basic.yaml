@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MemoryExportService.swift
 preconditions:
   - automation_bridge_ready
 

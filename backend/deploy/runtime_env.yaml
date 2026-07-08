@@ -357,6 +357,18 @@ environments:
               value: canonical_memory_atoms
               category: memory_rollout
           secrets:
+            MCP_OAUTH_CLAUDE_CLIENT_ID:
+              secret: MCP_OAUTH_CLAUDE_CLIENT_ID
+              version: latest
+            MCP_OAUTH_CLAUDE_CLIENT_NAME:
+              secret: MCP_OAUTH_CLAUDE_CLIENT_NAME
+              version: latest
+            MCP_OAUTH_CLAUDE_REDIRECT_URIS:
+              secret: MCP_OAUTH_CLAUDE_REDIRECT_URIS
+              version: latest
+            MCP_OAUTH_CLIENTS_JSON:
+              secret: MCP_OAUTH_CLIENTS_JSON
+              version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
