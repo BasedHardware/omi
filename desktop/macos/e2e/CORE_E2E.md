@@ -115,4 +115,11 @@ Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summa
 - **Hermetic (T2):** `make dev-up` with `PROVIDER_MODE=offline` (verified via config digest + service health; non-offline stacks abort), Rust `OMI_LLM_STUB=1`, bridge transcript seam — no real LLM or mic/STT.
 - **Live (T3):** Real provider credentials; agent continuity gauntlet.
 
+Release-candidate agent QA: launch a named bundle, then run
+`cd desktop/macos && ./scripts/agent-continuity-gauntlet.sh --suite resilience`
+for startup/bad-state bridge and subagent probes. Follow with
+`./scripts/agent-continuity-gauntlet.sh --suite all` for the full continuity,
+prompt, owner, and resilience pass. Evidence is written under
+`.harness/agent-continuity-gauntlet/`.
+
 See also `desktop/macos/e2e/SKILL.md` and `scripts/dev-harness/`.

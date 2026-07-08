@@ -1,0 +1,3 @@
+{
+  "change": "Reduced random-language push-to-talk replies by tightening short speech detection and rejecting misheard realtime tool queries"
+}
