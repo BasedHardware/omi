@@ -4224,6 +4224,9 @@ struct TaskRow: View {
                     .scaledFont(size: 10)
                     .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
                     .frame(width: 16, height: 24)
+                    // Match taskRowContent's vertical inset so the handle lines
+                    // up with the checkbox in the top-aligned outer HStack.
+                    .padding(.top, 6)
                     .contentShape(Rectangle())
                     .onDrag {
                         log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
