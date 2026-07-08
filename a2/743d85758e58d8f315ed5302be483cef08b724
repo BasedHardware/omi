@@ -1,0 +1,33 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_897886a34066e7::t_89645839d3426e 283-286
+  s_897886a34066e7::t_b39e32b09c4349 1244-1247,1260-1263
+  s_897886a34066e7::t_e2a6a964b2aaaf 326
+  s_897886a34066e7::t_22f69e0928ede2 1298
+  s_897886a34066e7::t_868d6fcabe0426 443
+  s_897886a34066e7::t_abe3726b66b158 396,405,417
+  s_897886a34066e7::t_4706a18edadfe7 1957
+  s_897886a34066e7::t_7dd2d7b6115c08 1971
+  s_897886a34066e7::t_482a8cea9e2978 1997,2009,2023,2027
+  s_897886a34066e7::t_6d106c647afd59 311
+  s_897886a34066e7::t_5255b7f3e42a7f 212-214,216-221
+  s_897886a34066e7::t_481fe4c74bf054 452
+  s_897886a34066e7::t_db74ddc9efcd17 462,467
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMessagesPage.swift
+  s_897886a34066e7::t_909c49cb1d9e72 432-435,442-443,447,449
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "a2743d85758e58d8f315ed5302be483cef08b724",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
