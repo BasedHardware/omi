@@ -20,13 +20,21 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
       .showImmediately)
   }
 
-  func testDisabledFloatingBarStaysHiddenOnNormalLaunch() {
-    XCTAssertEqual(
-      FloatingBarLaunchPolicy.presentation(
-        isEnabled: false,
-        context: .normalSignedInDesktop,
-        displayHasNotch: true),
-      .hidden)
+  func testDisabledFloatingBarStaysHiddenForEveryLaunchContext() {
+    let contexts: [FloatingBarLaunchContext] = [
+      .normalSignedInDesktop,
+      .onboardingOrDemo,
+      .explicitMinimalMode,
+    ]
+
+    for context in contexts {
+      XCTAssertEqual(
+        FloatingBarLaunchPolicy.presentation(
+          isEnabled: false,
+          context: context,
+          displayHasNotch: true),
+        .hidden)
+    }
   }
 
   func testDeferredRevealIsOnlyForExplicitOptInContextsOnNotchedDisplays() {
@@ -45,13 +53,20 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
       .deferUntilFirstPushToTalk)
   }
 
-  func testDeferredRevealFallsBackToImmediateShowWithoutNotch() {
-    XCTAssertEqual(
-      FloatingBarLaunchPolicy.presentation(
-        isEnabled: true,
-        context: .onboardingOrDemo,
-        displayHasNotch: false),
-      .showImmediately)
+  func testDeferredRevealContextsFallBackToImmediateShowWithoutNotch() {
+    let deferredContexts: [FloatingBarLaunchContext] = [
+      .onboardingOrDemo,
+      .explicitMinimalMode,
+    ]
+
+    for context in deferredContexts {
+      XCTAssertEqual(
+        FloatingBarLaunchPolicy.presentation(
+          isEnabled: true,
+          context: context,
+          displayHasNotch: false),
+        .showImmediately)
+    }
   }
 
   func testDesktopHomeLaunchUsesNormalPolicyAndDoesNotCallDeferredRevealDirectly() throws {
