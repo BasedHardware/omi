@@ -11,6 +11,10 @@ typedef SpeakerSelected = Future<void> Function(String? speakerId);
 Future<void> showSpeakerFilterSheet(BuildContext context) async {
   final conversationProvider = context.read<ConversationProvider>();
   final people = context.read<PeopleProvider>().people;
+  final l10n = context.l10n;
+  final title = l10n.phoneSpeaker;
+  final allLabel = l10n.all;
+  final userLabel = l10n.speakerLabelYou;
 
   await showModalBottomSheet<void>(
     context: context,
@@ -20,9 +24,9 @@ Future<void> showSpeakerFilterSheet(BuildContext context) async {
       return SpeakerFilterSheet(
         people: people,
         selectedSpeakerId: conversationProvider.selectedSpeakerId,
-        title: context.l10n.phoneSpeaker,
-        allLabel: context.l10n.all,
-        userLabel: context.l10n.speakerLabelYou,
+        title: title,
+        allLabel: allLabel,
+        userLabel: userLabel,
         onSelected: (speakerId) async {
           Navigator.of(sheetContext).pop();
           await conversationProvider.setSpeakerFilter(speakerId);
