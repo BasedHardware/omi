@@ -418,6 +418,15 @@ extension AppState {
       recordSystemAudioCaptureOutcome(.granted)
       log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
     } catch {
+      // Mirror the success path's staleness guards: if recording stopped or the
+      // service was replaced while startCapture was suspended, the failure says
+      // nothing about permission for the CURRENT session — don't record it.
+      guard isTranscribing,
+        (systemAudioCaptureService as? SystemAudioCaptureService) === systemService
+      else {
+        log("Transcription: System audio capture failed after session ended — outcome not recorded")
+        return
+      }
       recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))
       logError(
         "Transcription: System audio capture failed (continuing with mic only)", error: error)
