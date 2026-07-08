@@ -631,11 +631,12 @@ actor AgentRuntimeProcess {
     // Only the suspend that scheduled this auto-resume may clear it; a newer
     // suspend or an explicit resume has already moved the generation on.
     guard generation == debugSuspendGeneration else { return }
-    // If the agent was torn down and relaunched during the freeze, the current
-    // process has a different pid; SIGCONT-ing the old pid could hit a reused
-    // pid. restart()/stop() already SIGKILL the old process, so there is nothing
-    // to resume in that case.
-    guard process?.processIdentifier == pid else { return }
+    // Only resume if the SAME process is still alive. A stored Process that has
+    // already exited can still report its original pid (which the OS may have
+    // reused), so require isRunning as well as a pid match — never SIGCONT a
+    // reused pid. restart()/stop() already SIGKILL the old process, so a
+    // torn-down/relaunched agent has nothing to resume here.
+    guard let process, process.isRunning, process.processIdentifier == pid else { return }
     _ = kill(pid, SIGCONT)
     log("AgentRuntimeProcess: DEBUG auto-resumed stream pid=\(pid) (gen \(generation))")
   }
