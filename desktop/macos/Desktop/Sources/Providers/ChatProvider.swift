@@ -4359,7 +4359,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for runId in runIds {
             guard let artifacts = try? await DesktopCoordinatorService.shared.inspectArtifactsForRun(runId: runId)
             else { continue }
-            artifactsByRunId[runId] = Dictionary(uniqueKeysWithValues: artifacts.map { ($0.artifactId, $0) })
+            // Guard against duplicate artifact ids (last-write-wins); Dictionary(uniqueKeysWithValues:)
+            // traps on a duplicate key and would crash the chat view.
+            artifactsByRunId[runId] = Dictionary(
+                artifacts.map { ($0.artifactId, $0) }, uniquingKeysWith: { _, latest in latest })
         }
         guard !artifactsByRunId.isEmpty else { return }
 
