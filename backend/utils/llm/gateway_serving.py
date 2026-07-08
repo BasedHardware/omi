@@ -10,24 +10,24 @@ except ImportError:
     try:
         from langchain_core.callbacks import BaseCallbackHandler as CallbackManagerForLLMRun
     except ImportError:
-        CallbackManagerForLLMRun = Any
+        CallbackManagerForLLMRun = Any  # type: ignore[misc,assignment]
 
-    AsyncCallbackManagerForLLMRun = CallbackManagerForLLMRun
+    AsyncCallbackManagerForLLMRun = CallbackManagerForLLMRun  # type: ignore[misc,assignment]
 from langchain_core.language_models import BaseChatModel
 
 try:
     from langchain_core.messages import BaseMessage
 except ImportError:
-    BaseMessage = None
+    BaseMessage = None  # type: ignore[assignment,misc]
 try:
     from langchain_core.outputs import ChatResult
 except ImportError:
-    ChatResult = Any
+    ChatResult = Any  # type: ignore[misc,assignment]
 try:
     from langchain_core.runnables import Runnable
 except ImportError:
 
-    class Runnable:
+    class Runnable:  # type: ignore[no-redef]
         pass
 
 
@@ -178,7 +178,7 @@ class GatewayWithLegacyFallbackChatModel(BaseChatModel):
         stop: list[str] | None = None,
         run_manager: CallbackManagerForLLMRun | None = None,
         **kwargs: Any,
-    ) -> Iterator:
+    ) -> Iterator[Any]:
         try:
             stream = self.gateway_model._stream(messages, stop=stop, run_manager=run_manager, **kwargs)
             yielded = False
@@ -216,7 +216,7 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
         self._gateway = gateway
         self._legacy = legacy
 
-    def invoke(self, input: Any, config=None, **kwargs: Any) -> Any:
+    def invoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
         try:
             result = self._gateway.invoke(input, config=config, **kwargs)
         except Exception as exc:
@@ -238,7 +238,7 @@ class GatewayWithLegacyFallbackRunnable(Runnable):
         )
         return result
 
-    async def ainvoke(self, input: Any, config=None, **kwargs: Any) -> Any:
+    async def ainvoke(self, input: Any, config: Any = None, **kwargs: Any) -> Any:
         try:
             result = await self._gateway.ainvoke(input, config=config, **kwargs)
         except Exception as exc:
