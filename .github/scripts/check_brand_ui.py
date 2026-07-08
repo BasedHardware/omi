@@ -33,12 +33,14 @@ ALLOWLIST_FILES: set[str] = {
 
 PURPLE_PATTERNS = [
     re.compile(r"Color\.purple\b"),
+    re.compile(r"\.purple\b"),  # SwiftUI shorthand: .foregroundStyle(.purple)
+    re.compile(r"Colors\.purple\b"),  # Flutter
     re.compile(r"#(?:7C3AED|8B5CF6|A855F7|9333EA|6D28D9|AF52DE|D946EF|A78BFA|C4B5FD)\b", re.I),
     re.compile(r"purple(?:Primary|Secondary|Accent|Light|Gradient|LightGradient)\b"),
-    re.compile(r"purple-(?:primary|secondary|accent)\b"),
+    re.compile(r"purple-(?:primary|secondary|accent|\d{2,4})\b"),  # Tailwind: bg-purple-500 etc.
     re.compile(r"--purple-"),
     re.compile(r"""['"]Purple['"]"""),
-    re.compile(r"""\bpurple\b""", re.I),  # last: broad; counted only with other signals? keep for folder colors
+    re.compile(r"""\bpurple\b""", re.I),  # CSS: color: purple; also catches bare "purple" references
 ]
 
 
@@ -68,9 +70,7 @@ def is_ui_source(path: str) -> bool:
 
 
 def count_purple(text: str) -> int:
-    # Use specific patterns only (avoid the broad \bpurple\b false-positive flood).
-    specific = PURPLE_PATTERNS[:-1]
-    return sum(len(p.findall(text)) for p in specific)
+    return sum(len(p.findall(text)) for p in PURPLE_PATTERNS)
 
 
 def git_show(ref: str, path: str) -> str | None:

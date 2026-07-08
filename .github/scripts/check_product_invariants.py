@@ -24,6 +24,13 @@ SKIP_NAMING_RE = re.compile(
     r"Do\s+\*\*not\*\*\s+require\s+naming|do\s+not\s+require\s+naming",
     re.IGNORECASE,
 )
+# Match an invariant ID as a distinct token so INV-CHAT-1 does not satisfy
+# a check for INV-CHAT-10 (or vice-versa). Word boundaries via lookarounds
+# because `-` is not a word char, so \b does not anchor the trailing digits.
+ID_TOKEN_RE_TMPL = r"(?<![A-Z0-9-]){id}(?![A-Z0-9-])"
+# HTML comments in the PR template contain example IDs like INV-CHAT-1;
+# strip them before matching so untouched template text does not auto-pass.
+HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,6 +68,18 @@ def load_pr_body(args: argparse.Namespace) -> str:
     if args.pr_body_file:
         return Path(args.pr_body_file).read_text(encoding="utf-8")
     return args.pr_body or ""
+
+
+def pr_body_cites_id(inv_id: str, pr_body: str) -> bool:
+    """True if the PR body names inv_id as a distinct token.
+
+    Strips HTML comments first so the PR template's example IDs do not
+    auto-satisfy the check. Uses lookaround boundaries because ``-`` is not
+    a word character, so ``\\b`` would not anchor the trailing digits.
+    """
+    cleaned = HTML_COMMENT_RE.sub("", pr_body)
+    token_re = re.compile(ID_TOKEN_RE_TMPL.format(id=re.escape(inv_id)))
+    return token_re.search(cleaned) is not None
 
 
 def parse_invariant(path: Path) -> dict | None:
@@ -102,7 +121,13 @@ def load_locked_invariants(root: Path) -> list[dict]:
             continue
         parsed = parse_invariant(path)
         if not parsed:
-            continue
+            # Fail-closed: a malformed invariant doc should not silently
+            # disable enforcement. Surface it so formatting drift is caught.
+            raise SystemExit(
+                f"FAIL: could not parse invariant ID from {path.name}.\n"
+                f"Expected a '# INV-XXX-N: Title' header. Fix the doc so "
+                f"enforcement is not silently skipped."
+            )
         if parsed["status"] != "locked":
             continue
         if not parsed["globs"]:
@@ -166,12 +191,12 @@ def main() -> int:
     still_missing = []
     for hit in hits:
         inv_id = hit["id"]
-        if inv_id in pr_body:
+        if pr_body_cites_id(inv_id, pr_body):
             continue
         # INV-AGENT-* : accept INV-AGENT-* literally, INV-AGENT, or control-plane doc ref
         if inv_id.endswith("-*"):
             prefix = inv_id[:-2]  # INV-AGENT
-            if prefix in pr_body or inv_id in pr_body:
+            if pr_body_cites_id(prefix, pr_body) or pr_body_cites_id(inv_id, pr_body):
                 continue
             if "agent-control-plane" in pr_body.lower():
                 continue

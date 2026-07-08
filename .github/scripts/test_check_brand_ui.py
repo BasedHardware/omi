@@ -19,6 +19,18 @@ class BrandUiTests(unittest.TestCase):
         self.assertFalse(is_ui_source("backend/main.py"))
         self.assertFalse(is_ui_source("desktop/macos/Desktop/Sources/Theme/OmiColors.swift"))
 
+    def test_counts_swiftui_dot_purple(self) -> None:
+        self.assertGreaterEqual(count_purple(".foregroundStyle(.purple)"), 1)
+
+    def test_counts_flutter_colors_purple(self) -> None:
+        self.assertGreaterEqual(count_purple("color: Colors.purple"), 1)
+
+    def test_counts_tailwind_bg_purple_500(self) -> None:
+        self.assertGreaterEqual(count_purple('className="bg-purple-500 text-purple-700"'), 2)
+
+    def test_counts_css_color_purple(self) -> None:
+        self.assertGreaterEqual(count_purple("color: purple;"), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -19,7 +19,7 @@ const RUNTIME_DIR = fileURLToPath(new URL("../src/runtime", import.meta.url));
 const FORBIDDEN_SOURCE_PATTERNS: { id: string; re: RegExp }[] = [
   {
     id: "second-sqlite-chat-db",
-    re: /new\s+Database\s*\(\s*['`][^'`]*chat[^'`]*['`]/i,
+    re: /new\s+Database\s*\(\s*['"`][^'"`]*chat[^'"`]*['"`]/i,
   },
   {
     id: "per-surface-continuity-ring",

@@ -37,6 +37,16 @@ default access policy of Short-term + Long-term.
 - `backend/utils/mcp_memories.py`
 - `backend/routers/memories.py`
 - `backend/routers/memory_*.py`
+- `app/lib/pages/memories/**`
+- `app/lib/backend/schema/memory.dart`
+- `desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/**`
+- `desktop/macos/Desktop/Sources/MemoryExportService.swift`
+- `desktop/macos/Desktop/Sources/MemoryBankConnector.swift`
+- `desktop/macos/Desktop/Sources/Rewind/Core/MemoryStorage.swift`
+- `desktop/macos/Desktop/Sources/Rewind/Core/MemoryModels.swift`
+- `web/app/src/components/memories/**`
+- `web/app/src/lib/memoryExport.ts`
+- `web/frontend/src/components/memories/**`
 
 ## PR rule
 
