@@ -2485,7 +2485,7 @@ class FloatingControlBarManager {
         guard let provider = sharedFloatingProvider else {
             return ["error": "floating chat provider unavailable"]
         }
-        return provider.automationMainChatSnapshot(limit: limit)
+        return provider.automationFloatingChatSnapshot(limit: limit)
     }
 
     func seedSubagentsForAutomation(count: Int) async -> [String: String] {

@@ -493,7 +493,7 @@ struct DashboardPage: View {
             dashboardWidgets
 
             ChatMessagesView(
-                messages: chatProvider.messages,
+                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -725,7 +725,7 @@ struct DashboardPage: View {
     private var homeChatPanel: some View {
         VStack(spacing: 0) {
             ChatMessagesView(
-                messages: chatProvider.messages,
+                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
