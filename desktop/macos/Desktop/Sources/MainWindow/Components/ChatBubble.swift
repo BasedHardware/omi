@@ -498,6 +498,9 @@ private struct BackgroundAgentSummaryCard: View {
           Color.clear.frame(width: 12)
         }
       }
+      // Truncated header snippets must not inherit SelectionOverlay — long agent
+      // output under lineLimit(1) can thrash GraphHost layout updates.
+      .textSelection(.disabled)
 
       if isExpanded || showUnavailable {
         Divider()
@@ -507,11 +510,13 @@ private struct BackgroundAgentSummaryCard: View {
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(3)
+            .textSelection(.disabled)
           SelectableMarkdown(text: summary.output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
+              .textSelection(.disabled)
           }
           if isExpanded {
             collapseControl
@@ -615,6 +620,7 @@ private struct AgentSpawnCard: View {
           Color.clear.frame(width: 12)
         }
       }
+      .textSelection(.disabled)
 
       if showUnavailable {
         Divider()
@@ -702,6 +708,9 @@ private struct AgentCompletionCard: View {
           Color.clear.frame(width: 12)
         }
       }
+      // Truncated header snippets must not inherit SelectionOverlay — long agent
+      // output under lineLimit(1) can thrash GraphHost layout updates.
+      .textSelection(.disabled)
 
       if isExpanded || showUnavailable {
         Divider()
@@ -712,12 +721,14 @@ private struct AgentCompletionCard: View {
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
               .lineLimit(3)
+              .textSelection(.disabled)
           }
           SelectableMarkdown(text: output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
+              .textSelection(.disabled)
           }
           if isExpanded {
             collapseControl
@@ -1142,6 +1153,7 @@ struct ToolCallsGroup: View {
         .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
+      .textSelection(.disabled)
 
       if canOpenSpawnedAgent {
         Button(action: {

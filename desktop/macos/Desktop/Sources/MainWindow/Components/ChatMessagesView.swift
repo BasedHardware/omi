@@ -134,7 +134,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 22)
-            .textSelection(.enabled)
+            // Do not enable text selection on the whole stack. SelectionOverlay on every
+            // chrome Text (agent card headers, tool summaries, timestamps) can peg the
+            // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
             .background(scrollDetectors)
 
             // Invisible anchor lives OUTSIDE the LazyVStack so it is always

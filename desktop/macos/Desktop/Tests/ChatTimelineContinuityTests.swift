@@ -357,6 +357,42 @@ final class ChatTimelineContinuityTests: XCTestCase {
     )
   }
 
+  func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay() throws {
+    // Mechanical guard for the omi-chat-continuity main-thread freeze:
+    // ChatMessagesView used to apply `.textSelection(.enabled)` on the LazyVStack,
+    // wrapping every agent-card header Text in SelectionOverlay and thrashing
+    // GraphHost via setFont → invalidateIntrinsicContentSize.
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+
+    let messagesSource = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatMessagesView.swift"),
+      encoding: .utf8
+    )
+    let markdownSource = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/SelectableMarkdown.swift"),
+      encoding: .utf8
+    )
+    let bubbleSource = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertFalse(
+      messagesSource.contains(".textSelection(.enabled)"),
+      "chat message stack must not enable selection on chrome Text views"
+    )
+    XCTAssertTrue(
+      markdownSource.contains(".textSelection(.enabled)"),
+      "SelectableMarkdown must opt message bodies into selection"
+    )
+    XCTAssertTrue(
+      bubbleSource.contains(".textSelection(.disabled)"),
+      "agent card headers must disable SelectionOverlay on truncated snippets"
+    )
+  }
+
   func testCanonicalSurfacesBindSharedProviderMessages() throws {
     // Mechanical single-provider UI binding check (INV-6 rule 1). Full UI
     // rendering is covered by e2e; this fails if Main/Home stop binding the
