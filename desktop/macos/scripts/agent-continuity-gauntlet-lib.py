@@ -85,6 +85,22 @@ def bridge_action_timeout_sec(
     return 60.0
 
 
+def automation_token(port: int) -> str | None:
+    """Load the per-launch bridge bearer token (same contract as omi-ctl)."""
+    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
+    if token:
+        return token
+    token_file = Path(
+        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
+        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
+    )
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    return token or None
+
+
 def bridge_request(
     port: int,
     method: str,
@@ -95,6 +111,9 @@ def bridge_request(
 ) -> dict[str, Any]:
     payload = None
     headers = {"Accept": "application/json"}
+    token = automation_token(port)
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         payload = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -1763,6 +1782,10 @@ def self_check() -> int:
         print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
         return 1
     driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
+    missing_auth_checks = bridge_auth_self_check_failures(driver_source)
+    if missing_auth_checks:
+        print(f"self-check failed: bridge auth wiring missing {missing_auth_checks}", file=sys.stderr)
+        return 1
     missing_driver_checks = resilience_driver_self_check_failures(driver_source)
     if missing_driver_checks:
         print(f"self-check failed: resilience suite wiring missing {missing_driver_checks}", file=sys.stderr)
@@ -1773,6 +1796,38 @@ def self_check() -> int:
         return 1
     print("self-check passed (owner-switch: kernel vitest + swap_test_owner action registered)")
     return 0
+
+
+
+def bridge_auth_self_check_failures(driver_source: str) -> list[str]:
+    """Fail if bridge_request no longer sends the automation bearer token."""
+    tree = ast.parse(driver_source)
+    failures: list[str] = []
+    funcs = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    token_fn = funcs.get("automation_token")
+    if token_fn is None:
+        failures.append("automation_token helper")
+    else:
+        if not method_contains_string(token_fn, "OMI_AUTOMATION_TOKEN"):
+            failures.append("automation_token reads OMI_AUTOMATION_TOKEN")
+        if not method_contains_string(token_fn, "omi-automation-"):
+            failures.append("automation_token reads omi-automation-{port}.token")
+    bridge = funcs.get("bridge_request")
+    if bridge is None:
+        failures.append("bridge_request function")
+        return failures
+    if not method_calls(bridge, "automation_token"):
+        failures.append("bridge_request calls automation_token")
+    if not method_contains_string(bridge, "Authorization"):
+        failures.append("bridge_request sets Authorization header")
+    # f"Bearer {token}" -> JoinedStr with Constant("Bearer ")
+    if not method_contains_string(bridge, "Bearer "):
+        failures.append("bridge_request uses Bearer token scheme")
+    return failures
 
 
 def resilience_driver_self_check_failures(driver_source: str) -> list[str]:
@@ -1867,12 +1922,18 @@ def method_contains_attr(node: ast.AST | None, name: str) -> bool:
 
 
 def method_calls(node: ast.AST | None, method_name: str) -> bool:
-    return node is not None and any(
-        isinstance(child, ast.Call)
-        and isinstance(child.func, ast.Attribute)
-        and child.func.attr == method_name
-        for child in ast.walk(node)
-    )
+    """True if node calls method_name as attr (obj.foo) or bare name (foo)."""
+    if node is None:
+        return False
+    for child in ast.walk(node):
+        if not isinstance(child, ast.Call):
+            continue
+        func = child.func
+        if isinstance(func, ast.Attribute) and func.attr == method_name:
+            return True
+        if isinstance(func, ast.Name) and func.id == method_name:
+            return True
+    return False
 
 
 SUITE_ALIASES: dict[str, set[str]] = {
