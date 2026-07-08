@@ -750,10 +750,13 @@ final class ImportConnectorStatusStore: ObservableObject {
     private let manualConnectorIDs: Set<String> = ["chatgpt", "claude"]
     private let onboardingChatGPTImportedMemoriesKey = "onboardingChatGPTImportedMemoriesCount"
     private let onboardingClaudeImportedMemoriesKey = "onboardingClaudeImportedMemoriesCount"
+    private var loadedUserID: String?
+    private var refreshGeneration = 0
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        load()
+        metricsByID = Self.emptyMetrics()
+        reloadForCurrentUserIfNeeded()
     }
 
     func snapshot(for connector: ImportConnector) -> Snapshot {
@@ -782,78 +785,132 @@ final class ImportConnectorStatusStore: ObservableObject {
         availabilityText: String? = nil,
         syncedAt: Date = Date()
     ) {
+        reloadForCurrentUserIfNeeded()
+        let userID = loadedUserID
         var metrics = metricsByID[connectorID] ?? ConnectorMetrics()
         if let sourceCount {
             metrics.sourceCount = max(sourceCount, 0)
-            defaults.set(metrics.sourceCount, forKey: sourceCountKeyPrefix + connectorID)
+            if let key = scopedKey(sourceCountKeyPrefix, connectorID: connectorID, userID: userID) {
+                defaults.set(metrics.sourceCount, forKey: key)
+            }
         }
         if let memoryCount {
             metrics.memoryCount = max(memoryCount, 0)
-            defaults.set(metrics.memoryCount, forKey: memoryCountKeyPrefix + connectorID)
+            if let key = scopedKey(memoryCountKeyPrefix, connectorID: connectorID, userID: userID) {
+                defaults.set(metrics.memoryCount, forKey: key)
+            }
         }
         metrics.lastSyncedAt = syncedAt
-        defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + connectorID)
+        if let key = scopedKey(lastSyncedAtKeyPrefix, connectorID: connectorID, userID: userID) {
+            defaults.set(syncedAt.timeIntervalSince1970, forKey: key)
+        }
         metrics.lastDeltaCount = lastDeltaCount
-        defaults.set(lastDeltaCount != nil, forKey: hasLastDeltaKeyPrefix + connectorID)
-        if let lastDeltaCount {
-            defaults.set(lastDeltaCount, forKey: lastDeltaCountKeyPrefix + connectorID)
-        } else {
-            defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
+        if let key = scopedKey(hasLastDeltaKeyPrefix, connectorID: connectorID, userID: userID) {
+            defaults.set(lastDeltaCount != nil, forKey: key)
+        }
+        if let key = scopedKey(lastDeltaCountKeyPrefix, connectorID: connectorID, userID: userID) {
+            if let lastDeltaCount {
+                defaults.set(lastDeltaCount, forKey: key)
+            } else {
+                defaults.removeObject(forKey: key)
+            }
         }
         if let availabilityText {
             metrics.availabilityText = availabilityText
-            defaults.set(availabilityText, forKey: availabilityTextKeyPrefix + connectorID)
+            if let key = scopedKey(availabilityTextKeyPrefix, connectorID: connectorID, userID: userID) {
+                defaults.set(availabilityText, forKey: key)
+            }
         }
         metricsByID[connectorID] = metrics
     }
 
     private func clearStoredMetrics(for connectorID: String) {
-        defaults.removeObject(forKey: sourceCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: memoryCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: lastSyncedAtKeyPrefix + connectorID)
-        defaults.removeObject(forKey: lastDeltaCountKeyPrefix + connectorID)
-        defaults.removeObject(forKey: hasLastDeltaKeyPrefix + connectorID)
-        defaults.removeObject(forKey: availabilityTextKeyPrefix + connectorID)
+        guard let userID = loadedUserID else {
+            metricsByID[connectorID] = ConnectorMetrics()
+            return
+        }
+        for prefix in [
+            sourceCountKeyPrefix,
+            memoryCountKeyPrefix,
+            lastSyncedAtKeyPrefix,
+            lastDeltaCountKeyPrefix,
+            hasLastDeltaKeyPrefix,
+            availabilityTextKeyPrefix,
+        ] {
+            if let key = scopedKey(prefix, connectorID: connectorID, userID: userID) {
+                defaults.removeObject(forKey: key)
+            }
+        }
         metricsByID[connectorID] = ConnectorMetrics()
     }
 
     func refresh() async {
-        await refreshLocalFilesMetrics()
-        await refreshAppleNotesMetrics()
+        reloadForCurrentUserIfNeeded()
+        let generation = refreshGeneration
+        let userID = loadedUserID
+        await refreshLocalFilesMetrics(generation: generation, userID: userID)
+        await refreshAppleNotesMetrics(generation: generation, userID: userID)
     }
 
-    private func load() {
+    func resetSessionState() {
+        refreshGeneration += 1
+        loadedUserID = nil
+        metricsByID = Self.emptyMetrics()
+    }
+
+    private func reloadForCurrentUserIfNeeded() {
+        let userID = currentUserID()
+        guard loadedUserID != userID else { return }
+        loadedUserID = userID
+        metricsByID = Self.emptyMetrics()
+        guard let userID else { return }
+        load(userID: userID)
+    }
+
+    private func load(userID: String) {
         for connector in ImportConnector.all {
             var metrics = ConnectorMetrics()
 
-            if defaults.object(forKey: sourceCountKeyPrefix + connector.id) != nil {
-                metrics.sourceCount = defaults.integer(forKey: sourceCountKeyPrefix + connector.id)
+            if let key = scopedKey(sourceCountKeyPrefix, connectorID: connector.id, userID: userID),
+                defaults.object(forKey: key) != nil
+            {
+                metrics.sourceCount = defaults.integer(forKey: key)
             }
-            if defaults.object(forKey: memoryCountKeyPrefix + connector.id) != nil {
-                metrics.memoryCount = defaults.integer(forKey: memoryCountKeyPrefix + connector.id)
+            if let key = scopedKey(memoryCountKeyPrefix, connectorID: connector.id, userID: userID),
+                defaults.object(forKey: key) != nil
+            {
+                metrics.memoryCount = defaults.integer(forKey: key)
             }
-            if defaults.object(forKey: lastSyncedAtKeyPrefix + connector.id) != nil {
-                let timestamp = defaults.double(forKey: lastSyncedAtKeyPrefix + connector.id)
+            if let key = scopedKey(lastSyncedAtKeyPrefix, connectorID: connector.id, userID: userID),
+                defaults.object(forKey: key) != nil
+            {
+                let timestamp = defaults.double(forKey: key)
                 if timestamp > 0 {
                     metrics.lastSyncedAt = Date(timeIntervalSince1970: timestamp)
                 }
             }
-            if defaults.bool(forKey: hasLastDeltaKeyPrefix + connector.id) {
-                metrics.lastDeltaCount = defaults.integer(forKey: lastDeltaCountKeyPrefix + connector.id)
+            if let key = scopedKey(hasLastDeltaKeyPrefix, connectorID: connector.id, userID: userID),
+                defaults.bool(forKey: key),
+                let deltaKey = scopedKey(lastDeltaCountKeyPrefix, connectorID: connector.id, userID: userID)
+            {
+                metrics.lastDeltaCount = defaults.integer(forKey: deltaKey)
             }
-            metrics.availabilityText = defaults.string(forKey: availabilityTextKeyPrefix + connector.id)
+            if let key = scopedKey(availabilityTextKeyPrefix, connectorID: connector.id, userID: userID) {
+                metrics.availabilityText = defaults.string(forKey: key)
+            }
 
             metricsByID[connector.id] = metrics
         }
 
-        hydrateLegacyManualImports()
+        hydrateLegacyManualImports(userID: userID)
 
         // A remembered path is not enough to call Apple Notes connected. The
         // status becomes connected only after the reader proves the store is readable.
     }
 
-    private func hydrateLegacyManualImports() {
-        let legacyChatGPTCount = defaults.integer(forKey: onboardingChatGPTImportedMemoriesKey)
+    private func hydrateLegacyManualImports(userID: String) {
+        let legacyChatGPTCount = defaults.integer(
+            forKey: scopedManualImportKey(onboardingChatGPTImportedMemoriesKey, userID: userID))
         if legacyChatGPTCount > 0, metricsByID["chatgpt"]?.memoryCount == nil {
             var metrics = metricsByID["chatgpt"] ?? ConnectorMetrics()
             metrics.memoryCount = legacyChatGPTCount
@@ -861,7 +918,8 @@ final class ImportConnectorStatusStore: ObservableObject {
             metricsByID["chatgpt"] = metrics
         }
 
-        let legacyClaudeCount = defaults.integer(forKey: onboardingClaudeImportedMemoriesKey)
+        let legacyClaudeCount = defaults.integer(
+            forKey: scopedManualImportKey(onboardingClaudeImportedMemoriesKey, userID: userID))
         if legacyClaudeCount > 0, metricsByID["claude"]?.memoryCount == nil {
             var metrics = metricsByID["claude"] ?? ConnectorMetrics()
             metrics.memoryCount = legacyClaudeCount
@@ -870,7 +928,7 @@ final class ImportConnectorStatusStore: ObservableObject {
         }
     }
 
-    private func refreshLocalFilesMetrics() async {
+    private func refreshLocalFilesMetrics(generation: Int, userID: String?) async {
         guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else { return }
 
         do {
@@ -889,19 +947,28 @@ final class ImportConnectorStatusStore: ObservableObject {
                 return (count, lastIndexedAt)
             }
 
+            guard canApplyRefresh(generation: generation, userID: userID) else { return }
             var metrics = metricsByID["local-files"] ?? ConnectorMetrics()
             metrics.sourceCount = result.count
-            defaults.set(result.count, forKey: sourceCountKeyPrefix + "local-files")
+            if let key = scopedKey(sourceCountKeyPrefix, connectorID: "local-files", userID: userID) {
+                defaults.set(result.count, forKey: key)
+            }
             if metrics.lastSyncedAt == nil, let lastIndexedAt = result.lastIndexedAt {
                 metrics.lastSyncedAt = lastIndexedAt
-                defaults.set(lastIndexedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "local-files")
+                if let key = scopedKey(lastSyncedAtKeyPrefix, connectorID: "local-files", userID: userID) {
+                    defaults.set(lastIndexedAt.timeIntervalSince1970, forKey: key)
+                }
             }
             if metrics.lastSyncedAt != nil || result.count > 0 {
                 metrics.availabilityText = "On-device index"
-                defaults.set("On-device index", forKey: availabilityTextKeyPrefix + "local-files")
+                if let key = scopedKey(availabilityTextKeyPrefix, connectorID: "local-files", userID: userID) {
+                    defaults.set("On-device index", forKey: key)
+                }
             } else {
                 metrics.availabilityText = nil
-                defaults.removeObject(forKey: availabilityTextKeyPrefix + "local-files")
+                if let key = scopedKey(availabilityTextKeyPrefix, connectorID: "local-files", userID: userID) {
+                    defaults.removeObject(forKey: key)
+                }
             }
             metricsByID["local-files"] = metrics
         } catch {
@@ -909,25 +976,54 @@ final class ImportConnectorStatusStore: ObservableObject {
         }
     }
 
-    private func refreshAppleNotesMetrics() async {
+    private func refreshAppleNotesMetrics(generation: Int, userID: String?) async {
         let status = await AppleNotesReaderService.shared.connectionStatus(maxResults: 250)
+        guard canApplyRefresh(generation: generation, userID: userID) else { return }
         switch status {
         case .connected(let noteCount, _):
             var metrics = metricsByID["apple-notes"] ?? ConnectorMetrics()
             metrics.sourceCount = noteCount
-            defaults.set(noteCount, forKey: sourceCountKeyPrefix + "apple-notes")
+            if let key = scopedKey(sourceCountKeyPrefix, connectorID: "apple-notes", userID: userID) {
+                defaults.set(noteCount, forKey: key)
+            }
             if metrics.lastSyncedAt == nil {
                 let syncedAt = Date()
                 metrics.lastSyncedAt = syncedAt
-                defaults.set(syncedAt.timeIntervalSince1970, forKey: lastSyncedAtKeyPrefix + "apple-notes")
+                if let key = scopedKey(lastSyncedAtKeyPrefix, connectorID: "apple-notes", userID: userID) {
+                    defaults.set(syncedAt.timeIntervalSince1970, forKey: key)
+                }
             }
             metrics.availabilityText = "Private notes accessible"
-            defaults.set("Private notes accessible", forKey: availabilityTextKeyPrefix + "apple-notes")
+            if let key = scopedKey(availabilityTextKeyPrefix, connectorID: "apple-notes", userID: userID) {
+                defaults.set("Private notes accessible", forKey: key)
+            }
             metricsByID["apple-notes"] = metrics
         case .needsAccess(_, let reasonCode), .error(_, let reasonCode):
             log("ImportConnectorStatusStore: Apple Notes refresh unavailable code=\(reasonCode)")
             clearStoredMetrics(for: "apple-notes")
         }
+    }
+
+    private func canApplyRefresh(generation: Int, userID: String?) -> Bool {
+        generation == refreshGeneration && userID == loadedUserID
+    }
+
+    private func scopedKey(_ prefix: String, connectorID: String, userID: String?) -> String? {
+        guard let userID, !userID.isEmpty else { return nil }
+        return prefix + userID + "." + connectorID
+    }
+
+    private func scopedManualImportKey(_ key: String, userID: String) -> String {
+        key + "." + userID
+    }
+
+    private func currentUserID() -> String? {
+        guard let userID = defaults.string(forKey: .authUserId), !userID.isEmpty else { return nil }
+        return userID
+    }
+
+    private static func emptyMetrics() -> [String: ConnectorMetrics] {
+        Dictionary(uniqueKeysWithValues: ImportConnector.all.map { ($0.id, ConnectorMetrics()) })
     }
 
     private func isConnected(connector: ImportConnector, metrics: ConnectorMetrics) -> Bool {

@@ -174,10 +174,13 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(refresh.contains("PollingConfig.shouldAllowActivationRefresh"))
         XCTAssertTrue(refresh.contains("lastRefreshAt = now"))
         XCTAssertTrue(refresh.contains("guard !isRefreshing else { return }"))
+        XCTAssertTrue(store.contains("private var refreshGeneration = 0"))
+        XCTAssertTrue(refresh.contains("guard generation == refreshGeneration else { return }"))
+        XCTAssertTrue(store.contains("importConnectorStatusStore.resetSessionState()"))
         XCTAssertTrue(refresh.contains("async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()"))
-        XCTAssertTrue(refresh.contains("async let screenshots: Void = loadScreenshotCount()"))
-        XCTAssertTrue(refresh.contains("async let knowledgeCounts: Void = loadKnowledgeCounts()"))
-        XCTAssertTrue(refresh.contains("async let exportStatuses: Void = loadMemoryExportStatuses()"))
+        XCTAssertTrue(refresh.contains("async let screenshots = loadScreenshotCount()"))
+        XCTAssertTrue(refresh.contains("async let knowledgeCounts = loadKnowledgeCounts()"))
+        XCTAssertTrue(refresh.contains("async let exportStatuses = loadMemoryExportStatuses()"))
         XCTAssertFalse(store.contains("memoryExportStatusActiveRefreshThrottle"))
         XCTAssertFalse(store.contains("loadMemoryExportStatuses(force:"))
     }
@@ -186,8 +189,8 @@ final class DashboardCaptureStateTests: XCTestCase {
         let store = try homeStatusStoreSource()
         let method = try methodBody(named: "loadMemoryExportStatuses", in: store)
 
-        XCTAssertTrue(method.contains("let statuses = await MemoryExportService.shared.allStatuses()"))
-        XCTAssertTrue(method.contains("memoryExportStatuses = statuses"))
+        XCTAssertTrue(method.contains("await MemoryExportService.shared.allStatuses()"))
+        XCTAssertTrue(store.contains("memoryExportStatuses = statuses"))
         XCTAssertFalse(method.contains("PollingConfig.shouldAllowActivationRefresh"))
         XCTAssertFalse(method.contains("lastRefreshAt"))
         XCTAssertFalse(method.contains("memoryExportStatusActiveRefreshThrottle"))
@@ -201,7 +204,8 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertTrue(method.contains("let shouldLoadDeviceHistory = !accountHasOmiDeviceConversations"))
         XCTAssertTrue(method.contains("async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil"))
         XCTAssertTrue(helper.contains("APIClient.shared.hasOmiDeviceConversations()"))
-        XCTAssertTrue(method.contains("UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)"))
+        XCTAssertTrue(store.contains("Self.setCachedOmiDeviceHistory()"))
+        XCTAssertTrue(store.contains("omiDeviceHistoryDefaultsKeyPrefix + userId"))
     }
 
     func testConnectorRowsUseStatusConnectionForConnectedState() throws {

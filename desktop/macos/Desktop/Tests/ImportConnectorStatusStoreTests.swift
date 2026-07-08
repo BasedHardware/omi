@@ -7,10 +7,12 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
   override func setUp() {
     super.setUp()
     resetImportConnectorDefaults()
+    UserDefaults.standard.set("test-user", forKey: .authUserId)
   }
 
   override func tearDown() {
     resetImportConnectorDefaults()
+    UserDefaults.standard.removeObject(forKey: .authUserId)
     super.tearDown()
   }
 
@@ -70,7 +72,9 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
 
   func testAvailabilityTextAloneDoesNotMarkConnectorConnected() {
     let connector = ImportConnector.all.first { $0.id == "apple-notes" }!
-    UserDefaults.standard.set("Private notes accessible", forKey: "appsImportConnectorAvailabilityText.apple-notes")
+    UserDefaults.standard.set(
+      "Private notes accessible",
+      forKey: "appsImportConnectorAvailabilityText.test-user.apple-notes")
 
     let store = ImportConnectorStatusStore()
     let snapshot = store.snapshot(for: connector)
@@ -83,7 +87,7 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
   func testPositiveCountWithoutSuccessfulSyncDoesNotMarkConnectorConnected() {
     let connector = ImportConnector.all.first { $0.id == "calendar" }!
 
-    UserDefaults.standard.set(3, forKey: "appsImportConnectorSourceCount.calendar")
+    UserDefaults.standard.set(3, forKey: "appsImportConnectorSourceCount.test-user.calendar")
     let snapshot = ImportConnectorStatusStore().snapshot(for: connector)
 
     XCTAssertFalse(snapshot.isConnected)
@@ -93,11 +97,46 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
   func testLegacyManualImportCountStillMarksConnectorConnected() {
     let connector = ImportConnector.all.first { $0.id == "chatgpt" }!
 
-    UserDefaults.standard.set(4, forKey: "onboardingChatGPTImportedMemoriesCount")
+    UserDefaults.standard.set(4, forKey: "onboardingChatGPTImportedMemoriesCount.test-user")
     let snapshot = ImportConnectorStatusStore().snapshot(for: connector)
 
     XCTAssertTrue(snapshot.isConnected)
     XCTAssertEqual(snapshot.actionTitle, "Update")
+  }
+
+  func testConnectorMetricsAreScopedBySignedInUser() {
+    let connector = ImportConnector.all.first { $0.id == "email" }!
+    let syncedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let store = ImportConnectorStatusStore()
+
+    store.markSynced(connectorID: "email", sourceCount: 12, memoryCount: 2, syncedAt: syncedAt)
+
+    UserDefaults.standard.set("other-user", forKey: .authUserId)
+    let otherUserSnapshot = ImportConnectorStatusStore().snapshot(for: connector)
+
+    UserDefaults.standard.set("test-user", forKey: .authUserId)
+    let originalUserSnapshot = ImportConnectorStatusStore().snapshot(for: connector)
+
+    XCTAssertFalse(otherUserSnapshot.isConnected)
+    XCTAssertEqual(otherUserSnapshot.actionTitle, "Connect")
+    XCTAssertTrue(originalUserSnapshot.isConnected)
+    XCTAssertEqual(originalUserSnapshot.primaryText, "12 emails • 2 memories")
+  }
+
+  func testResetSessionStateClearsConnectorMetricsUntilCurrentUserReloads() {
+    let connector = ImportConnector.all.first { $0.id == "email" }!
+    let syncedAt = Date(timeIntervalSince1970: 1_700_000_000)
+    let store = ImportConnectorStatusStore()
+
+    store.markSynced(connectorID: "email", sourceCount: 12, memoryCount: 2, syncedAt: syncedAt)
+    XCTAssertTrue(store.snapshot(for: connector).isConnected)
+
+    UserDefaults.standard.removeObject(forKey: .authUserId)
+    store.resetSessionState()
+    XCTAssertFalse(store.snapshot(for: connector).isConnected)
+
+    UserDefaults.standard.set("test-user", forKey: .authUserId)
+    XCTAssertTrue(ImportConnectorStatusStore().snapshot(for: connector).isConnected)
   }
 
   private func resetImportConnectorDefaults() {
@@ -112,9 +151,15 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     for connector in ImportConnector.all {
       for prefix in prefixes {
         UserDefaults.standard.removeObject(forKey: prefix + connector.id)
+        UserDefaults.standard.removeObject(forKey: prefix + "test-user." + connector.id)
+        UserDefaults.standard.removeObject(forKey: prefix + "other-user." + connector.id)
       }
     }
     UserDefaults.standard.removeObject(forKey: "onboardingChatGPTImportedMemoriesCount")
     UserDefaults.standard.removeObject(forKey: "onboardingClaudeImportedMemoriesCount")
+    UserDefaults.standard.removeObject(forKey: "onboardingChatGPTImportedMemoriesCount.test-user")
+    UserDefaults.standard.removeObject(forKey: "onboardingClaudeImportedMemoriesCount.test-user")
+    UserDefaults.standard.removeObject(forKey: "onboardingChatGPTImportedMemoriesCount.other-user")
+    UserDefaults.standard.removeObject(forKey: "onboardingClaudeImportedMemoriesCount.other-user")
   }
 }

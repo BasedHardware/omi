@@ -125,10 +125,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ? AssistantSettings.shared.voiceLanguages : []
 
     let defaults = UserDefaults.standard
-    chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)
-    claudeImportedMemoriesCount = defaults.integer(forKey: claudeImportedMemoriesKey)
-    chatGPTImportSummary = defaults.string(forKey: chatGPTImportSummaryKey) ?? ""
-    claudeImportSummary = defaults.string(forKey: claudeImportSummaryKey) ?? ""
+    chatGPTImportedMemoriesCount = defaults.integer(forKey: Self.scopedDefaultsKey(chatGPTImportedMemoriesKey))
+    claudeImportedMemoriesCount = defaults.integer(forKey: Self.scopedDefaultsKey(claudeImportedMemoriesKey))
+    chatGPTImportSummary = defaults.string(forKey: Self.scopedDefaultsKey(chatGPTImportSummaryKey)) ?? ""
+    claudeImportSummary = defaults.string(forKey: Self.scopedDefaultsKey(claudeImportSummaryKey)) ?? ""
   }
 
   deinit {
@@ -236,13 +236,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     case .chatgpt:
       chatGPTImportedMemoriesCount = result.memories
       chatGPTImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: chatGPTImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: chatGPTImportSummaryKey)
+      defaults.set(result.memories, forKey: Self.scopedDefaultsKey(chatGPTImportedMemoriesKey))
+      defaults.set(result.profileSummary, forKey: Self.scopedDefaultsKey(chatGPTImportSummaryKey))
     case .claude:
       claudeImportedMemoriesCount = result.memories
       claudeImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: claudeImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: claudeImportSummaryKey)
+      defaults.set(result.memories, forKey: Self.scopedDefaultsKey(claudeImportedMemoriesKey))
+      defaults.set(result.profileSummary, forKey: Self.scopedDefaultsKey(claudeImportSummaryKey))
     }
 
     await saveGraph(
@@ -259,6 +259,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         ]
       ]
     )
+  }
+
+  private static func scopedDefaultsKey(_ key: String) -> String {
+    guard let userID = UserDefaults.standard.string(forKey: .authUserId), !userID.isEmpty else {
+      return key
+    }
+    return key + "." + userID
   }
 
   func selectAppleNotesFolderAndSync() async {

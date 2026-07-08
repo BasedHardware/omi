@@ -13,7 +13,7 @@ import SwiftUI
 /// MCP status scans).
 @MainActor
 final class HomeStatusStore: ObservableObject {
-    static let omiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
+    static let omiDeviceHistoryDefaultsKeyPrefix = "home-omi-device-account-history."
 
     /// Import-connector (Gmail, Notes, …) status cache. Owned here so the
     /// connected badges don't reset to unknown on every Home visit.
@@ -29,11 +29,11 @@ final class HomeStatusStore: ObservableObject {
     @Published var memoryExportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
     /// Wearable used on this account (any friend/omi-sourced conversation).
     /// Seeded from UserDefaults so the badge is instant on later launches.
-    @Published var accountHasOmiDeviceConversations = UserDefaults.standard.bool(
-        forKey: HomeStatusStore.omiDeviceHistoryDefaultsKey)
+    @Published var accountHasOmiDeviceConversations = HomeStatusStore.cachedOmiDeviceHistory()
 
     private var lastRefreshAt = Date.distantPast
     private var isRefreshing = false
+    private var refreshGeneration = 0
     private var cancellables: Set<AnyCancellable> = []
 
     init() {
@@ -57,43 +57,74 @@ final class HomeStatusStore: ObservableObject {
         guard !isRefreshing else { return }
         isRefreshing = true
         lastRefreshAt = now
-        defer { isRefreshing = false }
+        let generation = refreshGeneration
+        defer {
+            if generation == refreshGeneration {
+                isRefreshing = false
+            }
+        }
 
         async let importConnectorStatuses: Void = importConnectorStatusStore.refresh()
-        async let screenshots: Void = loadScreenshotCount()
-        async let knowledgeCounts: Void = loadKnowledgeCounts()
-        async let exportStatuses: Void = loadMemoryExportStatuses()
-        _ = await (importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
+        async let screenshots = loadScreenshotCount()
+        async let knowledgeCounts = loadKnowledgeCounts()
+        async let exportStatuses = loadMemoryExportStatuses()
+        let (_, screenshotCount, counts, statuses) = await (
+            importConnectorStatuses, screenshots, knowledgeCounts, exportStatuses)
+
+        guard generation == refreshGeneration else { return }
+        self.screenshotCount = screenshotCount
+        if let conversationCount = counts.conversationCount {
+            self.conversationCount = conversationCount
+        }
+        if let memoryCount = counts.memoryCount {
+            self.memoryCount = memoryCount
+        }
+        if let taskCount = counts.taskCount {
+            self.taskCount = taskCount
+        }
+        if counts.hasOmiDeviceHistory == true {
+            accountHasOmiDeviceConversations = true
+            Self.setCachedOmiDeviceHistory()
+        }
+        memoryExportStatuses = statuses
     }
 
     /// Clear per-account data on sign-out/account switch.
     func resetSessionState() {
+        refreshGeneration += 1
+        isRefreshing = false
         screenshotCount = nil
         conversationCount = nil
         memoryCount = nil
         taskCount = nil
         memoryExportStatuses = [:]
-        accountHasOmiDeviceConversations = UserDefaults.standard.bool(
-            forKey: HomeStatusStore.omiDeviceHistoryDefaultsKey)
+        accountHasOmiDeviceConversations = Self.cachedOmiDeviceHistory()
+        importConnectorStatusStore.resetSessionState()
         lastRefreshAt = .distantPast
     }
 
     // MARK: - Loaders
 
-    private func loadScreenshotCount() async {
-        let stats = await RewindIndexer.shared.getStats()
-        screenshotCount = stats?.total
+    private struct KnowledgeCounts {
+        var conversationCount: Int?
+        var memoryCount: Int?
+        var taskCount: Int?
+        var hasOmiDeviceHistory: Bool?
     }
 
-    private func loadMemoryExportStatuses() async {
-        let statuses = await MemoryExportService.shared.allStatuses()
-        memoryExportStatuses = statuses
+    private func loadScreenshotCount() async -> Int? {
+        let stats = await RewindIndexer.shared.getStats()
+        return stats?.total
+    }
+
+    private func loadMemoryExportStatuses() async -> [MemoryExportDestination: MemoryExportStatus] {
+        await MemoryExportService.shared.allStatuses()
     }
 
     /// Load the true totals behind the "What omi knows" tiles. Conversations come
     /// from the server count endpoint (not stored locally); memories and tasks are
     /// counted from the synced local DB — the same totals the detail pages show.
-    private func loadKnowledgeCounts() async {
+    private func loadKnowledgeCounts() async -> KnowledgeCounts {
         async let convos = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
         async let mems = try? MemoryStorage.shared.getLocalMemoriesCount()
         // Open tasks only (matches the "Tasks" label and the old tile's intent —
@@ -102,18 +133,30 @@ final class HomeStatusStore: ObservableObject {
         let shouldLoadDeviceHistory = !accountHasOmiDeviceConversations
         async let deviceHistory = shouldLoadDeviceHistory ? loadOmiDeviceHistory() : nil
         let (c, m, t, d) = await (convos, mems, tasks, deviceHistory)
-        if let c { conversationCount = c }
-        if let m { memoryCount = m }
-        if let t { taskCount = t }
-        // Sticky: device history never un-happens; keep the badge across
-        // launches and network failures once observed.
-        if d == true {
-            accountHasOmiDeviceConversations = true
-            UserDefaults.standard.set(true, forKey: Self.omiDeviceHistoryDefaultsKey)
-        }
+        return KnowledgeCounts(
+            conversationCount: c,
+            memoryCount: m,
+            taskCount: t,
+            hasOmiDeviceHistory: d
+        )
     }
 
     private func loadOmiDeviceHistory() async -> Bool? {
         try? await APIClient.shared.hasOmiDeviceConversations()
+    }
+
+    private static func cachedOmiDeviceHistory(defaults: UserDefaults = .standard) -> Bool {
+        guard let key = omiDeviceHistoryDefaultsKey(defaults: defaults) else { return false }
+        return defaults.bool(forKey: key)
+    }
+
+    private static func setCachedOmiDeviceHistory(defaults: UserDefaults = .standard) {
+        guard let key = omiDeviceHistoryDefaultsKey(defaults: defaults) else { return }
+        defaults.set(true, forKey: key)
+    }
+
+    private static func omiDeviceHistoryDefaultsKey(defaults: UserDefaults = .standard) -> String? {
+        guard let userId = defaults.string(forKey: .authUserId), !userId.isEmpty else { return nil }
+        return omiDeviceHistoryDefaultsKeyPrefix + userId
     }
 }
