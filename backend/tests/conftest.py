@@ -153,16 +153,30 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 
 def _enforce_fast_unit_duration_guard(session):
-    raw_limit = os.environ.get('BACKEND_FAST_UNIT_MAX_SECONDS')
-    if not raw_limit or not _collected_unit_files:
+    raw_warn_limit = os.environ.get('BACKEND_FAST_UNIT_WARN_SECONDS')
+    raw_fail_limit = os.environ.get('BACKEND_FAST_UNIT_FAIL_SECONDS')
+    if (not raw_warn_limit and not raw_fail_limit) or not _collected_unit_files:
         return
-    try:
-        limit = float(raw_limit)
-    except ValueError:
+
+    terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
+    warn_limit = _parse_fast_unit_limit(raw_warn_limit, 'BACKEND_FAST_UNIT_WARN_SECONDS', terminalreporter)
+    fail_limit = _parse_fast_unit_limit(raw_fail_limit, 'BACKEND_FAST_UNIT_FAIL_SECONDS', terminalreporter)
+    if warn_limit is None and raw_warn_limit:
+        session.exitstatus = 1
+        return
+    if fail_limit is None and raw_fail_limit:
+        session.exitstatus = 1
+        return
+
+    if warn_limit is None:
+        warn_limit = fail_limit
+    if fail_limit is not None and warn_limit is not None and fail_limit < warn_limit:
         terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
         if terminalreporter is not None:
-            terminalreporter.section('Backend fast unit duration guard failures')
-            terminalreporter.line(f'Invalid BACKEND_FAST_UNIT_MAX_SECONDS value: {raw_limit}')
+            terminalreporter.section('Backend fast unit duration guard configuration error')
+            terminalreporter.line(
+                'BACKEND_FAST_UNIT_FAIL_SECONDS must be greater than or equal to ' 'BACKEND_FAST_UNIT_WARN_SECONDS.'
+            )
         session.exitstatus = 1
         return
 
@@ -173,14 +187,9 @@ def _enforce_fast_unit_duration_guard(session):
     # slowness (real asyncio sleeps, network, stress) is excluded from the PR unit lane via
     # ``slow``/``integration`` markers, so CPU time is the right signal here. The advisory
     # timing summary in pytest_terminal_summary still reports wall-clock for visibility.
-    #
-    # A local-only grace can be supplied for noisy investigations, but CI defaults to a strict
-    # comparison so BACKEND_FAST_UNIT_MAX_SECONDS=0.1 means 100ms.
-    try:
-        grace = float(os.environ.get('BACKEND_FAST_UNIT_GRACE_SECONDS', '0'))
-    except ValueError:
-        grace = 0
-    fail_limit = limit + grace
+    # The warning threshold is the target for fast unit tests. The failure threshold is the
+    # blocking budget; CI keeps it higher than local pre-push so machine variance around the
+    # target does not block unrelated PRs.
 
     allowlist = _read_duration_allowlist()
     unit_test_items = {
@@ -188,24 +197,52 @@ def _enforce_fast_unit_duration_guard(session):
         for nodeid, seconds in _test_item_cpu.items()
         if nodeid.split('::', 1)[0] in _collected_unit_files
     }
-    offenders = [
+    warning_offenders = [
         (test_id, seconds)
         for test_id, seconds in sorted(unit_test_items.items(), key=lambda item: item[1], reverse=True)
-        if seconds > fail_limit and not _duration_allowlisted(test_id, allowlist)
+        if (
+            warn_limit is not None
+            and seconds > warn_limit
+            and (fail_limit is None or seconds <= fail_limit)
+            and not _duration_allowlisted(test_id, allowlist)
+        )
     ]
-    if not offenders:
+    failure_offenders = [
+        (test_id, seconds)
+        for test_id, seconds in sorted(unit_test_items.items(), key=lambda item: item[1], reverse=True)
+        if fail_limit is not None and seconds > fail_limit and not _duration_allowlisted(test_id, allowlist)
+    ]
+    if not warning_offenders and not failure_offenders:
         return
 
-    terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
     if terminalreporter is not None:
-        terminalreporter.section('Backend fast unit duration guard failures (CPU time)')
-        for test_id, seconds in offenders:
-            terminalreporter.line(f'{seconds:7.2f}s > {fail_limit:.2f}s  {test_id}')
+        if warning_offenders:
+            terminalreporter.section('Backend fast unit duration guard warnings (CPU time)')
+            for test_id, seconds in warning_offenders:
+                terminalreporter.line(f'{seconds:7.2f}s > {warn_limit:.2f}s  {test_id}')
+        if failure_offenders:
+            terminalreporter.section('Backend fast unit duration guard failures (CPU time)')
+            for test_id, seconds in failure_offenders:
+                terminalreporter.line(f'{seconds:7.2f}s > {fail_limit:.2f}s  {test_id}')
         terminalreporter.line(
-            f'(CPU time, call phase only; fail limit = {limit:.2f}s target + {grace:.2f}s ' f'optional grace.)'
+            f'(CPU time, call phase only; warn limit = {warn_limit:.2f}s'
+            + (f', fail limit = {fail_limit:.2f}s.)' if fail_limit is not None else '.)')
         )
         terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
-    session.exitstatus = 1
+    if failure_offenders:
+        session.exitstatus = 1
+
+
+def _parse_fast_unit_limit(raw_value, name, terminalreporter):
+    if raw_value is None or raw_value == '':
+        return None
+    try:
+        return float(raw_value)
+    except ValueError:
+        if terminalreporter is not None:
+            terminalreporter.section('Backend fast unit duration guard configuration error')
+            terminalreporter.line(f'Invalid {name} value: {raw_value}')
+        return None
 
 
 def _duration_allowlisted(test_id, allowlist):

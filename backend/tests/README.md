@@ -28,19 +28,20 @@ the old serial file-by-file run. Set `BACKEND_PYTEST_FILE_ISOLATION=0` to try on
 
 ### Per-test duration guard
 
-`BACKEND_FAST_UNIT_MAX_SECONDS=<seconds>` (default `0.1`) is the per-test CPU-time target. The guard
-measures **CPU time of the call phase only** (`time.process_time`), not wall-clock: wall-clock inflates
-unpredictably under parallel contention and makes a hard limit flake, while CPU time is load-independent and
-deterministic regardless of `BACKEND_PYTEST_WORKERS`. `BACKEND_FAST_UNIT_GRACE_SECONDS` can add an optional
-grace; CI defaults it to `0.02` so the 100ms target tolerates only a narrow CPU-accounting jitter margin. The
-slowest wall-clock times are still printed in the `Backend unit test durations` summary for visibility.
+`BACKEND_FAST_UNIT_WARN_SECONDS=<seconds>` (default `0.1`) is the per-test CPU-time target.
+`BACKEND_FAST_UNIT_FAIL_SECONDS=<seconds>` (default `0.12` locally) is the blocking budget. The guard measures
+**CPU time of the call phase only** (`time.process_time`), not wall-clock: wall-clock inflates unpredictably
+under parallel contention and makes a hard limit flake, while CPU time is load-independent and deterministic
+regardless of `BACKEND_PYTEST_WORKERS`. GitHub Actions keeps the same 100ms warning target but uses a higher
+failure threshold so near-target CPU-accounting differences do not block unrelated PRs. The slowest wall-clock
+times are still printed in the `Backend unit test durations` summary for visibility.
 
 Under the default file-isolated runner each test file is a separate pytest process, so the first test of a
 file/class amortizes that process's module import (FastAPI app / router / database graph) into its measured
 time. That import cost is structural, not a per-test regression; existing over-target unit tests are
 grandfathered in `tests/fast_unit_duration_allowlist.txt` (one node ID per line). To shrink that list, run a
 single pytest session instead (`BACKEND_PYTEST_FILE_ISOLATION=0`, pays imports once per worker) or raise the
-target.
+failure threshold.
 
 Genuinely non-unit tests (real `asyncio` sleeps, network/Redis, stress, codebase-wide greps, full-app
 wiring, per-test fresh module reload) must be marked `@pytest.mark.slow` / `@pytest.mark.integration` so they
