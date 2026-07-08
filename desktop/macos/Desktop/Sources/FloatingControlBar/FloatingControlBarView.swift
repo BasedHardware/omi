@@ -1366,15 +1366,23 @@ struct FloatingControlBarView: View {
         state.inputViewHeight = baseHeight + headerBudget
     }
 
+    private var floatingChatProvider: ChatProvider? {
+        FloatingControlBarManager.shared.sharedFloatingProvider
+    }
+
     private var aiResponseView: some View {
-        AIResponseView(
+        // Re-read derived content when viewport anchors or streamed answer tokens change.
+        let _ = state.chatViewport
+        let _ = state.answerStreamToken
+        let provider = floatingChatProvider
+        return AIResponseView(
             isLoading: Binding(
                 get: { state.isAILoading },
                 set: { state.isAILoading = $0 }
             ),
-            currentMessage: state.currentAIMessage,
+            currentMessage: state.currentAIMessage(from: provider),
             userInput: state.displayedQuery,
-            chatHistory: state.chatHistory,
+            chatHistory: state.derivedChatHistory(from: provider),
             isVoiceFollowUp: Binding(
                 get: { state.isVoiceFollowUp },
                 set: { state.isVoiceFollowUp = $0 }
@@ -1388,16 +1396,15 @@ struct FloatingControlBarView: View {
             onClearVisibleConversation: onClearVisibleConversation,
             onEscape: onEscape,
             onSendFollowUp: { message in
-                archiveCurrentExchange()
+                state.archiveCurrentExchange(using: floatingChatProvider)
 
                 (window as? FloatingControlBarWindow)?
                     .beginVisibleMainQuery(message, fromVoice: false, animated: true)
                 state.displayedQuery = message
-                state.currentQuestionMessageId = nil
+                state.bindQuestionMessageId(nil)
                 state.markConversationActivity()
                 withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
                     state.isAILoading = true
-                    state.currentAIMessage = nil
                 }
                 onSendQuery(message)
             },
@@ -1415,20 +1422,6 @@ struct FloatingControlBarView: View {
                 insertion: .move(edge: .bottom).combined(with: .opacity),
                 removal: .move(edge: .bottom).combined(with: .opacity)
             ))
-    }
-
-    private func archiveCurrentExchange() {
-        guard let currentMessage = state.currentAIMessage else { return }
-        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
-
-        let currentQuery = state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        state.chatHistory.append(
-            FloatingChatExchange(
-                question: currentQuery.isEmpty ? nil : currentQuery,
-                questionMessageId: state.currentQuestionMessageId,
-                aiMessage: currentMessage
-            )
-        )
     }
 
 }

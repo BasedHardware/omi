@@ -130,8 +130,12 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(windowSource.contains("chatCancellable?.cancel()"))
     XCTAssertTrue(windowSource.contains("completedMessage.isStreaming = false"))
-    XCTAssertTrue(windowSource.contains("window.state.currentAIMessage = completedMessage"))
-    XCTAssertFalse(windowSource.contains("window.state.currentAIMessage = nil\n        window.state.displayedQuery = \"\""))
+    XCTAssertTrue(windowSource.contains("window.state.archiveCurrentExchange(using: self.historyChatProvider)"))
+    XCTAssertTrue(
+      windowSource.contains("window.state.bindAnswerMessage(completedMessage)")
+        || windowSource.contains("window.state.setLocalAnswerOverride(completedMessage)")
+    )
+    XCTAssertFalse(windowSource.contains("window.state.chatHistory.append"))
     XCTAssertTrue(responseSource.contains("} else if isLoading {"))
     XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
   }
@@ -199,7 +203,7 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)"))
     XCTAssertTrue(source.contains("private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String?"))
-    XCTAssertTrue(source.contains("barWindow.state.chatHistory.reversed().compactMap"))
+    XCTAssertTrue(source.contains("barWindow.state.derivedChatHistory(from: historyChatProvider)"))
   }
 
   func testTypedProviderDirectivePromptsForSetupWhenProviderUnavailable() throws {
@@ -569,7 +573,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
 
     XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    XCTAssertTrue(viewSource.contains("onSendFollowUp: { message in\n                archiveCurrentExchange()\n\n                (window as? FloatingControlBarWindow)?\n                    .beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
+    XCTAssertTrue(viewSource.contains("state.archiveCurrentExchange(using: floatingChatProvider)"))
+    XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
     XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
     XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
     XCTAssertTrue(windowSource.contains("func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true)"))
@@ -577,6 +582,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("state.present(.mainResponse)"))
     XCTAssertTrue(windowSource.contains("beginMainResponseHeight(animated: animated)"))
     XCTAssertFalse(windowSource.contains("state.showingAIResponse = true"))
+    XCTAssertFalse(windowSource.contains("state.chatHistory"))
+    XCTAssertTrue(windowSource.contains("barWindow?.state.bindAnswerMessage(aiMessage)"))
   }
 
   func testActiveSubagentChatRefreshesWhenAgentOutputChanges() throws {

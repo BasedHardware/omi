@@ -183,7 +183,10 @@ Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over o
 source of truth; UI may optimistic-render, then must not double-apply the same turn.
 
 Rules (fail the PR if any break):
-1. **Single provider** — floating typed/PTT must not own a separate durable message array.
+1. **Single provider + floating viewport** — floating presentation is chrome + a
+   viewport cursor (`FloatingChatViewport` message ids / `clientTurnId`) over
+   `ChatProvider.messages`. It must not own a second durable transcript array
+   (`chatHistory` of `ChatMessage` copies is forbidden).
 2. **One idempotency key per logical turn** — every optimistic
    `stageOptimisticTurn` / kernel write MUST share the SAME key with
    `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Stage first for sync UI,

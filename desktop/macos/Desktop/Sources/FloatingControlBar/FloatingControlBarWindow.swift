@@ -1172,7 +1172,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 state.present(.mainInput)
                 state.isAILoading = false
                 state.aiInputText = ""
-                state.currentAIMessage = nil
+                state.setLocalAnswerOverride(nil)
                 // Match the explicit resize height so the observer doesn't immediately override it
                 state.inputViewHeight = inputPanelHeight
             }
@@ -1309,19 +1309,19 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 }
                 resizeToResponseHeight(animated: true)
             }
-            state.aiResponseText += text
+            state.appendLocalAnswerText(text)
         case "done":
             withAnimation(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
             if !text.isEmpty {
-                state.aiResponseText = text
+                state.replaceLocalAnswerText(text)
             }
         case "error":
             withAnimation(.easeOut(duration: 0.12)) {
                 state.isAILoading = false
             }
-            state.aiResponseText = text.isEmpty ? "An unknown error occurred." : text
+            state.replaceLocalAnswerText(text.isEmpty ? "An unknown error occurred." : text)
         default:
             break
         }
@@ -2352,29 +2352,12 @@ class FloatingControlBarManager {
             }
         }
 
-        barWindow.onShareLink = { [weak barWindow] in
-            guard let barWindow = barWindow else { return nil }
-            // Share the visible floating-bar exchange history in chat order.
-            var messageIds: [String] = []
-            for exchange in barWindow.state.chatHistory {
-                if let questionMessageId = exchange.questionMessageId {
-                    messageIds.append(questionMessageId)
-                }
-                if exchange.aiMessage.isSynced {
-                    messageIds.append(exchange.aiMessage.id)
-                }
-            }
-            if let currentQuestionMessageId = barWindow.state.currentQuestionMessageId {
-                messageIds.append(currentQuestionMessageId)
-            }
-            if let current = barWindow.state.currentAIMessage, current.isSynced {
-                messageIds.append(current.id)
-            }
-            let orderedUniqueMessageIds = messageIds.reduce(into: [String]()) { ids, messageId in
-                if !ids.contains(messageId) {
-                    ids.append(messageId)
-                }
-            }
+        barWindow.onShareLink = { [weak self, weak barWindow] in
+            guard let self, let barWindow = barWindow else { return nil }
+            // Share synced message ids from the viewport cursor over the shared provider.
+            let orderedUniqueMessageIds = barWindow.state.syncedShareMessageIds(
+                from: self.historyChatProvider
+            )
             guard !orderedUniqueMessageIds.isEmpty else { return nil }
             do {
                 let response = try await APIClient.shared.shareChatMessages(messageIds: orderedUniqueMessageIds)
@@ -3253,7 +3236,8 @@ class FloatingControlBarManager {
         if !displayed.isEmpty {
             return displayed
         }
-        return barWindow.state.chatHistory.reversed().compactMap { exchange in
+        let history = barWindow.state.derivedChatHistory(from: historyChatProvider)
+        return history.reversed().compactMap { exchange in
             exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
         }.first { !$0.isEmpty }
     }
@@ -3289,8 +3273,8 @@ class FloatingControlBarManager {
             chatCancellable = nil
             barWindow.state.aiInputText = ""
             barWindow.state.displayedQuery = ""
-            barWindow.state.currentQuestionMessageId = nil
-            barWindow.state.currentAIMessage = message
+            barWindow.state.bindQuestionMessageId(nil)
+            barWindow.state.setLocalAnswerOverride(message)
             barWindow.state.isAILoading = false
             barWindow.state.currentQueryFromVoice = false
             barWindow.state.clearVoiceResponseState()
@@ -3370,7 +3354,21 @@ class FloatingControlBarManager {
         chatCancellable = nil
         barWindow.state.aiInputText = ""
         barWindow.state.displayedQuery = userText
-        barWindow.state.currentAIMessage = assistantMessage
+        // Provider timeline is SoT: enrich the existing message in place (e.g. spawn_agent
+        // tool block), then bindAnswerMessage only. localAnswerOverride is reserved for
+        // ephemeral UI that never lands on the provider.
+        if let provider = historyChatProvider,
+           let index = provider.messages.firstIndex(where: { $0.id == assistantMessage.id })
+        {
+            provider.messages[index].isStreaming = false
+            provider.messages[index].contentBlocks = assistantMessage.contentBlocks
+            if !assistantMessage.text.isEmpty {
+                provider.messages[index].text = assistantMessage.text
+            }
+            barWindow.state.bindAnswerMessage(provider.messages[index])
+        } else {
+            barWindow.state.setLocalAnswerOverride(assistantMessage)
+        }
         barWindow.state.isAILoading = false
         barWindow.state.present(.mainResponse)
         barWindow.state.currentQueryFromVoice = false
@@ -3399,18 +3397,8 @@ class FloatingControlBarManager {
         }
         guard let provider = activeFloatingProvider() else { return }
 
-        // Archive current exchange
-        if let currentMessage = window.state.currentAIMessage,
-           !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty {
-            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-            window.state.chatHistory.append(
-                FloatingChatExchange(
-                    question: currentQuery.isEmpty ? nil : currentQuery,
-                    questionMessageId: window.state.currentQuestionMessageId,
-                    aiMessage: currentMessage
-                )
-            )
-        }
+        // Archive current exchange as viewport id anchors (content stays on provider).
+        window.state.archiveCurrentExchange(using: provider)
 
         if provider.isSending {
             let turnOwner = chatTurnOwner(for: .visible(fromVoice: fromVoice))
@@ -3768,11 +3756,13 @@ class FloatingControlBarManager {
         window.state.isAILoading = false
         window.state.aiInputText = ""
         if !shouldRestoreVisibleConversation {
-            window.state.chatHistory = []
-            window.state.displayedQuery = ""
-            window.state.currentQuestionMessageId = nil
+            window.state.clearViewport()
         }
-        window.state.currentAIMessage = notificationMessage
+        if self.historyChatProvider?.messages.contains(where: { $0.id == notificationMessage.id }) == true {
+            window.state.bindAnswerMessage(notificationMessage)
+        } else {
+            window.state.setLocalAnswerOverride(notificationMessage)
+        }
         window.state.markConversationActivity()
         window.resizeToResponseHeightPublic(animated: true)
         window.orderFrontRegardless()
@@ -3795,19 +3785,9 @@ class FloatingControlBarManager {
     }
 
     private func archiveVisibleConversationIfNeeded(in window: FloatingControlBarWindow) {
-        guard let currentMessage = window.state.currentAIMessage else { return }
-        guard !currentMessage.text.isEmpty || !currentMessage.contentBlocks.isEmpty else { return }
-
-        let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        window.state.chatHistory.append(
-            FloatingChatExchange(
-                question: currentQuery.isEmpty ? nil : currentQuery,
-                questionMessageId: window.state.currentQuestionMessageId,
-                aiMessage: currentMessage
-            )
-        )
+        window.state.archiveCurrentExchange(using: self.historyChatProvider)
         window.state.displayedQuery = ""
-        window.state.currentQuestionMessageId = nil
+        window.state.bindQuestionMessageId(nil)
     }
 
     private func purgeExpiredNotificationMessages() {
@@ -3833,20 +3813,15 @@ class FloatingControlBarManager {
         var completedMessage = message
         completedMessage.isStreaming = false
 
-        if let current = window.state.currentAIMessage {
-            let currentQuery = window.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-            window.state.chatHistory.append(
-                FloatingChatExchange(
-                    question: currentQuery.isEmpty ? nil : currentQuery,
-                    questionMessageId: window.state.currentQuestionMessageId,
-                    aiMessage: current
-                )
-            )
-        }
+        window.state.archiveCurrentExchange(using: self.historyChatProvider)
 
-        window.state.currentAIMessage = completedMessage
+        if self.historyChatProvider?.messages.contains(where: { $0.id == completedMessage.id }) == true {
+            window.state.bindAnswerMessage(completedMessage)
+        } else {
+            window.state.setLocalAnswerOverride(completedMessage)
+        }
         window.state.displayedQuery = ""
-        window.state.currentQuestionMessageId = nil
+        window.state.bindQuestionMessageId(nil)
         window.state.isAILoading = false
         if window.state.conversationSurface == .mainInput || window.state.conversationSurface == .mainResponse {
             window.state.present(.mainResponse)
@@ -4005,10 +3980,10 @@ class FloatingControlBarManager {
                 guard isActiveQueryGeneration(generation) else { return }
                 barWindow.state.isAILoading = false
                 barWindow.state.present(.mainResponse)
-                barWindow.state.currentAIMessage = ChatMessage(
+                barWindow.state.setLocalAnswerOverride(ChatMessage(
                     text: "You've reached \(limiter.limitDescription). Upgrade to keep chatting without restrictions.",
                     sender: .ai
-                )
+                ))
                 barWindow.resizeToResponseHeightPublic(animated: true)
                 NotificationCenter.default.post(
                     name: .showUsageLimitPopup,
@@ -4055,10 +4030,9 @@ class FloatingControlBarManager {
 
         let clientTurnId = UUID().uuidString
 
-        // Observe messages for streaming response
+        // Observe messages for streaming response — bind viewport ids only.
         chatCancellable?.cancel()
-        barWindow.state.currentAIMessage = nil
-        barWindow.state.currentQuestionMessageId = nil
+        barWindow.state.beginTurn(clientTurnId: clientTurnId)
         barWindow.state.isAILoading = true
         var hasSetUpResponseHeight = false
         chatCancellable = provider.$messages
@@ -4069,8 +4043,13 @@ class FloatingControlBarManager {
                     $0.clientTurnId == clientTurnId && $0.sender == .ai
                 }) else { return }
 
-                // Store the full ChatMessage (preserves contentBlocks, tool calls, thinking)
-                barWindow?.state.currentAIMessage = aiMessage
+                // Viewport cursor over provider messages (preserves contentBlocks via id lookup)
+                barWindow?.state.bindAnswerMessage(aiMessage)
+                if let userMessage = messages.last(where: {
+                    $0.clientTurnId == clientTurnId && $0.sender == .user
+                }) {
+                    barWindow?.state.bindQuestionMessageId(userMessage.id)
+                }
                 if shouldPlayVoice {
                     FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
                         aiMessage,
@@ -4115,12 +4094,12 @@ class FloatingControlBarManager {
         if let syncedUserMessage = provider.messages.last(where: {
             $0.clientTurnId == clientTurnId && $0.sender == .user && $0.isSynced
         }) {
-            barWindow.state.currentQuestionMessageId = syncedUserMessage.id
+            barWindow.state.bindQuestionMessageId(syncedUserMessage.id)
         }
         if let finalAIMessage = provider.messages.last(where: {
             $0.clientTurnId == clientTurnId && $0.sender == .ai
         }) {
-            barWindow.state.currentAIMessage = finalAIMessage
+            barWindow.state.bindAnswerMessage(finalAIMessage)
         }
         // Cancel the messages subscription now that streaming is done.
         // Leaving it alive lets later sidebar mutations overwrite the floating bar display.
@@ -4131,16 +4110,28 @@ class FloatingControlBarManager {
         barWindow.state.isAILoading = false
 
         if let errorText = provider.errorMessage {
-            // Provider reported an error (timeout, bridge crash, etc.)
-            // Show it even if there's partial content — append to existing or create new message
-            if barWindow.state.currentAIMessage != nil && !barWindow.state.aiResponseText.isEmpty {
-                barWindow.state.currentAIMessage?.text += "\n\n⚠️ \(errorText)"
+            // Provider reported an error (timeout, bridge crash, etc.).
+            // Prefer mutating the provider-backed answer in place; only use
+            // localAnswerOverride when there is no provider message to update.
+            if let existing = barWindow.state.currentAIMessage(from: provider),
+               let index = provider.messages.firstIndex(where: { $0.id == existing.id })
+            {
+                let existingText = provider.messages[index].text
+                provider.messages[index].text = existingText.isEmpty
+                    ? "⚠️ \(errorText)"
+                    : existingText + "\n\n⚠️ \(errorText)"
+                provider.messages[index].isStreaming = false
+                barWindow.state.bindAnswerMessage(provider.messages[index])
             } else {
-                barWindow.state.currentAIMessage = ChatMessage(text: "⚠️ \(errorText)", sender: .ai)
+                barWindow.state.setLocalAnswerOverride(ChatMessage(text: "⚠️ \(errorText)", sender: .ai))
             }
-        } else if barWindow.state.currentAIMessage == nil || barWindow.state.aiResponseText.isEmpty {
+        } else if barWindow.state.currentAIMessage(from: provider) == nil
+            || barWindow.state.aiResponseText(from: provider).isEmpty
+        {
             // No error message and no response — something else went wrong
-            barWindow.state.currentAIMessage = ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+            barWindow.state.setLocalAnswerOverride(
+                ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
+            )
         }
 
         // Ensure the response view is visible and resized (handles the case where
@@ -4154,7 +4145,7 @@ class FloatingControlBarManager {
 
         if shouldPlayVoice {
             FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
-                barWindow.state.currentAIMessage,
+                barWindow.state.currentAIMessage(from: provider),
                 isFinal: true
             )
         }
@@ -4342,8 +4333,8 @@ extension FloatingControlBarWindow {
         state.currentQueryFromVoice = fromVoice
         state.aiInputText = ""
         state.displayedQuery = message
-        state.currentQuestionMessageId = nil
-        state.currentAIMessage = nil
+        state.clearCurrentAnswerAnchors()
+        // clearCurrentAnswerAnchors keeps archived exchanges; sendAIQuery binds the real turn id.
         state.isAILoading = true
         state.isVoiceFollowUp = false
         state.voiceFollowUpTranscript = ""

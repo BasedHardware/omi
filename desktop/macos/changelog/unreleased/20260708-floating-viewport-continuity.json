@@ -1,0 +1,3 @@
+{
+  "change": "Floating bar chat now reads from the shared chat timeline instead of keeping a separate copy"
+}

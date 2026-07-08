@@ -324,6 +324,41 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "Home chat must not filter notch/PTT turns out of history"
     )
 
+    let floatingState = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarState.swift"),
+      encoding: .utf8)
+    XCTAssertTrue(
+      floatingState.contains("struct FloatingChatViewport"),
+      "floating bar must keep a viewport cursor over ChatProvider.messages"
+    )
+    XCTAssertTrue(
+      floatingState.contains("func currentAIMessage(from provider: ChatProvider?)"),
+      "floating answer must resolve from provider messages by id"
+    )
+    XCTAssertTrue(
+      floatingState.contains("if let answerId = chatViewport.answerMessageId,"),
+      "currentAIMessage must prefer provider-bound answerMessageId over localAnswerOverride"
+    )
+    let answerIdPreferIndex = floatingState.range(of: "if let answerId = chatViewport.answerMessageId,")?.lowerBound
+    let overrideFallbackIndex = floatingState.range(of: "if let localAnswerOverride { return localAnswerOverride }")?.lowerBound
+    XCTAssertNotNil(answerIdPreferIndex)
+    XCTAssertNotNil(overrideFallbackIndex)
+    if let answerIdPreferIndex, let overrideFallbackIndex {
+      XCTAssertLessThan(
+        answerIdPreferIndex,
+        overrideFallbackIndex,
+        "provider-bound answer must be checked before localAnswerOverride"
+      )
+    }
+    XCTAssertFalse(
+      floatingState.contains("@Published var chatHistory"),
+      "floating bar must not own a durable chatHistory transcript array"
+    )
+    XCTAssertFalse(
+      floatingState.contains("@Published var currentAIMessage"),
+      "floating bar must not store currentAIMessage as content ownership"
+    )
+
     let provider = try String(
       contentsOf: root.appendingPathComponent("Sources/Providers/ChatProvider.swift"),
       encoding: .utf8)
