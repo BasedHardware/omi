@@ -62,10 +62,20 @@ if kc.returncode == 0 and kc.stdout.strip():
     payload = kc.stdout.strip()
     try:
         tokens = json.loads(payload)
-        data["auth_idToken"] = {"type": "string", "value": tokens.get("idToken", "")}
-        data["auth_refreshToken"] = {"type": "string", "value": tokens.get("refreshToken", "")}
-        data["auth_tokenExpiry"] = {"type": "float", "value": str(tokens.get("expiryTime", 0))}
-        data["auth_tokenUserId"] = {"type": "string", "value": tokens.get("tokenUserId", "")}
+        # Validate tokenUserId against the UserDefaults auth_userId to avoid
+        # seeding signed-in state for one user with Keychain tokens belonging
+        # to a different user (the login Keychain is shared across all bundles).
+        kc_uid = tokens.get("tokenUserId", "")
+        ud_uid = data.get("auth_userId", {}).get("value", "")
+        if kc_uid and ud_uid and kc_uid != ud_uid:
+            print(f"WARNING: Keychain tokenUserId ({kc_uid}) does not match "
+                  f"UserDefaults auth_userId ({ud_uid}) — falling back to "
+                  f"UserDefaults token keys.", file=sys.stderr)
+        else:
+            data["auth_idToken"] = {"type": "string", "value": tokens.get("idToken", "")}
+            data["auth_refreshToken"] = {"type": "string", "value": tokens.get("refreshToken", "")}
+            data["auth_tokenExpiry"] = {"type": "float", "value": str(tokens.get("expiryTime", 0))}
+            data["auth_tokenUserId"] = {"type": "string", "value": kc_uid}
     except (json.JSONDecodeError, KeyError):
         pass  # fall through to UserDefaults below
 
