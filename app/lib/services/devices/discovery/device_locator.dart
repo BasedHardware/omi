@@ -37,14 +37,13 @@ class DeviceLocator {
     final kind = (rawKind is int && rawKind >= 0 && rawKind < TransportKind.values.length)
         ? TransportKind.values[rawKind]
         : TransportKind.bluetooth;
+    final rawBluetoothId = json['bluetoothId'];
+    final bluetoothId = rawBluetoothId is String && rawBluetoothId.trim().isNotEmpty ? rawBluetoothId : null;
     // Same defensiveness for extras: JSON decoding can yield Map<dynamic, dynamic>.
     final extras = (json['extras'] as Map?)?.map((k, v) => MapEntry(k.toString(), v as Object?)) ?? <String, Object?>{};
     switch (kind) {
       case TransportKind.bluetooth:
-        return DeviceLocator.bluetooth(
-          deviceId: json['bluetoothId'] as String? ?? '',
-          extras: extras,
-        );
+        return DeviceLocator._(kind: TransportKind.bluetooth, bluetoothId: bluetoothId, extras: extras);
       case TransportKind.watchConnectivity:
         return DeviceLocator.watchConnectivity(extras: extras);
       case TransportKind.metaDat:

@@ -94,8 +94,9 @@ The repo has no runtime flag system; gating follows the discoverer-self-gating
 idiom. `RayBanMetaHostAPI.getAvailabilityMode()` reports:
 
 - **`full`** — the `meta-wearables-dat-ios` SPM package is linked
-  (`#if canImport(MWDATCore)`) **and** Meta app credentials exist in
-  Info.plist (`MWDAT` dictionary with `MetaAppID`). Audio + photos.
+  (`#if canImport(MWDATCore)`). Audio + photos. Developer Mode deliberately
+  runs without `MetaAppID` / `ClientToken`; those credentials are only for
+  future beta/distribution builds.
 - **`audio_only`** — no DAT in this build. Only the labeled
   "Ray-Ban Meta audio-only mode" via the system Bluetooth HFP route. All
   camera APIs honestly report unavailable; nothing is faked.
@@ -125,7 +126,8 @@ credentials. See `docs/rayban-meta-dat-setup.md` for the `full` build.
 - **Music pauses** during capture (A2DP/HFP exclusivity).
 - **App Store distribution of DAT builds is not yet supported by Meta** —
   developer/beta channel only (see Meta's toolkit terms).
-- The DAT-enabled build requires Meta Wearables Developer Center credentials
-  and was written against the DAT 0.8 API reference; first compile against the
-  real SDK may need minor symbol fixes (it cannot be compiled without SDK
-  access, which is credential-gated).
+- The DAT-enabled build requires Meta Wearables Developer Center access to
+  fetch the SDK package and was written against the DAT 0.8 API reference;
+  first compile against the real SDK may need minor symbol fixes. Developer
+  Mode should not embed `MetaAppID` / `ClientToken`; those credentials are only
+  for a future beta/distribution build configuration.

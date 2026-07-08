@@ -170,13 +170,18 @@ class RayBanMetaTransport extends DeviceTransport {
 
     _updateState(DeviceTransportState.disconnecting);
 
-    try {
-      await _hostAPI.stopAudioCapture();
-      await _hostAPI.stopCamera();
-      await _hostAPI.disconnect();
-    } catch (e) {
-      Logger.debug('RayBanMeta Transport: Error during native disconnect: $e');
-    }
+    await _runNativeTeardownStep(
+      label: 'stopping audio during disconnect',
+      action: _hostAPI.stopAudioCapture,
+    );
+    await _runNativeTeardownStep(
+      label: 'stopping camera during disconnect',
+      action: _hostAPI.stopCamera,
+    );
+    await _runNativeTeardownStep(
+      label: 'disconnecting native session',
+      action: _hostAPI.disconnect,
+    );
 
     for (final controller in _streamControllers.values) {
       _audioControllers.remove(controller);
@@ -186,6 +191,17 @@ class RayBanMetaTransport extends DeviceTransport {
     _streamControllers.clear();
 
     _updateState(DeviceTransportState.disconnected);
+  }
+
+  Future<void> _runNativeTeardownStep({
+    required String label,
+    required Future<void> Function() action,
+  }) async {
+    try {
+      await action();
+    } catch (e) {
+      Logger.debug('RayBanMeta Transport: Error $label: $e');
+    }
   }
 
   @override

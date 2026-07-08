@@ -51,10 +51,13 @@ hyphen-free bundle identifier. Track this before any beta rollout.
 
 ### Distribution credentials (when you get there)
 
-Info.plist already carries the `MWDAT` dictionary (`MetaAppID`/`ClientToken`
-resolve from build settings), the `omirayban` callback URL scheme, and the
-`com.meta.ar.wearable` accessory protocol. Provide the credentials via a
-git-ignored xcconfig:
+Info.plist already carries the Developer Mode-safe `MWDAT` dictionary: the
+`omirayban` callback URL scheme and `DAMEnabled`. It deliberately does **not**
+include `MetaAppID` or `ClientToken`, because Meta's Developer Mode flow must
+run without those credential keys. The git-ignored xcconfig below is a staging
+place for future beta/distribution work; the current Xcode project does not
+consume `META_APP_ID` / `META_CLIENT_TOKEN` unless a distribution-specific
+Info.plist/build-setting mapping is added at the same time.
 
 ```bash
 cd app/ios/Flutter
@@ -63,10 +66,10 @@ cp RayBanMetaCredentials.xcconfig.template RayBanMetaCredentials.xcconfig
 ```
 
 Note: `getAvailabilityMode()` returns `full` whenever the DAT SDK is linked —
-credentials do not gate the mode. This file only supplies the `MetaAppID` /
-`ClientToken` build settings that distribution builds embed in Info.plist.
-Register the exact `omirayban://` scheme and your iOS bundle id in the
-Wearables Developer Center app settings.
+credentials do not gate the mode. For distribution, add the `MetaAppID` /
+`ClientToken` keys to the `MWDAT` dictionary through a dedicated build
+configuration or plist overlay, then register the exact `omirayban://` scheme
+and your iOS bundle id in the Wearables Developer Center app settings.
 
 Already present in Omi's Info.plist (no action): `NSMicrophoneUsageDescription`,
 `NSBluetoothAlwaysUsageDescription`, `NSCameraUsageDescription`, background
@@ -80,7 +83,7 @@ bash setup.sh ios              # first time only
 flutter build ios --flavor dev --debug   # or run on device from Xcode
 ```
 
-`getAvailabilityMode()` now returns `full` (SDK linked + `MetaAppID` present).
+`getAvailabilityMode()` now returns `full` once the SDK is linked.
 
 ## Step 4 — Authorize and pair inside Omi
 

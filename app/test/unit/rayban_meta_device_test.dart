@@ -1,13 +1,44 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/device_locator.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/transports/rayban_meta_transport.dart';
 
+const _rayBanMetaHostApiPrefix = 'dev.flutter.pigeon.omi_pigeon.RayBanMetaHostAPI';
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  final hostApiChannelNames = <String>{};
+
+  void setRayBanMetaHostApiHandler(
+    String methodName,
+    Future<Object?> Function(Object? message) handler,
+  ) {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final channelName = '$_rayBanMetaHostApiPrefix.$methodName';
+    hostApiChannelNames.add(channelName);
+    messenger.setMockMessageHandler(channelName, (ByteData? message) async {
+      final decoded = RayBanMetaHostAPI.pigeonChannelCodec.decodeMessage(message);
+      final response = await handler(decoded);
+      return RayBanMetaHostAPI.pigeonChannelCodec.encodeMessage(response);
+    });
+  }
+
+  tearDown(() {
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    for (final channelName in hostApiChannelNames) {
+      messenger.setMockMessageHandler(channelName, null);
+    }
+    hostApiChannelNames.clear();
+  });
+
   group('DeviceType.raybanMeta serialization', () {
     test('round-trips by name through BtDevice json', () {
       final device = BtDevice(
@@ -68,7 +99,30 @@ void main() {
       expect(wrongType.bluetoothId, 'abc');
 
       final missingId = DeviceLocator.fromJson({'kind': 0});
-      expect(missingId.bluetoothId, '');
+      expect(missingId.bluetoothId, isNull);
+
+      final blankId = DeviceLocator.fromJson({'kind': 0, 'bluetoothId': '   '});
+      expect(blankId.bluetoothId, isNull);
+    });
+
+    test('corrupted bluetooth locators without ids are not connectable', () {
+      final missingIdDevice = BtDevice(
+        name: 'Corrupted BLE',
+        id: 'fallback-id',
+        type: DeviceType.omi,
+        rssi: 0,
+        locator: DeviceLocator.fromJson({'kind': 99}),
+      );
+      expect(DeviceConnectionFactory.create(missingIdDevice), isNull);
+
+      final blankIdDevice = BtDevice(
+        name: 'Blank BLE',
+        id: 'fallback-id',
+        type: DeviceType.omi,
+        rssi: 0,
+        locator: DeviceLocator.fromJson({'kind': 0, 'bluetoothId': ''}),
+      );
+      expect(DeviceConnectionFactory.create(blankIdDevice), isNull);
     });
   });
 
@@ -93,6 +147,39 @@ void main() {
       expect(RayBanMetaTransport.framePhotoEvent(jpeg, 360).first, 0); // 4 & 0x03
       expect(RayBanMetaTransport.framePhotoEvent(jpeg, 0).first, 0);
       expect(RayBanMetaTransport.framePhotoEvent(jpeg, 90).first, 1);
+    });
+  });
+
+  group('RayBanMetaTransport disconnect', () {
+    test('continues native teardown when stopping audio fails', () async {
+      final nativeCalls = <String>[];
+
+      setRayBanMetaHostApiHandler('getAvailabilityMode', (_) async => <Object?>['audio_only']);
+      setRayBanMetaHostApiHandler(
+        'getBluetoothHfpInputNames',
+        (_) async => <Object?>[
+          <Object?>['Ray-Ban Meta'],
+        ],
+      );
+      setRayBanMetaHostApiHandler('stopAudioCapture', (_) async {
+        nativeCalls.add('stopAudioCapture');
+        return <Object?>['audio-stop-failed', 'Audio teardown failed', null];
+      });
+      setRayBanMetaHostApiHandler('stopCamera', (_) async {
+        nativeCalls.add('stopCamera');
+        return <Object?>[];
+      });
+      setRayBanMetaHostApiHandler('disconnect', (_) async {
+        nativeCalls.add('disconnect');
+        return <Object?>[];
+      });
+
+      final transport = RayBanMetaTransport('rayban-meta-test');
+      await transport.connect();
+
+      await expectLater(transport.disconnect(), completes);
+      expect(nativeCalls, ['stopAudioCapture', 'stopCamera', 'disconnect']);
+      expect(await transport.isConnected(), isTrue);
     });
   });
 

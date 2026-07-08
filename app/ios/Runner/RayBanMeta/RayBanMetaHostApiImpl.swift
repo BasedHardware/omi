@@ -14,8 +14,9 @@ import UIKit
 ///
 /// Two build modes, reported through getAvailabilityMode():
 /// - "full": the Meta Wearables Device Access Toolkit (SPM package
-///   meta-wearables-dat-ios) is linked and Meta app credentials are present in
-///   Info.plist — camera/photo capture plus HFP microphone audio.
+///   meta-wearables-dat-ios) is linked — camera/photo capture plus HFP
+///   microphone audio. Developer Mode must not include MetaAppID/ClientToken
+///   credentials; those are distribution-only.
 /// - "audio_only": no toolkit in this build — only the labeled Bluetooth HFP
 ///   microphone fallback. Camera calls report unavailable; nothing is faked.
 ///

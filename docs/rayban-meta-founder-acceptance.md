@@ -100,7 +100,8 @@ Verified automatically in this repo (no glasses needed):
 - Full app compiles and existing suites pass; iOS dev-flavor build succeeds in
   audio-only mode (no SDK, no credentials).
 
-Requires physical hardware + DAT credentials (NOT claimable from CI):
+Requires physical hardware + Meta Wearables Developer Center SDK access (NOT
+claimable from CI):
 
 - Meta AI registration round-trip (URL scheme callback).
 - Real HFP mic capture quality and route stability.

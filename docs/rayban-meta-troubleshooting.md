@@ -8,8 +8,10 @@
   matches a Meta product ("Ray-Ban…", "Oakley Meta…", "Meta Glasses"). Check
   iOS Settings → Bluetooth shows the glasses connected, then rescan.
 - **Full build**: `getAvailabilityMode()` must be `full`. If the setup entry
-  is missing, the `MWDAT` Info.plist dictionary is missing/empty
-  (`MetaAppID`) or the SPM package isn't linked into the Runner target.
+  is missing, the SPM package is not linked into the Runner target or the
+  Developer Mode-safe `MWDAT` Info.plist dictionary is missing
+  (`AppLinkURLScheme` / `DAMEnabled`). Developer Mode should not include
+  `MetaAppID` / `ClientToken`.
 
 ## Registration never completes (stuck on "Finish connecting in Meta AI")
 
@@ -17,7 +19,8 @@
 - The callback URL scheme (`omirayban`) must be registered in **both**
   Info.plist `CFBundleURLTypes` and the Wearables Developer Center app config.
 - Kill and reopen Omi, tap the Ray-Ban Meta entry again, use **Check Again**.
-- Confirm the `TeamID` in the `MWDAT` dict matches the signing team.
+- For beta/distribution builds only, confirm the Wearables Developer Center
+  team, bundle id, and callback scheme match the signed app.
 
 ## Connected, but no transcript while speaking
 
