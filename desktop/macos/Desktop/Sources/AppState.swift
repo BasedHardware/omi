@@ -4,6 +4,32 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+enum SystemAudioPermissionStatus: String {
+  case unknown
+  case granted
+  case denied
+  case unsupported
+
+  /// Map a capture-start failure to an honest permission status. A TCC denial
+  /// manifests as the tap failing to create or the device failing to start;
+  /// format/converter/aggregate failures are provably NOT permission problems
+  /// and must not claim a denial.
+  @available(macOS 14.4, *)
+  static func classify(captureError error: Error) -> SystemAudioPermissionStatus {
+    guard let captureError = error as? SystemAudioCaptureService.SystemAudioCaptureError else {
+      return .unknown
+    }
+    switch captureError {
+    case .tapCreationFailed, .deviceStartFailed:
+      return .denied
+    case .aggregateDeviceFailed, .ioProcCreationFailed, .formatError, .converterCreationFailed:
+      return .unknown
+    case .unsupportedOS:
+      return .unsupported
+    }
+  }
+}
+
 /// Translation from backend (e.g., Japanese speech translated to English)
 struct SegmentTranslation: Identifiable {
   var id: String { lang }
@@ -146,6 +172,7 @@ class AppState: ObservableObject {
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
   @Published var hasSystemAudioPermission = false
+  @Published var systemAudioPermissionStatus: SystemAudioPermissionStatus = .unknown
   @Published var isSystemAudioSupported = false
 
   // Audio source (microphone or BLE device)
