@@ -809,7 +809,10 @@ struct DesktopHomeView: View {
     // Every redesigned page is warm-paper light (Rewind included).
     let lightPage = true
     VStack(spacing: 0) {
-      RedesignTopBar(appState: appState, onNotifications: { selectedIndex = 6 })
+      RedesignTopBar(
+        appState: appState,
+        onNotifications: { selectedIndex = 6 },
+        onHome: { selectedIndex = 0 })
       if lightPage {
         redesignPageContent
       } else {
@@ -838,10 +841,8 @@ struct DesktopHomeView: View {
 
   private var mainContent: some View {
     HStack(spacing: 0) {
-      // Redesign: the minimal 68px icon rail replaces the old sidebar.
-      if redesignActive {
-        RedesignRail(selectedIndex: $selectedIndex, appState: appState)
-      }
+      // Redesign nav is a card-based Home hub (no persistent rail); the top-bar
+      // omi logo returns Home from any page.
       // Sidebar slot: settings sidebar overlays main sidebar
       // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
@@ -1183,7 +1184,7 @@ private struct PageContentView: View {
       switch selectedIndex {
       case 0:
         if useRedesign {
-          RedesignHomePage(appState: appState)
+          RedesignHomePage(appState: appState, selectedIndex: $selectedTabIndex)
         } else {
           DashboardPage(
             viewModel: viewModelContainer.dashboardViewModel,

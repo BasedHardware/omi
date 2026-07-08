@@ -1,9 +1,35 @@
 import SwiftUI
 
-/// The calm "lowkey" home — mockup `home.html`. Just a greeting, the ask bar,
-/// and the live transcript. All live-wired.
+/// The home hub — greeting, the ask bar, the live transcript, and a grid of
+/// feature cards that replaces the old nav rail. All live-wired.
 struct RedesignHomePage: View {
   @ObservedObject var appState: AppState
+  @Binding var selectedIndex: Int
+
+  private struct Feature: Identifiable {
+    let id = UUID()
+    let icon: String
+    let title: String
+    let sub: String
+    let index: Int
+  }
+
+  private let features: [Feature] = [
+    .init(icon: "sparkles", title: "Ask omi", sub: "Anything you've seen or said", index: 2),
+    .init(icon: "waveform", title: "Conversations", sub: "Every talk, summarized", index: 1),
+    .init(icon: "brain", title: "Memory", sub: "Facts & everything kept", index: 3),
+    .init(icon: "message", title: "Messages", sub: "Drafts & auto-reply", index: 23),
+    .init(icon: "checklist", title: "Tasks", sub: "What you owe, by when", index: 4),
+    .init(icon: "clock.arrow.circlepath", title: "Rewind", sub: "Find anything you saw", index: 7),
+    .init(icon: "puzzlepiece", title: "Apps", sub: "Connect & export", index: 8),
+    .init(icon: "point.3.connected.trianglepath.dotted", title: "Brain map", sub: "How it all connects", index: 24),
+    .init(icon: "eye", title: "Focus", sub: "Protect your best hours", index: 5),
+    .init(icon: "lightbulb", title: "Insights", sub: "Quiet things I noticed", index: 6),
+    .init(icon: "theatermasks", title: "Persona", sub: "How I sound as you", index: 21),
+    .init(icon: "gearshape", title: "Settings", sub: "Everything, tuned", index: 9),
+  ]
+
+  private let columns = [GridItem(.adaptive(minimum: 210), spacing: 14)]
 
   private var name: String {
     let given = AuthService.shared.givenName.trimmingCharacters(in: .whitespaces)
@@ -34,7 +60,7 @@ struct RedesignHomePage: View {
         header
         askBar
         HomeLiveTranscript(isActive: appState.isTranscribing)
-        Spacer(minLength: 0)
+        cardGrid
         footer
       }
       .frame(maxWidth: 840, alignment: .leading)
@@ -81,6 +107,31 @@ struct RedesignHomePage: View {
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)
+  }
+
+  private var cardGrid: some View {
+    LazyVGrid(columns: columns, spacing: 14) {
+      ForEach(features) { f in
+        Button { selectedIndex = f.index } label: { card(f) }
+          .buttonStyle(.plain)
+      }
+    }
+    .padding(.top, 4)
+  }
+
+  private func card(_ f: Feature) -> some View {
+    InkCard(padding: 18) {
+      VStack(alignment: .leading, spacing: 10) {
+        ZStack {
+          RoundedRectangle(cornerRadius: 9, style: .continuous).fill(Ink.surface2)
+            .frame(width: 34, height: 34)
+          Image(systemName: f.icon).font(.system(size: 15)).foregroundColor(Ink.ink)
+        }
+        Text(f.title).inkH3()
+        Text(f.sub).inkCaption()
+      }
+      .frame(maxWidth: .infinity, alignment: .leading)
+    }
   }
 
   private var footer: some View {

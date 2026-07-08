@@ -9,10 +9,25 @@ struct RedesignTopBar: View {
   @ObservedObject private var insightStorage = InsightStorage.shared
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
   var onNotifications: () -> Void = {}
+  var onHome: () -> Void = {}
+
+  @State private var homeHover = false
 
   var body: some View {
     HStack(spacing: 14) {
-      Text("omi").inkWordmark(17)
+      // The omi buddy logo + wordmark → Home (replaces the nav rail).
+      Button(action: onHome) {
+        HStack(spacing: 9) {
+          BuddyRing(diameter: 18, dot: 2.5, color: Ink.ink)
+          Text("omi").inkWordmark(17)
+        }
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(Capsule().fill(homeHover ? Ink.surface2 : .clear))
+        .contentShape(Capsule())
+      }
+      .buttonStyle(.plain)
+      .onHover { homeHover = $0 }
+      .help("Home")
       Spacer()
       PresenceChip(icon: "display", label: "Capture", on: screenAnalysisEnabled, toggle: toggleCapture)
       PresenceChip(icon: "mic", label: "Listening", on: appState.isTranscribing, toggle: toggleListening)
