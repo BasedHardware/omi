@@ -66,6 +66,25 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeStagePanelMaxWidth)"))
     }
 
+    func testHomeAskBarRefocusesAfterOpeningChatStage() throws {
+        let source = try dashboardSource()
+
+        XCTAssertTrue(source.contains("private func openHomeChat(focusInput: Bool = true)"))
+        XCTAssertTrue(source.contains("focusHomeAskFieldAfterStageTransition()"))
+        XCTAssertTrue(source.contains("await Task.yield()"))
+        XCTAssertTrue(source.contains("homeAskFieldFocused = true"))
+        XCTAssertTrue(source.contains("openHomeChat(focusInput: false)"))
+    }
+
+    func testSecondaryHomePagesReturnHomeOnEscape() throws {
+        let source = try desktopHomeSource()
+
+        XCTAssertTrue(source.contains(".onExitCommand {\n          navigateHomeOnEscapeIfNeeded()\n        }"))
+        XCTAssertTrue(source.contains("[.conversations, .memories, .tasks, .rewind].contains(item)"))
+        XCTAssertTrue(source.contains("selectedIndex = SidebarNavItem.dashboard.rawValue"))
+        XCTAssertFalse(source.contains("[.conversations, .chat, .memories, .tasks, .rewind]"))
+    }
+
     func testHomeConnectorButtonsOpenSheetsDirectly() throws {
         let source = try dashboardSource()
         let importMethod = try methodBody(named: "openImportConnector", in: source)
@@ -325,6 +344,14 @@ final class DashboardCaptureStateTests: XCTestCase {
             .deletingLastPathComponent()
             .appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift")
         return try String(contentsOf: dashboardURL, encoding: .utf8)
+    }
+
+    private func desktopHomeSource() throws -> String {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let desktopHomeURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
+        return try String(contentsOf: desktopHomeURL, encoding: .utf8)
     }
 
     private func appsSource() throws -> String {

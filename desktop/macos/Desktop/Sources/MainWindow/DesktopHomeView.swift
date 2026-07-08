@@ -919,6 +919,9 @@ struct DesktopHomeView: View {
             selectedTabIndex: $selectedIndex
           )
         }
+        .onExitCommand {
+          navigateHomeOnEscapeIfNeeded()
+        }
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
@@ -1022,6 +1025,15 @@ struct DesktopHomeView: View {
       // The chat panel is never open on startup (showChatPanel defaults to false),
       // but macOS restores the expanded window frame from the previous session.
       restorePreChatWindowWidth()
+    }
+  }
+
+  private func navigateHomeOnEscapeIfNeeded() {
+    guard !useLegacyHomeDesign else { return }
+    guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
+    guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
+    withAnimation(Self.pageNavigationAnimation) {
+      selectedIndex = SidebarNavItem.dashboard.rawValue
     }
   }
 }

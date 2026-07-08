@@ -905,7 +905,7 @@ struct DashboardPage: View {
             onSend: sendFromHomeAskBar,
             onStop: { chatProvider.stopAgent(owner: .mainChat) },
             onConnect: toggleHomeConnectPanel,
-            onActivate: openHomeChat
+            onActivate: { openHomeChat() }
         )
     }
 
@@ -973,12 +973,22 @@ struct DashboardPage: View {
         }
     }
 
-    private func openHomeChat() {
+    private func openHomeChat(focusInput: Bool = true) {
         guard homeMode != .chat else { return }
         withAnimation(Self.homeStageAnimation) {
             homeMode = .chat
         }
+        if focusInput {
+            focusHomeAskFieldAfterStageTransition()
+        }
         reportHomeAutomationMode()
+    }
+
+    private func focusHomeAskFieldAfterStageTransition() {
+        Task { @MainActor in
+            await Task.yield()
+            homeAskFieldFocused = true
+        }
     }
 
     private func toggleHomeConnectPanel() {
@@ -1006,7 +1016,7 @@ struct DashboardPage: View {
         // an attachment-only "send" would silently drop the turn.
         guard !text.isEmpty else { return }
         chatProvider.draftText = ""
-        openHomeChat()
+        openHomeChat(focusInput: false)
         AnalyticsManager.shared.chatMessageSent(
             messageLength: text.count,
             hasSelectedAppContext: selectedApp != nil,
@@ -1020,7 +1030,7 @@ struct DashboardPage: View {
     }
 
     private func askHomeSuggestion(_ suggestion: String) {
-        openHomeChat()
+        openHomeChat(focusInput: false)
         AnalyticsManager.shared.chatMessageSent(
             messageLength: suggestion.count,
             hasSelectedAppContext: selectedApp != nil,
