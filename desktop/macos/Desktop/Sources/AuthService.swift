@@ -384,9 +384,18 @@ class AuthService {
         var deleteKeychainString: (_ service: String, _ account: String) -> Void
         var recordsFallbackTelemetry: Bool
 
+        // Security invariant: auth tokens live in the Keychain on EVERY build — including
+        // dev and the Sparkle-distributed beta — and the plaintext UserDefaults write
+        // fallback is OFF. The file-based Keychain write now works on all builds (see
+        // DesktopKeychainStore), so a fallback that spills OAuth/refresh tokens into
+        // UserDefaults (plaintext on disk, included in backups, readable by any process with
+        // disk access) is pure risk with no correctness benefit. If a Keychain write fails we
+        // surface it via AuthError.keychainTokenStorageUnavailable instead of leaking secrets.
+        // The UserDefaults *read* path in storedTokens() is intentionally retained only to
+        // migrate pre-existing tokens into the Keychain on first launch, then clear them.
         static let live = TokenStorageHooks(
-            usesKeychainTokenStorage: { !AppBuild.isNonProduction },
-            allowsUserDefaultsFallback: { true },
+            usesKeychainTokenStorage: { true },
+            allowsUserDefaultsFallback: { false },
             readKeychainString: { service, account in
                 DesktopKeychainStore.string(service: service, account: account)
             },

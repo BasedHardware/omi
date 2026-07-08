@@ -10,11 +10,11 @@ enum DesktopKeychainStore {
     // every SecItem write fail with errSecMissingEntitlement (-34018), so token storage failed
     // ("Could not securely store sign-in tokens") and sign-in was blocked. The default
     // file-based keychain works for a signed non-sandboxed app with no extra entitlement and
-    // still keeps tokens out of UserDefaults. (The *auth-token* path uses UserDefaults on
-    // non-production builds — usesKeychainTokenStorage = !AppBuild.isNonProduction — so the
-    // sign-in failure only surfaced on prod/beta. This store is also used by
-    // LocalAgentAPIServer on all builds, whose keychain writes hit the same failure and are
-    // fixed by the same change.)
+    // still keeps tokens out of UserDefaults. (The auth-token path now uses this Keychain on
+    // ALL builds — AuthService.TokenStorageHooks.live sets usesKeychainTokenStorage = true with
+    // no UserDefaults write fallback — so the historical prod/beta-only sign-in failure is
+    // fully closed off. This store is also used by LocalAgentAPIServer on all builds, whose
+    // keychain writes hit the same errSecMissingEntitlement and are fixed by the same change.)
     [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: service,

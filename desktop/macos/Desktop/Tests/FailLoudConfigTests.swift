@@ -173,11 +173,14 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertEqual(SystemAudioPermissionStatus.classify(captureError: OtherError()), .unknown)
   }
 
-  func testProductionAuthTokensUseKeychainStorage() throws {
+  func testAuthTokensUseKeychainStorageOnAllBuilds() throws {
     let src = try source(relativePath: "Sources/AuthService.swift")
 
-    XCTAssertTrue(src.contains("private var usesKeychainTokenStorage: Bool"))
-    XCTAssertTrue(src.contains("!AppBuild.isNonProduction"))
+    // Security invariant: the live config stores auth tokens in the Keychain on EVERY build
+    // (dev, beta, and production) with the plaintext UserDefaults write fallback disabled.
+    XCTAssertTrue(src.contains("usesKeychainTokenStorage: { true }"))
+    XCTAssertFalse(src.contains("!AppBuild.isNonProduction"))
+    XCTAssertTrue(src.contains("allowsUserDefaultsFallback: { false }"))
     XCTAssertTrue(src.contains("DesktopKeychainStore.setString("))
     XCTAssertTrue(src.contains("migrated production auth tokens from UserDefaults to Keychain"))
     XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
