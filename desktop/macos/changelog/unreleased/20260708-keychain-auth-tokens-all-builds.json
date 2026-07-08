@@ -1,0 +1,3 @@
+{
+  "change": "Sign-in tokens are now stored in the macOS Keychain on every build; dev and beta builds no longer fall back to keeping credentials in plaintext UserDefaults."
+}
