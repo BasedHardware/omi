@@ -209,7 +209,13 @@ final class ScreenCaptureService: Sendable {
     // cause macOS to grant permissions to the wrong app
     ensureLaunchServicesRegistration()
 
-    // 1. Request traditional Screen Recording TCC permission
+    // 1. Request traditional Screen Recording TCC permission.
+    // Activate first so the request fires while Omi is frontmost. A
+    // screen-capture access request from a backgrounded app does not reliably
+    // register the kTCCServiceScreenCapture row, so the app never appears in the
+    // Screen Recording list (PERM-02). This mirrors requestMicrophonePermission,
+    // which activates before requesting and reliably creates its TCC row.
+    NSApp.activate()
     CGRequestScreenCaptureAccess()
 
     // 2. Request ScreenCaptureKit permission (macOS 14+)
@@ -221,6 +227,18 @@ final class ScreenCaptureService: Sendable {
 
     // Note: callers are responsible for opening System Settings
     // (removed duplicate open that conflicted with caller's own open call)
+  }
+
+  /// Guided grant flow (PERM-02 / BL-050): register the screen-recording TCC row
+  /// **while Omi is frontmost**, then open System Settings so the user lands on a
+  /// list that already contains Omi. Opening Settings first backgrounded the app
+  /// before the registering call, so a screen-capture request from the
+  /// backgrounded app never created the `kTCCServiceScreenCapture` row and Omi
+  /// never appeared in the list. Mirrors MemoryExportExecutor.requestScreenRecordingApprovalForCloudSetup, the existing register-while-frontmost path.
+  @MainActor
+  static func requestScreenRecordingAccessAndOpenSettings() {
+    requestAllScreenCapturePermissions()
+    openScreenRecordingPreferences()
   }
 
   /// Test if ScreenCaptureKit specifically works (macOS 14+)
