@@ -58,19 +58,21 @@ cmd_scan() {
   [ -d "$dir" ] || die "scan: no such directory: $dir"
   local dirty status
   set +e
-  dirty="$(grep -rlE "$CRED_PATTERNS" -- "$dir" 2>&1)"
+  dirty="$(grep -rlE "$CRED_PATTERNS" -- "$dir" 2>/dev/null)"
   status=$?
   set -e
-  if [ "$status" -eq 0 ]; then
+  # Matches win over read errors: grep can exit 2 (unreadable file elsewhere)
+  # while still printing matching filenames — that is a real regression, not a
+  # blocked scan.
+  if [ -n "$dirty" ]; then
     log "scan: credential patterns found in:"
     printf '%s\n' "$dirty" >&2
     return 1
   fi
-  if [ "$status" -ne 1 ]; then
-    # grep >=2 means it could not scan (unreadable files, bad args) — that is a
-    # scan FAILURE, never a clean result.
+  if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then
+    # No matches AND grep could not scan (unreadable files, bad args) — a scan
+    # FAILURE, never a clean result.
     log "scan: could not scan $dir (grep exit $status)"
-    printf '%s\n' "$dirty" >&2
     return 2
   fi
   log "scan: clean ($dir)"
@@ -113,7 +115,7 @@ parse_run_args() {
     esac
   done
   case "$PORT" in (*[!0-9]*|'') die "--port must be numeric" ;; esac
-  if [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then die "--port must be in 1-65535"; fi
+  if [ "${#PORT}" -gt 5 ] || [ "$PORT" -lt 1 ] || [ "$PORT" -gt 65535 ]; then die "--port must be in 1-65535"; fi
   case "$TIMEOUT_MULT" in (*[!0-9]*|'') die "--timeout-mult must be a positive integer" ;; esac
   [ "$TIMEOUT_MULT" -ge 1 ] || die "--timeout-mult must be >= 1"
   validate_probe_csv "$ONLY"
