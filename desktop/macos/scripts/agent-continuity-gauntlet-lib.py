@@ -33,6 +33,29 @@ TRACE_LOG = Path.home() / "Library/Logs/Omi/traces.jsonl"
 DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
 GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
 PRUNE_ABORTED_BUNDLE_DAYS = 7
+RESILIENCE_DIAGNOSTIC_SCHEMA_VERSION = 1
+RESILIENCE_FORBIDDEN_TERMINAL_REASONS = {
+    "bridge_launch_error",
+    "generic_chat_error",
+    "no_assistant_response",
+    "no_query_trace",
+    "response_already_running",
+    "response_stopped",
+    "skipped_missing_action",
+    "skipped_unimplemented_action",
+    "subagent_missing",
+    "subagent_status_invisible",
+}
+RESILIENCE_GENERIC_CHAT_PATTERNS = {
+    "AI not available",
+    "AI is not running",
+    "AI stopped unexpectedly",
+    "AI took too long to respond",
+    "A response is already running for this chat",
+    "Response stopped",
+    "requestAlreadyActive",
+    "response_already_running",
+}
 
 
 def now_iso() -> str:
@@ -333,6 +356,49 @@ def latest_assistant_text(snapshot_detail: dict[str, str]) -> str:
     return ""
 
 
+def current_turn_snapshot_text(snapshot_detail: dict[str, str], query_text: str) -> str:
+    try:
+        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(messages, list):
+        return ""
+    query = query_text.strip()
+    start_index: int | None = None
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
+            start_index = index
+    if start_index is None:
+        return ""
+    return json.dumps(messages[start_index:], sort_keys=True)
+
+
+def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str) -> str:
+    try:
+        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
+    except json.JSONDecodeError:
+        return ""
+    if not isinstance(messages, list):
+        return ""
+    query = query_text.strip()
+    start_index: int | None = None
+    for index, message in enumerate(messages):
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
+            start_index = index
+    if start_index is None:
+        return ""
+    for message in reversed(messages[start_index:]):
+        if isinstance(message, dict) and message.get("role") == "assistant" and message.get("streaming") != "true":
+            text = (message.get("text") or "").strip()
+            if text:
+                return text
+    return ""
+
+
 def kernel_surface_identity(database_path: str, owner_id: str) -> dict[str, str] | None:
     """Read kernel-owned main_chat identity from omi-agentd.sqlite3."""
     if not owner_id or not database_path or not Path(database_path).is_file():
@@ -425,6 +491,7 @@ class GauntletRunner:
         self.failures: list[str] = []
         self.warnings: list[str] = []
         self.steps: list[dict[str, Any]] = []
+        self.resilience_terminal_reason_counts: dict[str, int] = {}
         self.pcm_path = self.run_dir / "fixtures" / "ptt-voice.pcm"
 
     def bridge_act(self, name: str, params: dict[str, str] | None = None) -> dict[str, Any]:
@@ -435,6 +502,90 @@ class GauntletRunner:
 
     def warn(self, message: str) -> None:
         self.warnings.append(message)
+
+    def record_resilience_diagnostic(
+        self,
+        scenario: str,
+        iteration: int,
+        terminal_reason: str,
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        record = {
+            "schema_version": RESILIENCE_DIAGNOSTIC_SCHEMA_VERSION,
+            "run_id": self.run_id,
+            "scenario": scenario,
+            "iteration": iteration,
+            "terminal_reason": terminal_reason,
+            "detail": detail or {},
+        }
+        append_text(self.run_dir / "resilience-diagnostics.jsonl", json.dumps(record, sort_keys=True) + "\n")
+        self.resilience_terminal_reason_counts[terminal_reason] = (
+            self.resilience_terminal_reason_counts.get(terminal_reason, 0) + 1
+        )
+        if terminal_reason in RESILIENCE_FORBIDDEN_TERMINAL_REASONS:
+            self.fail(f"{scenario} iteration {iteration}: forbidden terminal reason {terminal_reason}")
+
+    def classify_resilience_turn(
+        self,
+        *,
+        scenario: str,
+        iteration: int,
+        query: str,
+        send: dict[str, Any],
+        snapshot: dict[str, str],
+        traces: list[dict[str, Any]],
+        require_trace: bool = True,
+    ) -> str:
+        detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
+        assistant = current_turn_assistant_text(snapshot, query)
+        trace_matches = traces_for_query(traces, query)
+        evidence = "\n".join(
+            [
+                json.dumps(send, sort_keys=True, default=str),
+                current_turn_snapshot_text(snapshot, query),
+                "\n".join(
+                    str(value)
+                    for key, value in snapshot.items()
+                    if "error" in key.lower() and value
+                ),
+                assistant,
+                "\n".join(flatten_trace_text(trace) for trace in traces),
+            ]
+        )
+        lower_evidence = evidence.lower()
+        terminal_reason = "passed"
+        if send.get("ok") is False or detail.get("error"):
+            message = str(detail.get("error", send.get("error", send)))
+            if "failed to start agent bridge" in message.lower() or "ai not available" in message.lower():
+                terminal_reason = "bridge_launch_error"
+            elif "already running" in message.lower() or "already_active" in message.lower():
+                terminal_reason = "response_already_running"
+            else:
+                terminal_reason = "generic_chat_error"
+        elif "response_already_running" in lower_evidence or "a response is already running" in lower_evidence:
+            terminal_reason = "response_already_running"
+        elif "response stopped" in lower_evidence:
+            terminal_reason = "response_stopped"
+        elif any(pattern.lower() in lower_evidence for pattern in RESILIENCE_GENERIC_CHAT_PATTERNS):
+            terminal_reason = "generic_chat_error"
+        elif not assistant:
+            terminal_reason = "no_assistant_response"
+        elif require_trace and not trace_matches:
+            terminal_reason = "no_query_trace"
+
+        self.record_resilience_diagnostic(
+            scenario,
+            iteration,
+            terminal_reason,
+            {
+                "assistant_chars": len(assistant),
+                "query_trace_count": len(trace_matches),
+                "trace_count": len(traces),
+                "send_ok": send.get("ok"),
+                "send_detail": detail,
+            },
+        )
+        return terminal_reason
 
     def ensure_bridge(self) -> None:
         health = bridge_request(self.port, "GET", "/health")
@@ -615,6 +766,40 @@ class GauntletRunner:
         traces = read_new_traces(trace_start)
         return send, snapshot_detail, traces
 
+    def send_and_wait_resilience(
+        self,
+        query: str,
+        timeout_ms: int,
+    ) -> tuple[dict[str, Any], dict[str, str], list[dict[str, Any]]]:
+        """Main-chat send path for resilience probes; capture failures instead of aborting."""
+        trace_start = trace_line_count()
+        send = self.bridge_act("ask_main_chat", {"query": query})
+        detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
+        if send.get("ok") is False or detail.get("error"):
+            snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+            snapshot_detail = snapshot.get("result", {}).get("detail", {})
+            return send, snapshot_detail, read_new_traces(trace_start)
+
+        deadline = time.monotonic() + (timeout_ms / 1000.0)
+        snapshot_detail: dict[str, str] = {}
+        while time.monotonic() < deadline:
+            wait = bridge_action(
+                self.port,
+                "wait_main_chat_idle",
+                {"timeoutMs": "2000", "pollMs": "250"},
+            )
+            snapshot_detail = wait.get("result", {}).get("detail", {})
+            if wait.get("ok") and snapshot_detail.get("idle") == "true":
+                break
+            time.sleep(0.25)
+        else:
+            self.fail(f"timed out waiting for resilience main chat idle after query: {query[:120]}")
+
+        snapshot = self.bridge_act("main_chat_snapshot", {"limit": "80"})
+        snapshot_detail = snapshot.get("result", {}).get("detail", snapshot_detail)
+        traces = read_new_traces(trace_start)
+        return send, snapshot_detail, traces
+
     def assert_trace_contains(self, traces: list[dict[str, Any]], needle: str, label: str) -> None:
         haystack = "\n".join(flatten_trace_text(trace) for trace in traces)
         if needle not in haystack:
@@ -715,6 +900,8 @@ class GauntletRunner:
             self.run_agents_suite()
         if "prompts" in self.suites:
             self.run_prompts_suite()
+        if "resilience" in self.suites:
+            self.run_resilience_suite()
         if "owner" in self.suites:
             self.run_owner_suite()
 
@@ -1276,9 +1463,235 @@ class GauntletRunner:
         if len(assistant) > 450:
             self.warn(f"P3 register: unknown-person reply too long ({len(assistant)} chars)")
 
+    def run_resilience_suite(self) -> None:
+        """Startup/bad-state probes for bridge, main chat, and subagent launch continuity.
+
+        Run with --suite resilience for release-candidate startup QA; --suite all
+        includes this suite alongside the canonical continuity, agents, owner, and
+        prompt checks.
+        """
+        self.manifest["resilience_forbidden_terminal_reasons"] = sorted(
+            RESILIENCE_FORBIDDEN_TERMINAL_REASONS
+        )
+
+        # R1 — cold/simple bridge launch probe. ask_main_chat goes through the
+        # real agent bridge and QueryTracer; it is safe for a named non-prod bundle
+        # and avoids process restarts or destructive simulation.
+        r1_query = (
+            f"Resilience startup probe {self.run_id}. "
+            "Reply with exactly: RESILIENCE_BRIDGE_READY"
+        )
+        send, snapshot, traces = self.send_and_wait_resilience(r1_query, self.args.turn_timeout_ms)
+        r1_reason = self.classify_resilience_turn(
+            scenario="R1-cold-simple-bridge-launch",
+            iteration=1,
+            query=r1_query,
+            send=send,
+            snapshot=snapshot,
+            traces=traces,
+        )
+        self.record_step(
+            "r1-cold-bridge-launch",
+            "resilience: cold/simple bridge launch probe",
+            user_text=r1_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={"terminal_reason": r1_reason},
+        )
+        self.assert_assistant_mentions(latest_assistant_text(snapshot), ["RESILIENCE_BRIDGE_READY"], "R1 bridge launch")
+
+        # R2 — warm reuse probe. Sequential short prompts must settle cleanly and
+        # must not surface already-running or generic stopped-response text.
+        for index in range(1, 4):
+            query = f"Warm reuse probe {index}. Reply with exactly WARM_REUSE_{index}."
+            send, snapshot, traces = self.send_and_wait_resilience(query, self.args.turn_timeout_ms)
+            terminal_reason = self.classify_resilience_turn(
+                scenario="R2-warm-reuse",
+                iteration=index,
+                query=query,
+                send=send,
+                snapshot=snapshot,
+                traces=traces,
+            )
+            self.record_step(
+                f"r2-warm-reuse-{index}",
+                f"resilience: warm reuse probe {index}",
+                user_text=query,
+                action_response=send,
+                snapshot_detail=snapshot,
+                traces=traces,
+                extra={"terminal_reason": terminal_reason},
+            )
+            self.assert_assistant_mentions(
+                latest_assistant_text(snapshot),
+                [f"WARM_REUSE_{index}"],
+                f"R2 warm reuse {index}",
+            )
+
+        # R3 — already-running/race policy. The current bridge only exposes a
+        # blocking ask_main_chat plus wait_main_chat_idle; without a non-waiting
+        # send or explicit busy-state action, racing it would require risky UI or
+        # process manipulation. Record the missing contract instead of faking pass.
+        bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
+        race_actions = {"ask_main_chat_no_wait", "main_chat_busy_state"}
+        present = sorted(name for name in race_actions if f'name: "{name}"' in bridge_source)
+        if not present:
+            missing = sorted(race_actions)
+            message = (
+                "R3 already-running/race policy skipped: missing bridge action(s) "
+                f"{missing}; need non-waiting send or explicit busy-state check"
+            )
+            self.warn(message)
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "skipped_missing_action",
+                {"missing_bridge_actions": missing},
+            )
+        else:
+            self.warn(
+                "R3 already-running/race policy has candidate bridge action(s) "
+                f"{present}, but no safe gauntlet implementation is wired yet"
+            )
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "skipped_unimplemented_action",
+                {"present_bridge_actions": present},
+            )
+
+        # R4 — subagent launch cold/resilience probe. This is stricter than the
+        # agents suite because it records terminal reasons and requires runtime,
+        # coordinator/pill projection, spawn tool evidence, and status visibility.
+        marker = f"RESILIENCE-SUBAGENT-{self.run_id}-{secrets.token_hex(3).upper()}"
+        spawn_query = (
+            "Use spawn_agent now to start a visible background agent. "
+            f"Objective: acknowledge resilience marker {marker} and then wait. "
+            "Do not ask follow-up questions."
+        )
+        trace_start = trace_line_count()
+        send, snapshot, traces = self.send_and_wait_resilience(spawn_query, self.args.turn_timeout_ms)
+        spawn_tools: list[dict[str, Any]] = []
+        settle_deadline = time.monotonic() + 10.0
+        while time.monotonic() < settle_deadline:
+            traces = read_new_traces(trace_start)
+            spawn_tools = [
+                tool
+                for tool in trace_tool_executions(traces, {"spawn_agent"})
+                if marker in str(tool.get("input", "")) or marker in str(tool.get("output", ""))
+            ]
+            if spawn_tools:
+                break
+            time.sleep(0.25)
+        coordinator = self.bridge_act("coordinator_awareness_snapshot")
+        coordinator_detail = coordinator.get("result", {}).get("detail", {})
+        runtime = self.bridge_act("agent_runtime_evidence")
+        runtime_detail = runtime.get("result", {}).get("detail", {})
+        terminal_reason = self.classify_resilience_turn(
+            scenario="R4-subagent-launch",
+            iteration=1,
+            query=spawn_query,
+            send=send,
+            snapshot=snapshot,
+            traces=traces,
+        )
+        if not spawn_tools:
+            terminal_reason = "subagent_missing"
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                2,
+                terminal_reason,
+                {
+                    "spawn_tool_calls": 0,
+                    "coordinator_snapshot_chars": len(str(coordinator_detail.get("snapshot", ""))),
+                    "database_exists": runtime_detail.get("database_exists"),
+                },
+            )
+            self.fail("R4 subagent launch: no spawn_agent execution carrying the resilience marker")
+        if runtime.get("ok") is False or runtime_detail.get("error") or runtime_detail.get("database_exists") != "true":
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                3,
+                "runtime_evidence_missing",
+                {"runtime_detail": runtime_detail},
+            )
+            self.fail("R4 subagent launch: runtime sqlite evidence missing")
+        if marker not in str(coordinator_detail):
+            self.record_resilience_diagnostic(
+                "R4-subagent-launch",
+                4,
+                "pill_runtime_evidence_missing",
+                {"coordinator_snapshot_chars": len(str(coordinator_detail.get("snapshot", "")))},
+            )
+            self.fail("R4 subagent launch: coordinator/pill evidence missing resilience marker")
+        self.record_step(
+            "r4-subagent-launch",
+            "resilience: subagent launch cold probe",
+            user_text=spawn_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={
+                "terminal_reason": terminal_reason,
+                "spawn_tool_calls": spawn_tools,
+                "coordinator_snapshot": coordinator_detail,
+                "runtime_evidence": runtime_detail,
+            },
+        )
+
+        status_query = (
+            "What is the status of the background agent you just started? "
+            "Use list_agent_sessions and include its exact resilience marker."
+        )
+        send, snapshot, traces = self.send_and_wait_resilience(status_query, self.args.turn_timeout_ms)
+        terminal_reason = self.classify_resilience_turn(
+            scenario="R4-subagent-status",
+            iteration=1,
+            query=status_query,
+            send=send,
+            snapshot=snapshot,
+            traces=traces,
+        )
+        assistant = latest_assistant_text(snapshot)
+        list_tools = trace_tool_executions(traces, {"list_agent_sessions"})
+        list_outputs = "\n".join(str(tool.get("output", "")) for tool in list_tools)
+        if not list_tools or marker not in (assistant + "\n" + list_outputs):
+            terminal_reason = "subagent_status_invisible"
+            self.record_resilience_diagnostic(
+                "R4-subagent-status",
+                2,
+                terminal_reason,
+                {
+                    "list_agent_sessions_calls": len(list_tools),
+                    "assistant_chars": len(assistant),
+                    "marker_in_tool_output": marker in list_outputs,
+                },
+            )
+            self.fail("R4 subagent status: status query could not see the spawned resilience agent")
+        self.record_step(
+            "r4-subagent-status",
+            "resilience: subagent status query",
+            user_text=status_query,
+            action_response=send,
+            snapshot_detail=snapshot,
+            traces=traces,
+            extra={
+                "terminal_reason": terminal_reason,
+                "list_agent_sessions_calls": list_tools,
+            },
+        )
+
     def finalize(self) -> int:
         manifest = self.manifest
         manifest["finished_at"] = datetime.now(timezone.utc).isoformat()
+        if "resilience" in self.suites:
+            manifest["resilience_terminal_reason_counts"] = dict(
+                sorted(self.resilience_terminal_reason_counts.items())
+            )
+            manifest["resilience_forbidden_terminal_reasons"] = sorted(
+                RESILIENCE_FORBIDDEN_TERMINAL_REASONS
+            )
         manifest["steps"] = self.steps
         manifest["failures"] = self.failures
         manifest["warnings"] = self.warnings
@@ -1320,12 +1733,14 @@ def run_owner_switch_kernel_check() -> tuple[bool, str]:
 def self_check() -> int:
     script = SCRIPT_DIR / "agent-continuity-gauntlet.sh"
     bridge_actions = {
+        "ask",
         "ask_main_chat",
         "main_chat_snapshot",
         "wait_main_chat_idle",
         "agent_runtime_evidence",
         "coordinator_awareness_snapshot",
         "swap_test_owner",
+        "restore_test_owner",
         "clear_owner_surface_state",
         "kernel_turn_tail",
     }
@@ -1346,6 +1761,20 @@ def self_check() -> int:
     if "clearOwnerState()" not in source:
         print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
         return 1
+    driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
+    required_driver_tokens = [
+        '"resilience"',
+        "def run_resilience_suite",
+        'if "resilience" in self.suites',
+        "resilience-diagnostics.jsonl",
+        "resilience_terminal_reason_counts",
+        "resilience_forbidden_terminal_reasons",
+        "skipped_missing_action",
+    ]
+    missing_driver_tokens = [token for token in required_driver_tokens if token not in driver_source]
+    if missing_driver_tokens:
+        print(f"self-check failed: resilience suite wiring missing {missing_driver_tokens}", file=sys.stderr)
+        return 1
     owner_ok, owner_detail = run_owner_switch_kernel_check()
     if not owner_ok:
         print(f"self-check failed: owner-switch kernel check: {owner_detail}", file=sys.stderr)
@@ -1356,9 +1785,9 @@ def self_check() -> int:
 
 SUITE_ALIASES: dict[str, set[str]] = {
     "core": {"continuity", "agents", "owner"},
-    "all": {"continuity", "agents", "owner", "prompts"},
+    "all": {"continuity", "agents", "owner", "prompts", "resilience"},
 }
-SUITE_NAMES = {"continuity", "agents", "owner", "prompts"}
+SUITE_NAMES = {"continuity", "agents", "owner", "prompts", "resilience"}
 
 
 def expand_suites(raw: str) -> set[str]:
@@ -1392,8 +1821,9 @@ def parse_args() -> argparse.Namespace:
         help=(
             "Comma-separated suites: continuity (steps 1-3, includes PTT), agents (4-5), "
             "owner (6), prompts (fast typed-only prompt-regression probes), "
-            "core (default: continuity+agents+owner), all (core+prompts). "
-            "Example: --suite prompts for fast prompt iteration."
+            "resilience (startup/bad-state bridge + subagent probes), "
+            "core (default: continuity+agents+owner), all (core+prompts+resilience). "
+            "Example: --suite resilience for release-candidate startup QA."
         ),
     )
     parser.add_argument("--self-check", action="store_true")
