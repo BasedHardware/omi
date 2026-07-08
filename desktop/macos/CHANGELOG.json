@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.45",
+      "date": "2026-07-08",
+      "changes": [
+        "Added a System Audio permission status row that can test and reflect whether Omi can capture audio from other apps"
+      ]
+    },
+    {
       "version": "0.12.44",
       "date": "2026-07-07",
       "changes": [
