@@ -407,21 +407,11 @@ struct RewindPage: View {
                 }
                 .buttonStyle(.plain)
                 .help("Back to results")
-            } else {
-                // Global hotkey hint (page title lives in the window toolbar)
-                HStack(spacing: 2) {
-                    Text("⌘")
-                    Text("⌥")
-                    Text("R")
-                }
-                .scaledFont(size: 10, weight: .medium, design: .rounded)
-                .foregroundColor(.white.opacity(0.4))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color.white.opacity(0.1))
-                .cornerRadius(4)
-                .help("Press ⌘⌥R from anywhere to open Rewind")
             }
+            // No standalone hotkey chip here: it read as a search shortcut,
+            // floated unanchored, and displayed ⌘⌥R while the registered
+            // hotkey is actually ⌃⌥R. The shortcut itself still works; it
+            // belongs in tooltips/settings, not as loose header chrome.
 
             // Search field + date picker - always present
             searchField(showResultsCount: isInSearchMode)
