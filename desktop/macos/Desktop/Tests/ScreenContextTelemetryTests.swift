@@ -174,6 +174,41 @@ final class ScreenContextTelemetryTests: XCTestCase {
     )
   }
 
+  func testPTTTranscriptVocabularyDoesNotFallbackToStaleScreenshots() throws {
+    let source = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/FloatingControlBar/PTTContextVocabularyProvider.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("transcription keyword"))
+    XCTAssertTrue(source.contains("loadRecentActivityScreenshots"))
+    XCTAssertTrue(source.contains("getScreenshots(\n        from: startDate"))
+    XCTAssertFalse(source.contains("getRecentScreenshots(limit: 8)"))
+    XCTAssertFalse(source.contains("return try await RewindDatabase.shared.getRecentScreenshots"))
+  }
+
+  func testPTTScreenContextPrefetchSeparatesScreenNowRecentActivityAndVocabulary() throws {
+    let source = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("prefetchVoiceTurnScreenContextIfNeeded"))
+    XCTAssertTrue(source.contains("voiceTurnScreenContextEnvelopeJSON"))
+    XCTAssertTrue(source.contains(#""screen_now""#))
+    XCTAssertTrue(source.contains(#""recent_activity""#))
+    XCTAssertTrue(source.contains(#""transcription_vocabulary""#))
+    XCTAssertTrue(source.contains("current_screen_truth"))
+    XCTAssertTrue(source.contains("ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds"))
+    XCTAssertTrue(source.contains("context[\"recent_activity\"] = rawPayload[\"timeline\"] ?? []"))
+  }
+
   func testStaleWorkContextDropsScreenNowWhenFreshCaptureFails() throws {
     let source = try String(
       contentsOf: URL(fileURLWithPath: #filePath)

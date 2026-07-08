@@ -278,6 +278,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Seed baked into the current warm session's system instructions.
   private var sessionVoiceSeedContextSnapshot = ""
   private var voiceSeedPrefetchTask: Task<Void, Never>?
+  private var voiceScreenContextPrefetchTask: Task<String, Never>?
   private var bargeInContinuityTask: Task<Void, Never>?
   private var pendingBargeInProvider: RealtimeHubProvider?
   private var pendingBargeInAuth: HubAuth?
@@ -803,6 +804,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
+  /// Prefetch the canonical screen context on PTT key-down. This keeps voice-turn
+  /// latency low without letting stale screenshot OCR become current-screen truth.
+  func prefetchVoiceTurnScreenContextIfNeeded() {
+    voiceScreenContextPrefetchTask?.cancel()
+    voiceScreenContextPrefetchTask = Task {
+      await Self.voiceTurnScreenContextEnvelopeJSON()
+    }
+  }
+
   private func refreshVoiceSeedContext() async {
     voiceSeedPrefetchTask?.cancel()
     voiceSeedPrefetchTask = nil
@@ -827,29 +837,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard voiceTurnScreenContextSentEpoch != epoch else { return }
     guard let targetSession = session else { return }
 
-    let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: [
-      "minutes": 10,
-      "max_age_seconds": ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds,
-    ])
+    let json: String
+    if let prefetchTask = voiceScreenContextPrefetchTask {
+      json = await prefetchTask.value
+    } else {
+      json = await Self.voiceTurnScreenContextEnvelopeJSON()
+    }
     guard inputTurnInProgress, epoch == turnEpoch else { return }
     guard voiceTurnScreenContextSentEpoch != epoch else { return }
     guard self.session === targetSession else { return }
-
-    let envelope: [String: Any] = [
-      "permission": [
-        "screen_recording": CGPreflightScreenCaptureAccess() ? "granted" : "not_granted"
-      ],
-      "reason": "ambient_voice_turn_context",
-      "context": rawPayload,
-      "guidance":
-        "Hidden current-work context for this push-to-talk turn. Use it silently if the user asks what is on screen, what they are looking at, or uses deictic phrases like this/that/here. For voice turns, finalized screen context older than 15 seconds is treated as stale. If screen_now.source is live_capture_stale_rewind or raw pixels are needed, call the screenshot tool before answering current screen contents. If permission is denied and the user asked about screen contents, say Omi cannot see the screen yet.",
-    ]
-    guard
-      let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]),
-      let json = String(data: data, encoding: .utf8)
-    else {
-      return
-    }
     let sent = await targetSession.sendTurnContextText("<auto_voice_screen_context>\n\(json)\n</auto_voice_screen_context>")
     guard inputTurnInProgress, epoch == turnEpoch else { return }
     guard self.session === targetSession else { return }
@@ -857,6 +853,43 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if sent {
       voiceTurnScreenContextSentEpoch = epoch
     }
+  }
+
+  private static func voiceTurnScreenContextEnvelopeJSON() async -> String {
+    let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: [
+      "minutes": 10,
+      "max_age_seconds": ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds,
+    ])
+    var context = rawPayload
+    context["recent_activity"] = rawPayload["timeline"] ?? []
+    context["transcription_vocabulary"] = [
+      "source": "ptt_transcript_corrector_only",
+      "current_screen_truth": false,
+      "note":
+        "PTT transcription vocabulary is built separately from immediate OCR, user vocabulary, and fresh recent activity. Do not use it as evidence for what is currently on screen.",
+    ]
+    let envelope: [String: Any] = [
+      "permission": [
+        "screen_recording": CGPreflightScreenCaptureAccess() ? "granted" : "not_granted"
+      ],
+      "reason": "ambient_voice_turn_context",
+      "context_contract": [
+        "screen_now": "Current screen state. If stale/missing or raw pixels matter, call capture_screen.",
+        "recent_activity": "Bounded activity timeline, useful for recent-work context but not current-screen truth.",
+        "transcription_vocabulary":
+          "STT correction hints only. Never treat vocabulary terms as visual evidence.",
+      ],
+      "context": context,
+      "guidance":
+        "Hidden current-work context for this push-to-talk turn. Use screen_now silently if the user asks what is on screen, what they are looking at, or uses deictic phrases like this/that/here. Recent activity is supporting context only. For voice turns, finalized screen context older than 15 seconds is treated as stale. If screen_now.source is live_capture_stale_rewind or raw pixels are needed, call the screenshot tool before answering current screen contents. If permission is denied and the user asked about screen contents, say Omi cannot see the screen yet.",
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "{}"
+    }
+    return json
   }
 
   private func recordTurnToKernel(
