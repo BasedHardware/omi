@@ -134,6 +134,39 @@ final class DesktopStressHarnessTests: XCTestCase {
     XCTAssertTrue(stderrText.contains("must be loopback"), stderrText)
   }
 
+  func testScriptRejectsHostnameThatOnlyLooksLoopback() throws {
+    let desktopDir = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let scriptURL = desktopDir.appendingPathComponent("scripts/stress_ptt_chat.py")
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    process.arguments = [scriptURL.path, "--base-url", "https://127.attacker.example", "--token", "secret"]
+
+    let stderr = Pipe()
+    process.standardError = stderr
+
+    try process.run()
+    process.waitUntilExit()
+
+    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    XCTAssertEqual(process.terminationStatus, 2)
+    XCTAssertTrue(stderrText.contains("must be loopback"), stderrText)
+  }
+
+  func testScriptRejectsMalformedFieldTypes() throws {
+    let jsonl = """
+      {"run_id":"run-bad","iteration":true,"scenario":"ptt_voiced","terminal_reason":"ptt_voiced_success","timestamp":"2026-07-07T12:00:00.000Z"}
+
+      """
+    let result = try runScript(jsonl: jsonl)
+
+    XCTAssertEqual(result.exitCode, 2)
+    XCTAssertTrue(result.stderr.contains("iteration must be a positive integer"), result.stderr)
+  }
+
   private func runScript(
     jsonl: String,
     extraArguments: [String] = []

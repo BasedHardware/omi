@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import http.client
 import json
@@ -539,6 +540,7 @@ class GauntletRunner:
         detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
         assistant = current_turn_assistant_text(snapshot, query)
         trace_matches = traces_for_query(traces, query)
+        trace_evidence = "\n".join(flatten_trace_text(trace) for trace in trace_matches)
         evidence = "\n".join(
             [
                 json.dumps(send, sort_keys=True, default=str),
@@ -549,7 +551,7 @@ class GauntletRunner:
                     if "error" in key.lower() and value
                 ),
                 assistant,
-                "\n".join(flatten_trace_text(trace) for trace in traces),
+                trace_evidence,
             ]
         )
         lower_evidence = evidence.lower()
@@ -1762,18 +1764,14 @@ def self_check() -> int:
         print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
         return 1
     driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
-    required_driver_tokens = [
-        '"resilience"',
-        "def run_resilience_suite",
-        'if "resilience" in self.suites',
-        "resilience-diagnostics.jsonl",
-        "resilience_terminal_reason_counts",
-        "resilience_forbidden_terminal_reasons",
-        "skipped_missing_action",
-    ]
-    missing_driver_tokens = [token for token in required_driver_tokens if token not in driver_source]
-    if missing_driver_tokens:
-        print(f"self-check failed: resilience suite wiring missing {missing_driver_tokens}", file=sys.stderr)
+    try:
+        driver_tree = ast.parse(driver_source)
+    except SyntaxError as exc:
+        print(f"self-check failed: gauntlet driver syntax error: {exc}", file=sys.stderr)
+        return 1
+    missing_driver_checks = resilience_driver_self_check_failures(driver_tree)
+    if missing_driver_checks:
+        print(f"self-check failed: resilience suite wiring missing {missing_driver_checks}", file=sys.stderr)
         return 1
     owner_ok, owner_detail = run_owner_switch_kernel_check()
     if not owner_ok:
@@ -1781,6 +1779,66 @@ def self_check() -> int:
         return 1
     print("self-check passed (owner-switch: kernel vitest + swap_test_owner action registered)")
     return 0
+
+
+def resilience_driver_self_check_failures(tree: ast.Module) -> list[str]:
+    """Validate resilience wiring structurally instead of matching self-contained token literals."""
+    failures: list[str] = []
+    runner = next(
+        (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"),
+        None,
+    )
+    if runner is None:
+        return ["GauntletRunner"]
+    methods = {node.name: node for node in runner.body if isinstance(node, ast.FunctionDef)}
+    for required in ("run_resilience_suite", "classify_resilience_turn", "record_resilience_diagnostic", "finalize"):
+        if required not in methods:
+            failures.append(f"GauntletRunner.{required}")
+
+    run_method = methods.get("run")
+    if run_method is None or not any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "run_resilience_suite"
+        for node in ast.walk(run_method)
+    ):
+        failures.append("run() dispatches run_resilience_suite")
+
+    record_method = methods.get("record_resilience_diagnostic")
+    if record_method is None or not any(
+        isinstance(node, ast.Constant) and node.value == "resilience-diagnostics.jsonl"
+        for node in ast.walk(record_method)
+    ):
+        failures.append("record_resilience_diagnostic appends resilience-diagnostics.jsonl")
+
+    finalize_method = methods.get("finalize")
+    if finalize_method is None or not all(
+        any(isinstance(node, ast.Constant) and node.value == key for node in ast.walk(finalize_method))
+        for key in ("resilience_terminal_reason_counts", "resilience_forbidden_terminal_reasons")
+    ):
+        failures.append("finalize writes resilience manifest fields")
+
+    constants = {
+        node.targets[0].id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+    }
+    suite_names = constants.get("SUITE_NAMES")
+    if not (
+        isinstance(suite_names, ast.Set)
+        and any(isinstance(item, ast.Constant) and item.value == "resilience" for item in suite_names.elts)
+    ):
+        failures.append("SUITE_NAMES includes resilience")
+    forbidden = constants.get("RESILIENCE_FORBIDDEN_TERMINAL_REASONS")
+    if not (
+        isinstance(forbidden, ast.Set)
+        and any(isinstance(item, ast.Constant) and item.value == "skipped_missing_action" for item in forbidden.elts)
+    ):
+        failures.append("skipped_missing_action is forbidden")
+
+    return failures
 
 
 SUITE_ALIASES: dict[str, set[str]] = {

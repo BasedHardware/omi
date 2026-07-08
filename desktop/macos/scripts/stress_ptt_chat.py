@@ -9,6 +9,7 @@ does not launch, restart, kill, or discover any Omi app bundle.
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import sys
@@ -77,6 +78,8 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
             event = json.loads(line)
         except json.JSONDecodeError as exc:
             raise StressValidationError(f"{path}:{line_number}: invalid JSON: {exc.msg}") from exc
+        if not isinstance(event, dict):
+            raise StressValidationError(f"{path}:{line_number}: event must be an object")
         validate_event(event, f"{path}:{line_number}")
         events.append(event)
     return events
@@ -86,14 +89,26 @@ def validate_event(event: dict[str, Any], where: str) -> None:
     for key in ("run_id", "iteration", "scenario", "terminal_reason", "timestamp"):
         if key not in event:
             raise StressValidationError(f"{where}: missing required field {key}")
+    if not isinstance(event["run_id"], str) or not event["run_id"]:
+        raise StressValidationError(f"{where}: run_id must be a non-empty string")
+    if not isinstance(event["timestamp"], str) or not event["timestamp"]:
+        raise StressValidationError(f"{where}: timestamp must be a non-empty string")
+    if not isinstance(event["scenario"], str):
+        raise StressValidationError(f"{where}: scenario must be a string")
     if event["scenario"] not in SCENARIOS:
         raise StressValidationError(f"{where}: unknown scenario {event['scenario']!r}")
+    if not isinstance(event["terminal_reason"], str):
+        raise StressValidationError(f"{where}: terminal_reason must be a string")
     if event["terminal_reason"] not in TERMINAL_REASONS:
         raise StressValidationError(f"{where}: unknown terminal_reason {event['terminal_reason']!r}")
-    if not isinstance(event["iteration"], int) or event["iteration"] < 1:
+    if not isinstance(event["iteration"], int) or isinstance(event["iteration"], bool) or event["iteration"] < 1:
         raise StressValidationError(f"{where}: iteration must be a positive integer")
     if "duration_ms" in event and event["duration_ms"] is not None:
-        if not isinstance(event["duration_ms"], int) or event["duration_ms"] < 0:
+        if (
+            not isinstance(event["duration_ms"], int)
+            or isinstance(event["duration_ms"], bool)
+            or event["duration_ms"] < 0
+        ):
             raise StressValidationError(f"{where}: duration_ms must be a non-negative integer")
     if "details" in event and not isinstance(event["details"], dict):
         raise StressValidationError(f"{where}: details must be an object when present")
@@ -132,14 +147,14 @@ def terminal_from_bridge_response(scenario: str, payload: dict[str, Any]) -> str
     result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
     detail = result.get("detail") if isinstance(result.get("detail"), dict) else {}
     explicit = detail.get("terminal_reason") or result.get("terminal_reason") or payload.get("terminal_reason")
-    if explicit in TERMINAL_REASONS:
-        return explicit
     if payload.get("ok") is False or detail.get("error") or payload.get("error"):
         if "already running" in text or "stuck run" in text or "response_already_running" in text:
             return "response_already_running"
         if "realtime_token_mint_failure" in text or "token mint" in text:
             return "realtime_token_mint_failure"
         return "bridge_launch_failure"
+    if explicit in TERMINAL_REASONS:
+        return explicit
     if "already running" in text or "stuck run" in text or "response_already_running" in text:
         return "response_already_running"
     if "realtime_token_mint_failure" in text or "token mint" in text:
@@ -158,7 +173,10 @@ def is_loopback_url(raw_url: str) -> bool:
         return False
     if hostname == "localhost" or hostname == "::1":
         return True
-    return hostname.startswith("127.")
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
 
 
 def collect_from_bridge(base_url: str, token: str | None, scenarios: list[str], iterations: int) -> list[dict[str, Any]]:
@@ -167,12 +185,15 @@ def collect_from_bridge(base_url: str, token: str | None, scenarios: list[str], 
     try:
         request_json(base_url, token=None, method="GET", path="/health")
         actions_payload = request_json(base_url, token=token, method="GET", path="/actions")
+        actions = actions_payload.get("result", [])
+        if not isinstance(actions, list):
+            raise StressValidationError("automation /actions result must be a list")
         action_names = {
             item.get("name")
-            for item in actions_payload.get("result", [])
+            for item in actions
             if isinstance(item, dict)
         }
-    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+    except (OSError, urllib.error.URLError, json.JSONDecodeError, StressValidationError) as exc:
         for iteration in range(1, iterations + 1):
             for scenario in scenarios:
                 events.append(make_event(run_id, iteration, scenario, "bridge_launch_failure", details={"error": str(exc)}))
