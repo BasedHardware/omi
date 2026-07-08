@@ -183,7 +183,9 @@ run_agent_runtime_focus() {
     npm test -- --run \
       tests/codemagic-pi-mono-extension-ci.test.ts \
       tests/runtime-adapter.test.ts \
-      tests/pi-mono-adapter.test.ts
+      tests/pi-mono-adapter.test.ts \
+      tests/surface-session.test.ts \
+      tests/chat-continuity-invariant.test.ts
   )
 }
 

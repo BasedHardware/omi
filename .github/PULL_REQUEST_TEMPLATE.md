@@ -4,6 +4,12 @@
 
 <!-- One or two sentences. Link the issue if there is one. -->
 
+## Product invariants affected
+
+<!-- Name locked invariant IDs this PR touches (e.g. INV-CHAT-1), or "none".
+     Registry: docs/product/invariants/ — required when changing paths listed
+     on a locked invariant. -->
+
 ## How it was verified
 
 <!-- The commands you ran and what they showed. Exercising the real user-facing
