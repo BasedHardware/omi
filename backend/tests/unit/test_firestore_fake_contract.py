@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from google.api_core.exceptions import NotFound
 
 from tests.unit.test_ws_b_short_term_lifecycle import _DocRef as WsBDocRef
 from tests.unit.test_ws_i_write_convergence import _DocRef as WsIDocRef
@@ -43,5 +44,5 @@ def test_doc_ref_get_set_update_merge_contract(doc_ref_cls):
 def test_doc_ref_update_raises_on_missing_doc(doc_ref_cls):
     db = _MinimalDb()
     ref = doc_ref_cls(db, "missing/path")
-    with pytest.raises(KeyError):
+    with pytest.raises(NotFound):
         ref.update({"a": 1})
