@@ -1,0 +1,83 @@
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingFinalSteps.swift
+  s_897886a34066e7::t_7c9ed81aa22bcb 1-207
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_897886a34066e7::t_ff456ba9717b16 1191-1194,1196-1200,1202-1210,1212-1216,1218-1225,1227,1229-1233,1237-1244,1246-1254,1256,1258
+  s_897886a34066e7::t_6d5bfb112b1efc 845-847
+  s_897886a34066e7::t_4bef743413dbdc 803-805
+  s_897886a34066e7::t_068af5f1f3d99c 383
+  s_897886a34066e7::t_1d03faf2300a84 90-94,96-99
+  s_897886a34066e7::t_5bcee50eeb9909 38-40
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingIntroSteps.swift
+  s_897886a34066e7::t_0b8d0378d9d6b4 1-251
+desktop/macos/Desktop/Sources/Redesign/RedesignEmptyStates.swift
+  s_897886a34066e7::t_e5691039854242 1-100
+desktop/macos/Desktop/Sources/Redesign/INK_API.md
+  s_897886a34066e7::t_08c1edec5a347a 1-54
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignConversationsPage.swift
+  s_897886a34066e7::t_111a327123060d 1-56,58-391
+  s_897886a34066e7::t_f52f190c0104bb 57
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignPlanUsagePage.swift
+  s_897886a34066e7::t_070c799edcaefd 1-170
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignFocusPage.swift
+  s_897886a34066e7::t_c190f3fefcbbd2 1-182
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignChatPage.swift
+  s_897886a34066e7::t_c25a7a35c5bc56 98-102
+  s_897886a34066e7::t_b26fdd715c2b92 1-97,103-365
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMemoryPage.swift
+  s_897886a34066e7::t_8c114641962f73 1-399
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignAppsPage.swift
+  s_897886a34066e7::t_341c337bfe3a13 14
+  s_897886a34066e7::t_e02bca19d13806 1-13,15-228
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignPermissionsPage.swift
+  s_897886a34066e7::t_0b4b4f743d0736 1-155
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignHelpPage.swift
+  s_897886a34066e7::t_6a83c2685d3bb2 1-103,110-116,118,120-137
+  s_897886a34066e7::t_91cae4421e3579 104-109,117,119
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingContextSteps.swift
+  s_897886a34066e7::t_69155aa22a6b6d 1-510
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingScaffold.swift
+  s_897886a34066e7::t_234c416c7bafd3 1-333
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignSettingsPage.swift
+  s_897886a34066e7::t_a32856a63761da 173
+  s_897886a34066e7::t_d4c5e6f67da142 78
+  s_897886a34066e7::t_1dda6f1b31bbf6 211
+  s_897886a34066e7::t_178e20bb22a79e 115
+  s_897886a34066e7::t_4ad6a525758bda 1-77,79-114,116-172,174-210,212-497
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingShortcutSteps.swift
+  s_897886a34066e7::t_ac8e8c05f68452 1-770
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignTasksPage.swift
+  s_897886a34066e7::t_56c67c8df47ae1 98,125
+  s_897886a34066e7::t_fe5e4f732f22cf 1-97,99-124,126-179,182-185,189-214
+  s_897886a34066e7::t_6829d0257063ba 180-181,186-188
+desktop/macos/Desktop/Sources/Redesign/RedesignSignInView.swift
+  s_897886a34066e7::t_09b2e7c256372c 1-166
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignInsightsPage.swift
+  s_897886a34066e7::t_5771ac9ca597fd 1-110
+desktop/macos/Desktop/Sources/OnboardingView.swift
+  s_897886a34066e7::t_e2eabdcd094d1d 13
+  s_897886a34066e7::t_4a74542e30853f 39-40,59-60
+  s_897886a34066e7::t_c3ebff07e7dd65 465-468,473-793
+  s_897886a34066e7::t_5676b58087cf4a 469-472
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignPersonaPage.swift
+  s_897886a34066e7::t_c1c2c571175848 1-129
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingPermissionSteps.swift
+  s_897886a34066e7::t_adf05abf6e8150 1-231
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMorePage.swift
+  s_897886a34066e7::t_0a5599147c6c27 26-27
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3df9365f573d8faf0d3643c1750879d9e94edc23",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
