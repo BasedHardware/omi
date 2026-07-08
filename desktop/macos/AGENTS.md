@@ -176,6 +176,36 @@ cd desktop/macos && ./scripts/agent-logic-harness.sh
 ```
 It is self-driving for agents: it runs the risky Swift lifecycle/state tests, focused agent runtime tests, exact `pi-mono-extension` package tests, and prints per-step runtime. Use `--swift-only`, `--node-only`, or `--skip-install` only when narrowing a failure.
 
+### Chat Continuity Write-Path Contract (INV-6)
+
+Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one
+`ChatProvider` (`historyChatProvider`). Kernel `main_chat` turns are the durable
+source of truth; UI may optimistic-render, then must not double-apply the same turn.
+
+Rules (fail the PR if any break):
+1. **Single provider** — floating typed/PTT must not own a separate durable message array.
+2. **One idempotency key per logical turn** — every local `recordCompletedTurn` /
+   optimistic stage that also persists via kernel MUST share the SAME key with
+   `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Until stage/promote lands,
+   call `suppressNextRecordedTurn(idempotencyKey:)` with that key BEFORE the
+   kernel write. Keys are opaque strings; never dedupe by assistant/user text.
+3. **Kernel apply is idempotent** — `KernelTurnProjection.apply` ignores already-seen
+   keys; empty keys do not suppress.
+4. **Cross-surface agent identity is structured** — pill/agent links carry a UUID
+   (tool block `spawnedAgentID` or explicit `id=` / structured content block).
+   Do not invent new free-text formats; extend the existing parser/schema + tests
+   together.
+5. **Pill cache is derived** — opening an agent from timeline may refresh from kernel
+   once; success = resolvable agent identity after refresh/hydrate. Do not keep a
+   second durable pill store.
+6. **Snapshots are aliases** — `automationFloatingChatSnapshot` ==
+   `automationChatSnapshot` / `automationMainChatSnapshot` over the same messages;
+   no surface-specific transcript filter.
+7. **Tests** — continuity behavior changes require a hermetic behavioral test (call
+   projection/provider APIs, assert message counts/IDs). Source-string greps for
+   function names are not continuity coverage. Live gauntlet/stress are gates, not
+   substitutes for hermetic tests.
+
 ### Verifying UI Changes (agent-swift)
 
 After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.

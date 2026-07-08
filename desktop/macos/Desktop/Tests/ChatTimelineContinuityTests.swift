@@ -95,7 +95,29 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(status, .running)
   }
 
-  func testSourceInvariantAllChatSurfacesRenderCanonicalProviderMessages() throws {
+  func testBackgroundAgentSummaryParsesLinkedAndLegacyCompletionText() {
+    let subagentID = UUID()
+    let linked = BackgroundAgentSummary.parse(
+      "[Background agent id=\(subagentID.uuidString) — sleep for one second] Done."
+    )
+
+    XCTAssertEqual(linked?.agentID, subagentID)
+    XCTAssertEqual(linked?.prompt, "sleep for one second")
+    XCTAssertEqual(linked?.output, "Done.")
+
+    let legacy = BackgroundAgentSummary.parse(
+      "[Background agent — tell a joke] Why don't scientists trust atoms?"
+    )
+
+    XCTAssertNil(legacy?.agentID)
+    XCTAssertEqual(legacy?.prompt, "tell a joke")
+    XCTAssertEqual(legacy?.output, "Why don't scientists trust atoms?")
+  }
+
+  func testCanonicalSurfacesBindSharedProviderMessages() throws {
+    // Mechanical single-provider UI binding check (INV-6 rule 1). Full UI
+    // rendering is covered by e2e; this fails if Main/Home stop binding the
+    // shared ChatProvider timeline or reintroduce transcript filtering.
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -105,83 +127,36 @@ final class ChatTimelineContinuityTests: XCTestCase {
       encoding: .utf8)
     XCTAssertTrue(
       chatPage.contains("messages: chatProvider.messages,"),
-      "main Chat page must render every Omi chat turn, including notch turns and subagent links"
+      "main Chat must bind the shared ChatProvider timeline"
     )
     XCTAssertFalse(
       chatPage.contains("transcriptMessages"),
-      "main Chat page must not filter notch/PTT turns out of history"
+      "main Chat must not filter notch/PTT turns out of history"
     )
     XCTAssertTrue(
-      chatPage.contains("FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID)"),
-      "main Chat page must open spawned-agent links from tool rows"
+      chatPage.contains("openAgentChatFromTimeline(agentID:"),
+      "main Chat must open spawned-agent links from the timeline"
     )
 
     let dashboard = try String(
       contentsOf: root.appendingPathComponent("Sources/MainWindow/Pages/DashboardPage.swift"),
       encoding: .utf8)
-    XCTAssertEqual(
+    XCTAssertGreaterThanOrEqual(
       dashboard.components(separatedBy: "messages: chatProvider.messages,").count - 1,
       2,
-      "both dashboard Home chat surfaces must render the canonical provider timeline"
+      "Home chat surfaces must bind the shared ChatProvider timeline"
     )
     XCTAssertFalse(
       dashboard.contains("transcriptMessages"),
       "Home chat must not filter notch/PTT turns out of history"
-    )
-    XCTAssertEqual(
-      dashboard.components(separatedBy: "FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID)").count - 1,
-      2,
-      "both dashboard Home chat surfaces must open spawned-agent links from tool rows"
     )
 
     let provider = try String(
       contentsOf: root.appendingPathComponent("Sources/Providers/ChatProvider.swift"),
       encoding: .utf8)
     XCTAssertFalse(
-      provider.contains("transcriptMessages"),
-      "ChatProvider must not expose split transcript filtering for main vs notch chat"
-    )
-    XCTAssertTrue(
-      provider.contains("automationFloatingChatSnapshot(limit: Int) -> [String: String]"),
-      "floating-bar harness snapshot must stay available"
-    )
-    XCTAssertTrue(
-      provider.contains("automationChatSnapshot(limit: limit)"),
-      "main and floating snapshots must read the same canonical timeline"
-    )
-
-    let floating = try String(
-      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift"),
-      encoding: .utf8)
-    let chatBubble = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
-      encoding: .utf8)
-    let floatingView = try String(
-      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarView.swift"),
-      encoding: .utf8)
-    XCTAssertTrue(
-      floating.contains("return provider.automationFloatingChatSnapshot(limit: limit)"),
-      "notch harness should still inspect floating chat through its named surface action"
-    )
-    XCTAssertTrue(
-      floating.contains("func openAgentChatFromTimeline(agentID: UUID)"),
-      "main chat needs a manager entrypoint to open spawned-agent links in the floating surface"
-    )
-    XCTAssertTrue(
-      chatBubble.contains("ContentBlockGroup.visibleChatGroups("),
-      "main chat bubbles must filter completed implementation-only tool logs"
-    )
-    XCTAssertTrue(
-      chatBubble.contains("return .toolCalls(id: id, calls: spawnedAgentCalls)"),
-      "main chat bubbles must still render spawned-agent links after the final answer"
-    )
-    XCTAssertTrue(
-      chatBubble.contains("ToolCallsGroup(calls: calls, onCancel: onCancelTurn, onOpenAgent: onOpenAgent)"),
-      "main chat bubbles must pass spawned-agent link callbacks into visible tool-call groups"
-    )
-    XCTAssertTrue(
-      floatingView.contains("onOpenAgent: { agentID in"),
-      "notch response view must keep opening spawned-agent links"
+      provider.contains("func transcriptMessages"),
+      "ChatProvider must not expose a split transcript filter API"
     )
   }
 }
