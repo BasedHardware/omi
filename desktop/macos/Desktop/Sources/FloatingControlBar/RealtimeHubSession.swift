@@ -290,6 +290,14 @@ final class RealtimeHubSession: NSObject {
   }
 
   func sendTestTextInput(_ text: String) async -> Bool {
+    await sendTextInput(text, logLabel: "test text input")
+  }
+
+  func sendTurnContextText(_ text: String) async -> Bool {
+    await sendTextInput(text, logLabel: "turn context")
+  }
+
+  private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
         guard let self, self.isOpen else {
@@ -299,7 +307,7 @@ final class RealtimeHubSession: NSObject {
         switch self.provider {
         case .gemini:
           guard self.activityOpen else {
-            log("\(self.tag): test text input dropped — no open activity window")
+            log("\(self.tag): \(logLabel) dropped — no open activity window")
             continuation.resume(returning: false)
             return
           }
@@ -314,7 +322,7 @@ final class RealtimeHubSession: NSObject {
             ],
           ])
         }
-        log("\(self.tag): test text input sent (\(text.count) chars)")
+        log("\(self.tag): \(logLabel) sent (\(text.count) chars)")
         continuation.resume(returning: true)
       }
     }

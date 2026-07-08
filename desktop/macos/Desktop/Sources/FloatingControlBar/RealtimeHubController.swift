@@ -273,6 +273,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Kernel-projected transcript tail prefetched when PTT is armed (key-down).
   private var prefetchedVoiceSeedContext = ""
   private var prefetchedFloatingAgentStatus = ""
+  private var voiceTurnScreenContextSentEpoch: Int?
   /// Seed baked into the current warm session's system instructions.
   private var sessionVoiceSeedContextSnapshot = ""
   private var voiceSeedPrefetchTask: Task<Void, Never>?
@@ -820,6 +821,36 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     teardownSession()
   }
 
+  private func sendVoiceTurnScreenContextIfNeeded(epoch: Int) async {
+    guard inputTurnInProgress, epoch == turnEpoch else { return }
+    guard voiceTurnScreenContextSentEpoch != epoch else { return }
+    guard let session else { return }
+    voiceTurnScreenContextSentEpoch = epoch
+
+    let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+    guard inputTurnInProgress, epoch == turnEpoch else { return }
+
+    let envelope: [String: Any] = [
+      "permission": [
+        "screen_recording": CGPreflightScreenCaptureAccess() ? "granted" : "not_granted"
+      ],
+      "reason": "ambient_voice_turn_context",
+      "context": rawPayload,
+      "guidance":
+        "Hidden current-work context for this push-to-talk turn. Use it silently if the user asks what is on screen, what they are looking at, or uses deictic phrases like this/that/here. If the context says a fresh capture is available but raw pixels are needed, call the screenshot tool. If permission is denied and the user asked about screen contents, say Omi cannot see the screen yet.",
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return
+    }
+    let sent = await session.sendTurnContextText("<auto_voice_screen_context>\n\(json)\n</auto_voice_screen_context>")
+    if !sent, inputTurnInProgress, epoch == turnEpoch {
+      voiceTurnScreenContextSentEpoch = nil
+    }
+  }
+
   private func recordTurnToKernel(
     userText: String,
     assistantText: String,
@@ -1109,6 +1140,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingCompletedAgentDeltaAckIds.removeAll()
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
+    voiceTurnScreenContextSentEpoch = nil
     lastTurnAt = Date()
     inputTurnInProgress = true
     inputTurnActivityStartPending = false
@@ -1150,6 +1182,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         if ownsInputTurn {
           if await self.waitUntilActive(timeout: 15) {
             self.session?.beginInputTurn(interrupting: interrupting)
+            await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
           } else {
             self.inputTurnActivityStartPending = true
             self.pendingInputTurnInterrupting = interrupting
@@ -1162,6 +1195,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ensureWarm()
       if !replacementSessionOwnsInputTurn {
         session?.beginInputTurn(interrupting: providerResponseInFlight)
+        Task { @MainActor in
+          await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
+        }
       }
     }
     // Capture locally at turn START so the explicit screenshot tool can respond without
@@ -1360,6 +1396,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     {
       session?.beginInputTurn(interrupting: pendingInputTurnInterrupting)
       inputTurnActivityStartPending = false
+      Task { @MainActor in
+        await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)
+      }
     }
   }
 
