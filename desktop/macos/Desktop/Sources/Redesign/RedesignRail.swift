@@ -73,19 +73,27 @@ struct RedesignRail: View {
   @ObservedObject var appState: AppState
   @ObservedObject private var insightStorage = InsightStorage.shared
 
+  // No separate Home item — the omi buddy mark at the top navigates Home.
   private let primary: [RedesignRoute] = [
-    .home, .chat, .conversations, .memories, .messages, .tasks, .rewind,
+    .chat, .conversations, .memories, .messages, .tasks, .rewind,
   ]
 
   var body: some View {
     VStack(spacing: 4) {
-      // Buddy mark → Home
+      // Buddy mark → Home (replaces a separate Home item)
       Button { select(.home) } label: {
         BuddyRing(diameter: 22, dot: 3, color: Ink.ink)
-          .frame(width: 44, height: 40)
+          .frame(width: 44, height: 44)
+          .background(
+            RoundedRectangle(cornerRadius: 11, style: .continuous)
+              .fill(isActive(.home) ? Ink.surface : .clear)
+              .overlay(
+                isActive(.home)
+                  ? RoundedRectangle(cornerRadius: 11).strokeBorder(Ink.hair, lineWidth: 1) : nil))
       }
       .buttonStyle(.plain)
-      .padding(.bottom, 12)
+      .help("Home")
+      .padding(.bottom, 10)
 
       ForEach(primary, id: \.rawValue) { route in
         RailItem(
