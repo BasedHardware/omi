@@ -3767,6 +3767,18 @@ struct TaskCategorySection: View {
 
                 Spacer()
 
+                // Every section shows its task count; Today additionally
+                // offers the clean-up action next to it.
+                Text("\(orderedTasks.count)")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(OmiColors.textTertiary.opacity(0.1))
+                    )
+
                 if category == .today {
                     Button {
                         confirmClearTodayDeadlines()
@@ -3779,16 +3791,6 @@ struct TaskCategorySection: View {
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
                     .help("Clean today's tasks")
-                } else {
-                    Text("\(orderedTasks.count)")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(OmiColors.textTertiary.opacity(0.1))
-                        )
                 }
 
             }
