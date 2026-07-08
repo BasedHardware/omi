@@ -827,7 +827,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard let session else { return }
     voiceTurnScreenContextSentEpoch = epoch
 
-    let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+    let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: [
+      "minutes": 10,
+      "max_age_seconds": ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds,
+    ])
     guard inputTurnInProgress, epoch == turnEpoch else { return }
 
     let envelope: [String: Any] = [
@@ -837,7 +840,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "reason": "ambient_voice_turn_context",
       "context": rawPayload,
       "guidance":
-        "Hidden current-work context for this push-to-talk turn. Use it silently if the user asks what is on screen, what they are looking at, or uses deictic phrases like this/that/here. If the context says a fresh capture is available but raw pixels are needed, call the screenshot tool. If permission is denied and the user asked about screen contents, say Omi cannot see the screen yet.",
+        "Hidden current-work context for this push-to-talk turn. Use it silently if the user asks what is on screen, what they are looking at, or uses deictic phrases like this/that/here. For voice turns, finalized screen context older than 15 seconds is treated as stale. If screen_now.source is live_capture_stale_rewind or raw pixels are needed, call the screenshot tool before answering current screen contents. If permission is denied and the user asked about screen contents, say Omi cannot see the screen yet.",
     ]
     guard
       let data = try? JSONSerialization.data(withJSONObject: envelope, options: [.prettyPrinted, .sortedKeys]),

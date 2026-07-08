@@ -157,6 +157,23 @@ final class ScreenContextTelemetryTests: XCTestCase {
     )
   }
 
+  func testVoiceWorkContextUsesShorterFreshnessBudget() {
+    XCTAssertFalse(
+      ScreenContextWorkContextBuilder.shouldUseFreshCapture(
+        screenNow: ["available": true],
+        latestCaptureAgeSeconds: ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds,
+        staleThresholdSeconds: ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds
+      )
+    )
+    XCTAssertTrue(
+      ScreenContextWorkContextBuilder.shouldUseFreshCapture(
+        screenNow: ["available": true],
+        latestCaptureAgeSeconds: ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds + 1,
+        staleThresholdSeconds: ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds
+      )
+    )
+  }
+
   func testStaleWorkContextDropsScreenNowWhenFreshCaptureFails() throws {
     let source = try String(
       contentsOf: URL(fileURLWithPath: #filePath)
@@ -166,13 +183,13 @@ final class ScreenContextTelemetryTests: XCTestCase {
       encoding: .utf8
     )
 
-	    XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
-	    XCTAssertTrue(source.contains(#""available": false"#))
-	    XCTAssertTrue(source.contains(#""Latest finalized work-context frame was older than 60 seconds and live capture was unavailable.""#))
-	    XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
-	    XCTAssertFalse(source.contains(#""image_base64": data.base64EncodedString()"#))
-	    XCTAssertTrue(source.contains(#""raw_image_tool": "capture_screen""#))
-	  }
+    XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
+    XCTAssertTrue(source.contains(#""available": false"#))
+    XCTAssertTrue(source.contains("Latest finalized work-context frame was older than \\(staleThresholdSeconds) seconds"))
+    XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
+    XCTAssertFalse(source.contains(#""image_base64": data.base64EncodedString()"#))
+    XCTAssertTrue(source.contains(#""raw_image_tool": "capture_screen""#))
+  }
 
   func testChatMessageSentPropertyNamesDoNotUseAmbiguousHasContext() throws {
     let sourcesDir = URL(fileURLWithPath: #filePath)

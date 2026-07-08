@@ -48,6 +48,24 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertFalse(source.contains("OmiColors.purplePrimary"))
     }
 
+    func testRedesignedHomeUsesResponsiveStageSizing() throws {
+        let source = try dashboardSource()
+
+        XCTAssertTrue(source.contains("private static let homeStageMaxWidth: CGFloat = 1360"))
+        XCTAssertTrue(source.contains("private static let homeAskBarMinWidth: CGFloat = 560"))
+        XCTAssertTrue(source.contains("private static let homeStagePanelMaxWidth: CGFloat = 1280"))
+        XCTAssertTrue(source.contains("private func homeStageSideInset(for stageWidth: CGFloat) -> CGFloat"))
+        XCTAssertTrue(source.contains("private func homeAskBarWidth(for stageWidth: CGFloat) -> CGFloat"))
+        XCTAssertTrue(source.contains("(text as NSString).size(withAttributes: attributes).width"))
+        XCTAssertTrue(source.contains("private func homeHubStage(askBarWidth: CGFloat, stageHeight: CGFloat) -> some View"))
+        XCTAssertTrue(source.contains("private var homeHubWordmark: some View"))
+        XCTAssertTrue(source.contains("private struct HomeStatRibbon: View"))
+        XCTAssertTrue(source.contains(".frame(height: 76)"))
+        XCTAssertFalse(source.contains(".frame(width: 304)"))
+        XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeAskBarMaxWidth)"))
+        XCTAssertFalse(source.contains(".frame(maxWidth: Self.homeStagePanelMaxWidth)"))
+    }
+
     func testHomeConnectorButtonsOpenSheetsDirectly() throws {
         let source = try dashboardSource()
         let importMethod = try methodBody(named: "openImportConnector", in: source)

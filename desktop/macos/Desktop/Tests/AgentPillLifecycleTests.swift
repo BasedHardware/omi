@@ -115,6 +115,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(typingSource.contains(".linear(duration: 0.9).repeatForever(autoreverses: false)"))
     XCTAssertTrue(notchSource.contains("private struct NotchThinkingMark: View"))
     XCTAssertTrue(notchSource.contains("OmiThinkingMark()"))
+    XCTAssertFalse(notchSource.contains("Text(\"Thinking\")"))
     XCTAssertFalse(typingSource.contains("animationPhase"))
     XCTAssertFalse(typingSource.contains("scaleEffect(animationPhase"))
     XCTAssertFalse(typingSource.contains(".delay(Double(index) * 0.15)"))
@@ -281,7 +282,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"))
     XCTAssertFalse(source.contains("notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"))
     XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
-    XCTAssertTrue(source.contains("if notchSettingsHovering"))
+    XCTAssertTrue(source.contains("if !showingNotchThinking && notchSettingsHovering"))
     XCTAssertTrue(source.contains("private var notchSettingsButton: some View"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(source.contains(".accessibilityIdentifier(\"notch_floating_bar_settings\")"))
@@ -574,9 +575,16 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("streamingMessage.isStreaming = true"))
     XCTAssertTrue(agentSource.contains("pill.conversationMessages.append(streamingMessage)"))
     XCTAssertTrue(agentSource.contains("private static func clearStreamingAssistantMessage(for pill: AgentPill)"))
+    XCTAssertTrue(agentSource.contains("private static func removeEmptyStreamingAssistantMessages(for pill: AgentPill)"))
+    XCTAssertTrue(agentSource.contains("private static func upsertAssistantMessage(_ message: ChatMessage, for pill: AgentPill)"))
     XCTAssertTrue(agentSource.contains("completedMessage.isStreaming = false"))
     XCTAssertTrue(agentSource.contains("pill.conversationMessages.removeAll { $0.id == aiMessage.id }"))
-    XCTAssertTrue(agentSource.contains("pill.conversationMessages[index] = finalMessage"))
+    XCTAssertTrue(agentSource.contains("pill.conversationMessages[index] = message"))
+    XCTAssertTrue(agentSource.contains("if !aiMessage.isStreaming, Self.hasVisibleAssistantContent(aiMessage)"))
+    XCTAssertTrue(agentSource.contains("pill.status = .done"))
+    XCTAssertTrue(viewSource.contains("private func normalizedAgentMessages(_ messages: [ChatMessage]) -> [ChatMessage]"))
+    XCTAssertTrue(viewSource.contains("private var hasFinalAssistantOutput: Bool"))
+    XCTAssertTrue(viewSource.contains("if hasFinalAssistantOutput, !pill.status.isFinished"))
     XCTAssertTrue(viewSource.contains("} else if trimmed.isEmpty && message.isStreaming && message.displayResources.isEmpty {"))
     XCTAssertTrue(viewSource.contains("TypingIndicator()"))
   }
@@ -631,7 +639,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentSource.contains("private func trimForNewPillIfNeeded()"))
     XCTAssertTrue(agentSource.contains(".filter({ $0.status == .done && $0.id != activeChatPillID })"))
     XCTAssertTrue(viewSource.contains("manager.markViewed(pillID: pill.id)"))
-    XCTAssertTrue(viewSource.contains("if pill.status.isFinished"))
+    XCTAssertTrue(viewSource.contains("if displayStatus.isFinished"))
     XCTAssertTrue(viewSource.contains("manager.dismiss(pillID: pill.id)"))
   }
 
@@ -756,7 +764,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("voiceTurnScreenContextSentEpoch = nil"))
     XCTAssertTrue(hubSource.contains("await self.sendVoiceTurnScreenContextIfNeeded(epoch: self.turnEpoch)"))
     XCTAssertTrue(hubSource.contains("private func sendVoiceTurnScreenContextIfNeeded(epoch: Int) async"))
-    XCTAssertTrue(hubSource.contains("ScreenContextWorkContextBuilder.payload(arguments: [\"minutes\": 10])"))
+    XCTAssertTrue(hubSource.contains(#""max_age_seconds": ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds"#))
     XCTAssertTrue(hubSource.contains("<auto_voice_screen_context>"))
     XCTAssertTrue(hubSource.contains("ambient_voice_turn_context"))
     XCTAssertTrue(sessionSource.contains("func sendTurnContextText(_ text: String) async -> Bool"))
@@ -924,11 +932,16 @@ final class AgentPillLifecycleTests: XCTestCase {
 
   func testTerminalProjectionPreservesStatusText() throws {
     let source = try agentRuntimeStatusStoreSource()
+    let agentSource = try agentPillSource()
 
     // Terminal projections must preserve the final result text so consumers
     // (floating pill latestActivity, task agent voice summary) can display it.
     XCTAssertFalse(source.contains("projection.statusText = terminal ? nil : statusText"))
     XCTAssertTrue(source.contains("projection.statusText = statusText"))
+    XCTAssertTrue(agentSource.contains("case .succeeded:"))
+    XCTAssertTrue(agentSource.contains("var finalMessage = currentAssistantMessage(for: pill) ?? ChatMessage(text: statusText, sender: .ai)"))
+    XCTAssertTrue(agentSource.contains("upsertAssistantMessage(finalMessage, for: pill)"))
+    XCTAssertTrue(agentSource.contains("let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) ?? \"Failed: \\(errorText)\""))
   }
 
   func testFloatingAgentHandoffExcludesQuestionStarters() throws {

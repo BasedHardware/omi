@@ -70,9 +70,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     }
     static let notchCompactSideWidth: CGFloat = 30
     static let notchActiveSideWidth: CGFloat = 42
-    /// Wider lobes while "thinking" so the right lobe fits the word alongside the
-    /// spinning Omi mark on the left.
-    static let notchThinkingSideWidth: CGFloat = 62
+    /// Thinking keeps the compact active lobe width: the visible state is the
+    /// spinning Omi mark only, without a right-side text label.
+    static let notchThinkingSideWidth: CGFloat = notchActiveSideWidth
     static let defaultNotchChromeHeight: CGFloat = 34
     static var notchChromeHeight: CGFloat { defaultNotchChromeHeight }
     static let notchActivationHeight: CGFloat = 17

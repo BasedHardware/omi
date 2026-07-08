@@ -411,9 +411,14 @@ final class ScreenContextChatCycleMetrics: @unchecked Sendable {
 
 enum ScreenContextWorkContextBuilder {
   static let staleCaptureThresholdSeconds = 60
+  static let voiceTurnStaleCaptureThresholdSeconds = 15
 
   static func payload(arguments: [String: Any]) async -> [String: Any] {
     let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
+    let staleThresholdSeconds = max(
+      1,
+      min(300, Int(parseInt64(arguments["max_age_seconds"]) ?? Int64(staleCaptureThresholdSeconds)))
+    )
     let now = Date()
     let start = now.addingTimeInterval(-Double(minutes) * 60)
     let formatter = ISO8601DateFormatter()
@@ -495,18 +500,23 @@ enum ScreenContextWorkContextBuilder {
       screenNow["failure_code"] = failureCode?.rawValue
     }
 
-    if shouldUseFreshCapture(screenNow: screenNow, latestCaptureAgeSeconds: latestCaptureAgeSeconds) {
+    if shouldUseFreshCapture(
+      screenNow: screenNow,
+      latestCaptureAgeSeconds: latestCaptureAgeSeconds,
+      staleThresholdSeconds: staleThresholdSeconds
+    ) {
       if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
         screenNow = fresh
         failureCode = nil
         latestCaptureAgeSeconds = 0
-      } else if let latestCaptureAgeSeconds, latestCaptureAgeSeconds > staleCaptureThresholdSeconds {
+      } else if let latestCaptureAgeSeconds, latestCaptureAgeSeconds > staleThresholdSeconds {
         failureCode = .imageUnavailable
         screenNow = [
           "available": false,
           "failure_code": failureCode?.rawValue ?? ScreenContextFailureCode.imageUnavailable.rawValue,
           "latest_capture_age_seconds": latestCaptureAgeSeconds,
-          "note": "Latest finalized work-context frame was older than 60 seconds and live capture was unavailable.",
+          "note":
+            "Latest finalized work-context frame was older than \(staleThresholdSeconds) seconds and live capture was unavailable.",
         ]
         ScreenContextToolTelemetry.trackInvariant(
           "stale_inspection_ignored",
@@ -562,28 +572,35 @@ enum ScreenContextWorkContextBuilder {
     if let latestCaptureAgeSeconds {
       payload["latest_capture_age_seconds"] = latestCaptureAgeSeconds
     }
+    payload["freshness_threshold_seconds"] = staleThresholdSeconds
     return payload
   }
 
-  static func shouldUseFreshCapture(screenNow: [String: Any], latestCaptureAgeSeconds: Int?) -> Bool {
+  static func shouldUseFreshCapture(
+    screenNow: [String: Any],
+    latestCaptureAgeSeconds: Int?,
+    staleThresholdSeconds: Int = staleCaptureThresholdSeconds
+  ) -> Bool {
     guard (screenNow["available"] as? Bool) == true else { return true }
     guard let latestCaptureAgeSeconds else { return true }
-    return latestCaptureAgeSeconds > staleCaptureThresholdSeconds
+    return latestCaptureAgeSeconds > staleThresholdSeconds
   }
 
-	  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter()) -> [String: Any]? {
-	    guard ScreenCaptureManager.captureScreenData() != nil else { return nil }
-	    return [
-	      "available": true,
-	      "source": "live_capture_stale_rewind",
-	      "timestamp": formatter.string(from: now),
-	      "latest_capture_age_seconds": 0,
-	      "fresh_capture_available": true,
-	      "raw_image_tool": "capture_screen",
-	      "note":
-	        "Fresh live screenshot capture succeeded because the latest finalized work-context frame was missing or older than 60 seconds. Raw pixels are not included here; call capture_screen if needed.",
-	    ]
-	  }
+  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter())
+    -> [String: Any]?
+  {
+    guard ScreenCaptureManager.captureScreenData() != nil else { return nil }
+    return [
+      "available": true,
+      "source": "live_capture_stale_rewind",
+      "timestamp": formatter.string(from: now),
+      "latest_capture_age_seconds": 0,
+      "fresh_capture_available": true,
+      "raw_image_tool": "capture_screen",
+      "note":
+        "Fresh live screenshot capture succeeded because the latest finalized work-context frame was missing or stale. Raw pixels are not included here; call capture_screen if the current screen contents matter.",
+    ]
+  }
 
   static func permissionDeniedPayload(windowMinutes minutes: Int) -> [String: Any] {
     [

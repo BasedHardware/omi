@@ -1,0 +1,4 @@
+{
+  "type": "fixed",
+  "change": "Made push-to-talk screen context prefer live capture when finalized screen frames are more than a few seconds old"
+}

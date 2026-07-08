@@ -1445,21 +1445,12 @@ final class AgentPillsManager: ObservableObject {
         let trimmed = finalText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !trimmed.isEmpty || !resources.isEmpty {
             let messageText = trimmed.isEmpty ? "Done." : trimmed
-            var finalMessage = pill.aiMessage ?? ChatMessage(text: messageText, sender: .ai)
+            Self.removeEmptyStreamingAssistantMessages(for: pill)
+            var finalMessage = Self.currentAssistantMessage(for: pill) ?? ChatMessage(text: messageText, sender: .ai)
             finalMessage.text = messageText
             finalMessage.resources = resources
             finalMessage.isStreaming = false
-            pill.aiMessage = finalMessage
-            if pill.conversationMessages.isEmpty {
-                pill.conversationMessages = [
-                    ChatMessage(text: pill.query, sender: .user),
-                    finalMessage,
-                ]
-            } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
-                pill.conversationMessages[index] = finalMessage
-            } else if !pill.conversationMessages.contains(where: { $0.id == finalMessage.id }) {
-                pill.conversationMessages.append(finalMessage)
-            }
+            Self.upsertAssistantMessage(finalMessage, for: pill)
             pill.latestActivity = String(messageText.prefix(140))
             FloatingControlBarManager.shared.recordAgentArtifactCompletion(
                 pillID: pill.id,
@@ -1535,6 +1526,7 @@ final class AgentPillsManager: ObservableObject {
         let hasVisibleContent =
             !aiMessage.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !aiMessage.contentBlocks.isEmpty
+            || !aiMessage.displayResources.isEmpty
 
         if hasVisibleContent {
             var completedMessage = aiMessage
@@ -1549,16 +1541,69 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
+    private static func removeEmptyStreamingAssistantMessages(for pill: AgentPill) {
+        pill.conversationMessages.removeAll { message in
+            message.sender == .ai
+                && message.isStreaming
+                && !hasVisibleAssistantContent(message)
+        }
+        if let aiMessage = pill.aiMessage,
+           aiMessage.isStreaming,
+           !hasVisibleAssistantContent(aiMessage) {
+            pill.aiMessage = nil
+        }
+    }
+
+    private static func currentAssistantMessage(for pill: AgentPill) -> ChatMessage? {
+        if let aiMessage = pill.aiMessage, hasVisibleAssistantContent(aiMessage) {
+            return aiMessage
+        }
+        return pill.conversationMessages.last { message in
+            message.sender == .ai && hasVisibleAssistantContent(message)
+        }
+    }
+
+    private static func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
+        !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.contentBlocks.isEmpty
+            || !message.displayResources.isEmpty
+    }
+
+    private static func upsertAssistantMessage(_ message: ChatMessage, for pill: AgentPill) {
+        pill.aiMessage = message
+        if pill.conversationMessages.isEmpty {
+            pill.conversationMessages = [
+                ChatMessage(text: pill.query, sender: .user),
+                message,
+            ]
+        } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == message.id }) {
+            pill.conversationMessages[index] = message
+        } else if !pill.conversationMessages.contains(where: { $0.id == message.id }) {
+            pill.conversationMessages.append(message)
+        }
+    }
+
     private func handle(messages: [ChatMessage], since: Int, for pill: AgentPill) {
         guard messages.count > since else { return }
         let recent = Array(messages.suffix(from: since))
-        let displayMessages = recent.filter { message in
+        var displayMessages = recent.filter { message in
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return message.sender == .user
                 || !trimmed.isEmpty
                 || message.isStreaming
                 || !message.contentBlocks.isEmpty
                 || !message.displayResources.isEmpty
+        }
+        if displayMessages.contains(where: { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && Self.hasVisibleAssistantContent(message)
+        }) {
+            displayMessages.removeAll { message in
+                message.sender == .ai
+                    && message.isStreaming
+                    && !Self.hasVisibleAssistantContent(message)
+            }
         }
         if !displayMessages.isEmpty {
             pill.conversationMessages = displayMessages
@@ -1581,6 +1626,17 @@ final class AgentPillsManager: ObservableObject {
             pill.latestActivity = activity
             pill.transcript.append(activity)
             pill.markContentChanged()
+        }
+
+        if !aiMessage.isStreaming, Self.hasVisibleAssistantContent(aiMessage) {
+            Self.removeEmptyStreamingAssistantMessages(for: pill)
+            pill.status = .done
+            pill.completedAt = pill.completedAt ?? Date()
+            pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
+            pill.markContentChanged()
+            if pill.viewedAt != nil {
+                scheduleViewedExpiration(for: pill)
+            }
         }
     }
 
@@ -1618,20 +1674,11 @@ final class AgentPillsManager: ObservableObject {
         let trimmedFinalText = finalText?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedFinalText, !trimmedFinalText.isEmpty {
             if pill.aiMessage?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
-                var finalMessage = pill.aiMessage ?? ChatMessage(text: trimmedFinalText, sender: .ai)
+                Self.removeEmptyStreamingAssistantMessages(for: pill)
+                var finalMessage = Self.currentAssistantMessage(for: pill) ?? ChatMessage(text: trimmedFinalText, sender: .ai)
                 finalMessage.text = trimmedFinalText
                 finalMessage.isStreaming = false
-                pill.aiMessage = finalMessage
-                if pill.conversationMessages.isEmpty {
-                    pill.conversationMessages = [
-                        ChatMessage(text: pill.query, sender: .user),
-                        finalMessage,
-                    ]
-                } else if let index = pill.conversationMessages.firstIndex(where: { $0.id == finalMessage.id }) {
-                    pill.conversationMessages[index] = finalMessage
-                } else {
-                    pill.conversationMessages.append(finalMessage)
-                }
+                Self.upsertAssistantMessage(finalMessage, for: pill)
             }
             pill.latestActivity = String(trimmedFinalText.prefix(140))
             pill.markContentChanged()
@@ -1673,7 +1720,7 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private static func ensureFailureMessage(_ errorText: String, for pill: AgentPill) {
-        guard let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) else { return }
+        let failureText = AgentFailureTranscriptFormatter.transcriptText(for: errorText) ?? "Failed: \(errorText)"
         let failureMessage = ChatMessage(text: failureText, sender: .ai)
         if pill.conversationMessages.isEmpty {
             pill.conversationMessages = [
@@ -1703,20 +1750,26 @@ final class AgentPillsManager: ObservableObject {
             pill.completedAt = nil
             ensureStreamingAssistantMessage(for: pill)
         case .succeeded:
-            pill.status = .done
-            pill.completedAt = projection.completedAt ?? Date()
-            clearStreamingAssistantMessage(for: pill)
             if let statusText = projection.statusText?.trimmingCharacters(in: .whitespacesAndNewlines),
                !statusText.isEmpty {
+                removeEmptyStreamingAssistantMessages(for: pill)
+                var finalMessage = currentAssistantMessage(for: pill) ?? ChatMessage(text: statusText, sender: .ai)
+                finalMessage.text = statusText
+                finalMessage.isStreaming = false
+                upsertAssistantMessage(finalMessage, for: pill)
                 pill.latestActivity = String(statusText.prefix(140))
-                pill.markContentChanged()
-            } else if let last = pill.aiMessage {
+            } else if let last = currentAssistantMessage(for: pill) {
                 let trimmed = last.text.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     pill.latestActivity = String(trimmed.prefix(140))
-                    pill.markContentChanged()
                 }
+                clearStreamingAssistantMessage(for: pill)
+            } else {
+                clearStreamingAssistantMessage(for: pill)
             }
+            pill.status = .done
+            pill.completedAt = projection.completedAt ?? Date()
+            pill.markContentChanged()
         case .failed, .timedOut, .orphaned:
             let message = projection.failure?.displayMessage ?? projection.errorMessage ?? "Agent failed"
             pill.status = .failed(message)

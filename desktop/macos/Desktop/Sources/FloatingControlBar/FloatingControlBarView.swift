@@ -148,7 +148,7 @@ struct FloatingControlBarView: View {
 
     /// The notch "thinking" state: a PTT query is committed and being processed,
     /// with no live listening or open conversation surface. Shows the spinning
-    /// Omi mark + "Thinking" in the notch lobes.
+    /// Omi mark in the left notch lobe.
     private var showingNotchThinking: Bool {
         (state.isThinking || state.isVoiceResponseWaiting)
             && !state.showingAIConversation && !state.isVoiceListening
@@ -424,15 +424,7 @@ struct FloatingControlBarView: View {
             }
             .buttonStyle(.plain)
 
-            if showingNotchThinking {
-                Text("Thinking")
-                    .scaledFont(size: 11, weight: .medium)
-                    .foregroundStyle(.white.opacity(0.92))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            } else if notchSettingsHovering {
+            if !showingNotchThinking && notchSettingsHovering {
                 notchSettingsButton
                     .zIndex(1)
                     .transition(.scale.combined(with: .opacity))
@@ -1620,6 +1612,7 @@ private struct AgentMainChatView: View {
     }
 
     private var isRunning: Bool {
+        guard !hasFinalAssistantOutput else { return false }
         switch pill.status {
         case .queued, .starting, .running:
             return true
@@ -1630,7 +1623,7 @@ private struct AgentMainChatView: View {
 
     private var displayedMessages: [ChatMessage] {
         if !pill.conversationMessages.isEmpty {
-            return pill.conversationMessages
+            return normalizedAgentMessages(pill.conversationMessages)
         }
         var fallback = [ChatMessage(id: "\(pill.id.uuidString)-query", text: pill.query, sender: .user)]
         if let message = pill.aiMessage {
@@ -1639,11 +1632,19 @@ private struct AgentMainChatView: View {
                 fallback.append(message)
             }
         }
-        return fallback
+        return normalizedAgentMessages(fallback)
     }
 
     private var hasAssistantTurn: Bool {
         displayedMessages.contains { $0.sender == .ai }
+    }
+
+    private var hasFinalAssistantOutput: Bool {
+        displayedMessages.contains { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && hasVisibleAssistantContent(message)
+        }
     }
 
     private var activityText: String {
@@ -1734,7 +1735,7 @@ private struct AgentMainChatView: View {
     private var statusBadge: some View {
         HStack(spacing: 6) {
             Group {
-                if pill.status.isFinished {
+                if displayStatus.isFinished {
                     Button {
                         manager.dismiss(pillID: pill.id)
                         onBackToAgentRows()
@@ -1771,17 +1772,24 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBadgeLabel: some View {
-        Text(pill.status.displayLabel)
+        Text(displayStatus.displayLabel)
             .scaledFont(size: 9, weight: .bold)
             .foregroundColor(statusForeground)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(pill.status.tintColor.opacity(statusBackgroundOpacity))
+            .background(displayStatus.tintColor.opacity(statusBackgroundOpacity))
             .clipShape(Capsule())
     }
 
+    private var displayStatus: AgentPill.Status {
+        if hasFinalAssistantOutput, !pill.status.isFinished {
+            return .done
+        }
+        return pill.status
+    }
+
     private var statusForeground: Color {
-        switch pill.status {
+        switch displayStatus {
         case .queued, .starting, .running, .done:
             return .black.opacity(0.86)
         case .stopped:
@@ -1792,7 +1800,7 @@ private struct AgentMainChatView: View {
     }
 
     private var statusBackgroundOpacity: Double {
-        switch pill.status {
+        switch displayStatus {
         case .queued, .starting, .running, .done, .stopped:
             return 1
         case .failed:
@@ -1811,6 +1819,26 @@ private struct AgentMainChatView: View {
                 runningActivityView
             }
         }
+    }
+
+    private func normalizedAgentMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
+        let hasFinalOutput = messages.contains { message in
+            message.sender == .ai
+                && !message.isStreaming
+                && hasVisibleAssistantContent(message)
+        }
+        guard hasFinalOutput else { return messages }
+        return messages.filter { message in
+            !(message.sender == .ai
+                && message.isStreaming
+                && !hasVisibleAssistantContent(message))
+        }
+    }
+
+    private func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
+        !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.contentBlocks.isEmpty
+            || !message.displayResources.isEmpty
     }
 
     private var runningActivityView: some View {
