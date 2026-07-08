@@ -82,22 +82,39 @@ enum ScreenContextInterestDetector {
   }
 }
 
+enum ScreenContextAutoIncludeReason: Equatable {
+  case explicitScreenRequest
+  case ambientSurfaceContext
+
+  var isExplicitScreenRequest: Bool {
+    self == .explicitScreenRequest
+  }
+}
+
 enum ScreenContextAutoIncludePolicy {
+  static func reason(
+    userText: String,
+    systemPromptStyle: ChatSystemPromptStyle,
+    turnOwner: ChatTurnOwner
+  ) -> ScreenContextAutoIncludeReason? {
+    if ScreenContextInterestDetector.isScreenContextRequest(userText) {
+      return .explicitScreenRequest
+    }
+
+    switch turnOwner {
+    case .floatingDefault, .floatingVoice, .taskChat, .agentPill:
+      return .ambientSurfaceContext
+    case .mainChat:
+      return systemPromptStyle == .floating ? .ambientSurfaceContext : nil
+    }
+  }
+
   static func shouldInclude(
     userText: String,
     systemPromptStyle: ChatSystemPromptStyle,
     turnOwner: ChatTurnOwner
   ) -> Bool {
-    if ScreenContextInterestDetector.isScreenContextRequest(userText) {
-      return true
-    }
-
-    switch turnOwner {
-    case .floatingDefault, .floatingVoice, .taskChat, .agentPill:
-      return true
-    case .mainChat:
-      return systemPromptStyle == .floating
-    }
+    reason(userText: userText, systemPromptStyle: systemPromptStyle, turnOwner: turnOwner) != nil
   }
 }
 
@@ -442,6 +459,30 @@ enum ScreenContextWorkContextBuilder {
         "type": "screen_recording"
       ],
     ]
+  }
+
+  static func ambientPayload(from payload: [String: Any]) -> [String: Any] {
+    var minimized: [String: Any] = [
+      "ok": payload["ok"] as? Bool ?? false,
+      "name": "get_work_context",
+      "ambient": true,
+    ]
+    if let failureCode = payload["failure_code"] as? String {
+      minimized["failure_code"] = failureCode
+    }
+    if let screenNow = payload["screen_now"] as? [String: Any] {
+      var compactScreen: [String: Any] = [:]
+      for key in ["available", "app_name", "window_title", "captured_at", "age_seconds"] {
+        if let value = screenNow[key] {
+          compactScreen[key] = value
+        }
+      }
+      minimized["screen_now"] = compactScreen
+    }
+    if let timeline = payload["timeline"] as? [[String: Any]] {
+      minimized["timeline_count"] = timeline.count
+    }
+    return minimized
   }
 
   static func telemetryValues(from payload: [String: Any]) -> (

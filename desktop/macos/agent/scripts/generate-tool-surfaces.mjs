@@ -194,7 +194,6 @@ function realtimeTools() {
     "inspect_agent_artifacts",
     "update_agent_artifact_lifecycle",
     "spawn_agent",
-    "run_agent_and_wait",
     "set_desktop_attention_override",
   ]);
 
@@ -211,7 +210,7 @@ function realtimeTools() {
     if (tool.voice?.realtimeExpose === false) return false;
     if (tool.voice?.realtimeExpose === true) return true;
     if (tool.executor.kind === "runtimeControl") {
-      return REALTIME_CONTROL_TOOLS.has(tool.name);
+      return REALTIME_CONTROL_TOOLS.has(tool.name) && hasRealtimeVoiceSurface(tool);
     }
     return hasRealtimeVoiceSurface(tool);
   };

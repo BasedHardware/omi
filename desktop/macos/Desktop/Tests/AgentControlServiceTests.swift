@@ -214,4 +214,45 @@ final class AgentControlServiceTests: XCTestCase {
     XCTAssertNotNil(missing)
     XCTAssertTrue(missing!.contains("artifact reference or id"))
   }
+
+  func testVoiceCanonicalizationMapsSnakeCaseAndStripsModelOnlyFields() {
+    let service = AgentControlService()
+    let input: [String: Any] = [
+      "objective": "check something",
+      "brief": "visible text only",
+      "parent_run_id": "run_parent",
+      "max_depth": 2,
+      "max_budget_usd": 3,
+      "run_mode": "act",
+    ]
+
+    let spawn = service.canonicalizeVoiceArguments(name: "spawn_agent", arguments: input)
+    XCTAssertEqual(spawn["parentRunId"] as? String, "run_parent")
+    XCTAssertNil(spawn["parent_run_id"])
+    XCTAssertNil(spawn["brief"])
+
+    let runAndWait = service.canonicalizeVoiceArguments(name: "run_agent_and_wait", arguments: input)
+    XCTAssertEqual(runAndWait["parentRunId"] as? String, "run_parent")
+    XCTAssertEqual(runAndWait["maxDepth"] as? Int, 2)
+    XCTAssertEqual(runAndWait["maxBudgetUsd"] as? Int, 3)
+    XCTAssertEqual(runAndWait["runMode"] as? String, "act")
+  }
+
+  func testUnresolvedVoiceHandlesFailBeforeRuntimeDispatch() {
+    let service = AgentControlService()
+
+    let agentError = service.unresolvedVoiceHandleError(
+      name: HubTool.getAgentRun.rawValue,
+      arguments: ["agentRef": "agent_99"]
+    )
+    XCTAssertNotNil(agentError)
+    XCTAssertTrue(agentError!.contains("couldn't resolve"))
+
+    let artifactError = service.unresolvedVoiceHandleError(
+      name: HubTool.updateAgentArtifactLifecycle.rawValue,
+      arguments: ["artifactRef": "artifact_99"]
+    )
+    XCTAssertNotNil(artifactError)
+    XCTAssertTrue(artifactError!.contains("couldn't resolve"))
+  }
 }

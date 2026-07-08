@@ -47,6 +47,16 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertFalse(source.contains("out = errorText }"))
   }
 
+  func testBeginTurnDoesNotUploadSpeculativeScreenshotPixels() throws {
+    let source = try realtimeHubControllerSource()
+    let beginRange = try XCTUnwrap(source.range(of: "func beginTurn()"))
+    let nextRange = try XCTUnwrap(source.range(of: "private func captureInterruptedTurnPayloadIfNeeded()", range: beginRange.upperBound..<source.endIndex))
+    let beginTurnSource = String(source[beginRange.lowerBound..<nextRange.lowerBound])
+
+    XCTAssertTrue(beginTurnSource.contains("speculativeScreenshot = jpeg"))
+    XCTAssertFalse(beginTurnSource.contains("sendVideoFrame"))
+  }
+
   private struct DummyDecodeError: Error {}
 
   private func realtimeHubControllerSource() throws -> String {

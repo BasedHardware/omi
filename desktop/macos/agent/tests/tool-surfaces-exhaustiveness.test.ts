@@ -34,6 +34,13 @@ function generatedRealtimeToolDefinitions(): Array<{ name: string; parameters: R
   return JSON.parse(match[1]) as Array<{ name: string; parameters: Record<string, unknown> }>;
 }
 
+function hasRealtimeSurface(tool: (typeof omiToolManifest)[number]): boolean {
+  if (tool.surfaces.includes("realtime_voice")) return true;
+  return Object.values(tool.aliasCapabilityDocs ?? {}).some((doc) =>
+    (doc.surfaces ?? tool.surfaces).includes("realtime_voice"),
+  );
+}
+
 describe("tool surface exhaustiveness", () => {
   it("matches the checked-in manifest fixture", () => {
     const fixture = JSON.parse(readFileSync(fixturePath, "utf8"));
@@ -106,6 +113,39 @@ describe("tool surface exhaustiveness", () => {
     expect(providerSchemas.length).toBeGreaterThan(0);
     for (const { surface, name, schema } of providerSchemas) {
       assertFlatProviderInputSchema(surface, name, schema);
+    }
+  });
+
+  it("only generates realtime tools that declare a realtime surface", () => {
+    const generated = generatedRealtimeToolDefinitions().map((tool) => tool.name);
+    expect(generated).not.toContain("run_agent_and_wait");
+
+    for (const name of generated) {
+      const tool = omiToolManifest.find((candidate) => {
+        if (candidate.name === name) return true;
+        return Object.keys(candidate.aliasCapabilityDocs ?? {}).includes(name);
+      });
+      expect(tool, `missing manifest entry for realtime tool ${name}`).toBeTruthy();
+      expect(hasRealtimeSurface(tool!), `${name} must declare realtime_voice`).toBe(true);
+    }
+  });
+
+  it("exposes runtime dispatch scoping fields in provider schemas", () => {
+    const dispatch = omiToolManifest.find((tool) => tool.name === "create_desktop_dispatch");
+    expect(dispatch).toBeTruthy();
+    const properties = dispatch!.inputSchema.properties;
+    for (const field of [
+      "recommendedDefault",
+      "sourceSessionId",
+      "sourceRunId",
+      "sourceAttemptId",
+      "sourceArtifactId",
+      "capability",
+      "operation",
+      "resourceRef",
+      "expiresAtMs",
+    ]) {
+      expect(properties, `create_desktop_dispatch missing ${field}`).toHaveProperty(field);
     }
   });
 });

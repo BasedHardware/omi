@@ -3382,33 +3382,46 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             }
-            if effectiveImageData == nil && ScreenContextAutoIncludePolicy.shouldInclude(
+            if effectiveImageData == nil, let screenContextReason = ScreenContextAutoIncludePolicy.reason(
                 userText: trimmedText,
                 systemPromptStyle: systemPromptStyle,
                 turnOwner: turnOwner
             ) {
                 let screenRecordingGranted = CGPreflightScreenCaptureAccess()
-                let screenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
-                let screenContextEnvelope: [String: Any] = [
-                    "permission": [
-                        "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
-                    ],
-                    "context": screenContextPayload,
-                    "guidance": screenRecordingGranted
-                        ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
-                        : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.",
-                ]
-                if let data = try? JSONSerialization.data(
-                    withJSONObject: screenContextEnvelope,
-                    options: [.prettyPrinted, .sortedKeys]
-                ), let json = String(data: data, encoding: .utf8) {
-                    systemPrompt += "\n\n<auto_screen_context>\n\(json)\n</auto_screen_context>"
-                    responseMetrics.recordToolRequested(name: "get_work_context")
-                    if let contextData = try? JSONSerialization.data(
-                        withJSONObject: screenContextPayload,
-                        options: [.sortedKeys]
-                    ), let contextJSON = String(data: contextData, encoding: .utf8) {
-                        responseMetrics.recordToolResult(name: "get_work_context", result: contextJSON)
+                if !screenRecordingGranted && !screenContextReason.isExplicitScreenRequest {
+                    // Ambient floating/task-agent turns are allowed to use screen context when already granted,
+                    // but they must not manufacture a screen-permission request for generic utterances.
+                } else {
+                    let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+                    let screenContextPayload = screenContextReason.isExplicitScreenRequest
+                        ? rawScreenContextPayload
+                        : ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
+                    let screenContextEnvelope: [String: Any] = [
+                        "permission": [
+                            "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
+                        ],
+                        "reason": screenContextReason.isExplicitScreenRequest
+                            ? "explicit_screen_request"
+                            : "ambient_surface_context",
+                        "context": screenContextPayload,
+                        "guidance": screenContextReason.isExplicitScreenRequest
+                            ? (screenRecordingGranted
+                                ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
+                                : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.")
+                            : "Use this minimized ambient context only if it helps resolve a deictic or app-local reference. Do not mention screen access or request Screen Recording permission unless the user explicitly asks about the current screen.",
+                    ]
+                    if let data = try? JSONSerialization.data(
+                        withJSONObject: screenContextEnvelope,
+                        options: [.prettyPrinted, .sortedKeys]
+                    ), let json = String(data: data, encoding: .utf8) {
+                        systemPrompt += "\n\n<auto_screen_context>\n\(json)\n</auto_screen_context>"
+                        responseMetrics.recordToolRequested(name: "get_work_context")
+                        if let contextData = try? JSONSerialization.data(
+                            withJSONObject: screenContextPayload,
+                            options: [.sortedKeys]
+                        ), let contextJSON = String(data: contextData, encoding: .utf8) {
+                            responseMetrics.recordToolResult(name: "get_work_context", result: contextJSON)
+                        }
                     }
                 }
             }

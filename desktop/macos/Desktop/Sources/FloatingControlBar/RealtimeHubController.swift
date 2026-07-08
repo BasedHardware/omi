@@ -12,7 +12,7 @@ import Foundation
 //   • executes the model's tool calls against EXISTING app code / endpoints:
 //       ask_higher_model → POST /v2/chat/completions (Claude, prompt-cached)
 //       spawn_agent      → canonical background agent + floating pill projection
-//       screenshot       → ScreenCaptureManager (+ inject into the session)
+//       screenshot       → ScreenCaptureManager (+ inject into the session when explicitly requested)
 //       point_click      → local CGEvent click
 //
 // This BYPASSES the Haiku classify() router — routing is the model's tool choice.
@@ -1014,9 +1014,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pending.pendingBegin = false
       session?.beginInputTurn(interrupting: false)
     }
-    if provider == .gemini, let speculativeScreenshot {
-      session?.sendVideoFrame(speculativeScreenshot, mime: "image/jpeg")
-    }
     flushBargeInReplacementAudioBuffer(pending.audioBuffer)
     if pending.pendingCommit {
       pending.pendingCommit = false
@@ -1167,19 +1164,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         session?.beginInputTurn(interrupting: providerResponseInFlight)
       }
     }
-    // Capture the screen at turn START and, for Gemini, send it in-turn right away — early
-    // enough that the ~450KB JPEG uploads/decodes during the seconds of speech, so the
-    // model can see it when it answers. A frame attached at commit (PTT-up) lands too late:
-    // the model starts generating before it decodes and answers blind on the first turn
-    // (correct only on the next turn, once the frame is in context). Non-blocking.
+    // Capture locally at turn START so the explicit screenshot tool can respond without
+    // blocking on screen capture. Do not upload raw pixels speculatively; provider-visible
+    // screen access must happen through an explicit tool request.
     Task.detached(priority: .utility) {
       let jpeg = ScreenCaptureManager.captureScreenJPEG()
       await MainActor.run {
         guard self.turnGeneration == screenshotTurnGeneration else { return }
         self.speculativeScreenshot = jpeg
-        if self.sessionProvider == .gemini, let jpeg {
-          self.session?.sendVideoFrame(jpeg, mime: "image/jpeg")
-        }
       }
     }
   }
@@ -1604,7 +1596,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       ) {
         try await self.agentControlService.executeVoiceTool(name: name, arguments: arguments)
       }
-    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle, .runAgentAndWait:
+    case .listAgentSessions, .getAgentRun, .cancelAgentRun, .inspectAgentArtifacts, .updateAgentArtifactLifecycle:
       runToolAndSpeak(
         source: source,
         callId: callId, name: name, detail: agentControlService.logDetail(name: name, arguments: arguments),
@@ -1738,12 +1730,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         return result
       }
     case .screenshot:
-      // Gemini: the screen is already attached to every turn (see commitTurn), so the
-      // tool is just an ack — pushing another image here is the broken path (mid-tool-call
-      // injection self-interrupts the turn / closes the socket 1007). OpenAI: add the image
-      // as an ordered conversation item (that path works for OpenAI).
+      // Raw pixels enter provider context only after an explicit screenshot tool call.
       let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
       if sessionProvider == .openai, let shot { session?.injectImage(shot) }
+      if sessionProvider == .gemini, let shot { session?.sendVideoFrame(shot, mime: "image/jpeg") }
       log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,

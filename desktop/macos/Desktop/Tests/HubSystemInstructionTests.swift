@@ -10,7 +10,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
         XCTAssertTrue(instr.contains("spawn_agent"))
         XCTAssertTrue(instr.contains("list_agent_sessions"))
-        XCTAssertTrue(instr.contains("run_agent_and_wait"))
+        XCTAssertFalse(instr.contains("run_agent_and_wait"))
         XCTAssertTrue(instr.contains("set_desktop_attention_override"))
         XCTAssertTrue(instr.contains("get_agent_run"))
         XCTAssertTrue(instr.contains("cancel_agent_run"))
@@ -123,6 +123,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(toolNames.contains(HubTool.cancelAgentRun.rawValue))
         XCTAssertTrue(toolNames.contains(HubTool.inspectAgentArtifacts.rawValue))
         XCTAssertTrue(toolNames.contains(HubTool.updateAgentArtifactLifecycle.rawValue))
+        XCTAssertFalse(toolNames.contains("run_agent_and_wait"))
 
         let cancelTool = tools.first { ($0["name"] as? String) == HubTool.cancelAgentRun.rawValue }
         XCTAssertTrue((cancelTool?["description"] as? String ?? "").contains("canonical"))

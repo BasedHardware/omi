@@ -79,6 +79,32 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertEqual(facts?.succeeded, false)
   }
 
+  func testAmbientPayloadMinimizesScreenContext() throws {
+    let payload: [String: Any] = [
+      "ok": true,
+      "screen_now": [
+        "available": true,
+        "app_name": "Safari",
+        "window_title": "Docs",
+        "ocr_preview": "Sensitive visible text",
+        "image_bytes": 12345,
+      ],
+      "timeline": [
+        ["app_name": "Safari"]
+      ],
+    ]
+
+    let ambient = ScreenContextWorkContextBuilder.ambientPayload(from: payload)
+    let data = try JSONSerialization.data(withJSONObject: ambient, options: [.sortedKeys])
+    let output = String(data: data, encoding: .utf8)!
+
+    XCTAssertTrue(output.contains(#""ambient":true"#))
+    XCTAssertTrue(output.contains(#""app_name":"Safari""#))
+    XCTAssertFalse(output.contains("Sensitive visible text"))
+    XCTAssertFalse(output.contains("image_bytes"))
+    XCTAssertTrue(output.contains(#""timeline_count":1"#))
+  }
+
   func testChatMessageSentPropertyNamesDoNotUseAmbiguousHasContext() throws {
     let sourcesDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -108,6 +134,22 @@ final class ScreenContextTelemetryTests: XCTestCase {
   }
 
   func testScreenContextAutoIncludePolicyCoversFloatingAndAgentTurns() {
+    XCTAssertEqual(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "can you see my screen?",
+        systemPromptStyle: .main,
+        turnOwner: .mainChat
+      ),
+      .explicitScreenRequest
+    )
+    XCTAssertEqual(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "which one",
+        systemPromptStyle: .floating,
+        turnOwner: .floatingDefault
+      ),
+      .ambientSurfaceContext
+    )
     XCTAssertTrue(
       ScreenContextAutoIncludePolicy.shouldInclude(
         userText: "which one",
