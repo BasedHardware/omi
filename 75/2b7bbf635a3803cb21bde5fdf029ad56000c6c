@@ -1,0 +1,73 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  s_897886a34066e7::t_56aa1d4abe901c 133,137,146,148,152
+  s_897886a34066e7::t_f21f863f0769e1 184,186
+  s_897886a34066e7::t_cf91093bc5a875 599
+  s_897886a34066e7::t_f89a199147e7d6 394,403,406,418
+  s_897886a34066e7::t_5d64f5fc48f83f 233,239
+  s_897886a34066e7::t_5e2acc4791c314 102
+  s_897886a34066e7::t_072c1a8d7c4376 259,267,279,287
+  s_897886a34066e7::t_d87ea22483ddfa 356,360,365,371,378
+  s_897886a34066e7::t_fe785eb1141e9d 168,170
+  s_897886a34066e7::t_607f9b8c019f43 434
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_897886a34066e7::t_6d04e2ebc9e78c 1230-1231
+  s_897886a34066e7::t_85cc45fb1b02a9 1246,1248
+  s_897886a34066e7::t_430448a2bd1dba 950
+  s_897886a34066e7::t_8e4ead297de1d2 970
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMessagesPage.swift
+  s_897886a34066e7::t_cf1c1150a7f79d 26-27
+  s_897886a34066e7::t_b78430201c5d89 270,312,798-1103
+  s_897886a34066e7::t_58e8aca5d2ba46 251
+  s_897886a34066e7::t_33ad247721a331 286,293-311
+  s_897886a34066e7::t_62f1d3b4217936 222-232,234-237,239-250,252-257,265-269
+  s_897886a34066e7::t_8ed91ea35407aa 271
+  s_897886a34066e7::t_02e1450cd2e0e8 313
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMemoryPage.swift
+  s_897886a34066e7::t_1fe3696c78bfaa 185-206
+desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
+  s_897886a34066e7::t_c8137c58168511 71
+  s_897886a34066e7::t_9c7f415c6f31a9 20-22,28,32,34
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_897886a34066e7::t_ec55032c95ddbf 1043-1046
+  s_897886a34066e7::t_17914f3f0f2836 37-38
+  s_897886a34066e7::t_f70d5053b5528f 812
+  s_897886a34066e7::t_9f0234b4520149 617-621
+  s_897886a34066e7::t_e754de343af772 971-975
+  s_897886a34066e7::t_7a99a3de1778e2 970
+desktop/macos/Desktop/Sources/Redesign/RedesignTopBar.swift
+  s_897886a34066e7::t_a64d169633b853 3-6,9,11,14,19,56-80,102
+desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
+  s_897886a34066e7::t_c83da8306d1cd4 140
+  s_897886a34066e7::t_d0bb076b49b777 151-152
+  s_897886a34066e7::t_d610e7d938901f 16-19
+  s_897886a34066e7::t_e71fe4d3858b31 32,35-36,40
+  s_897886a34066e7::t_81d53238cc79c0 92-93,104
+  s_897886a34066e7::t_7afca8f0544074 163-164
+  s_897886a34066e7::t_e5e97a42334afd 41
+desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
+  s_897886a34066e7::t_4a96d6cac7045f 31,33,37
+  s_897886a34066e7::t_481e92a25171b9 90,100
+  s_897886a34066e7::t_183f27a514143d 49,56
+desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
+  s_897886a34066e7::t_a560eae7119475 2150-2155,2158,2164-2165,2173,2177,2184
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
+  s_897886a34066e7::t_27347ac400917c 26-28,31,36,40,43-60,64-65
+desktop/macos/Desktop/Sources/Redesign/RedesignAppTour.swift
+  s_897886a34066e7::t_0df9c8bdd2529e 1-341
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "752b7bbf635a3803cb21bde5fdf029ad56000c6c",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
