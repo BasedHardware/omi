@@ -73,20 +73,38 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     XCTAssertEqual(ftsDescriptions, durableDescriptions)
   }
 
-  func testRepairToleratesMissingActionItemsFTSShadowTable() async throws {
+  func testRepairRebuildsActionItemsFTSFromDurableRows() async throws {
     let existing = try await ActionItemStorage.shared.insertLocalActionItem(
       ActionItemRecord(description: "shadow table durable row", source: "test"))
-    XCTAssertNotNil(existing.id)
+    let existingId = try XCTUnwrap(existing.id)
 
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
       return XCTFail("database should be initialized")
     }
 
     try await dbQueue.write { db in
-      try db.execute(sql: "DROP TABLE action_items_fts_data")
+      try db.execute(
+        sql: """
+          INSERT INTO action_items_fts(action_items_fts, rowid, description)
+          VALUES ('delete', ?, ?)
+          """,
+        arguments: [existingId, existing.description])
     }
 
-    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "missing shadow table test")
+    let missingMatches = try await dbQueue.read { db in
+      try String.fetchAll(
+        db,
+        sql: """
+          SELECT action_items.description
+          FROM action_items_fts
+          JOIN action_items ON action_items_fts.rowid = action_items.id
+          WHERE action_items_fts MATCH 'shadow'
+          ORDER BY action_items.id
+          """)
+    }
+    XCTAssertEqual(missingMatches, [])
+
+    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "fts rebuild test")
 
     let afterRepair = try await ActionItemStorage.shared.insertLocalActionItem(
       ActionItemRecord(description: "shadow table inserted after repair", source: "test"))
