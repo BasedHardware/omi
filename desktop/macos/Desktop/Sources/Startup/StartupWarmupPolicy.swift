@@ -72,9 +72,9 @@ struct DelayedFileIndexingBackfillState {
         return true
     }
 
-    mutating func markScanCompleted() {
+    mutating func finishScan(succeeded: Bool) {
         isScheduled = false
-        shouldMarkComplete = true
+        shouldMarkComplete = succeeded
     }
 
     mutating func releaseReservation() {

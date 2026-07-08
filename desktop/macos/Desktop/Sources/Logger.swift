@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Sentry
 
@@ -11,6 +12,8 @@ private let logFile: String = {
 func omiLogFilePath() -> String { logFile }
 
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
+private let logFileFailureCooldown: TimeInterval = 60
+private var lastLogFileFailure: Date?
 private let dateFormatter: DateFormatter = {
   let formatter = DateFormatter()
   formatter.dateFormat = "HH:mm:ss.SSS"  // Added milliseconds for perf tracking
@@ -77,16 +80,123 @@ private func writeToLogFile(_ data: Data) {
     // the log permanently world-readable.
     didEnsureLogFilePermissions = ensureLogFileOwnerOnly(atPath: logFile)
   }
-  if FileManager.default.fileExists(atPath: logFile) {
-    if let handle = FileHandle(forWritingAtPath: logFile) {
-      handle.seekToEndOfFile()
-      handle.write(data)
-      handle.closeFile()
+  switch LocalLogFileWriter.append(data, to: logFile) {
+  case .success:
+    return
+  case .failure(let error):
+    reportLogFileFailure(error)
+  }
+}
+
+private func reportLogFileFailure(_ error: LocalLogFileWriteError) {
+  let now = Date()
+  if let lastLogFileFailure, now.timeIntervalSince(lastLogFileFailure) < logFileFailureCooldown {
+    return
+  }
+  lastLogFileFailure = now
+  writeToStandardError("[logger] failed to append \(logFile): \(error.description)\n")
+}
+
+private func writeToStandardError(_ message: String) {
+  message.withCString { buffer in
+    var remaining = strlen(buffer)
+    var pointer = UnsafeRawPointer(buffer)
+    while remaining > 0 {
+      let written = Darwin.write(STDERR_FILENO, pointer, remaining)
+      if written > 0 {
+        pointer = pointer.advanced(by: written)
+        remaining -= written
+      } else if written == -1 && errno == EINTR {
+        continue
+      } else {
+        return
+      }
     }
-  } else {
-    // Recreate owner-only if the file was removed mid-session.
-    FileManager.default.createFile(
-      atPath: logFile, contents: data, attributes: [.posixPermissions: 0o600])
+  }
+}
+
+enum LocalLogFileWriteError: Error, Equatable, CustomStringConvertible {
+  case openFailed(errno: Int32)
+  case statFailed(errno: Int32)
+  case unsafeFile
+  case writeFailed(errno: Int32)
+  case closeFailed(errno: Int32)
+
+  var description: String {
+    switch self {
+    case .openFailed(let code):
+      return "open failed: \(Self.message(for: code))"
+    case .statFailed(let code):
+      return "stat failed: \(Self.message(for: code))"
+    case .unsafeFile:
+      return "unsafe log file"
+    case .writeFailed(let code):
+      return "write failed: \(Self.message(for: code))"
+    case .closeFailed(let code):
+      return "close failed: \(Self.message(for: code))"
+    }
+  }
+
+  private static func message(for code: Int32) -> String {
+    String(cString: strerror(code))
+  }
+}
+
+enum LocalLogFileWriter {
+  static func append(_ data: Data, to path: String) -> Result<Void, LocalLogFileWriteError> {
+    let flags = O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK
+    let fd = open(path, flags, S_IRUSR | S_IWUSR)
+    guard fd >= 0 else {
+      return .failure(.openFailed(errno: errno))
+    }
+
+    if let validationFailure = validateOpenedFile(fd) {
+      close(fd)
+      return .failure(validationFailure)
+    }
+
+    let writeFailure = data.withUnsafeBytes { rawBuffer -> LocalLogFileWriteError? in
+      guard let baseAddress = rawBuffer.baseAddress else { return nil }
+      var pointer = baseAddress
+      var remaining = rawBuffer.count
+
+      while remaining > 0 {
+        let written = Darwin.write(fd, pointer, remaining)
+        if written > 0 {
+          pointer = pointer.advanced(by: written)
+          remaining -= written
+        } else if written == -1 && errno == EINTR {
+          continue
+        } else {
+          return .writeFailed(errno: errno)
+        }
+      }
+      return nil
+    }
+
+    let closeStatus = close(fd)
+    if let writeFailure {
+      return .failure(writeFailure)
+    }
+    guard closeStatus == 0 else {
+      return .failure(.closeFailed(errno: errno))
+    }
+    return .success(())
+  }
+
+  private static func validateOpenedFile(_ fd: Int32) -> LocalLogFileWriteError? {
+    var fileStat = stat()
+    guard fstat(fd, &fileStat) == 0 else {
+      return .statFailed(errno: errno)
+    }
+
+    let isRegularFile = (fileStat.st_mode & S_IFMT) == S_IFREG
+    let isOwnedByCurrentUser = fileStat.st_uid == geteuid()
+    let hasSingleLink = fileStat.st_nlink == 1
+    guard isRegularFile, isOwnedByCurrentUser, hasSingleLink else {
+      return .unsafeFile
+    }
+    return nil
   }
 }
 

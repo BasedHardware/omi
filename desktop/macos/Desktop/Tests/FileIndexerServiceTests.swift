@@ -70,9 +70,10 @@ final class FileIndexerServiceTests: XCTestCase {
     let policy = FileIndexScanPolicy(maxDepth: 1, maxFileSize: 12)
     let service = FileIndexerService(databasePool: databasePool, scanPolicy: policy, batchSize: 2)
 
-    let firstCount = await service.scanFolders([root])
+    let firstScanResult = await service.scanFolders([root])
 
-    XCTAssertEqual(firstCount, 4)
+    XCTAssertEqual(firstScanResult.indexedCount, 4)
+    XCTAssertNil(firstScanResult.failure)
     var records = try fetchIndexedRecords()
     XCTAssertEqual(records.map(\.filename).sorted(), ["Example.app", "main.py", "remove.txt", "root.md"])
     XCTAssertEqual(records.first(where: { $0.filename == "Example.app" })?.fileType, "application")
@@ -91,9 +92,10 @@ final class FileIndexerServiceTests: XCTestCase {
     try FileManager.default.removeItem(at: deletedLater)
     _ = try writeFile("new", at: root.appendingPathComponent("new.csv"))
 
-    let secondCount = await service.scanFolders([root], incremental: true)
+    let secondScanResult = await service.scanFolders([root], incremental: true)
 
-    XCTAssertEqual(secondCount, 1)
+    XCTAssertEqual(secondScanResult.indexedCount, 1)
+    XCTAssertNil(secondScanResult.failure)
     records = try fetchIndexedRecords()
     XCTAssertEqual(records.map(\.filename).sorted(), ["Example.app", "main.py", "new.csv", "root.md"])
     XCTAssertNil(records.first { $0.filename == deletedFilename })

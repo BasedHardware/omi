@@ -238,16 +238,27 @@ final class StartupWarmupPolicyTests: XCTestCase {
         XCTAssertTrue(gate.reserve())
     }
 
-    func testFileIndexingBackfillMarksCompleteOnlyAfterScanCompletes() {
+    func testFileIndexingBackfillMarksCompleteOnlyAfterSuccessfulScan() {
         var backfill = DelayedFileIndexingBackfillState()
 
         XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
         XCTAssertFalse(backfill.shouldMarkComplete)
 
-        backfill.markScanCompleted()
+        backfill.finishScan(succeeded: true)
 
         XCTAssertTrue(backfill.shouldMarkComplete)
         XCTAssertFalse(backfill.reserveIfNeeded(hasCompletedBackfill: true))
+    }
+
+    func testFileIndexingBackfillDoesNotMarkCompleteAfterFailedScan() {
+        var backfill = DelayedFileIndexingBackfillState()
+
+        XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
+
+        backfill.finishScan(succeeded: false)
+
+        XCTAssertFalse(backfill.shouldMarkComplete)
+        XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
     }
 
     func testFileIndexingBackfillCanRescheduleAfterReservationRelease() {
@@ -260,6 +271,25 @@ final class StartupWarmupPolicyTests: XCTestCase {
 
         XCTAssertFalse(backfill.shouldMarkComplete)
         XCTAssertTrue(backfill.reserveIfNeeded(hasCompletedBackfill: false))
+    }
+
+    func testInitialFileIndexingBackfillUsesBackgroundScanResultBeforeMarkingComplete() throws {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let homeViewURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/MainWindow/DesktopHomeView.swift")
+        let source = try String(contentsOf: homeViewURL, encoding: .utf8)
+
+        guard
+            let scanRange = source.range(of: "let scanResult = await FileIndexerService.shared.backgroundRescan()"),
+            let successRange = source.range(of: "let scanSucceeded = scanResult.map { $0.failure == nil } ?? false"),
+            let finishRange = source.range(of: "initialFileIndexingBackfill.finishScan(succeeded: scanSucceeded)")
+        else {
+            return XCTFail("Initial file indexing backfill must gate completion on the background scan result")
+        }
+
+        XCTAssertLessThan(scanRange.lowerBound, successRange.lowerBound)
+        XCTAssertLessThan(successRange.lowerBound, finishRange.lowerBound)
     }
 
     func testSessionScopeRejectsSignedOutAndMismatchedUsers() {

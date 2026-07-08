@@ -1,0 +1,36 @@
+version: 2
+name: file-indexing
+tier: 1
+description: File indexing startup and onboarding flow — verify the desktop home surface can run file-indexing backfill without crashing or leaving stale pipeline state
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/FileIndexingView.swift
+  - desktop/macos/Desktop/Sources/Logger.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+  - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Assert Dashboard State
+    state.expect:
+      state.selectedTabIndex: 0
+
+  - id: S3
+    name: Assert File Indexing Logs Are Clean
+    log.expect:
+      absent:
+        - "FileIndexer: Batch insert error"
+        - "FileIndexer: Batch delete error"
+        - "FileIndexingView: File scan failed"
