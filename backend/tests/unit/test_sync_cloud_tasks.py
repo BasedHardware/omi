@@ -449,6 +449,27 @@ def _load_sync_router_for_fast_path():
     sys.modules['utils.cloud_tasks'].enqueue_sync_job = MagicMock()
     sys.modules['utils.byok'].has_byok_keys = MagicMock(return_value=False)
 
+    sync_dispatch_fallback_calls = []
+    sync_dispatch_attempt_modes = []
+
+    def _track_record_fallback(**kwargs):
+        sync_dispatch_fallback_calls.append(kwargs)
+
+    def _counter_labels(**kwargs):
+        child = MagicMock()
+        mode = kwargs.get('mode')
+
+        def _inc():
+            sync_dispatch_attempt_modes.append(mode)
+
+        child.inc = _inc
+        return child
+
+    mock_counter = MagicMock()
+    mock_counter.labels = _counter_labels
+    sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=mock_counter)
+    sys.modules['utils.observability.fallback'] = MagicMock(record_fallback=_track_record_fallback)
+
     class _AudioPrecacheResponse(BaseModel):
         pass
 
@@ -474,7 +495,7 @@ def _load_sync_router_for_fast_path():
     module._stage_files_to_gcs = MagicMock()
     module._cleanup_files = MagicMock()
 
-    return module, saved_modules, mock_sync_jobs, BytesIO
+    return module, saved_modules, mock_sync_jobs, BytesIO, sync_dispatch_fallback_calls, sync_dispatch_attempt_modes
 
 
 @pytest.mark.asyncio
@@ -483,7 +504,7 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
     import shutil
     from starlette.datastructures import UploadFile
 
-    module, saved_modules, mock_sync_jobs, BytesIO = _load_sync_router_for_fast_path()
+    module, saved_modules, mock_sync_jobs, BytesIO, _, _ = _load_sync_router_for_fast_path()
     unstage_calls = []
     inline_pipeline_started = []
 
@@ -514,6 +535,133 @@ async def test_sync_post_enqueue_cleanup_does_not_unstage(monkeypatch):
         module.start_background_task.assert_not_called()
         module.create_sync_job.assert_called_once()
         module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_cloud_tasks_success_increments_attempts(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == []
+        assert attempt_modes == ['cloud_tasks']
+        module.enqueue_sync_job.assert_called_once()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_enqueue_failed_records_degraded_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.start_background_task = MagicMock()
+    module.enqueue_sync_job = MagicMock(side_effect=RuntimeError('enqueue boom'))
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'cloud_tasks',
+                'to_mode': 'inline',
+                'reason': 'enqueue_failed',
+                'outcome': 'degraded',
+            }
+        ]
+        assert attempt_modes == ['inline']
+        assert module.start_background_task.call_count == 2
+        pipeline_call = module.start_background_task.call_args_list[-1]
+        assert pipeline_call.kwargs.get('name', '').startswith('sync_pipeline:')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_byok_records_recovered_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.has_byok_keys = MagicMock(return_value=True)
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'cloud_tasks',
+                'to_mode': 'inline',
+                'reason': 'byok',
+                'outcome': 'recovered',
+            }
+        ]
+        assert attempt_modes == ['inline']
+        module.start_background_task.assert_called_once()
+        module.enqueue_sync_job.assert_not_called()
+    finally:
+        sys.modules.pop('routers.sync', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_dispatch_disabled_records_recovered_inline(monkeypatch):
+    from starlette.datastructures import UploadFile
+
+    module, saved_modules, _, BytesIO, fallback_calls, attempt_modes = _load_sync_router_for_fast_path()
+    module.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    module.start_background_task = MagicMock()
+
+    try:
+        upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
+        resp = await module.sync_local_files_v2(files=[upload], uid='test-uid')
+
+        assert resp.status_code == 202
+        assert fallback_calls == [
+            {
+                'component': 'sync_dispatch',
+                'from_mode': 'cloud_tasks',
+                'to_mode': 'inline',
+                'reason': 'dispatch_disabled',
+                'outcome': 'recovered',
+            }
+        ]
+        assert attempt_modes == ['inline']
+        module.start_background_task.assert_called_once()
+        module.enqueue_sync_job.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
         for mod_name, orig in saved_modules.items():

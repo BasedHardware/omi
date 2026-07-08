@@ -854,7 +854,7 @@ class PushToTalkManager: ObservableObject {
       // socket; transcribe the buffered turn audio via Deepgram now so PTT still answers.
       if realtimeOmniService == nil {
         log("PushToTalkManager: omni relay unavailable — transcribing turn via Deepgram")
-        fallBackToDeepgram()
+        fallBackToDeepgram(reason: "other")
         return
       }
       // QueryTracer: the omni provider's post-commit finalization (VAD close +
@@ -870,7 +870,7 @@ class PushToTalkManager: ObservableObject {
           // interim it may have left behind; fall back to Deepgram on the full buffered
           // turn audio. fallBackToDeepgram() no-ops if the turn was already sent.
           log("PushToTalkManager: omni finalization timeout — falling back to Deepgram")
-          self.fallBackToDeepgram()
+          self.fallBackToDeepgram(reason: "timeout")
         }
       }
       liveFinalizationTimeout = timeout
@@ -1773,14 +1773,21 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     // holding, keep capturing — finalize()'s dead-relay branch falls back to Deepgram with
     // the full turn audio (avoids cutting them off mid-sentence).
     if state == .finalizing {
-      fallBackToDeepgram()
+      fallBackToDeepgram(reason: "other")
     }
   }
 
   /// Transcribe the buffered turn audio via Deepgram when omni is unavailable.
-  fileprivate func fallBackToDeepgram() {
+  fileprivate func fallBackToDeepgram(reason: String = "other") {
     guard !omniTurnSent else { return }
     omniTurnSent = true
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "ptt_cascade",
+      from: "omni",
+      to: "deepgram",
+      reason: reason,
+      outcome: .recovered,
+      extra: ["user_visible": false])
     log("PushToTalkManager: omni unavailable — falling back to Deepgram for this turn")
     isOmniSTT = false
     realtimeOmniService?.stop()
@@ -1800,6 +1807,13 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
         if let transcript, !transcript.isEmpty { self.transcriptSegments = [transcript] }
       } catch {
         logError("PushToTalkManager: Deepgram fallback failed", error: error)
+        DesktopDiagnosticsManager.shared.recordFallback(
+          area: "ptt_cascade",
+          from: "omni",
+          to: "deepgram",
+          reason: "other",
+          outcome: .exhausted,
+          extra: ["user_visible": false])
       }
       self.liveFinalizationTimeout?.cancel()
       self.liveFinalizationTimeout = nil
