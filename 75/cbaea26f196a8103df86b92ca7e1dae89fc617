@@ -1,0 +1,50 @@
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignAppsPage.swift
+  s_897886a34066e7::t_cbae72690a0d82 3,5-16,18-20,30-33,69-93,109,112-113,130,133-134,165-174,176,201
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMorePage.swift
+  s_897886a34066e7::t_468fb377ddcc63 20,22
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignHomePage.swift
+  s_897886a34066e7::t_8c78e571097a25 43-52,60,70-73
+  s_897886a34066e7::t_65f1342f8984fa 170
+  s_897886a34066e7::t_0d08c75ec30a4a 192-307
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMessagesPage.swift
+  s_897886a34066e7::t_c9bff1310cd476 554,562
+  s_897886a34066e7::t_2456c3d7779746 1-268,270-553,555-561,563-975
+  s_897886a34066e7::t_4109b42c22e225 269
+desktop/macos/Desktop/Sources/Redesign/RedesignRail.swift
+  s_897886a34066e7::t_db1dc7f70a3ff0 22-23,31,43,53,65
+  s_897886a34066e7::t_aa80484c7c328a 76-78
+  s_897886a34066e7::t_6f34fe017b6995 117
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMemoryPage.swift
+  s_897886a34066e7::t_af23911ed54edc 12
+  s_897886a34066e7::t_954077b8a8984d 259-266
+  s_897886a34066e7::t_7d78bd0bbbc6fd 74-86,88-91
+  s_897886a34066e7::t_878df9979f1ac2 11,13
+  s_897886a34066e7::t_ebd06406471e79 299-302,304-305,307-311,313,316-345,350-354,357-484
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignBrainMapPage.swift
+  s_897886a34066e7::t_6a67a148a8d645 1-322,324-432
+  s_897886a34066e7::t_a1417d2f7e032e 323
+desktop/macos/Desktop/Sources/Redesign/RedesignTopBar.swift
+  s_897886a34066e7::t_ceb7a883b29712 4-5,14-15,22-80
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignRewindPage.swift
+  s_897886a34066e7::t_d6935aec490619 1-553
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_897886a34066e7::t_c939c77a4dda9b 1238-1242
+  s_897886a34066e7::t_2d301439d54e32 1194-1197
+  s_897886a34066e7::t_69717c2555086a 803-804
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "75cbaea26f196a8103df86b92ca7e1dae89fc617",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
