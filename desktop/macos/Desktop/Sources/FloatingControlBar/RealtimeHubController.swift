@@ -261,6 +261,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var assistantText = ""
   private var speculativeWarmDone = false
   private var speculativeScreenshot: Data?
+  private var geminiScreenFrameSentThisTurn = false
   private var audioReceivedThisTurn = false
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
@@ -1183,6 +1184,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     assistantText = ""
     speculativeWarmDone = false
     speculativeScreenshot = nil
+    geminiScreenFrameSentThisTurn = false
     audioReceivedThisTurn = false
     turnGeneration &+= 1
     let screenshotTurnGeneration = turnGeneration
@@ -1272,9 +1274,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         }
       }
     }
-    // Capture locally at turn START so the explicit screenshot tool can respond without
-    // blocking on screen capture. Do not upload raw pixels speculatively; provider-visible
-    // screen access must happen through an explicit tool request.
+    // Capture locally at turn START so Gemini can receive pixels inside the active
+    // activity window before commit. Gemini Live does not reliably ground on video
+    // frames sent after activityEnd, so current-screen voice turns cannot depend on a
+    // post-commit screenshot tool call.
     Task.detached(priority: .utility) {
       let jpeg = ScreenCaptureManager.captureScreenJPEG()
       await MainActor.run {
@@ -1385,8 +1388,39 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if s.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       s.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
     }
+    attachGeminiScreenFrameBeforeCommitIfNeeded(session: s)
     s.commitInputTurn()
     return .accepted
+  }
+
+  private func attachGeminiScreenFrameBeforeCommitIfNeeded(session s: RealtimeHubSession) {
+    guard sessionProvider == .gemini else { return }
+    guard !geminiScreenFrameSentThisTurn else { return }
+    guard CGPreflightScreenCaptureAccess() else {
+      log("RealtimeHub[\(providerTag)]: skipping in-turn screen frame — screen permission not granted")
+      return
+    }
+    guard let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG() else {
+      log("RealtimeHub[\(providerTag)]: skipping in-turn screen frame — capture failed")
+      return
+    }
+    geminiScreenFrameSentThisTurn = true
+    s.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: false)
+    log("RealtimeHub[\(providerTag)]: attached in-turn screen frame before commit (\(shot.count) bytes)")
+  }
+
+  private func screenshotToolResultTextForCurrentProvider(capturedBytes: Int?) -> String {
+    switch sessionProvider {
+    case .openai:
+      return capturedBytes == nil ? "Could not capture the screen." : "Screen captured."
+    case .gemini:
+      if geminiScreenFrameSentThisTurn {
+        return "The current screen frame was already attached to this voice turn before commit. Use that image for current screen details."
+      }
+      return "Could not attach a new screenshot after the Gemini voice turn closed. Ask the user to try again if current screen pixels are required."
+    case .none:
+      return "Could not capture the screen."
+    }
   }
 
   /// Await a task's value with a REAL deadline on return time. A plain withTaskGroup
@@ -1871,15 +1905,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()
         if let shot { session?.injectImage(shot) }
       case .gemini:
-        shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()
-        if let shot { session?.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: true) }
+        shot = nil
       case .none:
         shot = nil
       }
       log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
-        output: shot == nil ? "Could not capture the screen." : "Screen captured.")
+        output: screenshotToolResultTextForCurrentProvider(capturedBytes: shot?.count))
     case .pointClick:
       guard
         let x = Self.finiteCoordinate(arguments["x"]),
