@@ -15,7 +15,8 @@ struct ChatBubble: View {
   /// down to `ToolCallsGroup`. Optional so existing callers compile
   /// without wiring cancellation.
   var onCancelTurn: (() -> Void)? = nil
-  var onOpenAgent: ((UUID) -> Void)? = nil
+  var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+  var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isTimestampHovering = false
   @State private var isExpanded = false
@@ -28,7 +29,8 @@ struct ChatBubble: View {
     message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
-    onOpenAgent: ((UUID) -> Void)? = nil
+    onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
+    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   ) {
     self.message = message
     self.app = app
@@ -37,6 +39,7 @@ struct ChatBubble: View {
     self.isDuplicate = isDuplicate
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
+    self.onOpenAgentRef = onOpenAgentRef
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
@@ -61,6 +64,18 @@ struct ChatBubble: View {
   private var backgroundAgentSummary: BackgroundAgentSummary? {
     guard message.sender == .ai, message.contentBlocks.isEmpty else { return nil }
     return BackgroundAgentSummary.parse(message.text)
+  }
+
+  private func openAgent(ref: AgentTimelineRef, completion: @escaping (Bool) -> Void) {
+    if let onOpenAgentRef {
+      onOpenAgentRef(ref, completion)
+      return
+    }
+    if let pillId = ref.pillId, let onOpenAgent {
+      onOpenAgent(pillId, completion)
+      return
+    }
+    completion(false)
   }
 
   var body: some View {
@@ -119,11 +134,34 @@ struct ChatBubble: View {
                   .padding(.top, 2)
               }
             case .toolCalls(_, let calls):
-              ToolCallsGroup(calls: calls, onCancel: onCancelTurn, onOpenAgent: onOpenAgent)
+              ToolCallsGroup(
+                calls: calls,
+                onCancel: onCancelTurn,
+                onOpenAgent: onOpenAgent,
+                onOpenAgentRef: onOpenAgentRef
+              )
             case .thinking(_, let text):
               ThinkingBlock(text: text)
             case .discoveryCard(_, let title, let summary, let fullText):
               DiscoveryCard(title: title, summary: summary, fullText: fullText)
+            case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+              AgentSpawnCard(
+                title: title,
+                objective: objective,
+                ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                onOpen: openAgent(ref:completion:)
+              )
+            case .agentCompletion(
+              _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+            ):
+              AgentCompletionCard(
+                title: title,
+                promptSnippet: promptSnippet,
+                output: output,
+                status: status,
+                ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                onOpen: openAgent(ref:completion:)
+              )
             }
           }
           // Show typing indicator at end if still streaming
@@ -404,15 +442,20 @@ struct BackgroundAgentSummary: Equatable {
 
 private struct BackgroundAgentSummaryCard: View {
   let summary: BackgroundAgentSummary
-  var onOpenAgent: ((UUID) -> Void)? = nil
+  var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isExpanded = false
+  @State private var showUnavailable = false
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Button(action: {
         if let agentID = summary.agentID, let onOpenAgent {
-          onOpenAgent(agentID)
+          onOpenAgent(agentID) { succeeded in
+            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+              showUnavailable = true
+            }
+          }
         } else {
           withAnimation(.easeInOut(duration: 0.18)) {
             isExpanded.toggle()
@@ -442,7 +485,7 @@ private struct BackgroundAgentSummaryCard: View {
       }
       .buttonStyle(.plain)
 
-      if isExpanded || summary.agentID == nil {
+      if isExpanded || summary.agentID == nil || showUnavailable {
         Divider()
           .padding(.horizontal, 10)
         VStack(alignment: .leading, spacing: 8) {
@@ -454,6 +497,11 @@ private struct BackgroundAgentSummaryCard: View {
             .scaledFont(size: 13)
             .foregroundColor(OmiColors.textPrimary)
             .fixedSize(horizontal: false, vertical: true)
+          if showUnavailable {
+            Text("Agent unavailable — it may have been dismissed.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -461,6 +509,161 @@ private struct BackgroundAgentSummaryCard: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+  }
+}
+
+private struct AgentSpawnCard: View {
+  let title: String
+  let objective: String
+  let ref: AgentTimelineRef
+  var onOpen: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+
+  @State private var showUnavailable = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Button(action: {
+        if ref.hasIdentity, let onOpen {
+          onOpen(ref) { succeeded in
+            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+              showUnavailable = true
+            }
+          }
+        }
+      }) {
+        HStack(spacing: 8) {
+          Image(systemName: "arrow.triangle.branch")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textSecondary)
+          Text(title.isEmpty ? "Background agent" : title)
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+          Text(objective)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: 4)
+          if ref.hasIdentity {
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: 9)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(.plain)
+
+      if showUnavailable {
+        Divider()
+          .padding(.horizontal, 10)
+        Text("Agent unavailable — it may have been dismissed.")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .padding(.horizontal, 12)
+          .padding(.vertical, 10)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+  }
+}
+
+private struct AgentCompletionCard: View {
+  let title: String
+  let promptSnippet: String
+  let output: String
+  let status: String
+  let ref: AgentTimelineRef
+  var onOpen: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+
+  @State private var isExpanded = false
+  @State private var showUnavailable = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Button(action: {
+        if ref.hasIdentity, let onOpen {
+          onOpen(ref) { succeeded in
+            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+              showUnavailable = true
+            }
+          }
+        } else {
+          withAnimation(.easeInOut(duration: 0.18)) {
+            isExpanded.toggle()
+          }
+        }
+      }) {
+        HStack(spacing: 8) {
+          Image(systemName: statusIconName)
+            .scaledFont(size: 12)
+            .foregroundColor(statusColor)
+          Text(title.isEmpty ? "Background agent" : title)
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+          Text(output)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: 4)
+          Image(systemName: ref.hasIdentity && onOpen != nil ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(.plain)
+
+      if isExpanded || !ref.hasIdentity || showUnavailable {
+        Divider()
+          .padding(.horizontal, 10)
+        VStack(alignment: .leading, spacing: 8) {
+          if !promptSnippet.isEmpty {
+            Text(promptSnippet)
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(3)
+          }
+          Text(output)
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+          if showUnavailable {
+            Text("Agent unavailable — it may have been dismissed.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+  }
+
+  private var statusIconName: String {
+    switch status.lowercased() {
+    case "failed", "cancelled", "stopped", "timed_out", "orphaned":
+      return "xmark.circle.fill"
+    default:
+      return "checkmark.circle.fill"
+    }
+  }
+
+  private var statusColor: Color {
+    switch status.lowercased() {
+    case "failed", "cancelled", "stopped", "timed_out", "orphaned":
+      return .red
+    default:
+      return .green
+    }
   }
 }
 
@@ -485,6 +688,24 @@ enum ContentBlockGroup: Identifiable {
   case toolCalls(id: String, calls: [ChatContentBlock])
   case thinking(id: String, text: String)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
+  case agentSpawn(
+    id: String,
+    pillId: UUID?,
+    sessionId: String,
+    runId: String,
+    title: String,
+    objective: String
+  )
+  case agentCompletion(
+    id: String,
+    pillId: UUID?,
+    sessionId: String?,
+    runId: String?,
+    title: String,
+    promptSnippet: String,
+    output: String,
+    status: String
+  )
 
   var id: String {
     switch self {
@@ -492,10 +713,12 @@ enum ContentBlockGroup: Identifiable {
     case .toolCalls(let id, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
+    case .agentSpawn(let id, _, _, _, _, _): return id
+    case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
   }
 
-  /// Groups consecutive `.toolCall` blocks together; passes `.text`, `.thinking`, `.discoveryCard` through
+  /// Groups consecutive `.toolCall` blocks together; passes other blocks through
   static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
     var groups: [ContentBlockGroup] = []
     var pendingToolCalls: [ChatContentBlock] = []
@@ -520,6 +743,34 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard(let id, let title, let summary, let fullText):
         flushToolCalls()
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
+      case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+        flushToolCalls()
+        groups.append(
+          .agentSpawn(
+            id: id,
+            pillId: pillId,
+            sessionId: sessionId,
+            runId: runId,
+            title: title,
+            objective: objective
+          )
+        )
+      case .agentCompletion(
+        let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+      ):
+        flushToolCalls()
+        groups.append(
+          .agentCompletion(
+            id: id,
+            pillId: pillId,
+            sessionId: sessionId,
+            runId: runId,
+            title: title,
+            promptSnippet: promptSnippet,
+            output: output,
+            status: status
+          )
+        )
       }
     }
     flushToolCalls()
@@ -533,7 +784,7 @@ enum ContentBlockGroup: Identifiable {
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
     group(blocks).compactMap { group in
       switch group {
-      case .text, .discoveryCard:
+      case .text, .discoveryCard, .agentSpawn, .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil
@@ -567,22 +818,26 @@ struct ToolCallsGroup: View {
   /// parent message view. If no action is available, the banner is hidden
   /// so the UI never presents a no-op Cancel button.
   var onCancel: (() -> Void)? = nil
-  var onOpenAgent: ((UUID) -> Void)? = nil
+  var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+  var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isExpanded: Bool
+  @State private var showUnavailable = false
 
   init(
     calls: [ChatContentBlock],
     compact: Bool = false,
     expandRunning: Bool = true,
     onCancel: (() -> Void)? = nil,
-    onOpenAgent: ((UUID) -> Void)? = nil
+    onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
+    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
   ) {
     self.calls = calls
     self.compact = compact
     self.expandRunning = expandRunning
     self.onCancel = onCancel
     self.onOpenAgent = onOpenAgent
+    self.onOpenAgentRef = onOpenAgentRef
     self._isExpanded = State(initialValue: expandRunning && Self.hasRunningTool(in: calls))
   }
 
@@ -661,8 +916,28 @@ struct ToolCallsGroup: View {
     return nil
   }
 
-  private var spawnedAgentID: UUID? {
-    calls.compactMap(\.spawnedAgentID).last
+  private var spawnedAgentOpenRef: AgentTimelineRef? {
+    calls.compactMap(\.agentOpenRef).last
+  }
+
+  private var canOpenSpawnedAgent: Bool {
+    spawnedAgentOpenRef != nil && (onOpenAgentRef != nil || onOpenAgent != nil)
+  }
+
+  private func openSpawnedAgent(completion: @escaping (Bool) -> Void) {
+    guard let ref = spawnedAgentOpenRef else {
+      completion(false)
+      return
+    }
+    if let onOpenAgentRef {
+      onOpenAgentRef(ref, completion)
+      return
+    }
+    if let pillId = ref.pillId, let onOpenAgent {
+      onOpenAgent(pillId, completion)
+      return
+    }
+    completion(false)
   }
 
   var body: some View {
@@ -675,6 +950,14 @@ struct ToolCallsGroup: View {
 
       if isExpanded {
         expandedToolCalls
+      }
+
+      if showUnavailable {
+        Text("Agent unavailable — it may have been dismissed.")
+          .scaledFont(size: 11)
+          .foregroundColor(OmiColors.textTertiary)
+          .padding(.horizontal, 10)
+          .padding(.bottom, compact ? 6 : 8)
       }
     }
     .frame(maxWidth: .infinity, alignment: .leading)
@@ -689,8 +972,12 @@ struct ToolCallsGroup: View {
 
   private var header: some View {
     Button(action: {
-      if let spawnedAgentID, let onOpenAgent {
-        onOpenAgent(spawnedAgentID)
+      if canOpenSpawnedAgent {
+        openSpawnedAgent { succeeded in
+          if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+            showUnavailable = true
+          }
+        }
         return
       }
       withAnimation(.easeInOut(duration: 0.2)) {
@@ -727,7 +1014,7 @@ struct ToolCallsGroup: View {
 
         Spacer(minLength: compact ? 0 : 4)
 
-        Image(systemName: spawnedAgentID != nil && onOpenAgent != nil ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
+        Image(systemName: canOpenSpawnedAgent ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
           .scaledFont(size: 9)
           .foregroundColor(OmiColors.textTertiary)
       }
@@ -752,8 +1039,9 @@ struct ToolCallsGroup: View {
               status: status,
               input: input,
               output: output,
-              spawnedAgentID: block.spawnedAgentID,
-              onOpenAgent: onOpenAgent
+              agentOpenRef: block.agentOpenRef,
+              onOpenAgent: onOpenAgent,
+              onOpenAgentRef: onOpenAgentRef
             )
           }
         }
@@ -785,21 +1073,47 @@ struct ToolCallCard: View {
   let status: ToolCallStatus
   let input: ToolCallInput?
   let output: String?
-  var spawnedAgentID: UUID? = nil
-  var onOpenAgent: ((UUID) -> Void)? = nil
+  var agentOpenRef: AgentTimelineRef? = nil
+  var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+  var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
   @State private var isExpanded = false
+  @State private var showUnavailable = false
 
   private var hasExpandableContent: Bool {
     input?.details != nil || output != nil
+  }
+
+  private var canOpenSpawnedAgent: Bool {
+    agentOpenRef != nil && (onOpenAgentRef != nil || onOpenAgent != nil)
+  }
+
+  private func openSpawnedAgent(completion: @escaping (Bool) -> Void) {
+    guard let ref = agentOpenRef else {
+      completion(false)
+      return
+    }
+    if let onOpenAgentRef {
+      onOpenAgentRef(ref, completion)
+      return
+    }
+    if let pillId = ref.pillId, let onOpenAgent {
+      onOpenAgent(pillId, completion)
+      return
+    }
+    completion(false)
   }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       // Compact header row
       Button(action: {
-        if let spawnedAgentID, let onOpenAgent {
-          onOpenAgent(spawnedAgentID)
+        if canOpenSpawnedAgent {
+          openSpawnedAgent { succeeded in
+            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+              showUnavailable = true
+            }
+          }
           return
         }
         if hasExpandableContent {
@@ -835,7 +1149,7 @@ struct ToolCallCard: View {
           Spacer(minLength: 4)
 
           // Expand chevron
-          if spawnedAgentID != nil && onOpenAgent != nil {
+          if canOpenSpawnedAgent {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: 9)
               .foregroundColor(OmiColors.textTertiary)
@@ -851,7 +1165,7 @@ struct ToolCallCard: View {
       .buttonStyle(.plain)
 
       // Expanded content
-      if isExpanded {
+      if isExpanded || showUnavailable {
         Divider()
           .padding(.horizontal, 8)
 
@@ -883,6 +1197,12 @@ struct ToolCallCard: View {
                 .lineLimit(15)
             }
           }
+
+          if showUnavailable {
+            Text("Agent unavailable — it may have been dismissed.")
+              .scaledFont(size: 11)
+              .foregroundColor(OmiColors.textTertiary)
+          }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -893,20 +1213,74 @@ struct ToolCallCard: View {
 }
 
 extension ChatContentBlock {
+  var agentOpenRef: AgentTimelineRef? {
+    if let ref = agentTimelineRef, ref.hasIdentity {
+      return ref
+    }
+    let ref = AgentTimelineRef(
+      pillId: spawnedAgentID,
+      sessionId: spawnedAgentSessionID,
+      runId: spawnedAgentRunID
+    )
+    return ref.hasIdentity ? ref : nil
+  }
+
   var spawnedAgentID: UUID? {
+    if case .agentSpawn(_, let pillId, _, _, _, _) = self {
+      return pillId
+    }
+    if case .agentCompletion(_, let pillId, _, _, _, _, _, _) = self {
+      return pillId
+    }
     guard case .toolCall(_, let name, let status, _, _, let output) = self,
       Self.cleanToolName(name) == "spawn_agent",
       !status.isInFlight,
       let output
     else { return nil }
 
+    return Self.labeledValue(in: output, keys: ["id"]).flatMap(UUID.init(uuidString:))
+  }
+
+  var spawnedAgentSessionID: String? {
+    if case .agentSpawn(_, _, let sessionId, _, _, _) = self {
+      return sessionId
+    }
+    if case .agentCompletion(_, _, let sessionId, _, _, _, _, _) = self {
+      return sessionId
+    }
+    guard case .toolCall(_, let name, let status, _, _, let output) = self,
+      Self.cleanToolName(name) == "spawn_agent",
+      !status.isInFlight,
+      let output
+    else { return nil }
+    return Self.labeledValue(in: output, keys: ["sessionid", "session_id"])
+  }
+
+  var spawnedAgentRunID: String? {
+    if case .agentSpawn(_, _, _, let runId, _, _) = self {
+      return runId
+    }
+    if case .agentCompletion(_, _, _, let runId, _, _, _, _) = self {
+      return runId
+    }
+    guard case .toolCall(_, let name, let status, _, _, let output) = self,
+      Self.cleanToolName(name) == "spawn_agent",
+      !status.isInFlight,
+      let output
+    else { return nil }
+    return Self.labeledValue(in: output, keys: ["runid", "run_id"])
+  }
+
+  private static func labeledValue(in output: String, keys: [String]) -> String? {
+    let keySet = Set(keys.map { $0.lowercased() })
     for line in output.components(separatedBy: .newlines) {
       let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard trimmed.lowercased().hasPrefix("id:") else { continue }
-      let value = trimmed.dropFirst(3).trimmingCharacters(in: .whitespacesAndNewlines)
-      if let uuid = UUID(uuidString: value) {
-        return uuid
-      }
+      guard let colon = trimmed.firstIndex(of: ":") else { continue }
+      let label = String(trimmed[..<colon]).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      guard keySet.contains(label) else { continue }
+      let value = String(trimmed[trimmed.index(after: colon)...])
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      if !value.isEmpty { return value }
     }
     return nil
   }

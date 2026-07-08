@@ -193,13 +193,14 @@ Rules (fail the PR if any break):
 3. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
    pending optimistic turns or appends via `recordCompletedTurn`; already-seen
    continuity keys are ignored. Empty keys do not suppress.
-4. **Cross-surface agent identity is structured** — pill/agent links carry a UUID
-   (tool block `spawnedAgentID` or explicit `id=` / structured content block).
-   Do not invent new free-text formats; extend the existing parser/schema + tests
-   together.
-5. **Pill cache is derived** — opening an agent from timeline may refresh from kernel
-   once; success = resolvable agent identity after refresh/hydrate. Do not keep a
-   second durable pill store.
+4. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
+   content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
+   authoritative. Legacy `[Background agent id=…]` bracket text remains dual-read
+   only. Do not invent new free-text formats; extend the schema + tests together.
+5. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
+   / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
+   refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.
+   Do not keep a second durable pill store.
 6. **Snapshots are aliases** — `automationFloatingChatSnapshot` ==
    `automationChatSnapshot` / `automationMainChatSnapshot` over the same messages;
    no surface-specific transcript filter.

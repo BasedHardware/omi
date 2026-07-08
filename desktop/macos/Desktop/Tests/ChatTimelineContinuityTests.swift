@@ -114,6 +114,175 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(legacy?.output, "Why don't scientists trust atoms?")
   }
 
+  func testAgentCompletionBlockExposesOpenRefAndStaysVisible() {
+    let pillId = UUID()
+    let block = ChatContentBlock.agentCompletion(
+      id: "completion-1",
+      pillId: pillId,
+      sessionId: "sess-1",
+      runId: "run-1",
+      title: "Background agent",
+      promptSnippet: "sleep",
+      output: "Done.",
+      status: "completed"
+    )
+
+    XCTAssertEqual(
+      block.agentTimelineRef,
+      AgentTimelineRef(pillId: pillId, sessionId: "sess-1", runId: "run-1")
+    )
+    XCTAssertEqual(
+      AgentTimelineHydratePreference.make(pillId: pillId, sessionId: "sess-1", runId: "run-1").keys,
+      [.runId("run-1"), .sessionId("sess-1"), .pillId(pillId)]
+    )
+
+    let groups = ContentBlockGroup.visibleChatGroups([block], isStreaming: false)
+    XCTAssertEqual(groups.count, 1)
+    guard case .agentCompletion(_, let visiblePill, let sessionId, let runId, _, _, let output, _) = groups[0]
+    else {
+      return XCTFail("expected agentCompletion to remain visible")
+    }
+    XCTAssertEqual(visiblePill, pillId)
+    XCTAssertEqual(sessionId, "sess-1")
+    XCTAssertEqual(runId, "run-1")
+    XCTAssertEqual(output, "Done.")
+
+    let message = ChatMessage(text: "Done.", sender: .ai, contentBlocks: [block])
+    let record = TaskChatMessageRecord.from(message, taskId: "task-roundtrip")
+    let restored = record.toChatMessage()
+    XCTAssertEqual(restored.contentBlocks.count, 1)
+    guard case .agentCompletion(_, let restoredPill, let restoredSession, let restoredRun, _, _, let restoredOutput, _) =
+      restored.contentBlocks.first
+    else {
+      return XCTFail("agentCompletion must round-trip through contentBlocksJson")
+    }
+    XCTAssertEqual(restoredPill, pillId)
+    XCTAssertEqual(restoredSession, "sess-1")
+    XCTAssertEqual(restoredRun, "run-1")
+    XCTAssertEqual(restoredOutput, "Done.")
+  }
+
+  func testSpawnToolOutputParsesSessionAndRunIds() {
+    let pillId = UUID()
+    let block = ChatContentBlock.toolCall(
+      id: "tool_1",
+      name: "spawn_agent",
+      status: .completed,
+      output: """
+      Agent started as a floating agent pill.
+      id: \(pillId.uuidString)
+      sessionId: sess-abc
+      runId: run-xyz
+      title: Sleep Agent
+      status: running
+      """
+    )
+
+    XCTAssertEqual(block.spawnedAgentID, pillId)
+    XCTAssertEqual(block.spawnedAgentSessionID, "sess-abc")
+    XCTAssertEqual(block.spawnedAgentRunID, "run-xyz")
+    XCTAssertEqual(
+      block.agentOpenRef,
+      AgentTimelineRef(pillId: pillId, sessionId: "sess-abc", runId: "run-xyz")
+    )
+  }
+
+  func testHydratePreferencePrefersRunThenSessionThenPill() {
+    let pillId = UUID()
+    let preference = AgentTimelineHydratePreference.make(
+      pillId: pillId,
+      sessionId: " sess-1 ",
+      runId: "run-1"
+    )
+    XCTAssertEqual(preference.keys, [
+      .runId("run-1"),
+      .sessionId("sess-1"),
+      .pillId(pillId),
+    ])
+
+    let pillOnly = AgentTimelineHydratePreference.make(
+      pillId: pillId,
+      sessionId: nil,
+      runId: "  "
+    )
+    XCTAssertEqual(pillOnly.keys, [.pillId(pillId)])
+
+    // Behavioral: firstMatchingKey walks run → session → pill and stops early.
+    XCTAssertEqual(
+      preference.firstMatchingKey(
+        runIdMatches: { $0 == "run-1" },
+        sessionIdMatches: { _ in XCTFail("session should not be checked after run match"); return false },
+        pillIdMatches: { _ in XCTFail("pill should not be checked after run match"); return false }
+      ),
+      .runId("run-1")
+    )
+    XCTAssertEqual(
+      preference.firstMatchingKey(
+        runIdMatches: { _ in false },
+        sessionIdMatches: { $0 == "sess-1" },
+        pillIdMatches: { _ in XCTFail("pill should not be checked after session match"); return false }
+      ),
+      .sessionId("sess-1")
+    )
+    XCTAssertEqual(
+      preference.firstMatchingKey(
+        runIdMatches: { _ in false },
+        sessionIdMatches: { _ in false },
+        pillIdMatches: { $0 == pillId }
+      ),
+      .pillId(pillId)
+    )
+  }
+
+  @MainActor
+  func testFindPillMatchesByHydratePreferenceOrder() {
+    let runPill = AgentPill(id: UUID(), query: "by-run", model: "test")
+    runPill.canonicalRunId = "run-match"
+    runPill.canonicalSessionId = "sess-other"
+
+    let sessionPill = AgentPill(id: UUID(), query: "by-session", model: "test")
+    sessionPill.canonicalSessionId = "sess-match"
+
+    let pillId = UUID()
+    let idPill = AgentPill(id: pillId, query: "by-id", model: "test")
+
+    let manager = AgentPillsManager.shared
+    let previous = manager.pills
+    defer { manager.replacePillsForTesting(previous) }
+    manager.replacePillsForTesting([runPill, sessionPill, idPill])
+
+    XCTAssertEqual(
+      manager.findPill(
+        matching: .make(pillId: pillId, sessionId: "sess-match", runId: "run-match")
+      )?.id,
+      runPill.id,
+      "runId must win over sessionId and pillId"
+    )
+    XCTAssertEqual(
+      manager.findPill(
+        matching: .make(pillId: pillId, sessionId: "sess-match", runId: "missing-run")
+      )?.id,
+      sessionPill.id,
+      "sessionId must win over pillId when run misses"
+    )
+    XCTAssertEqual(
+      manager.findPill(
+        matching: .make(pillId: pillId, sessionId: "missing-sess", runId: nil)
+      )?.id,
+      pillId
+    )
+    XCTAssertNil(
+      manager.findPill(
+        matching: .make(pillId: UUID(), sessionId: "nope", runId: "nope")
+      )
+    )
+  }
+
+  func testOpenFeedbackMarksUnavailableOnFailure() {
+    XCTAssertTrue(AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: false))
+    XCTAssertFalse(AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: true))
+  }
+
   func testCanonicalSurfacesBindSharedProviderMessages() throws {
     // Mechanical single-provider UI binding check (INV-6 rule 1). Full UI
     // rendering is covered by e2e; this fails if Main/Home stop binding the
@@ -134,8 +303,12 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "main Chat must not filter notch/PTT turns out of history"
     )
     XCTAssertTrue(
-      chatPage.contains("openAgentChatFromTimeline(agentID:"),
-      "main Chat must open spawned-agent links from the timeline"
+      chatPage.contains("openAgentChatFromTimeline(agentID: agentID, completion: completion)"),
+      "main Chat must open spawned-agent links from the timeline with open result feedback"
+    )
+    XCTAssertTrue(
+      chatPage.contains("openAgentChatFromTimeline(ref: ref, completion: completion)"),
+      "main Chat must open structured agent refs with open result feedback"
     )
 
     let dashboard = try String(

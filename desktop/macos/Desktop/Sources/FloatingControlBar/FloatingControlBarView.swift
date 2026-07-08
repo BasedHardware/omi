@@ -744,31 +744,58 @@ struct FloatingControlBarView: View {
         openAgentInChat(agentID: pill.id)
     }
 
-    private func openAgentInChat(agentID: UUID) {
-        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else {
-            Task { @MainActor in
-                await agentPills.refreshProjectedPillsFromKernel()
-                guard let refreshedPill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
-                openAgentInChat(refreshedPill)
+    private func openAgentInChat(agentID: UUID, completion: ((Bool) -> Void)? = nil) {
+        openAgentInChat(
+            ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),
+            completion: completion
+        )
+    }
+
+    private func openAgentInChat(ref: AgentTimelineRef, completion: ((Bool) -> Void)? = nil) {
+        Task { @MainActor in
+            let resolved = await agentPills.resolveAndPresentAgent(
+                pillId: ref.pillId,
+                sessionId: ref.sessionId,
+                runId: ref.runId
+            )
+            guard resolved else {
+                log(
+                    "FloatingControlBarView: agent open unavailable after hydrate "
+                        + "pillId=\(ref.pillId?.uuidString ?? "nil") "
+                        + "sessionId=\(ref.sessionId ?? "nil") "
+                        + "runId=\(ref.runId ?? "nil")"
+                )
+                completion?(false)
+                return
             }
-            return
+            guard let pill = agentPills.pills.first(where: { pill in
+                if let pillId = ref.pillId, pill.id == pillId { return true }
+                if let runId = ref.runId, pill.canonicalRunId == runId { return true }
+                if let sessionId = ref.sessionId, pill.canonicalSessionId == sessionId { return true }
+                return false
+            }) ?? ref.pillId.flatMap({ id in agentPills.pills.first(where: { $0.id == id }) }) else {
+                completion?(false)
+                return
+            }
+            if state.conversationSurface == .agent(pill.id) {
+                showAgentListFromConversation()
+                completion?(true)
+                return
+            }
+            agentPills.markViewed(pillID: pill.id)
+            let barWindow = window as? FloatingControlBarWindow
+            let wasShowingConversation = state.showingAIConversation
+            state.setNotchHoverMenuOpen(false)
+            notchLogoHovering = false
+            barWindow?.makeKeyAndOrderFront(nil)
+            withAnimation(agentChatSwitchTransition) {
+                state.present(.agent(pill.id))
+                state.isAILoading = false
+                state.aiInputText = ""
+            }
+            barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
+            completion?(true)
         }
-        if state.conversationSurface == .agent(pill.id) {
-            showAgentListFromConversation()
-            return
-        }
-        agentPills.markViewed(pillID: pill.id)
-        let barWindow = window as? FloatingControlBarWindow
-        let wasShowingConversation = state.showingAIConversation
-        state.setNotchHoverMenuOpen(false)
-        notchLogoHovering = false
-        barWindow?.makeKeyAndOrderFront(nil)
-        withAnimation(agentChatSwitchTransition) {
-            state.present(.agent(pill.id))
-            state.isAILoading = false
-            state.aiInputText = ""
-        }
-        barWindow?.resizeForActiveAgentChatPublic(pillID: pill.id, animated: !wasShowingConversation)
     }
 
     private func openOmiChatFromNotchRow() {
@@ -1376,8 +1403,11 @@ struct FloatingControlBarView: View {
             },
             onRate: onRate,
             onShareLink: onShareLink,
-            onOpenAgent: { agentID in
-                openAgentInChat(agentID: agentID)
+            onOpenAgent: { agentID, completion in
+                openAgentInChat(agentID: agentID, completion: completion)
+            },
+            onOpenAgentRef: { ref, completion in
+                openAgentInChat(ref: ref, completion: completion)
             }
         )
         .transition(
@@ -1946,6 +1976,8 @@ private struct AgentMainChatView: View {
                     case .discoveryCard(_, let title, let summary, let fullText):
                         DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    case .agentSpawn, .agentCompletion:
+                        EmptyView()
                     }
                 }
             }
@@ -1966,7 +1998,7 @@ private struct AgentMainChatView: View {
 
         return grouped.filter { group in
             switch group {
-            case .text, .discoveryCard:
+            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
                 return true
             case .toolCalls(_, let calls):
                 if calls.contains(where: { $0.spawnedAgentID != nil }) {

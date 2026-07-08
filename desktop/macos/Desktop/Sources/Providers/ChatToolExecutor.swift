@@ -703,6 +703,7 @@ class ChatToolExecutor {
       return """
       Agent started as a floating agent pill.
       id: \(pillId.uuidString)
+      sessionId: \(accepted.sessionId)
       runId: \(accepted.runId)
       title: \(accepted.title)
       status: running

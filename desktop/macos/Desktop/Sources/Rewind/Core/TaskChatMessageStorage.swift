@@ -147,6 +147,30 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
                 encoded.append(["type": "thinking", "id": id, "text": text])
             case .discoveryCard(let id, let title, let summary, let fullText):
                 encoded.append(["type": "discoveryCard", "id": id, "title": title, "summary": summary, "fullText": fullText])
+            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+                var dict: [String: Any] = [
+                    "type": "agentSpawn",
+                    "id": id,
+                    "sessionId": sessionId,
+                    "runId": runId,
+                    "title": title,
+                    "objective": objective,
+                ]
+                if let pillId { dict["pillId"] = pillId.uuidString }
+                encoded.append(dict)
+            case .agentCompletion(let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status):
+                var dict: [String: Any] = [
+                    "type": "agentCompletion",
+                    "id": id,
+                    "title": title,
+                    "promptSnippet": promptSnippet,
+                    "output": output,
+                    "status": status,
+                ]
+                if let pillId { dict["pillId"] = pillId.uuidString }
+                if let sessionId { dict["sessionId"] = sessionId }
+                if let runId { dict["runId"] = runId }
+                encoded.append(dict)
             }
         }
         guard let data = try? JSONSerialization.data(withJSONObject: encoded),
@@ -198,6 +222,42 @@ struct TaskChatMessageRecord: Codable, FetchableRecord, PersistableRecord, Ident
                 let summary = dict["summary"] as? String ?? ""
                 let fullText = dict["fullText"] as? String ?? ""
                 blocks.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
+            case "agentSpawn":
+                let pillId = (dict["pillId"] as? String).flatMap(UUID.init(uuidString:))
+                let sessionId = dict["sessionId"] as? String ?? ""
+                let runId = dict["runId"] as? String ?? ""
+                let title = dict["title"] as? String ?? ""
+                let objective = dict["objective"] as? String ?? ""
+                blocks.append(
+                    .agentSpawn(
+                        id: id,
+                        pillId: pillId,
+                        sessionId: sessionId,
+                        runId: runId,
+                        title: title,
+                        objective: objective
+                    )
+                )
+            case "agentCompletion":
+                let pillId = (dict["pillId"] as? String).flatMap(UUID.init(uuidString:))
+                let sessionId = dict["sessionId"] as? String
+                let runId = dict["runId"] as? String
+                let title = dict["title"] as? String ?? ""
+                let promptSnippet = dict["promptSnippet"] as? String ?? ""
+                let output = dict["output"] as? String ?? ""
+                let status = dict["status"] as? String ?? "completed"
+                blocks.append(
+                    .agentCompletion(
+                        id: id,
+                        pillId: pillId,
+                        sessionId: sessionId,
+                        runId: runId,
+                        title: title,
+                        promptSnippet: promptSnippet,
+                        output: output,
+                        status: status
+                    )
+                )
             default:
                 break
             }

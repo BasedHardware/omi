@@ -44,13 +44,49 @@ final class KernelTurnProjection {
       rememberAppliedKernelTurnKey(key)
     }
 
+    let contentBlocks = Self.contentBlocksForKernelApply(turn)
     _ = host.recordCompletedTurn(
       userText: turn.userText,
       assistantText: turn.assistantText,
       logLabel: turn.origin == "realtime_voice" ? "voice" : "kernel_turn",
       messageSource: turn.origin,
-      continuityKey: key.isEmpty ? nil : key
+      continuityKey: key.isEmpty ? nil : key,
+      contentBlocks: contentBlocks
     )
+  }
+
+  /// For kernel-only pill completions (no optimistic stage), materialize a
+  /// structured agentCompletion block from legacy bracket summary text.
+  static func contentBlocksForKernelApply(
+    _ turn: AgentRuntimeProcess.KernelTurnRecorded
+  ) -> [ChatContentBlock] {
+    guard turn.origin == "pill_completion" else { return [] }
+    guard let summary = BackgroundAgentSummary.parse(turn.assistantText) else { return [] }
+    let runId = Self.runIdFromPillCompletionKey(turn.idempotencyKey)
+    return [
+      .agentCompletion(
+        id: UUID().uuidString,
+        pillId: summary.agentID,
+        sessionId: nil,
+        runId: runId,
+        title: "Background agent",
+        promptSnippet: summary.prompt,
+        output: summary.output,
+        status: "completed"
+      )
+    ]
+  }
+
+  private static func runIdFromPillCompletionKey(_ key: String?) -> String? {
+    guard let key else { return nil }
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    let prefix = "pill_completion:"
+    guard trimmed.hasPrefix(prefix) else { return nil }
+    let value = String(trimmed.dropFirst(prefix.count))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    // Keys may be pill UUID when runId was absent — only treat non-UUID as runId.
+    if UUID(uuidString: value) != nil { return nil }
+    return value.isEmpty ? nil : value
   }
 
   private func rememberAppliedKernelTurnKey(_ key: String) {

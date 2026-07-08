@@ -37,7 +37,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Opens a spawned background-agent pill from a `spawn_agent` tool row.
     /// Optional so task/sidebar chat callers that do not expose floating pills
     /// keep the existing non-clickable tool-card behavior.
-    var onOpenAgent: ((UUID) -> Void)? = nil
+    /// Completion reports whether the agent was resolved and presented.
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+    /// Opens via structured agent identity (session/run/pill) when available.
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -421,7 +424,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                     },
                     isDuplicate: dupeIds.contains(message.id),
                     onCancelTurn: onCancelTurn,
-                    onOpenAgent: onOpenAgent
+                    onOpenAgent: onOpenAgent,
+                    onOpenAgentRef: onOpenAgentRef
                 )
                 .id(message.id)
             }

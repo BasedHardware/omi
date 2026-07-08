@@ -163,6 +163,16 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       mimeType: "text/plain",
       uri: "file:///tmp/out.txt"
     )
+    let completionBlock = ChatContentBlock.agentCompletion(
+      id: "completion-block",
+      pillId: pillID,
+      sessionId: "sess-42",
+      runId: "run-42",
+      title: "Background agent",
+      promptSnippet: "sleep",
+      output: "Done.",
+      status: "completed"
+    )
 
     let first = provider.stageOptimisticTurn(
       continuityKey: key,
@@ -170,10 +180,20 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       assistantText: summary,
       origin: "pill_completion",
       turnOwner: .mainChat,
+      contentBlocks: [completionBlock],
       resources: [resource]
     )
     XCTAssertNotNil(first.assistant)
     XCTAssertEqual(first.assistant?.resources.count, 1)
+    XCTAssertEqual(first.assistant?.contentBlocks.count, 1)
+    guard case .agentCompletion(_, let stagedPill, let stagedSession, let stagedRun, _, _, _, _) =
+      first.assistant?.contentBlocks.first
+    else {
+      return XCTFail("expected staged agentCompletion block")
+    }
+    XCTAssertEqual(stagedPill, pillID)
+    XCTAssertEqual(stagedSession, "sess-42")
+    XCTAssertEqual(stagedRun, "run-42")
 
     // Terminal path reuses the same key (artifact already staged).
     let second = provider.stageOptimisticTurn(
@@ -203,8 +223,56 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       )
     )
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.resources.count, 1)
+    let promoted = provider.messages.first(where: { $0.sender == .ai })
+    XCTAssertEqual(promoted?.resources.count, 1)
+    XCTAssertEqual(promoted?.contentBlocks.count, 1)
+    guard case .agentCompletion(_, let promotedPill, _, let promotedRun, _, _, _, _) =
+      promoted?.contentBlocks.first
+    else {
+      return XCTFail("promote must keep agentCompletion block")
+    }
+    XCTAssertEqual(promotedPill, pillID)
+    XCTAssertEqual(promotedRun, "run-42")
     XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
+  }
+
+  func testKernelOnlyPillCompletionMaterializesAgentCompletionBlock() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+    let pillID = UUID()
+    let key = "pill_completion:run-kernel-only"
+    let summary = "[Background agent id=\(pillID.uuidString) — research] Finished."
+
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "",
+        assistantText: summary,
+        origin: "pill_completion",
+        interrupted: false,
+        idempotencyKey: key,
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+
+    let assistant = provider.messages.first(where: { $0.sender == .ai })
+    XCTAssertEqual(assistant?.text, summary)
+    XCTAssertEqual(assistant?.contentBlocks.count, 1)
+    guard case .agentCompletion(_, let blockPill, _, let runId, _, let prompt, let output, let status) =
+      assistant?.contentBlocks.first
+    else {
+      return XCTFail("kernel-only pill_completion must attach agentCompletion")
+    }
+    XCTAssertEqual(blockPill, pillID)
+    XCTAssertEqual(runId, "run-kernel-only")
+    XCTAssertEqual(prompt, "research")
+    XCTAssertEqual(output, "Finished.")
+    XCTAssertEqual(status, "completed")
   }
 
   func testApplyWithoutOptimisticStillAppendsVoicePath() {

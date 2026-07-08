@@ -1180,6 +1180,204 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
+    /// Resolve an agent identity for timeline open-by-id.
+    /// Fast path: in-memory pill. Then refresh floating projections once.
+    /// Then hydrate via session/run/externalRef from DesktopCoordinatorService.
+    @discardableResult
+    func resolveAndPresentAgent(
+        pillId: UUID?,
+        sessionId: String?,
+        runId: String?
+    ) async -> Bool {
+        let preference = AgentTimelineHydratePreference.make(
+            pillId: pillId,
+            sessionId: sessionId,
+            runId: runId
+        )
+        guard !preference.keys.isEmpty else {
+            log("AgentPills: resolveAndPresentAgent called with empty identity")
+            return false
+        }
+
+        if let pill = findPill(matching: preference) {
+            return true
+        }
+
+        await refreshProjectedPillsFromKernel()
+        if findPill(matching: preference) != nil {
+            return true
+        }
+
+        let hydrated = await hydratePillFromKernel(preference: preference)
+        if hydrated {
+            return findPill(matching: preference) != nil
+        }
+
+        log(
+            "AgentPills: resolveAndPresentAgent failed after refresh+hydrate "
+                + "pillId=\(pillId?.uuidString ?? "nil") "
+                + "sessionId=\(sessionId ?? "nil") "
+                + "runId=\(runId ?? "nil")"
+        )
+        return false
+    }
+
+    /// Package-visible for hermetic preference-matching tests.
+    func findPill(matching preference: AgentTimelineHydratePreference) -> AgentPill? {
+        guard let matched = preference.firstMatchingKey(
+            runIdMatches: { runId in pills.contains(where: { $0.canonicalRunId == runId }) },
+            sessionIdMatches: { sessionId in pills.contains(where: { $0.canonicalSessionId == sessionId }) },
+            pillIdMatches: { pillId in pills.contains(where: { $0.id == pillId }) }
+        ) else {
+            return nil
+        }
+        switch matched {
+        case .runId(let runId):
+            return pills.first(where: { $0.canonicalRunId == runId })
+        case .sessionId(let sessionId):
+            return pills.first(where: { $0.canonicalSessionId == sessionId })
+        case .pillId(let pillId):
+            return pills.first(where: { $0.id == pillId })
+        }
+    }
+
+    /// Test hook: replace in-memory pills without kernel I/O.
+    func replacePillsForTesting(_ next: [AgentPill]) {
+        pills = next
+        objectWillChange.send()
+    }
+
+    private func hydratePillFromKernel(preference: AgentTimelineHydratePreference) async -> Bool {
+        do {
+            for key in preference.keys {
+                switch key {
+                case .runId(let runId):
+                    let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
+                    if upsertHydratedPill(
+                        pillId: preference.keys.compactMap { key -> UUID? in
+                            if case .pillId(let id) = key { return id }
+                            return nil
+                        }.first,
+                        sessionId: inspection.sessionId,
+                        runId: inspection.runId ?? runId,
+                        attemptId: inspection.attemptId,
+                        title: nil,
+                        query: inspection.finalText
+                    ) {
+                        return true
+                    }
+                case .sessionId(let sessionId):
+                    let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
+                    if let session = snapshot.sessions.first(where: { $0.sessionId == sessionId }) {
+                        let resolvedPillId =
+                            (session.externalRefKind == "pill"
+                                ? session.externalRefId.flatMap(UUID.init(uuidString:))
+                                : nil)
+                            ?? preference.keys.compactMap { key -> UUID? in
+                                if case .pillId(let id) = key { return id }
+                                return nil
+                            }.first
+                        if upsertHydratedPill(
+                            pillId: resolvedPillId,
+                            sessionId: session.sessionId ?? sessionId,
+                            runId: session.runId,
+                            attemptId: session.attemptId,
+                            title: session.title,
+                            query: nil
+                        ) {
+                            return true
+                        }
+                    }
+                    let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+                    if let entry = floating.first(where: {
+                        canonicalString($0["sessionId"]) == sessionId
+                    }) {
+                        mergeProjectedPills(from: [entry])
+                        return findPill(matching: preference) != nil
+                    }
+                case .pillId(let pillId):
+                    let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+                    if let entry = floating.first(where: { canonicalPillId(from: $0) == pillId }) {
+                        mergeProjectedPills(from: [entry])
+                        return findPill(matching: preference) != nil
+                    }
+                    let snapshot = await DesktopCoordinatorService.shared.awarenessSnapshot()
+                    if let session = snapshot.sessions.first(where: {
+                        $0.externalRefKind == "pill" && $0.externalRefId == pillId.uuidString
+                    }) {
+                        if upsertHydratedPill(
+                            pillId: pillId,
+                            sessionId: session.sessionId,
+                            runId: session.runId,
+                            attemptId: session.attemptId,
+                            title: session.title,
+                            query: nil
+                        ) {
+                            return true
+                        }
+                    }
+                }
+            }
+        } catch {
+            logError("AgentPills: kernel hydrate failed", error: error)
+        }
+        return false
+    }
+
+    @discardableResult
+    private func upsertHydratedPill(
+        pillId: UUID?,
+        sessionId: String?,
+        runId: String?,
+        attemptId: String?,
+        title: String?,
+        query: String?
+    ) -> Bool {
+        let trimmedSession = sessionId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let trimmedRun = runId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmedSession.isEmpty || !trimmedRun.isEmpty || pillId != nil else {
+            return false
+        }
+        let id = pillId ?? UUID()
+        let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let pill: AgentPill
+        if let existing = pills.first(where: { $0.id == id }) {
+            pill = existing
+        } else if let existing = pills.first(where: {
+            (!trimmedRun.isEmpty && $0.canonicalRunId == trimmedRun)
+                || (!trimmedSession.isEmpty && $0.canonicalSessionId == trimmedSession)
+        }) {
+            pill = existing
+        } else {
+            pill = AgentPill(
+                id: id,
+                query: (query?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+                    ? query! : "Background agent",
+                model: model
+            )
+            pills.append(pill)
+        }
+        if let title, !title.isEmpty {
+            pill.title = title
+        } else if pill.title.isEmpty {
+            pill.title = "Background agent"
+        }
+        if !trimmedSession.isEmpty {
+            pill.canonicalSessionId = trimmedSession
+        }
+        if !trimmedRun.isEmpty {
+            pill.canonicalRunId = trimmedRun
+        }
+        if let attemptId, !attemptId.isEmpty {
+            pill.canonicalAttemptId = attemptId
+        }
+        Self.ensureStreamingAssistantMessage(for: pill)
+        pill.markContentChanged()
+        objectWillChange.send()
+        return true
+    }
+
     @MainActor
     func upsertSpawnedPill(
         id: UUID,
@@ -1714,6 +1912,18 @@ final class AgentPillsManager: ObservableObject {
             case .text(_, let text):
                 guard !message.isStreaming else { continue }
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return String(trimmed.prefix(110))
+                }
+            case .agentSpawn(_, _, _, _, let title, let objective):
+                let label = objective.isEmpty ? title : objective
+                let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty {
+                    return String(trimmed.prefix(110))
+                }
+            case .agentCompletion(_, _, _, _, let title, _, let output, _):
+                let label = output.isEmpty ? title : output
+                let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
                 }

@@ -2145,28 +2145,56 @@ class FloatingControlBarManager {
     /// actively reading.
     var activeAgentChatPillID: UUID? { window?.state.activeAgentChatPillID }
 
-    func openAgentChatFromTimeline(agentID: UUID) {
-        guard let window else { return }
-        guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == agentID }) else {
-            Task { @MainActor in
-                await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
-                guard let refreshedPill = AgentPillsManager.shared.pills.first(where: { $0.id == agentID }) else {
-                    log("FloatingControlBarManager: agent link unresolved after refresh: \(agentID)")
-                    return
-                }
-                openAgentChatFromTimeline(agentID: refreshedPill.id)
-            }
+    func openAgentChatFromTimeline(agentID: UUID, completion: ((Bool) -> Void)? = nil) {
+        openAgentChatFromTimeline(
+            ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),
+            completion: completion
+        )
+    }
+
+    func openAgentChatFromTimeline(ref: AgentTimelineRef, completion: ((Bool) -> Void)? = nil) {
+        guard let window else {
+            completion?(false)
             return
         }
-        AgentPillsManager.shared.markViewed(pillID: pill.id)
-        window.state.setNotchHoverMenuOpen(false)
-        window.makeKeyAndOrderFront(nil)
-        withAnimation(.easeOut(duration: 0.10)) {
-            window.state.present(.agent(pill.id))
-            window.state.isAILoading = false
-            window.state.aiInputText = ""
+        Task { @MainActor in
+            let resolved = await AgentPillsManager.shared.resolveAndPresentAgent(
+                pillId: ref.pillId,
+                sessionId: ref.sessionId,
+                runId: ref.runId
+            )
+            guard resolved else {
+                log(
+                    "FloatingControlBarManager: agent link unavailable after hydrate "
+                        + "pillId=\(ref.pillId?.uuidString ?? "nil") "
+                        + "sessionId=\(ref.sessionId ?? "nil") "
+                        + "runId=\(ref.runId ?? "nil")"
+                )
+                completion?(false)
+                return
+            }
+            let pillID = AgentPillsManager.shared.pills.first(where: { pill in
+                if let pillId = ref.pillId, pill.id == pillId { return true }
+                if let runId = ref.runId, pill.canonicalRunId == runId { return true }
+                if let sessionId = ref.sessionId, pill.canonicalSessionId == sessionId { return true }
+                return false
+            })?.id ?? ref.pillId
+            guard let pillID else {
+                log("FloatingControlBarManager: agent hydrate succeeded but pill id missing")
+                completion?(false)
+                return
+            }
+            AgentPillsManager.shared.markViewed(pillID: pillID)
+            window.state.setNotchHoverMenuOpen(false)
+            window.makeKeyAndOrderFront(nil)
+            withAnimation(.easeOut(duration: 0.10)) {
+                window.state.present(.agent(pillID))
+                window.state.isAILoading = false
+                window.state.aiInputText = ""
+            }
+            window.resizeForActiveAgentChatPublic(pillID: pillID, animated: true)
+            completion?(true)
         }
-        window.resizeForActiveAgentChatPublic(pillID: pill.id, animated: true)
     }
 
     /// Called when a pill is dismissed while it is the one shown in the Ask Omi
@@ -3596,16 +3624,29 @@ class FloatingControlBarManager {
             ? "[Background agent id=\(pillID.uuidString)] \(messageText)"
             : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(messageText)"
 
+        let completionBlock = ChatContentBlock.agentCompletion(
+            id: UUID().uuidString,
+            pillId: pillID,
+            sessionId: AgentPillsManager.shared.pills.first(where: { $0.id == pillID })?.canonicalSessionId,
+            runId: runId,
+            title: trimmedTitle.isEmpty ? "Background agent" : trimmedTitle,
+            promptSnippet: requestSnippet.isEmpty ? "Background agent" : requestSnippet,
+            output: messageText,
+            status: "completed"
+        )
+
         _ = historyChatProvider?.stageOptimisticTurn(
             continuityKey: continuityKey,
             userText: "",
             assistantText: summary,
             origin: "pill_completion",
             turnOwner: .mainChat,
+            contentBlocks: [completionBlock],
             resources: resources
         )
         // Floating surface keeps the plain completion copy; timeline/kernel use the
-        // bracket summary staged above (parsed by BackgroundAgentSummary).
+        // bracket summary staged above (parsed by BackgroundAgentSummary) plus
+        // structured agentCompletion for open-by-id hydrate.
         deliverAgentArtifactCompletionToFloatingSurface(
             ChatMessage(text: messageText, sender: .ai, resources: resources)
         )
@@ -3648,6 +3689,17 @@ class FloatingControlBarManager {
             ? "[Background agent id=\(pillID.uuidString)] \(trimmedAssistant)"
             : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(trimmedAssistant)"
 
+        let completionBlock = ChatContentBlock.agentCompletion(
+            id: UUID().uuidString,
+            pillId: pillID,
+            sessionId: AgentPillsManager.shared.pills.first(where: { $0.id == pillID })?.canonicalSessionId,
+            runId: runId,
+            title: "Background agent",
+            promptSnippet: requestSnippet.isEmpty ? "Background agent" : requestSnippet,
+            output: trimmedAssistant,
+            status: "completed"
+        )
+
         guard let provider = historyChatProvider else { return }
         if provider.hasOptimisticTurn(continuityKey: idempotencyKey)
             || provider.messages.contains(where: { $0.clientTurnId == idempotencyKey }) {
@@ -3667,7 +3719,8 @@ class FloatingControlBarManager {
             userText: "",
             assistantText: summary,
             origin: "pill_completion",
-            turnOwner: .mainChat
+            turnOwner: .mainChat,
+            contentBlocks: [completionBlock]
         )
         await provider.kernelTurnProjection.projectCrossSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),

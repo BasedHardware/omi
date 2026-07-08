@@ -73,6 +73,85 @@ struct ToolCallInput {
 }
 
 /// A block of content within an AI message (text or tool call indicator)
+/// Stable identity for opening a background agent from the chat timeline.
+/// Prefer `sessionId` / `runId` for kernel hydrate; `pillId` is the UI cache key.
+struct AgentTimelineRef: Equatable {
+    var pillId: UUID?
+    var sessionId: String?
+    var runId: String?
+
+    var hasIdentity: Bool {
+        pillId != nil
+            || !(sessionId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            || !(runId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    /// Kernel lookup prefers run, then session, then pill externalRefId.
+    var hydratePreference: AgentTimelineHydratePreference {
+        AgentTimelineHydratePreference.make(pillId: pillId, sessionId: sessionId, runId: runId)
+    }
+}
+
+/// Pure ordering for open-by-id hydrate (unit-testable without kernel I/O).
+struct AgentTimelineHydratePreference: Equatable {
+    enum Key: Equatable {
+        case runId(String)
+        case sessionId(String)
+        case pillId(UUID)
+    }
+
+    let keys: [Key]
+
+    static func make(pillId: UUID?, sessionId: String?, runId: String?) -> AgentTimelineHydratePreference {
+        var keys: [Key] = []
+        if let runId = sessionIdOrNil(runId) {
+            keys.append(.runId(runId))
+        }
+        if let sessionId = sessionIdOrNil(sessionId) {
+            keys.append(.sessionId(sessionId))
+        }
+        if let pillId {
+            keys.append(.pillId(pillId))
+        }
+        return AgentTimelineHydratePreference(keys: keys)
+    }
+
+    /// First preference key that matches the provided lookups (run → session → pill).
+    func firstMatchingKey(
+        runIdMatches: (String) -> Bool,
+        sessionIdMatches: (String) -> Bool,
+        pillIdMatches: (UUID) -> Bool
+    ) -> Key? {
+        for key in keys {
+            switch key {
+            case .runId(let runId) where runIdMatches(runId):
+                return key
+            case .sessionId(let sessionId) where sessionIdMatches(sessionId):
+                return key
+            case .pillId(let pillId) where pillIdMatches(pillId):
+                return key
+            default:
+                continue
+            }
+        }
+        return nil
+    }
+
+    private static func sessionIdOrNil(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// Applies timeline open result to card unavailable UI (unit-testable).
+enum AgentTimelineOpenFeedback {
+    /// Returns whether the card should show the unavailable message after an open attempt.
+    static func shouldShowUnavailable(succeeded: Bool) -> Bool {
+        !succeeded
+    }
+}
+
 enum ChatContentBlock: Identifiable {
     case text(id: String, text: String)
     case toolCall(id: String, name: String, status: ToolCallStatus,
@@ -82,6 +161,24 @@ enum ChatContentBlock: Identifiable {
     case thinking(id: String, text: String)
     /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
     case discoveryCard(id: String, title: String, summary: String, fullText: String)
+    case agentSpawn(
+        id: String,
+        pillId: UUID?,
+        sessionId: String,
+        runId: String,
+        title: String,
+        objective: String
+    )
+    case agentCompletion(
+        id: String,
+        pillId: UUID?,
+        sessionId: String?,
+        runId: String?,
+        title: String,
+        promptSnippet: String,
+        output: String,
+        status: String
+    )
 
     var id: String {
         switch self {
@@ -89,6 +186,19 @@ enum ChatContentBlock: Identifiable {
         case .toolCall(let id, _, _, _, _, _): return id
         case .thinking(let id, _): return id
         case .discoveryCard(let id, _, _, _): return id
+        case .agentSpawn(let id, _, _, _, _, _): return id
+        case .agentCompletion(let id, _, _, _, _, _, _, _): return id
+        }
+    }
+
+    var agentTimelineRef: AgentTimelineRef? {
+        switch self {
+        case .agentSpawn(_, let pillId, let sessionId, let runId, _, _):
+            return AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId)
+        case .agentCompletion(_, let pillId, let sessionId, let runId, _, _, _, _):
+            return AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId)
+        default:
+            return nil
         }
     }
 
@@ -573,6 +683,15 @@ extension ChatContentBlock {
         case .discoveryCard(_, let title, _, let fullText):
             let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+        case .agentSpawn(_, _, _, _, let title, let objective):
+            let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+        case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
+            let body = [promptSnippet, output]
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+                .joined(separator: "\n")
+            return body.isEmpty ? title : "\(title)\n\(body)"
         case .toolCall:
             return nil
         }
@@ -2962,13 +3081,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         assistantText: String,
         logLabel: String = "completed",
         messageSource: String = "desktop_chat",
-        continuityKey: String? = nil
+        continuityKey: String? = nil,
+        contentBlocks: [ChatContentBlock] = []
     ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
         let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !user.isEmpty || !assistant.isEmpty else {
+        guard !user.isEmpty || !assistant.isEmpty || !contentBlocks.isEmpty else {
             return (nil, nil)
         }
 
@@ -2986,8 +3106,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             messages.append(m)
             userMessage = m
         }
-        if !assistant.isEmpty {
-            let m = ChatMessage(clientTurnId: clientTurnId, text: assistant, sender: .ai)
+        if !assistant.isEmpty || !contentBlocks.isEmpty {
+            let messageText = assistant.isEmpty && !contentBlocks.isEmpty ? "Done." : assistant
+            let m = ChatMessage(
+                clientTurnId: clientTurnId,
+                text: messageText,
+                sender: .ai,
+                contentBlocks: contentBlocks
+            )
             messages.append(m)
             aiMessage = m
         }

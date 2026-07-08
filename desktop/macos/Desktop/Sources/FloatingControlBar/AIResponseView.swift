@@ -25,7 +25,8 @@ struct AIResponseView: View {
     var onSendFollowUp: ((String) -> Void)?
     var onRate: ((String, Int?) -> Void)?
     var onShareLink: (() async -> String?)?
-    var onOpenAgent: ((UUID) -> Void)?
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)?
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -132,6 +133,30 @@ struct AIResponseView: View {
                 return ["thinking", id, text].joined(separator: "\u{1E}")
             case .discoveryCard(let id, let title, let summary, let fullText):
                 return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
+            case .agentSpawn(let id, let pillId, let sessionId, let runId, let title, let objective):
+                return [
+                    "agentSpawn",
+                    id,
+                    pillId?.uuidString ?? "",
+                    sessionId,
+                    runId,
+                    title,
+                    objective,
+                ].joined(separator: "\u{1E}")
+            case .agentCompletion(
+                let id, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+            ):
+                return [
+                    "agentCompletion",
+                    id,
+                    pillId?.uuidString ?? "",
+                    sessionId ?? "",
+                    runId ?? "",
+                    title,
+                    promptSnippet,
+                    output,
+                    status,
+                ].joined(separator: "\u{1E}")
             }
         }.joined(separator: "\u{1D}")
     }
@@ -184,7 +209,11 @@ struct AIResponseView: View {
                         .environment(\.colorScheme, .dark)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .toolCalls(_, let calls):
-                    ToolCallsGroup(calls: calls, onOpenAgent: onOpenAgent)
+                    ToolCallsGroup(
+                        calls: calls,
+                        onOpenAgent: onOpenAgent,
+                        onOpenAgentRef: onOpenAgentRef
+                    )
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .thinking(_, let text):
                     ThinkingBlock(text: text)
@@ -192,6 +221,8 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                case .agentSpawn, .agentCompletion:
+                    EmptyView()
                 }
             }
         } else if !message.text.isEmpty {
@@ -217,7 +248,7 @@ struct AIResponseView: View {
 
         return grouped.filter { group in
             switch group {
-            case .text, .discoveryCard:
+            case .text, .discoveryCard, .agentSpawn, .agentCompletion:
                 return true
             case .toolCalls(_, let calls):
                 return calls.contains { $0.spawnedAgentID != nil }
