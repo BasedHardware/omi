@@ -1251,10 +1251,12 @@ final class AgentPillsManager: ObservableObject {
             pill.canonicalSessionId = sessionId
             pill.canonicalRunId = runId
             pill.canonicalAttemptId = canonicalString(entry["attemptId"])
-            applyProjectedStatus((entry["status"] as? String) ?? "running", to: pill)
+            let projectedStatus = (entry["status"] as? String) ?? "running"
+            applyProjectedStatus(projectedStatus, to: pill)
             if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
                 pill.latestActivity = activity
             }
+            reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)
             pill.markContentChanged()
         }
         let removable = pills.filter { pill in
@@ -1286,6 +1288,9 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func applyProjectedStatus(_ status: String, to pill: AgentPill) {
+        if pill.status.isFinished && !isTerminalProjectedStatus(status) {
+            return
+        }
         switch status {
         case "queued":
             pill.status = .queued
@@ -1301,6 +1306,28 @@ final class AgentPillsManager: ObservableObject {
             pill.status = .failed("Agent failed")
         default:
             break
+        }
+    }
+
+    private func reconcileProjectedPillRun(entryStatus: String, pill: AgentPill) {
+        guard shouldPollCanonicalRun(for: pill, projectedStatus: entryStatus) else { return }
+        startCanonicalRunPolling(for: pill)
+    }
+
+    private func shouldPollCanonicalRun(for pill: AgentPill, projectedStatus: String) -> Bool {
+        guard pill.canonicalRunId?.isEmpty == false else { return false }
+        if isTerminalProjectedStatus(projectedStatus) {
+            return !Self.hasTerminalAssistantMessage(for: pill)
+        }
+        return !pill.status.isFinished && runTasksByPill[pill.id] == nil
+    }
+
+    private func isTerminalProjectedStatus(_ status: String) -> Bool {
+        switch status {
+        case "succeeded", "completed", "cancelled", "failed", "timed_out", "orphaned":
+            return true
+        default:
+            return false
         }
     }
 
@@ -1353,6 +1380,11 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func pollCanonicalRun(for pill: AgentPill, generation: Int) async {
+        defer {
+            if isCurrentRunAttempt(pillID: pill.id, generation: generation) {
+                runTasksByPill[pill.id] = nil
+            }
+        }
         while !Task.isCancelled {
             guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
             guard pills.contains(where: { $0.id == pill.id }) else { return }
@@ -1416,6 +1448,9 @@ final class AgentPillsManager: ObservableObject {
             return
         }
         if let expectedAttemptId, pill.canonicalAttemptId != expectedAttemptId {
+            return
+        }
+        if pill.status.isFinished && !isTerminalProjectedStatus(inspection.status) {
             return
         }
         pill.canonicalSessionId = inspection.sessionId ?? pill.canonicalSessionId
@@ -1579,6 +1614,11 @@ final class AgentPillsManager: ObservableObject {
         return pill.conversationMessages.last { message in
             message.sender == .ai && hasVisibleAssistantContent(message)
         }
+    }
+
+    private static func hasTerminalAssistantMessage(for pill: AgentPill) -> Bool {
+        guard let message = currentAssistantMessage(for: pill) else { return false }
+        return !message.isStreaming && hasVisibleAssistantContent(message)
     }
 
     private static func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
@@ -1756,6 +1796,9 @@ final class AgentPillsManager: ObservableObject {
 
     private static func apply(projection: AgentRunProjection, to pill: AgentPill) {
         if pill.status == .stopped && projection.status != .cancelled {
+            return
+        }
+        if pill.status.isFinished && !projection.status.isTerminal {
             return
         }
 

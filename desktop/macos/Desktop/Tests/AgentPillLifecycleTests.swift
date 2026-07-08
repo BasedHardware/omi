@@ -56,9 +56,26 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("pill.canonicalSessionId = sessionId"))
     XCTAssertTrue(source.contains("pill.canonicalRunId = runId"))
     XCTAssertTrue(source.contains("pill.canonicalAttemptId = canonicalString(entry[\"attemptId\"])"))
+    XCTAssertTrue(source.contains("reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)"))
     XCTAssertTrue(source.contains("removeRenderedProjection(pillID: pill.id)"))
     XCTAssertFalse(source.contains("stablePillUUID"))
     XCTAssertFalse(source.contains("UUID(uuidString: idString) ??"))
+  }
+
+  func testProjectedPillsStartCanonicalPollingForTerminalOutputReconciliation() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("private func reconcileProjectedPillRun(entryStatus: String, pill: AgentPill)"))
+    XCTAssertTrue(source.contains("guard shouldPollCanonicalRun(for: pill, projectedStatus: entryStatus) else { return }"))
+    XCTAssertTrue(source.contains("startCanonicalRunPolling(for: pill)"))
+    XCTAssertTrue(source.contains("private func shouldPollCanonicalRun(for pill: AgentPill, projectedStatus: String)"))
+    XCTAssertTrue(source.contains("if isTerminalProjectedStatus(projectedStatus)"))
+    XCTAssertTrue(source.contains("return !Self.hasTerminalAssistantMessage(for: pill)"))
+    XCTAssertTrue(source.contains("return !pill.status.isFinished && runTasksByPill[pill.id] == nil"))
+    XCTAssertTrue(source.contains("private static func hasTerminalAssistantMessage(for pill: AgentPill)"))
+    XCTAssertTrue(source.contains("if isCurrentRunAttempt(pillID: pill.id, generation: generation) {\n                runTasksByPill[pill.id] = nil"))
+    XCTAssertTrue(source.contains("if pill.status.isFinished && !isTerminalProjectedStatus(status)"))
+    XCTAssertTrue(source.contains("if pill.status.isFinished && !isTerminalProjectedStatus(inspection.status)"))
   }
 
   func testFloatingPillInspectResultsAreGuardedByCurrentRunAttempt() throws {
@@ -1087,6 +1104,10 @@ final class AgentPillLifecycleTests: XCTestCase {
       source.contains(
         """
         if pill.status == .stopped && projection.status != .cancelled {
+                    return
+                }
+
+                if pill.status.isFinished && !projection.status.isTerminal {
                     return
                 }
 
