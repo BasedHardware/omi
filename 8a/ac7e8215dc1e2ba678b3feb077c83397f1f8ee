@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/Redesign/README.md
+  s_897886a34066e7::t_cb74bd58168b04 1-41
+desktop/macos/Desktop/Sources/Redesign/InkTheme.swift
+  s_897886a34066e7::t_dea36582371b36 1-82
+desktop/macos/Desktop/Sources/Redesign/InkComponents.swift
+  s_897886a34066e7::t_a1f1f3566c9845 1-280
+desktop/macos/Desktop/Sources/Redesign/InkType.swift
+  s_897886a34066e7::t_a8287f53d0ee32 1-75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "8aac7e8215dc1e2ba678b3feb077c83397f1f8ee",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
