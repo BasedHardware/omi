@@ -232,11 +232,24 @@ final class DashboardCaptureStateTests: XCTestCase {
 
     func testOnboardingMemoryLogImportKeepsCapturedUserScope() throws {
         let source = try onboardingCoordinatorSource()
+        let method = try methodBody(named: "importMemoryLog", in: source)
+        let guardRange = try XCTUnwrap(
+            method.range(of: "guard Self.currentUserID() == importUserID else { return }")
+        )
+        let guardOffset = method.distance(from: method.startIndex, to: guardRange.lowerBound)
+        let scopedDefaultsWrites = [
+            "Self.scopedDefaultsKey(chatGPTImportedMemoriesKey, userID: importUserID)",
+            "Self.scopedDefaultsKey(chatGPTImportSummaryKey, userID: importUserID)",
+            "Self.scopedDefaultsKey(claudeImportedMemoriesKey, userID: importUserID)",
+            "Self.scopedDefaultsKey(claudeImportSummaryKey, userID: importUserID)",
+        ]
 
-        XCTAssertTrue(source.contains("let importUserID = Self.currentUserID()"))
-        XCTAssertTrue(source.contains("guard Self.currentUserID() == importUserID else { return }"))
-        XCTAssertTrue(source.contains("Self.scopedDefaultsKey(chatGPTImportedMemoriesKey, userID: importUserID)"))
-        XCTAssertTrue(source.contains("Self.scopedDefaultsKey(claudeImportedMemoriesKey, userID: importUserID)"))
+        XCTAssertTrue(method.contains("let importUserID = Self.currentUserID()"))
+        for scopedDefaultsWrite in scopedDefaultsWrites {
+            let writeRange = try XCTUnwrap(method.range(of: scopedDefaultsWrite))
+            let writeOffset = method.distance(from: method.startIndex, to: writeRange.lowerBound)
+            XCTAssertGreaterThan(writeOffset, guardOffset)
+        }
     }
 
     func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
@@ -378,12 +391,32 @@ final class DashboardCaptureStateTests: XCTestCase {
     }
 
     private func methodBody(named name: String, in source: String) throws -> String {
-        let pattern = #"(?:private )?func \#(name)\([^\)]*\)[^{]*\{([\s\S]*?)\n    \}"#
+        let pattern = #"(?:private )?func \#(name)\b"#
         let regex = try NSRegularExpression(pattern: pattern)
         let range = NSRange(source.startIndex..<source.endIndex, in: source)
         let match = try XCTUnwrap(regex.firstMatch(in: source, range: range))
-        let bodyRange = try XCTUnwrap(Range(match.range(at: 1), in: source))
-        return String(source[bodyRange])
+        let matchRange = try XCTUnwrap(Range(match.range, in: source))
+        let openBrace = try XCTUnwrap(source[matchRange.upperBound...].firstIndex(of: "{"))
+
+        var depth = 0
+        var current = openBrace
+        while current < source.endIndex {
+            switch source[current] {
+            case "{":
+                depth += 1
+            case "}":
+                depth -= 1
+                if depth == 0 {
+                    let bodyStart = source.index(after: openBrace)
+                    return String(source[bodyStart..<current])
+                }
+            default:
+                break
+            }
+            current = source.index(after: current)
+        }
+
+        return try XCTUnwrap(nil, "Could not find body for \(name)")
     }
 
     private func computedPropertyBody(named name: String, in source: String) throws -> String {
