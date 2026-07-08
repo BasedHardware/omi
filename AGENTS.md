@@ -83,6 +83,8 @@ ELSE (pure cache miss, expected soft path with no mode change):
 
 Emitters: Python `utils.observability.fallback.record_fallback` → `omi_fallback_total`; Swift `DesktopDiagnosticsManager.recordFallback` → `desktop_health_event`/`fallback_triggered`; Rust `fallback::record_fallback` → fixed-field `tracing` (`event=fallback`). Legacy metrics (`llm_gateway_*`, `pusher_sessions_degraded`) stay — do not copy their fat label sets onto new sites. Alert on rates with denominators or dwell gauges; never page on raw absolute counts or successful `recovered` heals.
 
+Optional ratchet (not CI): `python backend/scripts/check_fallback_instrumentation.py <touched files>` warns when a diff hunk adds fallback/fail-open/degraded branches without `record_fallback`/`recordFallback`.
+
 ### Backend (Python)
 
 - **No in-function imports** — all imports at module top level.

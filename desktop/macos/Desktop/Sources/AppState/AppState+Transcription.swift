@@ -581,6 +581,13 @@ extension AppState {
     }
 
     log("Transcription: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "silent_mic",
+      from: "bluetooth",
+      to: "built_in",
+      reason: "local_heal",
+      outcome: .recovered,
+      extra: ["user_visible": false])
 
     // Tear down the dead Bluetooth capture and spin a new one pinned to the built-in mic.
     // Silent healing — no user-facing UI, the recording just keeps working.

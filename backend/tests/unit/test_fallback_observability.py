@@ -103,3 +103,44 @@ def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
         outcome='degraded',
         log=BoomLogger(),
     )
+
+
+def test_stt_selection_fallback_records_on_capability_mismatch(monkeypatch):
+    from utils.stt import streaming as streaming_mod
+
+    counter = FakeCounter()
+    monkeypatch.setattr(fallback_mod, 'OMI_FALLBACK_TOTAL', counter)
+    monkeypatch.setattr(streaming_mod, 'stt_service_models', ['modulate-velma-2'])
+
+    service, lang, model = streaming_mod.get_stt_service_for_language('xx-unsupported')
+
+    assert service == streaming_mod.STTService.deepgram
+    assert lang == 'en'
+    assert model == 'nova-3'
+    assert counter.increments == [
+        (
+            {
+                'component': 'stt_selection',
+                'from_mode': 'requested_non_en',
+                'to_mode': 'deepgram_en',
+                'reason': 'capability_mismatch',
+                'outcome': 'degraded',
+            },
+            1.0,
+        )
+    ]
+
+
+def test_hosted_vad_fallback_reason_buckets(monkeypatch):
+    import httpx
+    import requests
+    from utils.stt import vad as vad_mod
+
+    assert vad_mod._hosted_vad_fallback_reason(requests.Timeout()) == 'timeout'
+    assert vad_mod._hosted_vad_fallback_reason(httpx.TimeoutException('slow')) == 'timeout'
+
+    response = requests.Response()
+    response.status_code = 503
+    assert vad_mod._hosted_vad_fallback_reason(requests.HTTPError(response=response)) == 'provider_5xx'
+
+    assert vad_mod._hosted_vad_fallback_reason(RuntimeError('boom')) == 'other'

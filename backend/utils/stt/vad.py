@@ -3,6 +3,7 @@ import os
 import threading
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
 
+import httpx
 import numpy as np
 import onnxruntime as ort  # onnxruntime is untyped
 import requests
@@ -12,8 +13,31 @@ from pydub import AudioSegment  # pydub is untyped
 from database import redis_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+
+def _hosted_vad_fallback_reason(exc: BaseException) -> str:
+    if isinstance(exc, (requests.Timeout, httpx.TimeoutException)):
+        return 'timeout'
+    response = getattr(exc, 'response', None)
+    if response is not None:
+        status_code = getattr(response, 'status_code', None)
+        if isinstance(status_code, int) and status_code >= 500:
+            return 'provider_5xx'
+    return 'other'
+
+
+def _record_hosted_vad_fallback(exc: BaseException) -> None:
+    record_fallback(
+        component='vad',
+        from_mode='hosted',
+        to_mode='local_onnx',
+        reason=_hosted_vad_fallback_reason(exc),
+        outcome='degraded',
+    )
+
 
 # ---------------------------------------------------------------------------
 # Singleton ONNX Silero-VAD session (process-wide, thread-safe)
@@ -129,6 +153,7 @@ def vad_is_empty(
                 response.raise_for_status()
                 segments = response.json()  # untyped external JSON response
         except Exception as e:
+            _record_hosted_vad_fallback(e)
             logger.warning(f'Hosted VAD unavailable, falling back to local ONNX VAD for {file_path}: {e}')
 
     if segments is None:
@@ -230,6 +255,7 @@ async def async_vad_is_empty(
             response.raise_for_status()
             segments = response.json()  # untyped external JSON response
         except Exception as e:
+            _record_hosted_vad_fallback(e)
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:

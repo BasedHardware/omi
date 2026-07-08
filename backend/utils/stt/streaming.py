@@ -25,6 +25,7 @@ from utils.stt.speaker_embedding import (
     async_extract_embedding_from_bytes,
     compare_embeddings,
 )
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
@@ -261,6 +262,14 @@ def _normalize_language(language: str) -> str:
     return language.split('-')[0].split('_')[0].lower()
 
 
+def _stt_selection_from_mode(language: str, base_lang: str) -> str:
+    if base_lang and base_lang != 'en':
+        return 'requested_non_en'
+    if any(m.strip() for m in stt_service_models):
+        return 'configured'
+    return 'none'
+
+
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True) -> Tuple[STTService, str, str]:
     base_lang = _normalize_language(language)
     for m in stt_service_models:
@@ -281,6 +290,13 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
             continue
 
     # Fallback to deepgram nova-3 with English
+    record_fallback(
+        component='stt_selection',
+        from_mode=_stt_selection_from_mode(language, base_lang),
+        to_mode='deepgram_en',
+        reason='capability_mismatch',
+        outcome='degraded',
+    )
     return STTService.deepgram, 'en', 'nova-3'
 
 
