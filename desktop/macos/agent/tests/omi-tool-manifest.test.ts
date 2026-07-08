@@ -122,16 +122,17 @@ describe("omi tool manifest", () => {
     });
   });
 
-  it("preserves control-tool schema preconditions in MCP projections", () => {
+  it("keeps control-tool cross-field preconditions in runtime validation instead of MCP schemas", () => {
     const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
     const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
 
-    expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
-      { required: ["artifactId"] },
-      { required: ["sessionId"] },
-      { required: ["runId"] },
-      { required: ["attemptId"] },
-    ]);
+    expect(inspectArtifacts?.inputSchema).toMatchObject({
+      type: "object",
+      required: [],
+    });
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("anyOf");
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("oneOf");
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("allOf");
   });
 
   it("keeps MCP-only schema options from overriding base tool schema fields", () => {

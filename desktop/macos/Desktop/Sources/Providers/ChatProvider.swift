@@ -3382,23 +3382,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             }
-            if ScreenContextInterestDetector.isScreenContextRequest(trimmedText) && effectiveImageData == nil {
+            if effectiveImageData == nil && ScreenContextAutoIncludePolicy.shouldInclude(
+                userText: trimmedText,
+                systemPromptStyle: systemPromptStyle,
+                turnOwner: turnOwner
+            ) {
                 let screenRecordingGranted = CGPreflightScreenCaptureAccess()
-                let screenContextPayload: [String: Any] = if screenRecordingGranted {
-                    await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
-                } else {
-                    [
-                        "ok": false,
-                        "name": "get_work_context",
-                        "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
-                        "screen_now": [
-                            "available": false,
-                            "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
-                        ],
-                        "timeline": [],
-                        "guidance": "Omi does not have Screen Recording permission for current screen access.",
-                    ]
-                }
+                let screenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
                 let screenContextEnvelope: [String: Any] = [
                     "permission": [
                         "screen_recording": screenRecordingGranted ? "granted" : "not_granted"

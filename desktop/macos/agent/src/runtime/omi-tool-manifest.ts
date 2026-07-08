@@ -41,13 +41,7 @@ export interface OmiToolInputSchema {
   additionalProperties?: boolean;
 }
 
-export interface OmiMcpToolInputSchema extends OmiToolInputSchema {
-  anyOf?: unknown[];
-  allOf?: unknown[];
-  oneOf?: unknown[];
-  if?: unknown;
-  then?: unknown;
-}
+export type OmiMcpToolInputSchema = OmiToolInputSchema;
 
 export interface OmiToolAdapterAvailability {
   advertised: boolean;
@@ -1413,7 +1407,6 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
     } as OmiToolInputSchema,
     mcpInputSchema: {
       ...agentControlInputSchema(tool),
-      ...tool.mcpInputSchemaOptions,
       additionalProperties: false,
     } as OmiMcpToolInputSchema,
     annotations: readOnlyLocal,

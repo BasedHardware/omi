@@ -64,6 +64,21 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertEqual(snapshot.screenToolFailureCodes, ["screenshot_pending"])
   }
 
+  func testWorkContextPermissionDeniedPayloadIsTypedForModels() throws {
+    let payload = ScreenContextWorkContextBuilder.permissionDeniedPayload(windowMinutes: 10)
+    let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    let output = String(data: data, encoding: .utf8)!
+
+    XCTAssertTrue(output.contains(#""failure_code":"permission_denied""#))
+    XCTAssertTrue(output.contains(#""screen_recording":"not_granted""#))
+    XCTAssertTrue(output.contains(#""next_tool":"request_permission""#))
+    XCTAssertTrue(output.contains(#""type":"screen_recording""#))
+
+    let facts = ScreenContextToolTelemetry.toolResultFacts(toolName: "get_work_context", output: output)
+    XCTAssertEqual(facts?.failureCode, .permissionDenied)
+    XCTAssertEqual(facts?.succeeded, false)
+  }
+
   func testChatMessageSentPropertyNamesDoNotUseAmbiguousHasContext() throws {
     let sourcesDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -90,5 +105,32 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(ScreenContextInterestDetector.isScreenContextRequest("Can you see my screen?"))
     XCTAssertTrue(ScreenContextInterestDetector.isScreenContextRequest("Debug this error"))
     XCTAssertFalse(ScreenContextInterestDetector.isScreenContextRequest("What did I do yesterday?"))
+  }
+
+  func testScreenContextAutoIncludePolicyCoversFloatingAndAgentTurns() {
+    XCTAssertTrue(
+      ScreenContextAutoIncludePolicy.shouldInclude(
+        userText: "which one",
+        systemPromptStyle: .floating,
+        turnOwner: .floatingDefault
+      ))
+    XCTAssertTrue(
+      ScreenContextAutoIncludePolicy.shouldInclude(
+        userText: "take a look",
+        systemPromptStyle: .main,
+        turnOwner: .agentPill(UUID())
+      ))
+    XCTAssertTrue(
+      ScreenContextAutoIncludePolicy.shouldInclude(
+        userText: "debug this error",
+        systemPromptStyle: .main,
+        turnOwner: .mainChat
+      ))
+    XCTAssertFalse(
+      ScreenContextAutoIncludePolicy.shouldInclude(
+        userText: "what did I do yesterday?",
+        systemPromptStyle: .main,
+        turnOwner: .mainChat
+      ))
   }
 }

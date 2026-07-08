@@ -82,6 +82,25 @@ enum ScreenContextInterestDetector {
   }
 }
 
+enum ScreenContextAutoIncludePolicy {
+  static func shouldInclude(
+    userText: String,
+    systemPromptStyle: ChatSystemPromptStyle,
+    turnOwner: ChatTurnOwner
+  ) -> Bool {
+    if ScreenContextInterestDetector.isScreenContextRequest(userText) {
+      return true
+    }
+
+    switch turnOwner {
+    case .floatingDefault, .floatingVoice, .taskChat, .agentPill:
+      return true
+    case .mainChat:
+      return systemPromptStyle == .floating
+    }
+  }
+}
+
 enum ScreenContextToolTelemetry {
   private static let screenContextTools: Set<String> = [
     "get_work_context",
@@ -289,6 +308,10 @@ enum ScreenContextWorkContextBuilder {
     let start = now.addingTimeInterval(-Double(minutes) * 60)
     let formatter = ISO8601DateFormatter()
 
+    guard CGPreflightScreenCaptureAccess() else {
+      return permissionDeniedPayload(windowMinutes: minutes)
+    }
+
     guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
       return [
         "ok": false,
@@ -396,6 +419,29 @@ enum ScreenContextWorkContextBuilder {
       payload["latest_capture_age_seconds"] = latestCaptureAgeSeconds
     }
     return payload
+  }
+
+  static func permissionDeniedPayload(windowMinutes minutes: Int) -> [String: Any] {
+    [
+      "ok": false,
+      "name": "get_work_context",
+      "window_minutes": max(1, min(120, minutes)),
+      "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
+      "permission": [
+        "screen_recording": "not_granted"
+      ],
+      "screen_now": [
+        "available": false,
+        "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
+      ],
+      "timeline": [],
+      "guidance":
+        "Omi does not have Screen Recording permission for current screen access. Tell the user plainly, then call request_permission with type=screen_recording if current screen access is needed.",
+      "next_tool": "request_permission",
+      "next_tool_arguments": [
+        "type": "screen_recording"
+      ],
+    ]
   }
 
   static func telemetryValues(from payload: [String: Any]) -> (

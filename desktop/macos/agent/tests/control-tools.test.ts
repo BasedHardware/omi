@@ -1695,6 +1695,61 @@ describe("agent control tools", () => {
     ]);
     expect(row.external_ref_kind).toBe("pill");
     expect(row.external_ref_id).toBe(spawned.session.externalRefId);
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+      }),
+    );
+    expect(listed.ok).toBe(true);
+    expect(listed.floating_agent_pills).toContainEqual(
+      expect.objectContaining({
+        id: spawned.session.externalRefId,
+        sessionId: spawned.session.sessionId,
+        runId: spawned.run.runId,
+        status: expect.any(String),
+        query: "summarize inbox",
+      }),
+    );
+    store.close();
+  });
+
+  it("projects typed failure details for accepted visible spawned agents", async () => {
+    const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), "acp");
+    adapter.failNextExecutionError = new Error("spawn bridge failed after acceptance");
+
+    const spawned = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+        objective: "summarize inbox",
+        visible: true,
+        externalRefId: "11111111-2222-4333-8444-555555555555",
+        requestId: "spawn-visible-failure-1",
+        clientId: "spawn-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(spawned.ok).toBe(true);
+    await waitUntil(() => {
+      const row = store.getRow("SELECT status FROM runs WHERE run_id = ?", [spawned.run.runId]);
+      return row.status === "failed";
+    });
+
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+      }),
+    );
+    expect(listed.floating_agent_pills).toContainEqual(
+      expect.objectContaining({
+        id: "11111111-2222-4333-8444-555555555555",
+        runId: spawned.run.runId,
+        status: "failed",
+        errorCode: "adapter_execution_failed",
+        errorMessage: expect.stringContaining("spawn bridge failed after acceptance"),
+        latestActivity: expect.stringContaining("spawn bridge failed after acceptance"),
+      }),
+    );
     store.close();
   });
 

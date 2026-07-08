@@ -1668,28 +1668,6 @@
         }
       },
       "required": [],
-      "anyOf": [
-        {
-          "required": [
-            "artifactId"
-          ]
-        },
-        {
-          "required": [
-            "sessionId"
-          ]
-        },
-        {
-          "required": [
-            "runId"
-          ]
-        },
-        {
-          "required": [
-            "attemptId"
-          ]
-        }
-      ],
       "additionalProperties": false
     },
     "annotations": {

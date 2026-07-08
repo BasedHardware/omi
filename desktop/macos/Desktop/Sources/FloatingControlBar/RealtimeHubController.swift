@@ -71,6 +71,94 @@ enum RealtimeHubCommitResult: Equatable {
   case rejectedNoSession
 }
 
+enum RealtimeHubToolFailureKind: String, Equatable {
+  case backendUnauthorized = "backend_unauthorized"
+  case backendRateLimited = "backend_rate_limited"
+  case backendClientRejected = "backend_client_rejected"
+  case backendServerError = "backend_server_error"
+  case backendTransport = "backend_transport"
+  case responseDecode = "response_decode"
+  case providerCredential = "provider_credential"
+  case toolExecution = "tool_execution"
+
+  static func classify(_ error: Error) -> RealtimeHubToolFailureKind {
+    if error is DecodingError { return .responseDecode }
+    if let apiError = error as? APIError {
+      switch apiError {
+      case .unauthorized:
+        return .backendUnauthorized
+      case .syncRateLimited:
+        return .backendRateLimited
+      case .invalidResponse, .decodingError:
+        return .responseDecode
+      case .httpError(let statusCode, _):
+        switch statusCode {
+        case 401, 403:
+          return .backendUnauthorized
+        case 408, 425, 429:
+          return .backendRateLimited
+        case 400..<500:
+          return .backendClientRejected
+        case 500..<600:
+          return .backendServerError
+        default:
+          return .backendTransport
+        }
+      case .unsupportedTierScopedBulkMutation, .syncUploadRejected:
+        return .backendClientRejected
+      }
+    }
+    if let credentialError = error as? CredentialHealthError {
+      switch credentialError.failureClass {
+      case .requiresLogin, .backendUnauthorized:
+        return .backendUnauthorized
+      case .paywalled, .byokEnrollmentMismatch, .providerAuthFailed, .providerQuotaExceeded:
+        return .providerCredential
+      case .backendTransient:
+        return .backendServerError
+      case .providerTransient, .providerPolicyClose, .unknown:
+        return .backendTransport
+      }
+    }
+    let nsError = error as NSError
+    if nsError.domain == NSURLErrorDomain { return .backendTransport }
+    return .toolExecution
+  }
+
+  var userFacingReason: String {
+    switch self {
+    case .backendUnauthorized:
+      return "Sign-in or account access needs attention."
+    case .backendRateLimited:
+      return "The service is rate limited; try again shortly."
+    case .backendClientRejected:
+      return "The request was rejected."
+    case .backendServerError:
+      return "The backend is temporarily unavailable."
+    case .backendTransport:
+      return "The network request failed."
+    case .responseDecode:
+      return "The response could not be read."
+    case .providerCredential:
+      return "The provider credential needs attention."
+    case .toolExecution:
+      return "The tool failed while running."
+    }
+  }
+}
+
+struct RealtimeHubToolFailure: Equatable {
+  let kind: RealtimeHubToolFailureKind
+
+  static func classify(_ error: Error) -> RealtimeHubToolFailure {
+    RealtimeHubToolFailure(kind: RealtimeHubToolFailureKind.classify(error))
+  }
+
+  func userFacingOutput(base: String) -> String {
+    "\(base) \(kind.userFacingReason)"
+  }
+}
+
 private struct PendingBargeInReplacementTurn {
   var pendingBegin = true
   var pendingCommit = false
@@ -1352,10 +1440,19 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     Task { [weak self] in
       guard let self else { return }
       var out: String
-      do { out = try await body() } catch { out = errorText }
-      if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
       let suffix = detail.isEmpty ? "" : " \(detail)"
-      log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
+      do {
+        out = try await body()
+        if out.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { out = emptyText }
+        log("RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) → \(out.prefix(60))")
+      } catch {
+        let failure = RealtimeHubToolFailure.classify(error)
+        out = failure.userFacingOutput(base: errorText)
+        log(
+          "RealtimeHub[\(self.providerTag)]: tool \(name)\(suffix) FAILED "
+            + "failure_type=\(failure.kind.rawValue)"
+        )
+      }
       self.sendToolResultIfCurrent(
         source: source, callId: callId, name: name, output: out, expectedTurnEpoch: expectedTurnEpoch)
     }

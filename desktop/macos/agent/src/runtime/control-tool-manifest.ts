@@ -25,14 +25,6 @@ export interface AgentControlManifestProperty {
 
 export type AgentControlSurface = "desktopChat" | "realtimeHub";
 
-export interface AgentControlMcpInputSchemaOptions {
-  anyOf?: unknown[];
-  allOf?: unknown[];
-  oneOf?: unknown[];
-  if?: unknown;
-  then?: unknown;
-}
-
 export interface AgentControlManifestTool {
   name:
     | "list_agent_sessions"
@@ -73,7 +65,6 @@ export interface AgentControlManifestTool {
   timeoutClass: AgentControlTimeoutClass;
   properties: Record<string, AgentControlManifestProperty>;
   required: string[];
-  mcpInputSchemaOptions?: AgentControlMcpInputSchemaOptions;
 }
 
 const agentControlReadPolicy = {
@@ -521,14 +512,6 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       limit: { type: "number", description: "Maximum artifacts to return. Default 50, max 200." },
     },
     required: [],
-    mcpInputSchemaOptions: {
-      anyOf: [
-        { required: ["artifactId"] },
-        { required: ["sessionId"] },
-        { required: ["runId"] },
-        { required: ["attemptId"] },
-      ],
-    },
   },
   {
     name: "update_agent_artifact_lifecycle",

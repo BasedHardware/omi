@@ -934,20 +934,28 @@ function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record
   const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
   const input = (run?.input as Record<string, unknown> | undefined) ?? {};
   const metadata = (session.metadata as Record<string, unknown> | undefined) ?? {};
+  const runId = typeof run?.runId === "string" && run.runId ? run.runId : null;
+  const sessionId = typeof session.sessionId === "string" && session.sessionId ? session.sessionId : null;
+  const errorMessage = typeof run?.errorMessage === "string" && run.errorMessage ? run.errorMessage : null;
+  const errorCode = typeof run?.errorCode === "string" && run.errorCode ? run.errorCode : null;
   const pillId =
     (typeof session.externalRefId === "string" && session.externalRefId) ||
-    (typeof run?.runId === "string" ? run.runId : null);
+    (typeof metadata.pillId === "string" && metadata.pillId) ||
+    runId ||
+    sessionId;
   return {
     id: pillId,
-    runId: run?.runId ?? null,
-    sessionId: session.sessionId ?? null,
+    runId,
+    sessionId,
     title: session.title ?? "Background agent",
     status: run?.status ?? session.status ?? "unknown",
-    latestActivity: run?.finalText ?? input.prompt ?? session.title ?? "",
+    latestActivity: run?.finalText ?? errorMessage ?? input.prompt ?? session.title ?? "",
     query: typeof input.prompt === "string" ? input.prompt : "",
     createdAtMs: session.createdAtMs ?? null,
     completedAtMs: run?.completedAtMs ?? null,
     provider: metadata.provider ?? null,
+    errorCode,
+    errorMessage,
   };
 }
 
