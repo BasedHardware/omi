@@ -12,6 +12,11 @@ void main() {
       expect(DeviceUtils.isOmiDevKit(deviceName: 'Omi DevKit'), isTrue);
     });
 
+    test('detects the spaced "Dev Kit" spelling (Friend Dev Kit 1)', () {
+      expect(DeviceUtils.isOmiDevKit(deviceName: 'Friend Dev Kit 1'), isTrue);
+      expect(DeviceUtils.isOmiDevKit(modelNumber: 'Omi Dev Kit 2'), isTrue);
+    });
+
     test('is case-insensitive', () {
       expect(DeviceUtils.isOmiDevKit(modelNumber: 'omi devkit 2'), isTrue);
     });
@@ -56,6 +61,11 @@ void main() {
 
     test('Friend DevKit 1 is NOT CV1', () {
       expect(DeviceUtils.isOmiCv1(modelNumber: 'Friend DevKit 1'), isFalse);
+    });
+
+    test('Friend Dev Kit 1 (spaced) is NOT CV1 — the forced-onboarding regression', () {
+      expect(DeviceUtils.isOmiCv1(deviceName: 'Friend Dev Kit 1'), isFalse);
+      expect(DeviceUtils.isOmiCv1(modelNumber: 'Friend Dev Kit 1'), isFalse);
     });
 
     test('Glass is NOT CV1', () {
