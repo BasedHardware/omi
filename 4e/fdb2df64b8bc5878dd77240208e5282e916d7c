@@ -1,0 +1,20 @@
+desktop/macos/Desktop/Sources/Redesign/RedesignRail.swift
+  s_897886a34066e7::t_92571943cdd17b 76,78
+  s_897886a34066e7::t_320280bdd47709 83,86-92,95-96
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "4efdb2df64b8bc5878dd77240208e5282e916d7c",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
