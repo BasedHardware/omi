@@ -230,17 +230,33 @@ class ChatToolExecutor {
       return .allow
 
     case "capture_screen", "get_screenshot":
+      // Screen-image bytes flow to the chat model only while the user-facing
+      // "Screen Sharing in Chat" setting is on (default on — asking Omi about
+      // the screen is the consent signal). The original unconditional deny
+      // shipped without any approval flow, leaving chat screen vision dead.
+      if isChatScreenshotSharingEnabled {
+        return .allow
+      }
       return .deny(
         policyDeniedMessage(
           toolName: toolName,
           code: "approval_required",
           capability: "desktop.context.screenshot_image",
-          message: "Screenshot image access requires explicit approval before Omi can share screen image bytes."
+          message:
+            "Screenshot sharing is turned off. The user can enable \"Screen Sharing in Chat\" in Settings → Floating Bar to let Omi see the screen."
         ))
 
     default:
       return .allow
     }
+  }
+
+  /// User-facing grant for `desktop.context.screenshot_image`. Stored in
+  /// UserDefaults so the nonisolated policy check can read it synchronously;
+  /// absent key means enabled (default on).
+  nonisolated static var isChatScreenshotSharingEnabled: Bool {
+    UserDefaults.standard.object(forKey: DefaultsKey.chatScreenshotSharingEnabled.rawValue) == nil
+      || UserDefaults.standard.bool(forKey: DefaultsKey.chatScreenshotSharingEnabled)
   }
 
   private nonisolated static func policyDeniedMessage(
