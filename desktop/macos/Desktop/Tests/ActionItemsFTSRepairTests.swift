@@ -83,14 +83,14 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     }
 
     try await dbQueue.write { db in
-      try db.execute(sql: "PRAGMA writable_schema = ON")
-      let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-      defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
-      try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts_data'")
-      try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
+      try db.execute(sql: "DROP TABLE action_items_fts_data")
     }
 
     try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "missing shadow table test")
+
+    let afterRepair = try await ActionItemStorage.shared.insertLocalActionItem(
+      ActionItemRecord(description: "shadow table inserted after repair", source: "test"))
+    XCTAssertNotNil(afterRepair.id)
 
     let matches = try await dbQueue.read { db in
       try String.fetchAll(
@@ -103,6 +103,9 @@ final class ActionItemsFTSRepairTests: XCTestCase {
           ORDER BY action_items.id
           """)
     }
-    XCTAssertEqual(matches, ["shadow table durable row"])
+    XCTAssertEqual(matches, [
+      "shadow table durable row",
+      "shadow table inserted after repair"
+    ])
   }
 }

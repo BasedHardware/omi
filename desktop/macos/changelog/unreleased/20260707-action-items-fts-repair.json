@@ -1,0 +1,3 @@
+{
+  "change": "Repaired action item search recovery so broken FTS shadow tables are rebuilt without writing directly to SQLite catalog tables"
+}

@@ -202,25 +202,44 @@ actor RewindDatabase {
         do {
             try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         } catch {
-            try forceRemoveBrokenActionItemsFTSMetadata(in: db)
+            try restoreMissingActionItemsFTSShadowTables(in: db)
+            try db.execute(sql: "DROP TABLE IF EXISTS action_items_fts")
         }
     }
 
-    private static func forceRemoveBrokenActionItemsFTSMetadata(in db: Database) throws {
-        try db.execute(sql: "PRAGMA writable_schema = ON")
-        defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
+    private static func restoreMissingActionItemsFTSShadowTables(in db: Database) throws {
+        let templateName = "action_items_fts_repair_template"
+        try db.execute(sql: "DROP TABLE IF EXISTS \(templateName)")
+        try db.execute(sql: """
+            CREATE VIRTUAL TABLE \(templateName) USING fts5(
+                description,
+                content='action_items',
+                content_rowid='id',
+                tokenize='unicode61'
+            )
+            """)
+        defer { try? db.execute(sql: "DROP TABLE IF EXISTS \(templateName)") }
 
-        try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts'")
         for table in actionItemsFTSShadowTables {
-            do {
-                try db.execute(sql: "DROP TABLE IF EXISTS \(table)")
-            } catch {
-                try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = '\(table)'")
-            }
-        }
+            let exists = (try Int.fetchOne(
+                db,
+                sql: "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?",
+                arguments: [table]
+            ) ?? 0) > 0
+            guard !exists else { continue }
 
-        let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-        try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
+            let templateTable = table.replacingOccurrences(of: "action_items_fts", with: templateName)
+            guard let templateSQL = try String.fetchOne(
+                db,
+                sql: "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?",
+                arguments: [templateTable]
+            ) else {
+                continue
+            }
+
+            let createSQL = templateSQL.replacingOccurrences(of: templateTable, with: table)
+            try db.execute(sql: createSQL)
+        }
     }
 
     /// Configure the database for a specific user.
