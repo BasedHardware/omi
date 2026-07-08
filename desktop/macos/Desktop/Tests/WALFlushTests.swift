@@ -70,6 +70,37 @@ final class WALFlushTests: XCTestCase {
     XCTAssertNil(service.wals.first?.filePath)
   }
 
+  func testLoadRecoversDiskWalWhenGeneratedFileExists() throws {
+    // A WAL with storage=.disk and no filePath should be recovered (not
+    // corrupted) when the deterministic generateFileName() file exists.
+    let wal = WALEntry(
+      timerStart: 1_700_000_000,
+      codec: "opus",
+      status: .miss,
+      storage: .disk,
+      seconds: 60,
+      device: "dev1",
+      deviceModel: "Omi",
+      totalFrames: 100
+    )
+    // Write a dummy frame file at the generated path.
+    let generatedName = wal.generateFileName()
+    try Data(repeating: 0, count: 80).write(
+      to: walDir.appendingPathComponent(generatedName))
+
+    let metadata = WALMetadata(wals: [wal])
+    let metadataURL = walDir.appendingPathComponent("wals.json")
+    try JSONEncoder().encode(metadata).write(to: metadataURL)
+
+    let reloaded = WALService(apiClient: APIClient(session: makeMockSession()))
+    reloaded.setWalDirectoryForTesting(walDir)
+    reloaded.reloadWalsFromDiskForTesting()
+
+    let recovered = try XCTUnwrap(reloaded.wals.first)
+    XCTAssertNotEqual(recovered.status, .corrupted)
+    XCTAssertEqual(recovered.filePath, generatedName)
+  }
+
   func testLoadMarksDiskWithoutFilePathCorrupted() throws {
     let wal = WALEntry(
       timerStart: 1_700_000_000,

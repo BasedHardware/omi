@@ -189,6 +189,16 @@ final class WALService: ObservableObject {
             guard wals[index].storage == .disk else { continue }
 
             if wals[index].filePath == nil {
+                // The old flush race could leave filePath=nil while the
+                // background writer already persisted frames under the
+                // deterministic generateFileName() path. Attempt recovery
+                // via persistedWalFilePath(for:) before corrupting.
+                if let recovered = persistedWalFilePath(for: wals[index]) {
+                    wals[index].filePath = recovered
+                    changed = true
+                    logger.info("Recovered WAL \(self.wals[index].id) filePath: \(recovered)")
+                    continue
+                }
                 wals[index].status = .corrupted
                 changed = true
                 logger.warning("Marked WAL \(self.wals[index].id) corrupted: disk storage without filePath")
