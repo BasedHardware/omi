@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import CoreGraphics
 import GRDB
 import UniformTypeIdentifiers
 
@@ -275,6 +276,7 @@ final class ChatResponseMetrics: @unchecked Sendable {
     struct Snapshot {
         let sqlRowsReturned: Int
         let sqlQueryCount: Int
+        let screenContext: ScreenContextChatCycleSnapshot
     }
 
     private let lock = NSLock()
@@ -282,6 +284,7 @@ final class ChatResponseMetrics: @unchecked Sendable {
     private var isGenerating = false
     private var sqlRowsReturned = 0
     private var sqlQueryCount = 0
+    private let screenContextMetrics = ScreenContextChatCycleMetrics()
 
     func markFirstOutputIfNeeded() -> Bool {
         lock.lock()
@@ -300,6 +303,7 @@ final class ChatResponseMetrics: @unchecked Sendable {
     }
 
     func recordToolResult(name: String, result: String) {
+        screenContextMetrics.recordToolResult(name: name, output: result)
         guard name == "execute_sql" else { return }
         let rowsReturned = Self.sqlRowsReturned(in: result)
         lock.lock()
@@ -308,10 +312,18 @@ final class ChatResponseMetrics: @unchecked Sendable {
         lock.unlock()
     }
 
+    func recordToolRequested(name: String) {
+        screenContextMetrics.recordToolRequested(name)
+    }
+
     func snapshot() -> Snapshot {
         lock.lock()
         defer { lock.unlock() }
-        return Snapshot(sqlRowsReturned: sqlRowsReturned, sqlQueryCount: sqlQueryCount)
+        return Snapshot(
+            sqlRowsReturned: sqlRowsReturned,
+            sqlQueryCount: sqlQueryCount,
+            screenContext: screenContextMetrics.snapshot()
+        )
     }
 
     private static func sqlRowsReturned(in result: String) -> Int {
@@ -3370,6 +3382,46 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                 }
             }
+            if ScreenContextInterestDetector.isScreenContextRequest(trimmedText) && effectiveImageData == nil {
+                let screenRecordingGranted = CGPreflightScreenCaptureAccess()
+                let screenContextPayload: [String: Any] = if screenRecordingGranted {
+                    await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+                } else {
+                    [
+                        "ok": false,
+                        "name": "get_work_context",
+                        "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
+                        "screen_now": [
+                            "available": false,
+                            "failure_code": ScreenContextFailureCode.permissionDenied.rawValue,
+                        ],
+                        "timeline": [],
+                        "guidance": "Omi does not have Screen Recording permission for current screen access.",
+                    ]
+                }
+                let screenContextEnvelope: [String: Any] = [
+                    "permission": [
+                        "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
+                    ],
+                    "context": screenContextPayload,
+                    "guidance": screenRecordingGranted
+                        ? "Use this hidden screen context to answer the user's screen-related request. Request raw screenshot pixels only if this summary is insufficient."
+                        : "The user asked about their screen, but Omi does not currently have Screen Recording permission for live screen access. Tell the user plainly and call request_permission with type=screen_recording if current screen access is needed.",
+                ]
+                if let data = try? JSONSerialization.data(
+                    withJSONObject: screenContextEnvelope,
+                    options: [.prettyPrinted, .sortedKeys]
+                ), let json = String(data: data, encoding: .utf8) {
+                    systemPrompt += "\n\n<auto_screen_context>\n\(json)\n</auto_screen_context>"
+                    responseMetrics.recordToolRequested(name: "get_work_context")
+                    if let contextData = try? JSONSerialization.data(
+                        withJSONObject: screenContextPayload,
+                        options: [.sortedKeys]
+                    ), let contextJSON = String(data: contextData, encoding: .utf8) {
+                        responseMetrics.recordToolResult(name: "get_work_context", result: contextJSON)
+                    }
+                }
+            }
 
             // Query the active bridge with streaming. Hermes and OpenClaw do not
             // accept Omi's Claude model aliases, so leave model choice to the
@@ -3407,6 +3459,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
             }
             let toolCallHandler: AgentClient.ToolCallHandler = { callId, name, input in
+                responseMetrics.recordToolRequested(name: name)
                 let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
                 let result = await ChatToolExecutor.execute(
                     toolCall,
@@ -3456,6 +3509,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     )
                     if toolStatus == .running {
                         toolNames.append(name)
+                        responseMetrics.recordToolRequested(name: name)
                         toolStartTimes[trackedId] = Date()
                         if (name.contains("browser") || name.contains("playwright")) {
                             let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
@@ -3516,6 +3570,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 }
                 Task { @MainActor [weak self] in
                     self?.addToolResult(messageId: aiMessageId, toolUseId: toolUseId, name: name, output: output)
+                    responseMetrics.recordToolResult(name: name, result: output)
                     let transitions = await stallDetector.step(kind: .other, atMs: nowMs)
                     self?.applyStallTransitions(messageId: aiMessageId, transitions: transitions)
                 }
@@ -3590,10 +3645,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
             // Determine the final text to display and save
             let messageText: String
+            let metricsSnapshot = responseMetrics.snapshot()
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text
-                let metricsSnapshot = responseMetrics.snapshot()
                 messages[index].text = messageText
                 messages[index].isStreaming = false
                 // Merge the parent agent's own artifacts with any produced by
@@ -3730,7 +3785,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 toolCallCount: toolNames.count,
                 toolNames: toolNames,
                 costUsd: queryResult.costUsd,
-                messageLength: responseLength
+                messageLength: responseLength,
+                screenToolRequested: metricsSnapshot.screenContext.screenToolRequested,
+                screenToolSucceeded: metricsSnapshot.screenContext.screenToolSucceeded,
+                screenToolApprovalRequired: metricsSnapshot.screenContext.screenToolApprovalRequired,
+                screenToolFailureCodes: metricsSnapshot.screenContext.screenToolFailureCodes
             )
 
             // Skip client-side cost telemetry for piMono because /v2/chat/completions

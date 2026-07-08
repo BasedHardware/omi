@@ -569,7 +569,7 @@ function schemaPropertyToSwift(name, schema) {
 }
 
 function generateLocalApiSwift() {
-  const localTools = omiToolManifest.filter((tool) => tool.executor.kind === "localApiOnly");
+  const localTools = omiToolManifest.filter((tool) => tool.adapters["local-agent-api"]?.advertised === true);
 
   const entries = localTools
     .map((tool) => {

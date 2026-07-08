@@ -530,7 +530,7 @@ struct DashboardPage: View {
                 onSend: { text in
                     AnalyticsManager.shared.chatMessageSent(
                         messageLength: text.count,
-                        hasContext: selectedApp != nil,
+                        hasSelectedAppContext: selectedApp != nil,
                         source: "dashboard_chat"
                     )
                     Task { await chatProvider.sendMessage(text) }
@@ -939,7 +939,7 @@ struct DashboardPage: View {
         openHomeChat()
         AnalyticsManager.shared.chatMessageSent(
             messageLength: text.count,
-            hasContext: selectedApp != nil,
+            hasSelectedAppContext: selectedApp != nil,
             source: "home_ask_bar"
         )
         if chatProvider.isSending {
@@ -953,7 +953,7 @@ struct DashboardPage: View {
         openHomeChat()
         AnalyticsManager.shared.chatMessageSent(
             messageLength: suggestion.count,
-            hasContext: selectedApp != nil,
+            hasSelectedAppContext: selectedApp != nil,
             source: "home_suggested_question"
         )
         Task { await chatProvider.sendMessage(suggestion) }

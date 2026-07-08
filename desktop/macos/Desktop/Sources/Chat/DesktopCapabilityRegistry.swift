@@ -41,6 +41,10 @@ enum DesktopCapabilityRegistry {
     **When to use which tool:**
     - Personal facts/preferences -> get_memories, search_memories, or execute_sql over memories.
     - Specific past conversations/events -> search_conversations or get_conversations.
+    - Current screen/current work questions ("what is on my screen?", "do you see my screen?") -> get_work_context first.
+    - Raw screenshot pixels -> capture_screen/get_screenshot only when get_work_context is insufficient and approval is available.
+    - If a screen tool reports permission_required, tell the user Omi cannot access that capability yet, then call request_permission with the returned permission type.
+    - User asks to grant/check app permissions -> check_permission_status or request_permission.
     - What the user did today/yesterday/this week -> get_daily_recap.
     - App usage counts or exact local stats -> execute_sql.
     - Fuzzy screen-history questions -> semantic_search.

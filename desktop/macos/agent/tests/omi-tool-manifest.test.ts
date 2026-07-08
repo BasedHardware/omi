@@ -49,8 +49,22 @@ describe("omi tool manifest", () => {
       "create_action_item",
       "update_action_item",
       "capture_screen",
+      "check_permission_status",
+      "request_permission",
+      "get_work_context",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
+  });
+
+  it("routes current-screen questions to work context before raw screenshots", () => {
+    const workContext = toolsForAdapter("pi-mono").find((tool) => tool.name === "get_work_context");
+    const captureScreen = toolsForAdapter("pi-mono").find((tool) => tool.name === "capture_screen");
+    const requestPermission = toolsForAdapter("pi-mono").find((tool) => tool.name === "request_permission");
+
+    expect(workContext?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
+    expect(requestPermission?.promptGuidelines?.join("\n")).toContain("Screen Recording is missing");
   });
 
   it("keeps spawn_background_agent internal to coordinator RPC only", () => {
@@ -68,11 +82,12 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });
 
-  it("projects stdio onboarding-only tools only in onboarding context", () => {
+  it("projects permission tools broadly and keeps onboarding-only tools scoped", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));
 
-    expect(regular.has("request_permission")).toBe(false);
+    expect(regular.has("request_permission")).toBe(true);
+    expect(regular.has("check_permission_status")).toBe(true);
     expect(regular.has("get_email_insights")).toBe(false);
     expect(regular.has("capture_screen")).toBe(false);
     expect(regular.has("get_work_context")).toBe(false);
@@ -103,7 +118,7 @@ describe("omi tool manifest", () => {
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.required).toEqual(["question", "options"]);
     expect(requestPermission?.inputSchema.properties.type).toMatchObject({
-      enum: ["screen_recording", "microphone", "accessibility", "automation", "full_disk_access"],
+      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
     });
   });
 
@@ -151,7 +166,7 @@ describe("omi tool manifest", () => {
     expect(snapshot.advertisedToolCount).toBe(toolNamesForAdapter("pi-mono").length);
     expect(snapshot.advertisedToolNames).toEqual(toolNamesForAdapter("pi-mono"));
     expect(snapshot.aliases["mcp__omi-tools__execute_sql"]).toBe("execute_sql");
-    expect(snapshot.disabled.some((tool) => tool.name === "request_permission")).toBe(true);
+    expect(snapshot.disabled.some((tool) => tool.name === "get_email_insights")).toBe(true);
   });
 
   it("requires surfaces and capabilityDoc on every manifest entry", () => {

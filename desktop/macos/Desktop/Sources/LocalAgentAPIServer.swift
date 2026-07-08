@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Network
 
@@ -342,82 +343,21 @@ final class LocalAgentAPIServer {
   /// timeline of the last N minutes of on-screen activity. Read-only; composes
   /// existing Rewind data so agents stop asking the user to screenshot/re-explain.
   private func workContextResponse(arguments: [String: Any]) async -> LocalHTTPResponse {
-    let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
-    let now = Date()
-    let start = now.addingTimeInterval(-Double(minutes) * 60)
-    let formatter = ISO8601DateFormatter()
-
-    // 1) Screen now — most recent frame whose pixels are currently loadable.
-    //    Frames still buffering in the unflushed active video chunk can't be
-    //    decoded yet; skip them up front so we don't repeatedly attempt (and
-    //    fail) a load — each failed load re-inits storage, a real latency spike
-    //    since the newest frames are commonly in the active chunk.
-    var screenNow: [String: Any] = ["available": false]
-    let activeChunk = await VideoChunkEncoder.shared.currentChunkPath
-    if let recent = try? await RewindDatabase.shared.getRecentScreenshots(limit: 25) {
-      for shot in recent {
-        guard let sid = shot.id else { continue }
-        if shot.usesVideoStorage, let chunk = shot.videoChunkPath, chunk == activeChunk {
-          continue  // pending: still in the active, unflushed chunk
-        }
-        if let data = try? await loadScreenshotDataEnsuringStorage(for: shot) {
-          screenNow = [
-            "available": true,
-            "screenshot_id": sid,
-            "timestamp": formatter.string(from: shot.timestamp),
-            "app_name": shot.appName,
-            "window_title": shot.windowTitle ?? NSNull(),
-            "ocr_preview": String((shot.ocrText ?? "").prefix(800)),
-            "image_bytes": data.count,
-            "note":
-              "Latest available finalized frame (may be up to ~1 min old, and can predate window_minutes). Call get_screenshot with this screenshot_id to SEE the full-screen image.",
-          ]
-          break
-        }
-      }
-    }
-
-    // 2) Recent activity — sampled frames, consecutive (app, window) runs collapsed.
-    var timeline: [[String: Any]] = []
-    let calendar = Calendar.current
-    func clock(_ date: Date) -> String {
-      let c = calendar.dateComponents([.hour, .minute], from: date)
-      return String(format: "%02d:%02d", c.hour ?? 0, c.minute ?? 0)
-    }
-    if let shots = try? await RewindDatabase.shared.getScreenshotsSampled(
-      from: start, to: now, targetCount: 80)
-    {
-      var runs: [(app: String, window: String, start: String, end: String, frames: Int)] = []
-      for shot in shots {
-        let window = Self.normalizeWindow(shot.windowTitle ?? "")
-        let cl = clock(shot.timestamp)
-        if var last = runs.last, last.app == shot.appName, last.window == window {
-          last.end = cl
-          last.frames += 1
-          runs[runs.count - 1] = last
-        } else {
-          runs.append((shot.appName, window, cl, cl, 1))
-        }
-      }
-      for run in runs.reversed().prefix(20) {
-        timeline.append([
-          "start": run.start, "end": run.end, "app": run.app,
-          "window": run.window, "frames": run.frames,
-        ])
-      }
-    }
-
-    return jsonResponse([
-      "ok": true,
-      "name": "get_work_context",
-      "window_minutes": minutes,
-      "screen_now": screenNow,
-      "timeline": timeline,
-      "memories_hint":
-        "For the user's operating principles/preferences, also call search_memories (omi-memory).",
-      "guidance":
-        "This is the user's recent on-screen activity. Act on it directly instead of asking them to screenshot or re-explain what they were doing.",
-    ])
+    let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
+    let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
+    ScreenContextToolTelemetry.trackToolResult(
+      toolName: "get_work_context",
+      surface: "local_api",
+      ok: telemetry.ok && telemetry.screenNowAvailable == true,
+      failureCode: telemetry.failureCode,
+      screenNowAvailable: telemetry.screenNowAvailable,
+      timelineCount: telemetry.timelineCount,
+      latestCaptureAgeSeconds: telemetry.latestCaptureAgeSeconds,
+      hasOCRPreview: telemetry.hasOCRPreview,
+      imageBytes: telemetry.imageBytes,
+      permissionTCCGranted: CGPreflightScreenCaptureAccess()
+    )
+    return jsonResponse(payload)
   }
 
   /// Strip Unicode format/control marks (bidi isolates apps like Telegram inject),
@@ -448,15 +388,36 @@ final class LocalAgentAPIServer {
       screenshot = try await RewindDatabase.shared.getScreenshot(id: screenshotID)
     } catch {
       logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        surface: "local_api",
+        ok: false,
+        failureCode: .databaseUnavailable,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
     guard let screenshot else {
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        surface: "local_api",
+        ok: false,
+        failureCode: .imageUnavailable,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return errorResponse("screenshot_not_found: \(screenshotID)", statusCode: 404)
     }
 
     do {
       let imageData = try await loadScreenshotDataEnsuringStorage(for: screenshot)
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        surface: "local_api",
+        ok: true,
+        imageBytes: imageData.count,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return jsonResponse([
         "ok": true,
         "name": toolName,
@@ -487,27 +448,33 @@ final class LocalAgentAPIServer {
     let reason: String
     let hint: String
 
-    if let rewindError = error as? RewindError, case .corruptedVideoChunk = rewindError {
-      code = "screenshot_chunk_corrupted"
-      reason = "The video chunk backing this screenshot is corrupted and cannot be decoded."
-      hint = "Pick a different screenshot_id; this frame's pixels are unrecoverable."
-    } else if screenshot.usesVideoStorage, let chunk = screenshot.videoChunkPath, chunk == activeChunk {
-      code = "screenshot_pending"
-      reason = "The frame is in the active recording segment that has not been flushed to disk yet."
-      hint = "Retry in ~60s, or choose an older screenshot_id whose video chunk is already finalized."
-    } else if !screenshot.usesVideoStorage, (screenshot.imagePath ?? "").isEmpty {
-      code = "screenshot_image_unavailable"
-      reason = "This screenshot row has no stored image (orphaned capture with no video chunk or image file)."
-      hint = "Pick a different screenshot_id from a recent search_screen_history result."
-    } else if error as? RewindError != nil {
-      code = "screenshot_file_missing"
-      reason = "The image data for this screenshot is no longer on disk (likely removed by retention/cleanup)."
-      hint = "Pick a more recent screenshot_id whose pixels are still retained."
+    if let classification = ScreenContextToolTelemetry.classifyScreenshotUnavailable(
+      screenshot: screenshot,
+      activeChunk: activeChunk,
+      error: error
+    ) {
+      code = classification.code.rawValue
+      reason = classification.reason
+      hint = classification.hint
     } else {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "get_screenshot",
+        surface: "local_api",
+        ok: false,
+        failureCode: .unknown,
+        permissionTCCGranted: CGPreflightScreenCaptureAccess()
+      )
       return errorResponse("failed_to_load_screenshot: \(error.localizedDescription)", statusCode: 500)
     }
 
+    ScreenContextToolTelemetry.trackToolResult(
+      toolName: "get_screenshot",
+      surface: "local_api",
+      ok: false,
+      failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,
+      permissionTCCGranted: CGPreflightScreenCaptureAccess()
+    )
     return jsonResponse([
       "ok": false,
       "error": code,

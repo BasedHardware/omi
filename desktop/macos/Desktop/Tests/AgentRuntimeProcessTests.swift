@@ -50,6 +50,18 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
   }
 
+  func testControlCreatedRunsCanRouteSwiftBackedTools() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("ChatToolExecutor.execute("))
+    XCTAssertTrue(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
+    XCTAssertFalse(processSource.contains("Swift-backed Omi tools are unavailable for control-created agent runs"))
+  }
+
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"result","protocolVersion":2,"requestId":"req-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done"}"#

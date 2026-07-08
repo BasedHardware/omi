@@ -516,7 +516,11 @@ final class AgentPillsManager: ObservableObject {
             return nil
         }
         let agentPattern = #"\b"# + Self.agentNounPattern + #"\b"#
-        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run)\b"#
+        let existingAgentFollowUpPattern = #"\b(?:ask|tell)\s+(?:this|that|the)\s+"# + Self.agentNounPattern + #"\b"#
+        if lower.range(of: existingAgentFollowUpPattern, options: .regularExpression) != nil {
+            return nil
+        }
+        let actionPattern = #"\b(?:spawn|start|launch|kick\s+off|create|make|run|ask|tell|have)\b"#
         guard lower.range(of: agentPattern, options: .regularExpression) != nil else { return nil }
         guard lower.range(of: actionPattern, options: .regularExpression) != nil else { return nil }
 
@@ -1121,6 +1125,35 @@ final class AgentPillsManager: ObservableObject {
             logError("AgentPills: failed to refresh projected pills from kernel", error: error)
             applyRuntimeProjections()
         }
+    }
+
+    @MainActor
+    func upsertSpawnedPill(
+        id: UUID,
+        query: String,
+        title: String,
+        sessionId: String,
+        runId: String,
+        attemptId: String?
+    ) {
+        let model = ShortcutSettings.shared.selectedModel.isEmpty
+            ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
+        let pill: AgentPill
+        if let existing = pills.first(where: { $0.id == id }) {
+            pill = existing
+        } else {
+            pill = AgentPill(id: id, query: query.isEmpty ? "Background agent" : query, model: model)
+            pills.append(pill)
+        }
+        pill.title = title.isEmpty ? "Background agent" : title
+        pill.canonicalSessionId = sessionId
+        pill.canonicalRunId = runId
+        pill.canonicalAttemptId = attemptId
+        pill.status = .running
+        pill.completedAt = nil
+        pill.latestActivity = "Working…"
+        pill.markContentChanged()
+        objectWillChange.send()
     }
 
     private func mergeProjectedPills(from floating: [[String: Any]]) {

@@ -1,6 +1,8 @@
 import AppKit
+import AVFoundation
 import Foundation
 import GRDB
+import UserNotifications
 
 /// Executes tool calls from Gemini and returns results
 /// Tools: execute_sql (read/write SQL on omi.db), semantic_search (vector similarity)
@@ -84,6 +86,17 @@ class ChatToolExecutor {
 
     if case .deny(let message) = localPolicyDecision(toolName: toolCall.name, arguments: toolCall.arguments) {
       log("Tool \(toolCall.name) denied by local policy")
+      if ScreenContextToolTelemetry.isScreenContextTool(toolCall.name) {
+        let failureCode: ScreenContextFailureCode =
+          message.hasPrefix("PERMISSION_REQUIRED:") ? .permissionDenied : .policyApprovalRequired
+        ScreenContextToolTelemetry.trackToolResult(
+          toolName: toolCall.name,
+          surface: "desktop_chat",
+          ok: false,
+          failureCode: failureCode,
+          permissionTCCGranted: CGPreflightScreenCaptureAccess()
+        )
+      }
       return message
     }
 
@@ -118,7 +131,7 @@ class ChatToolExecutor {
     case .requestPermission:
       let result = await executeRequestPermission(toolCall.arguments)
       let permType = toolCall.arguments["type"] as? String ?? "unknown"
-      let granted = result.contains("granted")
+      let granted = permissionToolResultGranted(result)
       AnalyticsManager.shared.onboardingChatToolUsed(
         tool: "request_permission",
         properties: ["permission": permType, "result": granted ? "granted" : "pending"])
@@ -186,6 +199,9 @@ class ChatToolExecutor {
     case .captureScreen:
       return await executeCaptureScreen()
 
+    case .getWorkContext:
+      return await executeGetWorkContext(toolCall.arguments)
+
     case .fillCloudConnectorForm:
       return await CloudConnectorFormAutomation.fill(toolCall.arguments)
 
@@ -230,6 +246,15 @@ class ChatToolExecutor {
       return .allow
 
     case "capture_screen", "get_screenshot":
+      if toolName == "capture_screen", !CGPreflightScreenCaptureAccess() {
+        return .deny(
+          permissionRequiredMessage(
+            toolName: toolName,
+            permission: "screen_recording",
+            message:
+              "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet, then call request_permission with type=screen_recording if they want to grant access."
+          ))
+      }
       return .deny(
         policyDeniedMessage(
           toolName: toolName,
@@ -265,6 +290,29 @@ class ChatToolExecutor {
     return "POLICY_DENIED: \(json)"
   }
 
+  private nonisolated static func permissionRequiredMessage(
+    toolName: String,
+    permission: String,
+    message: String
+  ) -> String {
+    let payload = [
+      "ok": false,
+      "code": "permission_required",
+      "tool": toolName,
+      "permission": permission,
+      "message": message,
+      "next_tool": "request_permission",
+      "next_tool_arguments": ["type": permission],
+    ] as [String: Any]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "PERMISSION_REQUIRED: \(message)"
+    }
+    return "PERMISSION_REQUIRED: \(json)"
+  }
+
   /// Execute multiple tool calls and return results keyed by tool name
   static func executeAll(_ toolCalls: [ToolCall]) async -> [String: String] {
     var results: [String: String] = [:]
@@ -281,12 +329,61 @@ class ChatToolExecutor {
   /// Capture the current screen and return the file path
   private static func executeCaptureScreen() async -> String {
     guard CGPreflightScreenCaptureAccess() else {
-      return "Error: Screen recording permission not granted. Ask the user to enable it in System Settings > Privacy & Security > Screen & System Audio Recording."
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "capture_screen",
+        surface: "desktop_chat",
+        ok: false,
+        failureCode: .permissionDenied,
+        permissionTCCGranted: false
+      )
+      return permissionRequiredMessage(
+        toolName: "capture_screen",
+        permission: "screen_recording",
+        message:
+          "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet, then call request_permission with type=screen_recording if they want to grant access."
+      )
     }
     guard let fileURL = ScreenCaptureManager.captureScreen() else {
+      ScreenContextToolTelemetry.trackToolResult(
+        toolName: "capture_screen",
+        surface: "desktop_chat",
+        ok: false,
+        failureCode: .captureFailed,
+        permissionTCCGranted: true
+      )
       return "Error: Failed to capture screen"
     }
+    ScreenContextToolTelemetry.trackToolResult(
+      toolName: "capture_screen",
+      surface: "desktop_chat",
+      ok: true,
+      permissionTCCGranted: true
+    )
     return fileURL.path
+  }
+
+  private static func executeGetWorkContext(_ arguments: [String: Any]) async -> String {
+    let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
+    let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
+    ScreenContextToolTelemetry.trackToolResult(
+      toolName: "get_work_context",
+      surface: "desktop_chat",
+      ok: telemetry.ok && telemetry.screenNowAvailable == true,
+      failureCode: telemetry.failureCode,
+      screenNowAvailable: telemetry.screenNowAvailable,
+      timelineCount: telemetry.timelineCount,
+      latestCaptureAgeSeconds: telemetry.latestCaptureAgeSeconds,
+      hasOCRPreview: telemetry.hasOCRPreview,
+      imageBytes: telemetry.imageBytes,
+      permissionTCCGranted: CGPreflightScreenCaptureAccess()
+    )
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return #"{"ok":false,"name":"get_work_context","failure_code":"unknown"}"#
+    }
+    return json
   }
 
   // MARK: - SQL Execution
@@ -578,6 +675,14 @@ class ChatToolExecutor {
         model: model,
         harnessMode: directedProvider?.harnessMode,
         cwd: FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
+      )
+      AgentPillsManager.shared.upsertSpawnedPill(
+        id: pillId,
+        query: objective,
+        title: accepted.title,
+        sessionId: accepted.sessionId,
+        runId: accepted.runId,
+        attemptId: accepted.attemptId
       )
       await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
       return """
@@ -1106,126 +1211,267 @@ class ChatToolExecutor {
 
   /// Request a specific macOS permission
   private static func executeRequestPermission(_ args: [String: Any]) async -> String {
-    guard let type = args["type"] as? String else {
-      return
-        "Error: 'type' parameter is required (\(onboardingPermissionTypesDescription))"
-    }
-
-    guard let appState = onboardingAppState else {
-      return "Error: onboarding not active"
+    guard let type = permissionType(from: args) else {
+      return permissionJSON([
+        "ok": false,
+        "status": "error",
+        "error": "missing_permission_type",
+        "valid_types": onboardingPermissionTypes,
+      ])
     }
 
     AnalyticsManager.shared.permissionRequested(permission: type)
+    let appState = onboardingAppState ?? AppState.current
 
     switch type {
     case "screen_recording":
-      appState.screenRecordingGrantAttempts += 1
-      appState.triggerScreenRecordingPermission()
-      if let url = URL(
-        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
-      {
-        NSWorkspace.shared.open(url)
-      }
+      appState?.screenRecordingGrantAttempts += 1
+      appState?.triggerScreenRecordingPermission()
+      ScreenCaptureService.openScreenRecordingPreferences()
       try? await Task.sleep(nanoseconds: 2_000_000_000)
-      appState.checkScreenRecordingPermission()
+      appState?.checkScreenRecordingPermission()
       try? await Task.sleep(nanoseconds: 500_000_000)
-      if appState.hasScreenRecordingPermission {
-        return "granted"
-      } else {
-        return
-          "pending - user needs to toggle Screen Recording for omi in System Settings, then quit and reopen the app"
-      }
+      return permissionRequestResult(
+        type: type,
+        granted: ScreenCaptureService.checkPermission(),
+        pendingMessage:
+          "User needs to toggle Screen Recording for Omi in System Settings, then quit and reopen the app.",
+        requiresRestart: true
+      )
 
     case "microphone":
-      appState.requestMicrophonePermission()
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      if appState.hasMicrophonePermission {
-        return "granted"
+      if let appState {
+        appState.requestMicrophonePermission()
       } else {
-        return "pending - user needs to allow microphone access in the system dialog"
+        _ = await requestMicrophonePermissionDirectly()
       }
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      appState?.checkMicrophonePermission()
+      return permissionRequestResult(
+        type: type,
+        granted: AudioCaptureService.checkPermission(),
+        pendingMessage: "User needs to allow microphone access in the system dialog.",
+        requiresRestart: false
+      )
 
     case "notifications":
-      appState.requestNotificationPermission()
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      appState.checkNotificationPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      if appState.hasNotificationPermission {
-        return "granted"
+      if let appState {
+        appState.requestNotificationPermission()
       } else {
-        return "pending - user needs to allow notifications in the system dialog or enable omi in System Settings > Notifications"
+        _ = await requestNotificationPermissionDirectly()
       }
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      appState?.checkNotificationPermission()
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      return permissionRequestResult(
+        type: type,
+        granted: await notificationPermissionGranted(),
+        pendingMessage:
+          "User needs to allow notifications in the system dialog or enable Omi in System Settings > Notifications.",
+        requiresRestart: false
+      )
 
     case "accessibility":
-      appState.triggerAccessibilityPermission()
-      try? await Task.sleep(nanoseconds: 2_000_000_000)
-      appState.checkAccessibilityPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      if appState.hasAccessibilityPermission {
-        return "granted"
+      if let appState {
+        appState.triggerAccessibilityPermission()
       } else {
-        return "pending - user needs to toggle Accessibility for omi in System Settings"
+        requestAccessibilityPermissionDirectly()
       }
+      try? await Task.sleep(nanoseconds: 2_000_000_000)
+      appState?.checkAccessibilityPermission()
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      return permissionRequestResult(
+        type: type,
+        granted: AXIsProcessTrusted(),
+        pendingMessage: "User needs to toggle Accessibility for Omi in System Settings.",
+        requiresRestart: false
+      )
 
     case "automation":
-      appState.triggerAutomationPermission()
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      appState.checkAutomationPermission()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      if appState.hasAutomationPermission {
-        return "granted"
-      } else {
-        return "pending - user needs to toggle Automation for omi in System Settings"
+      appState?.triggerAutomationPermission()
+      if appState == nil {
+        triggerAutomationPermissionDirectly()
       }
+      try? await Task.sleep(nanoseconds: 3_000_000_000)
+      appState?.checkAutomationPermission()
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      return permissionRequestResult(
+        type: type,
+        granted: AppState.queryAutomationPermissionStatus() == noErr,
+        pendingMessage: "User needs to toggle Automation for Omi in System Settings.",
+        requiresRestart: false
+      )
 
     case "full_disk_access":
-      // Open System Settings to Full Disk Access pane
       if let url = URL(
         string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")
       {
         NSWorkspace.shared.open(url)
       }
       try? await Task.sleep(nanoseconds: 3_000_000_000)
-      appState.checkFullDiskAccess()
+      appState?.checkFullDiskAccess()
       try? await Task.sleep(nanoseconds: 500_000_000)
-      if appState.hasFullDiskAccess {
-        return "granted"
-      } else {
-        return
-          "pending - user needs to toggle Full Disk Access for omi in System Settings > Privacy & Security > Full Disk Access"
-      }
+      return permissionRequestResult(
+        type: type,
+        granted: appState?.hasFullDiskAccess ?? checkFullDiskAccessDirectly(),
+        pendingMessage:
+          "User needs to toggle Full Disk Access for Omi in System Settings > Privacy & Security > Full Disk Access.",
+        requiresRestart: false
+      )
 
     default:
-      return
-        "Error: unknown permission type '\(type)'. Valid types: \(onboardingPermissionTypesDescription)"
+      return permissionJSON([
+        "ok": false,
+        "status": "error",
+        "error": "unknown_permission_type",
+        "permission": type,
+        "valid_types": onboardingPermissionTypes,
+      ])
     }
   }
 
   /// Check status of all macOS permissions
   private static func executeCheckPermissionStatus(_ args: [String: Any]) async -> String {
-    guard let appState = onboardingAppState else {
-      return "Error: onboarding not active"
-    }
-
-    appState.checkAllPermissions()
+    let appState = onboardingAppState ?? AppState.current
+    appState?.checkAllPermissions()
     try? await Task.sleep(nanoseconds: 500_000_000)
 
-    let statuses = onboardingPermissionStatusPayload(
-      screenRecording: appState.hasScreenRecordingPermission,
-      microphone: appState.hasMicrophonePermission,
-      notifications: appState.hasNotificationPermission,
-      accessibility: appState.hasAccessibilityPermission,
-      automation: appState.hasAutomationPermission,
-      fullDiskAccess: appState.hasFullDiskAccess
-    )
-
-    if let data = try? JSONSerialization.data(withJSONObject: statuses, options: .prettyPrinted),
-      let json = String(data: data, encoding: .utf8)
-    {
-      return json
+    let statuses = await currentPermissionStatuses(appState: appState)
+    if let type = permissionType(from: args), onboardingPermissionTypes.contains(type) {
+      return permissionJSON([
+        "ok": true,
+        "permission": type,
+        "status": statuses[type] ?? "unknown",
+      ])
     }
-    return
-      "screen_recording: \(statuses["screen_recording"]!), microphone: \(statuses["microphone"]!), accessibility: \(statuses["accessibility"]!), automation: \(statuses["automation"]!)"
+
+    return permissionJSON(["ok": true, "permissions": statuses])
+  }
+
+  private static func permissionType(from args: [String: Any]) -> String? {
+    let raw = (args["type"] ?? args["permission"]) as? String
+    return raw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+  }
+
+  private static func permissionJSON(_ payload: [String: Any]) -> String {
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]),
+      let json = String(data: data, encoding: .utf8)
+    else {
+      return "\(payload)"
+    }
+    return json
+  }
+
+  private static func permissionRequestResult(
+    type: String,
+    granted: Bool,
+    pendingMessage: String,
+    requiresRestart: Bool
+  ) -> String {
+    permissionJSON([
+      "ok": granted,
+      "permission": type,
+      "status": granted ? "granted" : "pending",
+      "message": granted ? "\(type) permission granted." : pendingMessage,
+      "requires_restart": requiresRestart && !granted,
+    ])
+  }
+
+  private static func permissionToolResultGranted(_ result: String) -> Bool {
+    guard
+      let data = result.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let status = json["status"] as? String
+    else {
+      return result.trimmingCharacters(in: .whitespacesAndNewlines) == "granted"
+    }
+    return status == "granted"
+  }
+
+  private static func currentPermissionStatuses(appState: AppState?) async -> [String: String] {
+    let notificationsGranted = await notificationPermissionGranted()
+    return onboardingPermissionStatusPayload(
+      screenRecording: ScreenCaptureService.checkPermission(),
+      microphone: AudioCaptureService.checkPermission(),
+      notifications: notificationsGranted,
+      accessibility: AXIsProcessTrusted(),
+      automation: AppState.queryAutomationPermissionStatus() == noErr,
+      fullDiskAccess: appState?.hasFullDiskAccess ?? checkFullDiskAccessDirectly()
+    )
+  }
+
+  private static func requestMicrophonePermissionDirectly() async -> Bool {
+    await withCheckedContinuation { continuation in
+      AVCaptureDevice.requestAccess(for: .audio) { granted in
+        continuation.resume(returning: granted)
+      }
+    }
+  }
+
+  private static func notificationPermissionGranted() async -> Bool {
+    await withCheckedContinuation { continuation in
+      UNUserNotificationCenter.current().getNotificationSettings { settings in
+        continuation.resume(returning: settings.authorizationStatus == .authorized)
+      }
+    }
+  }
+
+  private static func requestNotificationPermissionDirectly() async -> Bool {
+    await withCheckedContinuation { continuation in
+      UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
+        continuation.resume(returning: granted)
+      }
+    }
+  }
+
+  private static func requestAccessibilityPermissionDirectly() {
+    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+    _ = AXIsProcessTrustedWithOptions(options)
+    if let url = URL(
+      string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")
+    {
+      NSWorkspace.shared.open(url)
+    }
+  }
+
+  private static func triggerAutomationPermissionDirectly() {
+    Task.detached {
+      let launchScript = NSAppleScript(source: "launch application \"System Events\"")
+      var launchError: NSDictionary?
+      launchScript?.executeAndReturnError(&launchError)
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      let script = NSAppleScript(
+        source: """
+          tell application "System Events"
+            return name of first process whose frontmost is true
+          end tell
+          """)
+      var error: NSDictionary?
+      script?.executeAndReturnError(&error)
+      if let url = URL(
+        string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation")
+      {
+        _ = await MainActor.run {
+          NSWorkspace.shared.open(url)
+        }
+      }
+    }
+  }
+
+  private static func checkFullDiskAccessDirectly() -> Bool {
+    let home = FileManager.default.homeDirectoryForCurrentUser.path
+    let protectedPaths = [
+      "\(home)/Library/Safari",
+      "\(home)/Library/Mail",
+      "\(home)/Library/Messages",
+    ]
+    for path in protectedPaths {
+      if FileManager.default.fileExists(atPath: path) {
+        return (try? FileManager.default.contentsOfDirectory(atPath: path)) != nil
+      }
+    }
+    return false
   }
 
   /// Scan files BLOCKING — triggers folder access dialogs, waits for scan, returns results

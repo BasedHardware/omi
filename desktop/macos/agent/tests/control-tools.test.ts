@@ -1287,7 +1287,7 @@ describe("agent control tools", () => {
     ]);
     expect(adapter.executed).toHaveLength(2);
     expect(adapter.executed[1].sessionId).toBe(first.session.sessionId);
-    expect(adapter.executed[1].metadata).toMatchObject({ disableSwiftBackedTools: true });
+    expect(adapter.executed[1].metadata).not.toMatchObject({ disableSwiftBackedTools: true });
 
     const listed = parseToolResult(
       await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", { ownerId: "owner" }),
@@ -1563,11 +1563,16 @@ describe("agent control tools", () => {
     store.close();
   });
 
-  it("passes only non-Swift-backed MCP tools into delegated child bindings", async () => {
+  it("keeps Swift-backed MCP tools available in delegated child bindings", async () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     const buildMcpServers = vi.fn(() => [
-      { name: "omi-tools", command: "node", args: ["omi-tools.js"], env: [] },
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
       { name: "playwright", command: "node", args: ["playwright.js"], env: [] },
     ]);
 
@@ -1590,9 +1595,15 @@ describe("agent control tools", () => {
       clientId: "delegate-client",
       adapterId: "fake",
       protocolVersion: 2,
-      includeSwiftBackedTools: false,
+      includeSwiftBackedTools: true,
     });
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
+      {
+        name: "omi-tools",
+        command: "node",
+        args: ["omi-tools.js"],
+        env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
+      },
       {
         name: "playwright",
         command: "node",
@@ -1600,7 +1611,7 @@ describe("agent control tools", () => {
         env: [{ name: "OMI_CONTEXT_FILE", value: expect.stringContaining("omi-tools-context") }],
       },
     ]);
-    expect(adapter.executed.at(-1)?.metadata).toMatchObject({ disableSwiftBackedTools: true });
+    expect(adapter.executed.at(-1)?.metadata).not.toMatchObject({ disableSwiftBackedTools: true });
     store.close();
   });
 
@@ -1633,8 +1644,27 @@ describe("agent control tools", () => {
       clientId: "delegate-client",
       adapterId: "openclaw",
       protocolVersion: 2,
-      includeSwiftBackedTools: false,
+      includeSwiftBackedTools: true,
     });
+    store.close();
+  });
+
+  it("rejects non-run parent ids before creating delegated child work", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+
+    const delegated = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "run_agent_and_wait", {
+        parentRunId: "ctx_73609606effbbf6d",
+        objective: "try the invalid parent id",
+        requestId: "delegate-invalid-parent-1",
+        clientId: "delegate-client",
+        ownerId: "owner",
+      }),
+    );
+
+    expect(delegated.ok).toBe(false);
+    expect(delegated.error.code).toBe("control_tool_failed");
+    expect(delegated.error.message).toContain("parentRunId must be a canonical Omi run_id");
     store.close();
   });
 

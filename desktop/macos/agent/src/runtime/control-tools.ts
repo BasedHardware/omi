@@ -610,7 +610,7 @@ export async function handleAgentControlToolCall(
           ...parsed,
           ownerId,
           requestId,
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          metadata: { ...(parsed.metadata ?? {}) },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.mode,
             cwd: parsed.cwd,
@@ -642,7 +642,7 @@ export async function handleAgentControlToolCall(
           ownerId,
           requestId,
           surfaceKind: parsed.surfaceKind ?? "floating_bar",
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          metadata: { ...(parsed.metadata ?? {}) },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.mode,
             cwd: parsed.cwd,
@@ -660,6 +660,9 @@ export async function handleAgentControlToolCall(
       }
       case "spawn_agent": {
         const parsed = agentControlToolSchemas.spawn_agent.parse(input);
+        if (parsed.parentRunId) {
+          assertCanonicalRunId(parsed.parentRunId, "parentRunId");
+        }
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `spawn-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId =
@@ -694,7 +697,7 @@ export async function handleAgentControlToolCall(
             model: parsed.model,
             runMode: "act",
             clientId: parsed.clientId,
-            metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true, visible: parsed.visible },
+            metadata: { ...(parsed.metadata ?? {}), visible: parsed.visible },
             mcpServers,
           });
           return stringifyToolResult({
@@ -720,7 +723,6 @@ export async function handleAgentControlToolCall(
           mode: "act",
           metadata: {
             ...(parsed.metadata ?? {}),
-            disableSwiftBackedTools: true,
             visible: parsed.visible,
             provider: parsed.provider ?? null,
           },
@@ -734,6 +736,7 @@ export async function handleAgentControlToolCall(
       }
       case "run_agent_and_wait": {
         const parsed = agentControlToolSchemas.run_agent_and_wait.parse(input);
+        assertCanonicalRunId(parsed.parentRunId, "parentRunId");
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
@@ -752,7 +755,7 @@ export async function handleAgentControlToolCall(
           clientId: parsed.clientId,
           maxDepth: parsed.maxDepth,
           maxBudgetUsd: parsed.maxBudgetUsd,
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          metadata: { ...(parsed.metadata ?? {}) },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.runMode,
             cwd: parsed.cwd,
@@ -822,13 +825,15 @@ function buildControlRunMcpServers(
     clientId: input.clientId,
     adapterId: input.adapterId,
     protocolVersion: 2,
-    includeSwiftBackedTools: false,
+    includeSwiftBackedTools: true,
   });
-  // Direct control-created runs do not have a Swift ActiveRequest with an
-  // onToolCall handler. Keep browser/stdio-independent MCPs available, but do
-  // not expose omi-tools, whose execute_sql/semantic_search calls must be
-  // answered by Swift-backed request routing.
-  return servers.filter((server) => server.name !== "omi-tools");
+  return servers;
+}
+
+function assertCanonicalRunId(value: string, fieldName: string): void {
+  if (!value.startsWith("run_")) {
+    throw new Error(`${fieldName} must be a canonical Omi run_id starting with "run_"; omit it for a top-level background agent`);
+  }
 }
 
 function controlToolOwnerId(context: AgentControlToolContext): string {
