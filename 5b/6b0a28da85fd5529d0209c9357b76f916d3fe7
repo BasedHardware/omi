@@ -1,0 +1,36 @@
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignTasksPage.swift
+  s_897886a34066e7::t_8994d86f607781 87-88,93-117
+  s_897886a34066e7::t_0826ce196203c9 13-16
+  s_897886a34066e7::t_60e3a22c0d3a06 51-53
+  s_897886a34066e7::t_0e2d95f5dc0f04 118
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignHelpPage.swift
+  s_897886a34066e7::t_f694fcb13e7b73 3-4,6,9-16,18,20-22,24,27-30,33-40
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignFocusPage.swift
+  s_897886a34066e7::t_a623986b21fb51 9
+  s_897886a34066e7::t_5698566ebf50bc 152
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignHomePage.swift
+  s_897886a34066e7::t_29a8a0ccad336e 3-4
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMemoryPage.swift
+  s_897886a34066e7::t_b2ae9835952f39 171
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_897886a34066e7::t_09cfdf79d52624 1186
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignPersonaPage.swift
+  s_897886a34066e7::t_14b0a1b4e66c9b 4-5,7-10
+  s_897886a34066e7::t_f11310ef2a8546 32-40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "5b6b0a28da85fd5529d0209c9357b76f916d3fe7",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
