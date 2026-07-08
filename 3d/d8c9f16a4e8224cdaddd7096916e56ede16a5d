@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignLiveBrainGraph.swift
+  s_897886a34066e7::t_f9be3183d04833 1-78
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingShortcutSteps.swift
+  s_897886a34066e7::t_83f66cbe48e420 166-167,171
+  s_897886a34066e7::t_02f570c2881633 509,513
+  s_897886a34066e7::t_d15e7b80d880e6 91
+desktop/macos/Desktop/Sources/Redesign/Onboarding/RedesignOnboardingIntroSteps.swift
+  s_897886a34066e7::t_f417e6eb4d06f8 26
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3dd8c9f16a4e8224cdaddd7096916e56ede16a5d",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
