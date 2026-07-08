@@ -96,3 +96,15 @@ def test_typesense_client_initializes_once_for_concurrent_first_use(monkeypatch)
 
     assert len({id(client) for client in clients}) == 1
     assert len(client_configs) == 1
+
+
+def test_exposes_shared_lazy_typesense_client_for_other_indexes(monkeypatch):
+    monkeypatch.setenv('TYPESENSE_HOST', 'localhost')
+    monkeypatch.setenv('TYPESENSE_HOST_PORT', '8108')
+    monkeypatch.setenv('TYPESENSE_API_KEY', 'dev-key')
+    search_module, client_configs = _import_search_module(monkeypatch)
+
+    client = search_module.get_typesense_client()
+
+    assert search_module.get_typesense_client() is client
+    assert len(client_configs) == 1

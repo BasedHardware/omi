@@ -53,9 +53,9 @@ def _payload_list(value: object) -> List[Payload]:
 
 
 def _typesense_client() -> Any:
-    from utils.conversations.search import client
+    from utils.conversations.search import get_typesense_client
 
-    return client
+    return get_typesense_client()
 
 
 def memories_collection_name() -> str:
