@@ -255,6 +255,21 @@ timeline identity/open, or pill projection is incomplete until:
   gate; live bridge probes stay optional until continuity `terminal_reason`s
   exist in the taxonomy.
 
+### Live gauntlet vs hermetic INV-6 coverage
+
+Do not confuse these gates — a green live suite does **not** prove write-path
+contract rules, and hermetic unit tests do **not** prove bridge/LLM continuity.
+
+| Gate | What it covers | What it does **not** cover |
+| --- | --- | --- |
+| **Hermetic** (`agent-logic-harness.sh` Swift filter: `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`, `FloatingControlBarStateTests`) | stage/promote same key → one message pair; floating snapshot aliases main; structured agent identity; open-by-id hydrate preference; floating viewport derive / SoT | Live bridge auth, LLM tool use, PTT hub, race/busy policy under a real runtime |
+| **Gauntlet `--self-check`** | Bridge action registration (incl. R3 `ask_main_chat_no_wait` / `main_chat_busy_state`), resilience suite wiring, hermetic contract test presence in harness filter | Any live turn |
+| **Live `--suite continuity` / `agents` / `owner` / `prompts`** | Typed + PTT + blind recall, spawn/status, owner swap probe, prompt regressions on a named bundle | stage/promote single-writer, snapshot alias, hydrate preference, viewport SoT (those stay hermetic) |
+| **Live `--suite resilience` (R1–R4)** | Cold bridge launch, warm reuse, bridge busy/race rejection (R3; requires real `is_sending`/`is_streaming` once, latch only extends the race window), subagent launch+status (R4) | INV-6 write-path unit invariants above |
+
+`--self-check` fails if R3 race actions or the hermetic INV-6 test methods /
+harness filter classes drift away.
+
 ### Verifying UI Changes (agent-swift)
 
 After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.

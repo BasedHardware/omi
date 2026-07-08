@@ -980,6 +980,9 @@ final class DesktopAutomationActionRegistry {
       }
       let holdBusyMs = intParam(params["hold_busy_ms"], default: 0)
       if holdBusyMs > 0 {
+        guard AppBuild.isNonProduction else {
+          return ["error": "hold_busy_ms is disabled on production bundles"]
+        }
         self.armHarnessBusyLatch(holdBusyMs: holdBusyMs)
       }
       Task { @MainActor in

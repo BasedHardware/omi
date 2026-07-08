@@ -1546,7 +1546,9 @@ class GauntletRunner:
         # Hold was accepted — always drain before returning so R4 starts idle.
         busy_detail: dict[str, Any] = {}
         race_detail: dict[str, Any] = {}
+        wait_detail: dict[str, Any] = {}
         terminal_reason = "generic_chat_error"
+        provider_busy_seen = False
         try:
             busy_seen = False
             busy_deadline = time.monotonic() + 5.0
@@ -1564,6 +1566,11 @@ class GauntletRunner:
                         f"R3 race policy: main_chat_busy_state failed: {busy_detail.get('error', busy)}"
                     )
                     return
+                if (
+                    busy_detail.get("is_sending") == "true"
+                    or busy_detail.get("is_streaming") == "true"
+                ):
+                    provider_busy_seen = True
                 if busy_detail.get("busy") == "true":
                     busy_seen = True
                     break
@@ -1582,9 +1589,30 @@ class GauntletRunner:
                 )
                 self.fail("R3 race policy: main chat never reported busy after no-wait send")
                 return
+            # Latch alone is not enough — require ChatProvider isSending/isStreaming
+            # at least once so R3 is not a pure harness-gate self-test.
+            if not provider_busy_seen:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    2,
+                    "generic_chat_error",
+                    {
+                        "phase": "provider_busy_missing",
+                        "busy_detail": busy_detail,
+                        "fire_detail": fire_detail,
+                        "note": "busy was latch-only; never observed is_sending/is_streaming",
+                    },
+                )
+                self.fail(
+                    "R3 race policy: never observed ChatProvider is_sending/is_streaming "
+                    "(latch-only busy is insufficient)"
+                )
+                return
 
             # Re-check immediately before the race send — models often finish the
             # hold prompt early; accepting a second send while idle is not a race bug.
+            # Latch may keep busy=true after provider idle; that is OK for the race
+            # window only after provider_busy_seen above.
             pre_race = self.bridge_act("main_chat_busy_state")
             pre_race_detail = (
                 pre_race.get("result", {}).get("detail", {}) if isinstance(pre_race, dict) else {}
@@ -1651,6 +1679,7 @@ class GauntletRunner:
                         "busy_detail": busy_detail,
                         "race_detail": race_detail,
                         "rejected": False,
+                        "provider_busy_seen": provider_busy_seen,
                     },
                 )
                 self.fail(
@@ -1670,6 +1699,7 @@ class GauntletRunner:
                         "busy_detail": busy_detail,
                         "race_detail": race_detail,
                         "rejected": True,
+                        "provider_busy_seen": provider_busy_seen,
                     },
                 )
         finally:
@@ -1680,6 +1710,28 @@ class GauntletRunner:
                 {"timeoutMs": str(self.args.turn_timeout_ms), "pollMs": "250"},
             )
             wait_detail = wait.get("result", {}).get("detail", {}) if isinstance(wait, dict) else {}
+            drain_ok = (
+                wait.get("ok") is not False
+                and not wait_detail.get("error")
+                and wait_detail.get("idle") == "true"
+            )
+            if not drain_ok:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    5,
+                    "generic_chat_error",
+                    {
+                        "phase": "drain",
+                        "wait_detail": wait_detail,
+                        "wait": wait if isinstance(wait, dict) else {"raw": str(wait)},
+                        "prior_terminal_reason": terminal_reason,
+                    },
+                )
+                self.fail(
+                    "R3 race policy: wait_main_chat_idle did not reach idle before R4 "
+                    f"(wait_detail={wait_detail})"
+                )
+                terminal_reason = "generic_chat_error"
             self.record_step(
                 "r3-already-running-race-policy",
                 "resilience: already-running/race policy",
@@ -1693,6 +1745,8 @@ class GauntletRunner:
                     "race_query": race_query,
                     "race_detail": race_detail,
                     "wait_detail": wait_detail,
+                    "provider_busy_seen": provider_busy_seen,
+                    "drain_ok": drain_ok,
                 },
             )
 
@@ -2148,8 +2202,12 @@ def resilience_driver_self_check_failures(driver_source: str) -> list[str]:
         r3 = methods.get("run_resilience_r3_race_policy")
         if not method_contains_string(r3, "hold_busy_ms"):
             failures.append("run_resilience_r3_race_policy arms hold_busy_ms latch")
+        if not method_contains_string(r3, "provider_busy_missing"):
+            failures.append("run_resilience_r3_race_policy requires provider is_sending/is_streaming")
         if not method_contains_string(r3, "hold_completed_early"):
             failures.append("run_resilience_r3_race_policy handles hold_completed_early")
+        if not method_contains_string(r3, "drain"):
+            failures.append("run_resilience_r3_race_policy asserts wait_main_chat_idle drain")
     if not method_contains_string(methods.get("run_resilience_suite"), '". Objective: track marker '):
         failures.append("run_resilience_suite R4 spawn uses track-marker objective")
     if not method_contains_attr(methods.get("record_resilience_diagnostic"), "resilience_terminal_reason_counts"):
