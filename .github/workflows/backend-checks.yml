@@ -58,5 +58,5 @@ jobs:
             --fail-on high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def
 
       - name: Check workflow contracts
-        if: needs.changes.outputs.has_backend_workflow_contracts == 'true'
+        if: needs.changes.outputs.has_backend_workflow_contracts == 'true' || needs.changes.outputs.has_backend_async_gate == 'true'
         run: python3 backend/scripts/check_workflow_contracts.py
