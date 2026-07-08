@@ -830,38 +830,36 @@ struct DesktopHomeView: View {
   /// system sizes — no in-content chrome.
   @ToolbarContentBuilder
   private var mainToolbar: some ToolbarContent {
-    if !useLegacyHomeDesign {
-      // Home is the root: it gets no leading toolbar items at all. Subpages
-      // get the house button plus the page title. The `if` must wrap the
-      // ToolbarItems (not live inside them): an item with empty content
-      // still renders as an empty slot in the unified bar. PlainToolbarItem
-      // opts every item out of the macOS 26 glass platter — bare glyphs on
-      // the app's own dark surface.
-      if selectedIndex != SidebarNavItem.dashboard.rawValue {
-        PlainToolbarItem(placement: .navigation) {
-          Button {
-            withAnimation(Self.pageNavigationAnimation) {
-              selectedIndex = SidebarNavItem.dashboard.rawValue
-            }
-          } label: {
-            Image(systemName: "house")
-              .foregroundStyle(Color.secondary)
+    // Home is the root: it gets no leading toolbar items at all. Subpages
+    // get the house button plus the page title. The `if` must wrap the
+    // ToolbarItems (not live inside them): an item with empty content
+    // still renders as an empty slot in the unified bar. PlainToolbarItem
+    // opts every item out of the macOS 26 glass platter — bare glyphs on
+    // the app's own dark surface.
+    if !useLegacyHomeDesign, selectedIndex != SidebarNavItem.dashboard.rawValue {
+      PlainToolbarItem(placement: .navigation) {
+        Button {
+          withAnimation(Self.pageNavigationAnimation) {
+            selectedIndex = SidebarNavItem.dashboard.rawValue
           }
-          .help("Back to Home (\u{2318}[)")
-          .keyboardShortcut("[", modifiers: .command)
+        } label: {
+          Image(systemName: "house")
+            .foregroundStyle(Color.secondary)
         }
-        PlainToolbarItem(placement: .navigation) {
-          toolbarTitle
-        }
+        .help("Back to Home (\u{2318}[)")
+        .keyboardShortcut("[", modifiers: .command)
       }
-      // On macOS `.primaryAction` maps to the *leading* toolbar edge, so a
-      // flexible spacer is what pushes the status cluster to the trailing side.
-      ToolbarItem(placement: .automatic) {
-        Spacer()
+      PlainToolbarItem(placement: .navigation) {
+        toolbarTitle
       }
-      PlainToolbarItem(placement: .automatic) {
-        ToolbarStatusControls(appState: appState)
-      }
+    }
+    // On macOS `.primaryAction` maps to the *leading* toolbar edge, so a
+    // flexible spacer is what pushes the status cluster to the trailing side.
+    ToolbarItem(placement: .automatic) {
+      Spacer()
+    }
+    PlainToolbarItem(placement: .automatic) {
+      ToolbarStatusControls(appState: appState)
     }
   }
 

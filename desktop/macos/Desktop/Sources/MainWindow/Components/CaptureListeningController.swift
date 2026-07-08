@@ -120,7 +120,6 @@ final class CaptureListeningController: ObservableObject {
         }
 
         isTogglingListening = true
-        UserDefaults.standard.set(enabled, forKey: "transcriptionEnabled")
         AssistantSettings.shared.transcriptionEnabled = enabled
         AnalyticsManager.shared.settingToggled(setting: "transcription", enabled: enabled)
         NotificationCenter.default.post(
@@ -137,7 +136,6 @@ final class CaptureListeningController: ObservableObject {
     func toggleListeningMode() {
         let nextMode: AssistantSettings.SystemAudioCaptureMode =
             listeningCaptureMode == .onlyDuringMeetings ? .always : .onlyDuringMeetings
-        UserDefaults.standard.set(nextMode.rawValue, forKey: "systemAudioCaptureMode")
         AssistantSettings.shared.systemAudioCaptureMode = nextMode
         AnalyticsManager.shared.settingToggled(
             setting: "meetings_only_listening",
@@ -193,7 +191,6 @@ final class CaptureListeningController: ObservableObject {
     }
 
     private func setScreenAnalysisEnabled(_ enabled: Bool) {
-        UserDefaults.standard.set(enabled, forKey: "screenAnalysisEnabled")
         AssistantSettings.shared.screenAnalysisEnabled = enabled
     }
 }
