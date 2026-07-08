@@ -73,6 +73,10 @@ final class WALService: ObservableObject {
         try await uploadWalToCloud(wal)
     }
 
+    func flushToDiskForTesting() {
+        flushToDisk()
+    }
+
     private var walDirectory: URL?
     private var flushTimer: Timer?
     private var chunkTimer: Timer?
@@ -400,8 +404,20 @@ final class WALService: ObservableObject {
     }
 
     private func writeWalToDisk(at index: Int) {
-        // For in-memory WALs that don't have frames here, just mark as disk
-        // In a full implementation, this would write buffered frames
+        // Frames are persisted by `writeFramesToDisk` when the WAL is created;
+        // there is no separate in-memory frame buffer to flush here. Only promote
+        // to `.disk` once the backing file actually exists — otherwise we'd mark an
+        // entry `.disk` with no frames and no `filePath`, which sends it into the
+        // sync path where it fails with `fileNotFound` and the recording is lost
+        // (#9240). Leave it `.memory` so the in-flight write (or a retry) can
+        // complete it.
+        guard let walDir = walDirectory,
+              let fileName = wals[index].filePath, !fileName.isEmpty,
+              fileManager.fileExists(atPath: walDir.appendingPathComponent(fileName).path)
+        else {
+            logger.warning("WALService: skipping disk promotion for \(self.wals[index].id); frames not yet persisted")
+            return
+        }
         wals[index].storage = .disk
     }
 
