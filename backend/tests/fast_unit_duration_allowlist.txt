@@ -1,15 +1,15 @@
-# Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_MAX_SECONDS (default 0.1s).
+# Backend unit-test node IDs grandfathered against BACKEND_FAST_UNIT_FAIL_SECONDS (default 0.12s locally).
 #
-# The duration guard measures per-test CPU time (call phase) with a strict 100ms default. CPU time
-# is load-independent, so the guard is deterministic regardless of parallelism. The entries below are
-# genuine unit tests whose measured CPU exceeds the target. The dominant cause is the file-isolation
+# The duration guard measures per-test CPU time (call phase). CPU time is load-independent, so the
+# guard is deterministic regardless of parallelism. The entries below are genuine unit tests whose
+# measured CPU exceeds the failure threshold. The dominant cause is the file-isolation
 # runner model: each test file runs in its own pytest process, so the first test of a file/class
 # amortizes that process's module import (FastAPI app / router / database graph) into its call.
 # This is structural, not a per-test regression. They STAY in the PR unit lane; this file only
 # suppresses the duration guard for these baseline node IDs. NEW slow tests are still flagged.
 #
 # To shrink this list: (a) migrate the runner to a single pytest session (BACKEND_PYTEST_FILE_ISOLATION=0)
-# so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_MAX_SECONDS.
+# so imports are paid once per worker instead of per file, or (b) raise BACKEND_FAST_UNIT_FAIL_SECONDS.
 # Genuinely non-unit tests (real asyncio sleeps, network, stress, codebase greps, full-app wiring,
 # per-test fresh module reload) are marked `slow`/`integration` and are NOT listed here.
 tests/unit/test_app_client_schema_inventory.py::test_inventory_ignores_static_base_url_field_routes
