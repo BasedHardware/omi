@@ -2,6 +2,7 @@
 # Tests: clipboard paste detection, QR code generation, Telegram token validation
 
 version: 2
+tier: 2
 name: ai-clone-utilities
 description: AI Clone utilities flow — verify clipboard watcher detects plugin URLs, QR code renders for bot tokens, and Telegram token validator accepts valid tokens
 app: com.omi.computer-macos

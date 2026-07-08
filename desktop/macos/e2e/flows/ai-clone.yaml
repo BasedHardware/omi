@@ -4,6 +4,7 @@
 # Core feature: AI Clone persona plugin configuration and auto-reply management
 
 version: 2
+tier: 2
 name: ai-clone
 description: AI Clone flow — open AI Clone settings, verify plugin URL/bearer token fields, Telegram/WhatsApp connect sheets, ToS acknowledgement, rate-limit badge, auto-reply toggle, and status poll wiring
 app: com.omi.computer-macos
