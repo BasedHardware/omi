@@ -139,6 +139,16 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     XCTAssertTrue(ImportConnectorStatusStore().snapshot(for: connector).isConnected)
   }
 
+  func testOmiDeviceHistoryMigratesLegacyGlobalKeyToCurrentUser() {
+    UserDefaults.standard.set(true, forKey: "home-omi-device-account-history")
+    UserDefaults.standard.set("test-user", forKey: .authUserId)
+
+    let store = HomeStatusStore()
+
+    XCTAssertTrue(store.accountHasOmiDeviceConversations)
+    XCTAssertTrue(UserDefaults.standard.bool(forKey: "home-omi-device-account-history.test-user"))
+  }
+
   private func resetImportConnectorDefaults() {
     let prefixes = [
       "appsImportConnectorSourceCount.",
@@ -161,5 +171,8 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: "onboardingClaudeImportedMemoriesCount.test-user")
     UserDefaults.standard.removeObject(forKey: "onboardingChatGPTImportedMemoriesCount.other-user")
     UserDefaults.standard.removeObject(forKey: "onboardingClaudeImportedMemoriesCount.other-user")
+    UserDefaults.standard.removeObject(forKey: "home-omi-device-account-history")
+    UserDefaults.standard.removeObject(forKey: "home-omi-device-account-history.test-user")
+    UserDefaults.standard.removeObject(forKey: "home-omi-device-account-history.other-user")
   }
 }

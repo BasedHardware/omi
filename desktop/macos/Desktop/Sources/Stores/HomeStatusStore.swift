@@ -13,6 +13,7 @@ import SwiftUI
 /// MCP status scans).
 @MainActor
 final class HomeStatusStore: ObservableObject {
+    static let legacyOmiDeviceHistoryDefaultsKey = "home-omi-device-account-history"
     static let omiDeviceHistoryDefaultsKeyPrefix = "home-omi-device-account-history."
 
     /// Import-connector (Gmail, Notes, …) status cache. Owned here so the
@@ -147,6 +148,11 @@ final class HomeStatusStore: ObservableObject {
 
     private static func cachedOmiDeviceHistory(defaults: UserDefaults = .standard) -> Bool {
         guard let key = omiDeviceHistoryDefaultsKey(defaults: defaults) else { return false }
+        if defaults.object(forKey: key) == nil,
+            defaults.bool(forKey: legacyOmiDeviceHistoryDefaultsKey)
+        {
+            defaults.set(true, forKey: key)
+        }
         return defaults.bool(forKey: key)
     }
 
