@@ -3623,7 +3623,7 @@ class FloatingControlBarManager {
             status: "completed"
         )
 
-        _ = historyChatProvider?.stageOptimisticTurn(
+        let staged = historyChatProvider?.stageOptimisticTurn(
             continuityKey: continuityKey,
             userText: "",
             assistantText: summary,
@@ -3632,12 +3632,21 @@ class FloatingControlBarManager {
             contentBlocks: [completionBlock],
             resources: resources
         )
-        // Floating surface keeps the plain completion copy; timeline/kernel use the
-        // bracket summary staged above (parsed by BackgroundAgentSummary) plus
-        // structured agentCompletion for open-by-id hydrate.
-        deliverAgentArtifactCompletionToFloatingSurface(
-            ChatMessage(text: messageText, sender: .ai, resources: resources)
-        )
+        // Bind the staged provider message (same id) so floating and timeline share
+        // one answer — bracket text + agentCompletion + resources. Do not mint a
+        // second ChatMessage id and setLocalAnswerOverride over the staged row.
+        if let stagedAssistant = staged?.assistant {
+            deliverAgentArtifactCompletionToFloatingSurface(stagedAssistant)
+        } else {
+            deliverAgentArtifactCompletionToFloatingSurface(
+                ChatMessage(
+                    text: summary,
+                    sender: .ai,
+                    contentBlocks: [completionBlock],
+                    resources: resources
+                )
+            )
+        }
         Task {
             guard let provider = historyChatProvider else { return }
             await provider.kernelTurnProjection.projectCrossSurfaceTurn(
@@ -4125,10 +4134,10 @@ class FloatingControlBarManager {
             } else {
                 barWindow.state.setLocalAnswerOverride(ChatMessage(text: "⚠️ \(errorText)", sender: .ai))
             }
-        } else if barWindow.state.currentAIMessage(from: provider) == nil
-            || barWindow.state.aiResponseText(from: provider).isEmpty
-        {
-            // No error message and no response — something else went wrong
+        } else if barWindow.state.shouldPresentEmptyResponseFailure(from: provider) {
+            // No error and no provider-backed answer content (text/blocks/resources).
+            // Never call setLocalAnswerOverride when an answerMessageId is already
+            // bound — that would clear the provider answer (including block-only).
             barWindow.state.setLocalAnswerOverride(
                 ChatMessage(text: "Failed to get a response. Please try again.", sender: .ai)
             )

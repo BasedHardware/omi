@@ -311,6 +311,35 @@ class FloatingControlBarState: NSObject, ObservableObject {
         currentAIMessage(from: provider)?.text ?? ""
     }
 
+    /// True when a message has user-visible answer payload (plain text, structured
+    /// blocks, or resources). Block-only / resource-only answers are not empty.
+    static func messageHasAnswerContent(_ message: ChatMessage) -> Bool {
+        !message.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !message.contentBlocks.isEmpty
+            || !message.resources.isEmpty
+    }
+
+    /// Provider-bound answer with visible content (text, contentBlocks, or resources).
+    func hasProviderBackedAnswerContent(from provider: ChatProvider?) -> Bool {
+        guard let answerId = chatViewport.answerMessageId,
+              let message = provider?.messages.first(where: { $0.id == answerId })
+        else { return false }
+        return Self.messageHasAnswerContent(message)
+    }
+
+    /// Post-send empty-response path: only fail when there is no provider-backed
+    /// answer and no visible content. Never treat a bound provider answer as a
+    /// failure (calling `setLocalAnswerOverride` would clear the answer id).
+    func shouldPresentEmptyResponseFailure(from provider: ChatProvider?) -> Bool {
+        if let answerId = chatViewport.answerMessageId,
+           provider?.messages.contains(where: { $0.id == answerId }) == true
+        {
+            return false
+        }
+        guard let message = currentAIMessage(from: provider) else { return true }
+        return !Self.messageHasAnswerContent(message)
+    }
+
     /// Build archived exchanges as a thin view-model from ids + provider messages.
     func derivedChatHistory(from provider: ChatProvider?) -> [FloatingChatExchange] {
         guard let provider else { return [] }

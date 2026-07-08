@@ -304,6 +304,75 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     )
   }
 
+  /// INV-6: never dedupe by text — identical user+assistant copy with different
+  /// continuity keys must produce two distinct pairs on the timeline.
+  func testSameTextDifferentContinuityKeysKeepsTwoPairs() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+    let userText = "same question"
+    let assistantText = "same answer"
+
+    let first = provider.stageOptimisticTurn(
+      continuityKey: "key-a",
+      userText: userText,
+      assistantText: assistantText,
+      origin: "realtime_voice",
+      turnOwner: .mainChat
+    )
+    let second = provider.stageOptimisticTurn(
+      continuityKey: "key-b",
+      userText: userText,
+      assistantText: assistantText,
+      origin: "realtime_voice",
+      turnOwner: .mainChat
+    )
+    XCTAssertNotEqual(first.user?.id, second.user?.id)
+    XCTAssertNotEqual(first.assistant?.id, second.assistant?.id)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 2)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 2)
+
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: userText,
+        assistantText: assistantText,
+        origin: "realtime_voice",
+        interrupted: false,
+        idempotencyKey: "key-a",
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: userText,
+        assistantText: assistantText,
+        origin: "realtime_voice",
+        interrupted: false,
+        idempotencyKey: "key-b",
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+
+    let users = provider.messages.filter { $0.sender == .user }
+    let assistants = provider.messages.filter { $0.sender == .ai }
+    XCTAssertEqual(users.count, 2)
+    XCTAssertEqual(assistants.count, 2)
+    XCTAssertEqual(users.map(\.text), [userText, userText])
+    XCTAssertEqual(assistants.map(\.text), [assistantText, assistantText])
+    XCTAssertEqual(Set(users.compactMap(\.clientTurnId)), Set(["key-a", "key-b"]))
+    XCTAssertEqual(Set(assistants.compactMap(\.clientTurnId)), Set(["key-a", "key-b"]))
+  }
+
   func testEmptyIdempotencyKeyStillAppends() {
     let provider = ChatProvider()
     let projection = provider.kernelTurnProjection

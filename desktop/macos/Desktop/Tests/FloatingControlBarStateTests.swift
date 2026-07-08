@@ -322,6 +322,73 @@ final class FloatingControlBarStateTests: XCTestCase {
         )
     }
 
+    /// Block-only answers (empty text, non-empty contentBlocks) are not empty failures.
+    func testBlockOnlyAnswerIsNotEmptyResponseFailure() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let blockOnly = ChatMessage(
+            id: "a-blocks",
+            clientTurnId: "turn-blocks",
+            text: "",
+            sender: .ai,
+            contentBlocks: [.text(id: "b1", text: "Structured only")]
+        )
+        provider.messages = [blockOnly]
+
+        XCTAssertTrue(FloatingControlBarState.messageHasAnswerContent(blockOnly))
+        state.bindAnswerMessage(blockOnly)
+        XCTAssertTrue(state.hasProviderBackedAnswerContent(from: provider))
+        XCTAssertFalse(
+            state.shouldPresentEmptyResponseFailure(from: provider),
+            "Bound provider answer with contentBlocks must not be treated as failed empty"
+        )
+        XCTAssertTrue(state.aiResponseText(from: provider).isEmpty)
+
+        // Truly empty: no message at all.
+        let emptyState = FloatingControlBarState()
+        XCTAssertTrue(emptyState.shouldPresentEmptyResponseFailure(from: provider))
+
+        // Unbound empty-text message with no blocks/resources is a failure.
+        let emptyText = ChatMessage(id: "a-empty", text: "", sender: .ai)
+        provider.messages = [emptyText]
+        emptyState.beginTurn(clientTurnId: "t-empty")
+        // Resolve via activeClientTurnId without binding answer id.
+        var viewport = emptyState.chatViewport
+        viewport.activeClientTurnId = "t-empty"
+        emptyState.chatViewport = viewport
+        let emptyTurnMessage = ChatMessage(
+            id: "a-empty-turn",
+            clientTurnId: "t-empty",
+            text: "",
+            sender: .ai
+        )
+        provider.messages = [emptyTurnMessage]
+        XCTAssertTrue(emptyState.shouldPresentEmptyResponseFailure(from: provider))
+    }
+
+    /// Resource-only answers also count as provider-backed content.
+    func testResourceOnlyAnswerIsNotEmptyResponseFailure() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+        let resource = ChatResource.localGeneratedFile(
+            id: "res-1",
+            title: "out.txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/out.txt"
+        )
+        let resourceOnly = ChatMessage(
+            id: "a-res",
+            clientTurnId: "turn-res",
+            text: "",
+            sender: .ai,
+            resources: [resource]
+        )
+        provider.messages = [resourceOnly]
+        state.bindAnswerMessage(resourceOnly)
+        XCTAssertFalse(state.shouldPresentEmptyResponseFailure(from: provider))
+    }
+
     /// Thread 2: isAgentSwitcherExpanded reflects pinned and hovering states.
     func testIsAgentSwitcherExpanded() {
         let state = FloatingControlBarState()
