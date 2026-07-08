@@ -10,6 +10,10 @@ struct RedesignTasksPage: View {
   @ObservedObject var tasksStore = TasksStore.shared
   @Binding var selectedIndex: Int
 
+  @State private var showAdd = false
+  @State private var newTaskText = ""
+  @FocusState private var addFocused: Bool
+
   // MARK: Derived groups
 
   /// "Do this next" — anything already due (overdue first, then today).
@@ -44,7 +48,9 @@ struct RedesignTasksPage: View {
         header
           .padding(.bottom, 4)
 
-        if isEmpty {
+        if showAdd { addRow }
+
+        if isEmpty && !showAdd {
           emptyCard
             .padding(.top, InkSpace.s5)
         } else {
@@ -78,9 +84,36 @@ struct RedesignTasksPage: View {
       }
       Spacer()
       InkButton(title: "Add", systemImage: "plus", kind: .ghost, size: .sm) {
-        // Reserved for inline task entry; no-op for now.
+        showAdd = true
+        addFocused = true
       }
     }
+  }
+
+  /// Inline new-task entry — creates a real task via the store on submit.
+  private var addRow: some View {
+    HStack(spacing: 12) {
+      Circle().strokeBorder(Ink.hair2, lineWidth: 1.6).frame(width: 20, height: 20)
+      TextField("Add a task…", text: $newTaskText)
+        .textFieldStyle(.plain)
+        .font(InkFont.sans(14.5))
+        .foregroundColor(Ink.ink)
+        .focused($addFocused)
+        .onSubmit { commitNewTask() }
+      Spacer()
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 12)
+    .padding(.top, InkSpace.s4)
+  }
+
+  private func commitNewTask() {
+    let text = newTaskText.trimmingCharacters(in: .whitespacesAndNewlines)
+    newTaskText = ""
+    showAdd = false
+    addFocused = false
+    guard !text.isEmpty else { return }
+    Task { _ = await tasksStore.createTask(description: text, dueAt: nil, priority: nil) }
   }
 
   // MARK: Section

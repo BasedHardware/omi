@@ -1183,11 +1183,7 @@ private struct PageContentView: View {
       switch selectedIndex {
       case 0:
         if useRedesign {
-          RedesignHomePage(
-            appState: appState,
-            memoriesViewModel: viewModelContainer.memoriesViewModel,
-            dashboardViewModel: viewModelContainer.dashboardViewModel,
-            selectedIndex: $selectedTabIndex)
+          RedesignHomePage(appState: appState)
         } else {
           DashboardPage(
             viewModel: viewModelContainer.dashboardViewModel,

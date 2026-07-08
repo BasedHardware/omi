@@ -1,13 +1,13 @@
 import SwiftUI
 
 /// The redesigned "how I sound as you" persona page — mockup `persona.html`,
-/// light-styled. Tone toggles persist to local @State for now (wiring to a
-/// real persona store comes later).
+/// light-styled. Tone preferences persist via @AppStorage so they survive
+/// relaunch (and can be read by the drafting layer).
 struct RedesignPersonaPage: View {
-  @State private var shortAndDirect = true
-  @State private var warmNotFormal = true
-  @State private var emojiNowAndThen = true
-  @State private var matchEachPerson = true
+  @AppStorage("persona.shortAndDirect") private var shortAndDirect = true
+  @AppStorage("persona.warmNotFormal") private var warmNotFormal = true
+  @AppStorage("persona.emojiNowAndThen") private var emojiNowAndThen = true
+  @AppStorage("persona.matchEachPerson") private var matchEachPerson = true
 
   var body: some View {
     ScrollView {
@@ -29,9 +29,15 @@ struct RedesignPersonaPage: View {
 
         HStack(spacing: 4) {
           Text("I never send without you.").inkCaption()
-          Text("See a draft →")
-            .font(InkFont.sans(12, .medium))
-            .foregroundColor(Ink.accentStrong)
+          Button {
+            NotificationCenter.default.post(
+              name: .navigateToSidebarItem, object: nil, userInfo: ["rawValue": 23])
+          } label: {
+            Text("See a draft →")
+              .font(InkFont.sans(12, .medium))
+              .foregroundColor(Ink.accentStrong)
+          }
+          .buttonStyle(.plain)
         }
         .padding(.top, 4)
       }

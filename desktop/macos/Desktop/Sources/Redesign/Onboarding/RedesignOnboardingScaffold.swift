@@ -270,16 +270,6 @@ struct RedesignBrainGraph: View {
       .fixedSize()
   }
 
-  /// The welcome-screen node set from the mockup.
-  static let welcome: [RedesignBrainNode] = [
-    RedesignBrainNode(text: "omi", x: 0.46, y: 0.44, core: true),
-    RedesignBrainNode(text: "Sarah — Q3 deck", x: 0.18, y: 0.20),
-    RedesignBrainNode(text: "Atlas v2", x: 0.72, y: 0.22),
-    RedesignBrainNode(text: "Deep work = mornings", x: 0.60, y: 0.70),
-    RedesignBrainNode(text: "Mom · July 22", x: 0.22, y: 0.72),
-    RedesignBrainNode(text: "Standup 9am", x: 0.78, y: 0.52),
-  ]
-  static let welcomeLinks: [(Int, Int)] = [(0, 1), (0, 2), (0, 3), (0, 4), (0, 5)]
 }
 
 // MARK: - Benefit-led permission card (mockup `.perm`)

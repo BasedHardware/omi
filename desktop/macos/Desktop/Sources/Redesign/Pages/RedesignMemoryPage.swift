@@ -168,7 +168,7 @@ struct RedesignMemoryPage: View {
     VStack(alignment: .leading, spacing: 0) {
       VStack(alignment: .leading, spacing: 8) {
         Text("What I know about you").inkEyebrow()
-        Text("The profile I use to help. Correct anything — it sticks.")
+        Text("The profile I use to help — edit any memory on the left and it sticks.")
           .font(InkFont.sans(13)).foregroundColor(Ink.body)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -515,10 +515,6 @@ private struct FactRow: View {
           .font(InkFont.sans(11.5)).foregroundColor(Ink.faint)
       }
       Spacer(minLength: 0)
-      Image(systemName: "square.and.pencil")
-        .font(.system(size: 12)).foregroundColor(Ink.faint)
-        .opacity(hovering ? 1 : 0)
-        .padding(.top, 2)
     }
     .padding(12)
     .background(

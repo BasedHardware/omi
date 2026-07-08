@@ -6,7 +6,7 @@ struct RedesignFocusPage: View {
   @ObservedObject private var storage = FocusStorage.shared
   @Binding var selectedIndex: Int
 
-  @State private var protecting = false
+  @AppStorage("focus.protectMornings") private var protecting = false
 
   // MARK: - Derived data
 
@@ -149,7 +149,7 @@ struct RedesignFocusPage: View {
           Text("TOMORROW")
             .font(InkFont.sans(11, .semibold)).foregroundColor(Ink.accentStrong).tracking(1.2)
         }
-        Text("I'll guard 9–11am again — it's where you do your best work. Meetings after 4pm stay off your calendar.")
+        Text("I'll watch your 9–11am window — it's where you do your best work — and nudge you if it starts slipping.")
           .inkBody()
           .frame(maxWidth: 520, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
