@@ -99,6 +99,8 @@ _stubs = [
     'google.cloud.firestore_v1.FieldFilter',
     'google',
     'google.cloud',
+    'google.api_core',
+    'google.api_core.exceptions',
     'pinecone',
     'typesense',
     'opuslib',
@@ -144,6 +146,7 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+sys.modules['google.api_core.exceptions'].FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
@@ -492,6 +495,27 @@ class TestScreenActivity:
         mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
         result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
         assert result['total_screenshots'] == 0
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
+        # Regression for #9189: a missing Firestore index must surface as a typed,
+        # actionable ToolExecutionError, not an opaque 500.
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
+        assert exc_info.value.code == -32009
+        assert 'index' in exc_info.value.message.lower()
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
+        assert exc_info.value.code == -32009
 
 
 class TestDailySummaries:
