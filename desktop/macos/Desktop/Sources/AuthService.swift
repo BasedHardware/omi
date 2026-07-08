@@ -358,8 +358,14 @@ class AuthService {
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing).
     // Keys are defined once in `DefaultsKey` and read/written through the typed
     // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
-    private let authTokenKeychainService = "com.omi.desktop.firebase-rest-session"
+    //
+    // Keychain service is team-scoped so Apple Development / named-bundle builds
+    // cannot poison the notarized Beta/Prod item (and trigger a login-keychain
+    // password dialog). See DesktopKeychainStore.scopedService.
     private let authTokenKeychainAccount = "firebase-rest-tokens"
+    private var authTokenKeychainService: String {
+        DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
+    }
 
     private struct StoredAuthTokens: Codable {
         let idToken: String
@@ -397,12 +403,18 @@ class AuthService {
             usesKeychainTokenStorage: { true },
             allowsUserDefaultsFallback: { false },
             readKeychainString: { service, account in
+                // Only the team-scoped service. Never query the unscoped legacy
+                // `com.omi.desktop.firebase-rest-session` item — a foreign-team ACL
+                // on that name is what triggers the login-keychain password dialog.
+                // Pre-scoping installs recover via the UserDefaults migration path below.
                 DesktopKeychainStore.string(service: service, account: account)
             },
             writeKeychainString: { value, service, account in
                 DesktopKeychainStore.setString(value, service: service, account: account)
             },
             deleteKeychainString: { service, account in
+                // Only delete the scoped item. Touching the legacy unscoped name can
+                // itself prompt when the ACL belongs to another signing team.
                 DesktopKeychainStore.delete(service: service, account: account)
             },
             recordsFallbackTelemetry: true

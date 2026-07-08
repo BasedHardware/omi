@@ -17,9 +17,12 @@ enum LocalAgentAPISettings {
 
   private static let enabledKey = "localAgentAPIEnabled"
   private static let tokenKey = "localAgentAPIToken"
-  private static let tokenKeychainService = "com.omi.desktop.local-agent-api"
   private static let tokenKeychainAccount = "local-agent-api-token"
   private static let portKey = "localAgentAPIPort"
+  /// Team-scoped so local Apple Development builds cannot poison the notarized item.
+  private static var tokenKeychainService: String {
+    DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyLocalAgentTokenService)
+  }
 
   static var isEnabled: Bool {
     get { UserDefaults.standard.bool(forKey: enabledKey) }
@@ -43,7 +46,10 @@ enum LocalAgentAPISettings {
   }
 
   static func storedToken() -> String? {
-    if let token = DesktopKeychainStore.string(service: tokenKeychainService, account: tokenKeychainAccount) {
+    if let token = DesktopKeychainStore.string(
+      service: tokenKeychainService,
+      account: tokenKeychainAccount
+    ) {
       return token
     }
     let token = UserDefaults.standard.string(forKey: tokenKey) ?? ""

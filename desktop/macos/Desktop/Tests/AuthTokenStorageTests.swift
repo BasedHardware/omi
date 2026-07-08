@@ -116,18 +116,69 @@ final class AuthTokenStorageTests: XCTestCase {
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-keychain")
   }
 
-  /// Regression: the token Keychain store must NOT opt into the data-protection keychain
-  /// (`kSecUseDataProtectionKeychain`). That requires a `keychain-access-groups` entitlement
-  /// this non-sandboxed Developer ID app doesn't have, so on the signed/notarized build every
-  /// SecItem write failed with errSecMissingEntitlement and sign-in broke with "Could not
-  /// securely store sign-in tokens". Dev builds use UserDefaults, so this only ever failed on
-  /// prod/beta and is invisible to the behavioral tests — hence a source-level guard.
+  /// Regression: the token Keychain store must NOT opt into the data-protection keychain.
+  /// That requires a `keychain-access-groups` entitlement this non-sandboxed Developer ID
+  /// app doesn't have, so on the signed/notarized build every SecItem write failed with
+  /// errSecMissingEntitlement and sign-in broke with "Could not securely store sign-in
+  /// tokens". This only ever failed on signed prod/beta builds and is invisible to the
+  /// behavioral tests — hence a source-level guard.
   func testKeychainStoreDoesNotUseDataProtectionKeychain() throws {
     let source = try sourceFile("DesktopKeychainStore.swift")
+    // Match an actual query assignment, not the explanatory comment that names the flag.
     XCTAssertFalse(
-      source.contains("kSecUseDataProtectionKeychain"),
+      source.contains("kSecUseDataProtectionKeychain as String")
+        || source.contains("[kSecUseDataProtectionKeychain"),
       "DesktopKeychainStore must use the file-based login keychain (no keychain-access-groups "
         + "entitlement); the data-protection keychain breaks sign-in on signed builds.")
+  }
+
+  /// Regression: never show the login-keychain password dialog. Local Apple Development
+  /// builds previously wrote the unscoped `firebase-rest-session` item; notarized Beta then
+  /// prompted on every launch. Team-scoped v2 service names + never querying the legacy
+  /// unscoped item close that path (LAContext alone does not suppress file-based ACL sheets).
+  func testKeychainStoreNeverPresentsAuthenticationUI() throws {
+    let source = try sourceFile("DesktopKeychainStore.swift")
+    XCTAssertTrue(
+      source.contains("interactionNotAllowed = true"),
+      "DesktopKeychainStore must set LAContext.interactionNotAllowed so SecItem prefers fail-closed")
+    XCTAssertTrue(
+      source.contains("kSecUseAuthenticationContext"),
+      "DesktopKeychainStore must pass an LAContext via kSecUseAuthenticationContext")
+    XCTAssertTrue(
+      source.contains("scopedService"),
+      "DesktopKeychainStore must team-scope service names so Dev and Developer ID items diverge")
+    XCTAssertTrue(
+      source.contains(".v2.team."),
+      "Scoped service names must include a v2 marker so they never collide with the legacy item")
+    XCTAssertFalse(
+      source.contains("legacyServices"),
+      "DesktopKeychainStore must not offer a legacy-service migration path that SecItem-queries "
+        + "the unscoped firebase-rest-session item (that query is what triggers the password dialog)")
+  }
+
+  func testAuthTokenServiceIsTeamScopedAndNeverTouchesLegacyItem() throws {
+    let source = try sourceFile("AuthService.swift")
+    XCTAssertTrue(
+      source.contains("DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)"),
+      "AuthService must store tokens under the team-scoped Keychain service")
+    XCTAssertFalse(
+      source.contains("private let authTokenKeychainService = \"com.omi.desktop.firebase-rest-session\""),
+      "AuthService must not hardcode the unscoped firebase-rest-session service name")
+    // Live hooks must not pass the unscoped legacy name into SecItem (read or delete).
+    XCTAssertFalse(
+      source.contains("legacyServices: [DesktopKeychainStore.legacyAuthTokenService]"),
+      "AuthService must not migrate by reading the unscoped legacy Keychain item")
+    XCTAssertFalse(
+      source.contains("delete(\n                    service: DesktopKeychainStore.legacyAuthTokenService"),
+      "AuthService must not delete the unscoped legacy Keychain item (can itself prompt)")
+  }
+
+  func testScopedServiceIncludesTeamID() {
+    let scoped = DesktopKeychainStore.scopedService("com.omi.desktop.firebase-rest-session", teamID: "9536L8KLMP")
+    XCTAssertEqual(scoped, "com.omi.desktop.firebase-rest-session.v2.team.9536L8KLMP")
+    let other = DesktopKeychainStore.scopedService("com.omi.desktop.firebase-rest-session", teamID: "JVMXE5G542")
+    XCTAssertEqual(other, "com.omi.desktop.firebase-rest-session.v2.team.JVMXE5G542")
+    XCTAssertNotEqual(scoped, other)
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {

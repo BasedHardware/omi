@@ -195,11 +195,15 @@ final class FailLoudConfigTests: XCTestCase {
     let src = try source(relativePath: "Sources/LocalAgentAPIServer.swift")
 
     XCTAssertTrue(src.contains("tokenKeychainService"))
-    XCTAssertTrue(src.contains("DesktopKeychainStore.string(service: tokenKeychainService"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyLocalAgentTokenService)"))
+    XCTAssertTrue(src.contains("DesktopKeychainStore.string("))
     XCTAssertTrue(src.contains("DesktopKeychainStore.setString(token, service: tokenKeychainService"))
     XCTAssertTrue(src.contains("enum LocalAgentAPIError"))
     XCTAssertTrue(src.contains("throw LocalAgentAPIError.tokenStorageUnavailable"))
     XCTAssertFalse(src.contains("UserDefaults.standard.set(token, forKey: tokenKey)"))
+    XCTAssertFalse(
+      src.contains("private static let tokenKeychainService = \"com.omi.desktop.local-agent-api\""),
+      "Local agent token service must be team-scoped, not a shared unscoped constant")
   }
 
   // The data-protection keychain assertion was inverted by the file-based-keychain fix:
