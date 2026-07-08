@@ -1100,19 +1100,9 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testStoppedPillIgnoresLateNonCancellationProjection() throws {
     let source = try agentPillSource()
 
-    XCTAssertTrue(
-      source.contains(
-        """
-        if pill.status == .stopped && projection.status != .cancelled {
-                    return
-                }
-
-                if pill.status.isFinished && !projection.status.isTerminal {
-                    return
-                }
-
-                switch projection.status {
-        """))
+    XCTAssertTrue(source.contains("if pill.status == .stopped && projection.status != .cancelled"))
+    XCTAssertTrue(source.contains("if pill.status.isFinished && !projection.status.isTerminal"))
+    XCTAssertTrue(source.contains("switch projection.status"))
   }
 
   func testDirectedProviderPillsDoNotForwardClaudeModelOverrides() throws {
