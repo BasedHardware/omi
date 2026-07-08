@@ -57,6 +57,57 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
   }
 
+  /// Speculative warm used to construct a second ChatProvider that attached its
+  /// own KernelTurnProjection. Each turn_recorded then fanned out to both hosts
+  /// (main UI + warm), and warm's persist/poll produced duplicate chat rows.
+  func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout() async {
+    let runtime = AgentRuntimeProcess()
+    let bridge = AgentBridge(runtime: runtime)
+    let main = ChatProvider()
+    let warm = ChatProvider()
+    let surface = main.mainChatSurfaceReference()
+    let turn = AgentRuntimeProcess.KernelTurnRecorded(
+      conversationId: "conv-warm",
+      surfaceKind: surface.surfaceKind,
+      externalRefKind: surface.externalRefKind,
+      externalRefId: surface.externalRefId,
+      userText: "PTT after warm",
+      assistantText: "Single answer",
+      origin: "realtime_voice",
+      interrupted: false,
+      idempotencyKey: "warm-dup-key",
+      userTurnId: "u1",
+      assistantTurnId: "a1"
+    )
+
+    // Fixed path: re-attach replaces; handler count stays 1.
+    await bridge.setTurnRecordedHandler { _ in }
+    await bridge.setTurnRecordedHandler { _ in }
+    let afterReplace = await runtime.turnRecordedHandlerCount()
+    XCTAssertEqual(afterReplace, 1)
+
+    // Bug shape: two providers each apply once → two independent message lists
+    // that later merge via persistence/poll into duplicate UI rows.
+    main.kernelTurnProjection.apply(turn)
+    warm.kernelTurnProjection.apply(turn)
+    XCTAssertEqual(main.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(warm.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(
+      main.messages.filter { $0.sender == .user }.count
+        + warm.messages.filter { $0.sender == .user }.count,
+      2
+    )
+
+    // Product fix: replace back to a single handler (warm uses mainInstance).
+    await bridge.setTurnRecordedHandler { recorded in
+      Task { @MainActor in
+        main.kernelTurnProjection.apply(recorded)
+      }
+    }
+    let afterSingle = await runtime.turnRecordedHandlerCount()
+    XCTAssertEqual(afterSingle, 1)
+  }
+
   func testApplyKernelTurnRecordedIgnoresOtherSurfaces() {
     let provider = ChatProvider()
     provider.kernelTurnProjection.apply(

@@ -394,6 +394,10 @@ actor AgentRuntimeProcess {
     turnRecordedHandlers.append(handler)
   }
 
+  func turnRecordedHandlerCount() -> Int {
+    turnRecordedHandlers.count
+  }
+
   func recordSurfaceTurn(
     clientId: String,
     surface: AgentSurfaceReference,

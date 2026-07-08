@@ -371,10 +371,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  /// Held warm so spawn_agent's pi-mono bridge boot is off the hot path. The pill
-  /// spawn creates its own provider; warming this one primes node/auth caches.
-  private var warmProvider: ChatProvider?
-
   /// In-flight ephemeral mint guard (managed users).
   private var minting = false
   /// A Gemini active-reply barge-in replaces the whole session. Managed sessions
@@ -2381,9 +2377,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   }
 
   private func speculativelyWarmAgent() {
-    if warmProvider == nil { warmProvider = ChatProvider() }
-    let provider = warmProvider
-    Task { await provider?.warmupBridge() }
+    // Must warm the live main chat provider — a second ChatProvider would attach
+    // another KernelTurnProjection handler to the shared AgentRuntimeProcess and
+    // double-apply every turn_recorded into chat / pill_completion cards.
+    guard let provider = ChatProvider.mainInstance else {
+      log("RealtimeHub: speculative warm skipped — main ChatProvider unavailable")
+      return
+    }
+    Task { await provider.warmupBridge() }
     log("RealtimeHub: speculatively warming agent bridge (action-y intent)")
   }
 

@@ -14,6 +14,9 @@ final class KernelTurnProjection {
     self.host = host
   }
 
+  /// Registers (or re-registers) this projection as the turn_recorded listener.
+  /// AgentBridge replaces the prior handler — re-attach after warm/restart must
+  /// not accumulate duplicate applies into chat.
   func attachClient(_ client: AgentClient.Session) async {
     self.client = client
     await client.setTurnRecordedHandler { [weak self] turn in

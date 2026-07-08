@@ -322,6 +322,12 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("escalateToHigherModel"))
     XCTAssertTrue(hubSource.contains("AgentDelegationResolver.shared.resolve"))
     XCTAssertTrue(hubSource.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
+    // Speculative warm must reuse mainInstance — a second ChatProvider attaches a
+    // duplicate turn_recorded handler and doubles PTT chat / pill_completion rows.
+    XCTAssertTrue(hubSource.contains("ChatProvider.mainInstance"))
+    XCTAssertTrue(hubSource.contains("speculativelyWarmAgent"))
+    XCTAssertFalse(hubSource.contains("warmProvider = ChatProvider()"))
+    XCTAssertFalse(hubSource.contains("private var warmProvider"))
     XCTAssertTrue(pillSource.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(pillSource.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
   }
