@@ -429,24 +429,24 @@ private struct ChannelTab: View {
   @State private var hovering = false
 
   var body: some View {
-    HStack(spacing: 7) {
-      BrandLogo(channel: channel, size: 20)
-      Text(channel.title)
-        .font(InkFont.sans(12, isActive ? .semibold : .medium))
-        .foregroundColor(isActive ? Ink.ink : Ink.body)
-        .lineLimit(1)
-        .minimumScaleFactor(0.85)
+    // Logo only — names are omitted to keep the switcher clean; the unread
+    // count sits as a badge on the corner of the brand logo.
+    ZStack(alignment: .topTrailing) {
+      BrandLogo(channel: channel, size: 26)
       if attention > 0 {
         Text("\(attention)")
           .font(InkFont.sans(10, .semibold))
           .foregroundColor(Ink.accentInk)
           .frame(minWidth: 15, minHeight: 15)
           .background(Circle().fill(Ink.accent))
+          .overlay(Circle().strokeBorder(Ink.soft, lineWidth: 1.5))
+          .offset(x: 6, y: -6)
       }
     }
     .frame(maxWidth: .infinity)
-    .padding(.vertical, 7)
+    .padding(.vertical, 8)
     .padding(.horizontal, 6)
+    .help(channel.title)
     .background(
       RoundedRectangle(cornerRadius: 8, style: .continuous)
         .fill(isActive ? Ink.surface : (hovering ? Ink.surface.opacity(0.6) : .clear))

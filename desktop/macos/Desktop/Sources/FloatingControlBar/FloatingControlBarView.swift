@@ -209,25 +209,17 @@ struct FloatingControlBarView: View {
                     : notchChromeHeight
 
                 ZStack(alignment: .top) {
+                    // Light warm-paper island. Reads as a floating white pill
+                    // hanging below the notch: a hairline border + soft shadow
+                    // separate it from the desktop, incl. light wallpapers.
                     NotchDockShape(bottomRadius: bottomRadius)
-                        .fill(Color.black)
+                        .fill(Ink.surface)
+                        .overlay(
+                            NotchDockShape(bottomRadius: bottomRadius)
+                                .stroke(Ink.hair, lineWidth: 1)
+                        )
+                        .shadow(color: Ink.shadow, radius: 12, x: 0, y: 6)
                         .frame(width: surfaceWidth, height: surfaceHeight)
-
-                    // Light warm-paper panel for the expanded conversation. The
-                    // top `notchChromeHeight` stays the dark notch cap; below it
-                    // reads light (masked to the dock's rounded bottom corners).
-                    if state.showingAIConversation {
-                        NotchDockShape(bottomRadius: bottomRadius)
-                            .fill(Ink.surface)
-                            .frame(width: surfaceWidth, height: surfaceHeight)
-                            .mask(
-                                VStack(spacing: 0) {
-                                    Color.clear.frame(height: notchChromeHeight)
-                                    Color.black
-                                }
-                                .frame(width: surfaceWidth, height: surfaceHeight)
-                            )
-                    }
 
                     if state.isVoiceResponseActive {
                         NotchResponseGlowView(bottomRadius: bottomRadius)
@@ -288,6 +280,10 @@ struct FloatingControlBarView: View {
             }
         }
         .onDisappear { state.setNotchHoverMenuOpen(false) }
+        // The notch island is a light "warm-paper" surface. Oppose the window's
+        // forced dark scheme for this subtree only (the legacy non-notch pill
+        // keeps its dark blur chrome untouched) so text/controls render on light.
+        .environment(\.colorScheme, .light)
     }
 
     private var notchChrome: some View {
@@ -312,7 +308,7 @@ struct FloatingControlBarView: View {
     private var notchAgentLobe: some View {
         HStack(spacing: 0) {
             if showingNotchWaveform {
-                VoiceWaveformBars(isActive: true)
+                VoiceWaveformBars(isActive: true, tint: Ink.ink)
                     .scaleEffect(0.72)
                     .frame(width: 28, height: 15)
                     .frame(width: 38, height: 27)
@@ -327,7 +323,7 @@ struct FloatingControlBarView: View {
 
                     Image(systemName: "gearshape.fill")
                         .scaledFont(size: 15, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.88))
+                        .foregroundColor(Ink.body)
                         .frame(width: NotchAgentStackMetrics.logoFrameSize, height: NotchAgentStackMetrics.logoFrameSize)
                         .opacity(notchLogoHovering ? 1 : 0)
                         .scaleEffect(notchLogoHovering ? 1 : 0.5)
@@ -397,7 +393,7 @@ struct FloatingControlBarView: View {
             HStack(spacing: 8) {
                 Image(systemName: "message.fill")
                     .scaledFont(size: 11, weight: .semibold)
-                    .foregroundStyle(.white.opacity(0.86))
+                    .foregroundStyle(Ink.body)
                     .frame(
                         width: NotchAgentStackMetrics.listOrbSize,
                         height: NotchAgentStackMetrics.listOrbSize
@@ -406,7 +402,7 @@ struct FloatingControlBarView: View {
 
                 Text("Omi Chat")
                     .scaledFont(size: 12, weight: .semibold)
-                    .foregroundStyle(.white.opacity(0.94))
+                    .foregroundStyle(Ink.ink)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -418,7 +414,7 @@ struct FloatingControlBarView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
             .overlay(alignment: .bottom) {
                 Rectangle()
-                    .fill(Color.white.opacity(0.11))
+                    .fill(Ink.hair)
                     .frame(height: 0.6)
             }
             .contentShape(Rectangle())
@@ -444,7 +440,7 @@ struct FloatingControlBarView: View {
         HStack(spacing: 3) {
             Text(title)
                 .scaledFont(size: 8, weight: .semibold)
-                .foregroundStyle(.white.opacity(0.54))
+                .foregroundStyle(Ink.faint)
             notchShortcutKeys(keys)
         }
     }
@@ -453,7 +449,7 @@ struct FloatingControlBarView: View {
         HStack(spacing: 3) {
             Image(systemName: systemImage)
                 .scaledFont(size: 8, weight: .semibold)
-                .foregroundStyle(.white.opacity(0.58))
+                .foregroundStyle(Ink.faint)
                 .frame(width: 8, height: 10)
             notchShortcutKeys(keys)
         }
@@ -463,12 +459,12 @@ struct FloatingControlBarView: View {
         ForEach(ShortcutHintLayout.visibleTokens(for: keys), id: \.self) { key in
             Text(key)
                 .scaledFont(size: 8, weight: .medium)
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(Ink.body)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .padding(.horizontal, key.count > 1 ? 3 : 0)
                 .frame(minWidth: 12, minHeight: 12)
-                .background(Color.white.opacity(0.12))
+                .background(Ink.accentTint)
                 .cornerRadius(3)
         }
         .fixedSize(horizontal: true, vertical: false)
@@ -1245,10 +1241,10 @@ private struct NotchResponseGlowView: View {
                     .stroke(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(1.0),
-                                Color.white.opacity(0.85),
-                                Color.white.opacity(0.92),
-                                Color.white.opacity(1.0)
+                                Ink.ink.opacity(0.85),
+                                Ink.ink.opacity(0.55),
+                                Ink.ink.opacity(0.7),
+                                Ink.ink.opacity(0.85)
                             ],
                             startPoint: .leading,
                             endPoint: .trailing
@@ -1261,10 +1257,10 @@ private struct NotchResponseGlowView: View {
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0.0),
-                                .init(color: Color.white.opacity(0.55), location: 0.28),
-                                .init(color: Color.white.opacity(1.0), location: 0.45),
-                                .init(color: Color.white.opacity(1.0), location: 0.53),
-                                .init(color: Color.white.opacity(0.9), location: 0.70),
+                                .init(color: Ink.ink.opacity(0.4), location: 0.28),
+                                .init(color: Ink.ink.opacity(0.9), location: 0.45),
+                                .init(color: Ink.ink.opacity(0.9), location: 0.53),
+                                .init(color: Ink.ink.opacity(0.7), location: 0.70),
                                 .init(color: .clear, location: 1.0)
                             ],
                             startPoint: sweepStart,
@@ -1299,7 +1295,7 @@ private struct NotchOmiMark: View {
                 ForEach(0..<Self.dotCount, id: \.self) { index in
                     let angle = Double(index) / Double(Self.dotCount) * Double.pi * 2 - Double.pi
                     Circle()
-                        .fill(dotColors.indices.contains(index) ? dotColors[index] : Color.white.opacity(0.96))
+                        .fill(dotColors.indices.contains(index) ? dotColors[index] : Ink.ink.opacity(0.9))
                         .frame(width: dotDiameter, height: dotDiameter)
                         .position(
                             x: center.x + CGFloat(cos(angle)) * ringRadius,
@@ -1958,7 +1954,7 @@ private struct NotchMorphDot: View {
             .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
             .overlay(
                 Circle()
-                    .strokeBorder(Color.white.opacity(0.42 * Double(progress)), lineWidth: 0.8)
+                    .strokeBorder(Ink.surface.opacity(0.7 * Double(progress)), lineWidth: 0.8)
             )
             .shadow(color: color.opacity(0.6), radius: isActive ? 9 : 5)
             .scaleEffect(scale)
@@ -1972,7 +1968,7 @@ private struct NotchLogoPlaceholderDot: View {
 
     var body: some View {
         Circle()
-            .fill(Color.white.opacity(0.96 * Double(1 - progress)))
+            .fill(Ink.ink.opacity(0.9 * Double(1 - progress)))
             .frame(width: NotchAgentStackMetrics.listOrbSize, height: NotchAgentStackMetrics.listOrbSize)
             .scaleEffect(NotchAgentStackMetrics.logoDotScale)
             .frame(width: 18, height: 22)
@@ -1998,7 +1994,7 @@ private struct NotchAgentListRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                     .scaledFont(size: 12, weight: .semibold)
-                    .foregroundStyle(.white.opacity(0.94))
+                    .foregroundStyle(Ink.ink)
                     .lineLimit(1)
                     .truncationMode(.tail)
 
@@ -2010,7 +2006,7 @@ private struct NotchAgentListRow: View {
 
                     Text(progressSummary)
                         .scaledFont(size: 9, weight: .medium)
-                        .foregroundStyle(.white.opacity(0.52))
+                        .foregroundStyle(Ink.muted)
                         .lineLimit(1)
                         .truncationMode(.tail)
                 }
@@ -2024,11 +2020,11 @@ private struct NotchAgentListRow: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? Color.white.opacity(0.12 * Double(progress)) : .clear)
+                .fill(isSelected ? Ink.accentTint.opacity(Double(progress)) : .clear)
         )
         .overlay(alignment: .bottom) {
             Rectangle()
-                .fill(Color.white.opacity(0.11 * Double(progress)))
+                .fill(Ink.hair.opacity(Double(progress)))
                 .frame(height: 0.6)
         }
         .contentShape(Rectangle())
