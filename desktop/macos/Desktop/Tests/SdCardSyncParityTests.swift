@@ -1,7 +1,7 @@
 import XCTest
 
 /// Guards parity between BLE and WiFi SD-card sync: both paths must upload
-/// downloaded WALs via syncToCloud() before tearing down sync state.
+/// downloaded WALs via syncToCloud() after persisting downloaded frames.
 final class SdCardSyncParityTests: XCTestCase {
 
   private func walSourcesRoot() -> URL {
@@ -49,18 +49,22 @@ final class SdCardSyncParityTests: XCTestCase {
     return ""
   }
 
-  private func assertSyncToCloudAfterDownload(in source: String, file: StaticString) throws {
+  private func assertSyncToCloudAfterDownload(
+    in source: String,
+    uploadCall: String,
+    file: StaticString
+  ) throws {
     let body = try finishSyncBody(from: source)
 
     XCTAssertTrue(
       body.contains("updateWalWithDownloadedData"),
       "finishSync must persist downloaded frames before upload (\(file))")
     XCTAssertTrue(
-      body.contains("syncToCloud()"),
+      body.contains(uploadCall),
       "finishSync must upload WALs to cloud after download (\(file))")
 
     guard let update = body.range(of: "updateWalWithDownloadedData"),
-      let upload = body.range(of: "syncToCloud()")
+      let upload = body.range(of: uploadCall)
     else {
       XCTFail("Could not locate updateWalWithDownloadedData or syncToCloud in finishSync (\(file))")
       return
@@ -69,6 +73,19 @@ final class SdCardSyncParityTests: XCTestCase {
     XCTAssertLessThan(
       update.upperBound, upload.lowerBound,
       "syncToCloud must run after updateWalWithDownloadedData (\(file))")
+  }
+
+  private func assertSyncToCloudBeforeTeardown(
+    in source: String,
+    uploadCall: String,
+    file: StaticString
+  ) throws {
+    let body = try finishSyncBody(from: source)
+
+    guard let upload = body.range(of: uploadCall) else {
+      XCTFail("Could not locate syncToCloud in finishSync (\(file))")
+      return
+    }
 
     let teardownMarker =
       body.range(of: "await cleanup()")
@@ -83,15 +100,44 @@ final class SdCardSyncParityTests: XCTestCase {
       "syncToCloud must run before sync teardown (\(file))")
   }
 
+  private func assertSyncToCloudAfterTeardown(
+    in source: String,
+    uploadCall: String,
+    file: StaticString
+  ) throws {
+    let body = try finishSyncBody(from: source)
+
+    guard let upload = body.range(of: uploadCall),
+      let teardown = body.range(of: "await cleanup()")
+    else {
+      XCTFail("Could not locate syncToCloud or cleanup in finishSync (\(file))")
+      return
+    }
+
+    XCTAssertLessThan(
+      teardown.upperBound, upload.lowerBound,
+      "WiFi sync must tear down the device SoftAP before cloud upload so internet is restored (\(file))")
+  }
+
   func testStorageSyncFinishSyncUploadsAfterDownload() throws {
     try assertSyncToCloudAfterDownload(
       in: try storageSyncSource(),
+      uploadCall: "await walService.syncToCloud()",
+      file: "StorageSyncService.swift")
+    try assertSyncToCloudBeforeTeardown(
+      in: try storageSyncSource(),
+      uploadCall: "await walService.syncToCloud()",
       file: "StorageSyncService.swift")
   }
 
   func testWifiSyncFinishSyncUploadsAfterDownload() throws {
     try assertSyncToCloudAfterDownload(
       in: try wifiSyncSource(),
+      uploadCall: "await activeWalService.syncToCloud()",
+      file: "WifiSyncService.swift")
+    try assertSyncToCloudAfterTeardown(
+      in: try wifiSyncSource(),
+      uploadCall: "await activeWalService.syncToCloud()",
       file: "WifiSyncService.swift")
   }
 }

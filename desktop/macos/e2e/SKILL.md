@@ -61,10 +61,11 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
-### 2d. Verify SD-card WAL cloud upload (WiFi / BLE)
+### 2c. Verify SD-card WAL cloud upload (WiFi / BLE)
 After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just
 saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`
-after `updateWalWithDownloadedData`.
+after `updateWalWithDownloadedData`; the WiFi path tears down the device SoftAP
+first so the Mac can regain internet before upload.
 ```bash
 # Structured WAL state via automation bridge (named test bundle must be running)
 cd desktop/macos && ./scripts/omi-ctl action wal_snapshot
@@ -77,7 +78,7 @@ Expect log lines like `Uploaded WAL <id>: status=synced` (or `status=uploaded` f
 202-queued jobs). Hermetic regression:
 `cd desktop/macos && xcrun swift test --filter 'WifiSync|SdCardSyncParity'`.
 
-### 2c. Inject backend faults (failure-path testing)
+### 2d. Inject backend faults (failure-path testing)
 The hermetic E2E harness is backend-only, so desktop failure paths (backend 5xx →
 structured `ChatErrorState`, task sortOrder sync failure surfaced/retried not silent,
 transcription transport truthfulness) can't be driven end-to-end. `scripts/omi-fault-inject.sh`
@@ -99,7 +100,7 @@ OMI_SKIP_BACKEND=1 OMI_SKIP_TUNNEL=1 \
 `reset` RSTs the connection; `refuse` leaves the port closed (connection refused). Verify a
 mode with `curl` before launching the app: `curl -s -o /dev/null -w '%{http_code}\n' "$(./scripts/omi-fault-inject.sh url)"`.
 
-### 2d. Hardening smoke (runtime regression tripwire)
+### 2e. Hardening smoke (runtime regression tripwire)
 `scripts/omi-hardening-smoke.sh` re-runs the proven runtime probes behind hardened
 acceptance rows so a behavior that regresses upstream is caught on the next run, not the
 next manual audit. One-time setup — build and seed a dedicated named bundle:

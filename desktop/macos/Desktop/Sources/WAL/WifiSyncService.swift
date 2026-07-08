@@ -444,12 +444,11 @@ final class WifiSyncService: ObservableObject {
 
         let frameCount = downloadedFrames.count
 
-        // Upload downloaded WALs to cloud before tearing down WiFi sync state,
-        // mirroring StorageSyncService (BLE SD-card path).
-        await activeWalService.syncToCloud()
-
-        // Cleanup
+        // Tear down the device SoftAP first so the Mac can regain its normal
+        // internet route before uploading downloaded WALs to cloud.
         await cleanup()
+
+        await activeWalService.syncToCloud()
 
         logger.info("WiFi sync completed: \(frameCount) frames")
     }
