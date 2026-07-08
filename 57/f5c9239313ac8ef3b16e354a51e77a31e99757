@@ -1,0 +1,24 @@
+index.html
+  s_11b211de1d7e03::t_bc0e2d09e797d0 163
+  s_11b211de1d7e03::t_0c99931dd6f0f3 118-135
+  s_11b211de1d7e03::t_bff900a7300b03 28,32-48,54-56,58
+  s_11b211de1d7e03::t_e92451ebd6948f 170-175
+  s_11b211de1d7e03::t_0f11aca7786f1e 80-89
+  s_11b211de1d7e03::t_c4cfb7ab749395 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "57f5c9239313ac8ef3b16e354a51e77a31e99757",
+  "prompts": {},
+  "sessions": {
+    "s_11b211de1d7e03": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7fcf8f61-739f-43ac-83ec-ba043622c943",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
