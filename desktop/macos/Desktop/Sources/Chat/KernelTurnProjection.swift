@@ -32,10 +32,7 @@ final class KernelTurnProjection {
     }
     if let key = turn.idempotencyKey, !key.isEmpty {
       guard !appliedKernelTurnKeys.contains(key) else { return }
-      appliedKernelTurnKeys.insert(key)
-      if appliedKernelTurnKeys.count > 64 {
-        appliedKernelTurnKeys = Set(Array(appliedKernelTurnKeys).suffix(32))
-      }
+      rememberAppliedKernelTurnKey(key)
     }
     _ = host.recordCompletedTurn(
       userText: turn.userText,
@@ -43,6 +40,19 @@ final class KernelTurnProjection {
       logLabel: turn.origin == "realtime_voice" ? "voice" : "kernel_turn",
       messageSource: turn.origin
     )
+  }
+
+  func suppressNextRecordedTurn(idempotencyKey: String) {
+    let key = idempotencyKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !key.isEmpty else { return }
+    rememberAppliedKernelTurnKey(key)
+  }
+
+  private func rememberAppliedKernelTurnKey(_ key: String) {
+    appliedKernelTurnKeys.insert(key)
+    if appliedKernelTurnKeys.count > 64 {
+      appliedKernelTurnKeys = Set(Array(appliedKernelTurnKeys).suffix(32))
+    }
   }
 
   func recordSurfaceTurn(

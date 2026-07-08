@@ -2147,7 +2147,17 @@ class FloatingControlBarManager {
 
     func openAgentChatFromTimeline(agentID: UUID) {
         guard let window else { return }
-        guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == agentID }) else { return }
+        guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == agentID }) else {
+            Task { @MainActor in
+                await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
+                guard let refreshedPill = AgentPillsManager.shared.pills.first(where: { $0.id == agentID }) else {
+                    log("FloatingControlBarManager: agent link unresolved after refresh: \(agentID)")
+                    return
+                }
+                openAgentChatFromTimeline(agentID: refreshedPill.id)
+            }
+            return
+        }
         AgentPillsManager.shared.markViewed(pillID: pill.id)
         window.state.setNotchHoverMenuOpen(false)
         window.makeKeyAndOrderFront(nil)
@@ -3047,6 +3057,7 @@ class FloatingControlBarManager {
             assistantText: assistantText,
             logLabel: origin
         )
+        provider.kernelTurnProjection.suppressNextRecordedTurn(idempotencyKey: idempotencyKey)
         await recordSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
             userText: userText,
@@ -3610,8 +3621,8 @@ class FloatingControlBarManager {
             ? String(trimmedUser.prefix(120)) + "…"
             : trimmedUser
         let summary = requestSnippet.isEmpty
-            ? trimmedAssistant
-            : "[Background agent — \(requestSnippet)] \(trimmedAssistant)"
+            ? "[Background agent id=\(pillID.uuidString)] \(trimmedAssistant)"
+            : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(trimmedAssistant)"
 
         guard let provider = historyChatProvider else { return }
         await provider.kernelTurnProjection.projectCrossSurfaceTurn(

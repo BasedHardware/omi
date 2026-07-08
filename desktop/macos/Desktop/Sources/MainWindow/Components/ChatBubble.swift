@@ -58,6 +58,11 @@ struct ChatBubble: View {
     return message.text
   }
 
+  private var backgroundAgentSummary: BackgroundAgentSummary? {
+    guard message.sender == .ai, message.contentBlocks.isEmpty else { return nil }
+    return BackgroundAgentSummary.parse(message.text)
+  }
+
   var body: some View {
     let groupedBlocks = ContentBlockGroup.visibleChatGroups(
       message.contentBlocks,
@@ -174,7 +179,9 @@ struct ChatBubble: View {
               resourceStrip
             }
 
-            if !message.text.isEmpty {
+            if let backgroundAgentSummary {
+              BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
+            } else if !message.text.isEmpty {
               SelectableMarkdown(text: displayText, sender: message.sender)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -349,6 +356,111 @@ struct ChatBubble: View {
         MessageMetadataPopover(metadata: metadata)
       }
     }
+  }
+}
+
+struct BackgroundAgentSummary: Equatable {
+  let agentID: UUID?
+  let prompt: String
+  let output: String
+
+  static func parse(_ text: String) -> BackgroundAgentSummary? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("[Background agent") else { return nil }
+    guard let close = trimmed.firstIndex(of: "]") else { return nil }
+
+    let headerStart = trimmed.index(trimmed.startIndex, offsetBy: 1)
+    let header = String(trimmed[headerStart..<close])
+    guard header.hasPrefix("Background agent") else { return nil }
+
+    var remainder = String(header.dropFirst("Background agent".count))
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    var agentID: UUID?
+
+    if remainder.hasPrefix("id=") {
+      remainder.removeFirst(3)
+      let idEnd = remainder.firstIndex { $0 == " " || $0 == "—" } ?? remainder.endIndex
+      let idText = String(remainder[..<idEnd]).trimmingCharacters(in: .whitespacesAndNewlines)
+      agentID = UUID(uuidString: idText)
+      remainder = String(remainder[idEnd...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    if remainder.hasPrefix("—") {
+      remainder.removeFirst()
+      remainder = remainder.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    let outputStart = trimmed.index(after: close)
+    let output = String(trimmed[outputStart...]).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !output.isEmpty else { return nil }
+
+    return BackgroundAgentSummary(
+      agentID: agentID,
+      prompt: remainder.isEmpty ? "Background agent" : remainder,
+      output: output
+    )
+  }
+}
+
+private struct BackgroundAgentSummaryCard: View {
+  let summary: BackgroundAgentSummary
+  var onOpenAgent: ((UUID) -> Void)? = nil
+
+  @State private var isExpanded = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 0) {
+      Button(action: {
+        if let agentID = summary.agentID, let onOpenAgent {
+          onOpenAgent(agentID)
+        } else {
+          withAnimation(.easeInOut(duration: 0.18)) {
+            isExpanded.toggle()
+          }
+        }
+      }) {
+        HStack(spacing: 8) {
+          Image(systemName: "checkmark.circle.fill")
+            .scaledFont(size: 12)
+            .foregroundColor(.green)
+          Text("Background agent")
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textSecondary)
+          Text(summary.output)
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(1)
+            .truncationMode(.tail)
+          Spacer(minLength: 4)
+          Image(systemName: summary.agentID != nil && onOpenAgent != nil ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+      .buttonStyle(.plain)
+
+      if isExpanded || summary.agentID == nil {
+        Divider()
+          .padding(.horizontal, 10)
+        VStack(alignment: .leading, spacing: 8) {
+          Text(summary.prompt)
+            .scaledFont(size: 11)
+            .foregroundColor(OmiColors.textTertiary)
+            .lineLimit(3)
+          Text(summary.output)
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textPrimary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+      }
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
   }
 }
 

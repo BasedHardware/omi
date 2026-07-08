@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCapabilityRegistry.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
+  - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift

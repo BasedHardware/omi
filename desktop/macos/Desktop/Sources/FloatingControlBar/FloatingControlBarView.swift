@@ -745,7 +745,14 @@ struct FloatingControlBarView: View {
     }
 
     private func openAgentInChat(agentID: UUID) {
-        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
+        guard let pill = agentPills.pills.first(where: { $0.id == agentID }) else {
+            Task { @MainActor in
+                await agentPills.refreshProjectedPillsFromKernel()
+                guard let refreshedPill = agentPills.pills.first(where: { $0.id == agentID }) else { return }
+                openAgentInChat(refreshedPill)
+            }
+            return
+        }
         if state.conversationSurface == .agent(pill.id) {
             showAgentListFromConversation()
             return
