@@ -105,6 +105,16 @@ except ImportError as exc:
         return legacy_model
 
 
+try:
+    from utils.llm.gateway_serving import wrap_gateway_with_legacy_fallback
+except ImportError as exc:
+    if exc.name != 'utils.llm.gateway_serving':
+        raise
+
+    def wrap_gateway_with_legacy_fallback(*, gateway_model, **_kwargs):
+        return gateway_model
+
+
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -457,7 +467,17 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
     elif gateway_feature_mode:
-        result = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming)
+        gateway_model = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming)
+        if provider in {'anthropic', 'perplexity'}:
+            # No OpenAI-compatible LangChain legacy client for these providers.
+            result = gateway_model
+        else:
+            legacy_model = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
+            result = wrap_gateway_with_legacy_fallback(
+                feature=feature,
+                gateway_model=gateway_model,
+                legacy_model=legacy_model,
+            )
     else:
         result = get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
 

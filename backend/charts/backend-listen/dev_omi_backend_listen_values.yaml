@@ -113,16 +113,20 @@ env:
     value: "http://dev-omi-llm-gateway.dev-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
     value: "dev"
-  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
+  - name: OMI_LLM_GATEWAY_FEATURE_MODE
+    value: "gateway"
+  - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION
     value: "true"
+  - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED
-    value: "true"
+    value: "false"
   - name: OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE
     value: "1.0"
   - name: OMI_LLM_GATEWAY_SERVICE_TOKEN
