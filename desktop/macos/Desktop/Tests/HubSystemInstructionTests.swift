@@ -25,6 +25,24 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
     }
 
+    func testInstructionRequiresTryingContextBeforeAsking() {
+        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
+        XCTAssertTrue(instr.contains("Try before asking"))
+        XCTAssertTrue(instr.contains("use the relevant read tools before asking the user"))
+        XCTAssertTrue(instr.contains("Missing or incomplete context is"))
+        XCTAssertTrue(instr.contains("not a reason to ask first"))
+        XCTAssertTrue(instr.contains("give the best answer you can with a confidence caveat"))
+    }
+
+    func testInstructionDelegatesLargerVoiceWork() {
+        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
+        XCTAssertTrue(instr.contains("Larger work"))
+        XCTAssertTrue(instr.contains("PTT is the fast front door"))
+        XCTAssertTrue(instr.contains("call spawn_agent with a clear objective and title"))
+        XCTAssertTrue(instr.contains("Do not ask permission to delegate when the user's intent is clear"))
+        XCTAssertTrue(instr.contains("work product, investigation, or"))
+    }
+
     func testRealtimeToolSurfaceMatchesCapabilityRegistry() {
         let toolNames = Set(RealtimeHubTools.openAITools.compactMap { $0["name"] as? String })
         XCTAssertEqual(toolNames, Set(DesktopCapabilityRegistry.realtimeToolNames))

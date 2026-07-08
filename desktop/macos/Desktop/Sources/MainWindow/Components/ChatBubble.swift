@@ -15,6 +15,7 @@ struct ChatBubble: View {
   /// down to `ToolCallsGroup`. Optional so existing callers compile
   /// without wiring cancellation.
   var onCancelTurn: (() -> Void)? = nil
+  var onOpenAgent: ((UUID) -> Void)? = nil
 
   @State private var isTimestampHovering = false
   @State private var isExpanded = false
@@ -26,7 +27,8 @@ struct ChatBubble: View {
   init(
     message: ChatMessage, app: OmiApp?, onRate: @escaping (Int?) -> Void,
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
-    onCancelTurn: (() -> Void)? = nil
+    onCancelTurn: (() -> Void)? = nil,
+    onOpenAgent: ((UUID) -> Void)? = nil
   ) {
     self.message = message
     self.app = app
@@ -34,6 +36,7 @@ struct ChatBubble: View {
     self.onCitationTap = onCitationTap
     self.isDuplicate = isDuplicate
     self.onCancelTurn = onCancelTurn
+    self.onOpenAgent = onOpenAgent
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
@@ -108,7 +111,7 @@ struct ChatBubble: View {
                   .padding(.top, 2)
               }
             case .toolCalls(_, let calls):
-              ToolCallsGroup(calls: calls, onCancel: onCancelTurn)
+              ToolCallsGroup(calls: calls, onCancel: onCancelTurn, onOpenAgent: onOpenAgent)
             case .thinking(_, let text):
               ThinkingBlock(text: text)
             case .discoveryCard(_, let title, let summary, let fullText):

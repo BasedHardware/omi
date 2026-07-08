@@ -516,8 +516,9 @@ struct ChatMessage: Identifiable {
     /// `attachments` for backwards compatibility.
     var resources: [ChatResource]
 
-    /// CHAT-06: which surface produced this turn. nil (history/restored rows)
-    /// renders as main chat.
+    /// Which surface produced this turn. This is only an ownership label for
+    /// interruption/cancellation policy; chat history is canonical and renders
+    /// every Omi turn in every full chat timeline.
     var turnOwner: ChatTurnOwner?
 
     init(id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(), sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false, citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil, notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [], resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil) {
@@ -589,23 +590,6 @@ enum ChatTurnOwner: Equatable {
     case floatingVoice
     case taskChat(String)
     case agentPill(UUID)
-
-    /// CHAT-06: turns owned by a floating-bar surface must not appear in the
-    /// main-chat transcript (and vice versa). taskChat/agentPill turns are NOT
-    /// floating-bar surfaces — they keep rendering with the main transcript
-    /// (pre-fix behavior) if they ever share this provider.
-    var isFloating: Bool {
-        switch self {
-        case .floatingDefault, .floatingVoice: return true
-        case .mainChat, .taskChat, .agentPill: return false
-        }
-    }
-
-    /// Pure per-surface transcript filter (unit-tested): nil owners are legacy/
-    /// restored history and belong to the main surface.
-    static func transcriptMessages(_ messages: [ChatMessage], floatingSurface: Bool) -> [ChatMessage] {
-        messages.filter { ($0.turnOwner?.isFloating ?? false) == floatingSurface }
-    }
 
     func canInterrupt(_ activeOwner: ChatTurnOwner) -> Bool {
         switch (self, activeOwner) {
@@ -4566,9 +4550,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Default chat mode: clear UI immediately, delete in background
             let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
             let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-            // CHAT-06: clearing the MAIN transcript must not wipe the floating
-            // bar's turns, which live in the same shared array.
-            messages = ChatTurnOwner.transcriptMessages(messages, floatingSurface: true)
+            messages = []
             resetMessagesPagination()
             AgentRuntimeStatusStore.shared.clear(surface: surface)
             await invalidateAgentSurface(surface: surface)
@@ -4594,9 +4576,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 sessions.removeAll { $0.id == session.id }
             }
             currentSession = nil
-            // CHAT-06: clearing the MAIN transcript must not wipe the floating
-            // bar's turns, which live in the same shared array.
-            messages = ChatTurnOwner.transcriptMessages(messages, floatingSurface: true)
+            messages = []
             resetMessagesPagination()
 
             // Delete old session in background (don't await — backend is slow)
@@ -4796,20 +4776,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.
     func automationMainChatSnapshot(limit: Int) -> [String: String] {
-        automationChatSnapshot(limit: limit, floatingSurface: false)
+        automationChatSnapshot(limit: limit)
     }
 
-    /// CHAT-06: floating-bar transcript view — only turns owned by a floating
-    /// surface, so the harness can assert cross-surface isolation.
+    /// Snapshot for the floating-bar chat. It intentionally returns the same
+    /// canonical Omi chat timeline as main chat so typed notch, PTT, and
+    /// spawned-agent links can be verified from either surface.
     func automationFloatingChatSnapshot(limit: Int) -> [String: String] {
-        automationChatSnapshot(limit: limit, floatingSurface: true)
+        automationChatSnapshot(limit: limit)
     }
 
-    private func automationChatSnapshot(limit: Int, floatingSurface: Bool) -> [String: String] {
+    private func automationChatSnapshot(limit: Int) -> [String: String] {
         let boundedLimit = max(1, limit)
         let runtimeChatId = mainChatRuntimeChatId(sessionId: currentSessionId)
-        let transcript = ChatTurnOwner.transcriptMessages(messages, floatingSurface: floatingSurface)
-        let rows: [[String: String]] = transcript.suffix(boundedLimit).map { message in
+        let rows: [[String: String]] = messages.suffix(boundedLimit).map { message in
             [
                 "id": message.id,
                 "role": message.sender == .user ? "user" : "assistant",
@@ -4829,11 +4809,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             "chat_session_id": currentSessionId ?? "",
             "runtime_chat_id": runtimeChatId,
             "is_sending": isSending ? "true" : "false",
-            "is_streaming": transcript.contains(where: { $0.isStreaming }) ? "true" : "false",
-            "message_count": "\(transcript.count)",
+            "is_streaming": messages.contains(where: { $0.isStreaming }) ? "true" : "false",
+            "message_count": "\(messages.count)",
             "messages_json": messagesJSON,
         ]
-        if let lastAssistant = transcript.last(where: { $0.sender != .user })?.copyableText {
+        if let lastAssistant = messages.last(where: { $0.sender != .user })?.copyableText {
             detail["last_assistant_text"] = lastAssistant
         }
         if let ownerId = runtimeOwnerId {

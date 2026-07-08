@@ -2145,6 +2145,20 @@ class FloatingControlBarManager {
     /// actively reading.
     var activeAgentChatPillID: UUID? { window?.state.activeAgentChatPillID }
 
+    func openAgentChatFromTimeline(agentID: UUID) {
+        guard let window else { return }
+        guard let pill = AgentPillsManager.shared.pills.first(where: { $0.id == agentID }) else { return }
+        AgentPillsManager.shared.markViewed(pillID: pill.id)
+        window.state.setNotchHoverMenuOpen(false)
+        window.makeKeyAndOrderFront(nil)
+        withAnimation(.easeOut(duration: 0.10)) {
+            window.state.present(.agent(pill.id))
+            window.state.isAILoading = false
+            window.state.aiInputText = ""
+        }
+        window.resizeForActiveAgentChatPublic(pillID: pill.id, animated: true)
+    }
+
     /// Called when a pill is dismissed while it is the one shown in the Ask Omi
     /// surface. Leaves the agent surface so conversationSurface resets instead
     /// of dangling as .agent(id) for a removed pill. (Codex P2 — clear active

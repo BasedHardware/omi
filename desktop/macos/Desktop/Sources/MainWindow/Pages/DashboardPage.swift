@@ -497,7 +497,7 @@ struct DashboardPage: View {
             dashboardWidgets
 
             ChatMessagesView(
-                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
+                messages: chatProvider.messages,
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -514,6 +514,9 @@ struct DashboardPage: View {
                 sessionsLoadError: chatProvider.sessionsLoadError,
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
+                onOpenAgent: { agentID in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID)
+                },
                 welcomeContent: { dashboardChatWelcome }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -764,7 +767,7 @@ struct DashboardPage: View {
     private func homeChatPanel(stageWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
             ChatMessagesView(
-                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
+                messages: chatProvider.messages,
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -782,6 +785,9 @@ struct DashboardPage: View {
                 onRetry: { Task { await chatProvider.retryLoad() } },
                 localSendToken: chatProvider.localSendToken,
                 onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+                onOpenAgent: { agentID in
+                    FloatingControlBarManager.shared.openAgentChatFromTimeline(agentID: agentID)
+                },
                 welcomeContent: { dashboardChatWelcome }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity)

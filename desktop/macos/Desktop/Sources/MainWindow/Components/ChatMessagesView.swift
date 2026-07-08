@@ -34,6 +34,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Threaded down to `ToolCallsGroup`. Optional so existing callers
     /// don't need updating; ChatPage passes `chatProvider.stopAgent`.
     var onCancelTurn: (() -> Void)? = nil
+    /// Opens a spawned background-agent pill from a `spawn_agent` tool row.
+    /// Optional so task/sidebar chat callers that do not expose floating pills
+    /// keep the existing non-clickable tool-card behavior.
+    var onOpenAgent: ((UUID) -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -416,7 +420,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         onCitationTap?(citation)
                     },
                     isDuplicate: dupeIds.contains(message.id),
-                    onCancelTurn: onCancelTurn
+                    onCancelTurn: onCancelTurn,
+                    onOpenAgent: onOpenAgent
                 )
                 .id(message.id)
             }
