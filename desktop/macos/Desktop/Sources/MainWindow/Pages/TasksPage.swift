@@ -2951,7 +2951,7 @@ struct TasksPage: View {
     }
 
     private var addTaskButton: some View {
-        OmiHeaderIconButton(systemImage: "plus", isProminent: true) {
+        OmiHeaderIconButton(systemImage: "plus") {
             viewModel.inlineCreateAfterTaskId = nil
             viewModel.isInlineCreating = true
         }

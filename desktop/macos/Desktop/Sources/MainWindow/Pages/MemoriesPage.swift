@@ -1559,7 +1559,7 @@ struct MemoriesPage: View {
       }
 
       // Add Memory button (icon only)
-      OmiHeaderIconButton(systemImage: "plus", isProminent: true) {
+      OmiHeaderIconButton(systemImage: "plus") {
         viewModel.showingAddMemory = true
       }
       .help("Add Memory")

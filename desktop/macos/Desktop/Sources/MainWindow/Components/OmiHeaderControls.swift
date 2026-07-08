@@ -81,12 +81,12 @@ struct OmiSearchField: View {
     }
 }
 
-/// Circular icon button for header rows. `prominent` renders filled ink for
-/// the row's single primary action (e.g. add).
+/// Circular icon button for header rows. All header actions render at the
+/// same quiet weight — native macOS header rows don't shout any single
+/// action with an accent fill.
 struct OmiHeaderIconButton: View {
     let systemImage: String
     var isActive: Bool = false
-    var isProminent: Bool = false
     let action: () -> Void
 
     @State private var isHovering = false
@@ -95,28 +95,18 @@ struct OmiHeaderIconButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(glyphColor)
+                .foregroundColor(
+                    isActive || isHovering ? OmiColors.textPrimary : OmiColors.textSecondary
+                )
                 .frame(width: OmiHeader.controlHeight, height: OmiHeader.controlHeight)
-                .background(Circle().fill(fillColor))
+                .background(Circle().fill(isActive ? OmiHeader.activeFill : OmiHeader.fill))
                 .overlay(
                     Circle().stroke(
-                        isProminent ? Color.clear : (isActive ? OmiHeader.activeStroke : OmiHeader.stroke),
-                        lineWidth: 1)
+                        isActive ? OmiHeader.activeStroke : OmiHeader.stroke, lineWidth: 1)
                 )
         }
         .buttonStyle(.plain)
         .onHover { isHovering = $0 }
-    }
-
-    private var glyphColor: Color {
-        if isProminent { return .black }
-        if isActive || isHovering { return OmiColors.textPrimary }
-        return OmiColors.textSecondary
-    }
-
-    private var fillColor: Color {
-        if isProminent { return OmiColors.textPrimary }
-        return isActive ? OmiHeader.activeFill : OmiHeader.fill
     }
 }
 
