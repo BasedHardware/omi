@@ -1001,6 +1001,31 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "suspend_agent_stream",
+      summary: "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
+      params: ["durationMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "suspend_agent_stream is disabled on production bundles"]
+      }
+      // Default just past the 180s send watchdog so CHAT-02 can assert the
+      // "Response took too long" error + recoverable retry; capped at 300s.
+      let durationMs = intParam(params["durationMs"], default: 190_000)
+      return await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: durationMs)
+    }
+
+    register(
+      name: "resume_agent_stream",
+      summary: "Resume a suspended agent stdio stream (SIGCONT) immediately. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "resume_agent_stream is disabled on production bundles"]
+      }
+      return await AgentRuntimeProcess.shared.debugResumeStream()
+    }
+
+    register(
       name: "floating_bar_chat_snapshot",
       summary: "Export floating-bar chat transcript and stream state for harness assertions",
       params: ["limit"]

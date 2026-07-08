@@ -31,6 +31,16 @@ final class StallDetectorTests: XCTestCase {
     XCTAssertEqual(transitions, [.interEvent(from: .running, to: .slow)])
   }
 
+  func testGapWellBeyondStalledStaysStalled() async {
+    // A persistent stall (e.g. the full 180s until ChatProvider's send watchdog
+    // fires, CHAT-02) must remain .stalled, not decay back to running.
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+    _ = await detector.tick(atMs: thresholds.stalledGapMs)
+    _ = await detector.tick(atMs: 185_000)
+    let state = await detector.interEventState
+    XCTAssertEqual(state, .stalled)
+  }
+
   func testGapAtStalledThresholdPromotesToStalled() async {
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     let transitions = await detector.tick(atMs: thresholds.stalledGapMs)

@@ -110,6 +110,38 @@ Exit codes: `0` all PASS · `1` any FAIL (a regression — investigate) · `2` u
 given. Safety: only `com.omi.omi-*` bundles are accepted; the sole production interaction is
 the read-only `defaults read` in `auth-06`.
 
+### 2e. Stall the agent stream (chat watchdog testing)
+The HTTP fault harness (§2c) can't stall the **agent** stream — that's a node/stdio
+bridge, not HTTP. Two non-prod bridge actions freeze it so the chat stall path can be
+exercised end-to-end (CHAT-02): a slow/stalled annotation at 8s/20s (`StallDetector`),
+and ChatProvider's **180s send watchdog** which force-releases `isSending` and surfaces
+"Response took too long. Try again." (recoverable — the next send works).
+
+- `suspend_agent_stream` — SIGSTOP the agent process so it emits no events; `durationMs`
+  (default `190000`, just past the 180s watchdog; capped at `300000`) auto-resumes it, so
+  a forgotten resume can never wedge the agent.
+- `resume_agent_stream` — SIGCONT immediately (early clear).
+
+Both are non-production only (`AppBuild.isNonProduction`). Recipe (drive against a named
+test bundle's automation port):
+```bash
+cd desktop/macos
+# 1. start a chat turn so a send is in flight
+./scripts/omi-ctl action ask query="write a long detailed answer" &
+sleep 2
+# 2. freeze the agent stream past the 180s watchdog
+./scripts/omi-ctl action suspend_agent_stream durationMs=190000
+# 3. within <=180s the send watchdog fires: assert the error + that sending is released
+sleep 185
+./scripts/omi-ctl action main_chat_snapshot | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("error:", d.get("has_error"), d.get("error_message")); print("is_sending:", d.get("is_sending"))'
+#   expect has_error=true / "Response took too long…" and is_sending=false (recoverable)
+# 4. resume + prove recovery with a fresh turn
+./scripts/omi-ctl action resume_agent_stream
+./scripts/omi-ctl action ask query="are you back?"   # succeeds — not blocked by the stale send
+```
+`suspend_agent_stream` returns `{suspended:true, pid, durationMs}` (or an `error` if no
+agent process is running / on a prod bundle).
+
 ### The full loop
 ```bash
 cd desktop/macos

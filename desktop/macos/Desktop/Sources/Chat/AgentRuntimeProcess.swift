@@ -569,6 +569,76 @@ actor AgentRuntimeProcess {
     }
   }
 
+  // MARK: - Automation stall hook (non-production only)
+
+  /// Generation guard so a late auto-resume from an earlier suspend can't
+  /// SIGCONT a process that a newer suspend is deliberately holding.
+  private var debugSuspendGeneration: UInt64 = 0
+
+  /// Freeze the agent's stdio stream by sending SIGSTOP to the node bridge
+  /// process. With the process paused it emits no further events, so an in-flight
+  /// chat send stalls exactly like a hung ACP subprocess — driving the
+  /// StallDetector to `.stalled` (20s) and, if held long enough, ChatProvider's
+  /// 180s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
+  /// (hard-capped) so the process can never stay frozen if `debugResumeStream`
+  /// is never called. Non-production bundles only.
+  func debugSuspendStream(durationMs: Int) -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "suspend_agent_stream is disabled on production bundles"]
+    }
+    guard let process, process.isRunning, process.processIdentifier > 0 else {
+      return ["error": "no running agent process to suspend"]
+    }
+    let pid = process.processIdentifier
+    guard kill(pid, SIGSTOP) == 0 else {
+      return ["error": "SIGSTOP failed for pid \(pid) (errno \(errno))"]
+    }
+    debugSuspendGeneration &+= 1
+    let generation = debugSuspendGeneration
+    // Cap the freeze window so a forgotten resume can't wedge the agent.
+    let cappedMs = max(1_000, min(durationMs, 300_000))
+    log("AgentRuntimeProcess: DEBUG suspended stream pid=\(pid) for \(cappedMs)ms (gen \(generation))")
+    Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(cappedMs) * 1_000_000)
+      await self?.autoResumeStream(pid: pid, generation: generation)
+    }
+    return ["suspended": "true", "pid": "\(pid)", "durationMs": "\(cappedMs)"]
+  }
+
+  /// SIGCONT the agent process immediately (early clear of a debug suspend).
+  func debugResumeStream() -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "resume_agent_stream is disabled on production bundles"]
+    }
+    guard let process, process.isRunning, process.processIdentifier > 0 else {
+      return ["error": "no running agent process to resume"]
+    }
+    // Bump the generation so any pending auto-resume becomes a no-op.
+    debugSuspendGeneration &+= 1
+    let pid = process.processIdentifier
+    _ = kill(pid, SIGCONT)
+    log("AgentRuntimeProcess: DEBUG resumed stream pid=\(pid)")
+    return ["resumed": "true", "pid": "\(pid)"]
+  }
+
+  private func autoResumeStream(pid: pid_t, generation: UInt64) {
+    // Only the suspend that scheduled this auto-resume may clear it; a newer
+    // suspend or an explicit resume has already moved the generation on.
+    guard generation == debugSuspendGeneration else { return }
+    // If the agent was torn down and relaunched during the freeze, the current
+    // process has a different pid; SIGCONT-ing the old pid could hit a reused
+    // pid. restart()/stop() already SIGKILL the old process, so there is nothing
+    // to resume in that case.
+    guard process?.processIdentifier == pid else { return }
+    _ = kill(pid, SIGCONT)
+    log("AgentRuntimeProcess: DEBUG auto-resumed stream pid=\(pid) (gen \(generation))")
+  }
+  // Caveat: autoResumeStream is actor-isolated, so it can only run once the
+  // actor is idle. The intended stall flow writes only the tiny 180s interrupt
+  // to the frozen process (far below the stdin pipe buffer), so the actor never
+  // blocks on a write while suspended; do not push large stdin payloads to a
+  // suspended agent or the auto-resume could be delayed until the actor frees.
+
   func interrupt(clientId: String, requestId: String) {
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     guard var request = activeRequests[requestKey] else { return }
