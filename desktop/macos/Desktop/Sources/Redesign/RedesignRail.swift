@@ -90,6 +90,8 @@ struct RedesignRail: View {
               .overlay(
                 isActive(.home)
                   ? RoundedRectangle(cornerRadius: 11).strokeBorder(Ink.hair, lineWidth: 1) : nil))
+          // Whole square is tappable — not just the small rotating dots.
+          .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
       }
       .buttonStyle(.plain)
       .help("Home")
