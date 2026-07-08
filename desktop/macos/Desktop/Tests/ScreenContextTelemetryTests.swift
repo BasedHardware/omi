@@ -166,11 +166,13 @@ final class ScreenContextTelemetryTests: XCTestCase {
       encoding: .utf8
     )
 
-    XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
-    XCTAssertTrue(source.contains(#""available": false"#))
-    XCTAssertTrue(source.contains(#""Latest finalized work-context frame was older than 60 seconds and live capture was unavailable.""#))
-    XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
-  }
+	    XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
+	    XCTAssertTrue(source.contains(#""available": false"#))
+	    XCTAssertTrue(source.contains(#""Latest finalized work-context frame was older than 60 seconds and live capture was unavailable.""#))
+	    XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
+	    XCTAssertFalse(source.contains(#""image_base64": data.base64EncodedString()"#))
+	    XCTAssertTrue(source.contains(#""raw_image_tool": "capture_screen""#))
+	  }
 
   func testChatMessageSentPropertyNamesDoNotUseAmbiguousHasContext() throws {
     let sourcesDir = URL(fileURLWithPath: #filePath)

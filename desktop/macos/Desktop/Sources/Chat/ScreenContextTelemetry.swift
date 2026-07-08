@@ -422,20 +422,20 @@ enum ScreenContextWorkContextBuilder {
       return permissionDeniedPayload(windowMinutes: minutes)
     }
 
-    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
-      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
-        return [
-          "ok": true,
-          "name": "get_work_context",
-          "window_minutes": minutes,
-          "screen_now": fresh,
-          "timeline": [],
-          "latest_capture_age_seconds": 0,
-          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
-          "guidance":
-            "The local Rewind timeline database is unavailable, but this payload includes a fresh live screenshot for the current screen.",
-        ]
-      }
+	    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
+	      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
+	        return [
+	          "ok": true,
+	          "name": "get_work_context",
+	          "window_minutes": minutes,
+	          "screen_now": fresh,
+	          "timeline": [],
+	          "latest_capture_age_seconds": 0,
+	          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
+	          "guidance":
+	            "The local Rewind timeline database is unavailable, but a fresh live screen capture succeeded. Use capture_screen if raw pixels are necessary.",
+	        ]
+	      }
       return [
         "ok": false,
         "name": "get_work_context",
@@ -571,21 +571,19 @@ enum ScreenContextWorkContextBuilder {
     return latestCaptureAgeSeconds > staleCaptureThresholdSeconds
   }
 
-  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter()) -> [String: Any]? {
-    guard let data = ScreenCaptureManager.captureScreenData() else { return nil }
-    return [
-      "available": true,
-      "source": "live_capture_stale_rewind",
-      "timestamp": formatter.string(from: now),
-      "latest_capture_age_seconds": 0,
-      "image_mime": "image/webp",
-      "image_encoding": "base64",
-      "image_base64": data.base64EncodedString(),
-      "image_bytes": data.count,
-      "note":
-        "Fresh live screenshot captured because the latest finalized work-context frame was missing or older than 60 seconds. Use image_base64 directly for current-screen questions.",
-    ]
-  }
+	  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter()) -> [String: Any]? {
+	    guard ScreenCaptureManager.captureScreenData() != nil else { return nil }
+	    return [
+	      "available": true,
+	      "source": "live_capture_stale_rewind",
+	      "timestamp": formatter.string(from: now),
+	      "latest_capture_age_seconds": 0,
+	      "fresh_capture_available": true,
+	      "raw_image_tool": "capture_screen",
+	      "note":
+	        "Fresh live screenshot capture succeeded because the latest finalized work-context frame was missing or older than 60 seconds. Raw pixels are not included here; call capture_screen if needed.",
+	    ]
+	  }
 
   static func permissionDeniedPayload(windowMinutes minutes: Int) -> [String: Any] {
     [

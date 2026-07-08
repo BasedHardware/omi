@@ -745,7 +745,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("Do not upload raw pixels speculatively"))
     XCTAssertTrue(hubSource.contains("let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()"))
-    XCTAssertTrue(hubSource.contains("if sessionProvider == .gemini, let shot { session?.sendVideoFrame(shot, mime: \"image/jpeg\") }"))
+	    XCTAssertTrue(hubSource.contains("allowClosedActivityWindow: true"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
     XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
     XCTAssertTrue(hubSource.contains("responding = false\n      exitVoiceUI(clearResponseGlow: true)\n      return .rejectedNoSession"))

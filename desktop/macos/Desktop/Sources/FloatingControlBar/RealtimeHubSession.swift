@@ -250,23 +250,24 @@ final class RealtimeHubSession: NSObject {
   /// a frame sent here becomes part of the user's speech turn, so the model has the screen
   /// when it answers. This is the ONLY image delivery this model accepts — a separate
   /// image-only turn (after the speech turn closed) is rejected with close 1007.
-  func sendVideoFrame(_ image: Data, mime: String) {
-    guard provider == .gemini else { return }
-    let b64 = image.base64EncodedString()
-    q.async { [weak self] in
-      guard let self else { return }
-      // Buffer until the socket is open AND a turn is active, then flush in markReady.
-      // A cold first turn dumps audio + this frame before connect (~300ms); without
-      // buffering the frame is dropped and the model answers blind.
-      guard self.isOpen, self.activityOpen else {
-        self.pendingVideo.append((b64, mime))
-        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
-        return
-      }
-      log("\(self.tag): screen frame sent in-turn (\(image.count) bytes)")
-      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
-    }
-  }
+  func sendVideoFrame(_ image: Data, mime: String, allowClosedActivityWindow: Bool = false) {
+	    guard provider == .gemini else { return }
+	    let b64 = image.base64EncodedString()
+	    q.async { [weak self] in
+	      guard let self else { return }
+	      // Buffer until the socket is open AND a turn is active, then flush in markReady.
+	      // A cold first turn dumps audio + this frame before connect (~300ms); without
+	      // buffering the frame is dropped and the model answers blind.
+	      guard self.isOpen, self.activityOpen || allowClosedActivityWindow else {
+	        self.pendingVideo.append((b64, mime))
+	        log("\(self.tag): screen frame buffered until open (\(image.count) bytes)")
+	        return
+	      }
+	      let phase = self.activityOpen ? "in-turn" : "after-activity-end"
+	      log("\(self.tag): screen frame sent \(phase) (\(image.count) bytes)")
+	      self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": mime]]])
+	    }
+	  }
 
   /// TEST SEAM (ptt_test_turn only, bridge is non-prod-only): inject the probe text as
   /// realtime user input so the model answers the forced transcript instead of the

@@ -1733,7 +1733,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Raw pixels enter provider context only after an explicit screenshot tool call.
       let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
       if sessionProvider == .openai, let shot { session?.injectImage(shot) }
-      if sessionProvider == .gemini, let shot { session?.sendVideoFrame(shot, mime: "image/jpeg") }
+	      if sessionProvider == .gemini, let shot {
+	        session?.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: true)
+	      }
       log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
