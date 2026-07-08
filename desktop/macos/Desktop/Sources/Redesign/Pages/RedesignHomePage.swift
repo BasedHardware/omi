@@ -56,7 +56,6 @@ struct RedesignHomePage: View {
         header
         nextCard
         askBar
-        statsRow
         HomeLiveTranscript(isActive: appState.isTranscribing)
         footer
       }

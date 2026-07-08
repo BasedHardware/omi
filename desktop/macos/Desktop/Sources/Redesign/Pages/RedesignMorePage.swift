@@ -13,20 +13,16 @@ struct RedesignMorePage: View {
     let index: Int
   }
 
+  // Only the features that AREN'T already one tap away in the rail
+  // (Home, Ask omi, Conversations, Messages, Memory, Tasks, Rewind, Settings).
   private let features: [Feature] = [
-    .init(icon: "house", title: "Home", sub: "Your one next move", index: 0),
-    .init(icon: "sparkles", title: "Ask omi", sub: "Anything you've seen or said", index: 2),
-    .init(icon: "waveform", title: "Conversations", sub: "Every talk, summarized", index: 1),
-    .init(icon: "message", title: "Messages", sub: "Drafts & auto-reply", index: 23),
-    .init(icon: "brain", title: "Memory", sub: "Facts & everything kept", index: 3),
     .init(icon: "point.3.connected.trianglepath.dotted", title: "Brain map", sub: "How it all connects", index: 24),
-    .init(icon: "checklist", title: "Tasks", sub: "What you owe, by when", index: 4),
     .init(icon: "eye", title: "Focus", sub: "Protect your best hours", index: 5),
     .init(icon: "lightbulb", title: "Insights", sub: "Quiet things I noticed", index: 6),
-    .init(icon: "clock.arrow.circlepath", title: "Rewind", sub: "Find anything you saw", index: 7),
     .init(icon: "puzzlepiece", title: "Apps", sub: "Connect & export", index: 8),
     .init(icon: "theatermasks", title: "Persona", sub: "How I sound as you", index: 21),
-    .init(icon: "gearshape", title: "Settings", sub: "Everything, tuned", index: 9),
+    .init(icon: "star", title: "Plan & usage", sub: "Your plan, at a glance", index: 22),
+    .init(icon: "lock.shield", title: "Permissions", sub: "See, hear, act", index: 10),
     .init(icon: "bubble.left", title: "Talk to a founder", sub: "We usually reply fast", index: 12),
   ]
 
