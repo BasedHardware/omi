@@ -177,6 +177,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// `spawn_agent` is a handoff, not a read tool. After the tool result returns,
   /// the realtime model sometimes continues with meta/control text; never speak it.
   private var suppressAssistantOutputForCurrentTurn = false
+  private var voiceOutputCoordinator = PTTVoiceOutputCoordinator()
   /// Guards against recording the same turn to the kernel twice (a delegate that
   /// fires turn-done more than once on reconnect/barge-in edges). Reset per turn.
   private var turnRecorded = false
@@ -969,10 +970,40 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       Task { @MainActor in
         guard let self, self.realtimePlaybackEpoch == playbackEpoch else { return }
         self.realtimePlaybackActive = false
+        if let lease = self.voiceOutputCoordinator.snapshot().activeLease,
+          lease.lane == .nativeRealtime
+        {
+          self.voiceOutputCoordinator.release(lease)
+        }
         self.clearResponseGlowIfRealtimeAudioIdle()
       }
     }
     return player
+  }
+
+  private func acquireVoiceOutput(_ lane: PTTVoiceOutputLane, reason: String) -> PTTVoiceLease? {
+    guard let turnID = voiceOutputCoordinator.snapshot().turnID else {
+      log("RealtimeHub[\(providerTag)]: dropping \(lane.rawValue) output with no active PTT turn reason=\(reason)")
+      return nil
+    }
+    switch voiceOutputCoordinator.acquire(lane, turnID: turnID) {
+    case .acquired(let lease):
+      return lease
+    case .denied(let active):
+      log(
+        "RealtimeHub[\(providerTag)]: dropping \(lane.rawValue) output reason=\(reason) "
+          + "active_lane=\(active.lane.rawValue)"
+      )
+      return nil
+    case .staleTurn:
+      log("RealtimeHub[\(providerTag)]: dropping stale \(lane.rawValue) output reason=\(reason)")
+      return nil
+    }
+  }
+
+  private func releaseVoiceOutputIfActive(_ lane: PTTVoiceOutputLane) {
+    guard let lease = voiceOutputCoordinator.snapshot().activeLease, lease.lane == lane else { return }
+    voiceOutputCoordinator.release(lease)
   }
 
   // MARK: - PTT integration
@@ -986,6 +1017,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking
     let bargeIn = responding || realtimePlaybackActive || voicePlaybackActive
     let interruptedTurn = bargeIn ? captureInterruptedTurnPayloadIfNeeded() : nil
+    _ = voiceOutputCoordinator.beginTurn()
     responding = false
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
@@ -1236,6 +1268,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     clearBargeInReplacementState()
+    voiceOutputCoordinator.endTurn()
     // Abandon the open turn WITHOUT tearing down the socket: close the speech window
     // and leave the reply gated off so the model never answers the silence. Keeps the
     // warm session (and its context) so the next real turn is instant and in-context.
@@ -1306,12 +1339,16 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidReceiveAudio(_ pcm24k: Data, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
-    guard !suppressAssistantOutputForCurrentTurn else { return }
+    guard !suppressAssistantOutputForCurrentTurn,
+      !voiceOutputCoordinator.snapshot().providerOutputSuppressed
+    else { return }
+    guard acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") != nil else { return }
     // If PTT muted music/system output while listening, make sure the model's
     // reply is audible even if capture teardown restore is delayed by hardware.
     SystemAudioMuteController.shared.restore()
     guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else {
       log("RealtimeHub[\(providerTag)]: native audio chunk could not be scheduled; keeping text fallback armed")
+      releaseVoiceOutputIfActive(.nativeRealtime)
       return
     }
     audioReceivedThisTurn = true
@@ -1322,7 +1359,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidEmitText(_ text: String, isFinal: Bool, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
-    guard !suppressAssistantOutputForCurrentTurn else { return }
+    guard !suppressAssistantOutputForCurrentTurn,
+      !voiceOutputCoordinator.snapshot().providerOutputSuppressed
+    else { return }
     if !text.isEmpty {
       assistantText += text
     }
@@ -1331,7 +1370,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       // Fallback only: if the model produced text but no native audio this turn,
       // speak it through the selected app voice. Normally both providers stream
       // spoken audio (played by StreamingPCMPlayer) so this stays unused.
-      if !audioReceivedThisTurn, !reply.isEmpty {
+      if !audioReceivedThisTurn, !reply.isEmpty,
+        acquireVoiceOutput(.selectedVoiceFallback, reason: "text_no_native_audio") != nil
+      {
         responseGlowGate.markPlaybackActive()
         FloatingBarVoicePlaybackService.shared.speakOneShot(reply)
       }
@@ -1631,12 +1672,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         errorText: "Could not start the background agent right now.",
         expectedTurnEpoch: toolTurnEpoch
       ) {
-        if !objective.isEmpty {
-          FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
-        }
         var toolArgs = arguments
         toolArgs["objective"] = objective
         let result = try await self.agentControlService.executeVoiceTool(name: "spawn_agent", arguments: toolArgs)
+        if !objective.isEmpty,
+          self.acquireVoiceOutput(.deterministicAgentAck, reason: "spawn_agent_success") != nil
+        {
+          FloatingBarVoicePlaybackService.shared.speakBackgroundAgentKickoff()
+        }
         await AgentPillsManager.shared.refreshProjectedPillsFromKernel()
         return result
       }
@@ -1721,7 +1764,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         let setupPrompt = availability.setupPrompt
         assistantText = setupPrompt
         barState?.isVoiceResponseActive = true
-        if !audioReceivedThisTurn {
+        if !audioReceivedThisTurn,
+          acquireVoiceOutput(.deterministicAgentAck, reason: "directed_provider_unavailable") != nil
+        {
           FloatingBarVoicePlaybackService.shared.speakOneShot(directedProvider.setupNeededStatus)
         }
         suppressAssistantOutputForCurrentTurn = true
@@ -1857,6 +1902,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaAckIds.removeAll()
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
+    voiceOutputCoordinator.endTurn()
     exitVoiceUI()
   }
 
@@ -1981,6 +2027,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     realtimePlaybackActive = false
     realtimePlaybackEpoch += 1
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
+    voiceOutputCoordinator.endTurn()
     exitVoiceUI(clearResponseGlow: true)
     teardownSession()
     // Provider switching changes the user's voice identity and can fragment model-local

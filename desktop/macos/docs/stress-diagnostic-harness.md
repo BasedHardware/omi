@@ -31,11 +31,19 @@ Terminal reasons:
 - `provider_fallback`
 - `bridge_launch_failure`
 - `response_already_running`
+- `voice_output_overlap`
+- `realtime_no_response_timeout`
+- `deferred_commit_timeout`
+- `barge_in_replacement_timeout`
+- `stale_provider_audio_after_interrupt`
 
 The release gate passes only when at least one event exists and none of these
 forbidden reasons appear: `too_short_tap`, `audio_frames_missing`,
 `silent_audio`, `realtime_token_mint_failure`, `bridge_launch_failure`,
-`response_already_running`. `provider_fallback` is tracked but allowed so the
+`response_already_running`, `voice_output_overlap`,
+`realtime_no_response_timeout`, `deferred_commit_timeout`,
+`barge_in_replacement_timeout`, `stale_provider_audio_after_interrupt`.
+`provider_fallback` is tracked but allowed so the
 gate can distinguish a degraded but recovered provider path from a silent turn.
 The scenario-specific success reasons are allowed and make partial exports easy
 to spot in summaries.

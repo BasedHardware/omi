@@ -19,13 +19,20 @@ enum DesktopStressTerminalReason: String, CaseIterable, Codable {
   case providerFallback = "provider_fallback"
   case bridgeLaunchFailure = "bridge_launch_failure"
   case responseAlreadyRunning = "response_already_running"
+  case voiceOutputOverlap = "voice_output_overlap"
+  case realtimeNoResponseTimeout = "realtime_no_response_timeout"
+  case deferredCommitTimeout = "deferred_commit_timeout"
+  case bargeInReplacementTimeout = "barge_in_replacement_timeout"
+  case staleProviderAudioAfterInterrupt = "stale_provider_audio_after_interrupt"
 
   var isReleaseGateFailure: Bool {
     switch self {
     case .pttVoicedSuccess, .pttSilentRejected, .chatBridgeSuccess, .subagentLaunchSuccess, .providerFallback:
       return false
     case .tooShortTap, .audioFramesMissing, .silentAudio, .realtimeTokenMintFailure,
-      .bridgeLaunchFailure, .responseAlreadyRunning:
+      .bridgeLaunchFailure, .responseAlreadyRunning, .voiceOutputOverlap,
+      .realtimeNoResponseTimeout, .deferredCommitTimeout, .bargeInReplacementTimeout,
+      .staleProviderAudioAfterInterrupt:
       return true
     }
   }

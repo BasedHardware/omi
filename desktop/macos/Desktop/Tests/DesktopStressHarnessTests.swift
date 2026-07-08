@@ -20,6 +20,11 @@ final class DesktopStressHarnessTests: XCTestCase {
         "provider_fallback",
         "bridge_launch_failure",
         "response_already_running",
+        "voice_output_overlap",
+        "realtime_no_response_timeout",
+        "deferred_commit_timeout",
+        "barge_in_replacement_timeout",
+        "stale_provider_audio_after_interrupt",
       ])
     XCTAssertFalse(DesktopStressTerminalReason.pttVoicedSuccess.isReleaseGateFailure)
     XCTAssertFalse(DesktopStressTerminalReason.pttSilentRejected.isReleaseGateFailure)
@@ -29,6 +34,11 @@ final class DesktopStressHarnessTests: XCTestCase {
     XCTAssertTrue(DesktopStressTerminalReason.audioFramesMissing.isReleaseGateFailure)
     XCTAssertTrue(DesktopStressTerminalReason.realtimeTokenMintFailure.isReleaseGateFailure)
     XCTAssertTrue(DesktopStressTerminalReason.responseAlreadyRunning.isReleaseGateFailure)
+    XCTAssertTrue(DesktopStressTerminalReason.voiceOutputOverlap.isReleaseGateFailure)
+    XCTAssertTrue(DesktopStressTerminalReason.realtimeNoResponseTimeout.isReleaseGateFailure)
+    XCTAssertTrue(DesktopStressTerminalReason.deferredCommitTimeout.isReleaseGateFailure)
+    XCTAssertTrue(DesktopStressTerminalReason.bargeInReplacementTimeout.isReleaseGateFailure)
+    XCTAssertTrue(DesktopStressTerminalReason.staleProviderAudioAfterInterrupt.isReleaseGateFailure)
   }
 
   func testStressEventJSONRoundTripsWithStableSnakeCaseKeys() throws {

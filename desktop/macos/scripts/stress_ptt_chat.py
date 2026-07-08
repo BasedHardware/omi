@@ -37,6 +37,11 @@ TERMINAL_REASONS = {
     "provider_fallback",
     "bridge_launch_failure",
     "response_already_running",
+    "voice_output_overlap",
+    "realtime_no_response_timeout",
+    "deferred_commit_timeout",
+    "barge_in_replacement_timeout",
+    "stale_provider_audio_after_interrupt",
 }
 FORBIDDEN_TERMINAL_REASONS = {
     "too_short_tap",
@@ -45,6 +50,11 @@ FORBIDDEN_TERMINAL_REASONS = {
     "realtime_token_mint_failure",
     "bridge_launch_failure",
     "response_already_running",
+    "voice_output_overlap",
+    "realtime_no_response_timeout",
+    "deferred_commit_timeout",
+    "barge_in_replacement_timeout",
+    "stale_provider_audio_after_interrupt",
 }
 ACTION_BY_SCENARIO = {
     "ptt_voiced": "stress_ptt_voiced",
