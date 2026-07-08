@@ -26,6 +26,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 import database.vector_db as vector_db
 from database import conversations as conversations_db
 from database import memories as memories_db
+from database import users as users_db
 from database._client import db as firestore_db
 from database.auth import get_user_name
 from database.entities import person_entity_id
@@ -465,6 +466,35 @@ def _general_style_samples(uid: str) -> List[str]:
     return _dedupe_recent(samples)
 
 
+# Max chars of the tone guide's Voice section to inject into a draft prompt — enough
+# for the qualitative "how" without drowning the (hard-constraint) fingerprint or the
+# per-person context. The By-recipient section is dropped here (per-person tone_notes
+# already cover that at draft time).
+TONE_GUIDE_DRAFT_CHAR_CAP = 1800
+
+
+def _voice_section_for_drafting(guide_text: str) -> str:
+    """Extract the '## Voice' section of a stored tone guide for prompt injection,
+    dropping the '## By recipient' section and capping length. Falls back to the whole
+    (capped) text if the section markers aren't present."""
+    text = (guide_text or '').strip()
+    if not text:
+        return ''
+    low = text.lower()
+    start = low.find('## voice')
+    if start != -1:
+        text = text[start:]
+        low = text.lower()
+    end = low.find('## by recipient')
+    if end != -1:
+        text = text[:end]
+    text = text.strip()
+    if len(text) > TONE_GUIDE_DRAFT_CHAR_CAP:
+        # Cut on a line boundary so we never inject a half-sentence.
+        text = text[:TONE_GUIDE_DRAFT_CHAR_CAP].rsplit('\n', 1)[0].strip()
+    return text
+
+
 def _collect_user_style_samples(uid: str, person: Optional[dict], thread: List[dict]) -> List[str]:
     """The user's OWN past messages — ground truth for their texting voice.
 
@@ -568,6 +598,7 @@ def build_reply_prompt(
     is_group: bool,
     availability_context: str = '',
     user_name: str = '',
+    tone_guide: str = '',
 ) -> tuple[str, str]:
     """Assemble the candidate-generation prompt as (system, user). The SYSTEM string
     holds only trusted instructions; the USER string holds every untrusted/fenced data
@@ -576,6 +607,16 @@ def build_reply_prompt(
     network — so it can be unit-tested directly. Lists NO example slang: how the user
     writes is described only via the measured fingerprint and their own samples."""
     fingerprint_lines = render_fingerprint_lines(fingerprint)
+
+    # The learned prose voice guide, injected right after the measured stats. The stats
+    # are the hard constraint; this is the qualitative "how". Empty on cold start.
+    tone_guide_block = (
+        f"THE USER'S WRITING VOICE (a guide learned from their real messages — internalize it and "
+        f"write the way it describes; where it conflicts with the measured stats above, the stats "
+        f"win):\n{_fence(tone_guide)}\n\n"
+        if tone_guide
+        else ""
+    )
 
     omi_block = (
         f"WHAT OMI KNOWS (use ONLY to answer something {name} actually asked; otherwise ignore it):\n"
@@ -708,6 +749,7 @@ def build_reply_prompt(
         f"plain' guidance is about avoiding AI filler — it is NOT a license to be dismissive when the moment isn't "
         f"light; give the moment the weight the user would give it.\n"
         f"HOW THIS USER TEXTS (measured from their real messages — match it):\n{fingerprint_lines}\n\n"
+        f"{tone_guide_block}"
         f"THE ONE RULE — ONLY SAY WHAT YOU ACTUALLY KNOW. You may state a specific ONLY if it is written in WHAT "
         f"YOU KNOW (the facts/context above) or in THIS CONVERSATION. If it's there: answer directly and "
         f"specifically, in the user's voice — that's the whole point. If it is NOT there: you do NOT know it, so "
@@ -1243,6 +1285,18 @@ def draft_reply(
 
     style_samples = _collect_user_style_samples(uid, person, thread)
     fingerprint = compute_fingerprint(style_samples)
+
+    # The user's learned Tone & Style guide (generated on message sync) — the qualitative
+    # "how they write" that complements the objective fingerprint. Voice section only;
+    # per-person tone comes from the person profile. Absent (cold start) => unchanged.
+    tone_guide = ''
+    try:
+        stored_guide = users_db.get_user_tone_guide(uid)
+        if stored_guide:
+            tone_guide = _voice_section_for_drafting(stored_guide.get('guide_text') or '')
+    except Exception as e:
+        logger.warning(f"reply_draft: tone guide lookup failed uid={uid}: {e}")
+
     style_block = (
         "\n".join(f"- {_fence(s)}" for s in style_samples)
         if style_samples
@@ -1323,6 +1377,7 @@ def draft_reply(
         intent=intent,
         is_group=is_group,
         user_name=user_name,
+        tone_guide=tone_guide,
     )
 
     candidates = _generate_candidates(system_prompt, user_prompt)

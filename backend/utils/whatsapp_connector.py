@@ -59,6 +59,7 @@ from utils.imessage_connector import (
 from utils.executors import db_executor, llm_executor, postprocess_executor, run_blocking, start_background_task
 from utils.llm.person_profile import generate_person_profile
 from utils.memory.person_messaging_enrichment import enrich_persons_from_conversation
+from utils.llm.user_tone_guide import generate_user_tone_guide
 from utils.memory.person_backfill import maybe_backfill_on_first_sync
 from utils.log_sanitizer import sanitize
 
@@ -280,6 +281,14 @@ async def _enrich_conversations(
             await run_blocking(llm_executor, generate_person_profile, uid, person_id)
         except Exception as e:
             logger.warning(f'whatsapp: profile generation failed uid={uid} person={person_id}: {sanitize(str(e))}')
+
+    # Refresh the user's Tone & Style guide from their now-synced messages. Self-gates on
+    # staleness (weekly), so a re-sync is cheap; runs after person profiles so the guide's
+    # By-recipient section sees fresh tone_notes.
+    try:
+        await run_blocking(llm_executor, generate_user_tone_guide, uid)
+    except Exception as e:
+        logger.warning(f'whatsapp: tone guide generation failed uid={uid}: {sanitize(str(e))}')
 
 
 async def ingest_threads(uid: str, req: WhatsAppIngestRequest) -> WhatsAppIngestResponse:

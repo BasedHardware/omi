@@ -94,6 +94,7 @@ from database import user_usage as user_usage_db
 from utils import stripe as stripe_utils
 from utils.log_sanitizer import sanitize
 from utils.llm.followup import followup_question_prompt
+from utils.llm.user_tone_guide import generate_user_tone_guide
 from utils.notifications import send_notification, send_training_data_submitted_notification
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from models.notification_message import NotificationMessage
@@ -1667,6 +1668,27 @@ def update_ai_profile(
         generated_at=request.generated_at,
         data_sources_used=request.data_sources_used,
     )
+
+
+# ============================================================================
+# Messaging Tone & Style guide (the user's learned writing voice)
+# ============================================================================
+
+
+@router.get('/v1/users/tone-guide', tags=['users'])
+def get_tone_guide(uid: str = Depends(auth.get_current_user_uid)):
+    """The user's learned Tone & Style guide (or null if not generated yet)."""
+    return users_db.get_user_tone_guide(uid)
+
+
+@router.post('/v1/users/tone-guide/regenerate', tags=['users'])
+def regenerate_tone_guide(uid: str = Depends(auth.get_current_user_uid)):
+    """Force-regenerate the guide from the user's synced messages, then return it.
+    Sync `def` endpoint: FastAPI runs it in a threadpool, so the LLM call doesn't
+    block the event loop. Returns the stored guide unchanged when there aren't enough
+    messages to (re)generate one."""
+    generate_user_tone_guide(uid, force=True)
+    return users_db.get_user_tone_guide(uid)
 
 
 # ============================================================================

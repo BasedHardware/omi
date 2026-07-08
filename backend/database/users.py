@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 _USER_LANGUAGE_CACHE = CachePolicy(namespace='user_language', version=1, ttl_seconds=300)
 _USER_TRANSCRIPTION_PREFS_CACHE = CachePolicy(namespace='user_transcription_prefs', version=1, ttl_seconds=120)
 _USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl_seconds=300)
+_USER_TONE_GUIDE_CACHE = CachePolicy(namespace='user_tone_guide', version=1, ttl_seconds=300)
 
 
 # Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
@@ -1972,4 +1973,35 @@ def update_ai_user_profile(
     user_ref = db.collection('users').document(uid)
     user_ref.update({'ai_user_profile': existing})
     invalidate(_USER_AI_PROFILE_CACHE, uid)
+    return existing
+
+
+def _get_user_tone_guide_from_firestore(uid: str) -> Optional[dict]:
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get(['messaging_tone_guide'])
+    if not doc.exists:
+        return None
+    return doc.to_dict().get('messaging_tone_guide')
+
+
+def get_user_tone_guide(uid: str) -> Optional[dict]:
+    # Cache only this low-risk projection (same rationale as get_ai_user_profile):
+    # high-risk entitlement/BYOK/privacy fields live on the same user doc.
+    return get_or_fetch(_USER_TONE_GUIDE_CACHE, uid, lambda: _get_user_tone_guide_from_firestore(uid))
+
+
+def update_user_tone_guide(uid: str, guide_text: str = None, generated_at=None, sample_count: int = None) -> dict:
+    """Update the messaging Tone & Style guide. Only writes non-None fields (partial update)."""
+    # Read-modify-write: read straight from Firestore (never the cache) so a stale
+    # projection can't clobber newer fields.
+    existing = _get_user_tone_guide_from_firestore(uid) or {}
+    if guide_text is not None:
+        existing['guide_text'] = guide_text
+    if generated_at is not None:
+        existing['generated_at'] = generated_at
+    if sample_count is not None:
+        existing['sample_count'] = sample_count
+    user_ref = db.collection('users').document(uid)
+    user_ref.update({'messaging_tone_guide': existing})
+    invalidate(_USER_TONE_GUIDE_CACHE, uid)
     return existing

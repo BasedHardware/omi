@@ -287,6 +287,41 @@ def test_build_reply_prompt_has_no_hardcoded_example_slang():
     assert 'commitments' in low
 
 
+def test_build_reply_prompt_injects_tone_guide_only_when_present():
+    """The learned Tone & Style guide is injected as its own block when present, and the
+    block is omitted entirely on cold start (empty guide) so there's no dangling label."""
+    fp = sf.compute_fingerprint(_CASUAL_SAMPLES)
+    kwargs = dict(
+        name='Sam',
+        context_text='(no extra context)',
+        style_block='- bet',
+        fingerprint=fp,
+        omi_context='',
+        media_context='',
+        thread_text='Sam: you around?',
+        intent=None,
+        is_group=False,
+    )
+    system, _ = rd.build_reply_prompt(tone_guide='writes in all lowercase, opens with "yo"', **kwargs)
+    low = system.lower()
+    assert "the user's writing voice" in low
+    assert 'writes in all lowercase, opens with "yo"' in low
+    system_none, _ = rd.build_reply_prompt(tone_guide='', **kwargs)
+    assert "the user's writing voice" not in system_none.lower()
+
+
+def test_voice_section_extraction_drops_by_recipient_and_caps():
+    """Draft-time injection uses only the Voice section (per-person tone comes from the
+    person profile) and is length-capped so it never crowds out the rest of the prompt."""
+    guide = '## Voice\nlowercase, lots of lol.\n\n## By recipient\nmila: warm and soft.'
+    out = rd._voice_section_for_drafting(guide)
+    assert out == '## Voice\nlowercase, lots of lol.'
+    assert 'mila' not in out.lower()
+    long_guide = '## Voice\n' + ('word ' * 2000)
+    assert len(rd._voice_section_for_drafting(long_guide)) <= rd.TONE_GUIDE_DRAFT_CHAR_CAP
+    assert rd._voice_section_for_drafting('') == ''
+
+
 def test_build_reply_prompt_injects_user_identity_when_name_given():
     """The drafter must know WHOSE voice it writes in: given the user's name, the system
     prompt anchors identity so a group mention of the name ("i miss archit") or a
@@ -339,6 +374,41 @@ def test_draft_reply_passes_user_name_into_prompt():
     low = captured['prompt'].lower()
     assert 'your identity' in low
     assert 'you are archit lal' in low
+
+
+def test_draft_reply_injects_stored_tone_guide():
+    """End-to-end: draft_reply fetches the stored Tone & Style guide, extracts the Voice
+    section, and injects it into the generation prompt — while dropping the By-recipient
+    section at draft time (per-person tone comes from the person profile)."""
+    captured = {}
+
+    def fake_invoke(prompt):
+        captured.setdefault('prompt', _as_text(prompt))
+        return SimpleNamespace(content='"ok"')
+
+    thread = [{'text': 'hey what up', 'is_from_me': False, 'sender': 'Sam'}]
+    guide = {'guide_text': '## Voice\nopens with "yo" and writes all lowercase.\n\n## By recipient\nmila: warm'}
+    with patch.object(rd, 'resolve_person', return_value={'id': 'p1', 'name': 'Sam'}), patch.object(
+        rd, 'get_user_name', return_value='Archit'
+    ), patch.object(rd.memories_db, 'get_memories_by_subject_entity', return_value=[]), patch.object(
+        rd, 'search_person_memories', return_value=[]
+    ), patch.object(
+        rd, '_relevant_context', return_value=''
+    ), patch.object(
+        rd.conversations_db, 'get_conversations_by_person_id', return_value=[]
+    ), patch.object(
+        rd.conversations_db, 'get_conversations', return_value=[]
+    ), patch.object(
+        rd.users_db, 'get_user_tone_guide', return_value=guide
+    ), patch.object(
+        rd, 'get_llm', return_value=SimpleNamespace(invoke=fake_invoke)
+    ):
+        rd.draft_reply('uid', 'Sam', thread, is_group=False)
+
+    low = captured['prompt'].lower()
+    assert "the user's writing voice" in low
+    assert 'opens with "yo" and writes all lowercase' in low
+    assert 'mila: warm' not in low  # By-recipient section dropped at draft time
 
 
 def test_availability_block_and_rule_present_only_when_context_given():
