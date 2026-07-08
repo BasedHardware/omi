@@ -32,6 +32,10 @@ final class MemoryGraphRevisitTests: XCTestCase {
             method.contains("if isEmpty && !hasRunEmptyBootstrap {"),
             "The empty-graph rebuild+poll bootstrap must run once per session, not on every visit"
         )
+        XCTAssertTrue(
+            method.contains("guard await rebuildGraph() else { return }"),
+            "A failed rebuild request must not spend the one-shot empty-graph bootstrap latch"
+        )
     }
 
     func testLoadGraphSkipsResimulationForUnchangedGraph() throws {

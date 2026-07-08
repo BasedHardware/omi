@@ -267,8 +267,8 @@ class MemoryGraphViewModel: ObservableObject {
     if isEmpty && !hasRunEmptyBootstrap {
       // First-session bootstrap for sparse accounts: ask the backend to build
       // the graph, then poll for it. Run once per session — not per visit.
+      guard await rebuildGraph() else { return }
       hasRunEmptyBootstrap = true
-      await rebuildGraph()
       for _ in 1...10 {
         try? await Task.sleep(nanoseconds: 3_000_000_000)
         await loadGraph()
@@ -446,7 +446,8 @@ class MemoryGraphViewModel: ObservableObject {
 
   // MARK: - Rebuild Graph
 
-  func rebuildGraph() async {
+  @discardableResult
+  func rebuildGraph() async -> Bool {
     isRebuilding = true
     defer { isRebuilding = false }
 
@@ -458,8 +459,10 @@ class MemoryGraphViewModel: ObservableObject {
 
       // Reload the graph
       await loadGraph()
+      return true
     } catch {
       log("Failed to rebuild knowledge graph: \(error.localizedDescription)")
+      return false
     }
   }
 
