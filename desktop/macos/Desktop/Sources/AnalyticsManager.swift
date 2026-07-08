@@ -576,7 +576,7 @@ class AnalyticsManager {
     guard !Self.isDevBuild else { return }
     var props: [String: Any] = [
       "tool_name": toolName,
-      "surface": context.surface,
+      "surface": boundedAnalyticsIdentifier(context.surface),
       "ok": ok,
     ]
     addScreenContextProperties(context, to: &props)
@@ -600,7 +600,7 @@ class AnalyticsManager {
     guard !Self.isDevBuild else { return }
     var props = properties
     props["invariant"] = name
-    props["surface"] = context.surface
+    props["surface"] = boundedAnalyticsIdentifier(context.surface)
     if let toolName { props["tool_name"] = toolName }
     addScreenContextProperties(context, to: &props)
     PostHogManager.shared.track("desktop_screen_context_invariant", properties: props)

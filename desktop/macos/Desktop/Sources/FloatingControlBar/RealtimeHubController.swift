@@ -1731,18 +1731,31 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       }
     case .screenshot:
       // Raw pixels enter provider context only after an explicit screenshot tool call.
-      let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()
-      if sessionProvider == .openai, let shot { session?.injectImage(shot) }
-	      if sessionProvider == .gemini, let shot {
-	        session?.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: true)
-	      }
+      let shot: Data?
+      switch sessionProvider {
+      case .openai:
+        shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()
+        if let shot { session?.injectImage(shot) }
+      case .gemini:
+        shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()
+        if let shot { session?.sendVideoFrame(shot, mime: "image/jpeg", allowClosedActivityWindow: true) }
+      case .none:
+        shot = nil
+      }
       log("RealtimeHub[\(providerTag)]: tool screenshot → ack (\(shot?.count ?? 0) bytes, screen on turn)")
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
         output: shot == nil ? "Could not capture the screen." : "Screen captured.")
     case .pointClick:
-      let x = (arguments["x"] as? Double) ?? (arguments["x"] as? NSNumber)?.doubleValue ?? 0
-      let y = (arguments["y"] as? Double) ?? (arguments["y"] as? NSNumber)?.doubleValue ?? 0
+      guard
+        let x = Self.finiteCoordinate(arguments["x"]),
+        let y = Self.finiteCoordinate(arguments["y"])
+      else {
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "Could not click: point_click requires finite numeric x and y coordinates.")
+        return
+      }
       let ok = Self.click(at: CGPoint(x: x, y: y))
       sendToolResultIfCurrent(
         source: source, callId: callId, name: name,
@@ -2205,6 +2218,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     down.post(tap: .cghidEventTap)
     up.post(tap: .cghidEventTap)
     return true
+  }
+
+  nonisolated static func finiteCoordinate(_ value: Any?) -> Double? {
+    let coordinate: Double?
+    switch value {
+    case is Bool:
+      coordinate = nil
+    case let number as NSNumber:
+      coordinate = number.doubleValue
+    case let double as Double:
+      coordinate = double
+    case let int as Int:
+      coordinate = Double(int)
+    default:
+      coordinate = nil
+    }
+    guard let coordinate, coordinate.isFinite else { return nil }
+    return coordinate
   }
 }
 

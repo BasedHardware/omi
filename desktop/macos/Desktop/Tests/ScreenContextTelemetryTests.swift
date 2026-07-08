@@ -196,6 +196,40 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(prompt.contains("request_permission"))
   }
 
+  func testScopedDesktopPromptDoesNotMentionExcludedScreenTools() {
+    let prompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(
+      excluding: ["get_work_context", "capture_screen", "get_screenshot", "request_permission", "check_permission_status"]
+    )
+    XCTAssertFalse(prompt.contains("get_work_context"))
+    XCTAssertFalse(prompt.contains("capture_screen"))
+    XCTAssertFalse(prompt.contains("get_screenshot"))
+    XCTAssertFalse(prompt.contains("request_permission"))
+    XCTAssertFalse(prompt.contains("check_permission_status"))
+    XCTAssertFalse(prompt.contains("Current screen/current work questions"))
+    XCTAssertFalse(prompt.contains("Raw screenshot pixels"))
+  }
+
+  func testScopedDesktopPromptDoesNotMentionPartiallyExcludedAlternatives() {
+    let prompt = DesktopCapabilityRegistry.scopedDesktopToolPrompt(
+      excluding: [
+        "request_permission", "get_screenshot", "search_memories", "create_action_item", "delete_task",
+        "update_agent_artifact_lifecycle",
+      ]
+    )
+    XCTAssertFalse(prompt.contains("request_permission"))
+    XCTAssertFalse(prompt.contains("get_screenshot"))
+    XCTAssertFalse(prompt.contains("search_memories"))
+    XCTAssertFalse(prompt.contains("create_action_item"))
+    XCTAssertFalse(prompt.contains("delete_task"))
+    XCTAssertFalse(prompt.contains("update_agent_artifact_lifecycle"))
+    XCTAssertTrue(prompt.contains("check_permission_status"))
+    XCTAssertTrue(prompt.contains("capture_screen"))
+    XCTAssertTrue(prompt.contains("get_memories"))
+    XCTAssertTrue(prompt.contains("update_action_item"))
+    XCTAssertTrue(prompt.contains("complete_task"))
+    XCTAssertTrue(prompt.contains("set_desktop_attention_override"))
+  }
+
   func testScreenInterestDetectorCatchesExplicitAndDeicticRequests() {
     XCTAssertTrue(ScreenContextInterestDetector.isScreenContextRequest("Can you see my screen?"))
     XCTAssertTrue(ScreenContextInterestDetector.isScreenContextRequest("Debug this error"))

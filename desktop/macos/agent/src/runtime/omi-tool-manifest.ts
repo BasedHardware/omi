@@ -161,25 +161,11 @@ function localApiOnly(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailabi
   };
 }
 
-function piAndLocalApi(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
-  return {
-    "pi-mono": { advertised: true },
-    "local-agent-api": { advertised: true },
-  };
-}
-
 function piLocalApiAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
   return {
     "pi-mono": { advertised: true },
     "omi-tools-stdio": { advertised: true, condition: "screenContext" },
     "local-agent-api": { advertised: true },
-  };
-}
-
-function piAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
-  return {
-    "pi-mono": { advertised: true },
-    "omi-tools-stdio": { advertised: true, condition: "screenContext" },
   };
 }
 
@@ -1078,6 +1064,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
             "Permission type: screen_recording, microphone, notifications, accessibility, automation, or full_disk_access",
         },
       },
+      ["type"],
     ),
     annotations: localWrite,
     timeoutClass: "normal",

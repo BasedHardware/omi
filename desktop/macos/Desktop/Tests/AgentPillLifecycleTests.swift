@@ -744,8 +744,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
     XCTAssertTrue(hubSource.contains("Do not upload raw pixels speculatively"))
-    XCTAssertTrue(hubSource.contains("let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()"))
-	    XCTAssertTrue(hubSource.contains("allowClosedActivityWindow: true"))
+    XCTAssertFalse(hubSource.contains("shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()"))
+    XCTAssertTrue(hubSource.contains("case .openai:\n        shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()"))
+    XCTAssertTrue(hubSource.contains("case .gemini:\n        shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenJPEG()"))
+    XCTAssertTrue(hubSource.contains("allowClosedActivityWindow: true"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
     XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
     XCTAssertTrue(hubSource.contains("responding = false\n      exitVoiceUI(clearResponseGlow: true)\n      return .rejectedNoSession"))
@@ -782,6 +784,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(sessionSource.contains("deferring Gemini turnComplete with"))
     XCTAssertTrue(sessionSource.contains("nextGeminiSyntheticToolCallId(name: name)"))
     XCTAssertFalse(sessionSource.contains("let callId = call[\"id\"] as? String ?? name"))
+  }
+
+  func testPointClickRejectsMissingAndMalformedCoordinates() {
+    XCTAssertNil(RealtimeHubController.finiteCoordinate(nil))
+    XCTAssertNil(RealtimeHubController.finiteCoordinate("12"))
+    XCTAssertNil(RealtimeHubController.finiteCoordinate(true))
+    XCTAssertNil(RealtimeHubController.finiteCoordinate(Double.nan))
+    XCTAssertNil(RealtimeHubController.finiteCoordinate(Double.infinity))
+    XCTAssertEqual(RealtimeHubController.finiteCoordinate(12), 12)
+    XCTAssertEqual(RealtimeHubController.finiteCoordinate(12.5), 12.5)
+    XCTAssertEqual(RealtimeHubController.finiteCoordinate(NSNumber(value: 7.25)), 7.25)
   }
 
   func testCredentialHealthRetryAndFailoverInvariants() throws {

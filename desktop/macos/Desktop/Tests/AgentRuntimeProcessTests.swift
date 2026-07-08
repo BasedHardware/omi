@@ -50,33 +50,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(message?.payload["result"] as? String, #"{"ok":true,"artifacts":[]}"#)
   }
 
-  func testControlCreatedRunsCanRouteSwiftBackedTools() throws {
+  func testUnroutedToolCallsFailClosed() throws {
     let processSourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
 
-    XCTAssertTrue(processSource.contains("ChatToolExecutor.execute("))
-    XCTAssertTrue(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
-    XCTAssertFalse(processSource.contains("Swift-backed Omi tools are unavailable for control-created agent runs"))
-  }
-
-  func testControlCreatedToolTelemetryUsesTrustedContextOnly() throws {
-    let processSourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
-
-    XCTAssertTrue(processSource.contains("originatingSurfaceRef: Self.trustedSurfaceReference(from: message.payload)"))
-    XCTAssertTrue(processSource.contains("originatingRunId: Self.trustedRunId(from: message.payload[\"runId\"])"))
-    XCTAssertTrue(processSource.contains("private static func trustedSurfaceReference(from payload: [String: Any])"))
-    XCTAssertTrue(processSource.contains("isTrustedSurfaceKind(surfaceKind)"))
-    XCTAssertTrue(processSource.contains("isTrustedExternalRefId(externalRefId, kind: externalRefKind)"))
-    XCTAssertTrue(processSource.contains("if kind == \"pill\" {\n      return UUID(uuidString: trimmed) != nil"))
-    XCTAssertTrue(processSource.contains("trimmed.hasPrefix(\"run_\")"))
-    XCTAssertFalse(processSource.contains("originatingRunId: message.payload[\"runId\"] as? String"))
+    XCTAssertTrue(processSource.contains("Self.unroutedToolCallError(toolName: name)"))
+    XCTAssertTrue(processSource.contains(#""code": "unrouted_tool_call""#))
+    XCTAssertFalse(processSource.contains("originatingClientScope: AgentClientScope.floatingPill"))
   }
 
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {

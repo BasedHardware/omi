@@ -241,6 +241,19 @@ final class AgentControlServiceTests: XCTestCase {
   func testUnresolvedVoiceHandlesFailBeforeRuntimeDispatch() {
     let service = AgentControlService()
 
+    _ = service.summarizeVoiceResult(
+      name: HubTool.listAgentSessions.rawValue,
+      raw: """
+        {"ok":true,"sessions":[{"session":{"sessionId":"ses_1","title":"Screen visibility check","status":"open"},"activeRun":{"runId":"run_1","status":"running","mode":"act"},"activeAttempt":{"attemptId":"att_1","status":"running"}}]}
+        """
+    )
+    XCTAssertNil(
+      service.unresolvedVoiceHandleError(
+        name: HubTool.getAgentRun.rawValue,
+        arguments: ["agentRef": "agent_1"]
+      )
+    )
+
     let agentError = service.unresolvedVoiceHandleError(
       name: HubTool.getAgentRun.rawValue,
       arguments: ["agentRef": "agent_99"]
