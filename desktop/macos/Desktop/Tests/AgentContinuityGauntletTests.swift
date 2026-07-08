@@ -75,6 +75,11 @@ final class AgentContinuityGauntletTests: XCTestCase {
       contentsOf: desktopDir.appendingPathComponent("scripts/agent-continuity-gauntlet-lib.py"),
       encoding: .utf8
     )
+    let bridgeSource = try String(
+      contentsOf: desktopDir
+        .appendingPathComponent("Desktop/Sources/DesktopAutomationBridge.swift"),
+      encoding: .utf8
+    )
 
     XCTAssertTrue(driverSource.contains("\"resilience\""))
     XCTAssertTrue(driverSource.contains("\"all\": {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
@@ -89,11 +94,16 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(driverSource.contains("resilience_forbidden_terminal_reasons"))
     XCTAssertTrue(driverSource.contains("skipped_missing_action"))
     XCTAssertTrue(driverSource.contains("\"skipped_missing_action\""))
+    // Forbidden taxonomy still lists skipped_unimplemented_action; R3 no longer emits it.
     XCTAssertTrue(driverSource.contains("\"skipped_unimplemented_action\""))
+    XCTAssertTrue(driverSource.contains("hold_completed_early"))
+    XCTAssertTrue(driverSource.contains("hold_busy_ms"))
     XCTAssertTrue(driverSource.contains("ask_main_chat_no_wait"))
     XCTAssertTrue(driverSource.contains("main_chat_busy_state"))
     XCTAssertTrue(driverSource.contains("run_resilience_r3_race_policy"))
     XCTAssertTrue(driverSource.contains("Objective: track marker"))
+    XCTAssertTrue(bridgeSource.contains("hold_busy_ms"))
+    XCTAssertTrue(bridgeSource.contains("harnessBusyUntil"))
     XCTAssertTrue(driverSource.contains("continuity_contract_self_check_failures"))
     XCTAssertTrue(driverSource.contains("testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate"))
     XCTAssertTrue(driverSource.contains("testMainAndFloatingAutomationSnapshotsAliasSameTimeline"))

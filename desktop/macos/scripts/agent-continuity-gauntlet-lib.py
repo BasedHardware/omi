@@ -1516,8 +1516,13 @@ class GauntletRunner:
             "Take about twenty seconds to reply with exactly: RACE_HOLD_DONE"
         )
         race_query = f"Resilience race probe {self.run_id}. Reply with exactly: RACE_PROBE_REJECTED"
+        # Deterministic busy window (bridge latch) so R3 does not depend on LLM latency.
+        hold_busy_ms = "15000"
 
-        fire = self.bridge_act("ask_main_chat_no_wait", {"query": long_query})
+        fire = self.bridge_act(
+            "ask_main_chat_no_wait",
+            {"query": long_query, "hold_busy_ms": hold_busy_ms},
+        )
         fire_detail = fire.get("result", {}).get("detail", {}) if isinstance(fire, dict) else {}
         if fire.get("ok") is False or fire_detail.get("error"):
             self.record_resilience_diagnostic(
@@ -1538,107 +1543,158 @@ class GauntletRunner:
             self.fail(f"R3 race policy: initial no-wait send was not accepted: {fire_detail}")
             return
 
-        busy_seen = False
+        # Hold was accepted — always drain before returning so R4 starts idle.
         busy_detail: dict[str, Any] = {}
-        busy_deadline = time.monotonic() + 5.0
-        while time.monotonic() < busy_deadline:
-            busy = self.bridge_act("main_chat_busy_state")
-            busy_detail = busy.get("result", {}).get("detail", {}) if isinstance(busy, dict) else {}
-            if busy.get("ok") is False or busy_detail.get("error"):
+        race_detail: dict[str, Any] = {}
+        terminal_reason = "generic_chat_error"
+        try:
+            busy_seen = False
+            busy_deadline = time.monotonic() + 5.0
+            while time.monotonic() < busy_deadline:
+                busy = self.bridge_act("main_chat_busy_state")
+                busy_detail = busy.get("result", {}).get("detail", {}) if isinstance(busy, dict) else {}
+                if busy.get("ok") is False or busy_detail.get("error"):
+                    self.record_resilience_diagnostic(
+                        "R3-already-running-race-policy",
+                        2,
+                        "generic_chat_error",
+                        {"phase": "busy_poll", "busy_detail": busy_detail, "busy": busy},
+                    )
+                    self.fail(
+                        f"R3 race policy: main_chat_busy_state failed: {busy_detail.get('error', busy)}"
+                    )
+                    return
+                if busy_detail.get("busy") == "true":
+                    busy_seen = True
+                    break
+                time.sleep(0.05)
+            if not busy_seen:
                 self.record_resilience_diagnostic(
                     "R3-already-running-race-policy",
                     2,
                     "generic_chat_error",
-                    {"phase": "busy_poll", "busy_detail": busy_detail, "busy": busy},
+                    {
+                        "phase": "busy_poll",
+                        "busy_detail": busy_detail,
+                        "fire_detail": fire_detail,
+                        "note": "hold never became busy (or finished before poll)",
+                    },
                 )
-                self.fail(f"R3 race policy: main_chat_busy_state failed: {busy_detail.get('error', busy)}")
+                self.fail("R3 race policy: main chat never reported busy after no-wait send")
                 return
-            if busy_detail.get("busy") == "true":
-                busy_seen = True
-                break
-            time.sleep(0.05)
-        if not busy_seen:
-            self.record_resilience_diagnostic(
-                "R3-already-running-race-policy",
-                2,
-                "generic_chat_error",
-                {"phase": "busy_poll", "busy_detail": busy_detail, "fire_detail": fire_detail},
-            )
-            self.fail("R3 race policy: main chat never reported busy after no-wait send")
-            return
 
-        race = self.bridge_act("ask_main_chat_no_wait", {"query": race_query})
-        race_detail = race.get("result", {}).get("detail", {}) if isinstance(race, dict) else {}
-        if race.get("ok") is False or race_detail.get("error"):
-            self.record_resilience_diagnostic(
-                "R3-already-running-race-policy",
-                3,
-                "generic_chat_error",
-                {"phase": "race", "race_detail": race_detail, "race": race},
+            # Re-check immediately before the race send — models often finish the
+            # hold prompt early; accepting a second send while idle is not a race bug.
+            pre_race = self.bridge_act("main_chat_busy_state")
+            pre_race_detail = (
+                pre_race.get("result", {}).get("detail", {}) if isinstance(pre_race, dict) else {}
             )
-            self.fail(f"R3 race policy: concurrent no-wait send errored: {race_detail.get('error', race)}")
-            return
+            if pre_race.get("ok") is False or pre_race_detail.get("error"):
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    3,
+                    "generic_chat_error",
+                    {"phase": "pre_race_busy", "busy_detail": pre_race_detail},
+                )
+                self.fail(
+                    "R3 race policy: main_chat_busy_state failed before race: "
+                    f"{pre_race_detail.get('error', pre_race)}"
+                )
+                return
+            if pre_race_detail.get("busy") != "true":
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    3,
+                    "generic_chat_error",
+                    {
+                        "phase": "hold_completed_early",
+                        "busy_detail": busy_detail,
+                        "pre_race_detail": pre_race_detail,
+                        "fire_detail": fire_detail,
+                        "note": "hold turn went idle before concurrent send; race inconclusive",
+                    },
+                )
+                self.fail(
+                    "R3 race policy: hold turn completed before concurrent send "
+                    "(busy cleared; race inconclusive — retry or lengthen hold)"
+                )
+                return
+            busy_detail = pre_race_detail
 
-        rejected = (
-            race_detail.get("accepted") == "false"
-            or race_detail.get("busy") == "true"
-            or race_detail.get("reason") == "already_sending"
-        )
-        if not rejected:
-            self.record_resilience_diagnostic(
-                "R3-already-running-race-policy",
-                3,
-                "generic_chat_error",
-                {
-                    "phase": "race",
-                    "fire_detail": fire_detail,
+            race = self.bridge_act("ask_main_chat_no_wait", {"query": race_query})
+            race_detail = race.get("result", {}).get("detail", {}) if isinstance(race, dict) else {}
+            if race.get("ok") is False or race_detail.get("error"):
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    4,
+                    "generic_chat_error",
+                    {"phase": "race", "race_detail": race_detail, "race": race},
+                )
+                self.fail(
+                    f"R3 race policy: concurrent no-wait send errored: {race_detail.get('error', race)}"
+                )
+                return
+
+            rejected = (
+                race_detail.get("accepted") == "false"
+                or race_detail.get("busy") == "true"
+                or race_detail.get("reason") == "already_sending"
+            )
+            if not rejected:
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    4,
+                    "generic_chat_error",
+                    {
+                        "phase": "race",
+                        "fire_detail": fire_detail,
+                        "busy_detail": busy_detail,
+                        "race_detail": race_detail,
+                        "rejected": False,
+                    },
+                )
+                self.fail(
+                    "R3 race policy: concurrent ask_main_chat_no_wait was accepted while chat was busy "
+                    f"(race_detail={race_detail})"
+                )
+                terminal_reason = "generic_chat_error"
+            else:
+                terminal_reason = "passed"
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    4,
+                    terminal_reason,
+                    {
+                        "phase": "race",
+                        "fire_detail": fire_detail,
+                        "busy_detail": busy_detail,
+                        "race_detail": race_detail,
+                        "rejected": True,
+                    },
+                )
+        finally:
+            # Must use bridge_act so HTTP client timeout tracks turn_timeout_ms
+            # (bare bridge_action defaults to 60s and can abort a longer drain).
+            wait = self.bridge_act(
+                "wait_main_chat_idle",
+                {"timeoutMs": str(self.args.turn_timeout_ms), "pollMs": "250"},
+            )
+            wait_detail = wait.get("result", {}).get("detail", {}) if isinstance(wait, dict) else {}
+            self.record_step(
+                "r3-already-running-race-policy",
+                "resilience: already-running/race policy",
+                user_text=long_query,
+                action_response=fire,
+                snapshot_detail=wait_detail,
+                traces=[],
+                extra={
+                    "terminal_reason": terminal_reason,
                     "busy_detail": busy_detail,
+                    "race_query": race_query,
                     "race_detail": race_detail,
-                    "rejected": False,
+                    "wait_detail": wait_detail,
                 },
             )
-            self.fail(
-                "R3 race policy: concurrent ask_main_chat_no_wait was accepted while chat was busy "
-                f"(race_detail={race_detail})"
-            )
-            terminal_reason = "generic_chat_error"
-        else:
-            terminal_reason = "passed"
-            self.record_resilience_diagnostic(
-                "R3-already-running-race-policy",
-                3,
-                terminal_reason,
-                {
-                    "phase": "race",
-                    "fire_detail": fire_detail,
-                    "busy_detail": busy_detail,
-                    "race_detail": race_detail,
-                    "rejected": True,
-                },
-            )
-
-        # Drain the in-flight hold turn so later resilience probes start idle.
-        wait = bridge_action(
-            self.port,
-            "wait_main_chat_idle",
-            {"timeoutMs": str(self.args.turn_timeout_ms), "pollMs": "250"},
-        )
-        wait_detail = wait.get("result", {}).get("detail", {}) if isinstance(wait, dict) else {}
-        self.record_step(
-            "r3-already-running-race-policy",
-            "resilience: already-running/race policy",
-            user_text=long_query,
-            action_response=fire,
-            snapshot_detail=wait_detail,
-            traces=[],
-            extra={
-                "terminal_reason": terminal_reason,
-                "busy_detail": busy_detail,
-                "race_query": race_query,
-                "race_detail": race_detail,
-                "wait_detail": wait_detail,
-            },
-        )
 
     def run_resilience_suite(self) -> None:
         """Startup/bad-state probes for bridge, main chat, and subagent launch continuity.
@@ -2088,6 +2144,12 @@ def resilience_driver_self_check_failures(driver_source: str) -> list[str]:
         failures.append("GauntletRunner.run_resilience_r3_race_policy")
     elif not method_calls(methods.get("run_resilience_suite"), "run_resilience_r3_race_policy"):
         failures.append("run_resilience_suite calls run_resilience_r3_race_policy")
+    else:
+        r3 = methods.get("run_resilience_r3_race_policy")
+        if not method_contains_string(r3, "hold_busy_ms"):
+            failures.append("run_resilience_r3_race_policy arms hold_busy_ms latch")
+        if not method_contains_string(r3, "hold_completed_early"):
+            failures.append("run_resilience_r3_race_policy handles hold_completed_early")
     if not method_contains_string(methods.get("run_resilience_suite"), '". Objective: track marker '):
         failures.append("run_resilience_suite R4 spawn uses track-marker objective")
     if not method_contains_attr(methods.get("record_resilience_diagnostic"), "resilience_terminal_reason_counts"):

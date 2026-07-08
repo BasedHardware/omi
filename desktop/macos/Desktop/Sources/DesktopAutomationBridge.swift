@@ -488,6 +488,27 @@ final class DesktopAutomationActionRegistry {
 
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
+  /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
+  private var harnessBusyUntil: Date?
+
+  private func harnessBusyLatchActive(now: Date = Date()) -> Bool {
+    guard let until = harnessBusyUntil else { return false }
+    if now >= until {
+      harnessBusyUntil = nil
+      return false
+    }
+    return true
+  }
+
+  private func clearHarnessBusyLatch() {
+    harnessBusyUntil = nil
+  }
+
+  private func armHarnessBusyLatch(holdBusyMs: Int) {
+    let ms = max(0, holdBusyMs)
+    guard ms > 0 else { return }
+    harnessBusyUntil = Date().addingTimeInterval(Double(ms) / 1000.0)
+  }
 
   func register(
     name: String,
@@ -930,10 +951,12 @@ final class DesktopAutomationActionRegistry {
 
     // Fire-and-forget main-chat send for race/busy probes. Returns before the
     // turn settles so harnesses can observe isSending / concurrent rejection.
+    // Optional hold_busy_ms arms a non-prod latch so R3 does not depend on LLM
+    // latency keeping isSending true.
     register(
       name: "ask_main_chat_no_wait",
       summary: "Fire-and-forget main-chat send; returns immediately without waiting for the turn",
-      params: ["query"]
+      params: ["query", "hold_busy_ms"]
     ) { params in
       let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       guard !query.isEmpty else { return ["error": "missing 'query'"] }
@@ -942,16 +965,22 @@ final class DesktopAutomationActionRegistry {
       }
       let isSending = provider.isSending
       let isStreaming = provider.messages.contains(where: { $0.isStreaming })
-      let busy = isSending || isStreaming
+      let latchBusy = self.harnessBusyLatchActive()
+      let busy = isSending || isStreaming || latchBusy
       if busy {
         return [
           "accepted": "false",
           "busy": "true",
           "is_sending": isSending ? "true" : "false",
           "is_streaming": isStreaming ? "true" : "false",
+          "harness_busy_latch": latchBusy ? "true" : "false",
           "reason": "already_sending",
           "query": query,
         ]
+      }
+      let holdBusyMs = intParam(params["hold_busy_ms"], default: 0)
+      if holdBusyMs > 0 {
+        self.armHarnessBusyLatch(holdBusyMs: holdBusyMs)
       }
       Task { @MainActor in
         let tracer = QueryTracer(query: query, inputMode: .text)
@@ -964,6 +993,8 @@ final class DesktopAutomationActionRegistry {
         "busy": "false",
         "is_sending": "false",
         "is_streaming": isStreaming ? "true" : "false",
+        "harness_busy_latch": holdBusyMs > 0 ? "true" : "false",
+        "hold_busy_ms": "\(max(0, holdBusyMs))",
         "sent": query,
       ]
     }
@@ -978,10 +1009,12 @@ final class DesktopAutomationActionRegistry {
       }
       let isSending = provider.isSending
       let isStreaming = provider.messages.contains(where: { $0.isStreaming })
+      let latchBusy = self.harnessBusyLatchActive()
       return [
         "is_sending": isSending ? "true" : "false",
         "is_streaming": isStreaming ? "true" : "false",
-        "busy": (isSending || isStreaming) ? "true" : "false",
+        "harness_busy_latch": latchBusy ? "true" : "false",
+        "busy": (isSending || isStreaming || latchBusy) ? "true" : "false",
       ]
     }
 
@@ -1101,11 +1134,14 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
+      // Drop harness race latch so later probes are not stuck "busy" after R3.
+      self.clearHarnessBusyLatch()
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
       while Date() < deadline {
         if !provider.isSending && !provider.messages.contains(where: { $0.isStreaming }) {
           var detail = provider.automationMainChatSnapshot(limit: 8)
           detail["idle"] = "true"
+          detail["harness_busy_latch"] = "false"
           return detail
         }
         try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
