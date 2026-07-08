@@ -832,7 +832,7 @@ struct DashboardPage: View {
     private func reportHomeAutomationMode() {
         guard DesktopAutomationLaunchOptions.isEnabled else { return }
         let modeLabel = useLegacyHomeDesign ? nil : homeMode.automationLabel
-        DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
+        _ = DesktopAutomationStateStore.shared.updateLiveFields { snapshot in
             snapshot.homeMode = modeLabel
             snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
         }
