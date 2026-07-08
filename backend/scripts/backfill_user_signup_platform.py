@@ -56,6 +56,7 @@ _PLATFORM_FROM_CONVERSATION_SOURCE = {
     'friend': ('mobile', 'mobile'),
     'openglass': ('mobile', 'mobile'),
     'apple_watch': ('mobile', 'mobile'),
+    'rayban_meta': ('mobile', 'mobile'),
     'phone': ('mobile', 'mobile'),
     'phone_call': ('mobile', 'mobile'),
     'fieldy': ('mobile', 'mobile'),

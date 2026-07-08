@@ -32,9 +32,16 @@ launch"). For a DAT development build, link it manually:
    (Optionally **MWDATMockDevice** for hardware-free testing on Debug.)
 
 `RayBanMetaHostApiImpl.swift` activates its DAT path via
-`#if canImport(MWDATCore)` — no source changes needed; the code compiles clean
-against 0.8.0 (verified). Do not commit the linkage until the SwiftProtobuf
-collision is resolved.
+`#if canImport(MWDATCore)` — no source changes needed. The DAT branch was
+written against the published 0.8.0 interfaces (the shipped `.swiftinterface`);
+symbols can drift between SDK releases, so expect to reconcile on upgrade (see
+rayban-meta-troubleshooting.md). Do not commit the linkage until the
+SwiftProtobuf collision is resolved.
+
+Note: building with `.allowBluetoothHFP` (the current, non-deprecated spelling
+of the Bluetooth session option) requires the iOS 26 SDK (Xcode 26); it
+back-deploys to the app's iOS 15 target at runtime. If CI pins an older Xcode,
+the build will fail on that symbol.
 
 ## Step 2 — Credentials (distribution builds only — SKIP for Developer Mode)
 

@@ -249,7 +249,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaPhotoRequested)));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString()), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red));
     }
   }
 

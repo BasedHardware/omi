@@ -84,11 +84,22 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
 
     func getBluetoothHfpInputNames() throws -> [String] {
         // Enumerating Bluetooth inputs requires a record-capable session category.
+        // This can run during discovery while another device records, so restore
+        // the prior category instead of leaving the shared session mutated.
         let session = AVAudioSession.sharedInstance()
-        if session.category != .playAndRecord {
+        let priorCategory = session.category
+        let priorMode = session.mode
+        let priorOptions = session.categoryOptions
+        var mutated = false
+        if priorCategory != .playAndRecord {
             try? session.setCategory(.playAndRecord, mode: .default, options: [.allowBluetoothHFP])
+            mutated = true
         }
-        return RayBanMetaAudioCapture.availableHfpInputNames()
+        let names = RayBanMetaAudioCapture.availableHfpInputNames()
+        if mutated {
+            try? session.setCategory(priorCategory, mode: priorMode, options: priorOptions)
+        }
+        return names
     }
 
     #if canImport(MWDATCore)
@@ -142,7 +153,11 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                     let mapped = identifiers.map { identifier in
                         (id: identifier, name: wearables.deviceForIdentifier(identifier)?.nameOrId() ?? "Ray-Ban Meta")
                     }
-                    self.latestGlasses = mapped
+                    DispatchQueue.main.async {
+                        // Written on main: Pigeon reads (getAvailableGlasses) are
+                        // main-thread, so publishing here avoids a cross-thread race.
+                        self.latestGlasses = mapped
+                    }
                     DispatchQueue.main.async {
                         for glasses in mapped {
                             self.flutterAPI.onGlassesDiscovered(
@@ -263,7 +278,10 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
         }
 
         private func setConnectionState(_ state: String, deviceId: String) {
-            connectionState = state
+            DispatchQueue.main.async {
+                // Written on main for the same reason as latestGlasses.
+                self.connectionState = state
+            }
             DispatchQueue.main.async {
                 self.flutterAPI.onConnectionStateChanged(deviceId: deviceId, state: state) { _ in }
             }
@@ -354,6 +372,8 @@ final class RayBanMetaHostApiImpl: NSObject, RayBanMetaHostAPI {
                     DispatchQueue.main.async {
                         self.flutterAPI.onPhotoCaptured(
                             jpegBytes: FlutterStandardTypedData(bytes: data),
+                            // DAT 0.8 exposes no orientation metadata; photos always
+                            // decode as orientation0 downstream. Kept for framing parity.
                             orientationDegrees: 0
                         ) { _ in }
                     }

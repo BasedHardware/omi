@@ -32,6 +32,23 @@ final class RayBanMetaAudioCapture {
             name: AVAudioSession.routeChangeNotification,
             object: nil
         )
+        // A phone call (or Siri) interruption stops the engine out from under us;
+        // without observing it, isRunning stays true and capture dies silently.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: nil
+        )
+        // The engine rebuilds its I/O when the hardware format changes (e.g. the
+        // HFP route drops to the built-in mic); the tap installed at start() is
+        // frozen at the old format, so continuing would emit garbage or silence.
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleEngineConfigurationChange(_:)),
+            name: .AVAudioEngineConfigurationChange,
+            object: engine
+        )
     }
 
     deinit {
@@ -150,6 +167,41 @@ final class RayBanMetaAudioCapture {
     }
 
     @objc private func handleRouteChange(_ notification: Notification) {
-        onRouteChanged?(Self.isHfpRouteActive())
+        let hfpActive = Self.isHfpRouteActive()
+        onRouteChanged?(hfpActive)
+        // Losing the glasses' HFP input mid-capture means the tap is now fed by
+        // whatever input took over (usually the phone mic) at a stale format.
+        // Stop and surface it instead of silently recording the wrong source.
+        if isRunning && !hfpActive {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, self.isRunning, !Self.isHfpRouteActive() else { return }
+                self.stop()
+                self.onError?("audio_route_lost", "Glasses microphone route was lost during capture")
+            }
+        }
+    }
+
+    @objc private func handleInterruption(_ notification: Notification) {
+        guard
+            let info = notification.userInfo,
+            let typeValue = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+            let type = AVAudioSession.InterruptionType(rawValue: typeValue)
+        else { return }
+        if type == .began && isRunning {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self, self.isRunning else { return }
+                self.stop()
+                self.onError?("audio_interrupted", "Audio capture was interrupted (phone call or another app)")
+            }
+        }
+    }
+
+    @objc private func handleEngineConfigurationChange(_ notification: Notification) {
+        guard isRunning else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isRunning else { return }
+            self.stop()
+            self.onError?("audio_config_changed", "Audio input configuration changed during capture")
+        }
     }
 }
