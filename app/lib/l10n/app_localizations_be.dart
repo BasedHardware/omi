@@ -9538,4 +9538,67 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Памяць кулона амаль запоўнена — трымайце праграму адкрытай для сінхранізацыі.';
+
+  @override
+  String get connectRayBanMeta => 'Падключыць Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Выкарыстоўвайце свае акуляры Ray-Ban Meta ў якасці прылады захопу Omi для размоў і візуальнага кантэксту. Omi адкрые праграму Meta AI, каб звязаць вашы акуляры.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Падключыцца праз Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Завяршыце падключэнне ў праграме Meta AI, а потым вярніцеся сюды.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Праверыць зноў';
+
+  @override
+  String get raybanMetaAllowCamera => 'Дазволіць камеру на акулярах';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi выкарыстоўвае камеру вашых акуляраў, каб дадаваць фота ў вашы размовы. Вы можаце прапусціць гэта і выкарыстоўваць толькі гук.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Прапусціць пакуль';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Рэжым толькі гук для Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Гэтая версія Omi можа выкарыстоўваць мікрафон вашых акуляраў праз Bluetooth. Захоп фота патрабуе версіі распрацоўшчыка Omi ад Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Музыка на вашым тэлефоне прыпыняецца, пакуль выкарыстоўваецца мікрафон акуляраў.';
+
+  @override
+  String get raybanMetaContinue => 'Працягнуць';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Зрабіць фота';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Фота запытана — яно з\'явіцца ў вашай размове.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Мікрафон гатовы';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Захоп выявы гатовы';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Недаступна ў рэжыме толькі гук';
+
+  @override
+  String get raybanMetaCamera => 'Камера';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Памылка падключэння да Ray-Ban Meta: $error';
+  }
 }

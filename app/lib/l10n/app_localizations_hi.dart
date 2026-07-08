@@ -9484,4 +9484,67 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'पेंडेंट का स्टोरेज लगभग भर गया है — सिंक करने के लिए ऐप खुला रखें।';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta कनेक्ट करें';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'अपने Ray-Ban Meta ग्लासेस को बातचीत और विज़ुअल संदर्भ के लिए अपने Omi कैप्चर डिवाइस के रूप में उपयोग करें। Omi आपके ग्लासेस को लिंक करने के लिए Meta AI ऐप खोलेगा।';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI के माध्यम से कनेक्ट करें';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI ऐप में कनेक्ट करना पूरा करें, फिर यहाँ वापस आएँ।';
+
+  @override
+  String get raybanMetaCheckAgain => 'फिर से जाँचें';
+
+  @override
+  String get raybanMetaAllowCamera => 'ग्लासेस पर कैमरे की अनुमति दें';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi आपकी बातचीत में फ़ोटो जोड़ने के लिए आपके ग्लासेस के कैमरे का उपयोग करता है। आप इसे छोड़ सकते हैं और केवल ऑडियो का उपयोग कर सकते हैं।';
+
+  @override
+  String get raybanMetaSkipForNow => 'अभी के लिए छोड़ें';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta केवल-ऑडियो मोड';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi का यह संस्करण Bluetooth के माध्यम से आपके ग्लासेस के माइक्रोफ़ोन का उपयोग कर सकता है। फ़ोटो कैप्चर के लिए Omi का Meta डेवलपर बिल्ड आवश्यक है।';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'जब ग्लासेस का माइक्रोफ़ोन उपयोग में होता है, तब आपके फ़ोन पर संगीत रुक जाता है।';
+
+  @override
+  String get raybanMetaContinue => 'जारी रखें';
+
+  @override
+  String get raybanMetaCapturePhoto => 'फ़ोटो कैप्चर करें';
+
+  @override
+  String get raybanMetaPhotoRequested => 'फ़ोटो का अनुरोध किया गया — यह आपकी बातचीत में दिखाई देगी।';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'माइक्रोफ़ोन तैयार';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'इमेज कैप्चर तैयार';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'केवल-ऑडियो मोड में अनुपलब्ध';
+
+  @override
+  String get raybanMetaCamera => 'कैमरा';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta से कनेक्ट करने में त्रुटि: $error';
+  }
 }

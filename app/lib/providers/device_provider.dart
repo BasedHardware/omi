@@ -611,6 +611,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get _isOmiGlassDevice {
     if (pairedDevice == null) return false;
     if (pairedDevice!.type == DeviceType.openglass) return true;
+    // Name matching only applies to Omi-family devices: Ray-Ban Meta names can
+    // contain 'glasses' but its firmware is managed by the Meta AI app.
+    if (pairedDevice!.type != DeviceType.omi) return false;
     final name = pairedDevice!.name.toLowerCase();
     return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
   }

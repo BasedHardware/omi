@@ -9520,4 +9520,66 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Pendant\'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta\'yı Bağla';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta gözlüğünüzü konuşmalar ve görsel bağlam için Omi kayıt cihazınız olarak kullanın. Omi, gözlüğünüzü bağlamak için Meta AI uygulamasını açacaktır.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI ile bağlan';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Bağlantıyı Meta AI uygulamasında tamamlayın, ardından buraya geri dönün.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tekrar Kontrol Et';
+
+  @override
+  String get raybanMetaAllowCamera => 'Gözlükte Kameraya İzin Ver';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi, konuşmalarınıza fotoğraf eklemek için gözlüğünüzün kamerasını kullanır. Bunu atlayıp yalnızca sesi kullanabilirsiniz.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Şimdilik Atla';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta yalnızca ses modu';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi\'nin bu sürümü gözlüğünüzün mikrofonunu Bluetooth üzerinden kullanabilir. Fotoğraf çekimi için Omi\'nin Meta geliştirici sürümü gerekir.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Gözlüğün mikrofonu kullanılırken telefonunuzdaki müzik duraklatılır.';
+
+  @override
+  String get raybanMetaContinue => 'Devam Et';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fotoğraf Çek';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotoğraf istendi — konuşmanızda görünecektir.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon hazır';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Görüntü yakalama hazır';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Yalnızca ses modunda kullanılamaz';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta\'ya bağlanırken hata: $error';
+  }
 }

@@ -515,6 +515,7 @@ public enum OmiAPI {
     case sdcard
     case external_integration
     case limitless
+    case rayban_meta
     case onboarding
     case unknown
     case _unknown = "__unknown__"

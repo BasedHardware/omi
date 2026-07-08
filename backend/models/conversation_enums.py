@@ -56,6 +56,7 @@ class ConversationSource(str, Enum):
     sdcard = 'sdcard'
     external_integration = 'external_integration'
     limitless = 'limitless'
+    rayban_meta = 'rayban_meta'
     onboarding = 'onboarding'
     unknown = 'unknown'
 
