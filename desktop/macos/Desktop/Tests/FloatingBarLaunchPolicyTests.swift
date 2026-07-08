@@ -71,16 +71,26 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
 
   func testDesktopHomeLaunchUsesNormalPolicyAndDoesNotCallDeferredRevealDirectly() throws {
     let source = try sourceFile("MainWindow/DesktopHomeView.swift")
+    let floatingBarLaunchSection = try extractSection(
+      from: source,
+      startingAt: "// Set up floating control bar.",
+      endingBefore: "// Set up push-to-talk voice input")
 
     XCTAssertTrue(
-      source.contains("context: .normalSignedInDesktop"),
-      "Normal DesktopHomeView launch must route through the normal signed-in floating-bar policy.")
+      floatingBarLaunchSection.contains("FloatingControlBarManager.shared.setup("),
+      "DesktopHomeView must create the floating bar window before applying launch presentation.")
     XCTAssertTrue(
-      source.contains("FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)"),
-      "DesktopHomeView must use the explicit normal-launch policy instead of ad-hoc show/defer calls.")
+      floatingBarLaunchSection.contains("FloatingControlBarManager.shared.presentForLaunch(context: .normalSignedInDesktop)"),
+      "Normal DesktopHomeView launch must route through the normal signed-in floating-bar policy.")
     XCTAssertFalse(
-      source.contains("showInitial()"),
-      "showInitial()/deferred reveal hides the notch until PTT and must not be used for normal signed-in launch.")
+      floatingBarLaunchSection.contains("showDeferredUntilFirstPushToTalk()"),
+      "Deferred reveal hides the notch until PTT and must not be used for normal signed-in launch.")
+    XCTAssertFalse(
+      floatingBarLaunchSection.contains(".show()"),
+      "DesktopHomeView must not bypass the launch policy with an ad-hoc immediate show call.")
+    XCTAssertFalse(
+      floatingBarLaunchSection.contains(".showTemporarily()"),
+      "DesktopHomeView must not use temporary visibility for normal signed-in launch.")
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {
@@ -90,5 +100,17 @@ final class FloatingBarLaunchPolicyTests: XCTestCase {
       .appendingPathComponent("Sources")
       .appendingPathComponent(relativePath)
     return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func extractSection(from source: String, startingAt startMarker: String, endingBefore endMarker: String) throws -> String {
+    guard let start = source.range(of: startMarker) else {
+      XCTFail("Missing expected section start marker: \(startMarker)")
+      return ""
+    }
+    guard let end = source.range(of: endMarker, range: start.upperBound..<source.endIndex) else {
+      XCTFail("Missing expected section end marker: \(endMarker)")
+      return ""
+    }
+    return String(source[start.lowerBound..<end.lowerBound])
   }
 }
