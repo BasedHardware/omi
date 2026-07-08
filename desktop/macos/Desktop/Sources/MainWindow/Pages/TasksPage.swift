@@ -4217,7 +4217,7 @@ struct TaskRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             // Drag handle OUTSIDE swipeableContent so DragGesture doesn't intercept it
             if category != nil && !isMultiSelectMode && !isDeletedTask {
                 Image(systemName: "line.3.horizontal")
@@ -4252,11 +4252,11 @@ struct TaskRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+                .fill(isActiveChatTask ? OmiColors.backgroundRaised : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isActiveChatTask ? OmiColors.border.opacity(0.6) : Color.clear, lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
             if showShareCopiedToast {
@@ -4441,7 +4441,9 @@ struct TaskRow: View {
     }
 
     private var taskRowContent: some View {
-        HStack(alignment: .center, spacing: 12) {
+        // Top-aligned so the checkbox sits on the first text line of wrapped
+        // rows instead of floating between lines.
+        HStack(alignment: .top, spacing: 12) {
             // Indent visual (vertical line for indented tasks)
             if indentLevel > 0 {
                 HStack(spacing: 0) {
@@ -4642,7 +4644,7 @@ struct TaskRow: View {
                                         Text("View chat")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .foregroundColor(OmiColors.textSecondary)
                                 }
                                 .buttonStyle(.plain)
                                 .help("View previous AI investigation")
@@ -4668,9 +4670,6 @@ struct TaskRow: View {
                         if let coordinator = chatCoordinator, TaskAgentSettings.shared.isChatEnabled {
                             ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
                         }
-
-                        // Task detail button (hover for preview, click for full detail)
-                        TaskDetailButton(task: task, showDetail: $showTaskDetail)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -4772,6 +4771,13 @@ struct TaskRow: View {
                         .buttonStyle(.plain)
                         .help("Increase indent")
                     }
+
+                    // Task detail (hover for preview, click for full detail).
+                    // Lives with the other row actions instead of costing every
+                    // row a permanent badge line under the title.
+                    TaskDetailButton(task: task, showDetail: $showTaskDetail)
+                        .frame(width: 24, height: 24)
+                        .help("Task details")
 
                     // Share link button
                     Button {

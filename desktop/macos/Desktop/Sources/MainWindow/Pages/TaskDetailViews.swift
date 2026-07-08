@@ -20,7 +20,7 @@ struct TaskDetailButton: View {
             showDetail = true
         } label: {
             Image(systemName: "info.circle")
-                .scaledFont(size: 10)
+                .scaledFont(size: 12)
                 .foregroundColor(showTooltip ? OmiColors.textSecondary : OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
