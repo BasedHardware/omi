@@ -613,10 +613,16 @@ actor AgentRuntimeProcess {
     guard let process, process.isRunning, process.processIdentifier > 0 else {
       return ["error": "no running agent process to resume"]
     }
-    // Bump the generation so any pending auto-resume becomes a no-op.
-    debugSuspendGeneration &+= 1
     let pid = process.processIdentifier
-    _ = kill(pid, SIGCONT)
+    guard kill(pid, SIGCONT) == 0 else {
+      // SIGCONT failed (pid raced to exit, or an unexpected errno). Do NOT bump
+      // the generation here: leaving the pending auto-resume armed is the safe
+      // choice, so a still-frozen process can't stay stuck until app restart.
+      return ["error": "SIGCONT failed for pid \(pid) (errno \(errno))"]
+    }
+    // Only cancel the pending safety auto-resume once the explicit resume
+    // actually succeeded.
+    debugSuspendGeneration &+= 1
     log("AgentRuntimeProcess: DEBUG resumed stream pid=\(pid)")
     return ["resumed": "true", "pid": "\(pid)"]
   }
