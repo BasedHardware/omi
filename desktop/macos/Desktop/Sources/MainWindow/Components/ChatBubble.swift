@@ -447,45 +447,59 @@ private struct BackgroundAgentSummaryCard: View {
   @State private var isExpanded = false
   @State private var showUnavailable = false
 
+  private var shouldShowLinkOut: Bool {
+    AgentTimelineOpenFeedback.shouldShowLinkOut(
+      hasResolvableAgent: summary.agentID != nil,
+      hasOpenAction: onOpenAgent != nil,
+      showUnavailable: showUnavailable
+    )
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      Button(action: {
-        if let agentID = summary.agentID, let onOpenAgent {
-          onOpenAgent(agentID) { succeeded in
-            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
-              showUnavailable = true
-            }
+      HStack(spacing: 4) {
+        Button(action: toggleExpanded) {
+          HStack(spacing: 8) {
+            Image(systemName: "checkmark.circle.fill")
+              .scaledFont(size: 12)
+              .foregroundColor(.green)
+            Text("Background agent")
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+            Text(summary.output)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+              .truncationMode(.tail)
+            Spacer(minLength: 4)
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+              .scaledFont(size: 9)
+              .foregroundColor(OmiColors.textTertiary)
           }
-        } else {
-          withAnimation(.easeInOut(duration: 0.18)) {
-            isExpanded.toggle()
-          }
+          .padding(.leading, 12)
+          .padding(.vertical, 9)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
         }
-      }) {
-        HStack(spacing: 8) {
-          Image(systemName: "checkmark.circle.fill")
-            .scaledFont(size: 12)
-            .foregroundColor(.green)
-          Text("Background agent")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
-          Text(summary.output)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-          Spacer(minLength: 4)
-          Image(systemName: summary.agentID != nil && onOpenAgent != nil ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
-            .scaledFont(size: 9)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .buttonStyle(.plain)
+        .buttonStyle(.plain)
 
-      if isExpanded || summary.agentID == nil || showUnavailable {
+        if shouldShowLinkOut {
+          Button(action: openAgent) {
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: 9)
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(.trailing, 12)
+              .padding(.vertical, 9)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .help("Open agent")
+        } else {
+          Color.clear.frame(width: 12)
+        }
+      }
+
+      if isExpanded || showUnavailable {
         Divider()
           .padding(.horizontal, 10)
         VStack(alignment: .leading, spacing: 8) {
@@ -493,14 +507,14 @@ private struct BackgroundAgentSummaryCard: View {
             .scaledFont(size: 11)
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(3)
-          Text(summary.output)
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
+          SelectableMarkdown(text: summary.output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
+          }
+          if isExpanded {
+            collapseControl
           }
         }
         .padding(.horizontal, 12)
@@ -509,6 +523,43 @@ private struct BackgroundAgentSummaryCard: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+    .onChange(of: showUnavailable) { _, unavailable in
+      guard unavailable else { return }
+      withAnimation(.easeInOut(duration: 0.18)) {
+        isExpanded = true
+      }
+    }
+  }
+
+  private var collapseControl: some View {
+    Button(action: toggleExpanded) {
+      HStack(spacing: 4) {
+        Spacer(minLength: 0)
+        Text("Collapse")
+          .scaledFont(size: 11, weight: .medium)
+        Image(systemName: "chevron.up")
+          .scaledFont(size: 9)
+      }
+      .foregroundColor(OmiColors.textTertiary)
+      .padding(.top, 2)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func toggleExpanded() {
+    withAnimation(.easeInOut(duration: 0.18)) {
+      isExpanded.toggle()
+    }
+  }
+
+  private func openAgent() {
+    guard let agentID = summary.agentID, let onOpenAgent else { return }
+    onOpenAgent(agentID) { succeeded in
+      if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+        showUnavailable = true
+      }
+    }
   }
 }
 
@@ -520,17 +571,17 @@ private struct AgentSpawnCard: View {
 
   @State private var showUnavailable = false
 
+  private var shouldShowLinkOut: Bool {
+    AgentTimelineOpenFeedback.shouldShowLinkOut(
+      hasResolvableAgent: ref.hasIdentity,
+      hasOpenAction: onOpen != nil,
+      showUnavailable: showUnavailable
+    )
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      Button(action: {
-        if ref.hasIdentity, let onOpen {
-          onOpen(ref) { succeeded in
-            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
-              showUnavailable = true
-            }
-          }
-        }
-      }) {
+      HStack(spacing: 4) {
         HStack(spacing: 8) {
           Image(systemName: "arrow.triangle.branch")
             .scaledFont(size: 12)
@@ -544,17 +595,26 @@ private struct AgentSpawnCard: View {
             .lineLimit(1)
             .truncationMode(.tail)
           Spacer(minLength: 4)
-          if ref.hasIdentity {
+        }
+        .padding(.leading, 12)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+        if shouldShowLinkOut {
+          Button(action: openAgent) {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: 9)
               .foregroundColor(OmiColors.textTertiary)
+              .padding(.trailing, 12)
+              .padding(.vertical, 9)
+              .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
+          .help("Open agent")
+        } else {
+          Color.clear.frame(width: 12)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
       }
-      .buttonStyle(.plain)
 
       if showUnavailable {
         Divider()
@@ -569,6 +629,15 @@ private struct AgentSpawnCard: View {
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
   }
+
+  private func openAgent() {
+    guard shouldShowLinkOut, let onOpen else { return }
+    onOpen(ref) { succeeded in
+      if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+        showUnavailable = true
+      }
+    }
+  }
 }
 
 private struct AgentCompletionCard: View {
@@ -582,45 +651,59 @@ private struct AgentCompletionCard: View {
   @State private var isExpanded = false
   @State private var showUnavailable = false
 
+  private var shouldShowLinkOut: Bool {
+    AgentTimelineOpenFeedback.shouldShowLinkOut(
+      hasResolvableAgent: ref.hasIdentity,
+      hasOpenAction: onOpen != nil,
+      showUnavailable: showUnavailable
+    )
+  }
+
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
-      Button(action: {
-        if ref.hasIdentity, let onOpen {
-          onOpen(ref) { succeeded in
-            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
-              showUnavailable = true
-            }
+      HStack(spacing: 4) {
+        Button(action: toggleExpanded) {
+          HStack(spacing: 8) {
+            Image(systemName: statusIconName)
+              .scaledFont(size: 12)
+              .foregroundColor(statusColor)
+            Text(title.isEmpty ? "Background agent" : title)
+              .scaledFont(size: 12, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+            Text(output)
+              .scaledFont(size: 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+              .truncationMode(.tail)
+            Spacer(minLength: 4)
+            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+              .scaledFont(size: 9)
+              .foregroundColor(OmiColors.textTertiary)
           }
-        } else {
-          withAnimation(.easeInOut(duration: 0.18)) {
-            isExpanded.toggle()
-          }
+          .padding(.leading, 12)
+          .padding(.vertical, 9)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
         }
-      }) {
-        HStack(spacing: 8) {
-          Image(systemName: statusIconName)
-            .scaledFont(size: 12)
-            .foregroundColor(statusColor)
-          Text(title.isEmpty ? "Background agent" : title)
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.textSecondary)
-          Text(output)
-            .scaledFont(size: 12)
-            .foregroundColor(OmiColors.textTertiary)
-            .lineLimit(1)
-            .truncationMode(.tail)
-          Spacer(minLength: 4)
-          Image(systemName: ref.hasIdentity && onOpen != nil ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
-            .scaledFont(size: 9)
-            .foregroundColor(OmiColors.textTertiary)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      .buttonStyle(.plain)
+        .buttonStyle(.plain)
 
-      if isExpanded || !ref.hasIdentity || showUnavailable {
+        if shouldShowLinkOut {
+          Button(action: openAgent) {
+            Image(systemName: "arrow.up.forward.app")
+              .scaledFont(size: 9)
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(.trailing, 12)
+              .padding(.vertical, 9)
+              .contentShape(Rectangle())
+          }
+          .buttonStyle(.plain)
+          .help("Open agent")
+        } else {
+          Color.clear.frame(width: 12)
+        }
+      }
+
+      if isExpanded || showUnavailable {
         Divider()
           .padding(.horizontal, 10)
         VStack(alignment: .leading, spacing: 8) {
@@ -630,14 +713,14 @@ private struct AgentCompletionCard: View {
               .foregroundColor(OmiColors.textTertiary)
               .lineLimit(3)
           }
-          Text(output)
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textPrimary)
-            .fixedSize(horizontal: false, vertical: true)
+          SelectableMarkdown(text: output, sender: .ai)
           if showUnavailable {
             Text("Agent unavailable — it may have been dismissed.")
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
+          }
+          if isExpanded {
+            collapseControl
           }
         }
         .padding(.horizontal, 12)
@@ -646,6 +729,43 @@ private struct AgentCompletionCard: View {
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.88), radius: 16)
+    .onChange(of: showUnavailable) { _, unavailable in
+      guard unavailable else { return }
+      withAnimation(.easeInOut(duration: 0.18)) {
+        isExpanded = true
+      }
+    }
+  }
+
+  private var collapseControl: some View {
+    Button(action: toggleExpanded) {
+      HStack(spacing: 4) {
+        Spacer(minLength: 0)
+        Text("Collapse")
+          .scaledFont(size: 11, weight: .medium)
+        Image(systemName: "chevron.up")
+          .scaledFont(size: 9)
+      }
+      .foregroundColor(OmiColors.textTertiary)
+      .padding(.top, 2)
+      .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+  }
+
+  private func toggleExpanded() {
+    withAnimation(.easeInOut(duration: 0.18)) {
+      isExpanded.toggle()
+    }
+  }
+
+  private func openAgent() {
+    guard shouldShowLinkOut, let onOpen else { return }
+    onOpen(ref) { succeeded in
+      if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+        showUnavailable = true
+      }
+    }
   }
 
   private var statusIconName: String {
@@ -921,7 +1041,11 @@ struct ToolCallsGroup: View {
   }
 
   private var canOpenSpawnedAgent: Bool {
-    spawnedAgentOpenRef != nil && (onOpenAgentRef != nil || onOpenAgent != nil)
+    AgentTimelineOpenFeedback.shouldShowLinkOut(
+      hasResolvableAgent: spawnedAgentOpenRef != nil,
+      hasOpenAction: onOpenAgentRef != nil || onOpenAgent != nil,
+      showUnavailable: showUnavailable
+    )
   }
 
   private func openSpawnedAgent(completion: @escaping (Bool) -> Void) {
@@ -971,59 +1095,76 @@ struct ToolCallsGroup: View {
   }
 
   private var header: some View {
-    Button(action: {
-      if canOpenSpawnedAgent {
-        openSpawnedAgent { succeeded in
-          if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
-            showUnavailable = true
-          }
+    HStack(spacing: 4) {
+      Button(action: {
+        withAnimation(.easeInOut(duration: 0.2)) {
+          isExpanded.toggle()
         }
-        return
-      }
-      withAnimation(.easeInOut(duration: 0.2)) {
-        isExpanded.toggle()
-      }
-    }) {
-      HStack(spacing: compact ? 7 : 6) {
-        statusIcon(for: aggregateStatus, size: 12)
+      }) {
+        HStack(spacing: compact ? 7 : 6) {
+          statusIcon(for: aggregateStatus, size: 12)
 
-        Text(currentToolName)
-          .scaledFont(size: 12, weight: compact ? .semibold : .regular)
-          .foregroundColor(OmiColors.textSecondary)
-          .lineLimit(1)
-
-        if let summary = currentToolSummary, !summary.isEmpty {
-          Text(summary)
-            .scaledFont(size: 11)
-            .foregroundColor(OmiColors.textTertiary)
+          Text(currentToolName)
+            .scaledFont(size: 12, weight: compact ? .semibold : .regular)
+            .foregroundColor(OmiColors.textSecondary)
             .lineLimit(1)
-            .truncationMode(.middle)
-        }
 
-        if calls.count > 1 {
-          Text(compact ? "· \(calls.count) steps" : "·")
-            .scaledFont(size: compact ? 11 : 12)
-            .foregroundColor(OmiColors.textTertiary)
-            .lineLimit(1)
-          if !compact {
-            Text("\(calls.count) steps")
+          if let summary = currentToolSummary, !summary.isEmpty {
+            Text(summary)
               .scaledFont(size: 11)
               .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+              .truncationMode(.middle)
           }
+
+          if calls.count > 1 {
+            Text(compact ? "· \(calls.count) steps" : "·")
+              .scaledFont(size: compact ? 11 : 12)
+              .foregroundColor(OmiColors.textTertiary)
+              .lineLimit(1)
+            if !compact {
+              Text("\(calls.count) steps")
+                .scaledFont(size: 11)
+                .foregroundColor(OmiColors.textTertiary)
+            }
+          }
+
+          Spacer(minLength: compact ? 0 : 4)
+
+          Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textTertiary)
         }
-
-        Spacer(minLength: compact ? 0 : 4)
-
-        Image(systemName: canOpenSpawnedAgent ? "arrow.up.forward.app" : (isExpanded ? "chevron.up" : "chevron.down"))
-          .scaledFont(size: 9)
-          .foregroundColor(OmiColors.textTertiary)
+        .padding(.leading, 10)
+        .padding(.vertical, compact ? 0 : 6)
+        .frame(height: compact ? 34 : nil)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
       }
-      .padding(.horizontal, 10)
-      .padding(.vertical, compact ? 0 : 6)
-      .frame(height: compact ? 34 : nil)
-      .frame(maxWidth: .infinity, alignment: .leading)
+      .buttonStyle(.plain)
+
+      if canOpenSpawnedAgent {
+        Button(action: {
+          openSpawnedAgent { succeeded in
+            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+              showUnavailable = true
+            }
+          }
+        }) {
+          Image(systemName: "arrow.up.forward.app")
+            .scaledFont(size: 9)
+            .foregroundColor(OmiColors.textTertiary)
+            .padding(.trailing, 10)
+            .padding(.vertical, compact ? 0 : 6)
+            .frame(height: compact ? 34 : nil)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help("Open agent")
+      } else {
+        Color.clear.frame(width: 10)
+      }
     }
-    .buttonStyle(.plain)
   }
 
   private var expandedToolCalls: some View {
@@ -1085,7 +1226,11 @@ struct ToolCallCard: View {
   }
 
   private var canOpenSpawnedAgent: Bool {
-    agentOpenRef != nil && (onOpenAgentRef != nil || onOpenAgent != nil)
+    AgentTimelineOpenFeedback.shouldShowLinkOut(
+      hasResolvableAgent: agentOpenRef != nil,
+      hasOpenAction: onOpenAgentRef != nil || onOpenAgent != nil,
+      showUnavailable: showUnavailable
+    )
   }
 
   private func openSpawnedAgent(completion: @escaping (Bool) -> Void) {
@@ -1107,62 +1252,76 @@ struct ToolCallCard: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       // Compact header row
-      Button(action: {
-        if canOpenSpawnedAgent {
-          openSpawnedAgent { succeeded in
-            if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
-              showUnavailable = true
+      HStack(spacing: 4) {
+        Button(action: {
+          if hasExpandableContent {
+            withAnimation(.easeInOut(duration: 0.2)) {
+              isExpanded.toggle()
             }
           }
-          return
-        }
-        if hasExpandableContent {
-          withAnimation(.easeInOut(duration: 0.2)) {
-            isExpanded.toggle()
+        }) {
+          HStack(spacing: 6) {
+            // Status indicator — uses the shared statusIcon helper so
+            // .slow / .stalled / .failed render the same way here as in
+            // the group header.
+            statusIcon(for: status, size: 12)
+
+            // Tool name
+            Text(ChatContentBlock.displayName(for: name))
+              .scaledFont(size: 12, design: .monospaced)
+              .foregroundColor(OmiColors.textSecondary)
+
+            // Inline argument summary
+            if let summary = input?.summary {
+              Text("·")
+                .scaledFont(size: 12)
+                .foregroundColor(OmiColors.textTertiary)
+
+              Text(summary)
+                .scaledFont(size: 11, design: .monospaced)
+                .foregroundColor(OmiColors.textTertiary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            }
+
+            Spacer(minLength: 4)
+
+            // Expand chevron
+            if hasExpandableContent {
+              Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                .scaledFont(size: 9)
+                .foregroundColor(OmiColors.textTertiary)
+            }
           }
+          .padding(.leading, 10)
+          .padding(.vertical, 6)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .contentShape(Rectangle())
         }
-      }) {
-        HStack(spacing: 6) {
-          // Status indicator — uses the shared statusIcon helper so
-          // .slow / .stalled / .failed render the same way here as in
-          // the group header.
-          statusIcon(for: status, size: 12)
+        .buttonStyle(.plain)
+        .disabled(!hasExpandableContent)
 
-          // Tool name
-          Text(ChatContentBlock.displayName(for: name))
-            .scaledFont(size: 12, design: .monospaced)
-            .foregroundColor(OmiColors.textSecondary)
-
-          // Inline argument summary
-          if let summary = input?.summary {
-            Text("·")
-              .scaledFont(size: 12)
-              .foregroundColor(OmiColors.textTertiary)
-
-            Text(summary)
-              .scaledFont(size: 11, design: .monospaced)
-              .foregroundColor(OmiColors.textTertiary)
-              .lineLimit(1)
-              .truncationMode(.middle)
-          }
-
-          Spacer(minLength: 4)
-
-          // Expand chevron
-          if canOpenSpawnedAgent {
+        if canOpenSpawnedAgent {
+          Button(action: {
+            openSpawnedAgent { succeeded in
+              if AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: succeeded) {
+                showUnavailable = true
+              }
+            }
+          }) {
             Image(systemName: "arrow.up.forward.app")
               .scaledFont(size: 9)
               .foregroundColor(OmiColors.textTertiary)
-          } else if hasExpandableContent {
-            Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-              .scaledFont(size: 9)
-              .foregroundColor(OmiColors.textTertiary)
+              .padding(.trailing, 10)
+              .padding(.vertical, 6)
+              .contentShape(Rectangle())
           }
+          .buttonStyle(.plain)
+          .help("Open agent")
+        } else {
+          Color.clear.frame(width: 10)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
       }
-      .buttonStyle(.plain)
 
       // Expanded content
       if isExpanded || showUnavailable {

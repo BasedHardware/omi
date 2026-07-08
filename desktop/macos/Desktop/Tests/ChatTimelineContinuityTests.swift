@@ -283,6 +283,80 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertFalse(AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded: true))
   }
 
+  func testLinkOutHiddenWhenUnavailableOrMissingOpenAction() {
+    XCTAssertTrue(
+      AgentTimelineOpenFeedback.shouldShowLinkOut(
+        hasResolvableAgent: true,
+        hasOpenAction: true,
+        showUnavailable: false
+      )
+    )
+    XCTAssertFalse(
+      AgentTimelineOpenFeedback.shouldShowLinkOut(
+        hasResolvableAgent: true,
+        hasOpenAction: true,
+        showUnavailable: true
+      ),
+      "hide link-out after open failed / unavailable"
+    )
+    XCTAssertFalse(
+      AgentTimelineOpenFeedback.shouldShowLinkOut(
+        hasResolvableAgent: false,
+        hasOpenAction: true,
+        showUnavailable: false
+      )
+    )
+    XCTAssertFalse(
+      AgentTimelineOpenFeedback.shouldShowLinkOut(
+        hasResolvableAgent: true,
+        hasOpenAction: false,
+        showUnavailable: false
+      )
+    )
+  }
+
+  func testBackgroundAgentCardsSeparateExpandFromLinkOut() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let chatBubbleSource = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(
+      chatBubbleSource.contains("SelectableMarkdown(text: summary.output, sender: .ai)"),
+      "background agent summary body must render markdown"
+    )
+    XCTAssertTrue(
+      chatBubbleSource.contains("SelectableMarkdown(text: output, sender: .ai)"),
+      "agent completion body must render markdown"
+    )
+    XCTAssertTrue(chatBubbleSource.contains("Text(\"Collapse\")"))
+    XCTAssertTrue(
+      chatBubbleSource.contains("AgentTimelineOpenFeedback.shouldShowLinkOut("),
+      "cards must gate link-out with shared policy"
+    )
+    XCTAssertFalse(
+      chatBubbleSource.contains(
+        "Image(systemName: summary.agentID != nil && onOpenAgent != nil ? \"arrow.up.forward.app\""
+      ),
+      "header must not replace expand chevron with link-out"
+    )
+    XCTAssertFalse(
+      chatBubbleSource.contains(
+        "Image(systemName: ref.hasIdentity && onOpen != nil ? \"arrow.up.forward.app\""
+      ),
+      "completion header must not replace expand chevron with link-out"
+    )
+    XCTAssertFalse(
+      chatBubbleSource.contains(
+        "Image(systemName: canOpenSpawnedAgent ? \"arrow.up.forward.app\" : (isExpanded ? \"chevron.up\" : \"chevron.down\")"
+      ),
+      "tool-call headers must keep expand chevron separate from link-out"
+    )
+  }
+
   func testCanonicalSurfacesBindSharedProviderMessages() throws {
     // Mechanical single-provider UI binding check (INV-6 rule 1). Full UI
     // rendering is covered by e2e; this fails if Main/Home stop binding the

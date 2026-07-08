@@ -150,6 +150,15 @@ enum AgentTimelineOpenFeedback {
     static func shouldShowUnavailable(succeeded: Bool) -> Bool {
         !succeeded
     }
+
+    /// Link-out opens a resolvable agent; hide it when open failed / unavailable / no callback / no id.
+    static func shouldShowLinkOut(
+        hasResolvableAgent: Bool,
+        hasOpenAction: Bool,
+        showUnavailable: Bool
+    ) -> Bool {
+        hasResolvableAgent && hasOpenAction && !showUnavailable
+    }
 }
 
 enum ChatContentBlock: Identifiable {
