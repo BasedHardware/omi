@@ -1,0 +1,31 @@
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_dce5329af2ed39::t_2385246312e2c2 732-746
+  s_dce5329af2ed39::t_57696d1770d5f6 465-476
+  s_dce5329af2ed39::t_8b4946ba4653b4 747
+desktop/macos/changelog/unreleased/20260707-writing-voice-guide.json
+  s_dce5329af2ed39::t_01545fd5eb2ba1 1-3
+desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Advanced.swift
+  s_dce5329af2ed39::t_e5ec8f01092b5b 403
+  s_dce5329af2ed39::t_dcc55ab45c3cfb 567-682
+  s_dce5329af2ed39::t_0df8de71adf466 683
+desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  s_dce5329af2ed39::t_eedb985c5d62cb 203-208
+  s_dce5329af2ed39::t_2dd3dec7f72586 343
+  s_dce5329af2ed39::t_f479514b895420 361
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bc40e7626f3cf1356defeaa7ea59afd50433f063",
+  "prompts": {},
+  "sessions": {
+    "s_dce5329af2ed39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "17795923-7044-4827-b7aa-e05c0e30df95",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
