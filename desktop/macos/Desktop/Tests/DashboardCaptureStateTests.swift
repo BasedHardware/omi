@@ -230,6 +230,15 @@ final class DashboardCaptureStateTests: XCTestCase {
         XCTAssertFalse(source.contains("resultMessage = .failure(error.localizedDescription)"))
     }
 
+    func testOnboardingMemoryLogImportKeepsCapturedUserScope() throws {
+        let source = try onboardingCoordinatorSource()
+
+        XCTAssertTrue(source.contains("let importUserID = Self.currentUserID()"))
+        XCTAssertTrue(source.contains("guard Self.currentUserID() == importUserID else { return }"))
+        XCTAssertTrue(source.contains("Self.scopedDefaultsKey(chatGPTImportedMemoriesKey, userID: importUserID)"))
+        XCTAssertTrue(source.contains("Self.scopedDefaultsKey(claudeImportedMemoriesKey, userID: importUserID)"))
+    }
+
     func testAppsPageSupportsPopupDismissalAndFocusedSections() throws {
         let source = try appsSource()
 
@@ -350,6 +359,14 @@ final class DashboardCaptureStateTests: XCTestCase {
 
     private func appsSource() throws -> String {
         try source(named: "AppsPage.swift")
+    }
+
+    private func onboardingCoordinatorSource() throws -> String {
+        let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let sourceURL = testsURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("Sources/Onboarding/OnboardingPagedIntroCoordinator.swift")
+        return try String(contentsOf: sourceURL, encoding: .utf8)
     }
 
     private func source(named fileName: String) throws -> String {
