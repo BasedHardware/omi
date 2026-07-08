@@ -321,8 +321,10 @@ struct RewindPage: View {
 
     private var rewindToggle: some View {
         ZStack {
+            // Green = capturing (matches the toolbar's capture-state language);
+            // neutral = off. Never red (reads as recording) or purple (banned).
             Capsule()
-                .fill(isMonitoring ? OmiColors.purplePrimary : Color.red)
+                .fill(isMonitoring ? HomePalette.green : Color.white.opacity(0.2))
                 .frame(width: 36, height: 20)
 
             Circle()
@@ -390,7 +392,7 @@ struct RewindPage: View {
     // MARK: - Unified Top Bar (persistent search field)
 
     private var unifiedTopBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiHeader.controlSpacing) {
             // Left side: Back button (search timeline mode) or Rewind logo (other modes)
             if isInSearchMode && searchViewMode == .timeline {
                 Button {
@@ -471,25 +473,20 @@ struct RewindPage: View {
             Spacer()
 
             // Settings
-            Button {
+            OmiHeaderIconButton(systemImage: "gearshape") {
                 NotificationCenter.default.post(
                     name: .navigateToRewindSettings,
                     object: nil
                 )
-            } label: {
-                Image(systemName: "gearshape")
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white.opacity(0.6))
             }
-            .buttonStyle(.plain)
             .help("Rewind Settings")
 
             // Rewind on/off toggle (screen capture only)
             rewindToggle
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(OmiColors.backgroundTertiary.opacity(0.8))
+        .padding(.horizontal, OmiHeader.rowHorizontalPadding)
+        .padding(.top, OmiHeader.rowTopPadding)
+        .padding(.bottom, OmiHeader.rowBottomPadding)
     }
 
     // MARK: - Timeline Content Body (without top bar)
@@ -600,8 +597,8 @@ struct RewindPage: View {
     private func searchField(showResultsCount: Bool = false) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
-                .scaledFont(size: 12)
-                .foregroundColor(isSearchFocused ? OmiColors.purplePrimary : .white.opacity(0.5))
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textTertiary)
 
             TextField("Search your screen history...", text: $viewModel.searchQuery)
                 .textFieldStyle(.plain)
@@ -640,17 +637,10 @@ struct RewindPage: View {
                 .buttonStyle(.plain)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        // Shared header-control surface; focus reads through the active
+        // (raised + stronger border) treatment, not a purple accent.
+        .omiHeaderControl(isActive: isSearchFocused)
         .frame(maxWidth: 400)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.white.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(isSearchFocused ? OmiColors.purplePrimary.opacity(0.5) : Color.clear, lineWidth: 1)
-                )
-        )
     }
 
     // MARK: - Date Picker Controls
@@ -661,16 +651,13 @@ struct RewindPage: View {
         } label: {
             HStack(spacing: 6) {
                 Text(viewModel.selectedDate.formatted(.dateTime.month().day().year()))
-                    .scaledFont(size: 12)
-                    .foregroundColor(.white)
+                    .scaledFont(size: 13, weight: .medium)
+                    .foregroundColor(OmiColors.textSecondary)
                 Image(systemName: "chevron.up.chevron.down")
                     .scaledFont(size: 8, weight: .semibold)
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(OmiColors.textTertiary)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.white.opacity(0.15))
-            .cornerRadius(6)
+            .omiHeaderControl()
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showDatePicker) {
