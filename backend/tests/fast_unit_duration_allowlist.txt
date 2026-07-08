@@ -1,2 +1,7 @@
 # Backend-relative unit test files that may exceed BACKEND_FAST_UNIT_MAX_SECONDS.
 # Keep this list small and add a reason beside each entry.
+# AI Clone persona chat tests — exec source in isolated namespace (source-extraction pattern).
+tests/unit/test_persona_prompt_rewrite.py
+tests/unit/test_persona_chat_with_context.py
+tests/unit/test_persona_memory_retrieval.py
+tests/unit/test_persona_chat_endpoint.py
