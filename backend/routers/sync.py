@@ -1584,12 +1584,17 @@ async def sync_local_files_v2(
                     },
                 )
                 dispatched = True
-                # The handler instance downloads from GCS; local copies are done
-                await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
             except Exception as e:
                 logger.error(f'sync_v2: Cloud Tasks dispatch failed job={job_id}, falling back inline: {e}')
                 start_background_task(_delete_staged_blobs_async(owned_paths), name=f'sync_unstage:{job_id}')
+
+            if dispatched:
+                try:
+                    # The handler instance downloads from GCS; local copies are done
+                    await run_blocking(sync_executor, _cleanup_files, owned_paths)
+                    await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+                except Exception as e:
+                    logger.error(f'sync_v2: post-enqueue local cleanup failed job={job_id}: {e}')
 
         if not dispatched:
             # Async coordinator: runs on event loop, offloads blocking work to pools.
