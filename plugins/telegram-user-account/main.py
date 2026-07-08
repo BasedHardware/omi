@@ -590,12 +590,12 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
         except Exception as e:
             logger.warning("could not fetch Telegram history for context: %s", type(e).__name__)
 
-    # plan §8: rate-limit cap BEFORE the persona call. Saves LLM
-    # tokens when the cap is hit -- otherwise we'd call the
-    # persona API only to discover we can't send. can_send is
-    # non-mutating; record_send is called only on successful
-    # outbound send.
-    if not flood_control.default_rate_limit.can_send():
+    # plan §8: reserve a rate-limit slot BEFORE the persona call.
+    # Uses reserve_slot() instead of can_send() so concurrent
+    # requests can't all pass and exceed max_per_hour during the
+    # ~15s LLM call. commit_slot() on success, release_slot() on
+    # any failure.
+    if not flood_control.default_rate_limit.reserve_slot():
         retry_after = flood_control.default_rate_limit.seconds_until_next_slot()
         logger.warning(
             "rate limit hit: %d sends in last hour, blocking for %ds",
@@ -615,23 +615,29 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
     # inside the function would create a fresh binding that the
     # test's `patch.object(main_module, "_persona_chat", ...)`
     # wouldn't reach.
-    reply = await _persona_chat(
-        app_id=user["persona_id"],
-        api_key=user["omi_dev_api_key"],
-        omi_base=OMI_BASE_URL,
-        text=body.text,
-        uid=user["omi_uid"],
-        timeout_seconds=30.0,
-        previous_messages=previous_messages,
-    )
+    try:
+        reply = await _persona_chat(
+            app_id=user["persona_id"],
+            api_key=user["omi_dev_api_key"],
+            omi_base=OMI_BASE_URL,
+            text=body.text,
+            uid=user["omi_uid"],
+            timeout_seconds=30.0,
+            previous_messages=previous_messages,
+        )
+    except Exception:
+        flood_control.default_rate_limit.release_slot()
+        raise
 
     if not reply:
+        flood_control.default_rate_limit.release_slot()
         raise HTTPException(status_code=502, detail="Persona API returned empty reply")
 
     # Send the reply via Telethon.
     try:
         sent = await client.send_message(body.chat_id, reply)
     except Exception as e:
+        flood_control.default_rate_limit.release_slot()
         # plan §8: detect FLOOD_WAIT specifically. Telegram's
         # anti-flood systems return FLOOD_WAIT_* errors with a
         # `seconds` field; surfacing this in the log + response
@@ -670,10 +676,10 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
         )
         raise HTTPException(status_code=502, detail="Telethon send_message failed")
 
-    # Only record_send on successful send. Failed sends do NOT
-    # consume the budget (avoids rate-limiting on persistent
-    # failures that need operator attention, not backoff).
-    flood_control.default_rate_limit.record_send()
+    # Commit the reserved slot to the rolling window on successful
+    # send. Failed sends release the slot above and do NOT consume
+    # the budget.
+    flood_control.default_rate_limit.commit_slot()
 
     # Persist the turn to the chat's ring buffer so the next call
     # has the AI's reply in its context.
