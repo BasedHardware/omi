@@ -1304,6 +1304,32 @@ class GauntletRunner:
         swap_detail = swap.get("result", {}).get("detail", {})
         if swap.get("ok") is False or swap_detail.get("error"):
             self.fail(f"owner-switch swap_test_owner failed: {swap_detail.get('error', swap.get('error', swap))}")
+        # Guard against the ghost-auth regression: swap must keep Firebase
+        # auth_userId intact and only set an automation owner override.
+        swapped_auth_uid = (swap_detail.get("auth_user_id") or "").strip()
+        swapped_override = (swap_detail.get("owner_override") or "").strip()
+        swapped_owner_a = (swap_detail.get("owner_a") or "").strip()
+        if not swapped_auth_uid or not swapped_override:
+            self.fail(
+                "owner-switch: swap_test_owner missing auth_user_id/owner_override "
+                f"(detail keys={sorted(swap_detail.keys())}); rebuild app with override-based swap"
+            )
+        if swapped_auth_uid == owner_b_id:
+            self.fail(
+                "owner-switch: auth_user_id equals synthetic owner_b; "
+                "swap must use automation_owner_override instead"
+            )
+        if swapped_owner_a and swapped_auth_uid != swapped_owner_a:
+            self.fail(
+                "owner-switch: swap_test_owner rewrote auth_userId "
+                f"(owner_a={swapped_owner_a}, auth_user_id={swapped_auth_uid}); "
+                "this clears Firebase tokens via getIdToken mismatch"
+            )
+        if swapped_override != owner_b_id:
+            self.fail(
+                "owner-switch: owner_override mismatch "
+                f"(expected={owner_b_id}, actual={swapped_override})"
+            )
 
         deadline = time.monotonic() + (self.args.turn_timeout_ms / 1000.0)
         snapshot_detail: dict[str, str] = swap_detail
@@ -1483,6 +1509,137 @@ class GauntletRunner:
         if len(assistant) > 450:
             self.warn(f"P3 register: unknown-person reply too long ({len(assistant)} chars)")
 
+    def run_resilience_r3_race_policy(self) -> None:
+        """Probe concurrent main-chat send rejection via no-wait + busy-state actions."""
+        long_query = (
+            f"Resilience race hold {self.run_id}. "
+            "Take about twenty seconds to reply with exactly: RACE_HOLD_DONE"
+        )
+        race_query = f"Resilience race probe {self.run_id}. Reply with exactly: RACE_PROBE_REJECTED"
+
+        fire = self.bridge_act("ask_main_chat_no_wait", {"query": long_query})
+        fire_detail = fire.get("result", {}).get("detail", {}) if isinstance(fire, dict) else {}
+        if fire.get("ok") is False or fire_detail.get("error"):
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "generic_chat_error",
+                {"phase": "fire", "fire_detail": fire_detail, "fire": fire},
+            )
+            self.fail(f"R3 race policy: ask_main_chat_no_wait failed: {fire_detail.get('error', fire)}")
+            return
+        if fire_detail.get("accepted") != "true":
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                1,
+                "generic_chat_error",
+                {"phase": "fire", "fire_detail": fire_detail},
+            )
+            self.fail(f"R3 race policy: initial no-wait send was not accepted: {fire_detail}")
+            return
+
+        busy_seen = False
+        busy_detail: dict[str, Any] = {}
+        busy_deadline = time.monotonic() + 5.0
+        while time.monotonic() < busy_deadline:
+            busy = self.bridge_act("main_chat_busy_state")
+            busy_detail = busy.get("result", {}).get("detail", {}) if isinstance(busy, dict) else {}
+            if busy.get("ok") is False or busy_detail.get("error"):
+                self.record_resilience_diagnostic(
+                    "R3-already-running-race-policy",
+                    2,
+                    "generic_chat_error",
+                    {"phase": "busy_poll", "busy_detail": busy_detail, "busy": busy},
+                )
+                self.fail(f"R3 race policy: main_chat_busy_state failed: {busy_detail.get('error', busy)}")
+                return
+            if busy_detail.get("busy") == "true":
+                busy_seen = True
+                break
+            time.sleep(0.05)
+        if not busy_seen:
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                2,
+                "generic_chat_error",
+                {"phase": "busy_poll", "busy_detail": busy_detail, "fire_detail": fire_detail},
+            )
+            self.fail("R3 race policy: main chat never reported busy after no-wait send")
+            return
+
+        race = self.bridge_act("ask_main_chat_no_wait", {"query": race_query})
+        race_detail = race.get("result", {}).get("detail", {}) if isinstance(race, dict) else {}
+        if race.get("ok") is False or race_detail.get("error"):
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                3,
+                "generic_chat_error",
+                {"phase": "race", "race_detail": race_detail, "race": race},
+            )
+            self.fail(f"R3 race policy: concurrent no-wait send errored: {race_detail.get('error', race)}")
+            return
+
+        rejected = (
+            race_detail.get("accepted") == "false"
+            or race_detail.get("busy") == "true"
+            or race_detail.get("reason") == "already_sending"
+        )
+        if not rejected:
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                3,
+                "generic_chat_error",
+                {
+                    "phase": "race",
+                    "fire_detail": fire_detail,
+                    "busy_detail": busy_detail,
+                    "race_detail": race_detail,
+                    "rejected": False,
+                },
+            )
+            self.fail(
+                "R3 race policy: concurrent ask_main_chat_no_wait was accepted while chat was busy "
+                f"(race_detail={race_detail})"
+            )
+            terminal_reason = "generic_chat_error"
+        else:
+            terminal_reason = "passed"
+            self.record_resilience_diagnostic(
+                "R3-already-running-race-policy",
+                3,
+                terminal_reason,
+                {
+                    "phase": "race",
+                    "fire_detail": fire_detail,
+                    "busy_detail": busy_detail,
+                    "race_detail": race_detail,
+                    "rejected": True,
+                },
+            )
+
+        # Drain the in-flight hold turn so later resilience probes start idle.
+        wait = bridge_action(
+            self.port,
+            "wait_main_chat_idle",
+            {"timeoutMs": str(self.args.turn_timeout_ms), "pollMs": "250"},
+        )
+        wait_detail = wait.get("result", {}).get("detail", {}) if isinstance(wait, dict) else {}
+        self.record_step(
+            "r3-already-running-race-policy",
+            "resilience: already-running/race policy",
+            user_text=long_query,
+            action_response=fire,
+            snapshot_detail=wait_detail,
+            traces=[],
+            extra={
+                "terminal_reason": terminal_reason,
+                "busy_detail": busy_detail,
+                "race_query": race_query,
+                "race_detail": race_detail,
+                "wait_detail": wait_detail,
+            },
+        )
+
     def run_resilience_suite(self) -> None:
         """Startup/bad-state probes for bridge, main chat, and subagent launch continuity.
 
@@ -1549,45 +1706,39 @@ class GauntletRunner:
                 f"R2 warm reuse {index}",
             )
 
-        # R3 — already-running/race policy. The current bridge only exposes a
-        # blocking ask_main_chat plus wait_main_chat_idle; without a non-waiting
-        # send or explicit busy-state action, racing it would require risky UI or
-        # process manipulation. Record the missing contract instead of faking pass.
+        # R3 — already-running/race policy. Fire a non-waiting main-chat send,
+        # confirm busy state, then attempt a concurrent send and assert the bridge
+        # rejects it (or reports busy) instead of overlapping turns.
+        # Missing actions are a hard fail (skipped_missing_action is forbidden);
+        # --self-check also requires these actions so CI catches drift before live.
         bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
         race_actions = {"ask_main_chat_no_wait", "main_chat_busy_state"}
         present = sorted(name for name in race_actions if f'name: "{name}"' in bridge_source)
-        if not present:
-            missing = sorted(race_actions)
-            message = (
-                "R3 already-running/race policy skipped: missing bridge action(s) "
-                f"{missing}; need non-waiting send or explicit busy-state check"
-            )
-            self.warn(message)
+        missing = sorted(race_actions - set(present))
+        if missing:
+            # skipped_missing_action is forbidden → record_resilience_diagnostic fails the run.
             self.record_resilience_diagnostic(
                 "R3-already-running-race-policy",
                 1,
                 "skipped_missing_action",
-                {"missing_bridge_actions": missing},
+                {
+                    "missing_bridge_actions": missing,
+                    "note": "need ask_main_chat_no_wait + main_chat_busy_state",
+                },
             )
         else:
-            self.warn(
-                "R3 already-running/race policy has candidate bridge action(s) "
-                f"{present}, but no safe gauntlet implementation is wired yet"
-            )
-            self.record_resilience_diagnostic(
-                "R3-already-running-race-policy",
-                1,
-                "skipped_unimplemented_action",
-                {"present_bridge_actions": present},
-            )
+            self.run_resilience_r3_race_policy()
 
         # R4 — subagent launch cold/resilience probe. This is stricter than the
         # agents suite because it records terminal reasons and requires runtime,
         # coordinator/pill projection, spawn tool evidence, and status visibility.
+        # Prompt mirrors the agents-suite spawn wording (track marker + wait) so
+        # the model treats it as a real background-work objective, not a probe.
         marker = f"RESILIENCE-SUBAGENT-{self.run_id}-{secrets.token_hex(3).upper()}"
+        spawn_title = f"Resilience Monitor {marker[-8:]}"
         spawn_query = (
-            "Use spawn_agent now to start a visible background agent. "
-            f"Objective: acknowledge resilience marker {marker} and then wait. "
+            f"Use spawn_agent now to start a visible background agent titled \"{spawn_title}\". "
+            f"Objective: track marker {marker} and wait silently. "
             "Do not ask follow-up questions."
         )
         trace_start = trace_line_count()
@@ -1755,6 +1906,8 @@ def self_check() -> int:
     bridge_actions = {
         "ask",
         "ask_main_chat",
+        "ask_main_chat_no_wait",
+        "main_chat_busy_state",
         "main_chat_snapshot",
         "wait_main_chat_idle",
         "agent_runtime_evidence",
@@ -1790,12 +1943,73 @@ def self_check() -> int:
     if missing_driver_checks:
         print(f"self-check failed: resilience suite wiring missing {missing_driver_checks}", file=sys.stderr)
         return 1
+    missing_contract_checks = continuity_contract_self_check_failures()
+    if missing_contract_checks:
+        print(
+            f"self-check failed: INV-6 hermetic contract coverage missing {missing_contract_checks}",
+            file=sys.stderr,
+        )
+        return 1
     owner_ok, owner_detail = run_owner_switch_kernel_check()
     if not owner_ok:
         print(f"self-check failed: owner-switch kernel check: {owner_detail}", file=sys.stderr)
         return 1
-    print("self-check passed (owner-switch: kernel vitest + swap_test_owner action registered)")
+    print(
+        "self-check passed "
+        "(R3 race actions + resilience wiring + INV-6 hermetic contract gates + owner-switch)"
+    )
     return 0
+
+
+def continuity_contract_self_check_failures() -> list[str]:
+    """Fail if hermetic INV-6 contract tests / harness filter drift out of the DoD gate.
+
+    Live gauntlet suites exercise bridge/LLM continuity; they do NOT replace these
+    hermetic behavioral tests. See AGENTS.md → "Live gauntlet vs hermetic INV-6".
+    """
+    failures: list[str] = []
+    tests_dir = DESKTOP_DIR / "Desktop/Tests"
+    harness = (SCRIPT_DIR / "agent-logic-harness.sh").read_text(encoding="utf-8")
+
+    required_filter_classes = [
+        "KernelTurnRecordedProjectionTests",
+        "ChatTimelineContinuityTests",
+        "FloatingControlBarStateTests",
+        "AgentContinuityGauntletTests",
+    ]
+    for class_name in required_filter_classes:
+        if class_name not in harness:
+            failures.append(f"agent-logic-harness filter includes {class_name}")
+
+    projection = (tests_dir / "KernelTurnRecordedProjectionTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate(",
+        "func testApplyKernelTurnRecordedDedupesByIdempotencyKey(",
+        "func testMainAndFloatingAutomationSnapshotsAliasSameTimeline(",
+    ):
+        if needle not in projection:
+            failures.append(f"KernelTurnRecordedProjectionTests.{needle.split('(')[0].removeprefix('func ')}")
+
+    timeline = (tests_dir / "ChatTimelineContinuityTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testHydratePreferencePrefersRunThenSessionThenPill(",
+        "func testFindPillMatchesByHydratePreferenceOrder(",
+        "func testAgentCompletionBlockExposesOpenRefAndStaysVisible(",
+    ):
+        if needle not in timeline:
+            failures.append(f"ChatTimelineContinuityTests.{needle.split('(')[0].removeprefix('func ')}")
+
+    floating_state = (tests_dir / "FloatingControlBarStateTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testViewportDerivesCurrentAnswerAndHistoryFromProviderMessages(",
+        "func testCanRestoreUsesViewportAnchorsAndActivityWindow(",
+        "chatViewport",
+    ):
+        if needle not in floating_state:
+            label = needle.split("(")[0].removeprefix("func ") if needle.startswith("func ") else needle
+            failures.append(f"FloatingControlBarStateTests covers {label}")
+
+    return failures
 
 
 
@@ -1866,6 +2080,16 @@ def resilience_driver_self_check_failures(driver_source: str) -> list[str]:
         failures.append("record_resilience_diagnostic writes resilience-diagnostics.jsonl")
     if not method_contains_string(methods.get("run_resilience_suite"), "skipped_missing_action"):
         failures.append("run_resilience_suite can record skipped_missing_action")
+    if not method_contains_string(methods.get("run_resilience_suite"), "ask_main_chat_no_wait"):
+        failures.append("run_resilience_suite references ask_main_chat_no_wait")
+    if not method_contains_string(methods.get("run_resilience_suite"), "main_chat_busy_state"):
+        failures.append("run_resilience_suite references main_chat_busy_state")
+    if "run_resilience_r3_race_policy" not in methods:
+        failures.append("GauntletRunner.run_resilience_r3_race_policy")
+    elif not method_calls(methods.get("run_resilience_suite"), "run_resilience_r3_race_policy"):
+        failures.append("run_resilience_suite calls run_resilience_r3_race_policy")
+    if not method_contains_string(methods.get("run_resilience_suite"), '". Objective: track marker '):
+        failures.append("run_resilience_suite R4 spawn uses track-marker objective")
     if not method_contains_attr(methods.get("record_resilience_diagnostic"), "resilience_terminal_reason_counts"):
         failures.append("record_resilience_diagnostic updates resilience_terminal_reason_counts")
     if not method_contains_attr(methods.get("finalize"), "resilience_terminal_reason_counts"):

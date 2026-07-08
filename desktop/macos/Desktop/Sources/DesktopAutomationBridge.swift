@@ -928,6 +928,63 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
+    // Fire-and-forget main-chat send for race/busy probes. Returns before the
+    // turn settles so harnesses can observe isSending / concurrent rejection.
+    register(
+      name: "ask_main_chat_no_wait",
+      summary: "Fire-and-forget main-chat send; returns immediately without waiting for the turn",
+      params: ["query"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let isSending = provider.isSending
+      let isStreaming = provider.messages.contains(where: { $0.isStreaming })
+      let busy = isSending || isStreaming
+      if busy {
+        return [
+          "accepted": "false",
+          "busy": "true",
+          "is_sending": isSending ? "true" : "false",
+          "is_streaming": isStreaming ? "true" : "false",
+          "reason": "already_sending",
+          "query": query,
+        ]
+      }
+      Task { @MainActor in
+        let tracer = QueryTracer(query: query, inputMode: .text)
+        await QueryTracerContext.$current.withValue(tracer) {
+          _ = await provider.sendMessage(query)
+        }
+      }
+      return [
+        "accepted": "true",
+        "busy": "false",
+        "is_sending": "false",
+        "is_streaming": isStreaming ? "true" : "false",
+        "sent": query,
+      ]
+    }
+
+    register(
+      name: "main_chat_busy_state",
+      summary: "Return whether main chat is currently sending or streaming (race/busy probes)",
+      params: []
+    ) { _ in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let isSending = provider.isSending
+      let isStreaming = provider.messages.contains(where: { $0.isStreaming })
+      return [
+        "is_sending": isSending ? "true" : "false",
+        "is_streaming": isStreaming ? "true" : "false",
+        "busy": (isSending || isStreaming) ? "true" : "false",
+      ]
+    }
+
     // Gauntlet step 06: clear owner A kernel bindings, re-register synthetic owner B,
     // and run one assembled-context probe turn. Non-production bundles only.
     register(

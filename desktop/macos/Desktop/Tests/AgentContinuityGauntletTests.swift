@@ -29,6 +29,8 @@ final class AgentContinuityGauntletTests: XCTestCase {
       "wait_main_chat_idle",
       "agent_runtime_evidence",
       "ask_main_chat",
+      "ask_main_chat_no_wait",
+      "main_chat_busy_state",
       "coordinator_awareness_snapshot",
       "swap_test_owner",
       "restore_test_owner",
@@ -56,6 +58,8 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(providerSource.contains("automationSwapTestOwner"))
     XCTAssertTrue(providerSource.contains("automationKernelTurnTail"))
     XCTAssertTrue(providerSource.contains("automationClearOwnerSurfaceState"))
+    XCTAssertTrue(providerSource.contains("RuntimeOwnerIdentity.applyAutomationOwnerOverride"))
+    XCTAssertTrue(providerSource.contains("RuntimeOwnerIdentity.clearAutomationOwnerOverride"))
   }
 
   func testResilienceSuiteIsWiredIntoCanonicalGauntlet() throws {
@@ -88,11 +92,25 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(driverSource.contains("\"skipped_unimplemented_action\""))
     XCTAssertTrue(driverSource.contains("ask_main_chat_no_wait"))
     XCTAssertTrue(driverSource.contains("main_chat_busy_state"))
+    XCTAssertTrue(driverSource.contains("run_resilience_r3_race_policy"))
+    XCTAssertTrue(driverSource.contains("Objective: track marker"))
+    XCTAssertTrue(driverSource.contains("continuity_contract_self_check_failures"))
+    XCTAssertTrue(driverSource.contains("testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate"))
+    XCTAssertTrue(driverSource.contains("testMainAndFloatingAutomationSnapshotsAliasSameTimeline"))
+    XCTAssertTrue(driverSource.contains("testHydratePreferencePrefersRunThenSessionThenPill"))
     XCTAssertTrue(driverSource.contains("--suite resilience"))
 
     XCTAssertTrue(scriptSource.contains("--suite resilience"))
     XCTAssertTrue(scriptSource.contains("--suite all"))
     XCTAssertTrue(scriptSource.contains("Release-candidate manual QA"))
+
+    let harnessSource = try String(
+      contentsOf: desktopDir.appendingPathComponent("scripts/agent-logic-harness.sh"),
+      encoding: .utf8
+    )
+    XCTAssertTrue(harnessSource.contains("KernelTurnRecordedProjectionTests"))
+    XCTAssertTrue(harnessSource.contains("ChatTimelineContinuityTests"))
+    XCTAssertTrue(harnessSource.contains("FloatingControlBarStateTests"))
   }
 
   @MainActor
