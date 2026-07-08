@@ -159,7 +159,6 @@ tests/unit/test_ws_i_write_convergence.py::test_extract_memories_inner_legacy_ca
 tests/unit/test_ws_i_write_convergence.py::test_v3_get_routes_canonical_user_to_memory_service
 tests/unit/test_ws_l_surface_routing.py::TestMcpSseLegacySearchParity::test_legacy_sse_search_uses_vector_order_and_full_firestore_docs
 tests/unit/test_sync_cloud_tasks.py::test_sync_post_enqueue_cleanup_does_not_unstage
-# Router-load amortization: _load_sync_router_for_fast_path stubs heavy imports.
-tests/unit/test_sync_cloud_tasks.py::test_sync_dispatch_enqueue_failed_records_degraded_inline
-# STT streaming module import amortized into this node under file-isolation.
-tests/unit/test_fallback_observability.py::test_stt_selection_fallback_records_on_capability_mismatch
+# File-isolation amortizes router/STT/VAD imports across different node IDs per run.
+tests/unit/test_sync_cloud_tasks.py
+tests/unit/test_fallback_observability.py
