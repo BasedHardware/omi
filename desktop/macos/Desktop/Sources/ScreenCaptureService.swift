@@ -203,6 +203,7 @@ final class ScreenCaptureService: Sendable {
   }
 
   /// Request all screen capture permissions (both traditional TCC and ScreenCaptureKit)
+  @MainActor
   static func requestAllScreenCapturePermissions() {
     // 0. Ensure this app is the authoritative version in Launch Services
     // This fixes issues where stale registrations from old builds, DMGs, or Trash
