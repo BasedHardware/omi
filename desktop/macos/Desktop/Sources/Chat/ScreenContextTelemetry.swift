@@ -319,6 +319,8 @@ final class ScreenContextChatCycleMetrics: @unchecked Sendable {
 }
 
 enum ScreenContextWorkContextBuilder {
+  static let staleCaptureThresholdSeconds = 60
+
   static func payload(arguments: [String: Any]) async -> [String: Any] {
     let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
     let now = Date()
@@ -330,6 +332,19 @@ enum ScreenContextWorkContextBuilder {
     }
 
     guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
+      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
+        return [
+          "ok": true,
+          "name": "get_work_context",
+          "window_minutes": minutes,
+          "screen_now": fresh,
+          "timeline": [],
+          "latest_capture_age_seconds": 0,
+          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
+          "guidance":
+            "The local Rewind timeline database is unavailable, but this payload includes a fresh live screenshot for the current screen.",
+        ]
+      }
       return [
         "ok": false,
         "name": "get_work_context",
@@ -389,6 +404,14 @@ enum ScreenContextWorkContextBuilder {
       screenNow["failure_code"] = failureCode?.rawValue
     }
 
+    if shouldUseFreshCapture(screenNow: screenNow, latestCaptureAgeSeconds: latestCaptureAgeSeconds),
+      let fresh = freshScreenCapturePayload(now: now, formatter: formatter)
+    {
+      screenNow = fresh
+      failureCode = nil
+      latestCaptureAgeSeconds = 0
+    }
+
     var timeline: [[String: Any]] = []
     let calendar = Calendar.current
     func clock(_ date: Date) -> String {
@@ -438,6 +461,28 @@ enum ScreenContextWorkContextBuilder {
     return payload
   }
 
+  static func shouldUseFreshCapture(screenNow: [String: Any], latestCaptureAgeSeconds: Int?) -> Bool {
+    guard (screenNow["available"] as? Bool) == true else { return true }
+    guard let latestCaptureAgeSeconds else { return true }
+    return latestCaptureAgeSeconds > staleCaptureThresholdSeconds
+  }
+
+  static func freshScreenCapturePayload(now: Date = Date(), formatter: ISO8601DateFormatter = ISO8601DateFormatter()) -> [String: Any]? {
+    guard let data = ScreenCaptureManager.captureScreenData() else { return nil }
+    return [
+      "available": true,
+      "source": "live_capture_stale_rewind",
+      "timestamp": formatter.string(from: now),
+      "latest_capture_age_seconds": 0,
+      "image_mime": "image/webp",
+      "image_encoding": "base64",
+      "image_base64": data.base64EncodedString(),
+      "image_bytes": data.count,
+      "note":
+        "Fresh live screenshot captured because the latest finalized work-context frame was missing or older than 60 seconds. Use image_base64 directly for current-screen questions.",
+    ]
+  }
+
   static func permissionDeniedPayload(windowMinutes minutes: Int) -> [String: Any] {
     [
       "ok": false,
@@ -472,7 +517,7 @@ enum ScreenContextWorkContextBuilder {
     }
     if let screenNow = payload["screen_now"] as? [String: Any] {
       var compactScreen: [String: Any] = [:]
-      for key in ["available", "app_name", "window_title", "captured_at", "age_seconds"] {
+      for key in ["available", "app_name", "window_title", "captured_at", "age_seconds", "latest_capture_age_seconds", "source"] {
         if let value = screenNow[key] {
           compactScreen[key] = value
         }

@@ -84,9 +84,12 @@ final class ScreenContextTelemetryTests: XCTestCase {
       "ok": true,
       "screen_now": [
         "available": true,
+        "source": "live_capture_stale_rewind",
+        "latest_capture_age_seconds": 0,
         "app_name": "Safari",
         "window_title": "Docs",
         "ocr_preview": "Sensitive visible text",
+        "image_base64": "abc123",
         "image_bytes": 12345,
       ],
       "timeline": [
@@ -100,9 +103,38 @@ final class ScreenContextTelemetryTests: XCTestCase {
 
     XCTAssertTrue(output.contains(#""ambient":true"#))
     XCTAssertTrue(output.contains(#""app_name":"Safari""#))
+    XCTAssertTrue(output.contains(#""source":"live_capture_stale_rewind""#))
     XCTAssertFalse(output.contains("Sensitive visible text"))
+    XCTAssertFalse(output.contains("abc123"))
     XCTAssertFalse(output.contains("image_bytes"))
     XCTAssertTrue(output.contains(#""timeline_count":1"#))
+  }
+
+  func testWorkContextUsesFreshCaptureWhenFinalizedFrameIsStale() {
+    XCTAssertFalse(
+      ScreenContextWorkContextBuilder.shouldUseFreshCapture(
+        screenNow: ["available": true],
+        latestCaptureAgeSeconds: 60
+      )
+    )
+    XCTAssertTrue(
+      ScreenContextWorkContextBuilder.shouldUseFreshCapture(
+        screenNow: ["available": true],
+        latestCaptureAgeSeconds: 61
+      )
+    )
+    XCTAssertTrue(
+      ScreenContextWorkContextBuilder.shouldUseFreshCapture(
+        screenNow: ["available": false],
+        latestCaptureAgeSeconds: 0
+      )
+    )
+    XCTAssertTrue(
+      ScreenContextWorkContextBuilder.shouldUseFreshCapture(
+        screenNow: ["available": true],
+        latestCaptureAgeSeconds: nil
+      )
+    )
   }
 
   func testChatMessageSentPropertyNamesDoNotUseAmbiguousHasContext() throws {
