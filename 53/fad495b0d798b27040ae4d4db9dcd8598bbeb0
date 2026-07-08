@@ -1,0 +1,32 @@
+desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
+  s_897886a34066e7::t_fbcce160d873ab 246,546
+  s_897886a34066e7::t_87ced30d612481 1420
+  s_897886a34066e7::t_426085fefed5f9 216-231
+  s_897886a34066e7::t_37b3be20f94e9c 651,653,657
+  s_897886a34066e7::t_008854be997e41 1520
+  s_897886a34066e7::t_1ecdf8d673d59a 1553
+  s_897886a34066e7::t_db0d5f18b7b239 491-492
+  s_897886a34066e7::t_97be3366cae60b 613,622,633
+  s_897886a34066e7::t_04a3ff4f4cefd5 1577-1578
+  s_897886a34066e7::t_4cb738e8a34907 1597-1602
+  s_897886a34066e7::t_0eeb8dff314c90 1612,1615,1618,1623
+  s_897886a34066e7::t_481dd0b498f74b 1532,1538
+  s_897886a34066e7::t_00f752d2ab9cac 1634,1643,1646,1656
+  s_897886a34066e7::t_827fce66e68e0f 1437,1446
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "53fad495b0d798b27040ae4d4db9dcd8598bbeb0",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
