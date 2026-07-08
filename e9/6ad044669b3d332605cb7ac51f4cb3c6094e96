@@ -1,0 +1,37 @@
+backend/database/users.py
+  s_dce5329af2ed39::t_1b26ee0b5bb41c 1993-1999,2005-2006
+backend/utils/llm/user_tone_guide.py
+  s_dce5329af2ed39::t_86d91282f081be 193-265,267-292
+  s_dce5329af2ed39::t_79426a799b97a7 307-308,323-325,329
+  s_dce5329af2ed39::t_443c753e353cf8 19
+  s_dce5329af2ed39::t_ed92598ae71eca 266
+backend/tests/unit/test_user_tone_guide.py
+  s_dce5329af2ed39::t_3a23e6733bac58 115-127,133,143-162
+desktop/macos/Desktop/Sources/APIClient.swift
+  s_dce5329af2ed39::t_47312c94fdb351 469,475,479-499
+  s_897886a34066e7::t_b1d44ec5ac4193 500
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "e96ad044669b3d332605cb7ac51f4cb3c6094e96",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    },
+    "s_dce5329af2ed39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "17795923-7044-4827-b7aa-e05c0e30df95",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
