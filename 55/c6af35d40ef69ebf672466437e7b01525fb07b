@@ -1,0 +1,19 @@
+desktop/macos/changelog/unreleased/20260707-floating-bar-light-theme.json
+  s_897886a34066e7::t_9c5c2b32e7cad5 1-3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "55c6af35d40ef69ebf672466437e7b01525fb07b",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
