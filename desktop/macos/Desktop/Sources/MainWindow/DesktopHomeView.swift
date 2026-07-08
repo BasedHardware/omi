@@ -32,6 +32,13 @@ struct DesktopHomeView: View {
   @AppStorage("onboardingStep") private var onboardingStep = 0
   @AppStorage("onboardingJustCompleted") private var onboardingJustCompleted = false
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
+  /// Light-mode redesign (68px rail + warm-paper pages). On by default.
+  @AppStorage("useRedesign") private var useRedesign = true
+
+  /// True only when the redesigned, light-mode main app should be shown.
+  private var redesignActive: Bool {
+    useRedesign && authState.isSignedIn && appState.hasCompletedOnboarding
+  }
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -370,8 +377,8 @@ struct DesktopHomeView: View {
     }
     .background(OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
-    .preferredColorScheme(.dark)
-    .tint(OmiColors.purplePrimary)
+    .preferredColorScheme(redesignActive ? .light : .dark)
+    .tint(redesignActive ? Ink.ink : OmiColors.purplePrimary)
     .onAppear {
       log(
         "DesktopHomeView: View appeared - isSignedIn=\(authState.isSignedIn), hasCompletedOnboarding=\(appState.hasCompletedOnboarding)"
@@ -423,9 +430,10 @@ struct DesktopHomeView: View {
 
   private func enforceMainWindowMinimumSize() {
     let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
+    let useLightAppearance = redesignActive
     DispatchQueue.main.async {
       for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = NSAppearance(named: useLightAppearance ? .aqua : .darkAqua)
         window.contentMinSize = minimumContentSize
         window.minSize = window.frameRect(forContentRect: NSRect(origin: .zero, size: minimumContentSize)).size
 
@@ -783,8 +791,45 @@ struct DesktopHomeView: View {
       index == SidebarNavItem.memories.rawValue
   }
 
+  /// Redesigned content area: a slim presence top bar + the page. Redesigned pages
+  /// (home, more) render on warm-paper canvas; pages not yet converted render inside
+  /// a dark panel so they stay self-consistent until they're rebuilt.
+  @ViewBuilder private var redesignContentArea: some View {
+    let lightPage = (selectedIndex == 0 || selectedIndex == 20)
+    VStack(spacing: 0) {
+      RedesignTopBar(appState: appState)
+      if lightPage {
+        redesignPageContent
+      } else {
+        redesignPageContent
+          .background(OmiColors.backgroundPrimary)
+          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+          .padding(14)
+          .environment(\.colorScheme, .dark)
+      }
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Ink.canvas)
+  }
+
+  private var redesignPageContent: some View {
+    PageContentView(
+      selectedIndex: selectedIndex,
+      appState: appState,
+      viewModelContainer: viewModelContainer,
+      selectedSettingsSection: $selectedSettingsSection,
+      highlightedSettingId: $highlightedSettingId,
+      selectedTabIndex: $selectedIndex,
+      useRedesign: true
+    )
+  }
+
   private var mainContent: some View {
     HStack(spacing: 0) {
+      // Redesign: the minimal 68px icon rail replaces the old sidebar.
+      if redesignActive {
+        RedesignRail(selectedIndex: $selectedIndex, appState: appState)
+      }
       // Sidebar slot: settings sidebar overlays main sidebar
       // IMPORTANT: SidebarView is kept alive (but hidden) when in settings to prevent
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
@@ -834,7 +879,10 @@ struct DesktopHomeView: View {
         .clipped()
       }
 
-      // Main content area with rounded container
+      // Main content area
+      if redesignActive {
+        redesignContentArea
+      } else {
       ZStack {
         // Content container background
         RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
@@ -881,6 +929,7 @@ struct DesktopHomeView: View {
         .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
       }
       .padding(14)
+      }
     }
     .safeAreaInset(edge: .top, spacing: 0) {
       if usageLimiter.neoNeedsDesktopUpgrade && !neoDesktopBannerDismissed {
@@ -1107,18 +1156,29 @@ private struct PageContentView: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
+  var useRedesign: Bool = false
 
   var body: some View {
     Group {
       switch selectedIndex {
       case 0:
-        DashboardPage(
-          viewModel: viewModelContainer.dashboardViewModel,
-          appState: appState,
-          appProvider: viewModelContainer.appProvider,
-          chatProvider: viewModelContainer.chatProvider,
-          memoriesViewModel: viewModelContainer.memoriesViewModel,
-          selectedIndex: $selectedTabIndex)
+        if useRedesign {
+          RedesignHomePage(
+            appState: appState,
+            memoriesViewModel: viewModelContainer.memoriesViewModel,
+            dashboardViewModel: viewModelContainer.dashboardViewModel,
+            selectedIndex: $selectedTabIndex)
+        } else {
+          DashboardPage(
+            viewModel: viewModelContainer.dashboardViewModel,
+            appState: appState,
+            appProvider: viewModelContainer.appProvider,
+            chatProvider: viewModelContainer.chatProvider,
+            memoriesViewModel: viewModelContainer.memoriesViewModel,
+            selectedIndex: $selectedTabIndex)
+        }
+      case 20:
+        RedesignMorePage(selectedIndex: $selectedTabIndex)
       case 1:
         ConversationsPageHost(appState: appState)
       case 2:
