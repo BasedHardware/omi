@@ -1392,10 +1392,7 @@ struct DashboardPage: View {
                 screenAnalysisEnabled = false
                 isCaptureMonitoring = false
                 isTogglingCapture = false
-                ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    ScreenCaptureService.requestAllScreenCapturePermissions()
-                }
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 return
             }
         }
