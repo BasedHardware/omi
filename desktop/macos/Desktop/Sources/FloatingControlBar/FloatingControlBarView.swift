@@ -947,7 +947,7 @@ struct FloatingControlBarView: View {
                             LinearGradient(
                                 colors: [
                                     Color.white.opacity(0.9),
-                                    Color(red: 0.25, green: 0.75, blue: 1.0),
+                                    Color.white.opacity(0.85),
                                     Color.white.opacity(0.7)
                                 ],
                                 startPoint: .leading,
@@ -967,7 +967,7 @@ struct FloatingControlBarView: View {
             return LinearGradient(
                 colors: [
                     Color.white.opacity(0.9),
-                    Color(red: 0.50, green: 0.75, blue: 1.0),
+                    Color.white.opacity(0.8),
                     Color.white.opacity(0.7)
                 ],
                 startPoint: .leading,
@@ -1227,8 +1227,8 @@ private struct NotchResponseGlowView: View {
                         LinearGradient(
                             colors: [
                                 Color.white.opacity(1.0),
-                                Color(red: 0.72, green: 0.88, blue: 1.0).opacity(1.0),
-                                Color(red: 0.88, green: 0.95, blue: 1.0).opacity(1.0),
+                                Color.white.opacity(0.85),
+                                Color.white.opacity(0.92),
                                 Color.white.opacity(1.0)
                             ],
                             startPoint: .leading,
@@ -1243,9 +1243,9 @@ private struct NotchResponseGlowView: View {
                             stops: [
                                 .init(color: .clear, location: 0.0),
                                 .init(color: Color.white.opacity(0.55), location: 0.28),
-                                .init(color: Color(red: 0.22, green: 0.88, blue: 1.0).opacity(1.0), location: 0.45),
+                                .init(color: Color.white.opacity(1.0), location: 0.45),
                                 .init(color: Color.white.opacity(1.0), location: 0.53),
-                                .init(color: Color(red: 1.0, green: 0.96, blue: 0.92).opacity(0.95), location: 0.70),
+                                .init(color: Color.white.opacity(0.9), location: 0.70),
                                 .init(color: .clear, location: 1.0)
                             ],
                             startPoint: sweepStart,

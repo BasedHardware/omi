@@ -28,13 +28,13 @@ struct AskAIInputView: View {
                     HStack(spacing: 4) {
                         Text("esc")
                             .scaledFont(size: 11)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Ink.muted)
                             .frame(width: 30, height: 16)
-                            .background(Color.white.opacity(0.1))
+                            .background(Ink.hair)
                             .cornerRadius(4)
                         Text("to clear")
                             .scaledFont(size: 11)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Ink.muted)
                     }
                 }
                 .padding(.top, 8)
@@ -46,13 +46,14 @@ struct AskAIInputView: View {
                     if localInput.isEmpty && !hasMarkedText {
                         Text("Ask a question...")
                             .scaledFont(size: 13)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Ink.faint)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 8)
                     }
 
                     OmiTextEditor(
                         text: $localInput,
+                        textColor: NSColor(Ink.ink),
                         lineFragmentPadding: 8,
                         onSubmit: {
                             guard canSend else { return }
@@ -86,7 +87,7 @@ struct AskAIInputView: View {
                     Image(systemName: "arrow.up.circle.fill")
                         .scaledFont(size: 24)
                         .foregroundColor(
-                            canSend ? .white : .secondary
+                            canSend ? Ink.ink : Ink.faint
                         )
                 }
                 .disabled(!canSend)
@@ -96,6 +97,7 @@ struct AskAIInputView: View {
             .padding(.vertical, 12)
             .frame(maxWidth: .infinity)
         }
+        .environment(\.colorScheme, .light)
         .onExitCommand {
             onEscape?()
         }

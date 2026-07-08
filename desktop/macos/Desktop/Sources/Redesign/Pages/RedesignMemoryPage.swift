@@ -182,17 +182,28 @@ struct RedesignMemoryPage: View {
             FactRow(text: memory.content, meta: learnedFrom(for: memory))
           }
 
-          Text("Your brain map")
-            .font(InkFont.sans(11, .semibold))
-            .foregroundColor(Ink.faint)
-            .tracking(1.3)
-            .textCase(.uppercase)
-            .padding(.horizontal, 8)
-            .padding(.top, 18)
-            .padding(.bottom, 6)
+          HStack {
+            Text("Your brain map")
+              .font(InkFont.sans(11, .semibold))
+              .foregroundColor(Ink.faint)
+              .tracking(1.3)
+              .textCase(.uppercase)
+            Spacer()
+            Text("Open full map →")
+              .font(InkFont.sans(11, .semibold))
+              .foregroundColor(Ink.ink)
+          }
+          .padding(.horizontal, 8)
+          .padding(.top, 18)
+          .padding(.bottom, 6)
 
-          BrainMapPreview(labels: brainMapLabels)
-            .padding(.horizontal, 8)
+          Button {
+            NotificationCenter.default.post(
+              name: .navigateToSidebarItem, object: nil, userInfo: ["rawValue": 24])
+          } label: {
+            BrainMapPreview(labels: brainMapLabels).padding(.horizontal, 8)
+          }
+          .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 20)

@@ -17,17 +17,21 @@ import SwiftUI
 ///   never shows a frozen "last word."
 struct VoiceWaveformBars: View {
     let isActive: Bool
+    /// Bar color. White reads on the dark notch/pill chrome; pass `Ink.ink`
+    /// on the light expanded conversation surfaces. Never purple (off-brand).
+    var tint: Color = .white
 
     private static let barCount = 5
     private static let barWidth: CGFloat = 4
     private static let barSpacing: CGFloat = 3
     private static let barHeight: CGFloat = 18
-    private static let fillGradient = Gradient(colors: [OmiColors.purpleAccent, OmiColors.purplePrimary])
+    private var fillGradient: Gradient { Gradient(colors: [tint.opacity(0.72), tint]) }
 
     @State private var model: WaveBarsModel
 
-    init(isActive: Bool) {
+    init(isActive: Bool, tint: Color = .white) {
         self.isActive = isActive
+        self.tint = tint
         _model = State(initialValue: WaveBarsModel(barCount: Self.barCount))
     }
 
@@ -64,7 +68,7 @@ struct VoiceWaveformBars: View {
             context.fill(
                 path,
                 with: .linearGradient(
-                    Self.fillGradient,
+                    fillGradient,
                     startPoint: CGPoint(x: x, y: centerY - h / 2),
                     endPoint: CGPoint(x: x, y: centerY + h / 2)
                 )

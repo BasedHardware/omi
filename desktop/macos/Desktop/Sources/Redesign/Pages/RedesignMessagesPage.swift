@@ -23,6 +23,8 @@ struct RedesignMessagesPage: View {
   @State private var query: String = ""
   @State private var filter: MessagesFilter = .all
   @State private var autoReplyOn: Bool = false
+  /// Whether the right-side per-person "how omi messages them" card is open.
+  @State private var showPersonCard: Bool = false
 
   // MARK: Derived
 
@@ -217,27 +219,54 @@ struct RedesignMessagesPage: View {
   @ViewBuilder
   private var rightPane: some View {
     if let detail = selectedDetail {
-      VStack(spacing: 0) {
-        threadHeader(detail)
-        Divider().overlay(Ink.hair)
-        ScrollView {
-          VStack(alignment: .leading, spacing: 14) {
-            Text("Today").inkCaption().frame(maxWidth: .infinity, alignment: .center)
-            ForEach(detail.bubbles) { bubble in
-              ChatBubbleRow(bubble: bubble)
+      HStack(spacing: 0) {
+        VStack(spacing: 0) {
+          threadHeader(detail)
+          Divider().overlay(Ink.hair)
+          ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+              Text("Today").inkCaption().frame(maxWidth: .infinity, alignment: .center)
+              ForEach(detail.bubbles) { bubble in
+                ChatBubbleRow(bubble: bubble)
+              }
+              inlineBlock(detail.inline)
             }
-            inlineBlock(detail.inline)
+            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 22)
           }
-          .frame(maxWidth: 720, alignment: .leading)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 24)
-          .padding(.vertical, 22)
+          composer(detail.composer)
         }
-        composer(detail.composer)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+        if showPersonCard, let id = selectedThreadID {
+          PersonCard(
+            personID: id,
+            name: detail.name,
+            initials: detail.initials,
+            channelTitle: channel.title,
+            relationship: relationship(from: detail.sub),
+            brand: channel.brand,
+            onClose: { withAnimation(.easeInOut(duration: 0.18)) { showPersonCard = false } }
+          )
+          .frame(width: 340)
+          .frame(maxHeight: .infinity)
+          .background(Ink.soft)
+          .overlay(alignment: .leading) { Rectangle().fill(Ink.hair).frame(width: 1) }
+          .transition(.move(edge: .trailing).combined(with: .opacity))
+        }
       }
     } else {
       connectEmptyState
     }
+  }
+
+  /// Best-effort relationship label from a thread's subtitle (e.g. "iMessage · Omi team" → "Omi team").
+  private func relationship(from sub: String) -> String {
+    let parts = sub.components(separatedBy: " · ")
+    if parts.count > 1 { return parts.dropFirst().joined(separator: " · ") }
+    return "Contact"
   }
 
   private func threadHeader(_ detail: MsgDetail) -> some View {
@@ -254,10 +283,32 @@ struct RedesignMessagesPage: View {
       HStack(spacing: 10) {
         Text("Auto-reply").font(InkFont.sans(12.5)).foregroundColor(Ink.body)
         InkToggle(isOn: $autoReplyOn)
+        personButton
       }
     }
     .padding(.horizontal, 20)
     .padding(.vertical, 13)
+  }
+
+  /// Toggles the per-person "how omi sounds to them" card in the right rail.
+  private var personButton: some View {
+    Button {
+      withAnimation(.easeInOut(duration: 0.18)) { showPersonCard.toggle() }
+    } label: {
+      Image(systemName: "person.crop.circle")
+        .font(.system(size: 17, weight: .regular))
+        .foregroundColor(showPersonCard ? Ink.ink : Ink.faint)
+        .frame(width: 30, height: 30)
+        .background(
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(showPersonCard ? Ink.surface2 : .clear)
+            .overlay(
+              RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(showPersonCard ? Ink.hair : .clear, lineWidth: 1))
+        )
+    }
+    .buttonStyle(.plain)
+    .help("How omi messages this person")
   }
 
   @ViewBuilder
@@ -741,6 +792,312 @@ private struct AutoNote: View {
         .fill(Ink.accentTint)
         .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Ink.accent.opacity(0.25), lineWidth: 1))
     )
+  }
+}
+
+// MARK: - Person card (per-person messaging personality)
+
+/// How omi should sound to a specific person. Each control persists locally via
+/// `@AppStorage` keyed by the person's id, so the choices stick between launches.
+///
+/// **Storage keys** (all prefixed `msgPersona.<personID>.`): `autoReply` (Bool),
+/// `askBeforeSending` (Bool), `tone` (`PersonTone.rawValue`), `emoji` (`PersonEmoji.rawValue`),
+/// `length` (`PersonLength.rawValue`), `soundNote` (String). The future messaging PR reads the
+/// same keys — construct them the same way (`"msgPersona.\(id).<field>"`).
+private struct PersonCard: View {
+  let personID: String
+  let name: String
+  let initials: String
+  let channelTitle: String
+  let relationship: String
+  let brand: Color
+  var onClose: () -> Void
+
+  @AppStorage private var autoReply: Bool
+  @AppStorage private var askBeforeSending: Bool
+  @AppStorage private var toneRaw: String
+  @AppStorage private var emojiRaw: String
+  @AppStorage private var lengthRaw: String
+  @AppStorage private var soundNote: String
+
+  init(
+    personID: String, name: String, initials: String, channelTitle: String,
+    relationship: String, brand: Color, onClose: @escaping () -> Void
+  ) {
+    self.personID = personID
+    self.name = name
+    self.initials = initials
+    self.channelTitle = channelTitle
+    self.relationship = relationship
+    self.brand = brand
+    self.onClose = onClose
+    let base = "msgPersona.\(personID)."
+    _autoReply = AppStorage(wrappedValue: false, base + "autoReply")
+    _askBeforeSending = AppStorage(wrappedValue: true, base + "askBeforeSending")
+    _toneRaw = AppStorage(wrappedValue: PersonTone.shortDirect.rawValue, base + "tone")
+    _emojiRaw = AppStorage(wrappedValue: PersonEmoji.sometimes.rawValue, base + "emoji")
+    _lengthRaw = AppStorage(wrappedValue: PersonLength.short.rawValue, base + "length")
+    _soundNote = AppStorage(wrappedValue: "", base + "soundNote")
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      header
+      Divider().overlay(Ink.hair)
+      ScrollView {
+        VStack(alignment: .leading, spacing: 20) {
+          Text("How I message \(name)").inkEyebrow()
+
+          toggleRow(
+            "Auto-reply",
+            "Let me answer the routine ones for you and mark them.",
+            $autoReply)
+
+          segmentGroup(
+            "Tone", "How I carry myself with \(name).",
+            options: PersonTone.allCases.map { ($0.rawValue, $0.label) },
+            selection: $toneRaw)
+
+          segmentGroup(
+            "Emoji", "How often I reach for one.",
+            options: PersonEmoji.allCases.map { ($0.rawValue, $0.label) },
+            selection: $emojiRaw)
+
+          segmentGroup(
+            "Length", "How much I say by default.",
+            options: PersonLength.allCases.map { ($0.rawValue, $0.label) },
+            selection: $lengthRaw)
+
+          toggleRow(
+            "Always ask before sending",
+            "I'll hold every draft for your OK — nothing goes out on its own.",
+            $askBeforeSending)
+
+          soundField
+          samplePreview
+        }
+        .padding(16)
+      }
+    }
+  }
+
+  // MARK: Header
+
+  private var header: some View {
+    HStack(alignment: .top, spacing: 11) {
+      AvatarView(initials: initials, seed: name, size: 42, presence: brand, borderColor: Ink.soft)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(name).inkH3()
+        HStack(spacing: 5) {
+          Text(channelTitle).font(InkFont.sans(11.5, .medium)).foregroundColor(Ink.body)
+          Text("·").foregroundColor(Ink.faint)
+          Text(relationship).font(InkFont.sans(11.5)).foregroundColor(Ink.faint).lineLimit(1)
+        }
+      }
+      Spacer(minLength: 6)
+      Button(action: onClose) {
+        Image(systemName: "xmark")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(Ink.faint)
+          .frame(width: 26, height: 26)
+          .background(Circle().fill(Ink.surface2).overlay(Circle().strokeBorder(Ink.hair, lineWidth: 1)))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 14)
+  }
+
+  // MARK: Controls
+
+  private func toggleRow(_ title: String, _ sub: String, _ isOn: Binding<Bool>) -> some View {
+    HStack(alignment: .top, spacing: 12) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(InkFont.sans(13.5, .medium)).foregroundColor(Ink.ink)
+        Text(sub).inkCaption().fixedSize(horizontal: false, vertical: true)
+      }
+      Spacer(minLength: 8)
+      InkToggle(isOn: isOn)
+    }
+  }
+
+  private func segmentGroup(
+    _ title: String, _ sub: String, options: [(String, String)], selection: Binding<String>
+  ) -> some View {
+    VStack(alignment: .leading, spacing: 8) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(InkFont.sans(13.5, .medium)).foregroundColor(Ink.ink)
+        Text(sub).inkCaption()
+      }
+      InkSegmented(options: options, selection: selection)
+    }
+  }
+
+  private var soundField: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("How I should sound to \(name)").font(InkFont.sans(13.5, .medium)).foregroundColor(Ink.ink)
+      TextField(
+        "e.g. keep it casual, no work-speak, call me by my first name",
+        text: $soundNote, axis: .vertical
+      )
+      .textFieldStyle(.plain)
+      .font(InkFont.sans(13))
+      .foregroundColor(Ink.ink)
+      .lineLimit(2...5)
+      .padding(EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12))
+      .background(
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+          .fill(Ink.surface)
+          .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Ink.hair, lineWidth: 1))
+      )
+    }
+  }
+
+  // MARK: Live sample
+
+  private var samplePreview: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      HStack(spacing: 6) {
+        Image(systemName: "sparkles").font(.system(size: 11, weight: .semibold))
+        Text("Sample reply").font(InkFont.sans(11, .semibold)).tracking(1).textCase(.uppercase)
+      }
+      .foregroundColor(Ink.accentStrong)
+
+      Text(sampleReply)
+        .font(InkFont.sans(14))
+        .foregroundColor(Ink.ink)
+        .lineSpacing(3)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
+
+      Text("This is how a draft to \(name) would read with these settings.")
+        .inkCaption()
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .padding(14)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(
+      RoundedRectangle(cornerRadius: 14, style: .continuous)
+        .fill(Ink.accentTint)
+        .overlay(
+          RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .strokeBorder(Ink.accent, style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
+        )
+    )
+  }
+
+  /// Derives a plausible draft from the current settings — static/derived, no LLM.
+  private var sampleReply: String {
+    let tone = PersonTone(rawValue: toneRaw) ?? .shortDirect
+    let emoji = PersonEmoji(rawValue: emojiRaw) ?? .sometimes
+    let length = PersonLength(rawValue: lengthRaw) ?? .short
+
+    var text: String
+    switch tone {
+    case .shortDirect:
+      text = length == .short
+        ? "on it — sending now."
+        : "on it — I'll get that over to you now and follow up if anything's off."
+    case .warm:
+      text = length == .short
+        ? "yes! on it right now"
+        : "yes, happy to — I'll get that over to you now and shout if I need anything else."
+    case .formal:
+      text = length == .short
+        ? "Certainly — I'll send that shortly."
+        : "Of course. I'll have that sent over to you shortly and follow up if anything is unclear."
+    }
+
+    switch emoji {
+    case .off:
+      text = text.filter { !$0.isEmoji }.trimmingCharacters(in: .whitespaces)
+    case .sometimes:
+      if tone == .warm && !text.contains(where: { $0.isEmoji }) { text += " 🙂" }
+    case .matchThem:
+      if !text.contains(where: { $0.isEmoji }) { text += " 👍" }
+    }
+    return "\u{201C}" + text + "\u{201D}"
+  }
+}
+
+/// Per-person tone preset. Raw values are the persisted `msgPersona.<id>.tone` strings.
+private enum PersonTone: String, CaseIterable, Identifiable {
+  case shortDirect, warm, formal
+  var id: String { rawValue }
+  var label: String {
+    switch self {
+    case .shortDirect: return "Short & direct"
+    case .warm: return "Warm"
+    case .formal: return "Formal"
+    }
+  }
+}
+
+/// Per-person emoji preference. Raw values are the persisted `msgPersona.<id>.emoji` strings.
+private enum PersonEmoji: String, CaseIterable, Identifiable {
+  case off, sometimes, matchThem
+  var id: String { rawValue }
+  var label: String {
+    switch self {
+    case .off: return "Off"
+    case .sometimes: return "Sometimes"
+    case .matchThem: return "Match them"
+    }
+  }
+}
+
+/// Per-person default length. Raw values are the persisted `msgPersona.<id>.length` strings.
+private enum PersonLength: String, CaseIterable, Identifiable {
+  case short, normal
+  var id: String { rawValue }
+  var label: String {
+    switch self {
+    case .short: return "Short"
+    case .normal: return "Normal"
+    }
+  }
+}
+
+/// A compact Ink segmented control: pill track, active segment on `Ink.surface`.
+private struct InkSegmented: View {
+  let options: [(String, String)]  // (value, label)
+  @Binding var selection: String
+
+  var body: some View {
+    HStack(spacing: 4) {
+      ForEach(options, id: \.0) { value, label in
+        let active = value == selection
+        Text(label)
+          .font(InkFont.sans(12.5, active ? .semibold : .regular))
+          .foregroundColor(active ? Ink.ink : Ink.faint)
+          .lineLimit(1)
+          .minimumScaleFactor(0.85)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 7)
+          .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+              .fill(active ? Ink.surface : .clear)
+              .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                  .strokeBorder(active ? Ink.hair : .clear, lineWidth: 1))
+          )
+          .contentShape(Rectangle())
+          .onTapGesture { selection = value }
+      }
+    }
+    .padding(4)
+    .background(
+      RoundedRectangle(cornerRadius: 11, style: .continuous)
+        .fill(Ink.surface2)
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).strokeBorder(Ink.hair, lineWidth: 1))
+    )
+  }
+}
+
+/// Emoji detection for the sample-reply derivation (no external deps).
+extension Character {
+  fileprivate var isEmoji: Bool {
+    unicodeScalars.contains { $0.properties.isEmojiPresentation || $0.properties.isEmoji && $0.value > 0x238C }
   }
 }
 

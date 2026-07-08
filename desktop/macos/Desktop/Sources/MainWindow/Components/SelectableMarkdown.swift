@@ -13,6 +13,10 @@ import MarkdownUI
 struct SelectableMarkdown: View {
     let text: String
     let sender: ChatSender
+    /// Optional overrides so AI text/links can render in ink on the floating
+    /// bar's light conversation surface. Nil keeps the shared dark-chat colors.
+    var aiTextColor: Color?
+    var aiLinkColor: Color?
     @Environment(\.fontScale) private var fontScale
 
     // Cached parsed segments — pre-computed on init, recomputed only when text changes.
@@ -25,11 +29,15 @@ struct SelectableMarkdown: View {
     // Font scale at time of caching — used to invalidate when scale changes.
     @State private var cachedFontScale: CGFloat = 0
 
-    init(text: String, sender: ChatSender) {
+    init(text: String, sender: ChatSender, aiTextColor: Color? = nil, aiLinkColor: Color? = nil) {
         self.text = text
         self.sender = sender
+        self.aiTextColor = aiTextColor
+        self.aiLinkColor = aiLinkColor
         self._cachedSegments = State(initialValue: Self.splitSegments(text))
     }
+
+    private var resolvedAITextColor: Color { aiTextColor ?? OmiColors.textPrimary }
 
     var body: some View {
         Group {
@@ -81,7 +89,8 @@ struct SelectableMarkdown: View {
             }
             let processed = Self.preprocessText(content)
             return Self.styledAttributedString(
-                from: processed, sender: sender, fontSize: fontSize, fontScale: fontScale
+                from: processed, sender: sender, fontSize: fontSize, fontScale: fontScale,
+                aiTextColor: resolvedAITextColor, aiLinkColor: aiLinkColor
             )
         }()
 
@@ -92,7 +101,7 @@ struct SelectableMarkdown: View {
             } else {
                 Text(content)
                     .font(.system(size: fontSize))
-                    .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+                    .foregroundColor(sender == .user ? .white : resolvedAITextColor)
                     .if_available_writingToolsNone()
             }
         }
@@ -128,7 +137,7 @@ struct SelectableMarkdown: View {
         ScrollView(.horizontal, showsIndicators: false) {
             Text(code)
                 .font(.system(size: codeFontSize, design: .monospaced))
-                .foregroundColor(sender == .user ? .white : OmiColors.textPrimary)
+                .foregroundColor(sender == .user ? .white : resolvedAITextColor)
                 .if_available_writingToolsNone()
         }
         .padding(12)
@@ -139,7 +148,8 @@ struct SelectableMarkdown: View {
     // MARK: - Attributed String Styling
 
     private static func styledAttributedString(
-        from processed: String, sender: ChatSender, fontSize: CGFloat, fontScale: CGFloat
+        from processed: String, sender: ChatSender, fontSize: CGFloat, fontScale: CGFloat,
+        aiTextColor: Color = OmiColors.textPrimary, aiLinkColor: Color? = nil
     ) -> AttributedString? {
         guard var attributed = try? AttributedString(
             markdown: processed,
@@ -150,8 +160,8 @@ struct SelectableMarkdown: View {
         ) else { return nil }
 
         let codeFontSize = round(13 * fontScale)
-        let baseColor: Color = sender == .user ? .white : OmiColors.textPrimary
-        let linkColor: Color = sender == .user ? .white.opacity(0.9) : OmiColors.purplePrimary
+        let baseColor: Color = sender == .user ? .white : aiTextColor
+        let linkColor: Color = sender == .user ? .white.opacity(0.9) : (aiLinkColor ?? OmiColors.purplePrimary)
         let codeBgColor: Color = sender == .user
             ? .white.opacity(0.15)
             : OmiColors.backgroundTertiary

@@ -34,6 +34,8 @@ struct DesktopHomeView: View {
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   /// Light-mode redesign (68px rail + warm-paper pages). On by default.
   @AppStorage("useRedesign") private var useRedesign = true
+  /// Guided in-app walkthrough shown once, right after onboarding.
+  @AppStorage("hasSeenAppTour") private var hasSeenAppTour = false
 
   /// Whether the light-mode redesign is active. Sign-in, onboarding, and the main
   /// app are all redesigned, so the whole window goes warm-paper light when on.
@@ -612,7 +614,11 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if let item = resolvedAutomationTarget(target) {
+    if let numericIndex = Int(target) {
+      // Redesign routes (messages 23, brain map 24, etc.) have no SidebarNavItem;
+      // allow navigating to any page by its raw index.
+      selectedIndex = numericIndex
+    } else if let item = resolvedAutomationTarget(target) {
       selectedIndex = item.rawValue
     }
 
@@ -803,7 +809,7 @@ struct DesktopHomeView: View {
     // Every redesigned page is warm-paper light (Rewind included).
     let lightPage = true
     VStack(spacing: 0) {
-      RedesignTopBar(appState: appState)
+      RedesignTopBar(appState: appState, onNotifications: { selectedIndex = 6 })
       if lightPage {
         redesignPageContent
       } else {
@@ -962,6 +968,12 @@ struct DesktopHomeView: View {
       GoalCelebrationView()
     }
     .overlay {
+      // Guided walkthrough right after onboarding (redesign only, shown once).
+      if redesignActive && !hasSeenAppTour {
+        RedesignAppTour(selectedIndex: $selectedIndex, onFinish: { hasSeenAppTour = true })
+      }
+    }
+    .overlay {
       if showTryAskingPopup {
         let suggestions = PostOnboardingPromptSuggestions.suggestions()
         if !suggestions.isEmpty {
@@ -1028,10 +1040,10 @@ struct DesktopHomeView: View {
       selectedIndex = SidebarNavItem.tasks.rawValue
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
-      if let rawValue = notification.userInfo?["rawValue"] as? Int,
-        let item = SidebarNavItem(rawValue: rawValue)
-      {
-        selectedIndex = item.rawValue
+      // Accept any page index directly so redesign-only routes (brain map 24,
+      // messages 23, more 20) are reachable, not just legacy SidebarNavItems.
+      if let rawValue = notification.userInfo?["rawValue"] as? Int {
+        selectedIndex = rawValue
       }
     }
     .onChange(of: selectedIndex) { oldValue, newValue in

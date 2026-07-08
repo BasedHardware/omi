@@ -1,18 +1,22 @@
 import SwiftUI
 
-/// Slim window top bar for the redesign: the `omi` wordmark on the left and the
-/// live, clickable Capture / Listening presence chips on the right (mockup titlebar).
-/// Capture toggles screen monitoring; Listening toggles transcription.
+/// Slim window top bar for the redesign: the `omi` wordmark on the left; on the
+/// right, live Capture / Listening presence chips and a notification bell.
+/// Capture toggles screen monitoring; Listening toggles transcription; the bell
+/// opens Insights (where omi's proactive nudges live).
 struct RedesignTopBar: View {
   @ObservedObject var appState: AppState
+  @ObservedObject private var insightStorage = InsightStorage.shared
   @AppStorage("screenAnalysisEnabled") private var screenAnalysisEnabled = true
+  var onNotifications: () -> Void = {}
 
   var body: some View {
-    HStack {
+    HStack(spacing: 14) {
       Text("omi").inkWordmark(17)
       Spacer()
       PresenceChip(icon: "display", label: "Capture", on: screenAnalysisEnabled, toggle: toggleCapture)
       PresenceChip(icon: "mic", label: "Listening", on: appState.isTranscribing, toggle: toggleListening)
+      NotificationBell(unread: insightStorage.unreadCount, action: onNotifications)
     }
     .padding(.horizontal, 18)
     .frame(height: 40)
@@ -49,6 +53,31 @@ struct RedesignTopBar: View {
   }
 }
 
+private struct NotificationBell: View {
+  let unread: Int
+  let action: () -> Void
+  @State private var hovering = false
+
+  var body: some View {
+    Button(action: action) {
+      ZStack(alignment: .topTrailing) {
+        Image(systemName: "bell")
+          .font(.system(size: 14))
+          .foregroundColor(hovering ? Ink.ink : Ink.body)
+          .frame(width: 28, height: 28)
+          .background(Circle().fill(hovering ? Ink.surface2 : .clear))
+        if unread > 0 {
+          Circle().fill(Ink.warn).frame(width: 7, height: 7).offset(x: -4, y: 4)
+        }
+      }
+      .contentShape(Circle())
+    }
+    .buttonStyle(.plain)
+    .onHover { hovering = $0 }
+    .help(unread > 0 ? "\(unread) new — open notifications" : "Notifications")
+  }
+}
+
 private struct PresenceChip: View {
   let icon: String
   let label: String
@@ -70,8 +99,7 @@ private struct PresenceChip: View {
       }
       .padding(.horizontal, 8)
       .frame(height: 26)
-      .background(
-        Capsule().fill(hovering ? Ink.surface2 : .clear))
+      .background(Capsule().fill(hovering ? Ink.surface2 : .clear))
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)

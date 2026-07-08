@@ -2147,17 +2147,22 @@ extension Theme {
       }
   }
 
-  static func aiMessage(scale: CGFloat = 1.0) -> Theme {
+  static func aiMessage(
+    scale: CGFloat = 1.0,
+    textColor: Color = OmiColors.textPrimary,
+    linkColor: Color = OmiColors.purplePrimary,
+    codeBackground: Color = OmiColors.backgroundTertiary
+  ) -> Theme {
     Theme()
       .text {
-        ForegroundColor(OmiColors.textPrimary)
+        ForegroundColor(textColor)
         FontSize(round(14 * scale))
       }
       .code {
         FontFamilyVariant(.monospaced)
         FontSize(round(13 * scale))
-        ForegroundColor(OmiColors.textPrimary)
-        BackgroundColor(OmiColors.backgroundTertiary)
+        ForegroundColor(textColor)
+        BackgroundColor(codeBackground)
       }
       .codeBlock { configuration in
         ScrollView(.horizontal, showsIndicators: false) {
@@ -2165,18 +2170,18 @@ extension Theme {
             .markdownTextStyle {
               FontFamilyVariant(.monospaced)
               FontSize(round(13 * scale))
-              ForegroundColor(OmiColors.textPrimary)
+              ForegroundColor(textColor)
             }
         }
         .padding(12)
-        .background(OmiColors.backgroundTertiary)
+        .background(codeBackground)
         .cornerRadius(8)
       }
       .strong {
         FontWeight(.semibold)
       }
       .link {
-        ForegroundColor(OmiColors.purplePrimary)
+        ForegroundColor(linkColor)
       }
       .table { configuration in
         ScrollView(.horizontal, showsIndicators: false) {

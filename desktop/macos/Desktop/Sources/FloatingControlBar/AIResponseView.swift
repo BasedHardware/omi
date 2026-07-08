@@ -99,6 +99,7 @@ struct AIResponseView: View {
         .padding(.top, state.usesNotchIsland ? 0 : 16)
         .padding(.bottom, 16)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.colorScheme, .light)
         .animation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
         .onExitCommand {
             onEscape?()
@@ -129,11 +130,11 @@ struct AIResponseView: View {
                     .frame(width: 16, height: 16)
                 Text("thinking")
                     .scaledFont(size: 14)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Ink.muted)
             } else {
                 Text("omi says")
                     .scaledFont(size: 14)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(Ink.muted)
             }
 
             Spacer()
@@ -142,13 +143,13 @@ struct AIResponseView: View {
                 HStack(spacing: 4) {
                     Text("esc")
                         .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Ink.muted)
                         .frame(width: 30, height: 16)
-                        .background(Color.white.opacity(0.1))
+                        .background(Ink.hair)
                         .cornerRadius(4)
                     Text("to clear")
                         .scaledFont(size: 11)
-                        .foregroundColor(.secondary)
+                        .foregroundColor(Ink.muted)
                 }
             }
         }
@@ -164,9 +165,9 @@ struct AIResponseView: View {
             ForEach(grouped) { group in
                 switch group {
                 case .text(_, let text):
-                    SelectableMarkdown(text: text, sender: .ai)
+                    SelectableMarkdown(text: text, sender: .ai, aiTextColor: Ink.ink, aiLinkColor: Ink.accent)
                         .textSelection(.enabled)
-                        .environment(\.colorScheme, .dark)
+                        .environment(\.colorScheme, .light)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 case .toolCalls(_, let calls):
                     ToolCallsGroup(calls: calls)
@@ -180,9 +181,9 @@ struct AIResponseView: View {
                 }
             }
         } else if !message.text.isEmpty {
-            SelectableMarkdown(text: message.text, sender: .ai)
+            SelectableMarkdown(text: message.text, sender: .ai, aiTextColor: Ink.ink, aiLinkColor: Ink.accent)
                 .textSelection(.enabled)
-                .environment(\.colorScheme, .dark)
+                .environment(\.colorScheme, .light)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -229,13 +230,13 @@ struct AIResponseView: View {
                 HStack(alignment: .top, spacing: 8) {
                     Text(exchange.question ?? "")
                         .scaledFont(size: 13)
-                        .foregroundColor(.white)
+                        .foregroundColor(Ink.ink)
                         .lineLimit(2)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 8)
-                .background(Color.white.opacity(0.1))
+                .background(Ink.surface2)
                 .cornerRadius(8)
             }
 
@@ -255,7 +256,7 @@ struct AIResponseView: View {
                         ScrollView {
                             Text(userInput)
                                 .scaledFont(size: 13)
-                                .foregroundColor(.white)
+                                .foregroundColor(Ink.ink)
                                 .textSelection(.enabled)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -263,7 +264,7 @@ struct AIResponseView: View {
                     } else {
                         Text(userInput)
                             .scaledFont(size: 13)
-                            .foregroundColor(.white)
+                            .foregroundColor(Ink.ink)
                             .lineLimit(1)
                             .truncationMode(.head)
                             .textSelection(.enabled)
@@ -275,7 +276,7 @@ struct AIResponseView: View {
                     Button(action: { isQuestionExpanded.toggle() }) {
                         Image(systemName: isQuestionExpanded ? "chevron.up" : "chevron.down")
                             .scaledFont(size: 10)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(Ink.faint)
                             .frame(width: 20, height: 20)
                     }
                     .buttonStyle(.plain)
@@ -283,7 +284,7 @@ struct AIResponseView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color.white.opacity(0.1))
+            .background(Ink.surface2)
             .cornerRadius(8)
             .contextMenu {
                 Button("Copy") {
@@ -352,29 +353,29 @@ struct AIResponseView: View {
     private var voiceFollowUpView: some View {
         HStack(spacing: 8) {
             // Playful realtime mic waveform (replaces the old pulsing red dot)
-            VoiceWaveformBars(isActive: isVoiceFollowUp)
+            VoiceWaveformBars(isActive: isVoiceFollowUp, tint: Ink.ink)
 
             Image(systemName: "mic.fill")
                 .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.ink)
 
             if !voiceFollowUpTranscript.isEmpty {
                 Text(voiceFollowUpTranscript)
                     .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.8))
+                    .foregroundColor(Ink.body)
                     .lineLimit(2)
                     .truncationMode(.head)
             } else {
                 Text("Listening...")
                     .scaledFont(size: 13)
-                    .foregroundColor(.white.opacity(0.5))
+                    .foregroundColor(Ink.faint)
             }
 
             Spacer()
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(OmiColors.purplePrimary.opacity(0.12))
+        .background(Ink.surface2)
         .cornerRadius(8)
     }
 
@@ -390,7 +391,7 @@ struct AIResponseView: View {
             Button(action: { shareLink() }) {
                 Image(systemName: showShareFeedback ? "checkmark" : "arrowshape.turn.up.right")
                     .scaledFont(size: 13)
-                    .foregroundColor(showShareFeedback ? .green : .secondary)
+                    .foregroundColor(showShareFeedback ? Ink.live : Ink.muted)
             }
             .buttonStyle(.plain)
             .help("Copy share link")
@@ -399,9 +400,10 @@ struct AIResponseView: View {
             TextField("Ask follow up...", text: $followUpText)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 13)
+                .foregroundColor(Ink.ink)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(Color.white.opacity(0.1))
+                .background(Ink.surface2)
                 .cornerRadius(8)
                 .focused($isFollowUpFocused)
                 .onSubmit {
@@ -413,7 +415,7 @@ struct AIResponseView: View {
                     .scaledFont(size: 20)
                     .foregroundColor(
                         followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                            ? .secondary : .white
+                            ? Ink.faint : Ink.ink
                     )
             }
             .disabled(followUpText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -429,7 +431,7 @@ struct AIResponseView: View {
 
             Text("Share link copied to your clipboard")
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.sentText)
 
             Spacer(minLength: 0)
         }
@@ -594,7 +596,7 @@ struct MessageHoverOverlay<Content: View>: View {
                         Button(action: { showInfoPopover.toggle() }) {
                             Image(systemName: "info.circle")
                                 .scaledFont(size: 11)
-                                .foregroundColor(showInfoPopover ? .white : .secondary)
+                                .foregroundColor(showInfoPopover ? Ink.ink : .secondary)
                         }
                         .buttonStyle(.plain)
                         .help("View response context")
