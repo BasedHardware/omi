@@ -31,7 +31,7 @@ class RayBanMetaTransport extends DeviceTransport {
   static String _lastCameraState = 'stopped';
 
   RayBanMetaTransport(this._deviceId)
-    : _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
+      : _connectionStateController = StreamController<DeviceTransportState>.broadcast() {
     _ensureBridgeSetup();
     _instances.add(this);
   }
