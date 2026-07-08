@@ -1,0 +1,37 @@
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMorePage.swift
+  s_897886a34066e7::t_850fb8f070a492 1-71
+desktop/macos/Desktop/Sources/Redesign/RedesignRail.swift
+  s_897886a34066e7::t_a983b4daace9d4 1-165
+desktop/macos/changelog/unreleased/20260707-redesign-light-home-rail.json
+  s_897886a34066e7::t_f2865e0a625f0f 1-3
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignHomePage.swift
+  s_897886a34066e7::t_55359945015c7f 1-176
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_897886a34066e7::t_ad1ae9e417cb7c 380-381
+  s_897886a34066e7::t_0292a038f8e0bb 932
+  s_897886a34066e7::t_35df46aa9032b2 829-832
+  s_897886a34066e7::t_c65bc023c566c2 882-885
+  s_897886a34066e7::t_5545377e464384 1159,1165-1181
+  s_897886a34066e7::t_8dcbea2aa26161 794-825
+  s_897886a34066e7::t_0a3ba65faa34d2 35-41
+  s_897886a34066e7::t_bf7310eab652bf 433,436
+  s_897886a34066e7::t_c1393e119b3940 826
+desktop/macos/Desktop/Sources/Redesign/RedesignTopBar.swift
+  s_897886a34066e7::t_913d78725679b5 1-22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "b4a68a0e2a03c8524f127ed8eb153ba7d7e0f2a1",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
