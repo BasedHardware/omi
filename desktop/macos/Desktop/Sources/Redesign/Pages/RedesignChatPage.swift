@@ -223,16 +223,57 @@ struct RedesignChatPage: View {
     return blockText.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
+  /// Personalized starter prompts (built from onboarding context), with a
+  /// sensible fallback so the chat always offers dynamic suggestions.
+  private var suggestions: [String] {
+    let dynamic = PostOnboardingPromptSuggestions.suggestions()
+    if !dynamic.isEmpty { return Array(dynamic.prefix(4)) }
+    return [
+      "What should I focus on today to achieve my goals?",
+      "What did I spend my time on this week?",
+      "What's the highest-leverage thing I can do next?",
+      "Who am I overdue to reply to?",
+    ]
+  }
+
   private var emptyState: some View {
-    VStack(alignment: .leading, spacing: 12) {
+    VStack(alignment: .leading, spacing: 14) {
       Text("What do you want to know?")
         .inkDisplay(28)
       Text("I remember what you saw, said, and did — ask me anything and I'll answer from your own context.")
         .inkSmall()
         .fixedSize(horizontal: false, vertical: true)
+
+      VStack(spacing: 10) {
+        ForEach(suggestions, id: \.self) { suggestion in
+          Button { sendSuggestion(suggestion) } label: { suggestionRow(suggestion) }
+            .buttonStyle(.plain)
+        }
+      }
+      .padding(.top, 10)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
     .padding(.top, 40)
+  }
+
+  private func suggestionRow(_ text: String) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: "sparkles").font(.system(size: 13)).foregroundColor(Ink.faint)
+      Text(text).font(InkFont.sans(14, .medium)).foregroundColor(Ink.ink)
+      Spacer()
+      Image(systemName: "arrow.up.right").font(.system(size: 12)).foregroundColor(Ink.faint)
+    }
+    .padding(.horizontal, 16).frame(height: 52)
+    .background(
+      Capsule().fill(Ink.surface).overlay(Capsule().strokeBorder(Ink.hair, lineWidth: 1)))
+    .contentShape(Capsule())
+  }
+
+  private func sendSuggestion(_ text: String) {
+    guard !chatProvider.isSending else { return }
+    AnalyticsManager.shared.chatMessageSent(
+      messageLength: text.count, hasContext: false, source: "redesign_suggestion")
+    Task { await chatProvider.sendMessage(text) }
   }
 
   // MARK: - Footer composer

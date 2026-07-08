@@ -54,9 +54,9 @@ struct RedesignHomePage: View {
     ScrollView {
       VStack(alignment: .leading, spacing: 24) {
         header
-        nextCard
         askBar
         HomeLiveTranscript(isActive: appState.isTranscribing)
+        Spacer(minLength: 0)
         footer
       }
       .frame(maxWidth: 840, alignment: .leading)
