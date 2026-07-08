@@ -3715,6 +3715,10 @@
     "adapters": {
       "pi-mono": {
         "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true,
+        "condition": "screenContext"
       }
     },
     "surfaces": [
@@ -3774,7 +3778,8 @@
         "advertised": true
       },
       "omi-tools-stdio": {
-        "advertised": true
+        "advertised": true,
+        "condition": "screenContextOrOnboarding"
       }
     },
     "surfaces": [
@@ -3841,7 +3846,8 @@
         "advertised": true
       },
       "omi-tools-stdio": {
-        "advertised": true
+        "advertised": true,
+        "condition": "screenContextOrOnboarding"
       }
     },
     "surfaces": [
@@ -4563,6 +4569,10 @@
     "adapters": {
       "pi-mono": {
         "advertised": true
+      },
+      "omi-tools-stdio": {
+        "advertised": true,
+        "condition": "screenContext"
       },
       "local-agent-api": {
         "advertised": true

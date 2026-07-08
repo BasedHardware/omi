@@ -118,6 +118,54 @@ enum ScreenContextAutoIncludePolicy {
   }
 }
 
+struct ScreenContextTelemetryContext {
+  let surface: String
+  let surfaceKind: String?
+  let externalRefKind: String?
+  let externalRefId: String?
+  let runId: String?
+  let pillId: String?
+
+  static let desktopChat = ScreenContextTelemetryContext(surface: "desktop_chat")
+
+  init(
+    surface: String,
+    surfaceKind: String? = nil,
+    externalRefKind: String? = nil,
+    externalRefId: String? = nil,
+    runId: String? = nil,
+    pillId: String? = nil
+  ) {
+    self.surface = surface
+    self.surfaceKind = surfaceKind
+    self.externalRefKind = externalRefKind
+    self.externalRefId = externalRefId
+    self.runId = runId
+    self.pillId = pillId
+  }
+
+  static func from(
+    surfaceRef: AgentSurfaceReference?,
+    fallbackSurface: String = "desktop_chat",
+    runId: String? = nil
+  ) -> ScreenContextTelemetryContext {
+    guard let surfaceRef else {
+      return ScreenContextTelemetryContext(surface: fallbackSurface, runId: runId)
+    }
+    let surface = surfaceRef.surfaceKind.isEmpty ? fallbackSurface : surfaceRef.surfaceKind
+    let pillId = surfaceRef.externalRefKind == "pill" ? surfaceRef.externalRefId : nil
+    let resolvedRunId = runId ?? (surfaceRef.externalRefKind == "run" ? surfaceRef.externalRefId : nil)
+    return ScreenContextTelemetryContext(
+      surface: surface,
+      surfaceKind: surfaceRef.surfaceKind,
+      externalRefKind: surfaceRef.externalRefKind,
+      externalRefId: surfaceRef.externalRefId,
+      runId: resolvedRunId,
+      pillId: pillId
+    )
+  }
+}
+
 enum ScreenContextToolTelemetry {
   private static let screenContextTools: Set<String> = [
     "get_work_context",
@@ -141,7 +189,7 @@ enum ScreenContextToolTelemetry {
 
   static func trackToolResult(
     toolName: String,
-    surface: String,
+    context: ScreenContextTelemetryContext = .desktopChat,
     ok: Bool,
     failureCode: ScreenContextFailureCode? = nil,
     screenNowAvailable: Bool? = nil,
@@ -155,7 +203,7 @@ enum ScreenContextToolTelemetry {
     Task { @MainActor in
       AnalyticsManager.shared.screenContextToolResult(
         toolName: toolName,
-        surface: surface,
+        context: context,
         ok: ok,
         failureCode: failureCode?.rawValue,
         screenNowAvailable: screenNowAvailable,
@@ -165,6 +213,22 @@ enum ScreenContextToolTelemetry {
         imageBytesBucket: imageBytesBucket(imageBytes),
         permissionTCCGranted: permissionTCCGranted,
         sckAvailable: sckAvailable
+      )
+    }
+  }
+
+  static func trackInvariant(
+    _ name: String,
+    context: ScreenContextTelemetryContext = .desktopChat,
+    toolName: String? = nil,
+    properties: [String: Any] = [:]
+  ) {
+    Task { @MainActor in
+      AnalyticsManager.shared.screenContextInvariant(
+        name: name,
+        context: context,
+        toolName: toolName,
+        properties: properties
       )
     }
   }
@@ -215,6 +279,9 @@ enum ScreenContextToolTelemetry {
       )
     }
     if output.hasPrefix("PERMISSION_REQUIRED:"), output.contains("\"code\":\"permission_required\"") {
+      if !permissionErrorHasNextTool(output) {
+        trackInvariant("screen_tool_permission_error_missing_next_tool", toolName: toolName)
+      }
       return ScreenContextToolFacts(
         requested: true,
         succeeded: false,
@@ -238,6 +305,9 @@ enum ScreenContextToolTelemetry {
       let screenNow = json["screen_now"] as? [String: Any]
       let screenAvailable = (screenNow?["available"] as? Bool) == true
       let failureRaw = (json["failure_code"] as? String) ?? (screenNow?["failure_code"] as? String)
+      if failureRaw == ScreenContextFailureCode.permissionDenied.rawValue, !jsonPermissionErrorHasNextTool(json) {
+        trackInvariant("screen_tool_permission_error_missing_next_tool", toolName: toolName)
+      }
       return ScreenContextToolFacts(
         requested: true,
         succeeded: ok && screenAvailable,
@@ -257,6 +327,27 @@ enum ScreenContextToolTelemetry {
     }
 
     return nil
+  }
+
+  private static func permissionErrorHasNextTool(_ output: String) -> Bool {
+    let normalizedOutput = output
+      .replacingOccurrences(of: "PERMISSION_REQUIRED: ", with: "")
+    guard
+      let data = normalizedOutput.data(using: .utf8),
+      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    else {
+      return false
+    }
+    return jsonPermissionErrorHasNextTool(json)
+  }
+
+  private static func jsonPermissionErrorHasNextTool(_ json: [String: Any]) -> Bool {
+    guard json["next_tool"] as? String == "request_permission",
+      let args = json["next_tool_arguments"] as? [String: Any]
+    else {
+      return false
+    }
+    return args["type"] as? String == "screen_recording"
   }
 }
 
@@ -404,12 +495,25 @@ enum ScreenContextWorkContextBuilder {
       screenNow["failure_code"] = failureCode?.rawValue
     }
 
-    if shouldUseFreshCapture(screenNow: screenNow, latestCaptureAgeSeconds: latestCaptureAgeSeconds),
-      let fresh = freshScreenCapturePayload(now: now, formatter: formatter)
-    {
-      screenNow = fresh
-      failureCode = nil
-      latestCaptureAgeSeconds = 0
+    if shouldUseFreshCapture(screenNow: screenNow, latestCaptureAgeSeconds: latestCaptureAgeSeconds) {
+      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
+        screenNow = fresh
+        failureCode = nil
+        latestCaptureAgeSeconds = 0
+      } else if let latestCaptureAgeSeconds, latestCaptureAgeSeconds > staleCaptureThresholdSeconds {
+        failureCode = .imageUnavailable
+        screenNow = [
+          "available": false,
+          "failure_code": failureCode?.rawValue ?? ScreenContextFailureCode.imageUnavailable.rawValue,
+          "latest_capture_age_seconds": latestCaptureAgeSeconds,
+          "note": "Latest finalized work-context frame was older than 60 seconds and live capture was unavailable.",
+        ]
+        ScreenContextToolTelemetry.trackInvariant(
+          "stale_inspection_ignored",
+          toolName: "get_work_context",
+          properties: ["latest_capture_age_seconds": latestCaptureAgeSeconds]
+        )
+      }
     }
 
     var timeline: [[String: Any]] = []

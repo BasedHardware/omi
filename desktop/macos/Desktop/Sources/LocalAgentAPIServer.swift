@@ -347,7 +347,7 @@ final class LocalAgentAPIServer {
     let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
     ScreenContextToolTelemetry.trackToolResult(
       toolName: "get_work_context",
-      surface: "local_api",
+      context: ScreenContextTelemetryContext(surface: "local_api"),
       ok: telemetry.ok && telemetry.screenNowAvailable == true,
       failureCode: telemetry.failureCode,
       screenNowAvailable: telemetry.screenNowAvailable,
@@ -390,7 +390,7 @@ final class LocalAgentAPIServer {
       logError("LocalAgentAPIServer: get_screenshot lookup failed", error: error)
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "get_screenshot",
-        surface: "local_api",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .databaseUnavailable,
         permissionTCCGranted: CGPreflightScreenCaptureAccess()
@@ -400,7 +400,7 @@ final class LocalAgentAPIServer {
     guard let screenshot else {
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "get_screenshot",
-        surface: "local_api",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .imageUnavailable,
         permissionTCCGranted: CGPreflightScreenCaptureAccess()
@@ -413,7 +413,7 @@ final class LocalAgentAPIServer {
       let metadata = screenshotMetadata(screenshot, imageByteCount: imageData.count)
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "get_screenshot",
-        surface: "local_api",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: true,
         imageBytes: imageData.count,
         permissionTCCGranted: CGPreflightScreenCaptureAccess()
@@ -460,7 +460,7 @@ final class LocalAgentAPIServer {
       logError("LocalAgentAPIServer: get_screenshot failed", error: error)
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "get_screenshot",
-        surface: "local_api",
+        context: ScreenContextTelemetryContext(surface: "local_api"),
         ok: false,
         failureCode: .unknown,
         permissionTCCGranted: CGPreflightScreenCaptureAccess()
@@ -470,7 +470,7 @@ final class LocalAgentAPIServer {
 
     ScreenContextToolTelemetry.trackToolResult(
       toolName: "get_screenshot",
-      surface: "local_api",
+      context: ScreenContextTelemetryContext(surface: "local_api"),
       ok: false,
       failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,
       permissionTCCGranted: CGPreflightScreenCaptureAccess()

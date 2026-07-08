@@ -1175,7 +1175,9 @@ actor AgentRuntimeProcess {
       Task {
         let result = await ChatToolExecutor.execute(
           ToolCall(name: name, arguments: input, thoughtSignature: nil),
-          originatingClientScope: AgentClientScope.floatingPill
+          originatingClientScope: AgentClientScope.floatingPill,
+          originatingSurfaceRef: Self.trustedSurfaceReference(from: message.payload),
+          originatingRunId: Self.trustedRunId(from: message.payload["runId"])
         )
         self.completeToolCall(callId: callId, result: result, requestId: message.requestId, clientId: message.clientId)
       }
@@ -1190,6 +1192,60 @@ actor AgentRuntimeProcess {
       let result = await request.onToolCall(callId, name, input)
       completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
+  }
+
+  private static func trustedSurfaceReference(from payload: [String: Any]) -> AgentSurfaceReference? {
+    guard
+      let surfaceKind = payload["surfaceKind"] as? String,
+      let externalRefKind = payload["externalRefKind"] as? String,
+      let externalRefId = payload["externalRefId"] as? String,
+      isTrustedSurfaceKind(surfaceKind),
+      isTrustedExternalRefKind(externalRefKind),
+      isTrustedExternalRefId(externalRefId, kind: externalRefKind)
+    else {
+      return nil
+    }
+    return AgentSurfaceReference(
+      surfaceKind: surfaceKind,
+      externalRefKind: externalRefKind,
+      externalRefId: externalRefId
+    )
+  }
+
+  private static func trustedRunId(from value: Any?) -> String? {
+    guard let runId = value as? String else { return nil }
+    let trimmed = runId.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, trimmed.count <= 96, trimmed.hasPrefix("run_") else { return nil }
+    return trimmed
+  }
+
+  private static func isTrustedSurfaceKind(_ value: String) -> Bool {
+    [
+      "main_chat",
+      "task_chat",
+      "realtime",
+      "delegated_agent",
+      "background_agent",
+      "floating_bar",
+      "floating_pill",
+      "chat_lab",
+    ].contains(value)
+  }
+
+  private static func isTrustedExternalRefKind(_ value: String) -> Bool {
+    ["pill", "run", "chat", "task", "lab"].contains(value)
+  }
+
+  private static func isTrustedExternalRefId(_ value: String, kind: String) -> Bool {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, trimmed.count <= 128 else { return false }
+    if kind == "pill" {
+      return UUID(uuidString: trimmed) != nil
+    }
+    if kind == "run" {
+      return trustedRunId(from: trimmed) != nil
+    }
+    return true
   }
 
   private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {

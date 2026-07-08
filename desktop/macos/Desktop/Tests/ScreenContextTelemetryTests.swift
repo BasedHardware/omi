@@ -73,10 +73,30 @@ final class ScreenContextTelemetryTests: XCTestCase {
     XCTAssertTrue(output.contains(#""screen_recording":"not_granted""#))
     XCTAssertTrue(output.contains(#""next_tool":"request_permission""#))
     XCTAssertTrue(output.contains(#""type":"screen_recording""#))
+    XCTAssertEqual(payload["failure_code"] as? String, "permission_denied")
+    XCTAssertEqual(payload["next_tool"] as? String, "request_permission")
+    XCTAssertEqual((payload["next_tool_arguments"] as? [String: Any])?["type"] as? String, "screen_recording")
 
     let facts = ScreenContextToolTelemetry.toolResultFacts(toolName: "get_work_context", output: output)
     XCTAssertEqual(facts?.failureCode, .permissionDenied)
     XCTAssertEqual(facts?.succeeded, false)
+  }
+
+  func testTelemetryContextDerivesSurfaceRunAndPillIdentifiers() {
+    let pillId = UUID()
+    let pillContext = ScreenContextTelemetryContext.from(surfaceRef: .floatingPill(pillId: pillId))
+    XCTAssertEqual(pillContext.surface, "floating_bar")
+    XCTAssertEqual(pillContext.surfaceKind, "floating_bar")
+    XCTAssertEqual(pillContext.externalRefKind, "pill")
+    XCTAssertEqual(pillContext.externalRefId, pillId.uuidString)
+    XCTAssertEqual(pillContext.pillId, pillId.uuidString)
+    XCTAssertNil(pillContext.runId)
+
+    let runContext = ScreenContextTelemetryContext.from(surfaceRef: .floatingBarRun(runId: "run-123"))
+    XCTAssertEqual(runContext.surface, "floating_bar")
+    XCTAssertEqual(runContext.externalRefKind, "run")
+    XCTAssertEqual(runContext.runId, "run-123")
+    XCTAssertNil(runContext.pillId)
   }
 
   func testAmbientPayloadMinimizesScreenContext() throws {
@@ -135,6 +155,21 @@ final class ScreenContextTelemetryTests: XCTestCase {
         latestCaptureAgeSeconds: nil
       )
     )
+  }
+
+  func testStaleWorkContextDropsScreenNowWhenFreshCaptureFails() throws {
+    let source = try String(
+      contentsOf: URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .appendingPathComponent("Sources/Chat/ScreenContextTelemetry.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(source.contains("failureCode = .imageUnavailable"))
+    XCTAssertTrue(source.contains(#""available": false"#))
+    XCTAssertTrue(source.contains(#""Latest finalized work-context frame was older than 60 seconds and live capture was unavailable.""#))
+    XCTAssertTrue(source.contains(#""stale_inspection_ignored""#))
   }
 
   func testChatMessageSentPropertyNamesDoNotUseAmbiguousHasContext() throws {

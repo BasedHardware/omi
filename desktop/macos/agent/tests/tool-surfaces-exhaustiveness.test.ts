@@ -103,6 +103,11 @@ describe("tool surface exhaustiveness", () => {
         name: tool.name,
         schema: tool.inputSchema,
       })),
+      ...mcpToolDefinitionsForAdapter("omi-tools-stdio", { screenContext: true }).map((tool) => ({
+        surface: "mcp:screenContext",
+        name: tool.name,
+        schema: tool.inputSchema,
+      })),
       ...generatedRealtimeToolDefinitions().map((tool) => ({
         surface: "realtime",
         name: tool.name,

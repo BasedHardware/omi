@@ -62,6 +62,23 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertFalse(processSource.contains("Swift-backed Omi tools are unavailable for control-created agent runs"))
   }
 
+  func testControlCreatedToolTelemetryUsesTrustedContextOnly() throws {
+    let processSourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    let processSource = try String(contentsOf: processSourceURL, encoding: .utf8)
+
+    XCTAssertTrue(processSource.contains("originatingSurfaceRef: Self.trustedSurfaceReference(from: message.payload)"))
+    XCTAssertTrue(processSource.contains("originatingRunId: Self.trustedRunId(from: message.payload[\"runId\"])"))
+    XCTAssertTrue(processSource.contains("private static func trustedSurfaceReference(from payload: [String: Any])"))
+    XCTAssertTrue(processSource.contains("isTrustedSurfaceKind(surfaceKind)"))
+    XCTAssertTrue(processSource.contains("isTrustedExternalRefId(externalRefId, kind: externalRefKind)"))
+    XCTAssertTrue(processSource.contains("if kind == \"pill\" {\n      return UUID(uuidString: trimmed) != nil"))
+    XCTAssertTrue(processSource.contains("trimmed.hasPrefix(\"run_\")"))
+    XCTAssertFalse(processSource.contains("originatingRunId: message.payload[\"runId\"] as? String"))
+  }
+
   func testV2MessagesWithoutClientIdDoNotHaveRequestKey() {
     let message = AgentRuntimeProcess.RuntimeMessage.parse(
       #"{"type":"result","protocolVersion":2,"requestId":"req-1","sessionId":"omi-1","runId":"run-1","attemptId":"attempt-1","terminalStatus":"succeeded","text":"done"}"#

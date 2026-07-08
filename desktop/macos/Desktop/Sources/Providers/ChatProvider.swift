@@ -2228,7 +2228,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 onTextDelta: { _ in },
                 onToolCall: { callId, name, input in
                     let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-                    let result = await ChatToolExecutor.execute(toolCall, originatingChatMode: currentChatMode)
+                    let result = await ChatToolExecutor.execute(
+                        toolCall,
+                        originatingChatMode: currentChatMode,
+                        originatingSurfaceRef: .chatLab(labSessionId: labSessionId)
+                    )
                     log("ChatLab: tool \(name) executed")
                     return result
                 },
@@ -3312,6 +3316,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         var toolStartTimes: [String: Date] = [:]
         let responseMetrics = ChatResponseMetrics()
         var completedResponseText: String?
+        var screenContextEligibleForTurn = false
 
         // Stall detection.
         // The detector observes every bridge event (text deltas, tool
@@ -3392,6 +3397,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     // Ambient floating/task-agent turns are allowed to use screen context when already granted,
                     // but they must not manufacture a screen-permission request for generic utterances.
                 } else {
+                    screenContextEligibleForTurn = true
                     let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
                     let screenContextPayload = screenContextReason.isExplicitScreenRequest
                         ? rawScreenContextPayload
@@ -3467,7 +3473,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 let result = await ChatToolExecutor.execute(
                     toolCall,
                     originatingChatMode: currentChatMode,
-                    originatingClientScope: currentToolClientScope)
+                    originatingClientScope: currentToolClientScope,
+                    originatingSurfaceRef: resolvedSurface)
                 log("OMI tool \(name) executed for callId=\(callId)")
                 responseMetrics.recordToolResult(name: name, result: result)
                 return result
@@ -3649,6 +3656,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             // Determine the final text to display and save
             let messageText: String
             let metricsSnapshot = responseMetrics.snapshot()
+            if screenContextEligibleForTurn, !metricsSnapshot.screenContext.screenToolRequested {
+                ScreenContextToolTelemetry.trackInvariant(
+                    "eligible_run_missing_get_work_context",
+                    context: ScreenContextTelemetryContext.from(surfaceRef: resolvedSurface),
+                    toolName: "get_work_context"
+                )
+            }
             if let index = messages.firstIndex(where: { $0.id == aiMessageId }) {
                 // Message still in memory — update it in-place
                 messageText = messages[index].text.isEmpty ? queryResult.text : messages[index].text

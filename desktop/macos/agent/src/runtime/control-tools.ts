@@ -618,6 +618,7 @@ export async function handleAgentControlToolCall(
             requestId,
             clientId: parsed.clientId,
             adapterId,
+            screenContext: true,
           }),
         });
         return stringifyToolResult({
@@ -650,6 +651,7 @@ export async function handleAgentControlToolCall(
             requestId,
             clientId: parsed.clientId,
             adapterId,
+            screenContext: true,
           }),
         });
         return stringifyToolResult({
@@ -669,6 +671,11 @@ export async function handleAgentControlToolCall(
           parsed.adapterId ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
           (parsed.parentRunId ? undefined : "acp");
+        const visiblePillExternalRefId = parsed.visible
+          ? (parsed.externalRefId ?? randomUUID())
+          : parsed.externalRefId;
+        const childSurfaceKind = parsed.visible ? "floating_bar" : "delegated_agent";
+        const childExternalRefKind = parsed.visible ? "pill" : undefined;
         const mcpServers = buildControlRunMcpServers(context, {
           mode: "act",
           cwd: parsed.cwd,
@@ -676,10 +683,11 @@ export async function handleAgentControlToolCall(
           requestId,
           clientId: parsed.clientId,
           adapterId: adapterId ?? "acp",
+          surfaceKind: childSurfaceKind,
+          externalRefKind: childExternalRefKind,
+          externalRefId: visiblePillExternalRefId,
+          screenContext: true,
         });
-        const visiblePillExternalRefId = parsed.visible
-          ? (parsed.externalRefId ?? randomUUID())
-          : parsed.externalRefId;
         if (parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
             mode: "spawn",
@@ -689,8 +697,8 @@ export async function handleAgentControlToolCall(
             requestId,
             adapterId,
             defaultAdapterId: adapterId,
-            childSurfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
-            childExternalRefKind: parsed.visible ? "pill" : undefined,
+            childSurfaceKind,
+            childExternalRefKind,
             childExternalRefId: visiblePillExternalRefId,
             childTitle: parsed.title ?? `Delegated: ${parsed.objective.slice(0, 80)}`,
             cwd: parsed.cwd,
@@ -713,8 +721,8 @@ export async function handleAgentControlToolCall(
           requestId,
           prompt: parsed.objective,
           title: parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`,
-          surfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
-          externalRefKind: parsed.visible ? "pill" : undefined,
+          surfaceKind: childSurfaceKind,
+          externalRefKind: childExternalRefKind,
           externalRefId: visiblePillExternalRefId,
           adapterId,
           defaultAdapterId: adapterId,
@@ -763,6 +771,7 @@ export async function handleAgentControlToolCall(
             requestId,
             clientId: parsed.clientId,
             adapterId,
+            screenContext: true,
           }),
         });
         return stringifyToolResult({
@@ -814,6 +823,10 @@ function buildControlRunMcpServers(
     requestId: string;
     clientId: string;
     adapterId: string;
+    surfaceKind?: string;
+    externalRefKind?: string;
+    externalRefId?: string;
+    screenContext?: boolean;
   }
 ): Record<string, unknown>[] | undefined {
   if (!context.buildMcpServers) {
@@ -825,7 +838,11 @@ function buildControlRunMcpServers(
     clientId: input.clientId,
     adapterId: input.adapterId,
     protocolVersion: 2,
+    surfaceKind: input.surfaceKind,
+    externalRefKind: input.externalRefKind,
+    externalRefId: input.externalRefId,
     includeSwiftBackedTools: true,
+    screenContext: input.screenContext === true,
   });
   return servers;
 }

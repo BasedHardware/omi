@@ -123,6 +123,7 @@ final class AgentPillsManager: ObservableObject {
     /// INV-8: ephemeral UI only — tracks in-flight projection poll/send tasks per pill;
     /// canonical run truth lives in the kernel (`canonicalSessionId` / `canonicalRunId`).
     private var runTasksByPill: [UUID: Task<Void, Never>] = [:]
+    private var runAttemptGenerationByPill: [UUID: Int] = [:]
     private var viewedExpirationWorkItemsByPill: [UUID: DispatchWorkItem] = [:]
     private var pendingFollowUpsByPill: [UUID: [PendingAgentFollowUp]] = [:]
 
@@ -713,6 +714,7 @@ final class AgentPillsManager: ObservableObject {
         let modelForSpawn = bridgeHarnessOverride == nil
             ? (FloatingControlBarManager.shared.sharedFloatingProvider?.modelOverride ?? pill.model)
             : nil
+        let generation = nextRunAttemptGeneration(for: pill.id)
         let runTask = Task { @MainActor [weak self, weak pill] in
             guard !Task.isCancelled else { return }
             guard let self, let pill else { return }
@@ -728,15 +730,15 @@ final class AgentPillsManager: ObservableObject {
                     harnessMode: bridgeHarnessOverride,
                     cwd: workingDirectory
                 )
-                pill.canonicalSessionId = accepted.sessionId
-                pill.canonicalRunId = accepted.runId
-                pill.canonicalAttemptId = accepted.attemptId
-                if Task.isCancelled || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
+                if Task.isCancelled || !self.isCurrentRunAttempt(pillID: pill.id, generation: generation) || !self.pills.contains(where: { $0.id == pill.id }) || pill.status.isFinished {
                     Task {
                         _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: accepted.runId)
                     }
                     return
                 }
+                pill.canonicalSessionId = accepted.sessionId
+                pill.canonicalRunId = accepted.runId
+                pill.canonicalAttemptId = accepted.attemptId
                 pill.title = accepted.title
                 pill.status = .running
                 pill.completedAt = nil
@@ -760,9 +762,9 @@ final class AgentPillsManager: ObservableObject {
                     )
                     return
                 }
-                await self.pollCanonicalRun(for: pill)
+                await self.pollCanonicalRun(for: pill, generation: generation)
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
                 AgentRuntimeStatusStore.shared.recordLocalFailure(
                     surface: surfaceRef,
                     error: error.localizedDescription
@@ -823,12 +825,13 @@ final class AgentPillsManager: ObservableObject {
         let workingDirectory = FloatingControlBarManager.shared.sharedFloatingProvider?.workingDirectory
         let activeRunId = pill.canonicalRunId
         runTasksByPill[pill.id]?.cancel()
+        let generation = nextRunAttemptGeneration(for: pill.id)
         let runTask = Task { @MainActor [weak self, weak pill] in
             guard let self, let pill else { return }
             guard !Task.isCancelled else { return }
             do {
                 if let activeRunId, !activeRunId.isEmpty, !pill.status.isFinished {
-                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill) {
+                    switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill, generation: generation) {
                     case .stopped:
                         break
                     case .cancelled:
@@ -837,7 +840,7 @@ final class AgentPillsManager: ObservableObject {
                         pendingFollowUpsByPill[pill.id, default: []].append(PendingAgentFollowUp(text: text, attachments: attachments))
                         pill.latestActivity = "Queued follow-up until the current run stops…"
                         pill.markContentChanged()
-                        await self.pollCanonicalRun(for: pill)
+                        await self.pollCanonicalRun(for: pill, generation: generation)
                         guard self.pills.contains(where: { $0.id == pill.id }) else { return }
                         let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []
                         if !queuedFollowUps.isEmpty {
@@ -861,11 +864,17 @@ final class AgentPillsManager: ObservableObject {
                     model: pill.bridgeHarnessOverride == nil ? pill.model : nil,
                     cwd: workingDirectory
                 )
-                guard !Task.isCancelled else { return }
-                pill.canonicalRunId = result.runId ?? pill.canonicalRunId
-                self.apply(inspection: result, to: pill)
+                guard !Task.isCancelled, self.isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
+                guard pill.canonicalSessionId == sessionId else { return }
+                self.updateCanonicalRun(
+                    for: pill,
+                    runId: result.runId ?? pill.canonicalRunId,
+                    attemptId: result.attemptId,
+                    preservingAttemptForSameRun: true
+                )
+                self.apply(inspection: result, to: pill, expectedRunId: pill.canonicalRunId, expectedAttemptId: pill.canonicalAttemptId)
             } catch {
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled, self.isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
                 self.fail(pill: pill, errorText: error.localizedDescription)
             }
         }
@@ -878,7 +887,34 @@ final class AgentPillsManager: ObservableObject {
         case failed
     }
 
-    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult {
+    private func nextRunAttemptGeneration(for pillID: UUID) -> Int {
+        let next = (runAttemptGenerationByPill[pillID] ?? 0) + 1
+        runAttemptGenerationByPill[pillID] = next
+        return next
+    }
+
+    private func isCurrentRunAttempt(pillID: UUID, generation: Int) -> Bool {
+        runAttemptGenerationByPill[pillID] == generation
+    }
+
+    private func updateCanonicalRun(
+        for pill: AgentPill,
+        runId nextRunId: String?,
+        attemptId nextAttemptId: String?,
+        preservingAttemptForSameRun: Bool
+    ) {
+        let previousRunId = pill.canonicalRunId
+        pill.canonicalRunId = nextRunId
+        if nextRunId != previousRunId {
+            pill.canonicalAttemptId = nextAttemptId
+        } else if preservingAttemptForSameRun {
+            pill.canonicalAttemptId = nextAttemptId ?? pill.canonicalAttemptId
+        } else {
+            pill.canonicalAttemptId = nextAttemptId
+        }
+    }
+
+    private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill, generation: Int) async -> ActiveRunCancellationResult {
         do {
             _ = try await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId, reason: "Interrupted by follow-up")
         } catch {
@@ -887,6 +923,8 @@ final class AgentPillsManager: ObservableObject {
         }
         for _ in 0..<20 {
             if Task.isCancelled { return .cancelled }
+            guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return .cancelled }
+            guard pill.canonicalRunId == runId else { return .cancelled }
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(runId: runId)
                 let status = inspection.status
@@ -1076,6 +1114,7 @@ final class AgentPillsManager: ObservableObject {
         let runId = pill?.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
+        runAttemptGenerationByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
         pendingFollowUpsByPill[pillID] = nil
@@ -1085,6 +1124,20 @@ final class AgentPillsManager: ObservableObject {
                 _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
             }
         }
+    }
+
+    private func removeRenderedProjection(pillID: UUID) {
+        if recordingPillID == pillID {
+            recordingPillID = nil
+            PushToTalkManager.shared.cancelPillFollowUp(for: pillID)
+        }
+        runTasksByPill[pillID]?.cancel()
+        runTasksByPill[pillID] = nil
+        runAttemptGenerationByPill[pillID] = nil
+        viewedExpirationWorkItemsByPill[pillID]?.cancel()
+        viewedExpirationWorkItemsByPill[pillID] = nil
+        pendingFollowUpsByPill[pillID] = nil
+        pills.removeAll { $0.id == pillID }
     }
 
     /// Remove all completed (done or failed) pills.
@@ -1159,8 +1212,10 @@ final class AgentPillsManager: ObservableObject {
     private func mergeProjectedPills(from floating: [[String: Any]]) {
         var seen = Set<UUID>()
         for entry in floating {
-            let idString = (entry["id"] as? String) ?? (entry["runId"] as? String) ?? ""
-            guard let pillId = UUID(uuidString: idString) ?? stablePillUUID(from: idString) else { continue }
+            guard let pillId = canonicalPillId(from: entry),
+                  let sessionId = canonicalString(entry["sessionId"]),
+                  let runId = canonicalString(entry["runId"])
+            else { continue }
             seen.insert(pillId)
             let query = (entry["query"] as? String) ?? (entry["latestActivity"] as? String) ?? ""
             let model = ShortcutSettings.shared.selectedModel.isEmpty
@@ -1175,12 +1230,9 @@ final class AgentPillsManager: ObservableObject {
             if let title = entry["title"] as? String, !title.isEmpty {
                 pill.title = title
             }
-            if let sessionId = entry["sessionId"] as? String {
-                pill.canonicalSessionId = sessionId
-            }
-            if let runId = entry["runId"] as? String {
-                pill.canonicalRunId = runId
-            }
+            pill.canonicalSessionId = sessionId
+            pill.canonicalRunId = runId
+            pill.canonicalAttemptId = canonicalString(entry["attemptId"])
             applyProjectedStatus((entry["status"] as? String) ?? "running", to: pill)
             if let activity = entry["latestActivity"] as? String, !activity.isEmpty {
                 pill.latestActivity = activity
@@ -1188,11 +1240,18 @@ final class AgentPillsManager: ObservableObject {
             pill.markContentChanged()
         }
         let removable = pills.filter { pill in
-            guard let runId = pill.canonicalRunId, !runId.isEmpty else { return false }
-            return !seen.contains(pill.id) && pill.status.isFinished
+            if runTasksByPill[pill.id] != nil {
+                return false
+            }
+            guard let sessionId = pill.canonicalSessionId, !sessionId.isEmpty,
+                  let runId = pill.canonicalRunId, !runId.isEmpty
+            else {
+                return !hasLocalTransientState(pillID: pill.id)
+            }
+            return !seen.contains(pill.id)
         }
         for pill in removable {
-            cleanup(pillID: pill.id)
+            removeRenderedProjection(pillID: pill.id)
         }
         objectWillChange.send()
     }
@@ -1227,39 +1286,19 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func stablePillUUID(from value: String) -> UUID? {
-        guard !value.isEmpty else { return nil }
-        var bytes = [UInt8](repeating: 0, count: 16)
-        let hash = value.utf8.reduce(into: UInt64(0)) { partial, byte in
-            partial = partial &* 31 &+ UInt64(byte)
-        }
-        withUnsafeMutableBytes(of: &bytes) { raw in
-            raw[0] = UInt8(truncatingIfNeeded: hash)
-            raw[1] = UInt8(truncatingIfNeeded: hash >> 8)
-            raw[2] = UInt8(truncatingIfNeeded: hash >> 16)
-            raw[3] = UInt8(truncatingIfNeeded: hash >> 24)
-            raw[4] = UInt8(truncatingIfNeeded: hash >> 32)
-            raw[5] = UInt8(truncatingIfNeeded: hash >> 40)
-            raw[6] = UInt8(truncatingIfNeeded: hash >> 48)
-            raw[7] = UInt8(truncatingIfNeeded: hash >> 56)
-            let swapped = hash.byteSwapped
-            raw[8] = UInt8(truncatingIfNeeded: swapped)
-            raw[9] = UInt8(truncatingIfNeeded: swapped >> 8)
-            raw[10] = UInt8(truncatingIfNeeded: swapped >> 16)
-            raw[11] = UInt8(truncatingIfNeeded: swapped >> 24)
-            raw[12] = UInt8(truncatingIfNeeded: swapped >> 32)
-            raw[13] = UInt8(truncatingIfNeeded: swapped >> 40)
-            raw[14] = UInt8(truncatingIfNeeded: swapped >> 48)
-            raw[15] = UInt8(truncatingIfNeeded: swapped >> 56)
-        }
-        bytes[6] = (bytes[6] & 0x0F) | 0x40
-        bytes[8] = (bytes[8] & 0x3F) | 0x80
-        return UUID(uuid: (
-            bytes[0], bytes[1], bytes[2], bytes[3],
-            bytes[4], bytes[5], bytes[6], bytes[7],
-            bytes[8], bytes[9], bytes[10], bytes[11],
-            bytes[12], bytes[13], bytes[14], bytes[15]
-        ))
+    private func canonicalPillId(from entry: [String: Any]) -> UUID? {
+        guard let idString = canonicalString(entry["pillId"]) ?? canonicalString(entry["id"]) else { return nil }
+        return UUID(uuidString: idString)
+    }
+
+    private func canonicalString(_ value: Any?) -> String? {
+        guard let text = value as? String else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private func hasLocalTransientState(pillID: UUID) -> Bool {
+        recordingPillID == pillID || pendingFollowUpsByPill[pillID]?.isEmpty == false
     }
 
     func snapshotJSON(limit: Int = 20) -> String {
@@ -1295,15 +1334,46 @@ final class AgentPillsManager: ObservableObject {
         }?.id
     }
 
-    private func pollCanonicalRun(for pill: AgentPill) async {
+    private func pollCanonicalRun(for pill: AgentPill, generation: Int) async {
         while !Task.isCancelled {
+            guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
             guard pills.contains(where: { $0.id == pill.id }) else { return }
-            guard let runId = pill.canonicalRunId else { return }
+            guard let runId = pill.canonicalRunId, !runId.isEmpty else { return }
+            let attemptId = pill.canonicalAttemptId
             do {
                 let inspection = try await DesktopCoordinatorService.shared.inspectAgentRun(
                     runId: runId
                 )
-                apply(inspection: inspection, to: pill)
+                guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }
+                guard pill.canonicalRunId == runId else {
+                    ScreenContextToolTelemetry.trackInvariant(
+                        "stale_inspection_ignored",
+                        context: ScreenContextTelemetryContext.from(
+                            surfaceRef: .floatingPill(pillId: pill.id),
+                            runId: runId
+                        ),
+                        properties: [
+                            "expected_run_id": runId,
+                            "current_run_id": pill.canonicalRunId ?? "",
+                        ]
+                    )
+                    return
+                }
+                if let attemptId, pill.canonicalAttemptId != attemptId {
+                    ScreenContextToolTelemetry.trackInvariant(
+                        "stale_inspection_ignored",
+                        context: ScreenContextTelemetryContext.from(
+                            surfaceRef: .floatingPill(pillId: pill.id),
+                            runId: runId
+                        ),
+                        properties: [
+                            "expected_attempt_id": attemptId,
+                            "current_attempt_id": pill.canonicalAttemptId ?? "",
+                        ]
+                    )
+                    return
+                }
+                apply(inspection: inspection, to: pill, expectedRunId: runId, expectedAttemptId: attemptId)
                 if pill.status.isFinished { return }
             } catch {
                 logError("AgentPills: failed to inspect canonical run \(runId)", error: error)
@@ -1312,9 +1382,31 @@ final class AgentPillsManager: ObservableObject {
         }
     }
 
-    private func apply(inspection: DesktopCoordinatorAgentRunInspection, to pill: AgentPill) {
+    private func apply(
+        inspection: DesktopCoordinatorAgentRunInspection,
+        to pill: AgentPill,
+        expectedRunId: String?,
+        expectedAttemptId: String?
+    ) {
+        if let expectedRunId, let inspectedRunId = inspection.runId, inspectedRunId != expectedRunId {
+            return
+        }
+        if let expectedAttemptId, let inspectedAttemptId = inspection.attemptId, inspectedAttemptId != expectedAttemptId {
+            return
+        }
+        if let expectedRunId, pill.canonicalRunId != expectedRunId {
+            return
+        }
+        if let expectedAttemptId, pill.canonicalAttemptId != expectedAttemptId {
+            return
+        }
         pill.canonicalSessionId = inspection.sessionId ?? pill.canonicalSessionId
-        pill.canonicalRunId = inspection.runId ?? pill.canonicalRunId
+        updateCanonicalRun(
+            for: pill,
+            runId: inspection.runId ?? pill.canonicalRunId,
+            attemptId: inspection.attemptId,
+            preservingAttemptForSameRun: true
+        )
         switch inspection.status {
         case "queued", "starting":
             pill.status = .starting

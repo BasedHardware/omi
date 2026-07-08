@@ -31,8 +31,51 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(source.contains("AgentRuntimeStatusStore.shared.recordAcceptedRun("))
-    XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill)"))
+    XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill, generation: generation)"))
     XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
+  }
+
+  func testFloatingPillProjectionMergeRequiresCanonicalKernelIds() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)"))
+    XCTAssertTrue(source.contains("guard let pillId = canonicalPillId(from: entry),"))
+    XCTAssertTrue(source.contains("let sessionId = canonicalString(entry[\"sessionId\"]),"))
+    XCTAssertTrue(source.contains("let runId = canonicalString(entry[\"runId\"])"))
+    XCTAssertTrue(source.contains("pill.canonicalSessionId = sessionId"))
+    XCTAssertTrue(source.contains("pill.canonicalRunId = runId"))
+    XCTAssertTrue(source.contains("pill.canonicalAttemptId = canonicalString(entry[\"attemptId\"])"))
+    XCTAssertTrue(source.contains("removeRenderedProjection(pillID: pill.id)"))
+    XCTAssertFalse(source.contains("stablePillUUID"))
+    XCTAssertFalse(source.contains("UUID(uuidString: idString) ??"))
+  }
+
+  func testFloatingPillInspectResultsAreGuardedByCurrentRunAttempt() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("private var runAttemptGenerationByPill: [UUID: Int] = [:]"))
+    XCTAssertTrue(source.contains("let generation = nextRunAttemptGeneration(for: pill.id)"))
+    XCTAssertTrue(source.contains("guard isCurrentRunAttempt(pillID: pill.id, generation: generation) else { return }"))
+    XCTAssertTrue(source.contains("apply(inspection: inspection, to: pill, expectedRunId: runId, expectedAttemptId: attemptId)"))
+    XCTAssertTrue(source.contains("guard pill.canonicalRunId == runId else"))
+    XCTAssertTrue(source.contains("if let attemptId, pill.canonicalAttemptId != attemptId"))
+    XCTAssertTrue(source.contains("guard pill.canonicalSessionId == sessionId else { return }"))
+    XCTAssertTrue(source.contains("if let expectedRunId, let inspectedRunId = inspection.runId, inspectedRunId != expectedRunId"))
+    XCTAssertTrue(source.contains("if let expectedAttemptId, let inspectedAttemptId = inspection.attemptId, inspectedAttemptId != expectedAttemptId"))
+    XCTAssertTrue(source.contains("if let expectedRunId, pill.canonicalRunId != expectedRunId"))
+    XCTAssertTrue(source.contains("if let expectedAttemptId, pill.canonicalAttemptId != expectedAttemptId"))
+    XCTAssertTrue(source.contains("\"stale_inspection_ignored\""))
+  }
+
+  func testFloatingPillRunChangesResetAttemptAndPreserveTransients() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("private func updateCanonicalRun("))
+    XCTAssertTrue(source.contains("if nextRunId != previousRunId {\n            pill.canonicalAttemptId = nextAttemptId"))
+    XCTAssertTrue(source.contains("preservingAttemptForSameRun: true"))
+    XCTAssertTrue(source.contains("return !hasLocalTransientState(pillID: pill.id)"))
+    XCTAssertTrue(source.contains("private func hasLocalTransientState(pillID: UUID) -> Bool"))
+    XCTAssertTrue(source.contains("recordingPillID == pillID || pendingFollowUpsByPill[pillID]?.isEmpty == false"))
   }
 
   func testFinishedAgentArtifactsAreDeliveredToParentChatSurfaces() throws {
@@ -700,8 +743,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(hubSource.contains("return .deferredForReplacement"))
     XCTAssertTrue(hubSource.contains("return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
-    XCTAssertTrue(hubSource.contains("if provider == .gemini, let speculativeScreenshot"))
-    XCTAssertTrue(hubSource.contains("session?.sendVideoFrame(speculativeScreenshot, mime: \"image/jpeg\")"))
+    XCTAssertTrue(hubSource.contains("Do not upload raw pixels speculatively"))
+    XCTAssertTrue(hubSource.contains("let shot = speculativeScreenshot ?? ScreenCaptureManager.captureScreenData()"))
+    XCTAssertTrue(hubSource.contains("if sessionProvider == .gemini, let shot { session?.sendVideoFrame(shot, mime: \"image/jpeg\") }"))
     XCTAssertTrue(hubSource.contains("responding = false\n    realtimePlaybackActive = false"))
     XCTAssertTrue(hubSource.contains("exitVoiceUI(clearResponseGlow: true)"))
     XCTAssertTrue(hubSource.contains("responding = false\n      exitVoiceUI(clearResponseGlow: true)\n      return .rejectedNoSession"))
@@ -1029,10 +1073,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("let queuedFollowUps = self.pendingFollowUpsByPill.removeValue(forKey: pill.id) ?? []"))
     XCTAssertTrue(source.contains("text: queuedFollowUps.map(\\.text).joined(separator: \"\\n\\n\")"))
     XCTAssertTrue(source.contains("attachments: queuedFollowUps.flatMap(\\.attachments)"))
-    XCTAssertTrue(source.contains("switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill)"))
+    XCTAssertTrue(source.contains("switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill, generation: generation)"))
     XCTAssertTrue(source.contains("case .cancelled:\n                        return"))
     XCTAssertTrue(source.contains("private enum ActiveRunCancellationResult"))
-    XCTAssertTrue(source.contains("private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill) async -> ActiveRunCancellationResult"))
+    XCTAssertTrue(source.contains("private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill, generation: Int) async -> ActiveRunCancellationResult"))
     XCTAssertTrue(source.contains("let shouldCancelRun = pill?.status.isFinished == false"))
     XCTAssertTrue(source.contains("pendingFollowUpsByPill[pillID] = nil"))
     XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)"))

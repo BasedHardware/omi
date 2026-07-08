@@ -82,18 +82,24 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });
 
-  it("projects permission tools broadly and keeps onboarding-only tools scoped", () => {
+  it("projects permission tools only for screen-context stdio and keeps onboarding-only tools scoped", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));
+    const screenContext = new Set(toolNamesForAdapter("omi-tools-stdio", { screenContext: true }));
 
-    expect(regular.has("request_permission")).toBe(true);
-    expect(regular.has("check_permission_status")).toBe(true);
+    expect(regular.has("request_permission")).toBe(false);
+    expect(regular.has("check_permission_status")).toBe(false);
     expect(regular.has("get_email_insights")).toBe(false);
     expect(regular.has("capture_screen")).toBe(false);
     expect(regular.has("get_work_context")).toBe(false);
     expect(onboarding.has("request_permission")).toBe(true);
+    expect(onboarding.has("check_permission_status")).toBe(true);
     expect(onboarding.has("get_email_insights")).toBe(true);
     expect(onboarding.has("capture_screen")).toBe(false);
+    expect(screenContext.has("request_permission")).toBe(true);
+    expect(screenContext.has("check_permission_status")).toBe(true);
+    expect(screenContext.has("get_work_context")).toBe(true);
+    expect(screenContext.has("capture_screen")).toBe(true);
   });
 
   it("emits MCP tool definitions from the same projection", () => {

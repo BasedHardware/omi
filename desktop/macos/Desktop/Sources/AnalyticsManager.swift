@@ -562,7 +562,7 @@ class AnalyticsManager {
 
   func screenContextToolResult(
     toolName: String,
-    surface: String,
+    context: ScreenContextTelemetryContext,
     ok: Bool,
     failureCode: String?,
     screenNowAvailable: Bool?,
@@ -576,9 +576,10 @@ class AnalyticsManager {
     guard !Self.isDevBuild else { return }
     var props: [String: Any] = [
       "tool_name": toolName,
-      "surface": surface,
+      "surface": context.surface,
       "ok": ok,
     ]
+    addScreenContextProperties(context, to: &props)
     if let failureCode { props["failure_code"] = failureCode }
     if let screenNowAvailable { props["screen_now_available"] = screenNowAvailable }
     if let timelineCount { props["timeline_count"] = timelineCount }
@@ -588,6 +589,33 @@ class AnalyticsManager {
     if let permissionTCCGranted { props["permission_tcc_granted"] = permissionTCCGranted }
     if let sckAvailable { props["sck_available"] = sckAvailable }
     PostHogManager.shared.track("desktop_screen_context_result", properties: props)
+  }
+
+  func screenContextInvariant(
+    name: String,
+    context: ScreenContextTelemetryContext,
+    toolName: String?,
+    properties: [String: Any] = [:]
+  ) {
+    guard !Self.isDevBuild else { return }
+    var props = properties
+    props["invariant"] = name
+    props["surface"] = context.surface
+    if let toolName { props["tool_name"] = toolName }
+    addScreenContextProperties(context, to: &props)
+    PostHogManager.shared.track("desktop_screen_context_invariant", properties: props)
+  }
+
+  private func addScreenContextProperties(_ context: ScreenContextTelemetryContext, to props: inout [String: Any]) {
+    if let surfaceKind = context.surfaceKind { props["surface_kind"] = boundedAnalyticsIdentifier(surfaceKind) }
+    if let externalRefKind = context.externalRefKind { props["external_ref_kind"] = boundedAnalyticsIdentifier(externalRefKind) }
+    if let externalRefId = context.externalRefId { props["external_ref_id"] = boundedAnalyticsIdentifier(externalRefId) }
+    if let runId = context.runId { props["run_id"] = boundedAnalyticsIdentifier(runId) }
+    if let pillId = context.pillId { props["pill_id"] = boundedAnalyticsIdentifier(pillId) }
+  }
+
+  private func boundedAnalyticsIdentifier(_ value: String) -> String {
+    String(value.trimmingCharacters(in: .whitespacesAndNewlines).prefix(128))
   }
 
   /// Track individual tool calls made by the Claude agent

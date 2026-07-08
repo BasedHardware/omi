@@ -18,6 +18,7 @@ import {
   withMergedOwnerGuard,
 } from "../src/runtime/control-tools.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "../src/runtime/control-tool-manifest.js";
+import { toolNamesForAdapter } from "../src/runtime/omi-tool-manifest.js";
 import { baseRunInput, createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const createdDirs: string[] = [];
@@ -1596,7 +1597,11 @@ describe("agent control tools", () => {
       adapterId: "fake",
       protocolVersion: 2,
       includeSwiftBackedTools: true,
+      screenContext: true,
     });
+    expect(toolNamesForAdapter("omi-tools-stdio", { screenContext: true })).toEqual(
+      expect.arrayContaining(["get_work_context", "request_permission", "check_permission_status", "capture_screen"]),
+    );
     expect(adapter.opened.at(-1)?.mcpServers).toEqual([
       {
         name: "omi-tools",
@@ -1645,6 +1650,7 @@ describe("agent control tools", () => {
       adapterId: "openclaw",
       protocolVersion: 2,
       includeSwiftBackedTools: true,
+      screenContext: true,
     });
     store.close();
   });
@@ -1757,9 +1763,10 @@ describe("agent control tools", () => {
     const { store, adapter, kernel } = createKernelHarness(newDatabasePath());
     const parent = await kernel.executeRun(baseRunInput);
     adapter.deferResult();
+    const buildMcpServers = vi.fn(() => []);
 
     const spawned = parseToolResult(
-      await handleAgentControlToolCall(ownerContext(kernel), "spawn_agent", {
+      await handleAgentControlToolCall({ ...ownerContext(kernel), buildMcpServers }, "spawn_agent", {
         parentRunId: parent.run.runId,
         objective: "run in the background",
         visible: false,
@@ -1773,6 +1780,18 @@ describe("agent control tools", () => {
     expect(spawned.result).toBeUndefined();
     expect(spawned.session.sessionId).not.toBe(parent.session.sessionId);
     expect(spawned.run.status).toBe("queued");
+    expect(buildMcpServers).toHaveBeenCalledWith("act", undefined, undefined, {
+      ownerId: "owner",
+      requestId: "delegate-spawn-1",
+      clientId: "delegate-client",
+      adapterId: "acp",
+      protocolVersion: 2,
+      surfaceKind: "delegated_agent",
+      externalRefKind: undefined,
+      externalRefId: undefined,
+      includeSwiftBackedTools: true,
+      screenContext: true,
+    });
     await waitUntil(() => adapter.executed.length === 2);
 
     const running = parseToolResult(

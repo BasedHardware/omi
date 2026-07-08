@@ -5,7 +5,12 @@ import {
 } from "./control-tool-manifest.js";
 
 export type OmiToolAdapterId = "pi-mono" | "omi-tools-stdio" | "local-agent-api";
-export type OmiToolCondition = "always" | "onboardingOnly" | "nonOnboarding";
+export type OmiToolCondition =
+  | "always"
+  | "onboardingOnly"
+  | "nonOnboarding"
+  | "screenContext"
+  | "screenContextOrOnboarding";
 export type OmiToolExecutorKind = "swiftTool" | "runtimeControl" | "nodeTool" | "localApiOnly";
 export type OmiToolTimeoutClass = "normal" | "long";
 export type OmiToolSurface = "desktop_chat" | "realtime_voice" | "onboarding" | "task_chat";
@@ -91,6 +96,7 @@ interface OmiToolSurfacePatch {
 
 export interface OmiToolProjectionContext {
   onboarding?: boolean;
+  screenContext?: boolean;
 }
 
 export interface OmiToolAvailabilitySnapshot {
@@ -159,6 +165,28 @@ function piAndLocalApi(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailab
   return {
     "pi-mono": { advertised: true },
     "local-agent-api": { advertised: true },
+  };
+}
+
+function piLocalApiAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
+  return {
+    "pi-mono": { advertised: true },
+    "omi-tools-stdio": { advertised: true, condition: "screenContext" },
+    "local-agent-api": { advertised: true },
+  };
+}
+
+function piAndScreenContextStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
+  return {
+    "pi-mono": { advertised: true },
+    "omi-tools-stdio": { advertised: true, condition: "screenContext" },
+  };
+}
+
+function piAndScreenContextOrOnboardingStdio(): Partial<Record<OmiToolAdapterId, OmiToolAdapterAvailability>> {
+  return {
+    "pi-mono": { advertised: true },
+    "omi-tools-stdio": { advertised: true, condition: "screenContextOrOnboarding" },
   };
 }
 
@@ -1007,7 +1035,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires macOS Screen Recording permission."],
-    adapters: { "pi-mono": { advertised: true } },
+    adapters: { "pi-mono": { advertised: true }, "omi-tools-stdio": { advertised: true, condition: "screenContext" } },
   },
   {
     name: "check_permission_status",
@@ -1027,7 +1055,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires local desktop app."],
-    adapters: piAndStdio(),
+    adapters: piAndScreenContextOrOnboardingStdio(),
   },
   {
     name: "request_permission",
@@ -1057,7 +1085,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires local desktop app; some macOS permissions require the user to toggle Settings manually."],
-    adapters: piAndStdio(),
+    adapters: piAndScreenContextOrOnboardingStdio(),
   },
   {
     name: "scan_files",
@@ -1282,7 +1310,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool" },
     intendedForAgents: true,
     runtimePreconditions: ["Requires local Rewind database; raw screenshot pixels still require separate approval."],
-    adapters: piAndLocalApi(),
+    adapters: piLocalApiAndScreenContextStdio(),
   },
 ];
 
@@ -1434,6 +1462,8 @@ export function isToolAvailableForContext(
   if (!availability?.advertised) return false;
   if (availability.condition === "onboardingOnly") return context.onboarding === true;
   if (availability.condition === "nonOnboarding") return context.onboarding !== true;
+  if (availability.condition === "screenContext") return context.screenContext === true;
+  if (availability.condition === "screenContextOrOnboarding") return context.screenContext === true || context.onboarding === true;
   return true;
 }
 

@@ -128,7 +128,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       {
         "ok": true,
         "session": {"sessionId": "ses_pill"},
-        "run": {"runId": "run_pill", "status": "running"}
+        "run": {"runId": "run_pill", "status": "running"},
+        "attempt": {"attemptId": "att_pill"}
       }
       """
     )
@@ -142,10 +143,42 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let inspection = try await service.inspectAgentRun(runId: " run_pill ")
 
     XCTAssertEqual(inspection.runId, "run_pill")
+    XCTAssertEqual(inspection.attemptId, "att_pill")
     let call = try XCTUnwrap(runtime.calls.first)
     XCTAssertEqual(call.name, "get_agent_run")
     XCTAssertEqual(Set(call.input.keys), ["runId"])
     XCTAssertEqual(call.input["runId"] as? String, "run_pill")
+  }
+
+  @MainActor
+  func testInspectAgentRunParsesKnownAttemptIdShapes() async throws {
+    for (attemptShape, expected) in [
+      (#""attempt": {"attemptId": "att_nested"}"#, "att_nested"),
+      (#""attemptId": "att_top""#, "att_top"),
+      (#""run": {"runId": "run_pill", "status": "running", "attemptId": "att_run"}"#, "att_run"),
+    ] {
+      let runShape = attemptShape.hasPrefix(#""run":"#)
+        ? attemptShape
+        : #""run": {"runId": "run_pill", "status": "running"},"# + attemptShape
+      let runtime = RecordingCoordinatorRuntime(
+        response: """
+        {
+          "ok": true,
+          "session": {"sessionId": "ses_pill"},
+          \(runShape)
+        }
+        """
+      )
+      let service = DesktopCoordinatorService(
+        runtime: runtime,
+        clientId: "test-desktop-coordinator",
+        harnessModeProvider: { AgentHarnessMode.piMono.rawValue },
+        checkpointDefaults: UserDefaults(suiteName: "DesktopCoordinatorServiceTests.inspectShapes.\(expected)")!
+      )
+
+      let inspection = try await service.inspectAgentRun(runId: "run_pill")
+      XCTAssertEqual(inspection.attemptId, expected)
+    }
   }
 
   @MainActor

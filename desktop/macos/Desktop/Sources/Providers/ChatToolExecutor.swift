@@ -80,9 +80,15 @@ class ChatToolExecutor {
   static func execute(
     _ toolCall: ToolCall,
     originatingChatMode: ChatMode? = nil,
-    originatingClientScope: String? = nil
+    originatingClientScope: String? = nil,
+    originatingSurfaceRef: AgentSurfaceReference? = nil,
+    originatingRunId: String? = nil
   ) async -> String {
     log("Executing tool: \(toolCall.name) with args: \(toolCall.arguments)")
+    let telemetryContext = ScreenContextTelemetryContext.from(
+      surfaceRef: originatingSurfaceRef,
+      runId: originatingRunId
+    )
 
     if case .deny(let message) = localPolicyDecision(toolName: toolCall.name, arguments: toolCall.arguments) {
       log("Tool \(toolCall.name) denied by local policy")
@@ -91,7 +97,7 @@ class ChatToolExecutor {
           message.hasPrefix("PERMISSION_REQUIRED:") ? .permissionDenied : .policyApprovalRequired
         ScreenContextToolTelemetry.trackToolResult(
           toolName: toolCall.name,
-          surface: "desktop_chat",
+          context: telemetryContext,
           ok: false,
           failureCode: failureCode,
           permissionTCCGranted: CGPreflightScreenCaptureAccess()
@@ -197,10 +203,10 @@ class ChatToolExecutor {
       return result
 
     case .captureScreen:
-      return await executeCaptureScreen()
+      return await executeCaptureScreen(context: telemetryContext)
 
     case .getWorkContext:
-      return await executeGetWorkContext(toolCall.arguments)
+      return await executeGetWorkContext(toolCall.arguments, context: telemetryContext)
 
     case .fillCloudConnectorForm:
       return await CloudConnectorFormAutomation.fill(toolCall.arguments)
@@ -327,11 +333,11 @@ class ChatToolExecutor {
   // MARK: - Screen Capture
 
   /// Capture the current screen and return the file path
-  private static func executeCaptureScreen() async -> String {
+  private static func executeCaptureScreen(context: ScreenContextTelemetryContext) async -> String {
     guard CGPreflightScreenCaptureAccess() else {
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "capture_screen",
-        surface: "desktop_chat",
+        context: context,
         ok: false,
         failureCode: .permissionDenied,
         permissionTCCGranted: false
@@ -346,7 +352,7 @@ class ChatToolExecutor {
     guard let fileURL = ScreenCaptureManager.captureScreen() else {
       ScreenContextToolTelemetry.trackToolResult(
         toolName: "capture_screen",
-        surface: "desktop_chat",
+        context: context,
         ok: false,
         failureCode: .captureFailed,
         permissionTCCGranted: true
@@ -355,19 +361,22 @@ class ChatToolExecutor {
     }
     ScreenContextToolTelemetry.trackToolResult(
       toolName: "capture_screen",
-      surface: "desktop_chat",
+      context: context,
       ok: true,
       permissionTCCGranted: true
     )
     return fileURL.path
   }
 
-  private static func executeGetWorkContext(_ arguments: [String: Any]) async -> String {
+  private static func executeGetWorkContext(
+    _ arguments: [String: Any],
+    context: ScreenContextTelemetryContext
+  ) async -> String {
     let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
     let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
     ScreenContextToolTelemetry.trackToolResult(
       toolName: "get_work_context",
-      surface: "desktop_chat",
+      context: context,
       ok: telemetry.ok && telemetry.screenNowAvailable == true,
       failureCode: telemetry.failureCode,
       screenNowAvailable: telemetry.screenNowAvailable,
