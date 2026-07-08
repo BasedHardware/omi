@@ -1,0 +1,19 @@
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignMorePage.swift
+  s_897886a34066e7::t_0e34ca1f1d2fd3 16-17,24-25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "3e3e24165407ec32b4c476cdad8a5691b012a121",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
