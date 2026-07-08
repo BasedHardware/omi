@@ -390,7 +390,7 @@ extension AppState {
 
       } catch {
         logError("System audio: Test capture failed", error: error)
-        recordSystemAudioCaptureOutcome(.denied)
+        recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))
 
         // Open System Settings to Screen Recording section
         if let url = URL(

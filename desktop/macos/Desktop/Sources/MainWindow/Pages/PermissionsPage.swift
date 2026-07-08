@@ -844,6 +844,10 @@ struct SystemAudioPermissionSection: View {
                 Text("System audio capture is set to Never in Settings > General. Change that setting before testing access.")
                     .scaledFont(size: 14, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
+            } else if status == .unsupported {
+                Text("System audio capture requires macOS 14.4 or later.")
+                    .scaledFont(size: 14, weight: .medium)
+                    .foregroundColor(OmiColors.textPrimary)
             } else if status == .granted {
                 Text("System audio access was confirmed by a successful Core Audio tap.")
                     .scaledFont(size: 14, weight: .medium)
@@ -1116,13 +1120,17 @@ private func statusBadge(isGranted: Bool) -> some View {
     )
 }
 
-private func instructionStep(number: Int, text: String) -> some View {
+private func instructionStep(
+    number: Int, text: String,
+    numberColor: Color = .white,
+    circleFill: Color = OmiColors.purplePrimary
+) -> some View {
     HStack(alignment: .top, spacing: 12) {
         Text("\(number)")
             .scaledFont(size: 12, weight: .bold)
-            .foregroundColor(.white)
+            .foregroundColor(numberColor)
             .frame(width: 22, height: 22)
-            .background(Circle().fill(OmiColors.purplePrimary))
+            .background(Circle().fill(circleFill))
 
         Text(text)
             .scaledFont(size: 13)
@@ -1130,18 +1138,12 @@ private func instructionStep(number: Int, text: String) -> some View {
     }
 }
 
+/// Neutral (non-purple) variant used by the System Audio section.
 private func neutralInstructionStep(number: Int, text: String) -> some View {
-    HStack(alignment: .top, spacing: 12) {
-        Text("\(number)")
-            .scaledFont(size: 12, weight: .bold)
-            .foregroundColor(OmiColors.textPrimary)
-            .frame(width: 22, height: 22)
-            .background(Circle().fill(OmiColors.backgroundTertiary))
-
-        Text(text)
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textSecondary)
-    }
+    instructionStep(
+        number: number, text: text,
+        numberColor: OmiColors.textPrimary,
+        circleFill: OmiColors.backgroundTertiary)
 }
 
 #if canImport(PreviewsMacros)

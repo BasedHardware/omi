@@ -269,10 +269,15 @@ final class AudioSourceManager: ObservableObject {
                     AppState.current?.recordSystemAudioCaptureOutcome(.granted)
                 }
             } catch {
+                // System audio is optional/best-effort: the mic and mixer are
+                // already running, so a tap failure must not abort the stream
+                // (rethrowing here leaked a live mic/mixer with isStreaming
+                // never set). Record the honest outcome and continue mic-only.
                 await MainActor.run {
-                    AppState.current?.recordSystemAudioCaptureOutcome(.denied)
+                    AppState.current?.recordSystemAudioCaptureOutcome(
+                        SystemAudioPermissionStatus.classify(captureError: error))
                 }
-                throw error
+                print("AudioSourceManager: system audio capture failed, continuing mic-only: \(error)")
             }
         }
 

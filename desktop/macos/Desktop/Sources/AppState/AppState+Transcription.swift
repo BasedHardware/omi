@@ -418,7 +418,7 @@ extension AppState {
       recordSystemAudioCaptureOutcome(.granted)
       log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
     } catch {
-      recordSystemAudioCaptureOutcome(.denied)
+      recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))
       logError(
         "Transcription: System audio capture failed (continuing with mic only)", error: error)
     }

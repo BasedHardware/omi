@@ -86,8 +86,8 @@ final class FailLoudConfigTests: XCTestCase {
       src.contains("recordSystemAudioCaptureOutcome(.granted)"),
       "successful system-audio tap starts must mark the permission granted")
     XCTAssertTrue(
-      src.contains("recordSystemAudioCaptureOutcome(.denied)"),
-      "failed system-audio tap starts must mark the permission denied")
+      src.contains("recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))"),
+      "failed system-audio tap starts must record the CLASSIFIED outcome (denial only for permission-class errors)")
   }
 
   func testAudioSourceManagerSystemAudioOutcomesUpdatePermissionState() throws {
@@ -97,8 +97,11 @@ final class FailLoudConfigTests: XCTestCase {
       src.contains("AppState.current?.recordSystemAudioCaptureOutcome(.granted)"),
       "desktop audio-source system audio starts should mark the state granted")
     XCTAssertTrue(
-      src.contains("AppState.current?.recordSystemAudioCaptureOutcome(.denied)"),
-      "desktop audio-source system audio failures should mark the state denied")
+      src.contains("SystemAudioPermissionStatus.classify(captureError: error)"),
+      "desktop audio-source system audio failures should record the CLASSIFIED outcome")
+    XCTAssertFalse(
+      src.contains("throw error"),
+      "a system-audio tap failure must not abort the already-running mic/mixer stream")
   }
 
   func testPermissionsPageSurfacesSystemAudioRow() throws {
@@ -139,6 +142,35 @@ final class FailLoudConfigTests: XCTestCase {
     state.checkSystemAudioPermission()
     XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
     XCTAssertTrue(state.missingPermissions.contains("System Audio"))
+  }
+
+  @available(macOS 14.4, *)
+  func testSystemAudioCaptureErrorClassification() {
+    // A TCC denial manifests as tap-creation/device-start failure; format and
+    // converter errors are provably NOT permission problems and must not claim
+    // a denial (they map to unknown so the row stays honest).
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.tapCreationFailed(-1)),
+      .denied)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.deviceStartFailed(-1)),
+      .denied)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.formatError),
+      .unknown)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.converterCreationFailed),
+      .unknown)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.unsupportedOS),
+      .unsupported)
+    struct OtherError: Error {}
+    XCTAssertEqual(SystemAudioPermissionStatus.classify(captureError: OtherError()), .unknown)
   }
 
   func testProductionAuthTokensUseKeychainStorage() throws {
