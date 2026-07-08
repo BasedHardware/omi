@@ -147,6 +147,11 @@ final class ImportConnectorStatusStoreTests: XCTestCase {
 
     XCTAssertTrue(store.accountHasOmiDeviceConversations)
     XCTAssertTrue(UserDefaults.standard.bool(forKey: "home-omi-device-account-history.test-user"))
+    XCTAssertNil(UserDefaults.standard.object(forKey: "home-omi-device-account-history"))
+
+    UserDefaults.standard.set("other-user", forKey: .authUserId)
+    let otherStore = HomeStatusStore()
+    XCTAssertFalse(otherStore.accountHasOmiDeviceConversations)
   }
 
   private func resetImportConnectorDefaults() {

@@ -152,6 +152,7 @@ final class HomeStatusStore: ObservableObject {
             defaults.bool(forKey: legacyOmiDeviceHistoryDefaultsKey)
         {
             defaults.set(true, forKey: key)
+            defaults.removeObject(forKey: legacyOmiDeviceHistoryDefaultsKey)
         }
         return defaults.bool(forKey: key)
     }
