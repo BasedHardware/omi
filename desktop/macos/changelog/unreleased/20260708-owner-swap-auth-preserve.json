@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a test-owner swap that could wipe sign-in tokens and break chat loading until relaunch"
+}

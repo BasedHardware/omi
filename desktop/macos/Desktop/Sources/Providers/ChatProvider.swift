@@ -1388,7 +1388,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     }
 
     private var runtimeOwnerId: String? {
-        AuthState.shared.userId ?? UserDefaults.standard.string(forKey: "auth_userId")
+        RuntimeOwnerIdentity.currentOwnerId()
     }
 
     private func mainChatRuntimeChatId(sessionId: String?) -> String {
@@ -4972,14 +4972,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     // MARK: - Local automation (continuity gauntlet)
 
-  private static let automationAuthUserIdKey = "auth_userId"
-  /// Owner A's real uid, stashed by automationSwapTestOwner so restore_test_owner can
-  /// undo the swap. Without this the synthetic owner persists in UserDefaults across
-  /// relaunches and every backend-auth path breaks (mint, kernel persist, goals).
-  private static let automationOwnerABackupKey = "automation_swap_owner_a_backup"
-
-  /// Test-bundle-only owner swap: clear kernel state for owner A, register synthetic
-  /// owner B, and run one main-chat probe turn under a QueryTracer context.
+  /// Test-bundle-only owner swap: clear kernel state for owner A, apply a synthetic
+  /// owner-B override (without rewriting Firebase `auth_userId` / tokens), and run
+  /// one main-chat probe turn under a QueryTracer context.
   func automationSwapTestOwner(ownerBId: String, probeQuery: String) async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "swap_test_owner is disabled on production bundles"]
@@ -4988,7 +4983,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     let trimmedQuery = probeQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmedOwnerB.isEmpty else { return ["error": "missing 'owner_b'"] }
     guard !trimmedQuery.isEmpty else { return ["error": "missing 'query'"] }
-    guard let ownerA = runtimeOwnerId, !ownerA.isEmpty else {
+    // Real Firebase uid — never the automation override — so we refuse swapping
+    // when the session is not actually signed in.
+    guard let ownerA = UserDefaults.standard.string(forKey: .authUserId)?
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !ownerA.isEmpty
+    else {
       return ["error": "owner A is not signed in"]
     }
     guard trimmedOwnerB != ownerA else {
@@ -5000,8 +5000,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
       await resolvedAgentClient().clearOwnerState()
     }
 
-    UserDefaults.standard.set(ownerA, forKey: Self.automationOwnerABackupKey)
-    UserDefaults.standard.set(trimmedOwnerB, forKey: Self.automationAuthUserIdKey)
+    RuntimeOwnerIdentity.applyAutomationOwnerOverride(trimmedOwnerB)
     resetSessionStateForAuthChange()
 
     let tracer = QueryTracer(query: trimmedQuery, inputMode: .text)
@@ -5013,20 +5012,24 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     detail["owner_a"] = ownerA
     detail["owner_b"] = trimmedOwnerB
     detail["probe_query"] = trimmedQuery
+    detail["auth_user_id"] = UserDefaults.standard.string(forKey: .authUserId) ?? ""
+    detail["owner_override"] = UserDefaults.standard.string(forKey: .automationOwnerOverride) ?? ""
     return detail
   }
 
-  /// Undo automationSwapTestOwner: restore the stashed real owner and reset session
-  /// state. Safe no-op when no swap is active. Harnesses must call this after the
-  /// owner suite (and may call it defensively pre-run).
+  /// Undo automationSwapTestOwner: clear the owner override (and heal a legacy
+  /// synthetic auth_userId if an older build left one). Safe no-op when no swap
+  /// is active. Harnesses must call this after the owner suite (and may call it
+  /// defensively pre-run).
   func automationRestoreTestOwner() async -> [String: String] {
     guard AppBuild.isNonProduction else {
       return ["error": "restore_test_owner is disabled on production bundles"]
     }
     let defaults = UserDefaults.standard
-    guard let ownerA = defaults.string(forKey: Self.automationOwnerABackupKey),
-          !ownerA.isEmpty
-    else {
+    let hadSwap =
+      (defaults.string(forKey: .automationOwnerOverride)?.isEmpty == false)
+      || (defaults.string(forKey: .automationOwnerABackup)?.isEmpty == false)
+    guard hadSwap else {
       return ["restored": "false", "note": "no owner swap active"]
     }
 
@@ -5035,10 +5038,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
       await resolvedAgentClient().clearOwnerState()
     }
 
-    defaults.set(ownerA, forKey: Self.automationAuthUserIdKey)
-    defaults.removeObject(forKey: Self.automationOwnerABackupKey)
+    let result = RuntimeOwnerIdentity.clearAutomationOwnerOverride()
     resetSessionStateForAuthChange()
-    return ["restored": "true", "owner_id": ownerA]
+    return [
+      "restored": result.restored ? "true" : "false",
+      "owner_id": result.ownerId ?? "",
+      "auth_user_id": defaults.string(forKey: .authUserId) ?? "",
+    ]
   }
 
     /// Snapshot for `main_chat_snapshot` / `wait_main_chat_idle` harness actions.

@@ -1367,10 +1367,7 @@ actor AgentRuntimeProcess {
   }
 
   private func currentOwnerId() -> String? {
-    guard let value = UserDefaults.standard.string(forKey: "auth_userId"), !value.isEmpty else {
-      return nil
-    }
-    return value
+    RuntimeOwnerIdentity.currentOwnerId()
   }
 
   private func handleTermination(

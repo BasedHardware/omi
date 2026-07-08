@@ -26,6 +26,12 @@ enum DefaultsKey: String {
     case authTokenExpiry = "auth_tokenExpiry"
     case authTokenUserId = "auth_tokenUserId"  // User ID that owns the stored token
     case authIsImpersonating = "auth_isImpersonating"
+    /// Non-prod gauntlet owner swap: synthetic kernel owner that must NOT replace
+    /// `auth_userId` (that mismatch triggers AuthService.clearTokens()).
+    case automationOwnerOverride = "automation_owner_override"
+    /// Legacy/heal backup of the real Firebase uid when an older swap overwrote
+    /// `auth_userId` with a synthetic owner.
+    case automationOwnerABackup = "automation_swap_owner_a_backup"
     case chatBridgeMode = "chatBridgeMode"
     case onboardingStep = "onboardingStep"
     case chatScreenshotSharingEnabled = "chatScreenshotSharingEnabled"

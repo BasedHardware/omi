@@ -483,7 +483,7 @@ actor AgentBridge {
 
   private func migrateFloatingChatIntoMainChatIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+      RuntimeOwnerIdentity.currentOwnerId()
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     let migrationKey = "\(Self.floatingChatMigrationDefaultsKey).\(ownerId)"
@@ -494,7 +494,7 @@ actor AgentBridge {
 
   private func migrateLegacyMainChatSessionsIfNeeded() async {
     let ownerId = await MainActor.run {
-      AuthState.shared.userId ?? UserDefaults.standard.string(forKey: .authUserId)
+      RuntimeOwnerIdentity.currentOwnerId()
     }
     guard let ownerId, !ownerId.isEmpty else { return }
     guard let map = UserDefaults.standard.dictionary(forKey: Self.legacyMainChatDefaultsKey) as? [String: String],
