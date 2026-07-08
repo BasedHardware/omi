@@ -100,13 +100,17 @@ Verified automatically in this repo (no glasses needed):
 - Full app compiles and existing suites pass; iOS dev-flavor build succeeds in
   audio-only mode (no SDK, no credentials).
 
-Requires physical hardware + Meta Wearables Developer Center SDK access (NOT
+Requires physical hardware, Bluetooth pairing, and Developer Mode (NOT
 claimable from CI):
 
 - Meta AI registration round-trip (URL scheme callback).
 - Real HFP mic capture quality and route stability.
-- DAT camera stream, photo capture, LED behavior.
 - End-to-end transcript/memory quality from glasses audio.
+
+Requires physical hardware + Meta Wearables Developer Center SDK access (NOT
+claimable from CI):
+
+- DAT camera stream, photo capture, LED behavior.
 - First compile of the `#if canImport(MWDATCore)` code path against the real
   SDK (written against the DAT 0.8 reference; symbol drift is possible and
   fixes are contained to `RayBanMetaHostApiImpl.swift`).
