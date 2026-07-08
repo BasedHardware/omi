@@ -212,6 +212,49 @@ Rules (fail the PR if any break):
    function names are not continuity coverage. Live gauntlet/stress are gates, not
    substitutes for hermetic tests.
 
+### Continuity PR Definition of Done (INV-6)
+
+A PR that touches chat write-path, kernel projection, floating viewport, agent
+timeline identity/open, or pill projection is incomplete until:
+
+1. **Contract still true** — INV-6 rules above hold after the change (or are
+   updated in the same PR with a matching behavioral test).
+2. **Hermetic behavioral test** for the invariant touched (stage/promote,
+   snapshot alias, structured identity, open-by-id hydrate, viewport derive /
+   restore). Not a source grep.
+3. **`./scripts/agent-logic-harness.sh` green** (includes
+   `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`,
+   `FloatingControlBarStateTests` in the Swift focus filter).
+4. **Write-path / cross-surface changes:** run a named-bundle continuity
+   gauntlet and note evidence in the PR:
+   ```bash
+   cd desktop/macos && OMI_APP_NAME=omi-gauntlet OMI_SKIP_TUNNEL=1 ./run.sh
+   ./scripts/omi-auth-seed.sh com.omi.omi-gauntlet   # if needed
+   ./scripts/agent-continuity-gauntlet.sh --suite continuity --bundle-id com.omi.omi-gauntlet
+   ./scripts/check-gauntlet-evidence-at-head.sh
+   ```
+   CI only runs gauntlet `--self-check` (wiring). Live suite is a PR/RC gate,
+   not PR CI. Do not assert exact assistant wording.
+5. **Hermetic e2e** only if a bridge action/surface contract changed. Do not
+   expand flow `covers:` lists as fake continuity coverage.
+6. **No second message store** / no new free-text identity format / no
+   `suppressNextRecordedTurn`-style dual-write bandage.
+7. Changelog fragment only if user-visible.
+
+### Gauntlet / stress gate policy
+
+- **CI:** `agent-continuity-gauntlet.sh --self-check` only (via desktop-core /
+  agent-logic harness). Never require live LLM in PR CI.
+- **Continuity PRs / RC:** `--suite continuity` (typed + PTT + blind recall) on
+  a named `omi-*` bundle after auth seed; `--suite all` for RC. Evidence under
+  `.harness/agent-continuity-gauntlet/*/manifest.json` with matching git SHA.
+- **Anti-flake:** clear owner/kernel surface before probes; per-run nonces;
+  hard-fail on blind-recall / structural snapshot only; zero automatic retries
+  on model wrongness.
+- **Stress:** offline JSONL + forbidden terminal reasons remain the default
+  gate; live bridge probes stay optional until continuity `terminal_reason`s
+  exist in the taxonomy.
+
 ### Verifying UI Changes (agent-swift)
 
 After editing Swift UI code, verify the change programmatically using [agent-swift](https://github.com/beastoin/agent-swift) — a CLI that controls any macOS app via the Accessibility API.
