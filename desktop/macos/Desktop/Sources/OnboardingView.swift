@@ -10,6 +10,7 @@ struct OnboardingView: View {
   var exportStepOverride: Int? = nil
   var isExportPreview = false
   @AppStorage("onboardingStep") private var currentStep = 0
+  @AppStorage("useRedesign") private var useRedesign = true
   @AppStorage("onboardingPagedIntroMigrationDone") private var hasMigratedPagedIntro = false
   @AppStorage("onboardingVideoStepMigrationDone") private var hasMigratedOnboardingSteps = false
   @AppStorage("onboardingVoiceShortcutStepMigrationDone") private var hasInsertedVoiceShortcutStep =
@@ -35,8 +36,8 @@ struct OnboardingView: View {
 
   var body: some View {
     ZStack {
-      // Full dark background
-      OmiColors.backgroundPrimary
+      // Full background — warm-paper light for the redesign, dark otherwise.
+      (useRedesign ? Ink.canvas : OmiColors.backgroundPrimary)
         .ignoresSafeArea()
 
       Group {
@@ -55,6 +56,8 @@ struct OnboardingView: View {
                   "OnboardingView: No onComplete handler, view will transition via DesktopHomeView")
               }
             }
+        } else if useRedesign {
+          redesignedOnboardingContent
         } else {
           onboardingContent
         }
@@ -453,6 +456,335 @@ struct OnboardingView: View {
         )
       } else {
         OnboardingTasksStepView(
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks")
+            handleOnboardingComplete()
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks_Skipped")
+            handleOnboardingComplete()
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      }
+    }
+  }
+
+  /// Redesigned (light, warm-paper) onboarding — same functional ladder, same
+  /// closures/side-effects as `onboardingContent`, only the visuals + copy change.
+  @ViewBuilder
+  private var redesignedOnboardingContent: some View {
+    Group {
+      if currentStep == 0 {
+        RedesignNameStepView(
+          coordinator: introCoordinator,
+          stepIndex: 0,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 0, stepName: "Name")
+            currentStep = 1
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 1 {
+        RedesignLanguageStepView(
+          coordinator: introCoordinator,
+          stepIndex: 1,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 1, stepName: "Language")
+            currentStep = 2
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 2 {
+        RedesignHowDidYouHearStepView(
+          stepIndex: 2,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 2, stepName: "HowDidYouHear")
+            currentStep = 3
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 3 {
+        RedesignTrustStepView(
+          coordinator: introCoordinator,
+          stepIndex: 3,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 3, stepName: "Trust")
+            currentStep = 4
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 4 {
+        RedesignPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          stepIndex: 4,
+          eyebrow: "Permission",
+          title: "Let me see what you see.",
+          description: "Screen recording lets me watch your work and act on it.",
+          benefitName: "See my screen",
+          benefitPayoff: "So I can see what you're working on and act on it.",
+          permissionType: "screen_recording",
+          icon: "display.and.arrow.down",
+          primaryActionLabel: "Open Screen Recording settings",
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
+            if !AppBuild.usesLazyDevPermissions {
+              startMonitoringIfNeeded()
+            }
+            currentStep = 5
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 4, stepName: "ScreenRecording_Skipped")
+            currentStep = 5
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 5 {
+        RedesignPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          stepIndex: 5,
+          eyebrow: "Access",
+          title: "Let me read your files.",
+          description: "Full disk access lets me map your projects and recent work.",
+          benefitName: "Read my files",
+          benefitPayoff: "So I can map your projects and recent files.",
+          permissionType: "full_disk_access",
+          icon: "externaldrive.fill.badge.person.crop",
+          primaryActionLabel: "Open Disk Access",
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
+            currentStep = 6
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 5, stepName: "FullDiskAccess_Skipped")
+            currentStep = 6
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 6 {
+        RedesignFileScanStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 6,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan")
+            currentStep = 7
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 6, stepName: "FileScan_Skipped")
+            currentStep = 7
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 7 {
+        RedesignPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          stepIndex: 7,
+          eyebrow: "Permission",
+          title: "Let me hear the room.",
+          description: "Microphone lets me transcribe meetings and voice notes.",
+          benefitName: "Hear my conversations",
+          benefitPayoff: "So I never miss what was said.",
+          permissionType: "microphone",
+          icon: "mic.fill",
+          primaryActionLabel: "Grant microphone access",
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone")
+            currentStep = 8
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone_Skipped")
+            currentStep = 8
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 8 {
+        RedesignPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          stepIndex: 8,
+          eyebrow: "Permission",
+          title: "Let me see the active app.",
+          description: "Accessibility lets me know which app you're using.",
+          benefitName: "See the active app",
+          benefitPayoff: "So I know what you're focused on.",
+          permissionType: "accessibility",
+          icon: "figure.wave",
+          primaryActionLabel: "Open Accessibility settings",
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
+            currentStep = 9
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 8, stepName: "Accessibility_Skipped")
+            currentStep = 9
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 9 {
+        RedesignPermissionStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          stepIndex: 9,
+          eyebrow: "Permission",
+          title: "Let me act when you ask.",
+          description: "Automation lets me send and click on your behalf.",
+          benefitName: "Act for me",
+          benefitPayoff: "So I can send and click on your behalf.",
+          permissionType: "automation",
+          icon: "bolt.horizontal.circle.fill",
+          primaryActionLabel: "Grant automation access",
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
+            currentStep = 10
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 9, stepName: "Automation_Skipped")
+            currentStep = 10
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 10 {
+        RedesignFloatingBarShortcutStepView(
+          appState: appState,
+          chatProvider: chatProvider,
+          stepIndex: 10,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 10, stepName: "FloatingBarShortcut")
+            currentStep = 11
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 10, stepName: "FloatingBarShortcut_Skipped")
+            currentStep = 11
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 11 {
+        RedesignFloatingBarDemoView(
+          appState: appState,
+          chatProvider: chatProvider,
+          stepIndex: 11,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 11, stepName: "FloatingBar")
+            currentStep = 12
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 11, stepName: "FloatingBar_Skipped")
+            currentStep = 12
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 12 {
+        RedesignVoiceShortcutStepView(
+          appState: appState,
+          chatProvider: chatProvider,
+          stepIndex: 12,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 12, stepName: "VoiceShortcut")
+            currentStep = 13
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 12, stepName: "VoiceShortcut_Skipped")
+            currentStep = 13
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 13 {
+        RedesignVoiceDemoView(
+          appState: appState,
+          chatProvider: chatProvider,
+          stepIndex: 13,
+          onComplete: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 13, stepName: "VoiceDemo")
+            currentStep = 14
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 13, stepName: "VoiceDemo_Skipped")
+            currentStep = 14
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 14 {
+        RedesignDataSourcesStepView(
+          coordinator: introCoordinator,
+          graphViewModel: graphViewModel,
+          stepIndex: 14,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 14, stepName: "DataSources")
+            currentStep = 15
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 14, stepName: "DataSources_Skipped")
+            currentStep = 15
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 15 {
+        RedesignExportsStepView(
+          graphViewModel: graphViewModel,
+          stepIndex: 15,
+          summaryText: introCoordinator.connectedContextSummary,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 15, stepName: "Exports")
+            currentStep = 16
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 15, stepName: "Exports_Skipped")
+            currentStep = 16
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 16 {
+        RedesignGoalStepView(
+          appState: appState,
+          coordinator: introCoordinator,
+          stepIndex: 16,
+          onContinue: {
+            AnalyticsManager.shared.onboardingStepCompleted(step: 16, stepName: "Goal")
+            if !AppBuild.usesLazyDevPermissions, !ProactiveAssistantsPlugin.shared.isMonitoring {
+              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+            }
+            currentStep = 17
+          },
+          onSkip: {
+            AnalyticsManager.shared.onboardingStepCompleted(
+              step: 16, stepName: "Goal_Skipped")
+            if !AppBuild.usesLazyDevPermissions, !ProactiveAssistantsPlugin.shared.isMonitoring {
+              ProactiveAssistantsPlugin.shared.startMonitoring { _, _ in }
+            }
+            currentStep = 17
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else if currentStep == 17 {
+        RedesignBYOKStepView(
+          stepIndex: 17,
+          onContinue: {
+            currentStep = 18
+          },
+          onSkip: {
+            currentStep = 18
+          },
+          onForceComplete: handleOnboardingComplete
+        )
+      } else {
+        RedesignTasksStepView(
+          stepIndex: 18,
           onComplete: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 18, stepName: "Tasks")
             handleOnboardingComplete()

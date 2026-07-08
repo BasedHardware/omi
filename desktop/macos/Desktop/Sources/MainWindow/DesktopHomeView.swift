@@ -35,10 +35,9 @@ struct DesktopHomeView: View {
   /// Light-mode redesign (68px rail + warm-paper pages). On by default.
   @AppStorage("useRedesign") private var useRedesign = true
 
-  /// True only when the redesigned, light-mode main app should be shown.
-  private var redesignActive: Bool {
-    useRedesign && authState.isSignedIn && appState.hasCompletedOnboarding
-  }
+  /// Whether the light-mode redesign is active. Sign-in, onboarding, and the main
+  /// app are all redesigned, so the whole window goes warm-paper light when on.
+  private var redesignActive: Bool { useRedesign }
 
   // Settings sidebar state
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
@@ -88,10 +87,16 @@ struct DesktopHomeView: View {
         }
       } else if !authState.isSignedIn {
         // State 1: Not signed in - show sign in
-        SignInView(authState: authState)
-          .onAppear {
-            log("DesktopHomeView: Showing SignInView (not signed in)")
+        Group {
+          if redesignActive {
+            RedesignSignInView(authState: authState)
+          } else {
+            SignInView(authState: authState)
           }
+        }
+        .onAppear {
+          log("DesktopHomeView: Showing SignInView (not signed in)")
+        }
       } else if !appState.hasCompletedOnboarding {
         // State 2: Signed in but onboarding not complete
         if shouldSkipOnboarding() {
@@ -375,7 +380,7 @@ struct DesktopHomeView: View {
         }
       }
     }
-    .background(OmiColors.backgroundPrimary)
+    .background(redesignActive ? Ink.canvas : OmiColors.backgroundPrimary)
     .frame(minWidth: minimumWindowWidth, minHeight: minimumWindowHeight)
     .preferredColorScheme(redesignActive ? .light : .dark)
     .tint(redesignActive ? Ink.ink : OmiColors.purplePrimary)
@@ -795,7 +800,9 @@ struct DesktopHomeView: View {
   /// (home, more) render on warm-paper canvas; pages not yet converted render inside
   /// a dark panel so they stay self-consistent until they're rebuilt.
   @ViewBuilder private var redesignContentArea: some View {
-    let lightPage = (selectedIndex == 0 || selectedIndex == 20)
+    // Every page is redesigned (light) except Rewind (7), which keeps its
+    // existing dark UI in a panel until it's converted.
+    let lightPage = (selectedIndex != 7)
     VStack(spacing: 0) {
       RedesignTopBar(appState: appState)
       if lightPage {
@@ -835,7 +842,9 @@ struct DesktopHomeView: View {
       // EXC_BAD_ACCESS crash in SwiftUI's tooltip system. When the view is conditionally
       // removed, its .help() tooltip graph nodes get invalidated, but the macOS tooltip
       // tracking system still tries to evaluate them during window key state changes.
-      if isInSettings {
+      // Under the redesign, the new Settings page carries its own left nav, so the
+      // legacy settings sidebar is suppressed.
+      if isInSettings && !redesignActive {
         ZStack {
           if showsPrimarySidebar {
             SidebarView(
@@ -1179,38 +1188,74 @@ private struct PageContentView: View {
         }
       case 20:
         RedesignMorePage(selectedIndex: $selectedTabIndex)
+      case 21:
+        RedesignPersonaPage()
+      case 22:
+        RedesignPlanUsagePage()
       case 1:
-        ConversationsPageHost(appState: appState)
+        if useRedesign {
+          RedesignConversationsPage(appState: appState)
+        } else {
+          ConversationsPageHost(appState: appState)
+        }
       case 2:
-        ChatPage(
-          appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
-        )
+        if useRedesign {
+          RedesignChatPage(
+            appProvider: viewModelContainer.appProvider,
+            chatProvider: viewModelContainer.chatProvider)
+        } else {
+          ChatPage(
+            appProvider: viewModelContainer.appProvider,
+            chatProvider: viewModelContainer.chatProvider)
+        }
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        if useRedesign {
+          RedesignMemoryPage(viewModel: viewModelContainer.memoriesViewModel)
+        } else {
+          MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        }
       case 4:
-        TasksPage(
-          viewModel: viewModelContainer.tasksViewModel,
-          chatCoordinator: viewModelContainer.taskChatCoordinator,
-          chatProvider: viewModelContainer.chatProvider)
+        if useRedesign {
+          RedesignTasksPage(selectedIndex: $selectedTabIndex)
+        } else {
+          TasksPage(
+            viewModel: viewModelContainer.tasksViewModel,
+            chatCoordinator: viewModelContainer.taskChatCoordinator,
+            chatProvider: viewModelContainer.chatProvider)
+        }
       case 5:
-        FocusPage()
+        if useRedesign { RedesignFocusPage(selectedIndex: $selectedTabIndex) } else { FocusPage() }
       case 6:
-        InsightPage()
+        if useRedesign {
+          RedesignInsightsPage(selectedIndex: $selectedTabIndex)
+        } else {
+          InsightPage()
+        }
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
+        if useRedesign {
+          RedesignAppsPage(
+            appProvider: viewModelContainer.appProvider,
+            appState: appState,
+            selectedIndex: $selectedTabIndex)
+        } else {
+          AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
+        }
       case 9:
-        SettingsPage(
-          appState: appState,
-          selectedSection: $selectedSettingsSection,
-          highlightedSettingId: $highlightedSettingId,
-          chatProvider: viewModelContainer.chatProvider
-        )
+        if useRedesign {
+          RedesignSettingsPage(selectedTabIndex: $selectedTabIndex)
+        } else {
+          SettingsPage(
+            appState: appState,
+            selectedSection: $selectedSettingsSection,
+            highlightedSettingId: $highlightedSettingId,
+            chatProvider: viewModelContainer.chatProvider)
+        }
       case 10:
-        PermissionsPage(appState: appState)
+        if useRedesign { RedesignPermissionsPage(appState: appState) } else { PermissionsPage(appState: appState) }
       case 12:
-        HelpPage()
+        if useRedesign { RedesignHelpPage() } else { HelpPage() }
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,

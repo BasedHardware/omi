@@ -23,6 +23,8 @@ struct RedesignMorePage: View {
     .init(icon: "lightbulb", title: "Insights", sub: "Quiet things I noticed", index: 6),
     .init(icon: "clock.arrow.circlepath", title: "Rewind", sub: "Find anything you saw", index: 7),
     .init(icon: "puzzlepiece", title: "Apps", sub: "Connect & export", index: 8),
+    .init(icon: "theatermasks", title: "Persona", sub: "How I sound as you", index: 21),
+    .init(icon: "star", title: "Plan & usage", sub: "Your plan, at a glance", index: 22),
     .init(icon: "lock.shield", title: "Permissions", sub: "See, hear, act", index: 10),
     .init(icon: "gearshape", title: "Settings", sub: "Everything, tuned", index: 9),
     .init(icon: "bubble.left", title: "Talk to a founder", sub: "We usually reply fast", index: 12),
