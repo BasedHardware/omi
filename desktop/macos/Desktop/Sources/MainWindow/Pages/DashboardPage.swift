@@ -665,10 +665,15 @@ struct DashboardPage: View {
                     .transition(.homeSuggestionsFade)
             }
 
-            // Lifts the hub cluster toward the optical center; collapses while
+            // Hub: flexible spacer balances the flexible stage area above, so
+            // the wordmark→suggestions cluster sits vertically centered (a
+            // touch above true center) at any window height. Collapses while
             // a panel is up so the ask bar anchors at the bottom.
-            Spacer(minLength: 0)
-                .frame(height: homeMode == .hub ? 64 : 0)
+            if homeMode == .hub {
+                Spacer(minLength: 0)
+                    .frame(maxHeight: .infinity)
+                    .transition(.homeSuggestionsFade)
+            }
         }
         .padding(.top, 74)
         .padding(.bottom, 26)
