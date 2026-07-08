@@ -281,9 +281,9 @@ actor AgentBridge {
   }
 
   func setTurnRecordedHandler(_ handler: @escaping AgentRuntimeProcess.TurnRecordedHandler) async {
-    // Replace, don't append — KernelTurnProjection.attachClient re-registers on
-    // every bridge start/warm. Appending duplicated every turn_recorded apply.
-    await runtime.setTurnRecordedHandlers([handler])
+    // Single-slot replace — KernelTurnProjection.attachClient re-registers on
+    // every bridge start/warm. Never append; that double-applied turn_recorded.
+    await runtime.setTurnRecordedHandler(handler)
   }
 
   func controlTool(name: String, input: [String: Any]) async throws -> String {

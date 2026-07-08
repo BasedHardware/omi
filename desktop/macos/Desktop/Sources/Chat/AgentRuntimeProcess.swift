@@ -182,7 +182,9 @@ actor AgentRuntimeProcess {
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
   private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
-  private var turnRecordedHandlers: [TurnRecordedHandler] = []
+  /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
+  /// never append; a second ChatProvider attach must not fan out duplicates.
+  private var turnRecordedHandler: TurnRecordedHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
@@ -386,16 +388,17 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func setTurnRecordedHandlers(_ handlers: [TurnRecordedHandler]) {
-    turnRecordedHandlers = handlers
-  }
-
-  func addTurnRecordedHandler(_ handler: @escaping TurnRecordedHandler) {
-    turnRecordedHandlers.append(handler)
+  func setTurnRecordedHandler(_ handler: TurnRecordedHandler?) {
+    turnRecordedHandler = handler
   }
 
   func turnRecordedHandlerCount() -> Int {
-    turnRecordedHandlers.count
+    turnRecordedHandler == nil ? 0 : 1
+  }
+
+  /// Test-only: fire the single turn_recorded apply gate without a live node runtime.
+  func dispatchTurnRecordedForTesting(_ turn: KernelTurnRecorded) {
+    turnRecordedHandler?(turn)
   }
 
   func recordSurfaceTurn(
@@ -1148,9 +1151,7 @@ actor AgentRuntimeProcess {
 
     case .turnRecorded:
       if let recorded = kernelTurnRecorded(from: message) {
-        for handler in turnRecordedHandlers {
-          handler(recorded)
-        }
+        turnRecordedHandler?(recorded)
       }
 
     case .result:

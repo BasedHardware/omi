@@ -187,16 +187,21 @@ Rules (fail the PR if any break):
    viewport cursor (`FloatingChatViewport` message ids / `clientTurnId`) over
    `ChatProvider.messages`. It must not own a second durable transcript array
    (`chatHistory` of `ChatMessage` copies is forbidden).
-2. **One idempotency key per logical turn** — every optimistic
+2. **Single `turn_recorded` UI apply gate** — only `KernelTurnProjection` on
+   `ChatProvider.mainInstance` (`historyChatProvider`) may attach the runtime
+   turn handler (one replaceable slot). Speculative warm and other surfaces must
+   reuse `mainInstance`; never construct a second `ChatProvider()` that calls
+   `attachClient` / `setTurnRecordedHandler` on the shared runtime.
+3. **One idempotency key per logical turn** — every optimistic
    `stageOptimisticTurn` / kernel write MUST share the SAME key with
    `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Stage first for sync UI,
    then let `KernelTurnProjection.apply` `promoteOptimisticTurn` (in-place,
    no append) when `turn_recorded` arrives. Keys are opaque strings; never
    dedupe by assistant/user text.
-3. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
+4. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
    pending optimistic turns or appends via `recordCompletedTurn`; already-seen
    continuity keys are ignored. Empty keys do not suppress.
-4. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
+5. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
    content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
    authoritative. Persist structured blocks through `saveMessage` metadata key
    `content_blocks` (via `ChatContentBlockCodec`) so they survive reload; kernel
@@ -207,14 +212,14 @@ Rules (fail the PR if any break):
    Proactive notifications stage under continuity key `notification:<uuid>`
    (origin `proactive_notification`) — same stage/promote path as other surface
    turns; do not reintroduce `appendAssistantMessage` for timeline writes.
-5. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
+6. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
    / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
    refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.
    Do not keep a second durable pill store.
-6. **Snapshots are aliases** — `automationFloatingChatSnapshot` ==
+7. **Snapshots are aliases** — `automationFloatingChatSnapshot` ==
    `automationChatSnapshot` / `automationMainChatSnapshot` over the same messages;
    no surface-specific transcript filter.
-7. **Tests** — continuity behavior changes require a hermetic behavioral test (call
+8. **Tests** — continuity behavior changes require a hermetic behavioral test (call
    projection/provider APIs, assert message counts/IDs). Source-string greps for
    function names are not continuity coverage. Live gauntlet/stress are gates, not
    substitutes for hermetic tests.

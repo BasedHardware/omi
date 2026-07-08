@@ -57,14 +57,39 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
   }
 
-  /// Speculative warm used to construct a second ChatProvider that attached its
-  /// own KernelTurnProjection. Each turn_recorded then fanned out to both hosts
-  /// (main UI + warm), and warm's persist/poll produced duplicate chat rows.
+  /// INV-6: one turn_recorded UI apply gate. Warm/restart re-attach replaces the
+  /// single handler slot; one dispatched turn_recorded yields one message pair.
   func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout() async {
+    final class FanoutBox: @unchecked Sendable {
+      private let lock = NSLock()
+      private var turns: [AgentRuntimeProcess.KernelTurnRecorded] = []
+
+      func note(_ turn: AgentRuntimeProcess.KernelTurnRecorded) {
+        lock.lock()
+        turns.append(turn)
+        lock.unlock()
+      }
+
+      var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return turns.count
+      }
+
+      var last: AgentRuntimeProcess.KernelTurnRecorded? {
+        lock.lock()
+        defer { lock.unlock() }
+        return turns.last
+      }
+    }
+
     let runtime = AgentRuntimeProcess()
     let bridge = AgentBridge(runtime: runtime)
     let main = ChatProvider()
-    let warm = ChatProvider()
+    ChatProvider.mainInstance = main
+    defer { ChatProvider.mainInstance = nil }
+    let fanout = FanoutBox()
+
     let surface = main.mainChatSurfaceReference()
     let turn = AgentRuntimeProcess.KernelTurnRecorded(
       conversationId: "conv-warm",
@@ -80,32 +105,32 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       assistantTurnId: "a1"
     )
 
-    // Fixed path: re-attach replaces; handler count stays 1.
-    await bridge.setTurnRecordedHandler { _ in }
-    await bridge.setTurnRecordedHandler { _ in }
-    let afterReplace = await runtime.turnRecordedHandlerCount()
-    XCTAssertEqual(afterReplace, 1)
+    // Main attach, then speculative-warm re-attach on the same mainInstance.
+    // Pre-fix append API would leave two handlers; replace keeps one slot.
+    await bridge.setTurnRecordedHandler { fanout.note($0) }
+    await bridge.setTurnRecordedHandler { fanout.note($0) }
+    let handlerCount = await runtime.turnRecordedHandlerCount()
+    XCTAssertEqual(handlerCount, 1)
 
-    // Bug shape: two providers each apply once → two independent message lists
-    // that later merge via persistence/poll into duplicate UI rows.
-    main.kernelTurnProjection.apply(turn)
-    warm.kernelTurnProjection.apply(turn)
-    XCTAssertEqual(main.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(warm.messages.filter { $0.sender == .user }.count, 1)
-    XCTAssertEqual(
-      main.messages.filter { $0.sender == .user }.count
-        + warm.messages.filter { $0.sender == .user }.count,
-      2
-    )
-
-    // Product fix: replace back to a single handler (warm uses mainInstance).
-    await bridge.setTurnRecordedHandler { recorded in
-      Task { @MainActor in
-        main.kernelTurnProjection.apply(recorded)
-      }
+    await runtime.dispatchTurnRecordedForTesting(turn)
+    XCTAssertEqual(fanout.count, 1, "single handler slot must not fan out twice")
+    guard let delivered = fanout.last else {
+      return XCTFail("expected one delivered turn_recorded")
     }
-    let afterSingle = await runtime.turnRecordedHandlerCount()
-    XCTAssertEqual(afterSingle, 1)
+    main.kernelTurnProjection.apply(delivered)
+    XCTAssertEqual(main.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(main.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(main.messages.filter { $0.sender == .user }.map(\.text), ["PTT after warm"])
+    XCTAssertEqual(main.messages.filter { $0.sender == .ai }.map(\.text), ["Single answer"])
+
+    // Same key through the single gate again must not append a second pair.
+    await runtime.dispatchTurnRecordedForTesting(turn)
+    XCTAssertEqual(fanout.count, 2)
+    if let again = fanout.last {
+      main.kernelTurnProjection.apply(again)
+    }
+    XCTAssertEqual(main.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(main.messages.filter { $0.sender == .ai }.count, 1)
   }
 
   func testApplyKernelTurnRecordedIgnoresOtherSurfaces() {
