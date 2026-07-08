@@ -1,0 +1,21 @@
+docs/superpowers/specs/2026-07-07-cloud-telegram-autoreply-design.md
+  s_24c3f125817e73::t_103247177487a7 116-120
+  s_24c3f125817e73::t_aee946a9727fbb 155-156
+  s_24c3f125817e73::t_5c24d0736e6ca1 1-115,121-154,157-197
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "159457dbcf290e183afe9edbfa31f323e198e2bb",
+  "prompts": {},
+  "sessions": {
+    "s_24c3f125817e73": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "f8a3f61b-1690-4bf4-a460-ea7492841ae1",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
