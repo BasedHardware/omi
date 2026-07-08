@@ -213,6 +213,22 @@ struct FloatingControlBarView: View {
                         .fill(Color.black)
                         .frame(width: surfaceWidth, height: surfaceHeight)
 
+                    // Light warm-paper panel for the expanded conversation. The
+                    // top `notchChromeHeight` stays the dark notch cap; below it
+                    // reads light (masked to the dock's rounded bottom corners).
+                    if state.showingAIConversation {
+                        NotchDockShape(bottomRadius: bottomRadius)
+                            .fill(Ink.surface)
+                            .frame(width: surfaceWidth, height: surfaceHeight)
+                            .mask(
+                                VStack(spacing: 0) {
+                                    Color.clear.frame(height: notchChromeHeight)
+                                    Color.black
+                                }
+                                .frame(width: surfaceWidth, height: surfaceHeight)
+                            )
+                    }
+
                     if state.isVoiceResponseActive {
                         NotchResponseGlowView(bottomRadius: bottomRadius)
                             .frame(width: surfaceWidth, height: surfaceHeight)
@@ -227,7 +243,7 @@ struct FloatingControlBarView: View {
                     ResizeHandleView(targetWindow: window)
                         .frame(width: 20, height: 20)
                     ResizeGripShape()
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(Ink.faint)
                         .frame(width: 14, height: 14)
                         .allowsHitTesting(false)
                 }
@@ -472,6 +488,8 @@ struct FloatingControlBarView: View {
                 conversationView
                 .padding(.horizontal, 8)
                 .padding(.bottom, 8)
+                // Light warm-paper panel; the dark control strip above stays dark.
+                .background(Ink.surface)
                 .transition(.opacity)
             }
         }
@@ -525,7 +543,7 @@ struct FloatingControlBarView: View {
                     ResizeHandleView(targetWindow: window)
                         .frame(width: 20, height: 20)
                     ResizeGripShape()
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(Ink.faint)
                         .frame(width: 14, height: 14)
                         .allowsHitTesting(false)
                 }
@@ -592,7 +610,7 @@ struct FloatingControlBarView: View {
                     Button(action: showAgentListFromConversation) {
                         Image(systemName: "chevron.left")
                             .scaledFont(size: 13, weight: .semibold)
-                            .foregroundColor(.white.opacity(0.82))
+                            .foregroundColor(Ink.body)
                             .frame(width: 36, height: 32)
                             .contentShape(Rectangle())
                     }
@@ -601,7 +619,7 @@ struct FloatingControlBarView: View {
 
                     Text("Omi Chat")
                         .scaledFont(size: 13, weight: .bold)
-                        .foregroundColor(.white)
+                        .foregroundColor(Ink.ink)
                         .lineLimit(1)
 
                     Spacer(minLength: 0)
@@ -612,6 +630,7 @@ struct FloatingControlBarView: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
+                .environment(\.colorScheme, .light)
 
                 content()
             }
@@ -629,13 +648,13 @@ struct FloatingControlBarView: View {
         HStack(spacing: 4) {
             Text("esc")
                 .scaledFont(size: 11)
-                .foregroundColor(.secondary)
+                .foregroundColor(Ink.muted)
                 .frame(width: 30, height: 16)
-                .background(Color.white.opacity(0.1))
+                .background(Ink.hair)
                 .cornerRadius(4)
             Text("to clear")
                 .scaledFont(size: 11)
-                .foregroundColor(.secondary)
+                .foregroundColor(Ink.muted)
         }
     }
 
@@ -1398,6 +1417,7 @@ private struct AgentMainChatView: View {
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .environment(\.colorScheme, .light)
         .onAppear {
             manager.markViewed(pillID: pill.id)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
@@ -1414,7 +1434,7 @@ private struct AgentMainChatView: View {
             Button(action: onBackToAgentRows) {
                 Image(systemName: "chevron.left")
                     .scaledFont(size: 13, weight: .semibold)
-                    .foregroundColor(.white.opacity(0.82))
+                    .foregroundColor(Ink.body)
                     .frame(width: 36, height: 36)
                     .contentShape(Rectangle())
             }
@@ -1423,7 +1443,7 @@ private struct AgentMainChatView: View {
 
             Text(pill.title)
                 .scaledFont(size: 13, weight: .bold)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.ink)
                 .lineLimit(1)
 
             Spacer(minLength: 8)
@@ -1497,7 +1517,7 @@ private struct AgentMainChatView: View {
             if !activityText.isEmpty {
                 Text(activityText)
                     .scaledFont(size: 12, weight: .semibold)
-                    .foregroundColor(.white.opacity(0.62))
+                    .foregroundColor(Ink.muted)
                     .textSelection(.enabled)
             }
         }
@@ -1509,13 +1529,13 @@ private struct AgentMainChatView: View {
         if message.sender == .user {
             Text(trimmed)
                 .scaledFont(size: 13, weight: .semibold)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.ink)
                 .textSelection(.enabled)
                 .lineLimit(nil)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .background(Color.white.opacity(0.10))
+                .background(Ink.surface2)
                 .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .contextMenu {
                     Button("Copy") {
@@ -1530,7 +1550,7 @@ private struct AgentMainChatView: View {
                 if !activityText.isEmpty {
                     Text(activityText)
                         .scaledFont(size: 12, weight: .semibold)
-                        .foregroundColor(.white.opacity(0.62))
+                        .foregroundColor(Ink.muted)
                         .textSelection(.enabled)
                     }
             }
@@ -1554,8 +1574,8 @@ private struct AgentMainChatView: View {
                     switch group {
                     case .text(_, let text):
                         if !text.isEmpty {
-                            SelectableMarkdown(text: text, sender: .ai)
-                                .environment(\.colorScheme, .dark)
+                            SelectableMarkdown(text: text, sender: .ai, aiTextColor: Ink.ink, aiLinkColor: Ink.accent)
+                                .environment(\.colorScheme, .light)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     case .toolCalls(_, let calls):
@@ -1574,7 +1594,12 @@ private struct AgentMainChatView: View {
             let trimmed = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 Markdown(trimmed)
-                    .markdownTheme(.aiMessage(scale: 0.88))
+                    .markdownTheme(.aiMessage(
+                        scale: 0.88,
+                        textColor: Ink.ink,
+                        linkColor: Ink.accent,
+                        codeBackground: Ink.surface2
+                    ))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -1584,18 +1609,18 @@ private struct AgentMainChatView: View {
 
     private var voiceFollowUpView: some View {
         HStack(spacing: 8) {
-            VoiceWaveformBars(isActive: true)
+            VoiceWaveformBars(isActive: true, tint: Ink.ink)
             Image(systemName: "mic.fill")
                 .scaledFont(size: 14, weight: .semibold)
-                .foregroundColor(.white)
+                .foregroundColor(Ink.ink)
             Text("Listening...")
                 .scaledFont(size: 13)
-                .foregroundColor(.white.opacity(0.62))
+                .foregroundColor(Ink.muted)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-        .background(Color.white.opacity(0.08))
+        .background(Ink.surface2)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
@@ -1606,7 +1631,7 @@ private struct AgentMainChatView: View {
             } label: {
                 Image(systemName: isRecording ? "stop.circle.fill" : "mic.fill")
                     .scaledFont(size: 17, weight: .semibold)
-                    .foregroundColor(isRecording ? Color.white : .secondary)
+                    .foregroundColor(isRecording ? Ink.ink : Ink.muted)
                     .frame(width: 24, height: 24)
             }
             .buttonStyle(.plain)
@@ -1615,9 +1640,10 @@ private struct AgentMainChatView: View {
             TextField("Ask this agent...", text: $followUpText)
                 .textFieldStyle(.plain)
                 .scaledFont(size: 13)
+                .foregroundColor(Ink.ink)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .background(Color.white.opacity(0.10))
+                .background(Ink.surface2)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 .focused($isFollowUpFocused)
                 .onSubmit {
@@ -1627,7 +1653,7 @@ private struct AgentMainChatView: View {
             Button(action: sendFollowUp) {
                 Image(systemName: "arrow.up.circle.fill")
                     .scaledFont(size: 20)
-                    .foregroundColor(canSend ? .white : .secondary)
+                    .foregroundColor(canSend ? Ink.ink : Ink.faint)
             }
             .disabled(!canSend)
             .buttonStyle(.plain)
