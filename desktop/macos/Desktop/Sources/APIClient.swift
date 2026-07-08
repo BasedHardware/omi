@@ -462,6 +462,18 @@ enum APIError: LocalizedError {
 
 // MARK: - MCP API
 
+struct ToneGuideResponse: Codable {
+  let guideText: String?
+  let generatedAt: String?
+  let sampleCount: Int?
+
+  enum CodingKeys: String, CodingKey {
+    case guideText = "guide_text"
+    case generatedAt = "generated_at"
+    case sampleCount = "sample_count"
+  }
+}
+
 struct MCPKeyCreatedResponse: Codable {
   let id: String
   let name: String
@@ -715,6 +727,22 @@ extension APIClient {
 
     let response: CountResponse = try await get("v1/users/stats/chat-messages")
     return response.count
+  }
+
+  /// The user's learned messaging Tone & Style guide (nil if not generated yet).
+  func getToneGuide() async throws -> ToneGuideResponse? {
+    try await get("v1/users/tone-guide")
+  }
+
+  /// Force-regenerate the Tone & Style guide from synced messages, then return it.
+  /// The backend runs an LLM synthesis, so allow a generous timeout.
+  func regenerateToneGuide() async throws -> ToneGuideResponse? {
+    let url = URL(string: baseURL + "v1/users/tone-guide/regenerate")!
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
+    request.timeoutInterval = 90
+    return try await performRequest(request)
   }
 
   /// Merges multiple conversations into a new conversation

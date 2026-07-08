@@ -200,6 +200,12 @@ struct SettingsContentView: View {
   @State var isEditingAIProfile = false
   @State var aiProfileEditText: String = ""
 
+  // Writing Voice (messaging Tone & Style guide — backend-generated on message sync)
+  @State var toneGuideText: String?
+  @State var toneGuideGeneratedAt: Date?
+  @State var toneGuideSampleCount: Int = 0
+  @State var isGeneratingToneGuide = false
+
   // Selected section (passed in from parent)
   @Binding var selectedSection: SettingsSection
   @Binding var highlightedSettingId: String?
@@ -334,6 +340,7 @@ struct SettingsContentView: View {
   enum AdvancedSubsection: String, CaseIterable {
     case resetOnboarding = "Reset Onboarding"
     case aiUserProfile = "AI User Profile"
+    case writingVoice = "Writing Voice"
     case stats = "Your Stats"
     case focusAssistant = "Focus Assistant"
     case taskAssistant = "Task Assistant"
@@ -351,6 +358,7 @@ struct SettingsContentView: View {
       switch self {
       case .resetOnboarding: return "arrow.counterclockwise"
       case .aiUserProfile: return "brain"
+      case .writingVoice: return "text.bubble"
       case .stats: return "chart.bar"
       case .focusAssistant: return "eye.fill"
       case .taskAssistant: return "checklist"

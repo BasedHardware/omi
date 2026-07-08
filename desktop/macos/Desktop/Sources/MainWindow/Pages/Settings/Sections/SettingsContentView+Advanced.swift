@@ -400,6 +400,7 @@ extension SettingsContentView {
 
       if showProfileAndStats {
         aiUserProfileSubsection
+        writingVoiceSubsection
         statsSubsection
       }
     }
@@ -560,6 +561,123 @@ extension SettingsContentView {
           return
         }
       }
+    }
+  }
+
+  var writingVoiceSubsection: some View {
+    VStack(spacing: 20) {
+      settingsCard(settingId: "advanced.writingvoice") {
+        VStack(alignment: .leading, spacing: 16) {
+          HStack(spacing: 10) {
+            Image(systemName: "text.bubble")
+              .scaledFont(size: 16)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Text("Writing Voice")
+              .scaledFont(size: 15, weight: .medium)
+              .foregroundColor(OmiColors.textPrimary)
+
+            Spacer()
+
+            if isGeneratingToneGuide {
+              ProgressView()
+                .controlSize(.small)
+            } else {
+              Button(action: {
+                regenerateToneGuideAction()
+              }) {
+                Text(toneGuideText == nil ? "Generate Now" : "Regenerate")
+                  .scaledFont(size: 12)
+              }
+              .buttonStyle(.bordered)
+              .controlSize(.small)
+            }
+          }
+
+          Text("A tone & style guide Omi learns from your real messages, and uses to draft replies that sound like you.")
+            .scaledFont(size: 12)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+
+          Divider()
+            .background(OmiColors.backgroundQuaternary)
+
+          if let text = toneGuideText, !text.isEmpty {
+            ScrollView {
+              Text(text)
+                .scaledFont(size: 13)
+                .foregroundColor(OmiColors.textSecondary)
+                .textSelection(.enabled)
+                .if_available_writingToolsNone()
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 260)
+
+            HStack {
+              if let date = toneGuideGeneratedAt {
+                Text("Updated \(date.formatted(.relative(presentation: .named)))")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+              Spacer()
+              if toneGuideSampleCount > 0 {
+                Text("From \(toneGuideSampleCount) messages")
+                  .scaledFont(size: 12)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+            }
+          } else if !isGeneratingToneGuide {
+            Text(
+              "Sync your messages (iMessage, Telegram, or WhatsApp) and Omi will build your writing voice automatically, or click \"Generate Now\"."
+            )
+            .scaledFont(size: 13)
+            .foregroundColor(OmiColors.textTertiary)
+            .fixedSize(horizontal: false, vertical: true)
+          } else {
+            HStack {
+              Spacer()
+              VStack(spacing: 8) {
+                ProgressView()
+                Text("Learning your voice...")
+                  .scaledFont(size: 13)
+                  .foregroundColor(OmiColors.textTertiary)
+              }
+              Spacer()
+            }
+            .padding(.vertical, 20)
+          }
+        }
+      }
+    }
+    .task {
+      await loadToneGuide()
+    }
+  }
+
+  private func parseToneGuideDate(_ value: String?) -> Date? {
+    guard let value = value else { return nil }
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: value) { return date }
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter.date(from: value)
+  }
+
+  func loadToneGuide() async {
+    guard let guide = try? await APIClient.shared.getToneGuide() else { return }
+    toneGuideText = guide.guideText
+    toneGuideGeneratedAt = parseToneGuideDate(guide.generatedAt)
+    toneGuideSampleCount = guide.sampleCount ?? 0
+  }
+
+  func regenerateToneGuideAction() {
+    isGeneratingToneGuide = true
+    Task {
+      defer { isGeneratingToneGuide = false }
+      guard let guide = try? await APIClient.shared.regenerateToneGuide() else { return }
+      toneGuideText = guide.guideText
+      toneGuideGeneratedAt = parseToneGuideDate(guide.generatedAt)
+      toneGuideSampleCount = guide.sampleCount ?? 0
     }
   }
 
