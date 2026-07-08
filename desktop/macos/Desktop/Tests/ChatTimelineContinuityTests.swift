@@ -39,6 +39,62 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(messages[3].contentBlocks.spawnedAgentIDs, [subagentID])
   }
 
+  func testMainChatHidesCompletedNonAgentToolLogsButKeepsAgentLinks() {
+    let subagentID = UUID()
+    let groups = ContentBlockGroup.visibleChatGroups(
+      [
+        .text(id: "text_1", text: "I started a background agent for that."),
+        .toolCall(
+          id: "tool_1",
+          name: "search_conversations",
+          status: .completed,
+          input: ToolCallInput(summary: "designer", details: "query=designer"),
+          output: "raw search output"
+        ),
+        .toolCall(
+          id: "tool_2",
+          name: "spawn_agent",
+          status: .completed,
+          input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
+          output: "Started agent\nID: \(subagentID.uuidString)"
+        ),
+        .thinking(id: "thinking_1", text: "hidden after completion"),
+      ],
+      isStreaming: false
+    )
+
+    XCTAssertEqual(groups.count, 2)
+    guard case .text(_, let text) = groups[0] else {
+      return XCTFail("expected final assistant text to remain visible")
+    }
+    XCTAssertEqual(text, "I started a background agent for that.")
+    guard case .toolCalls(_, let calls) = groups[1] else {
+      return XCTFail("expected a spawned-agent link group")
+    }
+    XCTAssertEqual(calls.count, 1)
+    XCTAssertEqual(calls.spawnedAgentIDs, [subagentID])
+  }
+
+  func testMainChatKeepsOnlyInFlightNonAgentToolsWhileStreaming() {
+    let groups = ContentBlockGroup.visibleChatGroups(
+      [
+        .toolCall(id: "tool_1", name: "search_conversations", status: .completed, output: "done"),
+        .toolCall(id: "tool_2", name: "execute_sql", status: .running, output: nil),
+      ],
+      isStreaming: true
+    )
+
+    XCTAssertEqual(groups.count, 1)
+    guard case .toolCalls(_, let calls) = groups[0],
+          case .toolCall(_, let name, let status, _, _, _) = calls[0]
+    else {
+      return XCTFail("expected only the active progress tool")
+    }
+    XCTAssertEqual(calls.count, 1)
+    XCTAssertEqual(name, "execute_sql")
+    XCTAssertEqual(status, .running)
+  }
+
   func testSourceInvariantAllChatSurfacesRenderCanonicalProviderMessages() throws {
     let root = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -112,8 +168,16 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "main chat needs a manager entrypoint to open spawned-agent links in the floating surface"
     )
     XCTAssertTrue(
+      chatBubble.contains("ContentBlockGroup.visibleChatGroups("),
+      "main chat bubbles must filter completed implementation-only tool logs"
+    )
+    XCTAssertTrue(
+      chatBubble.contains("return .toolCalls(id: id, calls: spawnedAgentCalls)"),
+      "main chat bubbles must still render spawned-agent links after the final answer"
+    )
+    XCTAssertTrue(
       chatBubble.contains("ToolCallsGroup(calls: calls, onCancel: onCancelTurn, onOpenAgent: onOpenAgent)"),
-      "main chat bubbles must pass spawned-agent link callbacks into tool-call groups"
+      "main chat bubbles must pass spawned-agent link callbacks into visible tool-call groups"
     )
     XCTAssertTrue(
       floatingView.contains("onOpenAgent: { agentID in"),

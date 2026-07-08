@@ -59,7 +59,10 @@ struct ChatBubble: View {
   }
 
   var body: some View {
-    let groupedBlocks = ContentBlockGroup.group(message.contentBlocks)
+    let groupedBlocks = ContentBlockGroup.visibleChatGroups(
+      message.contentBlocks,
+      isStreaming: message.isStreaming
+    )
 
     HStack(alignment: .top, spacing: 12) {
       if message.sender == .ai {
@@ -409,6 +412,34 @@ enum ContentBlockGroup: Identifiable {
     }
     flushToolCalls()
     return groups
+  }
+
+  /// Main chat renders the agent's final answer and sub-agent entrypoints, not
+  /// the implementation log of every completed tool. While a response is live,
+  /// in-flight tools remain visible as progress feedback; after completion,
+  /// only spawned-agent links survive.
+  static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
+    group(blocks).compactMap { group in
+      switch group {
+      case .text, .discoveryCard:
+        return group
+      case .thinking:
+        return isStreaming ? group : nil
+      case .toolCalls(let id, let calls):
+        let spawnedAgentCalls = calls.filter { $0.spawnedAgentID != nil }
+        if !spawnedAgentCalls.isEmpty {
+          return .toolCalls(id: id, calls: spawnedAgentCalls)
+        }
+        guard isStreaming else { return nil }
+        let inFlightCalls = calls.filter { block in
+          if case .toolCall(_, _, let status, _, _, _) = block {
+            return status.isInFlight
+          }
+          return false
+        }
+        return inFlightCalls.isEmpty ? nil : .toolCalls(id: id, calls: inFlightCalls)
+      }
+    }
   }
 }
 

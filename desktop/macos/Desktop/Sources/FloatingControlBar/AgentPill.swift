@@ -1205,8 +1205,26 @@ final class AgentPillsManager: ObservableObject {
         pill.status = .running
         pill.completedAt = nil
         pill.latestActivity = "Working…"
+        Self.ensureStreamingAssistantMessage(for: pill)
         pill.markContentChanged()
+        AgentRuntimeStatusStore.shared.recordAcceptedRun(
+            surface: .floatingPill(pillId: pill.id),
+            sessionId: sessionId,
+            runId: runId,
+            attemptId: attemptId,
+            statusText: "Working…"
+        )
+        startCanonicalRunPolling(for: pill)
         objectWillChange.send()
+    }
+
+    private func startCanonicalRunPolling(for pill: AgentPill) {
+        runTasksByPill[pill.id]?.cancel()
+        let generation = nextRunAttemptGeneration(for: pill.id)
+        runTasksByPill[pill.id] = Task { @MainActor [weak self, weak pill] in
+            guard let self, let pill else { return }
+            await self.pollCanonicalRun(for: pill, generation: generation)
+        }
     }
 
     private func mergeProjectedPills(from floating: [[String: Any]]) {

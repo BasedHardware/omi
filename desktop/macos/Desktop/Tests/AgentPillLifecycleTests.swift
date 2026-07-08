@@ -35,6 +35,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("Self.backgroundAgentSystemPromptSuffix"))
   }
 
+  func testExternallySpawnedPillsPollCanonicalRunToTerminalState() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("func upsertSpawnedPill("))
+    XCTAssertTrue(source.contains("Self.ensureStreamingAssistantMessage(for: pill)"))
+    XCTAssertTrue(source.contains("surface: .floatingPill(pillId: pill.id)"))
+    XCTAssertTrue(source.contains("startCanonicalRunPolling(for: pill)"))
+    XCTAssertTrue(source.contains("private func startCanonicalRunPolling(for pill: AgentPill)"))
+    XCTAssertTrue(source.contains("await self.pollCanonicalRun(for: pill, generation: generation)"))
+  }
+
   func testFloatingPillProjectionMergeRequiresCanonicalKernelIds() throws {
     let source = try agentPillSource()
 
