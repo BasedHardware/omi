@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.47",
+      "date": "2026-07-08",
+      "changes": [
+        "Desktop API models now recognize Ray-Ban Meta conversations as a first-class source."
+      ]
+    },
+    {
       "version": "0.12.46",
       "date": "2026-07-08",
       "changes": [
