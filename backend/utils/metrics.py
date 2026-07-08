@@ -38,6 +38,18 @@ LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
     ['feature', 'field', 'outcome'],
 )
 
+OMI_FALLBACK_TOTAL = Counter(
+    'omi_fallback_total',
+    'Fallback / resilience transitions by component, path, reason, and outcome',
+    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
+)
+
+OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
+    'omi_sync_dispatch_attempts_total',
+    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
+    ['mode'],
+)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
     'Auth flow events by provider, stage, outcome, and sanitized failure class',
