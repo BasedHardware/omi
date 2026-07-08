@@ -7,11 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Desktop Launcher Script Tests ==="
 cd "$SCRIPT_DIR"
-bash tests/test-app-config.sh
-bash tests/test-settings-seed.sh
-bash tests/test-cleanup-omi-tcc.sh
-bash tests/test-omi-harness.sh
-bash tests/test-signed-artifact-smoke.sh
+# Discovery, not a hardcoded list — a hardcoded list already orphaned one test
+# (test-prepare-desktop-bundle-native-deps.sh ran nowhere). Every tests/test-*.sh
+# runs, mirroring swift-test-suites.sh's auto-discovery of Swift suites.
+for t in tests/test-*.sh; do
+  echo "== $t"
+  bash "$t"
+done
+python3 scripts/check-e2e-flow-coverage.py --strict
 echo ""
 
 echo "=== Rust Backend Tests ==="
@@ -19,7 +22,7 @@ cd "$SCRIPT_DIR/Backend-Rust"
 cargo test
 echo ""
 
-echo "=== Swift App Tests (per-suite process isolation) ==="
+echo "=== Swift App Tests (parallel per-suite process isolation) ==="
 cd "$SCRIPT_DIR"
 # Each XCTest suite runs in its own `swift test --filter` process.
 #
@@ -33,26 +36,8 @@ cd "$SCRIPT_DIR"
 # Tracking: https://github.com/BasedHardware/omi/issues/9029
 # (durable fix is singleton dependency injection; see the same issue).
 #
-# Method-level skips in scripts/swift-test-suites.sh are the only remaining
-# known-red tests; each needs a product/policy decision, not a test change:
-#   ChatDiscoverabilityTests/{testAgentControlCapabilitiesMatchCanonicalManifest,
-#     testDesktopCapabilitiesExistInAgentToolDeclarations,
-#     testDesktopPromptDistinguishesDelegationFromFloatingPills}
-#       — Swift DesktopCapabilityRegistry vs agent control-tool-manifest.ts vs the
-#         desktop chat prompt have drifted; reconciling the canonical tool set is a
-#         product change. https://github.com/BasedHardware/omi/issues/9030
-#   APIClientRoutingTests/testDeleteConversationRoutesToPython
-#       — client omits ?cascade=true; cascade is backend-gated behind owner sign-off
-#         (backend/routers/conversations.py), so flipping it is a data-deletion
-#         behavior change, not a test fix. https://github.com/BasedHardware/omi/issues/9031
-#   ActionItemsFTSRepairTests/testRepairToleratesMissingActionItemsFTSShadowTable
-#       — macOS 26 system SQLite rejects `DELETE FROM sqlite_master` even with
-#         writable_schema=ON, blocking the test's corruption setup.
-#         https://github.com/BasedHardware/omi/issues/9032
-#   PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing
-#       — the detector does not fully honor the injected environment/home, so the
-#         result depends on whether OpenClaw is installed on the runner.
-#         https://github.com/BasedHardware/omi/issues/9033
+# Method-level skips are ratcheted in scripts/swift-test-skips.json so new
+# known-red tests require an explicit issue, reason, and skip-count change.
 "$SCRIPT_DIR/scripts/swift-test-suites.sh"
 echo ""
 

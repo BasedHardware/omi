@@ -2,6 +2,51 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.44",
+      "date": "2026-07-07",
+      "changes": [
+        "Improved the desktop chat loading indicator so it matches the calmer notch thinking animation",
+        "Updated the Home ask bar to use one action button for Connect, Send, and Stop"
+      ]
+    },
+    {
+      "version": "0.12.43",
+      "date": "2026-07-07",
+      "changes": [
+        "Reduced noisy Sentry session heartbeat issues by switching to breadcrumb telemetry",
+        "Device offline audio now uploads to the cloud via POST /v2/sync-local-files instead of being marked synced locally without a server call",
+        "Fixed on-device desktop conversations staying untitled after backend processing completes."
+      ]
+    },
+    {
+      "version": "0.12.42",
+      "date": "2026-07-07",
+      "changes": [
+        "Fixed Gemini realtime voice sessions failing to start for managed users due to a malformed token-mint request",
+        "Fixed a duplicate AppState at desktop launch that could cause double lifecycle observers and fragile state initialization"
+      ]
+    },
+    {
+      "version": "0.12.41",
+      "date": "2026-07-07",
+      "changes": [
+        "Gate desktop prod promotion on blessed release metadata, with bless-release.sh orchestration and admin Releases blessed column",
+        "Fixed conversation search failing when backend search results used the search index shape instead of the normal conversation row shape",
+        "Fixed the Home ask bar showing a send button for attachment-only input that silently did nothing",
+        "Redesigned Home: ask omi directly from a new chat bar (chat slides in on the same page), suggested questions under the bar, and data connections tucked behind a Connect button",
+        "Omi now installs itself to Applications when launched from the downloaded disk image, fixing screen-recording permissions that wouldn't stick and the installer window reappearing after onboarding restarts; the onboarding language step also retries transient save failures instead of immediately showing a connection error"
+      ]
+    },
+    {
+      "version": "0.12.40",
+      "date": "2026-07-07",
+      "changes": [
+        "Fixed meeting-only listening so ended calls are saved as full conversations instead of staying stuck locally",
+        "Improved desktop reliability around live notes, file indexing, proactive capture, device reconnects, and sign-in recovery",
+        "Improved desktop test and verification tooling"
+      ]
+    },
+    {
       "version": "0.12.39",
       "date": "2026-07-07",
       "changes": [

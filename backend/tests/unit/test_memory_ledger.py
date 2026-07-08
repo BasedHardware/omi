@@ -368,3 +368,57 @@ def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
     assert result == {"repaired": ["repair1"], "failed": [], "processed": 1}
     assert updates[0]["status"] == "repaired"
     assert updates[0]["repair_action"] == "delete"
+
+
+def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch):
+    updates = []
+
+    class FakeDoc:
+        id = "repair1"
+
+        @property
+        def reference(self):
+            return self
+
+        def to_dict(self):
+            return {"repair_id": "repair1", "fact_id": "m1", "status": "failed", "attempt_count": 1}
+
+        def update(self, payload):
+            updates.append(payload)
+
+    class FakeQuery:
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            return [FakeDoc()]
+
+    class FakeCollection:
+        def document(self, value):
+            return self
+
+        def collection(self, value):
+            return self
+
+        def where(self, *args):
+            return FakeQuery()
+
+    class FakeDB:
+        def collection(self, value):
+            return FakeCollection()
+
+    monkeypatch.setattr(projection_repair, "db", FakeDB())
+
+    def _failing_repair(uid, fact):
+        raise RuntimeError("repair failed")
+
+    result = projection_repair.process_projection_repairs(
+        "uid-1",
+        fact_loader=lambda fact_id: {"id": fact_id},
+        repair_func=_failing_repair,
+        max_attempts=2,
+    )
+
+    assert result == {"repaired": [], "failed": ["repair1"], "processed": 1}
+    assert updates[0]["status"] == "dead_letter"
+    assert updates[0]["attempt_count"] == 2

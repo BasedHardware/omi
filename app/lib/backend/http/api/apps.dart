@@ -58,8 +58,8 @@ Future<List<Map<String, dynamic>>> retrieveAppsGrouped({
 
     final List<Map<String, dynamic>> parsed = [];
     for (final group in data.groups ?? const <wire.GeneratedAppCatalogGroup>[]) {
-      final apps = (group.data ?? const <wire.GeneratedAppBaseModel>[])
-          .map(App.fromGenerated)
+      final apps = (group.data ?? const <wire.GeneratedAppCatalogItem>[])
+          .map(App.fromGeneratedCatalogItem)
           .where((app) => !app.deleted)
           .toList();
       parsed.add({
@@ -90,8 +90,10 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, category: null);
     }
     final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final apps =
-        (data.data ?? const <wire.GeneratedAppBaseModel>[]).map(App.fromGenerated).where((p) => !p.deleted).toList();
+    final apps = (data.data ?? const <wire.GeneratedAppCatalogItem>[])
+        .map(App.fromGeneratedCatalogItem)
+        .where((p) => !p.deleted)
+        .toList();
     final pagination = _paginationToJson(data.pagination, offset, limit);
     final cat = data.category?.toJson();
     return (apps: apps, pagination: pagination, category: cat);
@@ -113,8 +115,8 @@ Future<({List<Map<String, dynamic>> groups, Map<String, dynamic>? capability, in
     final data = wire.GeneratedAppCatalogResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
     final List<Map<String, dynamic>> parsed = [];
     for (final group in data.groups ?? const <wire.GeneratedAppCatalogGroup>[]) {
-      final apps = (group.data ?? const <wire.GeneratedAppBaseModel>[])
-          .map(App.fromGenerated)
+      final apps = (group.data ?? const <wire.GeneratedAppCatalogItem>[])
+          .map(App.fromGeneratedCatalogItem)
           .where((app) => !app.deleted)
           .toList();
       final count = group.count ?? apps.length;
@@ -161,8 +163,10 @@ Future<({List<App> apps, Map<String, dynamic> pagination, Map<String, dynamic>? 
       return (apps: <App>[], pagination: {'total': 0, 'count': 0, 'offset': offset, 'limit': limit}, filters: null);
     }
     final data = wire.GeneratedAppSearchResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    final apps =
-        (data.data ?? const <wire.GeneratedAppBaseModel>[]).map(App.fromGenerated).where((p) => !p.deleted).toList();
+    final apps = (data.data ?? const <wire.GeneratedAppCatalogItem>[])
+        .map(App.fromGeneratedCatalogItem)
+        .where((p) => !p.deleted)
+        .toList();
     final pagination = data.pagination.toJson();
     final filters = data.filters.toJson();
     return (apps: apps, pagination: pagination, filters: filters);

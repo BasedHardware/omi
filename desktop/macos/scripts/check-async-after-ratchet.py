@@ -22,9 +22,9 @@ What counts: an occurrence of `.asyncAfter(` in a `.swift` file under the scanne
 root. The leading dot + open paren deliberately excludes prose mentions of the
 word `asyncAfter` (e.g. in doc comments).
 
-Wiring (see also `scripts/pre-push` and `.github/workflows/lint.yml`):
+Wiring (see also `scripts/pre-push` and `.github/workflows/repo-checks.yml`):
   - Pre-push: run automatically for pushes that touch the floating-bar sources.
-  - CI: a gated step in the Lint workflow.
+  - CI: a gated step in the Repo Checks workflow.
   - Manually:  python3 desktop/macos/scripts/check-async-after-ratchet.py
   - Show the count / offenders:  ... --print
 

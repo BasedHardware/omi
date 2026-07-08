@@ -1,5 +1,6 @@
 version: 2
 name: rewind
+tier: manual
 description: Rewind (Screen Capture) flow — navigate to Rewind page, verify permission state, explore timeline controls
 app: com.omi.computer-macos
 covers:

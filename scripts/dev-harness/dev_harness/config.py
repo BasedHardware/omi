@@ -254,4 +254,5 @@ def desktop_backend_child_env_for(cfg: HarnessConfig) -> dict[str, str]:
     env = safety.build_child_env(provider_mode=cfg.provider_mode, extra=extra)
     if cfg.provider_mode == "offline":
         env.update(safety.offline_provider_placeholders())
+        env["OMI_LLM_STUB"] = "1"
     return env

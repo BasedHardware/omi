@@ -1,4 +1,5 @@
 import Foundation
+import OmiWAL
 
 actor APIClient {
   static let shared = APIClient()
@@ -420,10 +421,18 @@ enum APIError: LocalizedError {
   case httpError(statusCode: Int, detail: String? = nil)
   case decodingError(Error)
   case unsupportedTierScopedBulkMutation(String)
+  case syncRateLimited(retryAfterSeconds: Int?)
+  case syncUploadRejected(reason: String)
 
   var detail: String? {
-    if case .httpError(_, let detail) = self { return detail }
-    return nil
+    switch self {
+    case .httpError(_, let detail):
+      return detail
+    case .syncUploadRejected(let reason):
+      return reason
+    default:
+      return nil
+    }
   }
 
   var errorDescription: String? {
@@ -439,6 +448,13 @@ enum APIError: LocalizedError {
       return "Failed to decode response: \(error.localizedDescription)"
     case .unsupportedTierScopedBulkMutation(let operation):
       return "Layer-scoped bulk memory \(operation) is not supported yet."
+    case .syncRateLimited(let retryAfterSeconds):
+      if let retryAfterSeconds {
+        return "Sync rate limited (retry after \(retryAfterSeconds)s)"
+      }
+      return "Sync rate limited"
+    case .syncUploadRejected(let reason):
+      return reason
     }
   }
 }
@@ -1984,6 +2000,19 @@ extension APIClient {
     let id: String
     let status: String
     let discarded: Bool
+
+    enum CodingKeys: String, CodingKey {
+      case id
+      case status
+      case discarded
+    }
+
+    init(from decoder: Decoder) throws {
+      let container = try decoder.container(keyedBy: CodingKeys.self)
+      id = try container.decode(String.self, forKey: .id)
+      status = try container.decodeIfPresent(String.self, forKey: .status) ?? ConversationStatus.processing.rawValue
+      discarded = try container.decodeIfPresent(Bool.self, forKey: .discarded) ?? false
+    }
   }
 
   /// Upload an already-transcribed (on-device Parakeet) conversation to the backend so it is
@@ -2286,21 +2315,11 @@ extension APIClient {
   }
 
   private func performPatchRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(T.self, from: data)
+    // Delegate to performRequest so PATCH gets the same 401 refresh-and-retry as
+    // GET/POST. PATCH previously threw `.unauthorized` on the first 401, which
+    // surfaced as a user-visible failure (e.g. the onboarding language step)
+    // whenever the ID token was momentarily stale right after sign-in.
+    return try await performRequest(request)
   }
 }
 
@@ -3835,7 +3854,7 @@ struct OmiAppDetails: Codable, Identifiable {
     price = try container.decodeIfPresent(Double.self, forKey: .price)
     paymentPlan = try container.decodeIfPresent(String.self, forKey: .paymentPlan)
     username = try container.decodeIfPresent(String.self, forKey: .username)
-    twitter = try container.decodeIfPresent(String.self, forKey: .twitter)
+    twitter = (try? container.decodeIfPresent(String.self, forKey: .twitter)) ?? nil
     createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
     enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? false
     externalIntegration = try container.decodeIfPresent(
@@ -5079,9 +5098,63 @@ struct MemorySettingsResponse: Codable {
 
 struct FloatingBarSettingsResponse: Codable {
   var voiceAnswersEnabled: Bool?
+  var elevenlabsVoiceId: String?
 
   enum CodingKeys: String, CodingKey {
     case voiceAnswersEnabled = "voice_answers_enabled"
+    case elevenlabsVoiceId = "elevenlabs_voice_id"
+  }
+}
+
+enum AssistantSettingsJSONValue: Codable, Equatable {
+  case null
+  case bool(Bool)
+  case int(Int)
+  case double(Double)
+  case string(String)
+  case array([AssistantSettingsJSONValue])
+  case object([String: AssistantSettingsJSONValue])
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.singleValueContainer()
+    if container.decodeNil() {
+      self = .null
+    } else if let value = try? container.decode(Bool.self) {
+      self = .bool(value)
+    } else if let value = try? container.decode(Int.self) {
+      self = .int(value)
+    } else if let value = try? container.decode(Double.self) {
+      self = .double(value)
+    } else if let value = try? container.decode(String.self) {
+      self = .string(value)
+    } else if let value = try? container.decode([AssistantSettingsJSONValue].self) {
+      self = .array(value)
+    } else if let value = try? container.decode([String: AssistantSettingsJSONValue].self) {
+      self = .object(value)
+    } else {
+      throw DecodingError.dataCorruptedError(
+        in: container, debugDescription: "Unsupported assistant settings JSON value")
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    switch self {
+    case .null:
+      try container.encodeNil()
+    case .bool(let value):
+      try container.encode(value)
+    case .int(let value):
+      try container.encode(value)
+    case .double(let value):
+      try container.encode(value)
+    case .string(let value):
+      try container.encode(value)
+    case .array(let value):
+      try container.encode(value)
+    case .object(let value):
+      try container.encode(value)
+    }
   }
 }
 
@@ -5093,13 +5166,99 @@ struct AssistantSettingsResponse: Codable {
   var memory: MemorySettingsResponse?
   var floatingBar: FloatingBarSettingsResponse?
   var updateChannel: String?
+  var unknownSections: [String: AssistantSettingsJSONValue]
 
-  enum CodingKeys: String, CodingKey {
+  enum CodingKeys: String, CodingKey, CaseIterable {
     case shared, focus, task
     case insight = "advice"
     case memory
     case floatingBar = "floating_bar"
     case updateChannel = "update_channel"
+  }
+
+  init(
+    shared: SharedAssistantSettingsResponse? = nil,
+    focus: FocusSettingsResponse? = nil,
+    task: TaskSettingsResponse? = nil,
+    insight: InsightSettingsResponse? = nil,
+    memory: MemorySettingsResponse? = nil,
+    floatingBar: FloatingBarSettingsResponse? = nil,
+    updateChannel: String? = nil,
+    unknownSections: [String: AssistantSettingsJSONValue] = [:]
+  ) {
+    self.shared = shared
+    self.focus = focus
+    self.task = task
+    self.insight = insight
+    self.memory = memory
+    self.floatingBar = floatingBar
+    self.updateChannel = updateChannel
+    self.unknownSections = unknownSections
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    shared = Self.decodeLossy(SharedAssistantSettingsResponse.self, from: container, forKey: .shared)
+    focus = Self.decodeLossy(FocusSettingsResponse.self, from: container, forKey: .focus)
+    task = Self.decodeLossy(TaskSettingsResponse.self, from: container, forKey: .task)
+    insight = Self.decodeLossy(InsightSettingsResponse.self, from: container, forKey: .insight)
+    memory = Self.decodeLossy(MemorySettingsResponse.self, from: container, forKey: .memory)
+    floatingBar = Self.decodeLossy(
+      FloatingBarSettingsResponse.self, from: container, forKey: .floatingBar)
+    updateChannel = Self.decodeLossy(String.self, from: container, forKey: .updateChannel)
+
+    let rawContainer = try decoder.container(keyedBy: AssistantSettingsDynamicCodingKey.self)
+    let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+    unknownSections = rawContainer.allKeys.reduce(into: [:]) { result, key in
+      guard !knownKeys.contains(key.stringValue),
+        let value = try? rawContainer.decode(AssistantSettingsJSONValue.self, forKey: key)
+      else { return }
+      result[key.stringValue] = value
+    }
+  }
+
+  func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encodeIfPresent(shared, forKey: .shared)
+    try container.encodeIfPresent(focus, forKey: .focus)
+    try container.encodeIfPresent(task, forKey: .task)
+    try container.encodeIfPresent(insight, forKey: .insight)
+    try container.encodeIfPresent(memory, forKey: .memory)
+    try container.encodeIfPresent(floatingBar, forKey: .floatingBar)
+    try container.encodeIfPresent(updateChannel, forKey: .updateChannel)
+
+    var rawContainer = encoder.container(keyedBy: AssistantSettingsDynamicCodingKey.self)
+    let knownKeys = Set(CodingKeys.allCases.map(\.rawValue))
+    for (key, value) in unknownSections where !knownKeys.contains(key) {
+      try rawContainer.encode(value, forKey: AssistantSettingsDynamicCodingKey(stringValue: key))
+    }
+  }
+
+  private static func decodeLossy<T: Decodable>(
+    _ type: T.Type,
+    from container: KeyedDecodingContainer<CodingKeys>,
+    forKey key: CodingKeys
+  ) -> T? {
+    do {
+      return try container.decodeIfPresent(type, forKey: key)
+    } catch {
+      return nil
+    }
+  }
+}
+
+struct AssistantSettingsDynamicCodingKey: CodingKey {
+  let stringValue: String
+  let intValue: Int?
+
+  init(stringValue: String) {
+    self.stringValue = stringValue
+    intValue = nil
+  }
+
+  init(intValue: Int) {
+    stringValue = String(intValue)
+    self.intValue = intValue
   }
 }
 
@@ -5284,11 +5443,137 @@ extension APIClient {
     return try decoder.decode([ChatFileResponse].self, from: data)
   }
 
-}
+  // MARK: - Sync local files (WAL upload)
 
-/// Response from rating a message
-struct MessageStatusResponse: Codable {
-  let status: String
+  /// Upload-only POST to `/v2/sync-local-files`. Mirrors Flutter `uploadLocalFilesV2`.
+  func uploadLocalFilesV2(
+    fileURLs: [URL],
+    conversationId: String? = nil
+  ) async throws -> UploadLocalFilesResult {
+    var components = URLComponents(string: baseURL + "v2/sync-local-files")!
+    if let conversationId, !conversationId.isEmpty {
+      components.queryItems = [URLQueryItem(name: "conversation_id", value: conversationId)]
+    }
+    guard let url = components.url else {
+      throw APIError.syncUploadRejected(reason: "Invalid sync-local-files URL")
+    }
+    let request = try await buildSyncLocalFilesMultipartRequest(url: url, fileURLs: fileURLs)
+    return try await performSyncLocalFilesUpload(request)
+  }
+
+  /// Single GET of a sync job's status — no polling loop.
+  func fetchSyncJobStatus(jobId: String) async -> SyncJobFetch {
+    let endpoint = "v2/sync-local-files/\(jobId)"
+    let url = URL(string: baseURL + endpoint)!
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
+
+    guard let (data, response) = try? await session.data(for: request),
+          let http = response as? HTTPURLResponse else {
+      return SyncJobFetch(outcome: .transient)
+    }
+
+    if http.statusCode == 404 {
+      return SyncJobFetch(outcome: .notFound)
+    }
+    // 403 means the caller is not permitted to access this sync job. Unlike a
+    // transient transport failure, re-polling will not resolve it — the upload
+    // path already refreshed auth on 401, so a 403 here is a durable permission
+    // failure. Surface it as `.forbidden` so the reconciler reverts the WAL to
+    // `.miss` for re-upload (the backend dedupes by conversation/timestamp)
+    // instead of polling forever.
+    if http.statusCode == 403 {
+      return SyncJobFetch(outcome: .forbidden)
+    }
+    guard http.statusCode == 200 else {
+      return SyncJobFetch(outcome: .transient)
+    }
+
+    do {
+      let status = try decoder.decode(SyncJobStatusResponse.self, from: data)
+      return SyncJobFetch(outcome: .ok, status: status)
+    } catch {
+      return SyncJobFetch(outcome: .transient)
+    }
+  }
+
+  private func buildSyncLocalFilesMultipartRequest(url: URL, fileURLs: [URL]) async throws -> URLRequest {
+    let boundary = "Boundary-\(UUID().uuidString)"
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    var headers = try await buildHeaders(requireAuth: true)
+    headers.removeValue(forKey: "Content-Type")
+    request.allHTTPHeaderFields = headers
+    request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+    var body = Data()
+    let lineBreak = "\r\n"
+    for fileURL in fileURLs {
+      // Legacy desktop WAL files on disk may still use byte-length `_fsN` tokens;
+      // normalize at upload time so the backend Opus decoder gets sample-frame size.
+      let fileName = WALSyncUploadFileName.normalizedForUpload(fileURL.lastPathComponent)
+      let fileData = try Data(contentsOf: fileURL)
+      body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
+      body.append(
+        "Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\(lineBreak)"
+          .data(using: .utf8)!)
+      body.append("Content-Type: application/octet-stream\(lineBreak)\(lineBreak)".data(using: .utf8)!)
+      body.append(fileData)
+      body.append(lineBreak.data(using: .utf8)!)
+    }
+    body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
+    request.httpBody = body
+    return request
+  }
+
+  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
+    let (data, response) = try await session.data(for: request)
+    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+
+    if http.statusCode == 401 {
+      guard !retriedAuth else {
+        throw APIError.unauthorized
+      }
+      var retryRequest = request
+      let authService = await MainActor.run { AuthService.shared }
+      retryRequest.setValue(
+        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
+    }
+
+    if http.statusCode == 200 {
+      let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)
+      return .done(completed)
+    }
+    if http.statusCode == 202 {
+      let start = try decoder.decode(SyncJobStartResponse.self, from: data)
+      guard !start.jobId.isEmpty else {
+        throw APIError.syncUploadRejected(reason: "Upload accepted but no job id returned")
+      }
+      return .queued(jobId: start.jobId)
+    }
+    if http.statusCode == 429 {
+      let retryAfter = Self.parseRetryAfterSeconds(from: http)
+      throw APIError.syncRateLimited(retryAfterSeconds: retryAfter)
+    }
+    if http.statusCode == 400 {
+      throw APIError.syncUploadRejected(reason: "Audio file could not be processed by server")
+    }
+    if http.statusCode == 413 {
+      throw APIError.syncUploadRejected(reason: "Audio file is too large to upload")
+    }
+    if http.statusCode >= 500 {
+      throw APIError.syncUploadRejected(reason: "Server is temporarily unavailable")
+    }
+    throw APIError.syncUploadRejected(reason: "Upload failed unexpectedly")
+  }
+
+  private static func parseRetryAfterSeconds(from response: HTTPURLResponse) -> Int? {
+    guard let raw = response.value(forHTTPHeaderField: "Retry-After") else { return nil }
+    return Int(raw.trimmingCharacters(in: .whitespacesAndNewlines))
+  }
+
 }
 
 /// Response shape for `POST /v2/files` — mirrors backend `FileChat` model.
@@ -5307,6 +5592,99 @@ struct ChatFileResponse: Codable {
     case mimeType = "mime_type"
     case thumbName = "thumb_name"
     case openaiFileId = "openai_file_id"
+  }
+}
+
+/// Response from rating a message
+struct MessageStatusResponse: Codable {
+  let status: String
+}
+
+// MARK: - Sync local files (WAL upload)
+
+/// Outcome of POST `/v2/sync-local-files` — exactly one of `jobId` (202) or `completed` (200).
+enum UploadLocalFilesResult: Equatable {
+  case queued(jobId: String)
+  case done(SyncLocalFilesResultResponse)
+
+  var jobId: String? {
+    if case .queued(let jobId) = self { return jobId }
+    return nil
+  }
+}
+
+struct SyncLocalFilesResultResponse: Codable, Equatable {
+  let newMemories: [String]
+  let updatedMemories: [String]
+  let failedSegments: Int
+  let totalSegments: Int
+  let errors: [String]
+
+  enum CodingKeys: String, CodingKey {
+    case newMemories = "new_memories"
+    case updatedMemories = "updated_memories"
+    case failedSegments = "failed_segments"
+    case totalSegments = "total_segments"
+    case errors
+  }
+}
+
+struct SyncJobStartResponse: Codable, Equatable {
+  let jobId: String
+  let status: String
+  let totalFiles: Int
+  let totalSegments: Int
+  let pollAfterMs: Int
+
+  enum CodingKeys: String, CodingKey {
+    case jobId = "job_id"
+    case status
+    case totalFiles = "total_files"
+    case totalSegments = "total_segments"
+    case pollAfterMs = "poll_after_ms"
+  }
+}
+
+struct SyncJobStatusResponse: Codable, Equatable {
+  let jobId: String
+  let status: String
+  let totalSegments: Int
+  let processedSegments: Int
+  let successfulSegments: Int
+  let failedSegments: Int
+  let result: SyncLocalFilesResultResponse?
+  let error: String?
+
+  var isTerminal: Bool {
+    status == "completed" || status == "partial_failure" || status == "failed"
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case jobId = "job_id"
+    case status
+    case totalSegments = "total_segments"
+    case processedSegments = "processed_segments"
+    case successfulSegments = "successful_segments"
+    case failedSegments = "failed_segments"
+    case result
+    case error
+  }
+}
+
+enum SyncJobFetchOutcome: Equatable {
+  case ok
+  case notFound
+  case forbidden
+  case transient
+}
+
+struct SyncJobFetch: Equatable {
+  let outcome: SyncJobFetchOutcome
+  let status: SyncJobStatusResponse?
+
+  init(outcome: SyncJobFetchOutcome, status: SyncJobStatusResponse? = nil) {
+    self.outcome = outcome
+    self.status = status
   }
 }
 
@@ -5577,13 +5955,49 @@ extension APIClient {
 struct Person: Codable, Identifiable {
   let id: String
   let name: String
-  let createdAt: Date
-  let updatedAt: Date
+  let createdAt: Date?
+  let updatedAt: Date?
+  let speechSamples: [String]
+  let speechSampleTranscripts: [String]?
+  let speechSamplesVersion: Int
 
   enum CodingKeys: String, CodingKey {
     case id, name
     case createdAt = "created_at"
     case updatedAt = "updated_at"
+    case speechSamples = "speech_samples"
+    case speechSampleTranscripts = "speech_sample_transcripts"
+    case speechSamplesVersion = "speech_samples_version"
+  }
+
+  init(
+    id: String,
+    name: String,
+    createdAt: Date? = nil,
+    updatedAt: Date? = nil,
+    speechSamples: [String] = [],
+    speechSampleTranscripts: [String]? = nil,
+    speechSamplesVersion: Int = 3
+  ) {
+    self.id = id
+    self.name = name
+    self.createdAt = createdAt
+    self.updatedAt = updatedAt
+    self.speechSamples = speechSamples
+    self.speechSampleTranscripts = speechSampleTranscripts
+    self.speechSamplesVersion = speechSamplesVersion
+  }
+
+  init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    id = try container.decode(String.self, forKey: .id)
+    name = try container.decode(String.self, forKey: .name)
+    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt)
+    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt)
+    speechSamples = try container.decodeIfPresent([String].self, forKey: .speechSamples) ?? []
+    speechSampleTranscripts = try container.decodeIfPresent(
+      [String].self, forKey: .speechSampleTranscripts)
+    speechSamplesVersion = try container.decodeIfPresent(Int.self, forKey: .speechSamplesVersion) ?? 3
   }
 }
 

@@ -1065,7 +1065,6 @@ def add_run_args(parser: argparse.ArgumentParser) -> None:
         help="explicitly allow compatible flows older than the current harness schema",
     )
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)

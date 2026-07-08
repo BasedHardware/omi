@@ -78,6 +78,36 @@ private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendabl
                 self,
                 didLoad: Data(#"{"id":"local-fallback-conversation","status":"processing","discarded":false}"#.utf8)
             )
+        } else if path == "/v1/conversations/local-fallback-conversation" {
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(
+                self,
+                didLoad: Data(
+                    """
+                    {
+                      "id": "local-fallback-conversation",
+                      "created_at": "2026-07-07T10:00:00Z",
+                      "started_at": "2026-07-07T10:00:00Z",
+                      "finished_at": "2026-07-07T10:01:00Z",
+                      "structured": {
+                        "title": "Hydrated local fallback",
+                        "overview": "Hydrated overview",
+                        "emoji": "",
+                        "category": "other",
+                        "action_items": [],
+                        "events": []
+                      },
+                      "status": "completed",
+                      "source": "desktop",
+                      "discarded": false,
+                      "deleted": false,
+                      "starred": false,
+                      "deferred": false
+                    }
+                    """.utf8
+                )
+            )
         } else {
             let response = HTTPURLResponse(url: request.url!, statusCode: 404, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -205,6 +235,24 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertEqual(session.finalizationReason, .userStop)
         XCTAssertNil(session.finalizationStartedAt)
         XCTAssertNil(session.finalizationCompletedAt)
+    }
+
+    func testMeetingEndedFinalizationReasonPersists() async throws {
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: "desktop",
+            finalizationStrategy: .localSegments
+        )
+
+        try await TranscriptionStorage.shared.finishSession(
+            id: sessionId,
+            reason: .meetingEnded
+        )
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let session = try XCTUnwrap(storedSession)
+        XCTAssertEqual(session.status, .pendingUpload)
+        XCTAssertEqual(session.finalizationStrategy, .localSegments)
+        XCTAssertEqual(session.finalizationReason, .meetingEnded)
     }
 
     func testSessionsNeedingFinalizationIncludesRetryableWorkOnly() async throws {
@@ -390,13 +438,17 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.backendId, "local-fallback-conversation")
         XCTAssertTrue(session.backendSynced)
+        XCTAssertEqual(session.title, "Hydrated local fallback")
+        XCTAssertEqual(session.overview, "Hydrated overview")
 
         let requests = FinalizationRecoveryURLStub.requests
-        XCTAssertEqual(requests.count, 1)
-        XCTAssertEqual(requests.first?.method, "POST")
-        XCTAssertEqual(requests.first?.url.path, "/v1/conversations/from-segments")
+        let postRequests = requests.filter { $0.method == "POST" }
+        let getRequests = requests.filter { $0.method == "GET" }
+        XCTAssertEqual(postRequests.count, 1)
+        XCTAssertEqual(postRequests.first?.url.path, "/v1/conversations/from-segments")
+        XCTAssertEqual(getRequests.map(\.url.path), ["/v1/conversations/local-fallback-conversation"])
 
-        let body = try XCTUnwrap(requests.first?.body)
+        let body = try XCTUnwrap(postRequests.first?.body)
         let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
         XCTAssertEqual(json["client_conversation_id"] as? String, "client-fallback-id")
         let segments = try XCTUnwrap(json["transcript_segments"] as? [[String: Any]])
@@ -490,6 +542,55 @@ final class TranscriptionFinalizationStateMachineTests: XCTestCase {
 
         let session = try await TranscriptionStorage.shared.getSession(id: sessionId)
         XCTAssertNil(session)
+    }
+
+    func testFromSegmentsSuccessWithCompletionConflictMarksRetryableFailure() async throws {
+        FinalizationRecoveryURLStub.reset()
+        setenv("OMI_PYTHON_API_URL", "https://finalization-recovery.test/", 1)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [FinalizationRecoveryURLStub.self]
+        let client = APIClient(session: URLSession(configuration: config))
+        await client.setTestAuthHeader("Bearer test-token")
+        await ConversationFinalizationService.shared.setAPIClientForTesting(client)
+        addTeardownBlock {
+            await ConversationFinalizationService.shared.setAPIClientForTesting(nil)
+        }
+        defer {
+            unsetenv("OMI_PYTHON_API_URL")
+            FinalizationRecoveryURLStub.reset()
+        }
+
+        let sessionId = try await TranscriptionStorage.shared.startSession(
+            source: "desktop",
+            finalizationStrategy: .localSegments
+        )
+        try await TranscriptionStorage.shared.bindBackendConversation(id: sessionId, backendId: "existing-backend-id")
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        try await TranscriptionStorage.shared.appendSegment(
+            sessionId: sessionId,
+            speaker: 0,
+            text: "saved transcript for conflicting completion",
+            startTime: 0,
+            endTime: 1
+        )
+
+        await ConversationFinalizationService.shared.finalizeSession(
+            id: sessionId,
+            reason: .userStop
+        )
+
+        let storedSession = try await TranscriptionStorage.shared.getSession(id: sessionId)
+        let session = try XCTUnwrap(storedSession)
+        XCTAssertEqual(session.status, .failed)
+        XCTAssertEqual(session.retryCount, 1)
+        XCTAssertEqual(session.backendId, "existing-backend-id")
+        XCTAssertFalse(session.backendSynced)
+        let segmentCount = try await TranscriptionStorage.shared.getSegmentCount(sessionId: sessionId)
+        XCTAssertEqual(segmentCount, 1)
+
+        let requests = FinalizationRecoveryURLStub.requests
+        XCTAssertEqual(requests.filter { $0.method == "POST" }.map(\.url.path), ["/v1/conversations/from-segments"])
+        XCTAssertTrue(requests.filter { $0.method == "GET" }.isEmpty)
     }
 
     func testCloudReconciliationExhaustionKeepsRetryingBeforeMaxAttempts() {

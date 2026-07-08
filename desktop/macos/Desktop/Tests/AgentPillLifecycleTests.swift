@@ -62,6 +62,21 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
   }
 
+  func testTypingIndicatorUsesSharedNotchThinkingMarkInsteadOfBounce() throws {
+    let typingSource = try typingIndicatorSource()
+    let notchSource = try floatingControlBarViewSource()
+
+    XCTAssertTrue(typingSource.contains("struct OmiThinkingMark: View"))
+    XCTAssertTrue(typingSource.contains("struct TypingIndicator: View"))
+    XCTAssertTrue(typingSource.contains("OmiThinkingMark()"))
+    XCTAssertTrue(typingSource.contains(".linear(duration: 0.9).repeatForever(autoreverses: false)"))
+    XCTAssertTrue(notchSource.contains("private struct NotchThinkingMark: View"))
+    XCTAssertTrue(notchSource.contains("OmiThinkingMark()"))
+    XCTAssertFalse(typingSource.contains("animationPhase"))
+    XCTAssertFalse(typingSource.contains("scaleEffect(animationPhase"))
+    XCTAssertFalse(typingSource.contains(".delay(Double(index) * 0.15)"))
+  }
+
   func testVoiceAgentKickoffUsesCachedPhrasePack() throws {
     let agentPillSource = try agentPillSource()
     let voiceServiceSource = try floatingBarVoicePlaybackServiceSource()
@@ -412,7 +427,7 @@ final class AgentPillLifecycleTests: XCTestCase {
   func testSpawnAgentToolCallOpensSubagentChat() throws {
     let responseSource = try aiResponseViewSource()
     let viewSource = try floatingControlBarViewSource()
-    let chatPageSource = try chatPageSource()
+    let chatBubbleSource = try chatBubbleSource()
 
     XCTAssertTrue(responseSource.contains("var onOpenAgent: ((UUID) -> Void)?"))
     XCTAssertTrue(responseSource.contains("ToolCallsGroup(calls: calls, onOpenAgent: onOpenAgent)"))
@@ -420,10 +435,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(responseSource.contains("openNewlySpawnedAgentIfNeeded()"))
     XCTAssertFalse(responseSource.contains("autoOpenedSpawnedAgentIDs"))
     XCTAssertTrue(viewSource.contains("onOpenAgent: { agentID in\n                openAgentInChat(agentID: agentID)"))
-    XCTAssertTrue(chatPageSource.contains("var onOpenAgent: ((UUID) -> Void)? = nil"))
-    XCTAssertTrue(chatPageSource.contains("calls.compactMap(\\.spawnedAgentID).last"))
-    XCTAssertTrue(chatPageSource.contains("Self.cleanToolName(name) == \"spawn_agent\""))
-    XCTAssertTrue(chatPageSource.contains("guard trimmed.lowercased().hasPrefix(\"id:\") else { continue }"))
+    XCTAssertTrue(chatBubbleSource.contains("var onOpenAgent: ((UUID) -> Void)? = nil"))
+    XCTAssertTrue(chatBubbleSource.contains("calls.compactMap(\\.spawnedAgentID).last"))
+    XCTAssertTrue(chatBubbleSource.contains("Self.cleanToolName(name) == \"spawn_agent\""))
+    XCTAssertTrue(chatBubbleSource.contains("guard trimmed.lowercased().hasPrefix(\"id:\") else { continue }"))
   }
 
   func testResizeGripKeepsNotchCentered() throws {
@@ -1053,29 +1068,29 @@ final class AgentPillLifecycleTests: XCTestCase {
   }
 
   func testFloatingAgentToolCallsUseCompactOneLinePresentation() throws {
-    let chatPageSource = try chatPageSource()
+    let chatBubbleSource = try chatBubbleSource()
     let providerSource = try chatProviderSource()
 
-    XCTAssertTrue(chatPageSource.contains("var compact: Bool = false"))
-    XCTAssertTrue(chatPageSource.contains("var expandRunning: Bool = true"))
-    XCTAssertTrue(chatPageSource.contains("State(initialValue: expandRunning && Self.hasRunningTool(in: calls))"))
-    XCTAssertTrue(chatPageSource.contains(".onChange(of: hasRunningTool)"))
-    XCTAssertTrue(chatPageSource.contains("private var header: some View"))
-    XCTAssertTrue(chatPageSource.contains("private var expandedToolCalls: some View"))
-    XCTAssertTrue(chatPageSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
-    XCTAssertTrue(chatPageSource.contains(".frame(height: compact ? 34 : nil)"))
-    XCTAssertTrue(chatPageSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
-    XCTAssertTrue(chatPageSource.contains("ToolCallCard(\n              name: name"))
-    XCTAssertTrue(chatPageSource.contains("spawnedAgentID: block.spawnedAgentID"))
-    XCTAssertTrue(chatPageSource.contains("onOpenAgent: onOpenAgent"))
-    XCTAssertTrue(chatPageSource.contains("summaryEmbeddedInToolName"))
+    XCTAssertTrue(chatBubbleSource.contains("var compact: Bool = false"))
+    XCTAssertTrue(chatBubbleSource.contains("var expandRunning: Bool = true"))
+    XCTAssertTrue(chatBubbleSource.contains("State(initialValue: expandRunning && Self.hasRunningTool(in: calls))"))
+    XCTAssertTrue(chatBubbleSource.contains(".onChange(of: hasRunningTool)"))
+    XCTAssertTrue(chatBubbleSource.contains("private var header: some View"))
+    XCTAssertTrue(chatBubbleSource.contains("private var expandedToolCalls: some View"))
+    XCTAssertTrue(chatBubbleSource.contains("VStack(alignment: .leading, spacing: compact ? 0 : 6)"))
+    XCTAssertTrue(chatBubbleSource.contains(".frame(height: compact ? 34 : nil)"))
+    XCTAssertTrue(chatBubbleSource.contains("Image(systemName: isExpanded ? \"chevron.up\" : \"chevron.down\")"))
+    XCTAssertTrue(chatBubbleSource.contains("ToolCallCard(\n              name: name"))
+    XCTAssertTrue(chatBubbleSource.contains("spawnedAgentID: block.spawnedAgentID"))
+    XCTAssertTrue(chatBubbleSource.contains("onOpenAgent: onOpenAgent"))
+    XCTAssertTrue(chatBubbleSource.contains("summaryEmbeddedInToolName"))
     XCTAssertTrue(providerSource.contains("cleanName.lowercased().hasPrefix(\"read:\")"))
     XCTAssertTrue(providerSource.contains("return \"Reading file\""))
   }
 
   func testSelectableMarkdownRoutesGFMTablesThroughMarkdownUI() throws {
     let selectableSource = try selectableMarkdownSource()
-    let chatPageSource = try chatPageSource()
+    let chatBubbleSource = try chatBubbleSource()
     let table = """
     | Rank | Skill | Loads |
     |---:|---|---:|
@@ -1094,9 +1109,9 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(selectableSource.contains("Markdown(content)"))
     XCTAssertTrue(selectableSource.contains(".scaledMarkdownTheme(sender)"))
     XCTAssertTrue(selectableSource.contains(".inlineOnlyPreservingWhitespace"))
-    XCTAssertTrue(chatPageSource.contains(".table { configuration in"))
-    XCTAssertTrue(chatPageSource.contains(".markdownTableBorderStyle"))
-    XCTAssertTrue(chatPageSource.contains(".markdownTableBackgroundStyle"))
+    XCTAssertTrue(chatBubbleSource.contains(".table { configuration in"))
+    XCTAssertTrue(chatBubbleSource.contains(".markdownTableBorderStyle"))
+    XCTAssertTrue(chatBubbleSource.contains(".markdownTableBackgroundStyle"))
   }
 
   func testNonProductionBundlesDoNotInstallNativeSentryHandlers() throws {
@@ -1164,6 +1179,22 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/MainWindow/Pages/ChatPage.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func chatBubbleSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func typingIndicatorSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/TypingIndicator.swift")
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

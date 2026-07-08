@@ -320,8 +320,9 @@ def get_route_options(feature: str, model: str, provider: str) -> Dict[str, obje
         temperature = _OPENROUTER_TEMPERATURES.get(feature)
         if temperature is not None:
             options['temperature'] = temperature
-    if provider == 'gemini':
-        # Mechanical Gemini-routed features do not need paid thinking tokens.
+    if provider == 'gemini' and not is_structured_output_feature(feature):
+        # Structured-output features use .with_structured_output(), which routes through
+        # Completions.parse() and rejects thinking_budget (issue #7898).
         options['thinking_budget'] = 0
     return options
 

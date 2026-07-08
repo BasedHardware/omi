@@ -243,8 +243,28 @@ export interface AppCatalogGroup {
   capability?: AppSelectOption | null;
   category?: AppSelectOption | null;
   count?: number | null;
-  data?: Array<AppBaseModel>;
+  data?: Array<AppCatalogItem>;
   pagination?: AppPagination | null;
+}
+
+export interface AppCatalogItem {
+  approved?: boolean;
+  author?: string;
+  capabilities?: Array<string>;
+  category?: string;
+  description?: string;
+  enabled?: boolean;
+  external_integration?: ExternalIntegration | null;
+  id: string;
+  image?: string;
+  installs?: number;
+  is_paid?: boolean | null;
+  name?: string;
+  price?: number | null;
+  private?: boolean;
+  rating_avg?: number | null;
+  rating_count?: number;
+  status?: string;
 }
 
 export interface AppCatalogMeta {
@@ -258,7 +278,7 @@ export interface AppCatalogMeta {
 export interface AppCatalogResponse {
   capability?: AppSelectOption | null;
   category?: AppSelectOption | null;
-  data?: Array<AppBaseModel>;
+  data?: Array<AppCatalogItem>;
   groups?: Array<AppCatalogGroup>;
   meta?: AppCatalogMeta | null;
   pagination?: AppPagination | null;
@@ -357,7 +377,7 @@ export interface AppSearchFilters {
 }
 
 export interface AppSearchResponse {
-  data?: Array<AppBaseModel>;
+  data?: Array<AppCatalogItem>;
   filters: AppSearchFilters;
   pagination: AppPagination;
 }
@@ -2116,7 +2136,7 @@ export interface SavePayPalPaymentDetailsRequest {
 
 export interface SearchConversationsResponse {
   current_page: number;
-  items: Array<Record<string, unknown>>;
+  items: Array<Conversation>;
   per_page: number;
   total_pages: number;
 }
@@ -2729,8 +2749,17 @@ export interface UserProfile {
 }
 
 export interface UserProfileResponse {
+  company?: string | null;
+  created_at?: string | null;
   data_protection_level?: string | null;
+  email?: string | null;
+  job?: string | null;
   migration_status?: Record<string, unknown> | null;
+  motivation?: string | null;
+  name?: string | null;
+  time_zone?: string | null;
+  uid: string;
+  use_case?: string | null;
   [key: string]: unknown;
 }
 
@@ -2872,6 +2901,7 @@ export interface OmiApiSchemas {
   "AppCapabilityAction": AppCapabilityAction;
   "AppCapabilityResponse": AppCapabilityResponse;
   "AppCatalogGroup": AppCatalogGroup;
+  "AppCatalogItem": AppCatalogItem;
   "AppCatalogMeta": AppCatalogMeta;
   "AppCatalogResponse": AppCatalogResponse;
   "AppCreateResponse": AppCreateResponse;
