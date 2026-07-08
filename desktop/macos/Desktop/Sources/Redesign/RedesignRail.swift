@@ -19,6 +19,8 @@ enum RedesignRoute: Int {
   case more = 20
   case persona = 21
   case planUsage = 22
+  case messages = 23
+  case brainMap = 24
 
   var icon: String {
     switch self {
@@ -26,6 +28,7 @@ enum RedesignRoute: Int {
     case .conversations: return "waveform"
     case .chat: return "sparkles"
     case .memories: return "brain"
+    case .messages: return "message"
     case .tasks: return "checklist"
     case .focus: return "eye"
     case .insight: return "lightbulb"
@@ -37,6 +40,7 @@ enum RedesignRoute: Int {
     case .more: return "square.grid.2x2"
     case .persona: return "theatermasks"
     case .planUsage: return "star"
+    case .brainMap: return "point.3.connected.trianglepath.dotted"
     }
   }
 
@@ -46,6 +50,7 @@ enum RedesignRoute: Int {
     case .conversations: return "Conversations"
     case .chat: return "Ask omi"
     case .memories: return "Memory"
+    case .messages: return "Messages"
     case .tasks: return "Tasks"
     case .focus: return "Focus"
     case .insight: return "Insights"
@@ -57,6 +62,7 @@ enum RedesignRoute: Int {
     case .more: return "All features"
     case .persona: return "Persona"
     case .planUsage: return "Plan & usage"
+    case .brainMap: return "Brain map"
     }
   }
 }
@@ -67,7 +73,9 @@ struct RedesignRail: View {
   @ObservedObject var appState: AppState
   @ObservedObject private var insightStorage = InsightStorage.shared
 
-  private let primary: [RedesignRoute] = [.home, .chat, .conversations, .memories, .tasks, .rewind]
+  private let primary: [RedesignRoute] = [
+    .home, .chat, .conversations, .memories, .messages, .tasks, .rewind,
+  ]
 
   var body: some View {
     VStack(spacing: 4) {
@@ -106,7 +114,7 @@ struct RedesignRail: View {
     // Many pages share one rail icon, mirroring the mockup.
     switch route {
     case .home: return [0, 5, 6].contains(selectedIndex)  // dashboard/focus/insights
-    case .memories: return [3, 21].contains(selectedIndex)  // memory/persona
+    case .memories: return [3, 21, 24].contains(selectedIndex)  // memory/persona/brain-map
     case .settings: return [9, 10, 12, 22].contains(selectedIndex)  // settings/perms/help/plan
     case .more: return selectedIndex == 20 || selectedIndex == 8  // more/apps
     default: return selectedIndex == route.rawValue

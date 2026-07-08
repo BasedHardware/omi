@@ -800,9 +800,8 @@ struct DesktopHomeView: View {
   /// (home, more) render on warm-paper canvas; pages not yet converted render inside
   /// a dark panel so they stay self-consistent until they're rebuilt.
   @ViewBuilder private var redesignContentArea: some View {
-    // Every page is redesigned (light) except Rewind (7), which keeps its
-    // existing dark UI in a panel until it's converted.
-    let lightPage = (selectedIndex != 7)
+    // Every redesigned page is warm-paper light (Rewind included).
+    let lightPage = true
     VStack(spacing: 0) {
       RedesignTopBar(appState: appState)
       if lightPage {
@@ -1192,6 +1191,10 @@ private struct PageContentView: View {
         RedesignPersonaPage()
       case 22:
         RedesignPlanUsagePage()
+      case 23:
+        RedesignMessagesPage()
+      case 24:
+        RedesignBrainMapPage(selectedIndex: $selectedTabIndex)
       case 1:
         if useRedesign {
           RedesignConversationsPage(appState: appState)
@@ -1232,7 +1235,11 @@ private struct PageContentView: View {
           InsightPage()
         }
       case 7:
-        RewindPage(appState: appState)
+        if useRedesign {
+          RedesignRewindPage(appState: appState, selectedIndex: $selectedTabIndex)
+        } else {
+          RewindPage(appState: appState)
+        }
       case 8:
         if useRedesign {
           RedesignAppsPage(

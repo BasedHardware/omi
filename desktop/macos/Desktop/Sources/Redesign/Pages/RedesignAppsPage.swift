@@ -1,16 +1,23 @@
 import SwiftUI
 
-/// "Where I learn, and where I work." — mockup `apps.html`, live-wired.
+/// "Where I learn, and where I work." — mockup `apps.html`, fully live-wired.
 ///
-/// A clear, accurate read-only display of the two sides of Omi's app surface:
-///   • LEFT  "Sources I learn from" — the real `ImportConnector.all`, with the
-///     live connected/Connect state from `ImportConnectorStatusStore`.
-///   • RIGHT "Places I work" — the real `MemoryExportDestination.allCases`, with
-///     the live configured/Connect state from `MemoryExportService`.
+/// The two sides of Omi's app surface, rendered with the REAL colored brand
+/// logos and the REAL connect popups:
+///   • LEFT  "Sources I learn from" — the real `ImportConnector.all`, each row
+///     showing its true `ConnectorBrandIcon`. "Connect" opens the real
+///     `ImportConnectorSheet` (calendar / Gmail / X OAuth / Apple Notes / local
+///     files / ChatGPT + Claude memory import). Live status comes from
+///     `ImportConnectorStatusStore`.
+///   • RIGHT "Places I work" — the real `MemoryExportDestination.allCases`, each
+///     row showing its true `ConnectorBrandIcon`. "Connect" opens the real
+///     `ConnectDestinationSheet` (which itself routes to
+///     `MemoryExportDestinationSheet` for single destinations, or the grouped
+///     Claude/ChatGPT picker). Live status comes from `MemoryExportService`.
 ///
-/// Tapping "Connect" jumps to the full Apps page (nav index 8), where the actual
-/// connect/import/export sheets live. This page never invents connectors,
-/// destinations, or statuses — it only reflects what those sources report.
+/// This page never invents connectors, destinations, logos, or statuses — it
+/// only reflects what those real sources report, and it drives the exact same
+/// sheets the full Apps page (nav index 8) uses.
 @MainActor
 struct RedesignAppsPage: View {
   @ObservedObject var appProvider: AppProvider
@@ -19,6 +26,10 @@ struct RedesignAppsPage: View {
 
   @StateObject private var connectorStatus = ImportConnectorStatusStore()
   @State private var exportStatuses: [MemoryExportDestination: MemoryExportStatus] = [:]
+
+  // Presenting the REAL connect popups. Setting either drives a `.dismissableSheet`.
+  @State private var selectedConnector: ImportConnector?
+  @State private var selectedDestination: MemoryExportDestination?
 
   private let connectors = ImportConnector.all
   private let destinations = MemoryExportDestination.allCases
@@ -55,6 +66,31 @@ struct RedesignAppsPage: View {
       await connectorStatus.refresh()
       exportStatuses = await MemoryExportService.shared.allStatuses()
     }
+    // The REAL import popup — same sheet the full Apps page presents.
+    .dismissableSheet(item: $selectedConnector) { connector in
+      ImportConnectorSheet(
+        connector: connector,
+        appState: appState,
+        statusStore: connectorStatus,
+        onDismiss: { selectedConnector = nil })
+        .frame(width: 520, height: 620)
+    }
+    // The REAL export/connect popup — routes to MemoryExportDestinationSheet or
+    // the grouped Claude/ChatGPT picker internally.
+    .dismissableSheet(item: $selectedDestination) { destination in
+      ConnectDestinationSheet(
+        destination: destination,
+        statuses: $exportStatuses,
+        onDismiss: { selectedDestination = nil })
+        .frame(width: 520, height: 620)
+    }
+    // When the export popup closes, pull fresh status so the row flips to
+    // "Connected" without needing a page reload.
+    .onChange(of: selectedDestination) { _, newValue in
+      if newValue == nil {
+        Task { exportStatuses = await MemoryExportService.shared.allStatuses() }
+      }
+    }
   }
 
   // MARK: - Left: Sources I learn from
@@ -70,10 +106,11 @@ struct RedesignAppsPage: View {
           if index > 0 { rowDivider }
           let snapshot = connectorStatus.snapshot(for: connector)
           connectorRow(
-            mark: mark(forConnectorID: connector.id),
+            brand: connector.brand,
             name: connector.title,
             sub: connector.description,
-            connected: snapshot.isConnected)
+            connected: snapshot.isConnected,
+            connect: { selectedConnector = connector })
         }
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -90,10 +127,11 @@ struct RedesignAppsPage: View {
         ForEach(Array(destinations.enumerated()), id: \.element.id) { index, destination in
           if index > 0 { rowDivider }
           connectorRow(
-            mark: mark(forDestination: destination),
+            brand: destination.brand,
             name: destination.title,
             sub: destination.subtitle,
-            connected: exportStatuses[destination]?.isConfigured ?? false)
+            connected: exportStatuses[destination]?.isConfigured ?? false,
+            connect: { selectedDestination = destination })
         }
 
         HStack(spacing: 8) {
@@ -124,9 +162,18 @@ struct RedesignAppsPage: View {
     Rectangle().fill(Ink.hair).frame(height: 1)
   }
 
-  private func connectorRow(mark: Mark, name: String, sub: String, connected: Bool) -> some View {
+  /// One row: the REAL colored brand logo (`ConnectorBrandIcon`), the name/sub,
+  /// and either a live "Connected" pill or a "Connect" button that opens the
+  /// real popup.
+  private func connectorRow(
+    brand: ConnectorBrand,
+    name: String,
+    sub: String,
+    connected: Bool,
+    connect: @escaping () -> Void
+  ) -> some View {
     HStack(spacing: 13) {
-      MonoChip(mark: mark)
+      ConnectorBrandIcon(brand: brand, size: 34, cornerRadius: 9)
 
       VStack(alignment: .leading, spacing: 1) {
         Text(name)
@@ -151,78 +198,10 @@ struct RedesignAppsPage: View {
         .foregroundColor(Ink.sentText)
         .fixedSize()
       } else {
-        InkButton(title: "Connect", kind: .plain, size: .sm) {
-          // The full Apps page (nav index 8) hosts the real connect sheets.
-          selectedIndex = 8
-        }
+        InkButton(title: "Connect", kind: .plain, size: .sm, action: connect)
       }
     }
     .padding(.vertical, 13)
     .frame(maxWidth: .infinity, alignment: .leading)
-  }
-
-  // MARK: - Monochrome brand marks
-
-  /// A monochrome chip mark: either an SF Symbol or a literal glyph (e.g. 𝕏),
-  /// falling back to the item's initial. Keeps the whole page on the Ink
-  /// monochrome palette instead of pulling in full-color brand logos.
-  fileprivate struct Mark {
-    var symbol: String? = nil
-    var glyph: String? = nil
-  }
-
-  private struct MonoChip: View {
-    let mark: Mark
-
-    var body: some View {
-      RoundedRectangle(cornerRadius: 9, style: .continuous)
-        .fill(Ink.surface)
-        .overlay(
-          RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .strokeBorder(Ink.hair, lineWidth: 1)
-        )
-        .frame(width: 34, height: 34)
-        .overlay(glyphView)
-    }
-
-    @ViewBuilder private var glyphView: some View {
-      if let symbol = mark.symbol {
-        Image(systemName: symbol)
-          .font(.system(size: 15, weight: .medium))
-          .foregroundColor(Ink.ink)
-      } else if let glyph = mark.glyph {
-        Text(glyph)
-          .font(.system(size: 16, weight: .semibold))
-          .foregroundColor(Ink.ink)
-      }
-    }
-  }
-
-  private func mark(forConnectorID id: String) -> Mark {
-    switch id {
-    case "calendar": return Mark(symbol: "calendar")
-    case "email": return Mark(symbol: "envelope")
-    case "local-files": return Mark(symbol: "folder")
-    case "apple-notes": return Mark(symbol: "note.text")
-    case "x": return Mark(glyph: "𝕏")
-    case "chatgpt": return Mark(symbol: "bubble.left.and.bubble.right")
-    case "claude": return Mark(symbol: "sparkles")
-    default: return Mark(glyph: String(id.prefix(1)).uppercased())
-    }
-  }
-
-  private func mark(forDestination destination: MemoryExportDestination) -> Mark {
-    switch destination {
-    case .notion: return Mark(symbol: "doc.text")
-    case .obsidian: return Mark(symbol: "mountain.2")
-    case .chatgpt: return Mark(symbol: "bubble.left.and.bubble.right")
-    case .claude: return Mark(symbol: "sparkles")
-    case .gemini: return Mark(symbol: "sparkle")
-    case .agents: return Mark(glyph: "🤖")
-    case .claudeCode: return Mark(symbol: "terminal")
-    case .codex: return Mark(symbol: "chevron.left.forwardslash.chevron.right")
-    case .openclaw: return Mark(symbol: "pawprint")
-    case .hermes: return Mark(symbol: "bolt.horizontal")
-    }
   }
 }

@@ -8,6 +8,9 @@ import SwiftUI
 struct RedesignMemoryPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
 
+  /// Backend id of the row currently expanded inline (accordion — one at a time).
+  @State private var expandedMemoryId: String? = nil
+
   var body: some View {
     HStack(spacing: 0) {
       leftPane
@@ -68,10 +71,24 @@ struct RedesignMemoryPage: View {
                 .padding(.bottom, 8)
 
               ForEach(group.memories) { memory in
-                MemoryRow(fact: memory.content, source: sourceCaption(for: memory))
-                  .onAppear {
-                    Task { await viewModel.loadMoreIfNeeded(currentMemory: memory) }
+                MemoryRow(
+                  memory: memory,
+                  viewModel: viewModel,
+                  source: sourceCaption(for: memory),
+                  fullDetail: fullDetailCaption(for: memory),
+                  isExpanded: expandedMemoryId == memory.id,
+                  onToggle: {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                      expandedMemoryId = (expandedMemoryId == memory.id) ? nil : memory.id
+                    }
+                  },
+                  onDeleted: {
+                    if expandedMemoryId == memory.id { expandedMemoryId = nil }
                   }
+                )
+                .onAppear {
+                  Task { await viewModel.loadMoreIfNeeded(currentMemory: memory) }
+                }
               }
             }
 
@@ -239,6 +256,14 @@ struct RedesignMemoryPage: View {
     return "\(name) · \(shortTime(memory.createdAt))"
   }
 
+  /// Full, human date shown in the expanded detail (e.g. "Jul 7, 2026 at 3:14 PM").
+  private func fullDetailCaption(for memory: ServerMemory) -> String {
+    let f = DateFormatter()
+    f.dateStyle = .medium
+    f.timeStyle = .short
+    return f.string(from: memory.createdAt)
+  }
+
   private func shortTime(_ date: Date) -> String {
     let cal = Calendar.current
     let f = DateFormatter()
@@ -271,26 +296,191 @@ struct RedesignMemoryPage: View {
 
 // MARK: - Left list row
 
+/// A remembered fact. Tapping the row expands it inline to reveal the full
+/// content, its provenance (source · full date · category · visibility), and the
+/// real actions — Edit, change visibility, Delete — all wired to
+/// `MemoriesViewModel` so changes persist.
 private struct MemoryRow: View {
-  let fact: String
+  let memory: ServerMemory
+  @ObservedObject var viewModel: MemoriesViewModel
   let source: String
+  let fullDetail: String
+  let isExpanded: Bool
+  let onToggle: () -> Void
+  let onDeleted: () -> Void
+
   @State private var hovering = false
+  @State private var isEditing = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 5) {
-      Text(fact)
-        .font(InkFont.sans(14)).foregroundColor(Ink.ink)
-        .lineSpacing(2)
-        .fixedSize(horizontal: false, vertical: true)
-      Text(source)
-        .font(InkFont.sans(12)).foregroundColor(Ink.faint)
+    VStack(alignment: .leading, spacing: 0) {
+      // Tappable summary (collapsed content clamps to two lines).
+      Button(action: onToggle) {
+        HStack(alignment: .top, spacing: 10) {
+          VStack(alignment: .leading, spacing: 5) {
+            Text(memory.content)
+              .font(InkFont.sans(14)).foregroundColor(Ink.ink)
+              .lineSpacing(2)
+              .lineLimit(isExpanded ? nil : 2)
+              .fixedSize(horizontal: false, vertical: true)
+            Text(source)
+              .font(InkFont.sans(12)).foregroundColor(Ink.faint)
+          }
+          Spacer(minLength: 0)
+          Image(systemName: "chevron.down")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(Ink.faint)
+            .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            .opacity(hovering || isExpanded ? 1 : 0)
+            .padding(.top, 3)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      if isExpanded {
+        expandedDetail
+          .padding(.top, 12)
+      }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
     .padding(12)
     .background(
       RoundedRectangle(cornerRadius: 11, style: .continuous)
-        .fill(hovering ? Ink.surface2 : .clear))
+        .fill(isExpanded ? Ink.surface : (hovering ? Ink.surface2 : .clear))
+        .overlay(
+          RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .strokeBorder(isExpanded ? Ink.hair2 : .clear, lineWidth: 1))
+    )
     .onHover { hovering = $0 }
+  }
+
+  // MARK: - Expanded detail
+
+  @ViewBuilder private var expandedDetail: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Rectangle().fill(Ink.hair).frame(height: 1)
+
+      // Metadata chips
+      HStack(spacing: 8) {
+        metaChip(icon: memory.category.icon, text: memory.category.displayName)
+        metaChip(
+          icon: memory.isPublic ? "globe" : "lock",
+          text: memory.isPublic ? "Public" : "Private")
+        if memory.manuallyAdded {
+          metaChip(icon: "checkmark.seal", text: "Added by you")
+        }
+      }
+
+      Text(fullDetail)
+        .font(InkFont.sans(12)).foregroundColor(Ink.faint)
+
+      if isEditing {
+        editor
+      } else {
+        actions
+      }
+    }
+  }
+
+  private func metaChip(icon: String, text: String) -> some View {
+    HStack(spacing: 5) {
+      Image(systemName: icon).font(.system(size: 10))
+      Text(text).font(InkFont.sans(11.5, .medium))
+    }
+    .foregroundColor(Ink.body)
+    .padding(.horizontal, 9).frame(height: 24)
+    .background(
+      Capsule().fill(Ink.surface2)
+        .overlay(Capsule().strokeBorder(Ink.hair, lineWidth: 1)))
+  }
+
+  // MARK: - Actions row (wired to the real view model)
+
+  private var actions: some View {
+    HStack(spacing: 8) {
+      rowButton(label: "Edit", systemImage: "square.and.pencil") {
+        viewModel.editText = memory.content
+        withAnimation(.easeInOut(duration: 0.15)) { isEditing = true }
+      }
+
+      rowButton(
+        label: memory.isPublic ? "Make private" : "Make public",
+        systemImage: memory.isPublic ? "lock" : "globe",
+        disabled: viewModel.isTogglingVisibility
+      ) {
+        Task { await viewModel.toggleVisibility(memory) }
+      }
+
+      Spacer(minLength: 0)
+
+      rowButton(label: "Delete", systemImage: "trash", tint: Ink.danger) {
+        onDeleted()
+        Task { await viewModel.deleteMemory(memory) }
+      }
+    }
+  }
+
+  // MARK: - Inline editor (wired to viewModel.editText + saveEditedMemory)
+
+  private var editor: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      TextField("Memory", text: $viewModel.editText, axis: .vertical)
+        .textFieldStyle(.plain)
+        .font(InkFont.sans(14)).foregroundColor(Ink.ink)
+        .lineLimit(2...8)
+        .padding(10)
+        .background(
+          RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(Ink.surface2)
+            .overlay(
+              RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .strokeBorder(Ink.hair2, lineWidth: 1)))
+
+      HStack(spacing: 8) {
+        Spacer(minLength: 0)
+        rowButton(label: "Cancel", systemImage: nil) {
+          viewModel.editText = ""
+          withAnimation(.easeInOut(duration: 0.15)) { isEditing = false }
+        }
+        rowButton(
+          label: "Save", systemImage: "checkmark", filled: true,
+          disabled: viewModel.editText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        ) {
+          Task {
+            await viewModel.saveEditedMemory(memory)
+            withAnimation(.easeInOut(duration: 0.15)) { isEditing = false }
+          }
+        }
+      }
+    }
+  }
+
+  /// Compact pill button matching the Ink aesthetic (InkButton is too tall here).
+  private func rowButton(
+    label: String,
+    systemImage: String?,
+    tint: Color = Ink.ink,
+    filled: Bool = false,
+    disabled: Bool = false,
+    action: @escaping () -> Void
+  ) -> some View {
+    Button(action: action) {
+      HStack(spacing: 5) {
+        if let systemImage { Image(systemName: systemImage).font(.system(size: 11, weight: .semibold)) }
+        Text(label).font(InkFont.sans(12.5, .medium))
+      }
+      .foregroundColor(filled ? Ink.accentInk : tint)
+      .padding(.horizontal, 12).frame(height: 30)
+      .background(
+        Capsule(style: .continuous)
+          .fill(filled ? Ink.ink : Ink.surface)
+          .overlay(Capsule(style: .continuous).strokeBorder(filled ? .clear : Ink.hair2, lineWidth: 1)))
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .disabled(disabled)
+    .opacity(disabled ? 0.5 : 1)
   }
 }
 
