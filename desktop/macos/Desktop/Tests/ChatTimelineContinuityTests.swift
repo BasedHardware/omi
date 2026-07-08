@@ -162,6 +162,121 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(restoredOutput, "Done.")
   }
 
+  func testAgentIdentityBlocksSurviveSaveMessageMetadataRoundTrip() {
+    let pillId = UUID()
+    let spawn = ChatContentBlock.agentSpawn(
+      id: "spawn-1",
+      pillId: pillId,
+      sessionId: "sess-spawn",
+      runId: "run-spawn",
+      title: "Sleep Agent",
+      objective: "sleep five seconds"
+    )
+    let completion = ChatContentBlock.agentCompletion(
+      id: "completion-1",
+      pillId: pillId,
+      sessionId: "sess-spawn",
+      runId: "run-spawn",
+      title: "Sleep Agent",
+      promptSnippet: "sleep five seconds",
+      output: "Done.",
+      status: "completed"
+    )
+
+    let metadata = ChatContentBlockCodec.mergeIntoMessageMetadata(
+      nil,
+      contentBlocks: [spawn, completion]
+    )
+    XCTAssertNotNil(metadata)
+    XCTAssertTrue(metadata?.contains(ChatContentBlockCodec.messageMetadataKey) == true)
+
+    let restored = ChatContentBlockCodec.decodeFromMessageMetadata(metadata)
+    XCTAssertEqual(restored.count, 2)
+    guard case .agentSpawn(_, let spawnPill, let spawnSession, let spawnRun, let title, let objective) =
+      restored[0]
+    else {
+      return XCTFail("expected agentSpawn in metadata round-trip")
+    }
+    XCTAssertEqual(spawnPill, pillId)
+    XCTAssertEqual(spawnSession, "sess-spawn")
+    XCTAssertEqual(spawnRun, "run-spawn")
+    XCTAssertEqual(title, "Sleep Agent")
+    XCTAssertEqual(objective, "sleep five seconds")
+
+    guard case .agentCompletion(_, let donePill, _, let doneRun, _, _, let output, _) = restored[1]
+    else {
+      return XCTFail("expected agentCompletion in metadata round-trip")
+    }
+    XCTAssertEqual(donePill, pillId)
+    XCTAssertEqual(doneRun, "run-spawn")
+    XCTAssertEqual(output, "Done.")
+
+    // Reload path used by ChatMessage(from:): hydrate content_blocks from metadata.
+    let hydrated = ChatMessage(
+      id: "server-msg-1",
+      text: "Done.",
+      sender: .ai,
+      contentBlocks: ChatContentBlockCodec.decodeFromMessageMetadata(metadata)
+    )
+    XCTAssertEqual(hydrated.contentBlocks.count, 2)
+    XCTAssertEqual(hydrated.contentBlocks.spawnedAgentIDs, [pillId, pillId])
+  }
+
+  func testMaterializeAgentSpawnBlockFromSpawnToolResult() {
+    let pillId = UUID()
+    var blocks: [ChatContentBlock] = [
+      .toolCall(
+        id: "tool_1",
+        name: "spawn_agent",
+        status: .completed,
+        toolUseId: "tu-1",
+        input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
+        output: """
+        Agent started as a floating agent pill.
+        id: \(pillId.uuidString)
+        sessionId: sess-abc
+        runId: run-xyz
+        title: Sleep Agent
+        status: running
+        """
+      )
+    ]
+
+    ChatProvider.materializeAgentSpawnBlockIfNeeded(
+      in: &blocks,
+      toolUseId: "tu-1",
+      toolName: "spawn_agent"
+    )
+    XCTAssertEqual(blocks.count, 2)
+    guard case .agentSpawn(_, let spawnPill, let sessionId, let runId, let title, let objective) =
+      blocks[1]
+    else {
+      return XCTFail("spawn_agent tool result must emit .agentSpawn")
+    }
+    XCTAssertEqual(spawnPill, pillId)
+    XCTAssertEqual(sessionId, "sess-abc")
+    XCTAssertEqual(runId, "run-xyz")
+    XCTAssertEqual(title, "Sleep Agent")
+    XCTAssertEqual(objective, "sleep five seconds")
+
+    // Idempotent on repeat apply.
+    ChatProvider.materializeAgentSpawnBlockIfNeeded(
+      in: &blocks,
+      toolUseId: "tu-1",
+      toolName: "spawn_agent"
+    )
+    XCTAssertEqual(blocks.count, 2)
+
+    // Structured spawn card is the single visible entrypoint (tool link hidden).
+    let groups = ContentBlockGroup.visibleChatGroups(blocks, isStreaming: false)
+    XCTAssertEqual(groups.count, 1)
+    guard case .agentSpawn(_, let visiblePill, _, let visibleRun, _, _) = groups[0] else {
+      return XCTFail("expected only agentSpawn card after materialize, got \(groups)")
+    }
+    XCTAssertEqual(visiblePill, pillId)
+    XCTAssertEqual(visibleRun, "run-xyz")
+  }
+
   func testSpawnToolOutputParsesSessionAndRunIds() {
     let pillId = UUID()
     let block = ChatContentBlock.toolCall(

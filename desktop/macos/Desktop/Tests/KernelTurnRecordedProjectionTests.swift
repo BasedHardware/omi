@@ -304,6 +304,51 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     )
   }
 
+  /// Proactive notifications stage under `notification:<uuid>` (same stage/promote
+  /// path as other surface turns) — not a separate appendAssistantMessage writer.
+  func testNotificationContinuityKeyStagesAndPromotesWithoutDoubleAppend() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+    let notificationId = UUID()
+    let key = "notification:\(notificationId.uuidString)"
+    let text = "Heads up: calendar conflict"
+
+    let staged = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "",
+      assistantText: text,
+      origin: "proactive_notification",
+      turnOwner: .mainChat
+    )
+    XCTAssertNotNil(staged.assistant)
+    XCTAssertNil(staged.user)
+    XCTAssertTrue(provider.hasOptimisticTurn(continuityKey: key))
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(provider.messages.first?.clientTurnId, key)
+
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "",
+        assistantText: text,
+        origin: "proactive_notification",
+        interrupted: false,
+        idempotencyKey: key,
+        userTurnId: nil,
+        assistantTurnId: "assistant-notif-1"
+      )
+    )
+
+    XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(provider.messages.first?.id, staged.assistant?.id)
+    XCTAssertEqual(provider.messages.first?.text, text)
+  }
+
   /// INV-6: never dedupe by text — identical user+assistant copy with different
   /// continuity keys must produce two distinct pairs on the timeline.
   func testSameTextDifferentContinuityKeysKeepsTwoPairs() {

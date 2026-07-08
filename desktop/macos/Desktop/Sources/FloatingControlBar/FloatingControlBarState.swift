@@ -286,6 +286,21 @@ class FloatingControlBarState: NSObject, ObservableObject {
         return Date().timeIntervalSince(lastConversationActivityAt) <= Self.visibleConversationReuseInterval
     }
 
+    /// True when a restored viewport should re-subscribe to provider streaming
+    /// for the active turn (mid-stream close → reopen within the reuse window).
+    static func shouldReobserveStreamingTurn(
+        activeClientTurnId: String?,
+        answerMessage: ChatMessage?
+    ) -> Bool {
+        guard let turnId = activeClientTurnId?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !turnId.isEmpty,
+              let answerMessage,
+              answerMessage.isStreaming,
+              answerMessage.clientTurnId == turnId
+        else { return false }
+        return true
+    }
+
     /// Resolve the current answer from the shared provider timeline (or local override).
     /// Provider-bound answers always win over `localAnswerOverride` so the shared
     /// timeline remains source of truth once an answer id is anchored.

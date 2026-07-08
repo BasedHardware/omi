@@ -911,16 +911,35 @@ enum ContentBlockGroup: Identifiable {
   /// Main chat renders the agent's final answer and sub-agent entrypoints, not
   /// the implementation log of every completed tool. While a response is live,
   /// in-flight tools remain visible as progress feedback; after completion,
-  /// only spawned-agent links survive.
+  /// only spawned-agent links survive. When a structured `.agentSpawn` exists
+  /// for the same pill/run, hide the spawn tool call so the card is the single
+  /// entrypoint (INV-6 structured identity).
   static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
-    group(blocks).compactMap { group in
+    let structuredSpawnKeys = Set(
+      blocks.compactMap { block -> String? in
+        guard case .agentSpawn(_, let pillId, _, let runId, _, _) = block else { return nil }
+        if let pillId { return "pill:\(pillId.uuidString)" }
+        let trimmedRun = runId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
+      }
+    )
+    return group(blocks).compactMap { group in
       switch group {
       case .text, .discoveryCard, .agentSpawn, .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil
       case .toolCalls(let id, let calls):
-        let spawnedAgentCalls = calls.filter { $0.spawnedAgentID != nil }
+        let spawnedAgentCalls = calls.filter { call in
+          guard let pillId = call.spawnedAgentID else { return false }
+          if structuredSpawnKeys.contains("pill:\(pillId.uuidString)") { return false }
+          if let runId = call.spawnedAgentRunID,
+             structuredSpawnKeys.contains("run:\(runId)")
+          {
+            return false
+          }
+          return true
+        }
         if !spawnedAgentCalls.isEmpty {
           return .toolCalls(id: id, calls: spawnedAgentCalls)
         }
@@ -1440,6 +1459,12 @@ extension ChatContentBlock {
       let output
     else { return nil }
     return Self.labeledValue(in: output, keys: ["runid", "run_id"])
+  }
+
+  /// Parse a labeled `key: value` line from a spawn_agent tool block's output.
+  static func labeledSpawnValue(in block: ChatContentBlock, keys: [String]) -> String? {
+    guard case .toolCall(_, _, _, _, _, let output) = block, let output else { return nil }
+    return labeledValue(in: output, keys: keys)
   }
 
   private static func labeledValue(in output: String, keys: [String]) -> String? {

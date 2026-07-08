@@ -198,8 +198,15 @@ Rules (fail the PR if any break):
    continuity keys are ignored. Empty keys do not suppress.
 4. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
    content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
-   authoritative. Legacy `[Background agent id=…]` bracket text remains dual-read
-   only. Do not invent new free-text formats; extend the schema + tests together.
+   authoritative. Persist structured blocks through `saveMessage` metadata key
+   `content_blocks` (via `ChatContentBlockCodec`) so they survive reload; kernel
+   apply still materializes `agentCompletion` from bracket text when a turn
+   arrives without an optimistic stage. Legacy `[Background agent id=…]` bracket
+   text remains dual-read only. Do not invent new free-text formats; extend the
+   schema + tests together.
+   Proactive notifications stage under continuity key `notification:<uuid>`
+   (origin `proactive_notification`) — same stage/promote path as other surface
+   turns; do not reintroduce `appendAssistantMessage` for timeline writes.
 5. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
    / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
    refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.

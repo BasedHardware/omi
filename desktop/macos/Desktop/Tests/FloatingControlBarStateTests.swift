@@ -282,6 +282,44 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertFalse(state.chatViewport.hasAnchors)
     }
 
+    /// Mid-stream restore must re-subscribe when the bound answer is still streaming.
+    func testShouldReobserveStreamingTurnAfterMidStreamClose() {
+        let streaming = ChatMessage(
+            id: "a-stream",
+            clientTurnId: "turn-stream",
+            text: "Partial…",
+            sender: .ai,
+            isStreaming: true
+        )
+        XCTAssertTrue(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: "turn-stream",
+                answerMessage: streaming
+            )
+        )
+
+        var completed = streaming
+        completed.isStreaming = false
+        XCTAssertFalse(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: "turn-stream",
+                answerMessage: completed
+            )
+        )
+        XCTAssertFalse(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: "other-turn",
+                answerMessage: streaming
+            )
+        )
+        XCTAssertFalse(
+            FloatingControlBarState.shouldReobserveStreamingTurn(
+                activeClientTurnId: nil,
+                answerMessage: streaming
+            )
+        )
+    }
+
     /// currentAIMessage prefers the provider message when override is nil and id is bound.
     func testCurrentAIMessagePrefersProviderWhenOverrideNilAndIdBound() {
         let state = FloatingControlBarState()

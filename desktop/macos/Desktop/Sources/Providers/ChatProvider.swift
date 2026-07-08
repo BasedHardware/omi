@@ -740,6 +740,7 @@ extension ChatMessage {
     /// Convert a backend message to a local ChatMessage
     init(from db: ChatMessageDB) {
         let resources = ChatResource.decodeResourcesFromMessageMetadata(db.metadata)
+        let contentBlocks = ChatContentBlockCodec.decodeFromMessageMetadata(db.metadata)
         self.init(
             id: db.id,
             text: db.text,
@@ -748,6 +749,7 @@ extension ChatMessage {
             isStreaming: false,
             rating: db.rating,
             isSynced: true,
+            contentBlocks: contentBlocks,
             attachments: ChatMessage.decodeAttachments(from: db.metadata),
             resources: resources
         )
@@ -3162,7 +3164,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         messageSource: String
     ) async {
         do {
-            let metadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: message.resources)
+            var metadata = ChatResource.mergeResourcesIntoMessageMetadata(nil, resources: message.resources)
+            metadata = ChatContentBlockCodec.mergeIntoMessageMetadata(
+                metadata,
+                contentBlocks: message.contentBlocks
+            )
             let response = try await APIClient.shared.saveMessage(
                 text: text,
                 sender: sender,
@@ -4402,6 +4408,85 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             toolUseId: toolUseId,
             extraTexts: [output]
         )
+        Self.materializeAgentSpawnBlockIfNeeded(
+            in: &messages[index].contentBlocks,
+            toolUseId: toolUseId,
+            toolName: name
+        )
+    }
+
+    /// When `spawn_agent` completes, append a structured `.agentSpawn` block so
+    /// cross-surface identity does not depend on tool-output text alone (INV-6 #4).
+    nonisolated static func materializeAgentSpawnBlockIfNeeded(
+        in blocks: inout [ChatContentBlock],
+        toolUseId: String?,
+        toolName: String
+    ) {
+        let cleanName: String
+        if toolName.hasPrefix("mcp__") {
+            cleanName = String(toolName.split(separator: "__").last ?? Substring(toolName))
+        } else {
+            cleanName = toolName
+        }
+        guard cleanName == "spawn_agent" else { return }
+
+        guard let toolIndex = blocks.lastIndex(where: { block in
+            guard case .toolCall(_, let name, let status, let existingToolUseId, _, let output) = block,
+                  !status.isInFlight,
+                  output != nil
+            else { return false }
+            let blockName: String
+            if name.hasPrefix("mcp__") {
+                blockName = String(name.split(separator: "__").last ?? Substring(name))
+            } else {
+                blockName = name
+            }
+            guard blockName == "spawn_agent" else { return false }
+            if let toolUseId, !toolUseId.isEmpty {
+                return existingToolUseId == toolUseId || existingToolUseId == nil
+            }
+            return true
+        }) else { return }
+
+        guard case .toolCall(_, _, _, _, let input, _) = blocks[toolIndex] else { return }
+        let spawnSource = blocks[toolIndex]
+        guard let pillId = spawnSource.spawnedAgentID else { return }
+        let sessionId = spawnSource.spawnedAgentSessionID ?? ""
+        let runId = spawnSource.spawnedAgentRunID ?? ""
+
+        // Idempotent: do not append a second spawn card for the same pill/run.
+        let alreadyPresent = blocks.contains { block in
+            if case .agentSpawn(_, let existingPill, _, let existingRun, _, _) = block {
+                if let existingPill, existingPill == pillId { return true }
+                if !runId.isEmpty, existingRun == runId { return true }
+            }
+            return false
+        }
+        guard !alreadyPresent else { return }
+
+        let titleFromOutput = ChatContentBlock.labeledSpawnValue(
+            in: spawnSource,
+            keys: ["title"]
+        )
+        let title = (titleFromOutput?.isEmpty == false)
+            ? (titleFromOutput ?? "Background agent")
+            : (input?.summary.isEmpty == false ? input!.summary : "Background agent")
+        let objective = (input?.details?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? (input?.details ?? "")
+            : (input?.summary ?? "")
+
+        let spawnBlock = ChatContentBlock.agentSpawn(
+            id: UUID().uuidString,
+            pillId: pillId,
+            sessionId: sessionId,
+            runId: runId,
+            title: title,
+            objective: objective
+        )
+        // Keep the tool block for in-session progress; insert structured spawn
+        // immediately after it so reload/metadata durability has a first-class card.
+        let insertAt = min(toolIndex + 1, blocks.count)
+        blocks.insert(spawnBlock, at: insertAt)
     }
 
     private func attachGeneratedFileResources(
@@ -4621,8 +4706,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
     }
 
-    /// Serialize tool calls and resource cards from a message into a JSON metadata string.
-    /// Returns nil if there are no tool calls and no resources.
+    /// Serialize tool calls, structured content blocks, and resource cards into
+    /// a JSON metadata string. Returns nil when there is nothing to persist.
     private func serializeMessagePersistenceMetadata(messageId: String) -> String? {
         guard let index = messages.firstIndex(where: { $0.id == messageId }) else { return nil }
 
@@ -4646,6 +4731,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
         if !toolCalls.isEmpty {
             root["tool_calls"] = toolCalls
+        }
+
+        let structuredBlocks = messages[index].contentBlocks.filter { block in
+            if case .toolCall = block { return false }
+            return true
+        }
+        if !structuredBlocks.isEmpty {
+            root[ChatContentBlockCodec.messageMetadataKey] =
+                ChatContentBlockCodec.encodeArray(structuredBlocks)
         }
 
         if let resourcesMetadata = ChatResource.mergeResourcesIntoMessageMetadata(

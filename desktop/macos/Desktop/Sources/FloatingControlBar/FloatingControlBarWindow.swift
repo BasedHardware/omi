@@ -1154,6 +1154,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 state.aiInputText = ""
             }
             resizeToResponseHeight(animated: true)
+            // Mid-stream close cancels the floating binder; re-subscribe so the
+            // restored viewport tracks provider updates within the 10-min window.
+            FloatingControlBarManager.shared.reobserveStreamingTurnIfNeeded(in: self)
         } else {
             // Anchor from top so the control bar stays visually in place, input grows downward.
             let inputSize = NSSize(width: expandedContentWidth, height: inputPanelHeight)
@@ -2780,6 +2783,74 @@ class FloatingControlBarManager {
         }
     }
 
+    /// After mid-stream close → restore, re-bind the floating viewport to the
+    /// still-streaming provider turn so answer text/blocks keep updating.
+    func reobserveStreamingTurnIfNeeded(in barWindow: FloatingControlBarWindow) {
+        guard let provider = historyChatProvider else { return }
+        let turnId = barWindow.state.chatViewport.activeClientTurnId
+        let answer = barWindow.state.currentAIMessage(from: provider)
+        guard FloatingControlBarState.shouldReobserveStreamingTurn(
+            activeClientTurnId: turnId,
+            answerMessage: answer
+        ), let turnId else {
+            // Refresh a completed/partial answer that advanced while the surface was closed.
+            if let message = answer {
+                barWindow.state.bindAnswerMessage(message)
+            }
+            return
+        }
+
+        let generation = activeQueryGeneration
+        let shouldPlayVoice = ShortcutSettings.shared.shouldSpeakFloatingBarResponse(
+            forVoiceQuery: barWindow.state.currentQueryFromVoice
+        )
+        chatCancellable?.cancel()
+        var hasSetUpResponseHeight = barWindow.state.showingAIResponse
+        chatCancellable = provider.$messages
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak barWindow] messages in
+                guard let self, self.isActiveQueryGeneration(generation) else { return }
+                guard let aiMessage = messages.last(where: {
+                    $0.clientTurnId == turnId && $0.sender == .ai
+                }) else { return }
+
+                barWindow?.state.bindAnswerMessage(aiMessage)
+                if let userMessage = messages.last(where: {
+                    $0.clientTurnId == turnId && $0.sender == .user
+                }) {
+                    barWindow?.state.bindQuestionMessageId(userMessage.id)
+                }
+                if shouldPlayVoice {
+                    FloatingBarVoicePlaybackService.shared.updateStreamingResponseIfEnabled(
+                        aiMessage,
+                        isFinal: !aiMessage.isStreaming
+                    )
+                }
+
+                if aiMessage.isStreaming {
+                    barWindow?.state.isAILoading = false
+                    if let barWindow, !hasSetUpResponseHeight {
+                        hasSetUpResponseHeight = true
+                        if !barWindow.state.showingAIResponse {
+                            withAnimation(.spring(response: 0.24, dampingFraction: 0.9)) {
+                                barWindow.state.present(.mainResponse)
+                            }
+                        }
+                        barWindow.resizeToResponseHeightPublic(animated: true)
+                    }
+                } else {
+                    barWindow?.state.isAILoading = false
+                    self.chatCancellable?.cancel()
+                    self.chatCancellable = nil
+                }
+            }
+
+        if let answer {
+            barWindow.state.bindAnswerMessage(answer)
+            barWindow.state.isAILoading = false
+        }
+    }
+
     /// Toggle visibility.
     func toggle() {
         guard let window = window else { return }
@@ -3499,26 +3570,41 @@ class FloatingControlBarManager {
     private func persistNotificationMessageIfNeeded(_ notification: FloatingBarNotification) {
         guard storedNotificationMessages[notification.id] == nil else { return }
 
-        // Also append the notification as an assistant message in the shared
-        // main chat provider so it is visible on both the home-page chat and the
-        // floating/notch chat without waiting for backend polling.
+        // Stage under a continuity key so kernel promote / later projection can
+        // share the same logical turn (INV-6). Notifications are assistant-only.
         let bodyText = notification.message.trimmingCharacters(in: .whitespacesAndNewlines)
         let messageText = bodyText.isEmpty ? notification.title : bodyText
-        let messageClientTurnId = "notification:\(notification.id.uuidString)"
-        let storedMessage = historyChatProvider?.appendAssistantMessage(
-            messageText,
-            clientTurnId: messageClientTurnId
+        let continuityKey = "notification:\(notification.id.uuidString)"
+        let staged = historyChatProvider?.stageOptimisticTurn(
+            continuityKey: continuityKey,
+            userText: "",
+            assistantText: messageText,
+            origin: "proactive_notification",
+            turnOwner: .mainChat
         )
-            ?? ChatMessage(text: messageText, sender: .ai)
+        let storedMessage = staged?.assistant
+            ?? ChatMessage(clientTurnId: continuityKey, text: messageText, sender: .ai)
 
         storedNotificationMessages[notification.id] = StoredNotificationMessage(
             notification: notification,
             context: notification.context,
-            messageClientTurnId: messageClientTurnId,
+            messageClientTurnId: continuityKey,
             message: storedMessage,
             createdAt: Date()
         )
         mostRecentNotificationID = notification.id
+
+        if let provider = historyChatProvider {
+            Task {
+                await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+                    surface: provider.mainChatSurfaceReference(),
+                    userText: "",
+                    assistantText: messageText,
+                    origin: "proactive_notification",
+                    idempotencyKey: continuityKey
+                )
+            }
+        }
     }
 
     func mainChatSurfaceReference() -> AgentSurfaceReference {
