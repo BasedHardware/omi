@@ -23,7 +23,7 @@ struct RedesignNameStepView: View {
 
           Rectangle().fill(Ink.hair).frame(width: 1)
 
-          RedesignBrainGraph(nodes: RedesignBrainGraph.welcome, links: RedesignBrainGraph.welcomeLinks)
+          RedesignLiveBrainGraph()
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       }

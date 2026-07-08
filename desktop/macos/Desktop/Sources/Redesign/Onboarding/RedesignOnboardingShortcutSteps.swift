@@ -88,7 +88,7 @@ struct RedesignFloatingBarShortcutStepView: View {
           }
 
         VStack(spacing: 12) {
-          Text("Choose a different shortcut:").font(InkFont.sans(14, .medium)).foregroundColor(Ink.muted)
+          Text("Or just tap the one you want:").font(InkFont.sans(14, .medium)).foregroundColor(Ink.muted)
           HStack(spacing: 10) {
             ForEach(ShortcutSettings.askOmiPresets, id: \.self) { shortcut in
               shortcutChoiceButton(shortcut)
@@ -163,10 +163,12 @@ struct RedesignFloatingBarShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.askOmiShortcut == shortcut && !shortcutSettings.askOmiUsesCustomShortcut
     return Button {
+      // Tapping a preset both selects it AND confirms — a reliable path forward
+      // even if the live key-press test doesn't register (focus/permission quirks).
       shortcutSettings.askOmiShortcut = shortcut
       isRecordingCustomShortcut = false
       captureError = nil
-      resetDetectionState()
+      confirmShortcutAndContinue()
     } label: {
       HStack(spacing: 4) {
         ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, symbol in
@@ -504,10 +506,11 @@ struct RedesignVoiceShortcutStepView: View {
   private func shortcutChoiceButton(_ shortcut: ShortcutSettings.KeyboardShortcut) -> some View {
     let isSelected = shortcutSettings.pttShortcut == shortcut && !shortcutSettings.pttUsesCustomShortcut
     return Button {
+      // Tapping a preset both selects it AND confirms — reliable path forward.
       shortcutSettings.pttShortcut = shortcut
       isRecordingCustomShortcut = false
       captureError = nil
-      resetDetectionState()
+      confirmShortcutAndContinue()
     } label: {
       HStack(spacing: 6) {
         ForEach(Array(shortcut.displayTokens.enumerated()), id: \.offset) { _, token in
