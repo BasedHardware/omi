@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.51",
+      "date": "2026-07-08",
+      "changes": [
+        "Centered the Home content vertically so it no longer sits low on tall windows"
+      ]
+    },
+    {
       "version": "0.12.50",
       "date": "2026-07-08",
       "changes": [
