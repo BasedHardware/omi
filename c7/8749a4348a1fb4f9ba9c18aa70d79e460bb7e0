@@ -1,0 +1,27 @@
+desktop/macos/Desktop/Sources/Redesign/Pages/RedesignHomePage.swift
+  s_897886a34066e7::t_9c360569b5ba1d 112-136
+  s_897886a34066e7::t_e476a3408c33be 63
+  s_897886a34066e7::t_0091024fc198c6 3-4,7-32
+desktop/macos/Desktop/Sources/Redesign/RedesignTopBar.swift
+  s_897886a34066e7::t_b1c0510943f86e 12-14,18-30
+desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  s_897886a34066e7::t_1c56b7b3f3a98d 812-815
+  s_897886a34066e7::t_637bd7746280ae 844-845
+  s_897886a34066e7::t_24e90af9faabff 1187
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "c78749a4348a1fb4f9ba9c18aa70d79e460bb7e0",
+  "prompts": {},
+  "sessions": {
+    "s_897886a34066e7": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c840b179-f0fa-4786-8dea-e9280233d65f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
