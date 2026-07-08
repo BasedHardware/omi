@@ -497,7 +497,7 @@ struct DashboardPage: View {
             dashboardWidgets
 
             ChatMessagesView(
-                messages: chatProvider.messages,
+                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -764,7 +764,7 @@ struct DashboardPage: View {
     private func homeChatPanel(stageWidth: CGFloat) -> some View {
         VStack(spacing: 0) {
             ChatMessagesView(
-                messages: chatProvider.messages,
+                messages: ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false),
                 isSending: chatProvider.isSending,
                 hasMoreMessages: chatProvider.hasMoreMessages,
                 isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -1472,10 +1472,7 @@ struct DashboardPage: View {
                 screenAnalysisEnabled = false
                 isCaptureMonitoring = false
                 isTogglingCapture = false
-                ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    ScreenCaptureService.requestAllScreenCapturePermissions()
-                }
+                ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
                 return
             }
         }

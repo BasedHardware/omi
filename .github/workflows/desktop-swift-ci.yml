@@ -57,6 +57,17 @@ jobs:
           fi
           python3 desktop/macos/scripts/check-e2e-flow-coverage.py --strict --base "$DIFF_BASE"
 
+      - name: Desktop launcher script tests
+        if: steps.changed.outputs.should_run == 'true'
+        working-directory: desktop/macos
+        run: |
+          # Discovery, not a hardcoded list — a new tests/test-*.sh runs here
+          # automatically, mirroring swift-test-suites.sh's auto-discovery.
+          for t in tests/test-*.sh; do
+            echo "== $t"
+            bash "$t"
+          done
+
       - name: Build desktop Swift app
         if: steps.changed.outputs.should_run == 'true'
         working-directory: desktop/macos

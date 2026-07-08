@@ -2,6 +2,51 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.49",
+      "date": "2026-07-08",
+      "changes": [
+        "Restored normal launch visibility for the enabled floating bar on notched Macs while keeping deferred reveal scoped to explicit opt-in contexts.",
+        "Improved push-to-talk reliability by preventing realtime and fallback voices from speaking over each other",
+        "Reduced random-language push-to-talk replies by tightening short speech detection and rejecting misheard realtime tool queries"
+      ]
+    },
+    {
+      "version": "0.12.48",
+      "date": "2026-07-08",
+      "changes": [
+        "Fixed the Screen Recording permission flow so Omi reliably appears in the Screen Recording list when you click Open Settings, instead of sometimes needing a second attempt"
+      ]
+    },
+    {
+      "version": "0.12.47",
+      "date": "2026-07-08",
+      "changes": [
+        "Desktop API models now recognize Ray-Ban Meta conversations as a first-class source."
+      ]
+    },
+    {
+      "version": "0.12.46",
+      "date": "2026-07-08",
+      "changes": [
+        "Questions asked from the floating bar no longer mix into the main chat transcript during a session (restored history from before the app relaunches still shows in the main chat)"
+      ]
+    },
+    {
+      "version": "0.12.45",
+      "date": "2026-07-08",
+      "changes": [
+        "Added a System Audio permission status row that can test and reflect whether Omi can capture audio from other apps"
+      ]
+    },
+    {
+      "version": "0.12.44",
+      "date": "2026-07-07",
+      "changes": [
+        "Improved the desktop chat loading indicator so it matches the calmer notch thinking animation",
+        "Updated the Home ask bar to use one action button for Connect, Send, and Stop"
+      ]
+    },
+    {
       "version": "0.12.43",
       "date": "2026-07-07",
       "changes": [

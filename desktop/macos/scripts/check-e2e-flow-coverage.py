@@ -113,7 +113,16 @@ def coverage_aliases(value: str | Path) -> set[str]:
 
 def is_desktop_swift_source(path: str) -> bool:
     canonical = canonical_path(path)
-    return canonical.startswith(DESKTOP_SWIFT_ROOT.as_posix() + "/") and canonical.endswith(".swift")
+    if not (canonical.startswith(DESKTOP_SWIFT_ROOT.as_posix() + "/") and canonical.endswith(".swift")):
+        return False
+    # Generated sources (e.g. Sources/Generated/OmiApi.generated.swift) are
+    # produced from the OpenAPI contract, not hand-written, so they cannot be
+    # covered by an e2e flow — exclude them from the coverage ratchet. Changing
+    # a shared backend enum forces these to regenerate, which must not require a
+    # user-flow covers: entry.
+    if "/Generated/" in canonical or canonical.endswith(".generated.swift"):
+        return False
+    return True
 
 
 def read_yaml(path: Path) -> dict:

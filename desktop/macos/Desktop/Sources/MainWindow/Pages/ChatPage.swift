@@ -5,6 +5,12 @@ import OmiTheme
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
+
+  /// CHAT-06: the main-surface transcript (floating-bar turns filtered out).
+  /// Single accessor so the filter expression isn't repeated at every use site.
+  private var mainTranscript: [ChatMessage] {
+    ChatTurnOwner.transcriptMessages(chatProvider.messages, floatingSurface: false)
+  }
   @State private var showAppPicker = false
   @State private var showHistoryPopover = false
   @State private var selectedCitation: Citation?
@@ -296,7 +302,7 @@ struct ChatPage: View {
         .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.9), radius: 12)
 
       // Copy conversation button
-      if !chatProvider.messages.isEmpty {
+      if !mainTranscript.isEmpty {
         Button(action: {
           copyConversation()
         }) {
@@ -309,7 +315,7 @@ struct ChatPage: View {
       }
 
       // Clear chat button
-      if !chatProvider.messages.isEmpty || chatProvider.isClearing {
+      if !mainTranscript.isEmpty || chatProvider.isClearing {
         Button(action: {
           Task {
             await chatProvider.clearChat()
@@ -364,7 +370,7 @@ struct ChatPage: View {
 
   private var messagesView: some View {
     ChatMessagesView(
-      messages: chatProvider.messages,
+      messages: mainTranscript,
       isSending: chatProvider.isSending,
       hasMoreMessages: chatProvider.hasMoreMessages,
       isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
@@ -473,7 +479,7 @@ struct ChatPage: View {
 
   /// Copy the entire conversation to clipboard
   private func copyConversation() {
-    let text: String = chatProvider.messages.map { message in
+    let text: String = mainTranscript.map { message in
       let sender = message.sender == .user ? "You" : (selectedApp?.name ?? "omi")
       return "\(sender): \(message.text)"
     }.joined(separator: "\n\n")

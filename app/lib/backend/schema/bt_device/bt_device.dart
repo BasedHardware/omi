@@ -184,7 +184,7 @@ int mapCodecToBitDepth(BleAudioCodec codec) {
   }
 }
 
-enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless }
+enum DeviceType { omi, openglass, appleWatch, plaud, bee, fieldy, friendPendant, limitless, raybanMeta }
 
 // Legacy index order (before Frame was removed) — keep for backward-compatible deserialization.
 const List<String> _legacyDeviceTypeNames = [
@@ -197,6 +197,7 @@ const List<String> _legacyDeviceTypeNames = [
   'fieldy',
   'friendPendant',
   'limitless',
+  'raybanMeta',
 ];
 
 DeviceType _deviceTypeFromJson(dynamic raw) {
@@ -245,16 +246,16 @@ class BtDevice {
 
   // create an empty device
   BtDevice.empty()
-      : name = '',
-        id = '',
-        type = DeviceType.omi,
-        rssi = 0,
-        locator = null,
-        _modelNumber = '',
-        _firmwareRevision = '',
-        _hardwareRevision = '',
-        _manufacturerName = '',
-        _serialNumber = '';
+    : name = '',
+      id = '',
+      type = DeviceType.omi,
+      rssi = 0,
+      locator = null,
+      _modelNumber = '',
+      _firmwareRevision = '',
+      _hardwareRevision = '',
+      _manufacturerName = '',
+      _serialNumber = '';
 
   // getters
   String get modelNumber => _modelNumber ?? 'Unknown';
@@ -351,9 +352,23 @@ class BtDevice {
       return await _getDeviceInfoFromOmi(conn);
     } else if (type == DeviceType.appleWatch) {
       return await _getDeviceInfoFromAppleWatch(conn as AppleWatchDeviceConnection);
+    } else if (type == DeviceType.raybanMeta) {
+      return _getDeviceInfoFromRayBanMeta();
     } else {
       return await _getDeviceInfoFromOmi(conn);
     }
+  }
+
+  // The Meta Wearables toolkit doesn't expose firmware/hardware revisions, so
+  // static identity fields are all we can report.
+  BtDevice _getDeviceInfoFromRayBanMeta() {
+    return copyWith(
+      modelNumber: 'Ray-Ban Meta',
+      firmwareRevision: 'Unknown',
+      hardwareRevision: 'Unknown',
+      manufacturerName: 'Meta',
+      type: DeviceType.raybanMeta,
+    );
   }
 
   Future _getDeviceInfoFromOmi(DeviceConnection conn) async {
@@ -595,6 +610,7 @@ class BtDevice {
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }
@@ -632,6 +648,7 @@ class BtDevice {
       case DeviceType.omi:
       case DeviceType.openglass:
       case DeviceType.appleWatch:
+      case DeviceType.raybanMeta:
         return ''; // No warning needed
     }
   }

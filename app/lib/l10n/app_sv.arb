@@ -3116,5 +3116,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera."
+    "pendantStorageAlmostFull": "Hängets lagringsutrymme är nästan fullt — håll appen öppen för att synkronisera.",
+    "connectRayBanMeta": "Anslut Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Använd dina Ray-Ban Meta-glasögon som din Omi-inspelningsenhet för konversationer och visuell kontext. Omi öppnar Meta AI-appen för att länka dina glasögon.",
+    "raybanMetaOpenMetaAI": "Anslut via Meta AI",
+    "raybanMetaWaitingForMetaAI": "Slutför anslutningen i Meta AI-appen och kom sedan tillbaka hit.",
+    "raybanMetaCheckAgain": "Kontrollera igen",
+    "raybanMetaAllowCamera": "Tillåt kamera på glasögonen",
+    "raybanMetaCameraExplanation": "Omi använder dina glasögons kamera för att lägga till foton i dina konversationer. Du kan hoppa över detta och endast använda ljud.",
+    "raybanMetaSkipForNow": "Hoppa över för nu",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta läge med endast ljud",
+    "raybanMetaAudioOnlyExplanation": "Den här versionen av Omi kan använda dina glasögons mikrofon via Bluetooth. Fotografering kräver Meta-utvecklarversionen av Omi.",
+    "raybanMetaMusicPauseNote": "Musik på din telefon pausas medan glasögonens mikrofon används.",
+    "raybanMetaContinue": "Fortsätt",
+    "raybanMetaCapturePhoto": "Ta foto",
+    "raybanMetaPhotoRequested": "Foto begärt — det visas i din konversation.",
+    "raybanMetaMicrophoneReady": "Mikrofon redo",
+    "raybanMetaImageCaptureReady": "Bildtagning redo",
+    "raybanMetaImageCaptureUnavailable": "Inte tillgängligt i läge med endast ljud",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Fel vid anslutning till Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

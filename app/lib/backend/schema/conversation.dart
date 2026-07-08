@@ -50,6 +50,7 @@ enum ConversationSource {
   phone,
   desktop,
   limitless,
+  rayban_meta,
 }
 
 class ConversationExternalData {
@@ -94,9 +95,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -364,12 +367,14 @@ class ServerConversation {
       photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
       audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
@@ -460,6 +465,7 @@ class ServerConversation {
   String getTag() {
     if (source == ConversationSource.screenpipe) return 'Screenpipe';
     if (source == ConversationSource.openglass) return 'OmiGlass';
+    if (source == ConversationSource.rayban_meta) return 'Ray-Ban Meta';
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     if (structured.category.isEmpty) return 'Other';

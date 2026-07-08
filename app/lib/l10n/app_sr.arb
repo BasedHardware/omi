@@ -10694,5 +10694,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije."
+    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije.",
+    "connectRayBanMeta": "Повежи Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Користите Ray-Ban Meta наочаре као Omi уређај за снимање разговора и визуелног контекста. Omi ће отворити Meta AI апликацију да повеже ваше наочаре.",
+    "raybanMetaOpenMetaAI": "Повежи преко Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завршите повезивање у Meta AI апликацији, а затим се вратите овде.",
+    "raybanMetaCheckAgain": "Провери поново",
+    "raybanMetaAllowCamera": "Дозволи камеру на наочарима",
+    "raybanMetaCameraExplanation": "Omi користи камеру ваших наочара да дода фотографије вашим разговорима. Ово можете прескочити и користити само звук.",
+    "raybanMetaSkipForNow": "Прескочи за сада",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta режим само за звук",
+    "raybanMetaAudioOnlyExplanation": "Ова верзија Omi може да користи микрофон ваших наочара преко Bluetooth. Снимање фотографија захтева Meta програмерску верзију Omi.",
+    "raybanMetaMusicPauseNote": "Музика на вашем телефону се паузира док се микрофон наочара користи.",
+    "raybanMetaContinue": "Настави",
+    "raybanMetaCapturePhoto": "Направи фотографију",
+    "raybanMetaPhotoRequested": "Фотографија је затражена — појавиће се у вашем разговору.",
+    "raybanMetaMicrophoneReady": "Микрофон спреман",
+    "raybanMetaImageCaptureReady": "Снимање слике спремно",
+    "raybanMetaImageCaptureUnavailable": "Није доступно у режиму само за звук",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Грешка при повезивању са Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -24,12 +24,14 @@ final class AgentContinuityGauntletTests: XCTestCase {
       encoding: .utf8
     )
     let required = [
+      "ask",
       "main_chat_snapshot",
       "wait_main_chat_idle",
       "agent_runtime_evidence",
       "ask_main_chat",
       "coordinator_awareness_snapshot",
       "swap_test_owner",
+      "restore_test_owner",
       "clear_owner_surface_state",
       "kernel_turn_tail",
     ]
@@ -54,6 +56,43 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(providerSource.contains("automationSwapTestOwner"))
     XCTAssertTrue(providerSource.contains("automationKernelTurnTail"))
     XCTAssertTrue(providerSource.contains("automationClearOwnerSurfaceState"))
+  }
+
+  func testResilienceSuiteIsWiredIntoCanonicalGauntlet() throws {
+    let desktopDir = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let scriptSource = try String(
+      contentsOf: desktopDir.appendingPathComponent("scripts/agent-continuity-gauntlet.sh"),
+      encoding: .utf8
+    )
+    let driverSource = try String(
+      contentsOf: desktopDir.appendingPathComponent("scripts/agent-continuity-gauntlet-lib.py"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(driverSource.contains("\"resilience\""))
+    XCTAssertTrue(driverSource.contains("\"all\": {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
+    XCTAssertTrue(driverSource.contains("SUITE_NAMES = {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
+    XCTAssertTrue(driverSource.contains("def run_resilience_suite(self) -> None"))
+    XCTAssertTrue(driverSource.contains("if \"resilience\" in self.suites"))
+    XCTAssertTrue(driverSource.contains("self.run_resilience_suite()"))
+    XCTAssertTrue(driverSource.contains("resilience-diagnostics.jsonl"))
+    XCTAssertTrue(driverSource.contains("schema_version"))
+    XCTAssertTrue(driverSource.contains("terminal_reason"))
+    XCTAssertTrue(driverSource.contains("resilience_terminal_reason_counts"))
+    XCTAssertTrue(driverSource.contains("resilience_forbidden_terminal_reasons"))
+    XCTAssertTrue(driverSource.contains("skipped_missing_action"))
+    XCTAssertTrue(driverSource.contains("\"skipped_missing_action\""))
+    XCTAssertTrue(driverSource.contains("\"skipped_unimplemented_action\""))
+    XCTAssertTrue(driverSource.contains("ask_main_chat_no_wait"))
+    XCTAssertTrue(driverSource.contains("main_chat_busy_state"))
+    XCTAssertTrue(driverSource.contains("--suite resilience"))
+
+    XCTAssertTrue(scriptSource.contains("--suite resilience"))
+    XCTAssertTrue(scriptSource.contains("--suite all"))
+    XCTAssertTrue(scriptSource.contains("Release-candidate manual QA"))
   }
 
   @MainActor

@@ -7,15 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "=== Desktop Launcher Script Tests ==="
 cd "$SCRIPT_DIR"
-bash tests/test-app-config.sh
-bash tests/test-settings-seed.sh
-bash tests/test-cleanup-omi-tcc.sh
-bash tests/test-omi-harness.sh
-bash tests/test-signed-artifact-smoke.sh
-bash tests/test-e2e-flow-coverage.sh
-bash tests/test-desktop-doctor-preflight.sh
-bash tests/test-swift-test-skip-ratchet.sh
-bash tests/test-swift-test-suites.sh
+# Discovery, not a hardcoded list — a hardcoded list already orphaned one test
+# (test-prepare-desktop-bundle-native-deps.sh ran nowhere). Every tests/test-*.sh
+# runs, mirroring swift-test-suites.sh's auto-discovery of Swift suites.
+for t in tests/test-*.sh; do
+  echo "== $t"
+  bash "$t"
+done
 python3 scripts/check-e2e-flow-coverage.py --strict
 echo ""
 

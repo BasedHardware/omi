@@ -7,6 +7,22 @@ MIN_CONVERSATION_TIMEOUT_SECONDS = 120
 TARGET_SAMPLE_RATE = 16000
 USER_SELF_PERSON_ID = 'user'
 
+# Live-session sources whose devices natively produce photos. Receiving a photo
+# must not overwrite their provenance; for every other source the legacy
+# behavior stands: a photo-bearing conversation is relabeled 'openglass'.
+PHOTO_CAPABLE_SOURCE_VALUES = frozenset({'openglass', 'rayban_meta'})
+
+
+def resolve_photo_conversation_source(current_source_value: Optional[str]) -> Optional[str]:
+    """Source a conversation should carry once it has photos.
+
+    Returns the new source value, or None when the current source already
+    identifies a photo-capable device and must be preserved.
+    """
+    if current_source_value in PHOTO_CAPABLE_SOURCE_VALUES:
+        return None
+    return 'openglass'
+
 
 class ConversationLifecycleAction(str, Enum):
     continue_current = 'continue_current'

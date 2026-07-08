@@ -7,6 +7,10 @@ covers:
   - desktop/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/Desktop/Sources/ScreenCaptureService.swift
   - desktop/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
+  - desktop/Desktop/Sources/AppState/AppState+SystemActions.swift
+  - desktop/Desktop/Sources/AppState/AppState+TrialPaywall.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
+  - desktop/Desktop/Sources/MainWindow/RewindOnlyView.swift
 preconditions:
   - auth_ready
 

@@ -1172,9 +1172,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return
       }
       if !ProactiveAssistantsPlugin.shared.hasScreenRecordingPermission {
-        // No permission — revert toggle and open preferences
+        // No permission — revert toggle, register + open preferences (PERM-02)
         sender.state = .off
-        ProactiveAssistantsPlugin.shared.openScreenRecordingPreferences()
+        ScreenCaptureService.requestScreenRecordingAccessAndOpenSettings()
         return
       }
       AssistantSettings.shared.screenAnalysisEnabled = true

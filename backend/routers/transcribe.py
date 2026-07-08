@@ -134,6 +134,7 @@ from utils.transcribe_decisions import (  # async-blockers: no-import-scope; asy
     normalize_codec_frame,
     normalize_language,
     person_id_for_client,
+    resolve_photo_conversation_source,
     select_translation_language,
     should_enable_speaker_identification,
     should_flush_final_multi_channel_mix,
@@ -1053,10 +1054,15 @@ async def _stream_handler(
 
         if photos:
             conversations_db.store_conversation_photos(uid, conversation.id, photos)
-            # Update source if we now have photos
-            if conversation.source != ConversationSource.openglass:
-                conversations_db.update_conversation(uid, conversation.id, {'source': ConversationSource.openglass})
-                conversation.source = ConversationSource.openglass
+            # Photo-bearing conversations default to the openglass label unless the
+            # source already identifies a photo-capable device (e.g. rayban_meta).
+            new_source_value = resolve_photo_conversation_source(
+                conversation.source.value if conversation.source else None
+            )
+            if new_source_value is not None and conversation.source != ConversationSource(new_source_value):
+                new_source = ConversationSource(new_source_value)
+                conversations_db.update_conversation(uid, conversation.id, {'source': new_source})
+                conversation.source = new_source
 
         conversations_db.update_conversation_finished_at(uid, conversation.id, finished_at)
         return conversation, updated_segments, removed_ids

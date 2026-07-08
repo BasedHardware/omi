@@ -5,8 +5,10 @@ description: Ask Omi open + stubbed typed turn on the floating bar (distinct fro
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTVoiceOutputCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
@@ -18,6 +20,11 @@ preconditions:
 
 steps:
   - id: S1
+    name: Assert signed-in launch shows floating bar
+    state.expect:
+      state.floatingBarVisible: true
+
+  - id: S2
     name: Open Ask Omi
     bridge.action:
       name: open_ask_omi
@@ -27,7 +34,7 @@ steps:
     expect:
       result.detail.focused: "true"
 
-  - id: S2
+  - id: S3
     name: Send stubbed floating-bar query
     bridge.action:
       name: ask
@@ -36,7 +43,7 @@ steps:
     expect:
       result.detail.sent: "Hermetic floating bar [[MARKER:floating-bar]]"
 
-  - id: S3
+  - id: S4
     name: Wait for floating-bar chat idle
     bridge.action:
       name: wait_floating_bar_chat_idle
@@ -45,7 +52,7 @@ steps:
     expect:
       result.detail.idle: "true"
 
-  - id: S4
+  - id: S5
     name: Assert stub marker echoed in assistant reply
     bridge.action:
       name: floating_bar_chat_snapshot
@@ -54,19 +61,19 @@ steps:
     expect:
       result.detail.last_assistant_text: "Stub saw marker: floating-bar"
 
-  - id: S5
+  - id: S6
     name: Assert floating bar still open
     state.expect:
       state.askOmiOpen: true
 
-  - id: S6
+  - id: S7
     name: Close Ask Omi
     bridge.action:
       name: close_ask_omi
       params:
         wait: "true"
 
-  - id: S7
+  - id: S8
     name: Logs clean
     log.expect:
       absent:

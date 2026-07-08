@@ -11,6 +11,22 @@ import Foundation
 // result; multi-step / other-app work still goes to spawn_agent.
 
 enum RealtimeHubTools {
+  static func resolvedVoiceLanguages(
+    explicit codes: [String],
+    preferredLanguages: [String] = Locale.preferredLanguages
+  ) -> [String] {
+    let source = codes.isEmpty ? preferredLanguages : codes
+    var seen = Set<String>()
+    var resolved: [String] = []
+    for code in source {
+      let base = AssistantSettings.baseLanguageCode(code)
+      guard !base.isEmpty, !seen.contains(base) else { continue }
+      seen.insert(base)
+      resolved.append(base)
+    }
+    return resolved
+  }
+
   private static func localAgentProviderInstruction() -> String {
     let providers: [AgentPillsManager.DirectedProvider] = [.openclaw, .hermes]
     let availability = providers.map { LocalAgentProviderDetector.availability(for: $0) }
@@ -60,10 +76,12 @@ enum RealtimeHubTools {
 
   /// One line telling the model which languages the user actually speaks, so a short or
   /// ambiguous utterance is never interpreted (or transcribed, where the provider allows
-  /// it) as some third language. Empty when the user has only the default set.
+  /// it) as some third language. Falls back to the Mac's preferred language when the user
+  /// has not configured an explicit voice-language set.
   private static func userLanguagesLine(_ codes: [String]) -> String {
-    guard !codes.isEmpty else { return "" }
-    let names = codes.map { code in
+    let resolved = resolvedVoiceLanguages(explicit: codes)
+    guard !resolved.isEmpty else { return "" }
+    let names = resolved.map { code in
       Locale(identifier: "en").localizedString(forLanguageCode: code) ?? code
     }
     let primary = names[0]
@@ -213,6 +231,37 @@ enum RealtimeHubTools {
 
     Keep latency low: prefer answering directly when you can.
     """
+  }
+
+  static func shouldRejectEscalationQueryForLanguage(
+    _ query: String,
+    userLanguages: [String],
+    preferredLanguages: [String] = Locale.preferredLanguages
+  ) -> Bool {
+    let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.count >= 12 else { return false }
+    let allowed = resolvedVoiceLanguages(explicit: userLanguages, preferredLanguages: preferredLanguages)
+    guard !allowed.isEmpty else { return false }
+    if !allowed.contains("es"), looksLikeSpanishQuestion(trimmed) { return true }
+    guard let dominant = PTTLanguageIdentifier.dominantLanguage(of: trimmed, hints: allowed) else {
+      return false
+    }
+    return !allowed.contains(dominant)
+  }
+
+  private static func looksLikeSpanishQuestion(_ text: String) -> Bool {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let first = trimmed.first else { return false }
+    if first == "¿" || first == "¡" { return true }
+    let lower = trimmed.lowercased()
+    return lower.hasPrefix("qué ")
+      || lower.hasPrefix("que ")
+      || lower.hasPrefix("cuál ")
+      || lower.hasPrefix("cual ")
+      || lower.hasPrefix("cómo ")
+      || lower.hasPrefix("como ")
+      || lower.hasPrefix("dónde ")
+      || lower.hasPrefix("donde ")
   }
 
   /// OpenAI Realtime GA `session.tools` entries.

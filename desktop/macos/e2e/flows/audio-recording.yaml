@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/Desktop/Sources/AudioCaptureService.swift
+  - desktop/Desktop/Sources/Audio/AudioSourceManager.swift
   - desktop/Desktop/Sources/AppState.swift
 preconditions:
   - auth_ready

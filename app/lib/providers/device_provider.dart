@@ -251,8 +251,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     // Throttle notifyListeners to reduce battery drain from excessive UI rebuilds
     // Only notify when: first reading, >=5% change, 15min elapsed, or crosses 20% threshold
     final delta = (_lastNotifiedBatteryLevel - value).abs();
-    final elapsed =
-        _lastBatteryNotifyTime == null ? const Duration(minutes: 999) : currentTime.difference(_lastBatteryNotifyTime!);
+    final elapsed = _lastBatteryNotifyTime == null
+        ? const Duration(minutes: 999)
+        : currentTime.difference(_lastBatteryNotifyTime!);
     final crossedLowBatteryThreshold =
         (value < 20 && _lastNotifiedBatteryLevel >= 20) || (value >= 20 && _lastNotifiedBatteryLevel < 20);
     final shouldNotify =
@@ -611,6 +612,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get _isOmiGlassDevice {
     if (pairedDevice == null) return false;
     if (pairedDevice!.type == DeviceType.openglass) return true;
+    // Name matching only applies to Omi-family devices: Ray-Ban Meta names can
+    // contain 'glasses' but its firmware is managed by the Meta AI app.
+    if (pairedDevice!.type != DeviceType.omi) return false;
     final name = pairedDevice!.name.toLowerCase();
     return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
   }

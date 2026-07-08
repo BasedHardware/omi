@@ -16,10 +16,8 @@ fi
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
-export BACKEND_FAST_UNIT_MAX_SECONDS="${BACKEND_FAST_UNIT_MAX_SECONDS:-0.1}"
-# Keep the CI fast-unit guard focused on materially slow tests while allowing
-# only a narrow CPU accounting jitter margin around the 100ms target.
-export BACKEND_FAST_UNIT_GRACE_SECONDS="${BACKEND_FAST_UNIT_GRACE_SECONDS:-0.02}"
+export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
+export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
 
 pytest_args=(-v)
 

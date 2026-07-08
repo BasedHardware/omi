@@ -3151,5 +3151,31 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Le stockage du pendentif est presque plein — gardez l'application ouverte pour synchroniser."
+    "pendantStorageAlmostFull": "Le stockage du pendentif est presque plein — gardez l'application ouverte pour synchroniser.",
+    "connectRayBanMeta": "Connecter les Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Utilisez vos lunettes Ray-Ban Meta comme appareil de capture Omi pour vos conversations et le contexte visuel. Omi ouvrira l'application Meta AI pour associer vos lunettes.",
+    "raybanMetaOpenMetaAI": "Se connecter via Meta AI",
+    "raybanMetaWaitingForMetaAI": "Terminez la connexion dans l'application Meta AI, puis revenez ici.",
+    "raybanMetaCheckAgain": "Vérifier à nouveau",
+    "raybanMetaAllowCamera": "Autoriser la caméra des lunettes",
+    "raybanMetaCameraExplanation": "Omi utilise la caméra de vos lunettes pour ajouter des photos à vos conversations. Vous pouvez ignorer cette étape et utiliser uniquement l'audio.",
+    "raybanMetaSkipForNow": "Ignorer pour l'instant",
+    "raybanMetaAudioOnlyTitle": "Mode audio uniquement des Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Cette version d'Omi peut utiliser le microphone de vos lunettes via Bluetooth. La capture de photos nécessite la version développeur Meta d'Omi.",
+    "raybanMetaMusicPauseNote": "La musique sur votre téléphone se met en pause pendant l'utilisation du microphone des lunettes.",
+    "raybanMetaContinue": "Continuer",
+    "raybanMetaCapturePhoto": "Prendre une photo",
+    "raybanMetaPhotoRequested": "Photo demandée — elle apparaîtra dans votre conversation.",
+    "raybanMetaMicrophoneReady": "Microphone prêt",
+    "raybanMetaImageCaptureReady": "Capture d'image prête",
+    "raybanMetaImageCaptureUnavailable": "Indisponible en mode audio uniquement",
+    "raybanMetaCamera": "Caméra",
+    "errorConnectingRayBanMeta": "Erreur de connexion aux Ray-Ban Meta : {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -9352,4 +9352,65 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'ペンダントのストレージがまもなくいっぱいになります。同期するにはアプリを開いたままにしてください。';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta を接続';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta グラスを、会話や視覚的なコンテキストのための Omi のキャプチャデバイスとして使用します。Omi が Meta AI アプリを開いてグラスをリンクします。';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI 経由で接続';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI アプリで接続を完了してから、ここに戻ってください。';
+
+  @override
+  String get raybanMetaCheckAgain => '再確認';
+
+  @override
+  String get raybanMetaAllowCamera => 'グラスのカメラを許可';
+
+  @override
+  String get raybanMetaCameraExplanation => 'Omi はグラスのカメラを使って会話に写真を追加します。これをスキップして音声のみを使用することもできます。';
+
+  @override
+  String get raybanMetaSkipForNow => '今はスキップ';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 音声のみモード';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'このバージョンの Omi は Bluetooth 経由でグラスのマイクを使用できます。写真の撮影には Omi の Meta 開発者ビルドが必要です。';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'グラスのマイクの使用中は、スマートフォンの音楽が一時停止します。';
+
+  @override
+  String get raybanMetaContinue => '続ける';
+
+  @override
+  String get raybanMetaCapturePhoto => '写真を撮影';
+
+  @override
+  String get raybanMetaPhotoRequested => '写真をリクエストしました — 会話に表示されます。';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'マイクの準備完了';
+
+  @override
+  String get raybanMetaImageCaptureReady => '画像キャプチャの準備完了';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => '音声のみモードでは利用できません';
+
+  @override
+  String get raybanMetaCamera => 'カメラ';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta への接続エラー: $error';
+  }
 }

@@ -47,28 +47,130 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("signInWithIdp?key=\\(apiKey)"))
   }
 
-  // MARK: BL-020 — checkSystemAudioPermission() must report the real state
+  // MARK: BL-047 — system audio permission truth
 
-  /// The check is no longer a no-op: it must derive `hasSystemAudioPermission`
-  /// from the real screen-recording TCC preflight the rest of the app uses,
-  /// mirroring `checkScreenRecordingPermission()`.
-  func testCheckSystemAudioPermissionReadsRealTccState() throws {
+  /// Core Audio process taps do not expose a preflight API. The app must not
+  /// proxy this through Screen Recording; it reports the last real tap outcome.
+  func testCheckSystemAudioPermissionUsesObservedTapOutcome() throws {
     let src = try source(relativePath: "Sources/AppState/AppState+SystemActions.swift")
 
     guard let range = src.range(of: "func checkSystemAudioPermission() {") else {
       return XCTFail("checkSystemAudioPermission not found")
     }
-    let body = String(src[range.lowerBound...].prefix(600))
+    let body = String(src[range.lowerBound...].prefix(900))
 
     XCTAssertFalse(
       body.contains("No-op"),
       "checkSystemAudioPermission must no longer be a no-op")
-    XCTAssertTrue(
-      body.contains("hasSystemAudioPermission ="),
-      "it must actually assign the reported permission state")
-    XCTAssertTrue(
+    XCTAssertFalse(
       body.contains("ScreenCaptureService.checkPermission()"),
-      "it must query the real TCC preflight the rest of the app relies on")
+      "system audio permission must not be proxied from Screen Recording TCC")
+    XCTAssertTrue(
+      src.contains("func recordSystemAudioCaptureOutcome(_ status: SystemAudioPermissionStatus)"),
+      "tap outcomes should be recorded through a single AppState helper")
+    XCTAssertTrue(
+      body.contains("recordSystemAudioCaptureOutcome(.unsupported)"),
+      "unsupported OS should be explicitly represented")
+    XCTAssertTrue(
+      body.contains("service.capturing"),
+      "active system audio capture should preserve a granted state")
+    XCTAssertTrue(
+      body.contains("recordSystemAudioCaptureOutcome(.unknown)"),
+      "refreshes without an active tap must not keep stale granted state")
+  }
+
+  func testSystemAudioCaptureOutcomesUpdatePermissionState() throws {
+    let src = try source(relativePath: "Sources/AppState/AppState+Transcription.swift")
+
+    XCTAssertTrue(
+      src.contains("recordSystemAudioCaptureOutcome(.granted)"),
+      "successful system-audio tap starts must mark the permission granted")
+    XCTAssertTrue(
+      src.contains("recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))"),
+      "failed system-audio tap starts must record the CLASSIFIED outcome (denial only for permission-class errors)")
+  }
+
+  func testAudioSourceManagerSystemAudioOutcomesUpdatePermissionState() throws {
+    let src = try source(relativePath: "Sources/Audio/AudioSourceManager.swift")
+
+    XCTAssertTrue(
+      src.contains("AppState.current?.recordSystemAudioCaptureOutcome(.granted)"),
+      "desktop audio-source system audio starts should mark the state granted")
+    XCTAssertTrue(
+      src.contains("SystemAudioPermissionStatus.classify(captureError: error)"),
+      "desktop audio-source system audio failures should record the CLASSIFIED outcome")
+    XCTAssertFalse(
+      src.contains("throw error"),
+      "a system-audio tap failure must not abort the already-running mic/mixer stream")
+  }
+
+  func testPermissionsPageSurfacesSystemAudioRow() throws {
+    let src = try source(relativePath: "Sources/MainWindow/Pages/PermissionsPage.swift")
+
+    XCTAssertTrue(src.contains("SystemAudioPermissionSection(appState: appState)"))
+    XCTAssertTrue(src.contains("Text(\"System Audio\")"))
+    XCTAssertTrue(src.contains("appState.systemAudioPermissionStatus"))
+    XCTAssertTrue(src.contains("appState.triggerSystemAudioPermission()"))
+  }
+
+  @MainActor
+  func testSystemAudioOutcomeMappingAndIdleDowngrade() {
+    // Behavioral contract (BL-047): status follows OBSERVED tap outcomes and
+    // never claims granted while idle.
+    let state = AppState()
+    state.recordSystemAudioCaptureOutcome(.granted)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .granted)
+    XCTAssertTrue(state.hasSystemAudioPermission)
+
+    state.recordSystemAudioCaptureOutcome(.denied)
+    XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
+    XCTAssertFalse(state.hasSystemAudioPermission)
+
+    // A stale granted (no live capture) must downgrade to unknown on re-check,
+    // never persist as granted — and idle unknown must not count as a missing
+    // permission (it would permanently suppress the all-granted banner).
+    state.recordSystemAudioCaptureOutcome(.granted)
+    state.checkSystemAudioPermission()
+    XCTAssertEqual(state.systemAudioPermissionStatus, .unknown)
+    XCTAssertFalse(state.hasSystemAudioPermission)
+    XCTAssertFalse(state.missingPermissions.contains("System Audio"))
+
+    // A proven denial DOES count as missing, and persists through re-checks
+    // (denial was observed; only stale grants decay).
+    state.recordSystemAudioCaptureOutcome(.denied)
+    XCTAssertTrue(state.missingPermissions.contains("System Audio"))
+    state.checkSystemAudioPermission()
+    XCTAssertEqual(state.systemAudioPermissionStatus, .denied)
+    XCTAssertTrue(state.missingPermissions.contains("System Audio"))
+  }
+
+  @available(macOS 14.4, *)
+  func testSystemAudioCaptureErrorClassification() {
+    // A TCC denial manifests as tap-creation/device-start failure; format and
+    // converter errors are provably NOT permission problems and must not claim
+    // a denial (they map to unknown so the row stays honest).
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.tapCreationFailed(-1)),
+      .denied)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.deviceStartFailed(-1)),
+      .denied)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.formatError),
+      .unknown)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.converterCreationFailed),
+      .unknown)
+    XCTAssertEqual(
+      SystemAudioPermissionStatus.classify(
+        captureError: SystemAudioCaptureService.SystemAudioCaptureError.unsupportedOS),
+      .unsupported)
+    struct OtherError: Error {}
+    XCTAssertEqual(SystemAudioPermissionStatus.classify(captureError: OtherError()), .unknown)
   }
 
   func testProductionAuthTokensUseKeychainStorage() throws {
