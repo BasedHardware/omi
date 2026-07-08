@@ -466,12 +466,36 @@ struct ToneGuideResponse: Codable {
   let guideText: String?
   let generatedAt: String?
   let sampleCount: Int?
+  let personaSummary: PersonaSummary?
 
   enum CodingKeys: String, CodingKey {
     case guideText = "guide_text"
     case generatedAt = "generated_at"
     case sampleCount = "sample_count"
+    case personaSummary = "persona_summary"
   }
+}
+
+/// Compact, card-friendly view of the tone guide (for the Persona "How I sound as you" card).
+struct PersonaSummary: Codable {
+  let soundsLike: String?
+  let notLike: String?
+  let traits: [PersonaTrait]?
+
+  enum CodingKeys: String, CodingKey {
+    case soundsLike = "sounds_like"
+    case notLike = "not_like"
+    case traits
+  }
+}
+
+struct PersonaTrait: Codable, Identifiable {
+  let key: String
+  let label: String
+  let subtitle: String
+  let on: Bool
+
+  var id: String { key }
 }
 
 struct MCPKeyCreatedResponse: Codable {

@@ -112,16 +112,25 @@ def test_skips_when_too_few_samples_even_with_force():
         gl.assert_not_called()
 
 
+def _guide_and_persona_llm():
+    """A fake get_llm('memories') that returns the prose guide for the guide call and JSON
+    for the persona-examples call, distinguished by the system prompt."""
+
+    def invoke(messages):
+        system = messages[0].content if not isinstance(messages, str) else messages
+        if 'two short example text messages' in system:
+            return SimpleNamespace(content='{"sounds_like": "yo sending it now", "not_like": "Please find attached."}')
+        return SimpleNamespace(content='## Voice\nwrites in all lowercase.\n\n## By recipient\n(none)')
+
+    return SimpleNamespace(invoke=invoke)
+
+
 def test_generates_and_stores_when_enough_samples():
     convos = [_convo(_TEXTING_SOURCE, _many_samples(utg.MIN_SAMPLES_FOR_GUIDE + 5))]
-    fake_llm = MagicMock()
-    fake_llm.invoke.return_value = SimpleNamespace(
-        content='## Voice\nwrites in all lowercase.\n\n## By recipient\n(none)'
-    )
     with patch.object(utg.users_db, 'get_user_tone_guide', return_value=None), patch.object(
         utg.conversations_db, 'get_conversations', return_value=convos
     ), patch.object(utg.users_db, 'get_people', return_value=[]), patch.object(
-        utg, 'get_llm', return_value=fake_llm
+        utg, 'get_llm', return_value=_guide_and_persona_llm()
     ), patch.object(
         utg.users_db, 'update_user_tone_guide'
     ) as upd:
@@ -131,6 +140,26 @@ def test_generates_and_stores_when_enough_samples():
         assert kwargs['guide_text'].startswith('## Voice')
         assert kwargs['sample_count'] >= utg.MIN_SAMPLES_FOR_GUIDE
         assert kwargs['generated_at']  # ISO timestamp recorded
+        # Persona card summary: derived trait toggles + generated example lines.
+        persona = kwargs['persona_summary']
+        assert persona['sounds_like'] == 'yo sending it now'
+        assert persona['not_like']
+        keys = {t['key'] for t in persona['traits']}
+        assert keys == {'short_and_direct', 'warm_not_formal', 'emoji', 'match_each_person'}
+        assert all(isinstance(t['on'], bool) for t in persona['traits'])
+
+
+def test_persona_traits_derive_from_fingerprint():
+    from utils.llm.style_fingerprint import compute_fingerprint
+
+    terse = compute_fingerprint(['k', 'ye', 'omw', 'bet', 'lol', 'fr'])
+    traits = {t['key']: t['on'] for t in utg._compute_persona_traits(terse, has_recipient_notes=True)}
+    assert traits['short_and_direct'] is True
+    assert traits['warm_not_formal'] is True  # all lowercase
+    assert traits['match_each_person'] is True  # recipient notes present
+    # No recipient notes -> match_each_person off.
+    traits_no = {t['key']: t['on'] for t in utg._compute_persona_traits(terse, has_recipient_notes=False)}
+    assert traits_no['match_each_person'] is False
 
 
 def test_empty_llm_output_is_not_stored():

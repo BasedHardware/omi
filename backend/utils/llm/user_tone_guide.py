@@ -16,6 +16,7 @@ re-sync is cheap. Never fabricates — with too little material it does nothing.
 """
 
 import html
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -189,6 +190,106 @@ def _build_prompt(fingerprint_lines: str, samples: List[str], recipient_notes: L
     return system_prompt, user_prompt
 
 
+def _extract_json(text: str) -> Optional[dict]:
+    t = (text or '').strip()
+    if t.startswith('```'):
+        newline = t.find('\n')
+        if newline != -1:
+            t = t[newline + 1 :]
+        if t.endswith('```'):
+            t = t[:-3]
+    start = t.find('{')
+    end = t.rfind('}')
+    if start == -1 or end == -1 or end < start:
+        return None
+    try:
+        return json.loads(t[start : end + 1])
+    except Exception:
+        return None
+
+
+def _compute_persona_traits(fp, has_recipient_notes: bool) -> List[dict]:
+    """The card's 'Your defaults' toggles — read-only, derived deterministically from the
+    measured fingerprint (never an LLM guess). The card owns final copy; label/subtitle are
+    provided so a thin renderer can use them directly."""
+    return [
+        {
+            'key': 'short_and_direct',
+            'label': 'Short and direct',
+            'subtitle': 'Get to it. No filler.',
+            'on': bool(fp.median_words <= 8 or fp.short_reply_rate >= 0.3),
+        },
+        {
+            'key': 'warm_not_formal',
+            'label': 'Warm, not formal',
+            'subtitle': 'Friendly, lowercase-ish.',
+            'on': bool((not fp.uses_capitalization) or fp.lowercase_ratio >= 0.4),
+        },
+        {
+            'key': 'emoji',
+            'label': 'An emoji now and then',
+            'subtitle': "Only where you'd use one.",
+            'on': bool(fp.uses_emoji),
+        },
+        {
+            'key': 'match_each_person',
+            'label': 'Match each person',
+            'subtitle': 'Looser with friends, tighter with work.',
+            'on': bool(has_recipient_notes),
+        },
+    ]
+
+
+def _generate_persona_examples(fingerprint_lines: str, samples: List[str]) -> Optional[dict]:
+    """Two short example lines for the persona card: one in the user's real voice
+    ('sounds_like') and a stiff/formal contrast they'd never send ('not_like')."""
+    system_prompt = (
+        "You write two short example text messages that illustrate a specific user's texting voice, "
+        "for a UI card. Base the voice ONLY on the user's real messages and measured stats below — "
+        "match their casing, length, slang, and emoji habits.\n\n"
+        f"{UNTRUSTED_DATA_NOTICE}\n\n"
+        "Return ONLY JSON (no markdown, no code fences):\n"
+        "{\n"
+        '  "sounds_like": "one realistic everyday message this user would actually send, in their real '
+        'voice — natural, not copied verbatim from a sample",\n'
+        '  "not_like": "the same kind of message written in a stiff, formal, corporate voice this user '
+        'would NEVER use"\n'
+        "}"
+    )
+    user_prompt = (
+        "MEASURED STATS:\n"
+        f"<stats>\n{fingerprint_lines}\n</stats>\n\n"
+        "THE USER'S REAL MESSAGES:\n"
+        f"<messages>\n" + "\n".join(f"- {_fence(s)}" for s in samples[:60]) + "\n</messages>"
+    )
+    try:
+        response = get_llm('memories').invoke([SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)])
+        parsed = _extract_json(response.content if hasattr(response, 'content') else str(response))
+    except Exception as e:
+        logger.warning(f"user_tone_guide: persona examples LLM failed: {e}")
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    sounds_like = parsed.get('sounds_like')
+    not_like = parsed.get('not_like')
+    sounds_like = sounds_like.strip() if isinstance(sounds_like, str) else ''
+    not_like = not_like.strip() if isinstance(not_like, str) else ''
+    if not sounds_like:
+        return None
+    return {'sounds_like': sounds_like, 'not_like': not_like}
+
+
+def _build_persona_summary(fp, fingerprint_lines: str, samples: List[str], recipient_notes: List[dict]) -> dict:
+    """The compact, card-friendly view: derived trait toggles (always) plus the
+    sounds-like / not-like example lines (best-effort)."""
+    summary = {'traits': _compute_persona_traits(fp, bool(recipient_notes))}
+    examples = _generate_persona_examples(fingerprint_lines, samples)
+    if examples:
+        summary['sounds_like'] = examples['sounds_like']
+        summary['not_like'] = examples['not_like']
+    return summary
+
+
 def generate_user_tone_guide(uid: str, force: bool = False) -> bool:
     """Regenerate and store the user's Tone & Style guide. Returns True if updated.
 
@@ -203,7 +304,8 @@ def generate_user_tone_guide(uid: str, force: bool = False) -> bool:
         logger.info(f"user_tone_guide: not enough samples ({len(samples)}) for uid={uid}, skipping")
         return False
 
-    fingerprint_lines = render_fingerprint_lines(compute_fingerprint(samples))
+    fingerprint = compute_fingerprint(samples)
+    fingerprint_lines = render_fingerprint_lines(fingerprint)
     recipient_notes = _collect_recipient_notes(uid)
     system_prompt, user_prompt = _build_prompt(fingerprint_lines, samples, recipient_notes)
 
@@ -218,9 +320,13 @@ def generate_user_tone_guide(uid: str, force: bool = False) -> bool:
         logger.warning(f"generate_user_tone_guide produced empty guide uid={uid}")
         return False
 
+    # Compact card view for the persona UI (traits are deterministic; examples best-effort).
+    persona_summary = _build_persona_summary(fingerprint, fingerprint_lines, samples, recipient_notes)
+
     users_db.update_user_tone_guide(
         uid,
         guide_text=guide_text,
+        persona_summary=persona_summary,
         generated_at=datetime.now(timezone.utc).isoformat(),
         sample_count=len(samples),
     )

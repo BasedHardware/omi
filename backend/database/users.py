@@ -1990,13 +1990,20 @@ def get_user_tone_guide(uid: str) -> Optional[dict]:
     return get_or_fetch(_USER_TONE_GUIDE_CACHE, uid, lambda: _get_user_tone_guide_from_firestore(uid))
 
 
-def update_user_tone_guide(uid: str, guide_text: str = None, generated_at=None, sample_count: int = None) -> dict:
-    """Update the messaging Tone & Style guide. Only writes non-None fields (partial update)."""
+def update_user_tone_guide(
+    uid: str, guide_text: str = None, persona_summary=None, generated_at=None, sample_count: int = None
+) -> dict:
+    """Update the messaging Tone & Style guide. Only writes non-None fields (partial update).
+
+    ``persona_summary`` is the compact, card-friendly view (sounds_like / not_like /
+    derived trait toggles) rendered by the persona UI; ``guide_text`` is the full prose."""
     # Read-modify-write: read straight from Firestore (never the cache) so a stale
     # projection can't clobber newer fields.
     existing = _get_user_tone_guide_from_firestore(uid) or {}
     if guide_text is not None:
         existing['guide_text'] = guide_text
+    if persona_summary is not None:
+        existing['persona_summary'] = persona_summary
     if generated_at is not None:
         existing['generated_at'] = generated_at
     if sample_count is not None:
