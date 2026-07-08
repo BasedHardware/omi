@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarLaunchPolicy.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTVoiceOutputCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
