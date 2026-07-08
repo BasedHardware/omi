@@ -392,6 +392,13 @@ struct DashboardPage: View {
             appState.checkAllPermissions()
             Task { await homeStatus.refresh(force: false) }
         }
+        // Clicking into the ask bar reveals the inline chat; the same is true
+        // when focus lands there via keyboard (Tab / Full Keyboard Access).
+        .onChange(of: homeAskFieldFocused) { _, focused in
+            if focused && !useLegacyHomeDesign && homeMode != .chat {
+                openHomeChat()
+            }
+        }
         // Automation-bridge entry points (home_open_chat / home_connect_toggle /
         // home_close_panel / home_ask) — they call the exact functions the
         // on-screen controls call.
@@ -572,6 +579,9 @@ struct DashboardPage: View {
                         homeHubCenterpiece
                     }
                     .transition(.homeHubFade)
+                case .chat:
+                    homeChatPanel
+                        .transition(.homeDropFromTop)
                 case .connect:
                     homeConnectPanel
                         .transition(.homeDropFromTop)
@@ -648,6 +658,70 @@ struct DashboardPage: View {
     }
 
     // MARK: Inline chat panel
+
+    private var homeChatPanel: some View {
+        VStack(spacing: 0) {
+            ChatMessagesView(
+                messages: chatProvider.messages,
+                isSending: chatProvider.isSending,
+                hasMoreMessages: chatProvider.hasMoreMessages,
+                isLoadingMoreMessages: chatProvider.isLoadingMoreMessages,
+                isLoadingInitial: (chatProvider.isLoading || chatProvider.isLoadingSessions)
+                    && !chatProvider.isClearing,
+                app: selectedApp,
+                onLoadMore: { await chatProvider.loadMoreMessages() },
+                onRate: { messageId, rating in
+                    Task { await chatProvider.rateMessage(messageId, rating: rating) }
+                },
+                onCitationTap: { citation in
+                    handleCitationTap(citation)
+                },
+                sessionsLoadError: chatProvider.sessionsLoadError,
+                onRetry: { Task { await chatProvider.retryLoad() } },
+                localSendToken: chatProvider.localSendToken,
+                onCancelTurn: { chatProvider.stopAgent(owner: .mainChat) },
+                welcomeContent: { dashboardChatWelcome }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.05),
+                        .init(color: .black, location: 0.97),
+                        .init(color: .clear, location: 1.0),
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+        }
+        // Barely-there card so the chat reads as a bounded surface — making it
+        // obvious the canvas around it is clickable (and closes the chat).
+        // The stroke is a soft gradient that dissolves toward the bottom.
+        .background(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .fill(Color.white.opacity(0.012))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            HomePalette.hairline.opacity(0.45),
+                            HomePalette.hairline.opacity(0.10),
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .frame(maxWidth: Self.homeStagePanelMaxWidth)
+        .padding(.horizontal, Self.homeStageHorizontalPadding)
+    }
 
     // MARK: Connect tray
 
@@ -764,10 +838,12 @@ struct DashboardPage: View {
         }
     }
 
-    /// Chat lives on its own page — every "open chat" affordance navigates
-    /// there instead of dropping an inline panel over Home.
     private func openHomeChat() {
-        navigate(to: .chat)
+        guard homeMode != .chat else { return }
+        withAnimation(Self.homeStageAnimation) {
+            homeMode = .chat
+        }
+        reportHomeAutomationMode()
     }
 
     private func toggleHomeConnectPanel() {
@@ -1441,11 +1517,13 @@ private enum HomeDestinationProminence {
 
 private enum HomeStageMode: Equatable {
     case hub
+    case chat
     case connect
 
     var automationLabel: String {
         switch self {
         case .hub: return "hub"
+        case .chat: return "chat"
         case .connect: return "connect"
         }
     }
