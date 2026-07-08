@@ -259,9 +259,11 @@ probe_auth_06() {
     record auth-06 PASS $(( $(now_s) - t0 )) "prod-not-installed (no $PROD_BUNDLE_ID defaults domain)"
     return
   fi
+  local presence
   for k in $keys; do
-    lines="$lines prod:$k=$(defaults_key_presence "$PROD_BUNDLE_ID" "$k")"
-    case "$(defaults_key_presence "$PROD_BUNDLE_ID" "$k")" in present*) prod_hits=$((prod_hits + 1)) ;; esac
+    presence="$(defaults_key_presence "$PROD_BUNDLE_ID" "$k")"
+    lines="$lines prod:$k=$presence"
+    case "$presence" in present*) prod_hits=$((prod_hits + 1)) ;; esac
   done
   for k in $keys; do
     lines="$lines test:$k=$(defaults_key_presence "$BUNDLE_ID" "$k")"
@@ -275,22 +277,35 @@ probe_auth_06() {
 }
 
 probe_set_04() {
-  local t0 f total=0 hits
+  local t0 f total=0 hits status scanned=0 scan_errors=0
   t0=$(now_s)
   {
     for f in /private/tmp/omi-dev.log /private/tmp/omi.log; do
       if [ ! -r "$f" ]; then echo "$f: not present/readable"; continue; fi
-      hits="$(grep -cE "$CRED_PATTERNS" "$f" 2>/dev/null || true)"
-      hits="${hits:-0}"
-      echo "$f: $hits credential-pattern hits ($(wc -l <"$f" | tr -d ' ') lines)"
-      total=$((total + hits))
+      set +e
+      hits="$(grep -cE "$CRED_PATTERNS" "$f" 2>/dev/null)"
+      status=$?
+      set -e
+      if [ "$status" -gt 1 ]; then
+        # grep >=2 = the log could not be scanned — never treat as clean.
+        echo "$f: SCAN ERROR (grep exit $status)"
+        scan_errors=$((scan_errors + 1))
+        continue
+      fi
+      scanned=$((scanned + 1))
+      echo "$f: ${hits:-0} credential-pattern hits ($(wc -l <"$f" | tr -d ' ') lines)"
+      total=$((total + ${hits:-0}))
     done
-    echo "total=$total"
+    echo "total=$total scanned=$scanned scan_errors=$scan_errors"
   } >"$REPORT_DIR/set-04.log"
-  if [ "$total" -eq 0 ]; then
-    record set-04 PASS $(( $(now_s) - t0 )) "0 credential patterns across app logs"
-  else
+  if [ "$total" -gt 0 ]; then
     record set-04 FAIL $(( $(now_s) - t0 )) "$total credential-pattern hits in app logs (see set-04.log)"
+  elif [ "$scan_errors" -gt 0 ]; then
+    record set-04 BLOCKED $(( $(now_s) - t0 )) "$scan_errors log(s) could not be scanned (see set-04.log)"
+  elif [ "$scanned" -eq 0 ]; then
+    record set-04 BLOCKED $(( $(now_s) - t0 )) "no app logs present to scan"
+  else
+    record set-04 PASS $(( $(now_s) - t0 )) "0 credential patterns across $scanned app log(s)"
   fi
 }
 
@@ -519,6 +534,7 @@ cmd_run() {
   # Preflight: tooling, app presence, port.
   command -v sqlite3 >/dev/null || die "sqlite3 not found"
   command -v python3 >/dev/null || die "python3 not found"
+  command -v nc >/dev/null || die "nc not found (needed for the port-busy preflight)"
   local needs_app=0
   for p in set-01 mic-06 chat-03 auth-03 lnch-07; do
     probe_selected "$p" && needs_app=1
