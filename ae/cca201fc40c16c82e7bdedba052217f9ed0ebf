@@ -1,0 +1,50 @@
+backend/utils/whatsapp_connector.py
+  s_dce5329af2ed39::t_84d98f16484d28 285-292
+  s_dce5329af2ed39::t_09709916fb8c13 62
+backend/routers/users.py
+  s_dce5329af2ed39::t_794e31934192a2 97
+  s_dce5329af2ed39::t_f6ed403ec539ab 1673-1693
+backend/tests/unit/test_reply_draft.py
+  s_dce5329af2ed39::t_76877e9f334c62 290-324
+  s_dce5329af2ed39::t_79c625268a717d 379-413
+backend/utils/telegram_connector.py
+  s_dce5329af2ed39::t_0e956617e965fb 62
+  s_dce5329af2ed39::t_d4a804d4070137 285-292
+backend/utils/llm/reply_draft.py
+  s_dce5329af2ed39::t_01afd4cb4abad5 611-620
+  s_dce5329af2ed39::t_4bf5c9e188eeb7 29
+  s_dce5329af2ed39::t_f857603a13e540 469-497
+  s_dce5329af2ed39::t_f5854431c1ca14 601
+  s_dce5329af2ed39::t_18f120f8bd83da 752
+  s_dce5329af2ed39::t_b46d7bb9c2c619 1380
+  s_dce5329af2ed39::t_95bea9eb221658 1288-1299
+backend/utils/imessage_connector.py
+  s_dce5329af2ed39::t_d580ad45592984 55
+  s_dce5329af2ed39::t_51a48239af3694 405-412
+backend/database/users.py
+  s_dce5329af2ed39::t_283ba5bb86052f 23
+  s_dce5329af2ed39::t_51224b5d09c8ff 1977-1992,1994-2007
+  s_dce5329af2ed39::t_b100f25ff4bb75 1993
+backend/utils/llm/user_tone_guide.py
+  s_dce5329af2ed39::t_b100f25ff4bb75 211
+  s_dce5329af2ed39::t_53446211709c67 1-210,212-227
+backend/tests/unit/test_user_tone_guide.py
+  s_dce5329af2ed39::t_b100f25ff4bb75 118-120
+  s_dce5329af2ed39::t_192dccc9e76579 1-117,121-148
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "aecca201fc40c16c82e7bdedba052217f9ed0ebf",
+  "prompts": {},
+  "sessions": {
+    "s_dce5329af2ed39": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "17795923-7044-4827-b7aa-e05c0e30df95",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
