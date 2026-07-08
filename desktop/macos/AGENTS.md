@@ -184,13 +184,15 @@ source of truth; UI may optimistic-render, then must not double-apply the same t
 
 Rules (fail the PR if any break):
 1. **Single provider** — floating typed/PTT must not own a separate durable message array.
-2. **One idempotency key per logical turn** — every local `recordCompletedTurn` /
-   optimistic stage that also persists via kernel MUST share the SAME key with
-   `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Until stage/promote lands,
-   call `suppressNextRecordedTurn(idempotencyKey:)` with that key BEFORE the
-   kernel write. Keys are opaque strings; never dedupe by assistant/user text.
-3. **Kernel apply is idempotent** — `KernelTurnProjection.apply` ignores already-seen
-   keys; empty keys do not suppress.
+2. **One idempotency key per logical turn** — every optimistic
+   `stageOptimisticTurn` / kernel write MUST share the SAME key with
+   `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Stage first for sync UI,
+   then let `KernelTurnProjection.apply` `promoteOptimisticTurn` (in-place,
+   no append) when `turn_recorded` arrives. Keys are opaque strings; never
+   dedupe by assistant/user text.
+3. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
+   pending optimistic turns or appends via `recordCompletedTurn`; already-seen
+   continuity keys are ignored. Empty keys do not suppress.
 4. **Cross-surface agent identity is structured** — pill/agent links carry a UUID
    (tool block `spawnedAgentID` or explicit `id=` / structured content block).
    Do not invent new free-text formats; extend the existing parser/schema + tests

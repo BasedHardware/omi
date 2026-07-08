@@ -114,10 +114,10 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(agentPillSource.contains("FloatingControlBarManager.shared.recordAgentArtifactCompletion("))
     XCTAssertTrue(agentPillSource.contains("resources: resources"))
     XCTAssertTrue(windowSource.contains("func recordAgentArtifactCompletion("))
-    XCTAssertTrue(windowSource.contains("historyChatProvider?.appendAssistantMessage("))
+    XCTAssertTrue(windowSource.contains("stageOptimisticTurn("))
     XCTAssertTrue(windowSource.contains("deliverAgentArtifactCompletionToFloatingSurface"))
+    XCTAssertTrue(chatProviderSource.contains("func stageOptimisticTurn("))
     XCTAssertTrue(chatProviderSource.contains("resources: [ChatResource] = []"))
-    XCTAssertTrue(chatProviderSource.contains("sender: .ai,"))
     XCTAssertTrue(chatProviderSource.contains("resources: resources"))
   }
 

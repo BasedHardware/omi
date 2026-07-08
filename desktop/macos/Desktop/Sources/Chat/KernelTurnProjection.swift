@@ -6,6 +6,8 @@ import Foundation
 final class KernelTurnProjection {
   private weak var host: ChatProvider?
   private var client: AgentClient.Session?
+  /// Continuity keys already committed from kernel `turn_recorded` (or promoted
+  /// optimistic stages). Prevents double-append of the same logical turn.
   private var appliedKernelTurnKeys = Set<String>()
 
   init(host: ChatProvider) {
@@ -30,22 +32,25 @@ final class KernelTurnProjection {
     else {
       return
     }
-    if let key = turn.idempotencyKey, !key.isEmpty {
+
+    let key = turn.idempotencyKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    if !key.isEmpty {
       guard !appliedKernelTurnKeys.contains(key) else { return }
+      if host.hasOptimisticTurn(continuityKey: key) {
+        host.promoteOptimisticTurn(continuityKey: key, from: turn)
+        rememberAppliedKernelTurnKey(key)
+        return
+      }
       rememberAppliedKernelTurnKey(key)
     }
+
     _ = host.recordCompletedTurn(
       userText: turn.userText,
       assistantText: turn.assistantText,
       logLabel: turn.origin == "realtime_voice" ? "voice" : "kernel_turn",
-      messageSource: turn.origin
+      messageSource: turn.origin,
+      continuityKey: key.isEmpty ? nil : key
     )
-  }
-
-  func suppressNextRecordedTurn(idempotencyKey: String) {
-    let key = idempotencyKey.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !key.isEmpty else { return }
-    rememberAppliedKernelTurnKey(key)
   }
 
   private func rememberAppliedKernelTurnKey(_ key: String) {

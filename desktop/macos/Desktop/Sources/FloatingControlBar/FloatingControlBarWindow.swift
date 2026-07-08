@@ -2185,7 +2185,6 @@ class FloatingControlBarManager {
     private var pendingNotificationContext: PendingNotificationContext?
     private var activeQueryGeneration: Int = 0
     private var deliveredAgentArtifactKeys: Set<String> = []
-    private var projectedPillCompletionKeys: Set<String> = []
 
     private var selectedFloatingModel: String {
         let selected = ShortcutSettings.shared.selectedModel
@@ -3052,12 +3051,13 @@ class FloatingControlBarManager {
         origin: String,
         idempotencyKey: String
     ) async -> (user: ChatMessage?, assistant: ChatMessage?) {
-        let turn = provider.recordCompletedTurn(
+        let turn = provider.stageOptimisticTurn(
+            continuityKey: idempotencyKey,
             userText: userText,
             assistantText: assistantText,
-            logLabel: origin
+            origin: origin,
+            turnOwner: .floatingDefault
         )
-        provider.kernelTurnProjection.suppressNextRecordedTurn(idempotencyKey: idempotencyKey)
         await recordSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
             userText: userText,
@@ -3579,18 +3579,44 @@ class FloatingControlBarManager {
             messageText = "Done. The background agent produced \(resources.count == 1 ? "an artifact" : "\(resources.count) artifacts")."
         }
 
-        let historyMessage = historyChatProvider?.appendAssistantMessage(
-            messageText,
+        let continuityKey: String
+        if let runId, !runId.isEmpty {
+            continuityKey = "pill_completion:\(runId)"
+        } else {
+            continuityKey = "pill_completion:\(pillID.uuidString)"
+        }
+
+        // Assistant-only projection: the spawn handoff already recorded the user's
+        // request on main_chat; repeating it here would double-spend the voice seed budget.
+        let trimmedUser = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let requestSnippet = trimmedUser.count > 120
+            ? String(trimmedUser.prefix(120)) + "…"
+            : trimmedUser
+        let summary = requestSnippet.isEmpty
+            ? "[Background agent id=\(pillID.uuidString)] \(messageText)"
+            : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(messageText)"
+
+        _ = historyChatProvider?.stageOptimisticTurn(
+            continuityKey: continuityKey,
+            userText: "",
+            assistantText: summary,
+            origin: "pill_completion",
+            turnOwner: .mainChat,
             resources: resources
         )
-        let visibleMessage = historyMessage ?? ChatMessage(text: messageText, sender: .ai, resources: resources)
-        deliverAgentArtifactCompletionToFloatingSurface(visibleMessage)
+        // Floating surface keeps the plain completion copy; timeline/kernel use the
+        // bracket summary staged above (parsed by BackgroundAgentSummary).
+        deliverAgentArtifactCompletionToFloatingSurface(
+            ChatMessage(text: messageText, sender: .ai, resources: resources)
+        )
         Task {
-            await recordPillTerminalCompletion(
-                pillID: pillID,
-                runId: runId,
-                userText: userText,
-                assistantText: messageText
+            guard let provider = historyChatProvider else { return }
+            await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+                surface: provider.mainChatSurfaceReference(),
+                userText: "",
+                assistantText: summary,
+                origin: "pill_completion",
+                idempotencyKey: continuityKey
             )
         }
     }
@@ -3612,10 +3638,8 @@ class FloatingControlBarManager {
         } else {
             idempotencyKey = "pill_completion:\(pillID.uuidString)"
         }
-        guard !projectedPillCompletionKeys.contains(idempotencyKey) else { return }
-        projectedPillCompletionKeys.insert(idempotencyKey)
 
-        // Assistant-only projection: the spawn handoff (Fix A) already recorded the user's
+        // Assistant-only projection: the spawn handoff already recorded the user's
         // request on main_chat; repeating it here would double-spend the voice seed budget.
         let requestSnippet = trimmedUser.count > 120
             ? String(trimmedUser.prefix(120)) + "…"
@@ -3625,6 +3649,26 @@ class FloatingControlBarManager {
             : "[Background agent id=\(pillID.uuidString) — \(requestSnippet)] \(trimmedAssistant)"
 
         guard let provider = historyChatProvider else { return }
+        if provider.hasOptimisticTurn(continuityKey: idempotencyKey)
+            || provider.messages.contains(where: { $0.clientTurnId == idempotencyKey }) {
+            // Artifact path already staged this key; only project to kernel.
+            await provider.kernelTurnProjection.projectCrossSurfaceTurn(
+                surface: provider.mainChatSurfaceReference(),
+                userText: "",
+                assistantText: summary,
+                origin: "pill_completion",
+                idempotencyKey: idempotencyKey
+            )
+            return
+        }
+
+        _ = provider.stageOptimisticTurn(
+            continuityKey: idempotencyKey,
+            userText: "",
+            assistantText: summary,
+            origin: "pill_completion",
+            turnOwner: .mainChat
+        )
         await provider.kernelTurnProjection.projectCrossSurfaceTurn(
             surface: provider.mainChatSurfaceReference(),
             userText: "",

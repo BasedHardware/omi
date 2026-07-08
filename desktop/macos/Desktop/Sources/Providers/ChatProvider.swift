@@ -818,6 +818,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return session
     }
     lazy var kernelTurnProjection = KernelTurnProjection(host: self)
+    private var pendingSurfaceTurns: [String: PendingSurfaceTurn] = [:]
     private var agentBridgeStarted = false
     /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
     /// @AppStorage("chatBridgeMode") can be updated by other views sharing the same key,
@@ -2826,6 +2827,132 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         return aiMessage
     }
 
+    private struct PendingSurfaceTurn {
+        let continuityKey: String
+        var userMessageId: String?
+        var assistantMessageId: String?
+        var origin: String
+    }
+
+    /// Stage a turn in the UI immediately under a continuity key. Kernel
+    /// `turn_recorded` later promotes the same messages in place (no append).
+    @discardableResult
+    func stageOptimisticTurn(
+        continuityKey: String,
+        userText: String,
+        assistantText: String,
+        origin: String,
+        turnOwner: ChatTurnOwner? = nil,
+        contentBlocks: [ChatContentBlock] = [],
+        resources: [ChatResource] = []
+    ) -> (user: ChatMessage?, assistant: ChatMessage?) {
+        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assistant = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return (nil, nil) }
+        guard !user.isEmpty || !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty else {
+            return (nil, nil)
+        }
+
+        if let pending = pendingSurfaceTurns[key] {
+            return (
+                pending.userMessageId.flatMap { id in messages.first(where: { $0.id == id }) },
+                pending.assistantMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
+            )
+        }
+
+        let existingUser = messages.first { $0.clientTurnId == key && $0.sender == .user }
+        let existingAssistant = messages.first { $0.clientTurnId == key && $0.sender == .ai }
+        if existingUser != nil || existingAssistant != nil {
+            pendingSurfaceTurns[key] = PendingSurfaceTurn(
+                continuityKey: key,
+                userMessageId: existingUser?.id,
+                assistantMessageId: existingAssistant?.id,
+                origin: origin
+            )
+            return (existingUser, existingAssistant)
+        }
+
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+        let logLabel = origin
+
+        var userMessage: ChatMessage?
+        var aiMessage: ChatMessage?
+        if !user.isEmpty {
+            let m = ChatMessage(
+                clientTurnId: key,
+                text: user,
+                sender: .user,
+                turnOwner: turnOwner
+            )
+            messages.append(m)
+            userMessage = m
+        }
+        if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
+            let messageText = assistant.isEmpty && (!contentBlocks.isEmpty || !resources.isEmpty) ? "Done." : assistant
+            let m = ChatMessage(
+                clientTurnId: key,
+                text: messageText,
+                sender: .ai,
+                contentBlocks: contentBlocks,
+                resources: resources,
+                turnOwner: turnOwner
+            )
+            messages.append(m)
+            aiMessage = m
+        }
+
+        pendingSurfaceTurns[key] = PendingSurfaceTurn(
+            continuityKey: key,
+            userMessageId: userMessage?.id,
+            assistantMessageId: aiMessage?.id,
+            origin: origin
+        )
+
+        pendingSaves.begin()
+        Task { [weak self] in
+            if let userMessage {
+                await self?.persistRecordedTurnMessage(
+                    userMessage, text: user, sender: "human",
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: origin)
+            }
+            if let aiMessage {
+                await self?.persistRecordedTurnMessage(
+                    aiMessage, text: aiMessage.text, sender: "ai",
+                    appId: capturedAppId, sessionId: capturedSessionId, logLabel: logLabel, messageSource: origin)
+            }
+            await MainActor.run { self?.pendingSaves.end() }
+        }
+
+        return (userMessage, aiMessage)
+    }
+
+    func promoteOptimisticTurn(continuityKey: String, from turn: AgentRuntimeProcess.KernelTurnRecorded) {
+        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty, let pending = pendingSurfaceTurns.removeValue(forKey: key) else { return }
+
+        let kernelUser = turn.userText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let kernelAssistant = turn.assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let userId = pending.userMessageId,
+           let index = messages.firstIndex(where: { $0.id == userId }),
+           !kernelUser.isEmpty {
+            messages[index].text = kernelUser
+        }
+        if let assistantId = pending.assistantMessageId,
+           let index = messages.firstIndex(where: { $0.id == assistantId }),
+           !kernelAssistant.isEmpty {
+            messages[index].text = kernelAssistant
+        }
+    }
+
+    func hasOptimisticTurn(continuityKey: String) -> Bool {
+        let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !key.isEmpty else { return false }
+        return pendingSurfaceTurns[key] != nil
+    }
+
     /// Record a completed turn that did not stream through `sendMessage`.
     /// Appends both messages to the in-memory provider session immediately, then
     /// persists them sequentially in the background so later follow-ups retain context.
@@ -2834,7 +2961,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         userText: String,
         assistantText: String,
         logLabel: String = "completed",
-        messageSource: String = "desktop_chat"
+        messageSource: String = "desktop_chat",
+        continuityKey: String? = nil
     ) -> (
         user: ChatMessage?, assistant: ChatMessage?
     ) {
@@ -2844,18 +2972,22 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return (nil, nil)
         }
 
+        let trimmedContinuityKey = continuityKey?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let clientTurnId = trimmedContinuityKey.isEmpty ? nil : trimmedContinuityKey
+
         let capturedSessionId = isInDefaultChat ? nil : currentSessionId
         let capturedAppId = overrideAppId ?? selectedAppId
 
         var userMessage: ChatMessage?
         var aiMessage: ChatMessage?
         if !user.isEmpty {
-            let m = ChatMessage(text: user, sender: .user)
+            let m = ChatMessage(clientTurnId: clientTurnId, text: user, sender: .user)
             messages.append(m)
             userMessage = m
         }
         if !assistant.isEmpty {
-            let m = ChatMessage(text: assistant, sender: .ai)
+            let m = ChatMessage(clientTurnId: clientTurnId, text: assistant, sender: .ai)
             messages.append(m)
             aiMessage = m
         }

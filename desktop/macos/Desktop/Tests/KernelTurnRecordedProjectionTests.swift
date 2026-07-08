@@ -27,6 +27,10 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
 
     XCTAssertEqual(provider.messages.filter { $0.sender == .user }.map(\.text), ["PTT question"])
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.map(\.text), ["PTT answer"])
+    XCTAssertEqual(
+      provider.messages.filter { $0.sender == .user }.compactMap(\.clientTurnId),
+      ["turn-1"]
+    )
   }
 
   func testApplyKernelTurnRecordedDedupesByIdempotencyKey() {
@@ -74,18 +78,28 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertTrue(provider.messages.isEmpty)
   }
 
-  func testLocalRecordThenSuppressPreventsKernelEchoDuplicate() {
+  func testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate() {
     let provider = ChatProvider()
     let projection = provider.kernelTurnProjection
     let surface = provider.mainChatSurfaceReference()
     let key = "floating_resolver:exchange-1:spawn"
+    let blocks: [ChatContentBlock] = [
+      .text(id: "block-1", text: "spawned"),
+    ]
 
-    _ = provider.recordCompletedTurn(
+    let staged = provider.stageOptimisticTurn(
+      continuityKey: key,
       userText: "Start a background agent",
       assistantText: "On it — spawning now.",
-      logLabel: "floating_resolver"
+      origin: "floating_resolver",
+      turnOwner: .floatingDefault,
+      contentBlocks: blocks
     )
-    projection.suppressNextRecordedTurn(idempotencyKey: key)
+    XCTAssertNotNil(staged.user)
+    XCTAssertNotNil(staged.assistant)
+    XCTAssertEqual(staged.assistant?.contentBlocks.count, 1)
+    XCTAssertTrue(provider.hasOptimisticTurn(continuityKey: key))
+
     projection.apply(
       .init(
         conversationId: "conv-1",
@@ -112,14 +126,121 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       provider.messages.filter { $0.sender == .ai }.map(\.text),
       ["On it — spawning now."]
     )
+    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.contentBlocks.count, 1)
+    XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
+
+    // Second apply of the same committed key must not append again.
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "Start a background agent",
+        assistantText: "On it — spawning now.",
+        origin: "floating_resolver",
+        interrupted: false,
+        idempotencyKey: key,
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
   }
 
-  func testEmptyIdempotencyKeyDoesNotSuppressApply() {
+  func testPillCompletionKeyCoalescesSecondStageWithoutDuplicate() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+    let key = "pill_completion:run-42"
+    let pillID = UUID()
+    let summary = "[Background agent id=\(pillID.uuidString) — sleep] Done."
+    let resource = ChatResource.localGeneratedFile(
+      id: "res-1",
+      title: "out.txt",
+      subtitle: "text/plain",
+      mimeType: "text/plain",
+      uri: "file:///tmp/out.txt"
+    )
+
+    let first = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "",
+      assistantText: summary,
+      origin: "pill_completion",
+      turnOwner: .mainChat,
+      resources: [resource]
+    )
+    XCTAssertNotNil(first.assistant)
+    XCTAssertEqual(first.assistant?.resources.count, 1)
+
+    // Terminal path reuses the same key (artifact already staged).
+    let second = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "",
+      assistantText: summary,
+      origin: "pill_completion",
+      turnOwner: .mainChat
+    )
+    XCTAssertEqual(second.assistant?.id, first.assistant?.id)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.resources.count, 1)
+
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "",
+        assistantText: summary,
+        origin: "pill_completion",
+        interrupted: false,
+        idempotencyKey: key,
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.resources.count, 1)
+    XCTAssertFalse(provider.hasOptimisticTurn(continuityKey: key))
+  }
+
+  func testApplyWithoutOptimisticStillAppendsVoicePath() {
     let provider = ChatProvider()
     let projection = provider.kernelTurnProjection
     let surface = provider.mainChatSurfaceReference()
 
-    projection.suppressNextRecordedTurn(idempotencyKey: "   ")
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "voice question",
+        assistantText: "voice answer",
+        origin: "realtime_voice",
+        interrupted: false,
+        idempotencyKey: "voice-turn-1",
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+
+    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.map(\.text), ["voice question"])
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.map(\.text), ["voice answer"])
+    XCTAssertEqual(
+      provider.messages.compactMap(\.clientTurnId),
+      ["voice-turn-1", "voice-turn-1"]
+    )
+  }
+
+  func testEmptyIdempotencyKeyStillAppends() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+
     projection.apply(
       .init(
         conversationId: "conv-1",
