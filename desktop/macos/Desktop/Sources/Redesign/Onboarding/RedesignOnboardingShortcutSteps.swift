@@ -324,7 +324,14 @@ struct RedesignFloatingBarDemoView: View {
       }
     }
     .onChange(of: barActivated) { _, activated in
-      if activated { Task { await waitForResponse() } }
+      if activated {
+        Task { await waitForResponse() }
+        // Once the bar is engaged, make Continue reachable shortly after — even if
+        // the AI is slow or unavailable — so the demo never feels stuck.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+          withAnimation(.easeInOut(duration: 0.3)) { showContinue = true }
+        }
+      }
     }
     .onReceive(Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()) { _ in
       guard !barActivated,
