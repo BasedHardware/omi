@@ -94,6 +94,9 @@ final class RealtimeHubSession: NSObject {
   /// Screen frames awaiting an open socket (base64, mime) — flushed into the turn in
   /// markReady. A cold first turn would otherwise drop the frame before connect.
   private var pendingVideo: [(b64: String, mime: String)] = []
+  /// Hidden text inputs awaiting a provider-acceptable input window. Voice turn context
+  /// must survive the same cold-start/activity-window race as audio and screen frames.
+  private var pendingTextInputs: [(text: String, logLabel: String)] = []
   private var pendingCommit = false
   /// OpenAI: call_id → function name, captured from response.output_item.added.
   private var openAIFunctionNames: [String: String] = [:]
@@ -190,6 +193,7 @@ final class RealtimeHubSession: NSObject {
       self.isOpen = false
       self.pendingAudio.removeAll()
       self.pendingVideo.removeAll()
+      self.pendingTextInputs.removeAll()
       self.pendingCommit = false
       self.openAIFunctionNames.removeAll()
       self.dispatchedToolItems.removeAll()
@@ -300,32 +304,56 @@ final class RealtimeHubSession: NSObject {
   private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
-        guard let self, self.isOpen else {
+        guard let self else {
           continuation.resume(returning: false)
           return
         }
-        switch self.provider {
-        case .gemini:
-          guard self.activityOpen else {
-            log("\(self.tag): \(logLabel) dropped — no open activity window")
-            continuation.resume(returning: false)
-            return
-          }
-          self.send(json: ["realtimeInput": ["text": text]])
-        case .openai:
-          self.send(json: [
-            "type": "conversation.item.create",
-            "item": [
-              "type": "message",
-              "role": "user",
-              "content": [["type": "input_text", "text": text]],
-            ],
-          ])
+        guard self.isOpen else {
+          self.bufferTextInput(text, logLabel: logLabel, reason: "socket not open")
+          continuation.resume(returning: true)
+          return
         }
-        log("\(self.tag): \(logLabel) sent (\(text.count) chars)")
+        if self.provider == .gemini, !self.activityOpen {
+          self.bufferTextInput(text, logLabel: logLabel, reason: "no open activity window")
+          continuation.resume(returning: true)
+          return
+        }
+        self.sendTextInputNow(text, logLabel: logLabel)
         continuation.resume(returning: true)
       }
     }
+  }
+
+  private func bufferTextInput(_ text: String, logLabel: String, reason: String) {
+    pendingTextInputs.append((text: text, logLabel: logLabel))
+    log("\(tag): \(logLabel) buffered — \(reason) (\(text.count) chars)")
+  }
+
+  private func flushPendingTextInputs() {
+    guard isOpen else { return }
+    guard provider == .openai || activityOpen else { return }
+    let inputs = pendingTextInputs
+    pendingTextInputs.removeAll()
+    for input in inputs {
+      sendTextInputNow(input.text, logLabel: input.logLabel)
+    }
+  }
+
+  private func sendTextInputNow(_ text: String, logLabel: String) {
+    switch provider {
+    case .gemini:
+      send(json: ["realtimeInput": ["text": text]])
+    case .openai:
+      send(json: [
+        "type": "conversation.item.create",
+        "item": [
+          "type": "message",
+          "role": "user",
+          "content": [["type": "input_text", "text": text]],
+        ],
+      ])
+    }
+    log("\(tag): \(logLabel) sent (\(text.count) chars)")
   }
 
   /// End the user's PTT turn and ask the model to respond.
@@ -346,6 +374,7 @@ final class RealtimeHubSession: NSObject {
       self.activityOpen = true
       if self.isOpen {
         self.send(json: ["realtimeInput": ["activityStart": [:]]])
+        self.flushPendingTextInputs()
         log("\(self.tag): turn begin (activityStart\(interrupting ? ", interrupting in-flight reply" : ""))")
       } else {
         self.pendingActivityStart = true
@@ -358,6 +387,7 @@ final class RealtimeHubSession: NSObject {
       guard let self else { return }
       self.resetTurnUsage()  // fresh per-turn usage before the model responds
       guard self.isOpen else { self.pendingCommit = true; return }
+      self.flushPendingTextInputs()
       log("\(self.tag): turn committed")
       switch self.provider {
       case .openai:
@@ -381,6 +411,7 @@ final class RealtimeHubSession: NSObject {
     q.async { [weak self] in
       guard let self else { return }
       self.geminiResponsePending = false
+      self.pendingTextInputs.removeAll()
       switch self.provider {
       case .openai:
         self.pendingOpenAIToolCallIds.removeAll()
@@ -591,6 +622,7 @@ final class RealtimeHubSession: NSObject {
       pendingActivityStart = false
       send(json: ["realtimeInput": ["activityStart": [:]]])
     }
+    flushPendingTextInputs()
     for chunk in pendingAudio { appendAudioFrame(chunk) }
     pendingAudio.removeAll()
     // Flush any screen frame INTO the turn (after activityStart + audio, before commit).
@@ -599,6 +631,7 @@ final class RealtimeHubSession: NSObject {
       log("\(tag): screen frame flushed into turn")
     }
     pendingVideo.removeAll()
+    flushPendingTextInputs()
     if pendingCommit {
       pendingCommit = false
       // Re-run commit now that we're open.

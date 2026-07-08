@@ -824,14 +824,15 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private func sendVoiceTurnScreenContextIfNeeded(epoch: Int) async {
     guard inputTurnInProgress, epoch == turnEpoch else { return }
     guard voiceTurnScreenContextSentEpoch != epoch else { return }
-    guard let session else { return }
-    voiceTurnScreenContextSentEpoch = epoch
+    guard let targetSession = session else { return }
 
     let rawPayload = await ScreenContextWorkContextBuilder.payload(arguments: [
       "minutes": 10,
       "max_age_seconds": ScreenContextWorkContextBuilder.voiceTurnStaleCaptureThresholdSeconds,
     ])
     guard inputTurnInProgress, epoch == turnEpoch else { return }
+    guard voiceTurnScreenContextSentEpoch != epoch else { return }
+    guard self.session === targetSession else { return }
 
     let envelope: [String: Any] = [
       "permission": [
@@ -848,9 +849,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     else {
       return
     }
-    let sent = await session.sendTurnContextText("<auto_voice_screen_context>\n\(json)\n</auto_voice_screen_context>")
-    if !sent, inputTurnInProgress, epoch == turnEpoch {
-      voiceTurnScreenContextSentEpoch = nil
+    let sent = await targetSession.sendTurnContextText("<auto_voice_screen_context>\n\(json)\n</auto_voice_screen_context>")
+    guard inputTurnInProgress, epoch == turnEpoch else { return }
+    guard self.session === targetSession else { return }
+    guard voiceTurnScreenContextSentEpoch != epoch else { return }
+    if sent {
+      voiceTurnScreenContextSentEpoch = epoch
     }
   }
 
