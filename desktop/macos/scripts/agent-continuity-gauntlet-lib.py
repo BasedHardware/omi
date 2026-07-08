@@ -540,7 +540,6 @@ class GauntletRunner:
         detail = send.get("result", {}).get("detail", {}) if isinstance(send, dict) else {}
         assistant = current_turn_assistant_text(snapshot, query)
         trace_matches = traces_for_query(traces, query)
-        trace_evidence = "\n".join(flatten_trace_text(trace) for trace in trace_matches)
         evidence = "\n".join(
             [
                 json.dumps(send, sort_keys=True, default=str),
@@ -551,7 +550,7 @@ class GauntletRunner:
                     if "error" in key.lower() and value
                 ),
                 assistant,
-                trace_evidence,
+                "\n".join(flatten_trace_text(trace) for trace in trace_matches),
             ]
         )
         lower_evidence = evidence.lower()
@@ -1764,12 +1763,7 @@ def self_check() -> int:
         print("self-check failed: ChatProvider sign-out must call clearOwnerState()", file=sys.stderr)
         return 1
     driver_source = (SCRIPT_DIR / "agent-continuity-gauntlet-lib.py").read_text(encoding="utf-8")
-    try:
-        driver_tree = ast.parse(driver_source)
-    except SyntaxError as exc:
-        print(f"self-check failed: gauntlet driver syntax error: {exc}", file=sys.stderr)
-        return 1
-    missing_driver_checks = resilience_driver_self_check_failures(driver_tree)
+    missing_driver_checks = resilience_driver_self_check_failures(driver_source)
     if missing_driver_checks:
         print(f"self-check failed: resilience suite wiring missing {missing_driver_checks}", file=sys.stderr)
         return 1
@@ -1781,64 +1775,104 @@ def self_check() -> int:
     return 0
 
 
-def resilience_driver_self_check_failures(tree: ast.Module) -> list[str]:
-    """Validate resilience wiring structurally instead of matching self-contained token literals."""
+def resilience_driver_self_check_failures(driver_source: str) -> list[str]:
+    tree = ast.parse(driver_source)
     failures: list[str] = []
     runner = next(
-        (node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"),
+        (
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "GauntletRunner"
+        ),
         None,
     )
     if runner is None:
-        return ["GauntletRunner"]
-    methods = {node.name: node for node in runner.body if isinstance(node, ast.FunctionDef)}
-    for required in ("run_resilience_suite", "classify_resilience_turn", "record_resilience_diagnostic", "finalize"):
-        if required not in methods:
-            failures.append(f"GauntletRunner.{required}")
+        return ["GauntletRunner class"]
 
-    run_method = methods.get("run")
-    if run_method is None or not any(
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "run_resilience_suite"
-        for node in ast.walk(run_method)
-    ):
-        failures.append("run() dispatches run_resilience_suite")
-
-    record_method = methods.get("record_resilience_diagnostic")
-    if record_method is None or not any(
-        isinstance(node, ast.Constant) and node.value == "resilience-diagnostics.jsonl"
-        for node in ast.walk(record_method)
-    ):
-        failures.append("record_resilience_diagnostic appends resilience-diagnostics.jsonl")
-
-    finalize_method = methods.get("finalize")
-    if finalize_method is None or not all(
-        any(isinstance(node, ast.Constant) and node.value == key for node in ast.walk(finalize_method))
-        for key in ("resilience_terminal_reason_counts", "resilience_forbidden_terminal_reasons")
-    ):
-        failures.append("finalize writes resilience manifest fields")
-
-    constants = {
-        node.targets[0].id: node.value
-        for node in tree.body
-        if isinstance(node, ast.Assign)
-        and len(node.targets) == 1
-        and isinstance(node.targets[0], ast.Name)
+    methods = {
+        node.name: node
+        for node in runner.body
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
-    suite_names = constants.get("SUITE_NAMES")
-    if not (
-        isinstance(suite_names, ast.Set)
-        and any(isinstance(item, ast.Constant) and item.value == "resilience" for item in suite_names.elts)
+    for method_name in (
+        "record_resilience_diagnostic",
+        "run_resilience_suite",
+        "finalize",
+        "run",
     ):
-        failures.append("SUITE_NAMES includes resilience")
-    forbidden = constants.get("RESILIENCE_FORBIDDEN_TERMINAL_REASONS")
-    if not (
-        isinstance(forbidden, ast.Set)
-        and any(isinstance(item, ast.Constant) and item.value == "skipped_missing_action" for item in forbidden.elts)
-    ):
-        failures.append("skipped_missing_action is forbidden")
+        if method_name not in methods:
+            failures.append(f"GauntletRunner.{method_name}")
 
+    if "resilience" not in ast_literal_set(tree, "SUITE_NAMES"):
+        failures.append("SUITE_NAMES includes resilience")
+    if "resilience" not in ast_literal_set(tree, "SUITE_ALIASES", key="all"):
+        failures.append("SUITE_ALIASES['all'] includes resilience")
+    if not method_contains_string(methods.get("record_resilience_diagnostic"), "resilience-diagnostics.jsonl"):
+        failures.append("record_resilience_diagnostic writes resilience-diagnostics.jsonl")
+    if not method_contains_string(methods.get("run_resilience_suite"), "skipped_missing_action"):
+        failures.append("run_resilience_suite can record skipped_missing_action")
+    if not method_contains_attr(methods.get("record_resilience_diagnostic"), "resilience_terminal_reason_counts"):
+        failures.append("record_resilience_diagnostic updates resilience_terminal_reason_counts")
+    if not method_contains_attr(methods.get("finalize"), "resilience_terminal_reason_counts"):
+        failures.append("finalize emits resilience_terminal_reason_counts")
+    if not method_contains_string(methods.get("finalize"), "resilience_forbidden_terminal_reasons"):
+        failures.append("finalize emits resilience_forbidden_terminal_reasons")
+    if not method_calls(methods.get("run"), "run_resilience_suite"):
+        failures.append("run dispatches run_resilience_suite")
     return failures
+
+
+def ast_literal_set(tree: ast.Module, name: str, *, key: str | None = None) -> set[str]:
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            if not any(isinstance(target, ast.Name) and target.id == name for target in node.targets):
+                continue
+            value = node.value
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id == name:
+            value = node.value
+            if value is None:
+                return set()
+        else:
+            continue
+        if key is not None:
+            if not isinstance(value, ast.Dict):
+                return set()
+            for dict_key, dict_value in zip(value.keys, value.values):
+                if isinstance(dict_key, ast.Constant) and dict_key.value == key:
+                    value = dict_value
+                    break
+            else:
+                return set()
+        if isinstance(value, (ast.Set, ast.List, ast.Tuple)):
+            return {
+                item.value
+                for item in value.elts
+                if isinstance(item, ast.Constant) and isinstance(item.value, str)
+            }
+    return set()
+
+
+def method_contains_string(node: ast.AST | None, text: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Constant) and child.value == text
+        for child in ast.walk(node)
+    )
+
+
+def method_contains_attr(node: ast.AST | None, name: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Attribute) and child.attr == name
+        for child in ast.walk(node)
+    )
+
+
+def method_calls(node: ast.AST | None, method_name: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Call)
+        and isinstance(child.func, ast.Attribute)
+        and child.func.attr == method_name
+        for child in ast.walk(node)
+    )
 
 
 SUITE_ALIASES: dict[str, set[str]] = {

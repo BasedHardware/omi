@@ -134,37 +134,77 @@ final class DesktopStressHarnessTests: XCTestCase {
     XCTAssertTrue(stderrText.contains("must be loopback"), stderrText)
   }
 
-  func testScriptRejectsHostnameThatOnlyLooksLoopback() throws {
-    let desktopDir = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let scriptURL = desktopDir.appendingPathComponent("scripts/stress_ptt_chat.py")
-
-    let process = Process()
-    process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-    process.arguments = [scriptURL.path, "--base-url", "https://127.attacker.example", "--token", "secret"]
-
-    let stderr = Pipe()
-    process.standardError = stderr
-
-    try process.run()
-    process.waitUntilExit()
-
-    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
-    XCTAssertEqual(process.terminationStatus, 2)
-    XCTAssertTrue(stderrText.contains("must be loopback"), stderrText)
-  }
-
-  func testScriptRejectsMalformedFieldTypes() throws {
-    let jsonl = """
-      {"run_id":"run-bad","iteration":true,"scenario":"ptt_voiced","terminal_reason":"ptt_voiced_success","timestamp":"2026-07-07T12:00:00.000Z"}
+  func testScriptRejectsMalformedFieldTypesWithoutCrashing() throws {
+    let malformedScenario = """
+      {"run_id":"run-typed","iteration":1,"scenario":["ptt_voiced"],"terminal_reason":"ptt_voiced_success","timestamp":"2026-07-07T12:00:00.000Z"}
 
       """
-    let result = try runScript(jsonl: jsonl)
+    let scenarioResult = try runScript(jsonl: malformedScenario)
+    XCTAssertEqual(scenarioResult.exitCode, 2)
+    XCTAssertTrue(scenarioResult.stderr.contains("scenario must be a string"), scenarioResult.stderr)
+
+    let boolIteration = """
+      {"run_id":"run-typed","iteration":true,"scenario":"ptt_voiced","terminal_reason":"ptt_voiced_success","timestamp":"2026-07-07T12:00:00.000Z","duration_ms":false}
+
+      """
+    let iterationResult = try runScript(jsonl: boolIteration)
+    XCTAssertEqual(iterationResult.exitCode, 2)
+    XCTAssertTrue(iterationResult.stderr.contains("iteration must be a positive integer"), iterationResult.stderr)
+  }
+
+  func testScriptRejectsCraftedLoopbackLikeHostnameWithToken() throws {
+    let result = try runScript(
+      arguments: [
+        "--base-url", "https://127.evil.com",
+        "--token", "secret",
+      ])
 
     XCTAssertEqual(result.exitCode, 2)
-    XCTAssertTrue(result.stderr.contains("iteration must be a positive integer"), result.stderr)
+    XCTAssertTrue(result.stderr.contains("must be loopback"), result.stderr)
+  }
+
+  func testBridgeTerminalReasonDoesNotTrustExplicitSuccessOnFailure() throws {
+    let scriptPath = stressScriptURL().path
+    let snippet = """
+      import importlib.util
+      spec = importlib.util.spec_from_file_location("stress_ptt_chat", \(pythonStringLiteral(scriptPath)))
+      module = importlib.util.module_from_spec(spec)
+      spec.loader.exec_module(module)
+      reason = module.terminal_from_bridge_response("chat_bridge", {"ok": False, "terminal_reason": "chat_bridge_success"})
+      assert reason == "bridge_launch_failure", reason
+      assert module.is_loopback_url("http://127.0.0.1:47777")
+      assert module.is_loopback_url("http://[::1]:47777")
+      assert not module.is_loopback_url("https://127.evil.com")
+      """
+
+    let result = try runPythonSnippet(snippet)
+    XCTAssertEqual(result.exitCode, 0, result.stderr)
+  }
+
+  func testBridgeActionDiscoveryTreatsNullResultAsLaunchFailure() throws {
+    let scriptPath = stressScriptURL().path
+    let snippet = """
+      import importlib.util
+      spec = importlib.util.spec_from_file_location("stress_ptt_chat", \(pythonStringLiteral(scriptPath)))
+      module = importlib.util.module_from_spec(spec)
+      spec.loader.exec_module(module)
+
+      def fake_request_json(base_url, token, method, path, body=None):
+          if path == "/health":
+              return {"ok": True}
+          if path == "/actions":
+              return {"ok": True, "result": None}
+          raise AssertionError(path)
+
+      module.request_json = fake_request_json
+      events = module.collect_from_bridge("http://localhost:47777", "secret", ["chat_bridge"], 1)
+      assert len(events) == 1, events
+      assert events[0]["terminal_reason"] == "bridge_launch_failure", events
+      assert "result must be a list" in events[0]["details"]["error"], events
+      """
+
+    let result = try runPythonSnippet(snippet)
+    XCTAssertEqual(result.exitCode, 0, result.stderr)
   }
 
   private func runScript(
@@ -176,15 +216,15 @@ final class DesktopStressHarnessTests: XCTestCase {
     try jsonl.write(to: tempURL, atomically: true, encoding: .utf8)
     defer { try? FileManager.default.removeItem(at: tempURL) }
 
-    let scriptURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("scripts/stress_ptt_chat.py")
+    return try runScript(arguments: ["--input-jsonl", tempURL.path] + extraArguments)
+  }
 
+  private func runScript(
+    arguments: [String]
+  ) throws -> (exitCode: Int32, stdout: String, stderr: String) {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
-    process.arguments = [scriptURL.path, "--input-jsonl", tempURL.path] + extraArguments
+    process.arguments = [stressScriptURL().path] + arguments
 
     let stdout = Pipe()
     let stderr = Pipe()
@@ -197,5 +237,37 @@ final class DesktopStressHarnessTests: XCTestCase {
     let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
     return (process.terminationStatus, stdoutText, stderrText)
+  }
+
+  private func runPythonSnippet(_ snippet: String) throws -> (exitCode: Int32, stdout: String, stderr: String) {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+    process.arguments = ["-c", snippet]
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    try process.run()
+    process.waitUntilExit()
+
+    let stdoutText = String(data: stdout.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    let stderrText = String(data: stderr.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+    return (process.terminationStatus, stdoutText, stderrText)
+  }
+
+  private func stressScriptURL() -> URL {
+    URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("scripts/stress_ptt_chat.py")
+  }
+
+  private func pythonStringLiteral(_ value: String) -> String {
+    let data = try! JSONSerialization.data(withJSONObject: [value])
+    let encoded = String(data: data, encoding: .utf8)!
+    return String(encoded.dropFirst().dropLast()).replacingOccurrences(of: "\\/", with: "/")
   }
 }
