@@ -64,3 +64,14 @@ Before adding a third PAGE alert:
 3. Document the change in this runbook and the dashboard text panel.
 
 Desktop PostHog `fallback_triggered` insights are **never** wired to paging in Phase 1–2.
+
+## Deferred instrumentation (Phase 2+)
+
+Not in this PR; track before adding PAGE alerts:
+
+| Component | Fallback path | Current signal | Next step |
+|-----------|---------------|----------------|-----------|
+| `audio_merge` | Cloud Tasks enqueue failure → inline merge on backend-sync | Logs only (`audio_merge:` prefix) | `record_fallback` on inline fallback + enqueue_failed share alert (mirror sync_dispatch) |
+| `webhook` | Circuit breaker open → drop or defer partner delivery | `get_webhook_circuit_breaker` state per URL | `record_fallback` with `reason=circuit_open`, bounded URL host label; ticket-tier alert on open-share |
+
+`audio_merge` and `webhook` are in the shared component allowlist so call sites can adopt the helper without schema churn later.
