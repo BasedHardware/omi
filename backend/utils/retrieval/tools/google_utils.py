@@ -2,19 +2,78 @@
 Shared utilities for Google OAuth integrations (Calendar, Gmail, etc.).
 """
 
+import asyncio
+import logging
 import os
-from typing import Optional
+from typing import Any, Dict, Optional
 
 import httpx
+from google.cloud import firestore
 
 import database.users as users_db
+from utils.executors import db_executor, run_blocking
 from utils.http_client import get_auth_client
-import logging
+from utils.integration_telemetry import (
+    GOOGLE_CALENDAR,
+    IntegrationTelemetryContext,
+    emit_auth_refresh_attempted,
+    emit_auth_refresh_failed,
+    emit_auth_refresh_succeeded,
+)
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
+# Transient HTTP status codes that should be retried
+_RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
 
-async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
+# Max retries for transient failures
+_MAX_RETRIES = 3
+
+
+class GoogleAPIError(Exception):
+    """Structured exception for Google API failures."""
+
+    def __init__(self, status_code: int, message: str):
+        self.status_code = status_code
+        self.message = message
+        super().__init__(f"Google API error {status_code}: {message}")
+
+    @property
+    def is_auth_error(self) -> bool:
+        return self.status_code == 401 or 'invalid_grant' in self.message.lower()
+
+    @property
+    def is_rate_limit(self) -> bool:
+        return self.status_code == 429
+
+    @property
+    def is_permission_error(self) -> bool:
+        return self.status_code == 403
+
+    @property
+    def is_retryable(self) -> bool:
+        return self.status_code in _RETRYABLE_STATUS_CODES
+
+
+async def _mark_google_integration_reauth_required(
+    uid: str, integration: dict[str, Any], integration_key: str, reason: str
+) -> None:
+    updated = dict(integration)
+    updated['connected'] = False
+    updated['reauth_required'] = True
+    updated['reauth_reason'] = reason
+    updated['access_token'] = firestore.DELETE_FIELD
+    await run_blocking(db_executor, users_db.set_integration, uid, integration_key, updated)
+
+
+async def refresh_google_token(
+    uid: str,
+    integration: dict[str, Any],
+    *,
+    integration_name: str = GOOGLE_CALENDAR,
+    integration_key: str = 'google_calendar',
+) -> Optional[str]:
     """
     Refresh Google access token using refresh token.
     Works for both Calendar and Gmail since they use the same OAuth.
@@ -22,18 +81,31 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
     Args:
         uid: User ID
         integration: Integration dict containing refresh_token
+        integration_name: Product-visible provider name for telemetry.
+        integration_key: Stored integration key to update after refresh.
 
     Returns:
         New access token or None if refresh failed
     """
     refresh_token = integration.get('refresh_token')
+    telemetry_context = IntegrationTelemetryContext(
+        integration_name=integration_name,
+        operation='refresh_token',
+        uid=uid,
+    )
+    emit_auth_refresh_attempted(telemetry_context)
     if not refresh_token:
+        logger.warning(f"🔄 No refresh_token stored for uid={uid}, cannot refresh")
+        emit_auth_refresh_failed(telemetry_context, 'missing_token')
+        await _mark_google_integration_reauth_required(uid, integration, integration_key, 'missing_refresh_token')
         return None
 
     client_id = os.getenv('GOOGLE_CLIENT_ID')
     client_secret = os.getenv('GOOGLE_CLIENT_SECRET')
 
     if not all([client_id, client_secret]):
+        logger.error("🔄 Missing GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET env vars")
+        emit_auth_refresh_failed(telemetry_context, 'missing_oauth_config')
         return None
 
     try:
@@ -53,12 +125,39 @@ async def refresh_google_token(uid: str, integration: dict) -> Optional[str]:
             new_access_token = token_data.get('access_token')
 
             if new_access_token:
-                # Update stored token
+                # Update stored token — offload the sync Firestore write to the
+                # DB executor so it does not block the event loop during
+                # concurrent chat/tool streaming.
                 integration['access_token'] = new_access_token
-                users_db.set_integration(uid, 'google_calendar', integration)
+                await run_blocking(db_executor, users_db.set_integration, uid, integration_key, integration)
+                logger.info(f"🔄 Successfully refreshed Google token for uid={uid}")
+                emit_auth_refresh_succeeded(telemetry_context)
                 return new_access_token
+
+        # Detect token revocation (invalid_grant) — user revoked access in Google settings
+        error_body = sanitize(response.text[:200]) if response.text else "No error body"
+        if response.status_code == 400 and 'invalid_grant' in (response.text or '').lower():
+            logger.error(
+                f"🔄 Google refresh token revoked for uid={uid} (invalid_grant). "
+                f"User needs to reconnect. Response: {error_body}"
+            )
+            await _mark_google_integration_reauth_required(uid, integration, integration_key, 'invalid_grant')
+        else:
+            logger.error(
+                f"🔄 Google token refresh failed for uid={uid}: " f"status={response.status_code}, body={error_body}"
+            )
+        emit_auth_refresh_failed(
+            telemetry_context, response.text or 'token_refresh_failed', provider_status_code=response.status_code
+        )
+    except httpx.TimeoutException:
+        logger.error(f"🔄 Timeout refreshing Google token for uid={uid}")
+        emit_auth_refresh_failed(telemetry_context, 'timeout')
+    except httpx.ConnectError:
+        logger.error(f"🔄 Network error refreshing Google token for uid={uid}")
+        emit_auth_refresh_failed(telemetry_context, 'connect_error')
     except Exception as e:
-        logger.error(f"Error refreshing Google token: {e}")
+        logger.error(f"🔄 Unexpected error refreshing Google token for uid={uid}: {e}")
+        emit_auth_refresh_failed(telemetry_context, e)
 
     return None
 
@@ -67,28 +166,75 @@ async def google_api_request(
     method: str,
     url: str,
     access_token: str,
-    params: dict | None = None,
-    body: dict | None = None,
+    params: Optional[Dict[str, Any]] = None,
+    body: Optional[Dict[str, Any]] = None,
     allow_204: bool = False,
-):
+) -> Any:
+    """
+    Make a Google API request with automatic retry for transient failures.
+
+    Retries on 429 (rate limit) and 5xx (server errors) with exponential backoff.
+    Raises GoogleAPIError with status_code for structured error handling upstream.
+    Raises httpx.TimeoutException / httpx.ConnectError for network failures.
+    """
     logger.info(f"🌐 Google API {method.upper()} {url}")
 
     client = get_auth_client()
-    r = await client.request(
-        method=method,
-        url=url,
-        headers={"Authorization": f"Bearer {access_token}"},
-        json=body,
-        params=params,
-    )
+    last_error = None
 
-    logger.info(f"🔎 Status {r.status_code}")
+    for attempt in range(_MAX_RETRIES):
+        try:
+            r = await client.request(
+                method=method,
+                url=url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                json=body,
+                params=params,
+            )
+        except httpx.TimeoutException:
+            logger.warning(f"🌐 Timeout on attempt {attempt + 1}/{_MAX_RETRIES} for {method.upper()} {url}")
+            last_error = httpx.TimeoutException(f"Timeout calling {url}")
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(2**attempt)
+            continue
+        except httpx.ConnectError as e:
+            logger.warning(f"🌐 Network error on attempt {attempt + 1}/{_MAX_RETRIES} for {method.upper()} {url}: {e}")
+            last_error = e
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(2**attempt)
+            continue
 
-    if allow_204 and r.status_code == 204:
-        return None
+        logger.info(f"🔎 Status {r.status_code}")
 
-    if r.status_code != 200:
-        snippet = r.text[:200] if r.text else "No error body"
-        raise Exception(f"Google API error {r.status_code}: {snippet}")
+        if allow_204 and r.status_code == 204:
+            return None
 
-    return r.json()
+        if r.status_code == 200:
+            return r.json()
+
+        snippet = sanitize(r.text[:200]) if r.text else "No error body"
+
+        # Retry on transient errors with exponential backoff
+        if r.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
+            delay = 2**attempt
+            if r.status_code == 429:
+                # Respect Retry-After header if present
+                retry_after = r.headers.get('Retry-After')
+                if retry_after and retry_after.isdigit():
+                    delay = max(delay, int(retry_after))
+                logger.warning(f"🌐 Rate limited (429), retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})")
+            else:
+                logger.warning(
+                    f"🌐 Server error {r.status_code}, retrying in {delay}s (attempt {attempt + 1}/{_MAX_RETRIES})"
+                )
+            await asyncio.sleep(delay)
+            continue
+
+        # Non-retryable error — raise immediately
+        raise GoogleAPIError(r.status_code, snippet)
+
+    # All retries exhausted
+    if last_error:
+        raise last_error
+    # Unreachable with _MAX_RETRIES >= 1, but kept as a safety net
+    raise GoogleAPIError(0, "All retries exhausted with no response")

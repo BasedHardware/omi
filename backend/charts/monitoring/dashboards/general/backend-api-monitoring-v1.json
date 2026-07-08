@@ -1,0 +1,450 @@
+{
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "Overall Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "targets": [
+        {
+          "aliasBy": "RPS",
+          "queryType": "timeSeriesList",
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_request_count"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_NONE",
+            "preprocessor": "rate",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      ],
+      "title": "Request Rate (RPS)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "reqps"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "id": 2,
+      "targets": [
+        {
+          "aliasBy": "{{metric.label.response_code}}",
+          "queryType": "timeSeriesList",
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_request_count"
+            ],
+            "groupBys": [
+              "metric.label.response_code"
+            ],
+            "perSeriesAligner": "ALIGN_NONE",
+            "preprocessor": "rate",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      ],
+      "title": "Error Rate by Response Code",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "beuxmaq8oxhq8e"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never"
+          },
+          "unit": "ms"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "id": 3,
+      "targets": [
+        {
+          "aliasBy": "p99",
+          "queryType": "timeSeriesList",
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_PERCENTILE_99",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_latencies"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        },
+        {
+          "aliasBy": "p95",
+          "queryType": "timeSeriesList",
+          "refId": "B",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_PERCENTILE_95",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_latencies"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        },
+        {
+          "aliasBy": "p50",
+          "queryType": "timeSeriesList",
+          "refId": "C",
+          "timeSeriesList": {
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_PERCENTILE_50",
+            "filters": [
+              "resource.label.backend_target_name",
+              "=",
+              "custom-domains-api-omi-me-backend-49a4-be",
+              "AND",
+              "metric.type",
+              "=",
+              "loadbalancing.googleapis.com/https/backend_latencies"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "preprocessor": "none",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      ],
+      "title": "Latency (p50/p95/p99)",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "id": 101,
+      "title": "Per-API Tables (Sortable)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "httpRequest.latency"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "httpRequest.requestUrl"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 400
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "id": 4,
+      "options": {
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Max"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"backend\"\nlogName:\"requests\"\nhttpRequest.latency!=\"\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Top APIs by Latency (p99)",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": [
+              "max"
+            ]
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "Max"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 8,
+        "y": 10
+      },
+      "id": 5,
+      "options": {
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Total"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"backend\"\nlogName:\"requests\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Top APIs by Request Count",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": [
+              "sum"
+            ]
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "Total"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "deuxlwt1d569sb"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 16,
+        "y": 10
+      },
+      "id": 6,
+      "options": {
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Total"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "deuxlwt1d569sb"
+          },
+          "projectId": "based-hardware",
+          "queryText": "resource.type=\"cloud_run_revision\"\nresource.labels.service_name=\"backend\"\nlogName:\"requests\"\nhttpRequest.status>=400",
+          "refId": "A"
+        }
+      ],
+      "title": "Top APIs by Error Count (4xx+5xx)",
+      "transformations": [
+        {
+          "id": "reduce",
+          "options": {
+            "reducers": [
+              "sum"
+            ]
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "sort": [
+              {
+                "desc": true,
+                "field": "Total"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "backend",
+    "api",
+    "monitoring",
+    "omi"
+  ],
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Backend API Monitoring",
+  "uid": "57c2a5ea-c310-4401-ac72-54dbc6da4c7e"
+}

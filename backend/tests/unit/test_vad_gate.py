@@ -930,6 +930,7 @@ class TestDgDeadDetection:
         assert mock_conn.send.call_count > 0
 
 
+@pytest.mark.slow
 class TestSafeSocketDelegation:
     """Tests for SafeDeepgramSocket finalize/finish delegation (#5870)."""
 
@@ -1280,6 +1281,7 @@ class TestOnnxStateAndConcurrency:
             assert elapsed < sleep_sec * 3, f'Took {elapsed:.3f}s — unexpected serialization'
 
 
+@pytest.mark.slow
 class TestLongSessionStress:
     """Tests for long-session invariants (large counters, checkpoint churn)."""
 
@@ -1986,6 +1988,7 @@ class TestProcessAudioDgRemapWiring:
         assert received_segments[0]['end'] == 7.0
 
 
+@pytest.mark.slow
 class TestDG1011KeepaliveGap:
     """Verify DG 1011 protection via SafeDeepgramSocket auto-keepalive.
 

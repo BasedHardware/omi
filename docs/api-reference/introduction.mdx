@@ -20,6 +20,12 @@ Authorization: Bearer omi_dev_your_api_key_here
 
 Get your key from **Settings → Developer → Create Key** in the Omi app.
 
+<Warning>
+MCP keys (`omi_mcp_...`) are only for the MCP server at `/v1/mcp/sse`. They are not accepted by REST
+Developer API endpoints. Use a Developer API key (`omi_dev_...`) for endpoints such as
+`/v1/dev/user/memories` and `/v1/dev/user/conversations`.
+</Warning>
+
 ## Rate Limits
 
 | Limit | Value |

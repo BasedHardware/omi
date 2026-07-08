@@ -572,7 +572,7 @@
             <section id="auth-section" class="login-info hidden">
                 <h2>Authentication</h2>
                 <p>To use Email Assistant, you need to be logged in with your email account.</p>
-                <p><a id="login-link" href="/api/email/auth/login" class="button">Login with Email</a></p>
+                <p><a id="login-link" href="/api/auth/login" class="button">Login with Email</a></p>
             </section>
 
             <section class="instructions">
@@ -685,7 +685,7 @@
                 if (omiuid) {
                     setupNotice.classList.add('hidden');
                     authSection.classList.remove('hidden');
-                    loginLink.href = `/api/email/auth/login?uid=${encodeURIComponent(omiuid)}`;
+                    loginLink.href = `/api/auth/login?uid=${encodeURIComponent(omiuid)}`;
                 } else {
                     setupNotice.classList.remove('hidden');
                     authSection.classList.add('hidden');
@@ -694,4 +694,4 @@
         };
     </script>
 </body>
-</html> 
+</html>

@@ -1,154 +1,40 @@
+import hashlib
+import os
+import unicodedata
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from difflib import SequenceMatcher
+from zoneinfo import ZoneInfo
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
-from database.auth import get_user_name
 from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, ActionItemsExtraction, Event, Structured
-from .clients import get_llm, parser
+from models.structured import ActionItem, Event, Structured
+from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
+from .clients import get_llm, get_llm_gateway_chat_structured, parser
+from utils.byok import has_byok_keys
+from utils.llm.gateway_client import record_chat_extraction_gateway_result
+from utils.llm.gateway_observability import record_gateway_shadow_comparison
 import logging
 
 logger = logging.getLogger(__name__)
+CONVERSATION_STRUCTURE_SHADOW_FEATURE = 'conversation_structure.extract.shadow'
+CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED'
+CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE'
+CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE = 'conversation_action_items.extract.shadow'
+CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED'
+CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV = 'OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE'
 
 # =============================================
 #            FOLDER ASSIGNMENT
 # =============================================
-
-
-class FolderAssignment(BaseModel):
-    """Model for AI folder assignment response."""
-
-    folder_id: str = Field(description="The ID of the best matching folder for this conversation")
-    confidence: float = Field(
-        default=0.5, ge=0.0, le=1.0, description="Confidence score for folder assignment (0.0 to 1.0)"
-    )
-    reasoning: str = Field(default="", description="Brief explanation of why this folder was chosen")
-
-
-def build_folders_context(folders: List[dict]) -> str:
-    """
-    Build context string for LLM folder assignment using natural language descriptions.
-
-    Each folder's description explains what conversations belong in it,
-    allowing the AI to match based on intent rather than keywords.
-    """
-    if not folders:
-        return "No folders available. Use default assignment."
-
-    lines = []
-    for folder in folders:
-        folder_id = folder.get('id', '')
-        name = folder.get('name', '')
-        description = folder.get('description', '')
-        is_default = folder.get('is_default', False)
-
-        # Format: folder_id | "Folder Name" → Description
-        if description:
-            line = f'- {folder_id} | "{name}" → {description}'
-        else:
-            line = f'- {folder_id} | "{name}"'
-
-        if is_default:
-            line += " (DEFAULT - use when no other folder matches)"
-
-        lines.append(line)
-
-    return "\n".join(lines)
-
-
-def assign_conversation_to_folder(
-    title: str,
-    overview: str,
-    category: str,
-    user_folders: List[dict],
-) -> Tuple[Optional[str], float, str]:
-    """
-    Use AI to assign a conversation to the most appropriate folder.
-
-    Args:
-        title: The conversation title
-        overview: The conversation overview/summary
-        category: The conversation category
-        user_folders: List of user's folders with id, name, description, is_default
-
-    Returns:
-        Tuple of (folder_id, confidence, reasoning)
-        Returns (None, 0.0, reason) if assignment fails or confidence is too low
-    """
-    if not user_folders:
-        return None, 0.0, "No folders available"
-
-    folders_context = build_folders_context(user_folders)
-
-    # Find default folder for fallback
-    default_folder = next((f for f in user_folders if f.get('is_default')), None)
-    default_folder_id = default_folder.get('id') if default_folder else None
-
-    # Build conversation context
-    conversation_context = f"""
-Title: {title}
-Category: {category}
-Overview: {overview}
-""".strip()
-
-    prompt_text = '''You are a folder assignment system. Match the conversation to the folder that best represents its overall theme.
-
-FOLDERS:
-{folders_context}
-
-CONVERSATION:
-{conversation_context}
-
-INSTRUCTIONS:
-- Match based on the dominant theme of the conversation (what it's fundamentally about)
-- The folder should feel like a natural home for this conversation
-- Only assign to a non-default folder if the theme clearly matches
-- When in doubt, use the DEFAULT folder
-
-Provide:
-- folder_id: The best matching folder ID from the list above
-- confidence: Match strength (0.0-1.0). Use 0.9+ only for clear thematic matches, below 0.7 means use DEFAULT
-- reasoning: One sentence explaining the match
-
-{format_instructions}'''
-
-    folder_parser = PydanticOutputParser(pydantic_object=FolderAssignment)
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
-    chain = prompt | get_llm('conv_folder') | folder_parser
-
-    try:
-        response: FolderAssignment = chain.invoke(
-            {
-                'folders_context': folders_context,
-                'conversation_context': conversation_context,
-                'format_instructions': folder_parser.get_format_instructions(),
-            }
-        )
-
-        # Validate the folder_id exists
-        valid_folder_ids = {f.get('id') for f in user_folders}
-        if response.folder_id not in valid_folder_ids:
-            return default_folder_id, 0.3, f"Invalid folder ID returned, using default"
-
-        # If confidence is too low, use default folder
-        if response.confidence < 0.7 and default_folder_id:
-            return (
-                default_folder_id,
-                response.confidence,
-                f"Low confidence ({response.confidence:.2f}), using default folder",
-            )
-
-        return response.folder_id, response.confidence, response.reasoning
-
-    except Exception as e:
-        logger.error(f'Error assigning conversation to folder: {e}')
-        return default_folder_id, 0.0, f"Error: {str(e)}"
+# The implementation moved to conversation_folder.py; that route still uses
+# get_llm('conv_folder') as the production model/provider plug-in seam.
 
 
 class DiscardConversation(BaseModel):
@@ -159,23 +45,457 @@ class SpeakerIdMatch(BaseModel):
     speaker_id: int = Field(description="The speaker id assigned to the segment")
 
 
+def _invoke_gateway_shadow_chain(chain: Any, values: dict[str, Any], *, feature: str) -> BaseModel | None:
+    if has_byok_keys():
+        record_chat_extraction_gateway_result(feature=feature, outcome='skipped', reason='byok')
+        return None
+    try:
+        response = chain.invoke(values)
+    except Exception:
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='unexpected_error')
+        return None
+    record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
+    return response
+
+
+def _word_count(text: str) -> int:
+    if not text:
+        return 0
+    cjk_chars = sum(1 for c in text if unicodedata.east_asian_width(c) in ('W', 'F', 'H'))
+    if cjk_chars > len(text) * 0.3:
+        return cjk_chars // 2
+    return len(text.split())
+
+
+def _coerce_action_items(response: ActionItemsExtraction) -> List[ActionItem]:
+    return response.to_action_items()
+
+
+def _content_str(response: Any) -> str:
+    content = response.content
+    return content if isinstance(content, str) else str(content)
+
+
+def _coerce_structured(response: Structured | StructuredExtraction) -> Structured:
+    if isinstance(response, StructuredExtraction):
+        return response.to_structured()
+    return response
+
+
+def _normalize_action_item_due_dates(
+    action_items: List[ActionItem],
+    *,
+    user_tz: Any,
+    now: datetime,
+    log_past_due_clears: bool,
+) -> List[ActionItem]:
+    for action_item in action_items:
+        if action_item.due_at is None:
+            continue
+        if action_item.due_at.tzinfo is None:
+            action_item.due_at = action_item.due_at.replace(tzinfo=user_tz).astimezone(timezone.utc)
+        else:
+            action_item.due_at = action_item.due_at.astimezone(timezone.utc)
+        if action_item.due_at < now - timedelta(days=1):
+            if log_past_due_clears:
+                logger.warning(
+                    f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
+                )
+            action_item.due_at = None
+    return action_items
+
+
+def _record_chat_extraction_comparison(*, feature: str, field: str, outcome: str) -> None:
+    record_gateway_shadow_comparison(feature=feature, field=field, outcome=outcome)
+
+
+def _env_flag_enabled(name: str, *, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().casefold() in {'1', 'true', 'yes', 'on'}
+
+
+def _env_sample_rate(name: str, *, default: float = 0.0) -> float:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return max(0.0, min(1.0, float(value)))
+    except ValueError:
+        return default
+
+
+def _should_run_gateway_shadow(
+    *,
+    feature: str,
+    enabled_env: str,
+    sample_rate_env: str,
+    sample_id: str,
+    started_at: datetime,
+    conversation_context: str,
+) -> bool:
+    if has_byok_keys():
+        record_chat_extraction_gateway_result(
+            feature=feature,
+            outcome='skipped',
+            reason='byok',
+        )
+        return False
+
+    if not _env_flag_enabled(enabled_env):
+        record_chat_extraction_gateway_result(
+            feature=feature,
+            outcome='skipped',
+            reason='disabled',
+        )
+        return False
+
+    sample_rate = _env_sample_rate(sample_rate_env, default=1.0)
+    if sample_rate <= 0:
+        record_chat_extraction_gateway_result(
+            feature=feature,
+            outcome='skipped',
+            reason='sample_rate_zero',
+        )
+        return False
+    if sample_rate >= 1:
+        return True
+
+    sample_key = f'{sample_id}:{started_at.isoformat()}:{len(conversation_context)}'
+    sample_value = int(hashlib.sha256(sample_key.encode('utf-8')).hexdigest()[:8], 16) / 0xFFFFFFFF
+    if sample_value < sample_rate:
+        return True
+
+    record_chat_extraction_gateway_result(
+        feature=feature,
+        outcome='skipped',
+        reason='sampled_out',
+    )
+    return False
+
+
+def _should_run_conversation_structure_shadow(uid: str, started_at: datetime, conversation_context: str) -> bool:
+    return _should_run_gateway_shadow(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        enabled_env=CONVERSATION_STRUCTURE_SHADOW_ENABLED_ENV,
+        sample_rate_env=CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE_ENV,
+        sample_id=uid,
+        started_at=started_at,
+        conversation_context=conversation_context,
+    )
+
+
+def _should_run_conversation_action_items_shadow(
+    sample_id: str, started_at: datetime, conversation_context: str
+) -> bool:
+    return _should_run_gateway_shadow(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        enabled_env=CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED_ENV,
+        sample_rate_env=CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE_ENV,
+        sample_id=sample_id,
+        started_at=started_at,
+        conversation_context=conversation_context,
+    )
+
+
+def _normalized_text(value: object) -> str:
+    if value is None:
+        return ''
+    return ' '.join(str(value).casefold().split())
+
+
+def _text_similarity_bucket(left: object, right: object) -> str:
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    if not normalized_left and not normalized_right:
+        return 'both_empty'
+    if not normalized_left:
+        return 'legacy_empty_gateway_present'
+    if not normalized_right:
+        return 'legacy_present_gateway_empty'
+    if normalized_left == normalized_right:
+        return 'exact_match'
+    ratio = SequenceMatcher(None, normalized_left, normalized_right).ratio()
+    if ratio >= 0.85:
+        return 'high_similarity'
+    if ratio >= 0.60:
+        return 'medium_similarity'
+    return 'low_similarity'
+
+
+def _length_ratio_bucket(left: object, right: object) -> str:
+    normalized_left = _normalized_text(left)
+    normalized_right = _normalized_text(right)
+    left_len = len(normalized_left)
+    right_len = len(normalized_right)
+    if left_len == 0 and right_len == 0:
+        return 'both_empty'
+    if left_len == 0:
+        return 'legacy_empty_gateway_present'
+    if right_len == 0:
+        return 'legacy_present_gateway_empty'
+    ratio = right_len / left_len
+    if ratio < 0.5:
+        return 'gateway_much_shorter'
+    if ratio < 0.8:
+        return 'gateway_shorter'
+    if ratio <= 1.25:
+        return 'similar_length'
+    if ratio <= 2.0:
+        return 'gateway_longer'
+    return 'gateway_much_longer'
+
+
+def _record_conversation_structure_shadow_comparison(
+    gateway_response: Structured | None,
+    legacy_response: Structured,
+) -> None:
+    if gateway_response is None:
+        return
+
+    legacy_category = getattr(legacy_response.category, 'value', legacy_response.category)
+    gateway_category = getattr(gateway_response.category, 'value', gateway_response.category)
+
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='category',
+        outcome='exact_match' if legacy_category == gateway_category else 'mismatch',
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='emoji',
+        outcome='exact_match' if legacy_response.emoji == gateway_response.emoji else 'mismatch',
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='title_similarity',
+        outcome=_text_similarity_bucket(legacy_response.title, gateway_response.title),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='overview_similarity',
+        outcome=_text_similarity_bucket(legacy_response.overview, gateway_response.overview),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        field='overview_length_ratio',
+        outcome=_length_ratio_bucket(legacy_response.overview, gateway_response.overview),
+    )
+
+
+def _count_comparison_bucket(legacy_count: int, gateway_count: int) -> str:
+    if legacy_count == gateway_count:
+        return 'exact_match'
+    if gateway_count < legacy_count:
+        return 'gateway_fewer'
+    return 'gateway_more'
+
+
+def _ordered_description_similarity_bucket(legacy_items: List[ActionItem], gateway_items: List[ActionItem]) -> str:
+    if not legacy_items and not gateway_items:
+        return 'both_empty'
+    if not legacy_items:
+        return 'legacy_empty_gateway_present'
+    if not gateway_items:
+        return 'legacy_present_gateway_empty'
+    if len(legacy_items) != len(gateway_items):
+        return 'count_mismatch'
+
+    buckets = [
+        _text_similarity_bucket(left.description, right.description) for left, right in zip(legacy_items, gateway_items)
+    ]
+    if all(bucket == 'exact_match' for bucket in buckets):
+        return 'all_exact_match'
+    if all(bucket in {'exact_match', 'high_similarity'} for bucket in buckets):
+        return 'all_high_similarity'
+    if all(bucket in {'exact_match', 'high_similarity', 'medium_similarity'} for bucket in buckets):
+        return 'all_medium_similarity'
+    return 'low_similarity'
+
+
+def _due_at_presence_bucket(legacy_items: List[ActionItem], gateway_items: List[ActionItem]) -> str:
+    if not legacy_items and not gateway_items:
+        return 'both_empty'
+    if len(legacy_items) != len(gateway_items):
+        return 'count_mismatch'
+    legacy_presence = [item.due_at is not None for item in legacy_items]
+    gateway_presence = [item.due_at is not None for item in gateway_items]
+    return 'exact_match' if legacy_presence == gateway_presence else 'mismatch'
+
+
+def _due_at_value_bucket(legacy_items: List[ActionItem], gateway_items: List[ActionItem]) -> str:
+    if not legacy_items and not gateway_items:
+        return 'both_empty'
+    if len(legacy_items) != len(gateway_items):
+        return 'count_mismatch'
+
+    legacy_due_at = [item.due_at for item in legacy_items]
+    gateway_due_at = [item.due_at for item in gateway_items]
+    if not any(legacy_due_at) and not any(gateway_due_at):
+        return 'no_due_dates'
+    if legacy_due_at == gateway_due_at:
+        return 'exact_match'
+    return 'mismatch'
+
+
+def _record_conversation_action_items_shadow_comparison(
+    gateway_response: ActionItemsExtraction | None,
+    legacy_response: List[ActionItem],
+    *,
+    user_tz: Any,
+    now: datetime,
+) -> None:
+    if gateway_response is None:
+        return
+
+    gateway_items = _coerce_action_items(gateway_response)
+    _normalize_action_item_due_dates(gateway_items, user_tz=user_tz, now=now, log_past_due_clears=False)
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='count',
+        outcome=_count_comparison_bucket(len(legacy_response), len(gateway_items)),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='description_similarity',
+        outcome=_ordered_description_similarity_bucket(legacy_response, gateway_items),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='due_at_presence',
+        outcome=_due_at_presence_bucket(legacy_response, gateway_items),
+    )
+    _record_chat_extraction_comparison(
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        field='due_at_value',
+        outcome=_due_at_value_bucket(legacy_response, gateway_items),
+    )
+
+
+def _run_conversation_structure_shadow(
+    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
+) -> None:
+    gateway_chain = cast(
+        Any,
+        prompt | get_llm_gateway_chat_structured(cache_key='omi-transcript-structure') | parser,
+    )
+    gateway_response = _invoke_gateway_shadow_chain(
+        gateway_chain,
+        prompt_values,
+        feature=CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+    )
+    if gateway_response is not None:
+        _record_conversation_structure_shadow_comparison(
+            _coerce_structured(cast(Structured | StructuredExtraction, gateway_response)), legacy_response
+        )
+
+
+def _run_conversation_action_items_shadow(
+    prompt: ChatPromptTemplate,
+    prompt_values: dict[str, Any],
+    legacy_response: List[ActionItem],
+    user_tz: Any,
+    now: datetime,
+) -> None:
+    gateway_chain = cast(
+        Any,
+        prompt
+        | get_llm_gateway_chat_structured(cache_key='omi-extract-actions')
+        | PydanticOutputParser(pydantic_object=ActionItemsExtraction),
+    )
+    gateway_response = _invoke_gateway_shadow_chain(
+        gateway_chain,
+        prompt_values,
+        feature=CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+    )
+    _record_conversation_action_items_shadow_comparison(
+        cast(Optional[ActionItemsExtraction], gateway_response),
+        legacy_response,
+        user_tz=user_tz,
+        now=now,
+    )
+
+
+def _submit_llm_background(fn: Any, *args: Any) -> Any:
+    from utils.executors import llm_executor, submit_with_context
+
+    return submit_with_context(llm_executor, fn, *args)
+
+
+def _submit_gateway_shadow(
+    worker_fn: Any,
+    feature: str,
+    log_label: str,
+    *args: Any,
+) -> None:
+    try:
+        future = _submit_llm_background(worker_fn, *args)
+    except Exception:
+        record_chat_extraction_gateway_result(
+            feature=feature,
+            outcome='skipped',
+            reason='submit_error',
+        )
+        return
+
+    def _log_shadow_failure(completed_future: Any) -> None:
+        try:
+            completed_future.result()
+        except Exception:
+            logger.exception('%s shadow task failed', log_label)
+
+    future.add_done_callback(_log_shadow_failure)
+
+
+def _submit_conversation_structure_shadow(
+    prompt: ChatPromptTemplate, prompt_values: dict[str, Any], legacy_response: Structured
+) -> None:
+    _submit_gateway_shadow(
+        _run_conversation_structure_shadow,
+        CONVERSATION_STRUCTURE_SHADOW_FEATURE,
+        'conversation_structure',
+        prompt,
+        prompt_values,
+        legacy_response,
+    )
+
+
+def _submit_conversation_action_items_shadow(
+    prompt: ChatPromptTemplate,
+    prompt_values: dict[str, Any],
+    legacy_response: List[ActionItem],
+    user_tz: Any,
+    now: datetime,
+) -> None:
+    _submit_gateway_shadow(
+        _run_conversation_action_items_shadow,
+        CONVERSATION_ACTION_ITEMS_SHADOW_FEATURE,
+        'conversation_action_items',
+        prompt,
+        prompt_values,
+        legacy_response,
+        user_tz,
+        now,
+    )
+
+
 def should_discard_conversation(
-    transcript: str, photos: List[ConversationPhoto] = None, duration_seconds: Optional[float] = None
+    transcript: str, photos: Optional[List[ConversationPhoto]] = None, duration_seconds: Optional[float] = None
 ) -> bool:
     # If there's a long transcript, it's very unlikely we want to discard it.
     # This is a performance optimization to avoid unnecessary LLM calls.
-    if transcript and len(transcript.split(' ')) > 100:
+    word_count = _word_count(transcript) if transcript and transcript.strip() else 0
+    if word_count > 100:
         return False
-
-    word_count = len(transcript.split()) if transcript and transcript.strip() else 0
     has_photos = photos and ConversationPhoto.photos_as_string(photos) != 'None'
 
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
     if has_photos:
-        photo_descriptions = ConversationPhoto.photos_as_string(photos)
+        photo_descriptions = ConversationPhoto.photos_as_string(photos) if photos else 'None'
         context_parts.append(f"Photo Descriptions from a wearable camera:\n{photo_descriptions}")
 
     # If there is no content to process (e.g., empty transcript and no photo descriptions), discard.
@@ -196,10 +516,7 @@ def should_discard_conversation(
                 "Generic filler words, acknowledgments, or incomplete thoughts in short conversations should be discarded."
             )
 
-    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory.
+    prompt_template = '''You will receive a transcript, a series of photo descriptions from a wearable camera, or both. Your task is to decide if this content is meaningful enough to be saved as a memory.
 
 Task: Decide if the content should be saved as conversation summary.
 {duration_context}
@@ -228,19 +545,19 @@ Content:
 {full_context}
 
 {format_instructions}'''.replace(
-                '    ', ''
-            ).strip()
-        ]
-    )
+        '    ', ''
+    ).strip()
+    custom_parser = PydanticOutputParser(pydantic_object=DiscardConversation)
+    prompt_values = {
+        'full_context': full_context,
+        'duration_context': duration_context,
+        'format_instructions': custom_parser.get_format_instructions(),
+    }
+
+    prompt = cast(Any, ChatPromptTemplate).from_messages([prompt_template])
     chain = prompt | get_llm('conv_discard') | custom_parser
     try:
-        response: DiscardConversation = chain.invoke(
-            {
-                'full_context': full_context,
-                'duration_context': duration_context,
-                'format_instructions': custom_parser.get_format_instructions(),
-            }
-        )
+        response: DiscardConversation = chain.invoke(prompt_values)
         return response.discard
 
     except Exception as e:
@@ -267,7 +584,7 @@ def _build_conversation_context(
     Returns:
         Formatted context string, or empty string if no content provided.
     """
-    context_parts = []
+    context_parts: List[str] = []
 
     if calendar_meeting_context:
         participants_str = ", ".join(
@@ -304,10 +621,10 @@ def extract_action_items(
     started_at: datetime,
     language_code: str,
     tz: str,
-    photos: List[ConversationPhoto] = None,
-    existing_action_items: List[dict] = None,
-    calendar_meeting_context: 'CalendarMeetingContext' = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    existing_action_items: Optional[List[Dict[str, Any]]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    output_language_code: Optional[str] = None,
 ) -> List[ActionItem]:
     """
     Dedicated function to extract action items from conversation content.
@@ -332,7 +649,7 @@ def extract_action_items(
 
     existing_items_context = ""
     if existing_action_items:
-        items_list = []
+        items_list: List[str] = []
         for item in existing_action_items:
             # Defensive: the rendered section is "OPEN TASKS"; a completed item
             # leaking through (e.g. a future caller that doesn't pre-filter)
@@ -510,19 +827,19 @@ def extract_action_items(
     • Order by: due date → urgency → alphabetical
 
     DUE DATE EXTRACTION:
-    All due_at values MUST be future UTC timestamps with 'Z' suffix. NEVER produce a past date.
+    Resolve each due date in the user's LOCAL time. NEVER produce a past date.
 
-    REFERENCE_TIME: If {started_at} is >7 days before {current_time}, use {current_time} (historical reprocessing). Otherwise use {started_at}.
+    REFERENCE_TIME (user's local time): If {started_at_local} is >7 days before {current_time_local}, use {current_time_local} (historical reprocessing). Otherwise use {started_at_local}.
 
     Date resolution: "today" → REFERENCE_TIME date, "tomorrow" → next day, weekday names → next occurrence, "next week" → +7 days.
     Time resolution: "morning" → 9AM, "afternoon" → 2PM, "evening" → 6PM, "noon" → 12PM, "end of day"/"midnight" → 11:59PM, no time → 11:59PM. "urgent"/"ASAP" → 2h from REFERENCE_TIME.
-    Process: resolve date + time in user's timezone ({tz}), convert to UTC with 'Z' suffix, verify it's future relative to {current_time}. If past, omit due_at.
+    Output the resolved value as the user's LOCAL wall-clock time in ISO 8601 with NO timezone suffix or offset (no 'Z', no '+05:30') — the server converts it to UTC. Verify it is in the future relative to REFERENCE_TIME; if past, omit due_at.
 
-    Example: REFERENCE_TIME "2025-10-03T13:25:00Z", tz "Asia/Kolkata": "tomorrow before 10am" → Oct 4 10:00 IST → "2025-10-04T04:30:00Z"
-    Format: UTC with 'Z' suffix only (e.g., "2025-10-04T04:30:00Z"). No timezone offsets like "+05:30".
+    Example: REFERENCE_TIME "2025-10-03T13:25:00", "tomorrow before 10am" → "2025-10-04T10:00:00"
+    Format: naive local ISO 8601, no suffix (e.g., "2025-10-04T10:00:00").
 
-    Conversation started at: {started_at}
-    Current time: {current_time}
+    Conversation started at (local): {started_at_local}
+    Current time (local): {current_time_local}
     User timezone: {tz}
 
     {format_instructions}'''.replace(
@@ -533,46 +850,71 @@ def extract_action_items(
     action_items_parser = PydanticOutputParser(pydantic_object=ActionItemsExtraction)
     # Second system message: conversation context + existing items (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}{existing_items_context}'
-    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | get_llm('conv_action_items', cache_key='omi-extract-actions') | action_items_parser
 
     current_time = datetime.now(timezone.utc)
 
+    # Resolve the user's timezone once; fall back to UTC on an invalid/missing tz (and log it).
+    # The LLM emits naive LOCAL wall-clock due dates (see prompt); we convert them to UTC here
+    # deterministically instead of trusting the model to do the timezone math (the cause of #7059).
     try:
-        response = chain.invoke(
-            {
-                'conversation_context': conversation_context,
-                'format_instructions': action_items_parser.get_format_instructions(),
-                'language_code': language_code,
-                'response_language': response_language,
-                'started_at': started_at.isoformat(),
-                'current_time': current_time.isoformat(),
-                'tz': tz,
-                'existing_items_context': existing_items_context,
-            }
-        )
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:
+        logger.warning(f'Invalid timezone {tz!r} for action item extraction; falling back to UTC')
+        user_tz = timezone.utc
+
+    started_at_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(
+        user_tz
+    )
+    current_time_local = current_time.astimezone(user_tz)
+    prompt_values = {
+        'conversation_context': conversation_context,
+        'format_instructions': action_items_parser.get_format_instructions(),
+        'language_code': language_code,
+        'response_language': response_language,
+        'started_at_local': started_at_local.replace(tzinfo=None).isoformat(),
+        'current_time_local': current_time_local.replace(tzinfo=None).isoformat(),
+        'tz': tz or 'UTC',
+        'existing_items_context': existing_items_context,
+    }
+
+    try:
+        response = chain.invoke(prompt_values)
+        action_items = _coerce_action_items(response)
 
         # Set created_at for action items if not already set
         now = current_time
-        for action_item in response.action_items or []:
+        for action_item in action_items:
             if action_item.created_at is None:
                 action_item.created_at = now
-            # Post-extraction validation: clear due dates more than 1 day in the past
-            if action_item.due_at is not None:
-                due_utc = (
-                    action_item.due_at if action_item.due_at.tzinfo else action_item.due_at.replace(tzinfo=timezone.utc)
-                )
-                if due_utc < now - timedelta(days=1):
-                    logger.warning(
-                        f'Clearing past due_at {action_item.due_at.isoformat()} for action item: {action_item.description}'
-                    )
-                    action_item.due_at = None
+        # The LLM returns naive LOCAL time; convert to UTC deterministically (and normalize any
+        # tz-aware value), then clear due dates more than 1 day in the past.
+        _normalize_action_item_due_dates(action_items, user_tz=user_tz, now=now, log_past_due_clears=True)
 
-        return response.action_items or []
+        if _should_run_conversation_action_items_shadow('conversation_action_items', started_at, conversation_context):
+            _submit_conversation_action_items_shadow(prompt, prompt_values, action_items, user_tz, now)
+
+        return action_items
 
     except Exception as e:
         logger.error(f'Error extracting action items: {e}')
         return []
+
+
+def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
+    """Render the capture time as the user's local wall-clock for prompt date context (#4773).
+
+    The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
+    in titles and overviews. Convert deterministically here instead. Naive datetimes are treated as
+    UTC; a missing or invalid timezone falls back to UTC.
+    """
+    try:
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
+    except Exception:  # noqa: BLE001 - any unknown/invalid tz falls back to UTC
+        user_tz = timezone.utc
+    aware = started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=timezone.utc)
+    return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
 
 
 def get_transcript_structure(
@@ -581,20 +923,15 @@ def get_transcript_structure(
     language_code: str,
     tz: str,
     uid: str,
-    photos: List[ConversationPhoto] = None,
-    calendar_meeting_context: 'CalendarMeetingContext' = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    calendar_meeting_context: Optional['CalendarMeetingContext'] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
     conversation_context = _build_conversation_context(transcript, photos, calendar_meeting_context)
     if not conversation_context:
         return Structured()  # Should be caught by discard logic, but as a safeguard.
 
     response_language = output_language_code or language_code
-    try:
-        user_name = get_user_name(uid)
-    except Exception as e:
-        logger.warning(f'Failed to load user name for transcript structuring (uid={uid}): {e}')
-        user_name = 'The User'
 
     # First system message: task-specific instructions (static prefix enables cross-conversation caching)
     # NOTE: language instructions are in context_message (second message) to keep this prefix fully static.
@@ -636,7 +973,7 @@ def get_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
 
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
+    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
 
     {format_instructions}'''.replace(
         '    ', ''
@@ -644,19 +981,24 @@ def get_transcript_structure(
 
     # Second system message: conversation context (dynamic, per-conversation)
     context_message = 'The content language is {language_code}. You MUST respond entirely in {response_language}.\n\nContent:\n{conversation_context}'
-    prompt = ChatPromptTemplate.from_messages([('system', instructions_text), ('system', context_message)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', instructions_text), ('system', context_message)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
+    legacy_prompt_values = {
+        'conversation_context': conversation_context,
+        'format_instructions': parser.get_format_instructions(),
+        'language_code': language_code,
+        'response_language': response_language,
+        'started_at': _local_started_at_iso(started_at, tz),
+        'tz': tz or 'UTC',
+    }
 
-    response = chain.invoke(
-        {
-            'conversation_context': conversation_context,
-            'format_instructions': parser.get_format_instructions(),
-            'language_code': language_code,
-            'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
-        }
-    )
+    response = _coerce_structured(chain.invoke(legacy_prompt_values))
+    if _should_run_conversation_structure_shadow(uid, started_at, conversation_context):
+        _submit_conversation_structure_shadow(
+            prompt,
+            legacy_prompt_values,
+            response,
+        )
 
     for event in response.events or []:
         if event.duration > 180:
@@ -672,10 +1014,10 @@ def get_reprocess_transcript_structure(
     language_code: str,
     tz: str,
     title: str,
-    photos: List[ConversationPhoto] = None,
-    output_language_code: str = None,
+    photos: Optional[List[ConversationPhoto]] = None,
+    output_language_code: Optional[str] = None,
 ) -> Structured:
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
@@ -719,7 +1061,7 @@ def get_reprocess_transcript_structure(
     • Vague suggestions ("let's grab coffee soon")
     • Hypothetical scenarios ("if we meet Tuesday...")
     
-    For date context, this content was captured on {started_at}. {tz} is the user's timezone; respond in user local timezone.
+    For date context, this content was captured at {started_at}, which is already the user's local time ({tz}). Interpret it as-is and describe times of day in the title and overview accordingly; do not re-interpret this timestamp as UTC.
 
     Content:
     {full_context}
@@ -728,19 +1070,21 @@ def get_reprocess_transcript_structure(
         '    ', ''
     ).strip()
 
-    prompt = ChatPromptTemplate.from_messages([('system', prompt_text)])
+    prompt = cast(Any, ChatPromptTemplate).from_messages([('system', prompt_text)])
     chain = prompt | get_llm('conv_structure', cache_key='omi-transcript-structure') | parser
 
-    response = chain.invoke(
-        {
-            'full_context': full_context,
-            'title': title,
-            'format_instructions': parser.get_format_instructions(),
-            'language_code': language_code,
-            'response_language': response_language,
-            'started_at': started_at.isoformat(),
-            'tz': tz,
-        }
+    response = _coerce_structured(
+        chain.invoke(
+            {
+                'full_context': full_context,
+                'title': title,
+                'format_instructions': parser.get_format_instructions(),
+                'language_code': language_code,
+                'response_language': response_language,
+                'started_at': _local_started_at_iso(started_at, tz),
+                'tz': tz or 'UTC',
+            }
+        )
     )
 
     for event in response.events or []:
@@ -752,7 +1096,7 @@ def get_reprocess_transcript_structure(
 
 
 def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, language_code: str = 'en') -> str:
-    context_parts = []
+    context_parts: List[str] = []
     if transcript and transcript.strip():
         context_parts.append(f"Transcript: ```{transcript.strip()}```")
 
@@ -779,7 +1123,7 @@ def get_app_result(transcript: str, photos: List[ConversationPhoto], app: App, l
     '''
 
     response = get_llm('conv_app_result', cache_key='omi-app-result').invoke(prompt)
-    content = response.content.replace('```json', '').replace('```', '')
+    content = _content_str(response).replace('```json', '').replace('```', '')
     return content
 
 
@@ -863,7 +1207,7 @@ def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[A
 
     try:
         with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
-        response: SuggestedAppsSelection = with_parser.invoke(prompt)
+        response: SuggestedAppsSelection = cast(SuggestedAppsSelection, with_parser.invoke(prompt))
 
         # Validate that suggested app IDs exist in the available apps
         valid_app_ids = {app.id for app in apps}
@@ -934,7 +1278,7 @@ def select_best_app_for_conversation(conversation: Conversation, apps: List[App]
 
     try:
         with_parser = get_llm('conv_app_select').with_structured_output(BestAppSelection)
-        response: BestAppSelection = with_parser.invoke(prompt)
+        response: BestAppSelection = cast(BestAppSelection, with_parser.invoke(prompt))
         selected_app_id = response.app_id
 
         if not selected_app_id or selected_app_id.strip() == "":
@@ -963,4 +1307,4 @@ def generate_summary_with_prompt(conversation_text: str, prompt: str, language_c
     {conversation_text}
     """
     response = get_llm('daily_summary', cache_key='omi-daily-summary').invoke(full_prompt)
-    return response.content
+    return _content_str(response)

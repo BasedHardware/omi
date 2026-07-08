@@ -14,15 +14,21 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
 import database.conversations as conversations_db
+from database._client import db as firestore_db
 from database.vector_db import delete_vector
 from models.audio_file import AudioFile
 from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
+from utils.memory.memory_service import MemoryService
+from utils.memory.memory_system import MemorySystem
+from utils.memory.canonical_activation import canonical_write_enabled
+from utils.memory.surface_routing import pin_memory_system
+from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.other.storage import (
     delete_conversation_audio_files,
     list_audio_chunks,
-    storage_client,
+    _get_storage_client,
     private_cloud_sync_bucket,
     _get_extension_for_path,
 )
@@ -32,29 +38,21 @@ logger = logging.getLogger(__name__)
 
 
 def _coerce_dt(value):
-    """Coerce a timestamp (datetime or ISO 8601 string) to a tz-aware UTC datetime.
+    return coerce_utc_datetime(value)
 
-    Conversation docs can carry ``started_at`` / ``finished_at`` as either a
-    Firestore-deserialised ``datetime`` (tz-aware) or as an ISO string (older
-    write paths persisted ``.isoformat()`` instead of a native timestamp).
-    Subtracting two strings throws ``TypeError``; mixing tz-aware with
-    tz-naive also throws. Coercing both sides to a single tz-aware UTC
-    representation keeps the gap math safe regardless of source.
 
-    Returns ``None`` for unparseable input rather than raising — gap warnings
-    are best-effort and a malformed timestamp must not fail the merge call.
-    """
-    if value is None:
-        return None
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    if isinstance(value, str):
-        try:
-            parsed = datetime.fromisoformat(value.replace('Z', '+00:00'))
-        except ValueError:
-            return None
-        return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
-    return None
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _photo_created_at_sort_key(photo: Dict) -> datetime:
+    created_at = coerce_utc_datetime(photo.get('created_at'))
+    if created_at is None:
+        logger.warning(
+            'conversation_merge_photo_missing_or_invalid_created_at',
+            extra={'photo_id': photo.get('id'), 'has_created_at': 'created_at' in photo},
+        )
+        return _UTC_MIN
+    return created_at
 
 
 # Timestamp fields touched by the merge pipeline. Coerced once at the entry
@@ -260,7 +258,7 @@ def perform_merge_async(
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.dict())
+        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
 
         # Store photos in subcollection if any
         if merged_photos:
@@ -390,8 +388,9 @@ def _collect_all_photos(uid: str, conversations: List[Dict]) -> List[Dict]:
         except Exception as e:
             logger.error(f"Error fetching photos for {conv['id']}: {e}")
 
-    # Sort by creation time
-    all_photos.sort(key=lambda p: p.get('created_at', datetime.min))
+    # Sort by creation time with a uniform tz-aware UTC key. Missing or malformed
+    # created_at values are retained and ordered first, with structured metrics.
+    all_photos.sort(key=_photo_created_at_sort_key)
     return all_photos
 
 
@@ -423,7 +422,7 @@ def _copy_audio_chunks_for_merge(
     Returns:
         List of AudioFile objects
     """
-    bucket = storage_client.bucket(private_cloud_sync_bucket)
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
 
     for conv in conversations:
@@ -492,8 +491,11 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
     import database.action_items as action_items_db
 
     try:
-        # Delete memories
-        memories_db.delete_memories_for_conversation(uid, conversation_id)
+        memory_system = pin_memory_system(uid, db_client=firestore_db)
+        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=firestore_db):
+            MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
+        else:
+            memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting memories for {conversation_id}: {e}")
 

@@ -4,7 +4,7 @@ PAYMENT_SOURCE_FILE = Path(__file__).resolve().parents[2] / "routers" / "payment
 
 
 def test_available_plans_support_partial_billing_options():
-    source = PAYMENT_SOURCE_FILE.read_text()
+    source = PAYMENT_SOURCE_FILE.read_text(encoding="utf-8")
 
     assert 'if monthly_price_id:' in source
     assert 'if annual_price_id:' in source

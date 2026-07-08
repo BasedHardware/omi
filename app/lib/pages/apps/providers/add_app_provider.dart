@@ -76,7 +76,12 @@ class AddAppProvider extends ChangeNotifier {
   bool isUpdating = false;
   bool isSubmitting = false;
   bool isValid = false;
+  bool hasChanges = false;
   bool isGenratingDescription = false;
+
+  // Snapshot of the app being edited, used to detect whether the update form is dirty.
+  App? _originalApp;
+  bool _changeListenersAttached = false;
 
   bool allowPaidApps = false;
 
@@ -141,6 +146,7 @@ class AddAppProvider extends ChangeNotifier {
       selectePaymentPlan = null;
     }
     isPaid = paid;
+    checkValidity();
     notifyListeners();
   }
 
@@ -156,6 +162,10 @@ class AddAppProvider extends ChangeNotifier {
 
   Future prepareUpdate(App app) async {
     setIsLoading(true);
+    // Reset all form state first. The provider is reused across the add/update flows,
+    // and prepareUpdate only seeds optional fields (integration, scopes, prompts) when
+    // present on the app — without this, leftover values would read as false "changes".
+    clear();
     if (capabilities.isEmpty) {
       await getAppCapabilities();
     }
@@ -210,11 +220,17 @@ class AddAppProvider extends ChangeNotifier {
       );
     }
 
-    // Set existing thumbnails
-    thumbnailUrls = app.thumbnailUrls;
-    thumbnailIds = app.thumbnailIds;
+    // Set existing thumbnails. Copy the lists — assigning app's lists directly would
+    // alias them, so in-place add/remove would also mutate the _originalApp snapshot
+    // and the dirty check would never detect thumbnail changes.
+    thumbnailUrls = List.of(app.thumbnailUrls);
+    thumbnailIds = List.of(app.thumbnailIds);
 
+    _originalApp = app;
     isValid = false;
+    hasChanges = false;
+    // Attach after initial values are set so seeding the form doesn't mark it dirty.
+    _ensureChangeListeners();
     setIsLoading(false);
     notifyListeners();
   }
@@ -247,6 +263,30 @@ class AddAppProvider extends ChangeNotifier {
     thumbnailUrls = [];
     thumbnailIds = [];
     actions.clear();
+    _originalApp = null;
+    hasChanges = false;
+  }
+
+  // Re-run validity/dirty checks as the user types in any text field. Idempotent.
+  void _ensureChangeListeners() {
+    if (_changeListenersAttached) return;
+    _changeListenersAttached = true;
+    for (final controller in [
+      appNameController,
+      appDescriptionController,
+      chatPromptController,
+      conversationPromptController,
+      webhookUrlController,
+      setupCompletedController,
+      instructionsController,
+      authUrlController,
+      appHomeUrlController,
+      chatToolsManifestUrlController,
+      sourceCodeUrlController,
+      priceController,
+    ]) {
+      controller.addListener(checkValidity);
+    }
   }
 
   void addSpecificAction(String actionTypeId) {
@@ -291,6 +331,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     selectePaymentPlan = plan;
+    checkValidity();
     notifyListeners();
   }
 
@@ -338,49 +379,62 @@ class AddAppProvider extends ChangeNotifier {
   }
 
   bool hasDataChanged(App app, String category) {
-    if (imageFile != null) {
-      return true;
+    // A newly picked logo always counts as a change.
+    if (imageFile != null) return true;
+
+    // Metadata. app.* strings are stored encoded; compare against the decoded form
+    // since that's what the controllers hold.
+    if (appNameController.text != app.name.decodeString) return true;
+    if (appDescriptionController.text != app.description.decodeString) return true;
+    if (makeAppPublic != !app.private) return true;
+    if (appCategory != category) return true;
+
+    // Capabilities — app.capabilities is a Set<String> of ids; selectedCapabilities
+    // are AppCapability objects. Compare by id, order-insensitive.
+    if (!setEquals(selectedCapabilities.map((c) => c.id).toSet(), app.capabilities.toSet())) return true;
+
+    // Pricing — only compare price/plan when the app is (still) paid, otherwise an
+    // empty price field on a free app would read as a false change.
+    if (isPaid != app.isPaid) return true;
+    if (isPaid) {
+      if (selectePaymentPlan != app.paymentPlan) return true;
+      if ((double.tryParse(priceController.text) ?? 0.0) != (app.price ?? 0.0)) return true;
     }
-    if (appNameController.text != app.name) {
-      return true;
-    }
-    if (appDescriptionController.text != app.description) {
-      return true;
-    }
-    if (makeAppPublic != !app.private) {
-      return true;
-    }
-    if (appCategory != category) {
-      return true;
-    }
-    if (selectedCapabilities.length != app.capabilities.length) {
-      return true;
-    }
-    if (app.externalIntegration != null) {
-      if (triggerEvent != app.externalIntegration!.triggersOn) {
-        return true;
-      }
-      if (webhookUrlController.text != app.externalIntegration!.webhookUrl) {
-        return true;
-      }
-      if (setupCompletedController.text != app.externalIntegration!.setupCompletedUrl) {
-        return true;
-      }
-      if (instructionsController.text != app.externalIntegration!.setupInstructionsFilePath) {
-        return true;
-      }
-    }
-    if (chatPromptController.text != app.chatPrompt) {
-      return true;
-    }
-    if (conversationPromptController.text != app.conversationPrompt) {
-      return true;
-    }
+
+    // Prompts.
+    if (conversationPromptController.text != (app.conversationPrompt ?? '').decodeString) return true;
+    if (chatPromptController.text != (app.chatPrompt ?? '').decodeString) return true;
+
+    // Source code URL.
+    if (sourceCodeUrlController.text != (app.sourceCodeUrl ?? '')) return true;
+
+    // External integration. Compare null-safe (not gated on ext != null) so adding
+    // these fields to an app that previously had no integration is also detected.
+    final ext = app.externalIntegration;
+    if (triggerEvent != ext?.triggersOn) return true;
+    if (webhookUrlController.text != (ext?.webhookUrl ?? '')) return true;
+    if (setupCompletedController.text != (ext?.setupCompletedUrl ?? '')) return true;
+    if (instructionsController.text != (ext?.setupInstructionsFilePath ?? '')) return true;
+    if (appHomeUrlController.text != (ext?.appHomeUrl ?? '')) return true;
+    if (chatToolsManifestUrlController.text != (ext?.chatToolsManifestUrl ?? '')) return true;
+    final originalAuthUrl = (ext?.authSteps.isNotEmpty ?? false) ? ext!.authSteps.first.url : '';
+    if (authUrlController.text != originalAuthUrl) return true;
+    final originalActions = (ext?.actions ?? []).map((a) => a.action).toSet();
+    if (!setEquals(actions.map((a) => a['action'] as String).toSet(), originalActions)) return true;
+
+    // Proactive notification scopes (null-safe for the same reason as above).
+    final originalScopes = (app.proactiveNotification?.scopes ?? const <String>[]).toSet();
+    if (!setEquals(selectedScopes.map((s) => s.id).toSet(), originalScopes)) return true;
+
+    // Thumbnails (order-insensitive).
+    if (!setEquals(thumbnailIds.toSet(), app.thumbnailIds.toSet())) return true;
+
     return false;
   }
 
   void checkValidity() {
     isValid = isFormValid();
+    hasChanges = _originalApp != null && hasDataChanged(_originalApp!, _originalApp!.category);
     notifyListeners();
   }
 
@@ -564,17 +618,23 @@ class AddAppProvider extends ChangeNotifier {
         data['proactive_notification']['scopes'] = selectedScopes.map((e) => e.id).toList();
       }
     }
+    final successMsg = globalNavigatorKey.currentContext?.l10n.addAppUpdatedSuccess;
+    final failMsg = globalNavigatorKey.currentContext?.l10n.addAppUpdateFailed;
     var success = false;
     var res = await updateAppServer(imageFile, data);
     if (res) {
-      await appProvider!.getApps();
-      var app = await getAppDetailsServer(updateAppId!);
-      appProvider!.updateLocalApp(App.fromJson(app!));
-      AppSnackbar.showSnackbarSuccess(globalNavigatorKey.currentContext!.l10n.addAppUpdatedSuccess);
+      await appProvider?.getApps();
+      if (updateAppId != null) {
+        var app = await getAppDetailsServer(updateAppId!);
+        if (app != null) {
+          appProvider?.updateLocalApp(App.fromJson(app));
+        }
+      }
+      if (successMsg != null) AppSnackbar.showSnackbarSuccess(successMsg);
       clear();
       success = true;
     } else {
-      AppSnackbar.showSnackbarError(globalNavigatorKey.currentContext!.l10n.addAppUpdateFailed);
+      if (failMsg != null) AppSnackbar.showSnackbarError(failMsg);
       success = false;
     }
     checkValidity();
@@ -805,6 +865,7 @@ class AddAppProvider extends ChangeNotifier {
         if (result.isNotEmpty) {
           thumbnailUrls.add(result['thumbnail_url']!);
           thumbnailIds.add(result['thumbnail_id']!);
+          checkValidity();
           Logger.debug('🖼️ Thumbnail uploaded successfully');
         }
         setIsUploadingThumbnail(false);
@@ -964,6 +1025,7 @@ class AddAppProvider extends ChangeNotifier {
       return;
     }
     makeAppPublic = value;
+    checkValidity();
     notifyListeners();
   }
 

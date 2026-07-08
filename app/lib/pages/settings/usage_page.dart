@@ -20,6 +20,7 @@ import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class UsagePage extends StatefulWidget {
@@ -45,6 +46,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   Future<void> _loadFairUseStatus() async {
     try {
       final result = await getFairUseStatus();
+      // Reconcile the rate-limit cooldown regardless of widget mount state.
+      reconcileSyncRateLimitWithFairUseStatus(result);
       if (mounted && result != null) {
         setState(() => _fairUseStatus = result);
       }
@@ -200,7 +203,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       shareText = baseText;
     }
 
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: periodTitle, text: shareText));
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: periodTitle.isEmpty ? null : periodTitle,
+        text: shareText.isEmpty ? null : shareText,
+      ),
+    );
   }
 
   String _getPeriodForIndex(int index) {
@@ -293,7 +302,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         centerTitle: true,
         elevation: 0,
         leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
-        actions: [IconButton(icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
+        actions: [IconButton(icon: FaIcon(FontAwesomeIcons.solidShareFromSquare), onPressed: _shareUsage)],
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.deepPurple,
@@ -311,8 +320,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       ),
       body: Consumer<UsageProvider>(
         builder: (context, provider, child) {
-          final hasAnyData =
-              provider.todayUsage != null ||
+          final hasAnyData = provider.todayUsage != null ||
               provider.monthlyUsage != null ||
               provider.yearlyUsage != null ||
               provider.allTimeUsage != null;
@@ -702,6 +710,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -720,6 +729,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -737,6 +747,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -759,6 +770,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           return UsageHistoryPoint(
             date: date.toIso8601String(),
             transcriptionSeconds: 0,
+            speechSeconds: 0,
             wordsTranscribed: 0,
             insightsGained: 0,
             memoriesCreated: 0,
@@ -1093,7 +1105,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
   Widget _buildUsageCard(
     BuildContext context, {
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required String value,
     required String subtitle,
@@ -1142,8 +1154,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 builder: (context) {
                   final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
                   final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage = (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit)
-                      .clamp(0.0, 1.0);
+                  final percentage =
+                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

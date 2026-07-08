@@ -1,6 +1,6 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class Folder(BaseModel):
@@ -64,4 +64,23 @@ class BulkMoveConversationsRequest(BaseModel):
 class ReorderFoldersRequest(BaseModel):
     """Request model for reordering folders."""
 
-    folder_ids: List[str]  # Ordered list of folder IDs
+    folder_ids: List[str] = Field(..., min_length=1, max_length=100)  # Ordered list of folder IDs
+
+    @field_validator('folder_ids')
+    @classmethod
+    def reject_duplicate_folder_ids(cls, folder_ids: List[str]) -> List[str]:
+        if len(folder_ids) != len(set(folder_ids)):
+            raise ValueError('folder_ids must not contain duplicates')
+        return folder_ids
+
+
+class FolderMutationResponse(BaseModel):
+    """Status response for folder mutation endpoints."""
+
+    status: str
+
+
+class BulkMoveConversationsResponse(FolderMutationResponse):
+    """Response for bulk folder conversation moves."""
+
+    moved_count: int = 0

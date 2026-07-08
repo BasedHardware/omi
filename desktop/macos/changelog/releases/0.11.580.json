@@ -1,0 +1,7 @@
+{
+  "version": "0.11.580",
+  "date": "2026-07-01",
+  "changes": [
+    "Added an onboarding prompt to turn up muted or zero Mac volume before trying push-to-talk"
+  ]
+}

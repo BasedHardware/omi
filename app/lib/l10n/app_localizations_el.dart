@@ -432,6 +432,12 @@ class AppLocalizationsEl extends AppLocalizations {
   String get offlineSync => 'Συγχρονισμός εκτός σύνδεσης';
 
   @override
+  String get autoSync => 'Αυτόματος συγχρονισμός';
+
+  @override
+  String get autoSyncDescription => 'Αυτόματος συγχρονισμός των εκτός σύνδεσης εγγραφών όταν συνδέεται η συσκευή σας';
+
+  @override
   String get deviceSettings => 'Ρυθμίσεις Συσκευής';
 
   @override
@@ -4724,10 +4730,7 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription και είναι $triggerDescription.';
   }
 
@@ -7816,6 +7819,9 @@ class AppLocalizationsEl extends AppLocalizations {
   String get viewAll => 'Προβολή όλων';
 
   @override
+  String get expand => 'Ανάπτυξη';
+
+  @override
   String get addTask => 'Προσθήκη εργασίας';
 
   @override
@@ -9366,6 +9372,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get backgroundModeNote => 'Προς το παρόν λειτουργεί μόνο με συσκευές Omi και βελτιώνεται συνεχώς.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Η λειτουργία παρασκηνίου δεν είναι διαθέσιμη επειδή δεν είναι συνδεδεμένη κάποια συμβατή συσκευή. Συνδέστε μια συσκευή Omi, OpenGlass ή Friend Pendant για να χρησιμοποιήσετε αυτήν τη λειτουργία.';
+
+  @override
   String get regenerateRecap => 'Αναδημιουργία ανακεφαλαίωσης';
 
   @override
@@ -9379,4 +9389,191 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Δεν υπάρχουν συνομιλίες για ανακεφαλαίωση αυτής της ημέρας.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Ο συγχρονισμός χρησιμοποιεί τη μεταγραφή του Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Χρησιμοποιείτε δικό σας πάροχο μεταγραφής. Ο συγχρονισμός αυτών των ηχογραφήσεων τις μεταγράφει στους διακομιστές του Omi και προσμετρώνται στο όριο μεταγραφής του προγράμματός σας.';
+
+  @override
+  String get transcribeLaterTitle => 'Μεταγραφή αργότερα';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Ηχογραφήστε τώρα και κάντε τη μεταγραφή αργότερα, όποτε θέλετε, αντί σε πραγματικό χρόνο. Οι ηχογραφήσεις αποθηκεύονται στο τηλέφωνό σας και τις ανεβάζετε για να δημιουργηθούν συνομιλίες.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Προς το παρόν λειτουργεί με συσκευές Omi και Limitless. Ο ήχος παραμένει στο τηλέφωνό σας μέχρι να επιλέξετε να τον ανεβάσετε.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Ο αποθηκευτικός χώρος του τηλεφώνου σας τελειώνει, γι\' αυτό η ηχογράφηση είναι σε παύση. Ελευθερώστε χώρο ή ανεβάστε τις ηχογραφήσεις σας και θα συνεχιστεί αυτόματα.';
+
+  @override
+  String get recordingMode => 'Λειτουργία εγγραφής';
+
+  @override
+  String get captureModeLater => 'Αργότερα';
+
+  @override
+  String get captureModeLiveDescription => 'Μεταγραφή σε πραγματικό χρόνο καθώς μιλάτε.';
+
+  @override
+  String get captureModeLaterDescription => 'Αποθηκεύστε τον ήχο τώρα και μεταγράψτε τον όποτε θέλετε.';
+
+  @override
+  String get unmute => 'Άρση σίγασης';
+
+  @override
+  String get newRecording => 'Νέα εγγραφή';
+
+  @override
+  String get transcribeLaterPaused => 'Σε παύση — δεν γίνεται εγγραφή ήχου';
+
+  @override
+  String get memoryThisDevice => 'Αυτή η συσκευή';
+
+  @override
+  String get memoryThisIphone => 'Αυτό το iPhone';
+
+  @override
+  String get memoryThisPhone => 'Αυτό το τηλέφωνο';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Πώς να χρησιμοποιήσετε το Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Μιλήστε στο Omi σας';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Πείτε λίγες λέξεις και δείτε τες να εμφανίζονται σε πραγματικό χρόνο';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Μπράβο!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Αρχίστε να μιλάτε...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Κάντε μια ερώτηση στο Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Πατήστε το κουμπί μία φορά, πείτε την ερώτησή σας και πατήστε ξανά όταν τελειώσετε';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Επεξεργασία της ερώτησής σας...';
+
+  @override
+  String get deviceOnboardingListening => 'Ακούει...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Απενεργοποίηση';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Ενεργοποίηση';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Κρατήστε το κουμπί για 3 δευτερόλεπτα';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Πατήστε το κουμπί για να την ενεργοποιήσετε ξανά';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Κρατήστε το κουμπί σταθερά μέχρι να σβήσει η λυχνία';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Συνδεδεμένη';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Συνδέθηκε!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Αποσυνδεδεμένη';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Απενεργοποίηση...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Προσαρμογή Διπλού Πατήματος';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Τερματισμός Συνομιλίας';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Αποθήκευση και τερματισμός τρέχουσας συνομιλίας';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Σίγαση / Κατάργηση σίγασης';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Ενεργοποίηση ή απενεργοποίηση μικροφώνου';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Επισήμανση Τρέχουσας Συνομιλίας';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Επισήμανση συνομιλίας ως σημαντικής';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Αυτό ήταν μονό πάτημα — δοκιμάστε να πατήσετε δύο φορές γρήγορα!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Δοκιμάστε το τώρα! Πατήστε δύο φορές το Omi σας';
+
+  @override
+  String get deviceOnboardingContinue => 'Συνέχεια';
+
+  @override
+  String get deviceOnboardingFinish => 'Τέλος';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Γνωρίστε το Omi σας';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Μια γρήγορη, πρακτική περιήγηση σε όλα όσα μπορεί να κάνει το Omi σας.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Περίπου 1 λεπτό';
+
+  @override
+  String get jumpToLatestMessage => 'Μετάβαση στο πιο πρόσφατο μήνυμα';
+
+  @override
+  String get latest => 'Πρόσφατο';
+
+  @override
+  String get flashFirmware => 'Εγκατάσταση firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Εγγραφή στο μενταγιόν';
+
+  @override
+  String get pendantRecordingNote =>
+      'Το μενταγιόν σας ηχογραφεί μόνο του. Οι εγγραφές συγχρονίζονται με το τηλέφωνό σας όσο η εφαρμογή είναι ανοιχτή.';
+
+  @override
+  String get pendantSyncingRecordings => 'Συγχρονισμός εγγραφών από το μενταγιόν σας…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes λεπτά αποθηκευμένα';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Ο αποθηκευτικός χώρος του μενταγιόν είναι σχεδόν πλήρης — κρατήστε την εφαρμογή ανοιχτή για συγχρονισμό.';
 }

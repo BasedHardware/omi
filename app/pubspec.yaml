@@ -3,7 +3,7 @@ description: A new Flutter project.
 
 publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
-version: 1.0.538+900
+version: 1.0.542+980
 
 
 environment:
@@ -55,16 +55,9 @@ dependencies:
   # Logging
   talker_flutter: 5.0.0
 
-  # Devices
-  frame_sdk:
-    git:
-      url: https://github.com/mdmohsin7/frame-sdk-flutter.git
-      ref: master
-
   # Utils
   pool: ^1.5.1
   collection: ^1.19.1
-  flutter_blue_plus: 2.1.0
   http: ^1.4.0
   pdf: ^3.11.0
   intl: 0.20.2
@@ -105,7 +98,6 @@ dependencies:
     git:
       url: https://github.com/mdmohsin7/opus_dart.git
       ref: dev
-  growthbook_sdk_flutter: 3.9.2
   flutter_timezone: 3.0.1
   cached_network_image: 3.4.1
   map_launcher: ^3.5.0
@@ -125,7 +117,7 @@ dependencies:
   flutter_svg: ^2.0.16
   file_picker: 8.3.2
   photo_view: ^0.15.0
-  font_awesome_flutter: ^10.8.0
+  font_awesome_flutter: ^11.0.0
   in_app_review: ^2.0.9
   fl_chart: ^0.68.0
   image: ^4.3.0
@@ -133,7 +125,7 @@ dependencies:
   whisper_flutter_new:
     git:
       url: https://github.com/BasedHardware/whisper_flutter_new.git
-      ref: 684fb43710dd4de5538ac2da7d0b1fa405363212
+      ref: af6b457cca4cdd6c97cc2dfa8557333ee09c81f1
   disk_space_2: ^1.0.11
   pasteboard: ^0.4.0
   vector_math: ^2.2.0
@@ -187,7 +179,6 @@ flutter:
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml
-    - assets/device_assets/frame_lib.lua
   fonts:
     - family: "SF Pro Display"
       fonts:

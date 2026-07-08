@@ -429,6 +429,12 @@ class AppLocalizationsFa extends AppLocalizations {
   String get offlineSync => 'همگام‌سازی آفلاین';
 
   @override
+  String get autoSync => 'همگام‌سازی خودکار';
+
+  @override
+  String get autoSyncDescription => 'هنگام اتصال دستگاه، ضبط‌های آفلاین به‌طور خودکار همگام‌سازی شوند';
+
+  @override
   String get deviceSettings => 'تنظیمات دستگاه';
 
   @override
@@ -4690,10 +4696,7 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription و $triggerDescription.';
   }
 
@@ -7766,6 +7769,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get viewAll => 'مشاهده همه';
 
   @override
+  String get expand => 'گسترش';
+
+  @override
   String get addTask => 'افزودن کار';
 
   @override
@@ -9302,6 +9308,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get backgroundModeNote => 'فعلاً فقط با دستگاه‌های Omi کار می‌کند و به‌طور مداوم در حال بهبود است.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'حالت پس‌زمینه در دسترس نیست چون هیچ دستگاه سازگاری متصل نیست. برای استفاده از این ویژگی، یک دستگاه Omi، OpenGlass یا Friend Pendant وصل کنید.';
+
+  @override
   String get regenerateRecap => 'بازسازی خلاصه';
 
   @override
@@ -9315,4 +9325,189 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'هیچ مکالمه‌ای برای خلاصه‌سازی این روز وجود ندارد.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'همگام‌سازی از رونویسی Omi استفاده می‌کند';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.';
+
+  @override
+  String get transcribeLaterTitle => 'رونویسی در زمان دلخواه';
+
+  @override
+  String get transcribeLaterDescription =>
+      'صدا را همین حالا ضبط کنید و به‌جای رونویسی زنده، هر وقت خواستید آن را رونویسی کنید. ضبط‌ها روی گوشی شما ذخیره می‌شوند و سپس با بارگذاری آن‌ها گفت‌وگوها ساخته می‌شوند.';
+
+  @override
+  String get transcribeLaterNote =>
+      'فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.';
+
+  @override
+  String get recordingMode => 'حالت ضبط';
+
+  @override
+  String get captureModeLater => 'بعداً';
+
+  @override
+  String get captureModeLiveDescription => 'رونویسی همزمان هنگام صحبت کردن.';
+
+  @override
+  String get captureModeLaterDescription => 'صدا را اکنون ذخیره کنید و هر وقت خواستید رونویسی کنید.';
+
+  @override
+  String get unmute => 'باصدا کردن';
+
+  @override
+  String get newRecording => 'ضبط جدید';
+
+  @override
+  String get transcribeLaterPaused => 'متوقف شد — صدا ضبط نمی‌شود';
+
+  @override
+  String get memoryThisDevice => 'این دستگاه';
+
+  @override
+  String get memoryThisIphone => 'این iPhone';
+
+  @override
+  String get memoryThisPhone => 'این تلفن';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'نحوه استفاده از Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'با Omi خود صحبت کنید';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'چند کلمه بگویید و ظاهر شدن آن‌ها را به‌صورت لحظه‌ای ببینید';
+
+  @override
+  String get deviceOnboardingGoodJob => 'آفرین!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'شروع به صحبت کنید...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'از Omi سؤالی بپرسید';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'یک‌بار دکمه را فشار دهید، سؤالتان را بگویید و پس از پایان دوباره فشار دهید';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'در حال پردازش سؤال شما...';
+
+  @override
+  String get deviceOnboardingListening => 'در حال شنیدن...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'خاموش کردن';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'روشن کردن';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'دکمه را ۳ ثانیه نگه دارید';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'برای روشن کردن دوباره، دکمه را فشار دهید';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'دکمه را محکم نگه دارید تا چراغ خاموش شود';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'متصل';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'متصل شد!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'قطع شد';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'در حال خاموش شدن...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'سفارشی‌سازی دو ضربه';
+
+  @override
+  String get deviceOnboardingEndConversation => 'پایان گفتگو';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'ذخیره و پایان گفتگوی فعلی';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'بی‌صدا / باصدا';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'روشن یا خاموش کردن میکروفون';
+
+  @override
+  String get deviceOnboardingStarConversation => 'ستاره‌دار کردن گفتگوی جاری';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'علامت‌گذاری گفتگو به‌عنوان مهم';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'آن یک ضربه بود — دو بار سریع ضربه بزنید!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'همین حالا امتحان کنید! روی Omi خود دو ضربه بزنید';
+
+  @override
+  String get deviceOnboardingContinue => 'ادامه';
+
+  @override
+  String get deviceOnboardingFinish => 'پایان';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'با Omi خود آشنا شوید';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'یک گشت سریع و کاربردی در همه‌ی کارهایی که Omi شما می‌تواند انجام دهد.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'حدود ۱ دقیقه';
+
+  @override
+  String get jumpToLatestMessage => 'پرش به آخرین پیام';
+
+  @override
+  String get latest => 'آخرین';
+
+  @override
+  String get flashFirmware => 'فلش کردن میان‌افزار';
+
+  @override
+  String get pendantRecordingTitle => 'در حال ضبط روی آویز';
+
+  @override
+  String get pendantRecordingNote =>
+      'آویز شما به‌صورت مستقل ضبط می‌کند. تا وقتی برنامه باز است، ضبط‌ها با گوشی شما همگام‌سازی می‌شوند.';
+
+  @override
+  String get pendantSyncingRecordings => 'در حال همگام‌سازی ضبط‌ها از آویز شما…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes دقیقه ذخیره شده';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید.';
 }

@@ -4,12 +4,17 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'desktop/Backend-Rust/**'
+      - 'desktop/macos/Backend-Rust/**'
   workflow_dispatch:
 
 env:
   SERVICE: desktop-backend
   REGION: us-central1
+  DEFAULT_DESKTOP_BACKEND_BASE_API_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
+
+concurrency:
+  group: desktop-backend-auto-dev
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -39,13 +44,47 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/Backend-Rust/google-credentials.json
+        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
+
+      - name: Resolve desktop OAuth base API URL
+        id: desktop-base-api-url
+        env:
+          DESKTOP_BACKEND_BASE_API_URL: ${{ vars.DESKTOP_BACKEND_BASE_API_URL }}
+        run: |
+          set -euo pipefail
+          BASE_API_URL="${DESKTOP_BACKEND_BASE_API_URL//[[:space:]]/}"
+          if [ -z "$BASE_API_URL" ]; then
+            BASE_API_URL="$DEFAULT_DESKTOP_BACKEND_BASE_API_URL"
+          fi
+          if [ -z "$BASE_API_URL" ]; then
+            echo "Desktop OAuth BASE_API_URL could not be resolved" >&2
+            exit 1
+          fi
+          echo "base_api_url=$BASE_API_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Validate desktop Calendar API key secret
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          gcloud secrets versions access latest \
+            --project="$PROJECT_ID" \
+            --secret=DESKTOP_GOOGLE_CALENDAR_API_KEY > /tmp/desktop-google-calendar-api-key
+          python3 - <<'PY'
+          from pathlib import Path
+
+          value = Path("/tmp/desktop-google-calendar-api-key").read_bytes()
+          if value.endswith(b"\n"):
+              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY must not include a trailing newline")
+          if len(value) != 39 or not value.startswith(b"AIza"):
+              raise SystemExit("DESKTOP_GOOGLE_CALENDAR_API_KEY does not look like a Google API key")
+          PY
 
       - name: Build and Push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: ./desktop/Backend-Rust
-          file: ./desktop/Backend-Rust/Dockerfile
+          context: ./desktop/macos/Backend-Rust
+          file: ./desktop/macos/Backend-Rust/Dockerfile
           push: true
           tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
@@ -61,6 +100,7 @@ jobs:
           env_vars: |
             FIREBASE_PROJECT_ID=based-hardware
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+            BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
           secrets: |
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
@@ -75,6 +115,44 @@ jobs:
             ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
             DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
             GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
+
+      - name: Route traffic to deployed desktop-backend revision
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          REVISION="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format='value(status.latestCreatedRevisionName)')"
+          if [ -z "$REVISION" ]; then
+            echo "Could not determine latest desktop-backend revision" >&2
+            exit 1
+          fi
+          gcloud run services update-traffic "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --to-revisions="$REVISION=100" \
+            --quiet
+          TRAFFIC_JSON="$(gcloud run services describe "$SERVICE" \
+            --project="$PROJECT_ID" \
+            --region="$REGION" \
+            --format=json)"
+          SERVING_REVISION="$(TRAFFIC_JSON="$TRAFFIC_JSON" python3 - <<'PY'
+          import json
+          import os
+
+          service = json.loads(os.environ["TRAFFIC_JSON"])
+          for target in service.get("status", {}).get("traffic", []):
+              if target.get("percent") == 100:
+                  print(target.get("revisionName", ""))
+                  break
+          PY
+          )"
+          if [ "$SERVING_REVISION" != "$REVISION" ]; then
+            echo "desktop-backend traffic is serving $SERVING_REVISION, expected $REVISION" >&2
+            exit 1
+          fi
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"

@@ -2,13 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/logger.dart';
 import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/playback_state.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
@@ -26,7 +28,6 @@ class WalItemDetailPage extends StatefulWidget {
 class _WalItemDetailPageState extends State<WalItemDetailPage> {
   List<double>? _waveformData;
   bool _isProcessingWaveform = false;
-  bool _isSharing = false;
   SyncProvider? _syncProvider;
 
   /// Returns true if WAL is still on device storage (SD card or flash page) and needs transfer
@@ -190,7 +191,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: storageColor.withOpacity(0.15),
+                      color: storageColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -221,7 +222,10 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       Container(
                         width: 120,
                         height: 120,
-                        decoration: BoxDecoration(color: Colors.deepPurple.withOpacity(0.1), shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurple.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,
@@ -356,7 +360,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.15),
+                      color: Colors.grey.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
@@ -413,7 +417,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _buildControlButton(
-                    icon: Icons.replay_10,
+                    icon: FontAwesomeIcons.backward,
                     onPressed: playbackState.canPlayOrShare && isPlaying
                         ? () => _handleSkipBackward(context.read<SyncProvider>())
                         : null,
@@ -421,8 +425,8 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   ),
                   _buildControlButton(
                     icon: playbackState.isProcessing
-                        ? Icons.hourglass_empty
-                        : (isPlaying ? Icons.pause : Icons.play_arrow),
+                        ? FontAwesomeIcons.hourglass
+                        : (isPlaying ? FontAwesomeIcons.pause : FontAwesomeIcons.play),
                     size: 80,
                     backgroundColor: Theme.of(context).colorScheme.secondary,
                     iconColor: Colors.white,
@@ -431,7 +435,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         : null,
                   ),
                   _buildControlButton(
-                    icon: Icons.forward_10,
+                    icon: FontAwesomeIcons.forward,
                     onPressed: playbackState.canPlayOrShare && isPlaying
                         ? () => _handleSkipForward(context.read<SyncProvider>())
                         : null,
@@ -456,7 +460,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Widget _buildControlButton({
-    required IconData icon,
+    required FaIconData icon,
     VoidCallback? onPressed,
     double size = 48,
     Color? backgroundColor,
@@ -471,7 +475,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: Icon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
+        icon: FaIcon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
       ),
     );
   }
@@ -553,7 +557,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
               ),
             ] else ...[
               ListTile(
-                leading: const FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
+                leading: FaIcon(FontAwesomeIcons.share, color: Colors.white, size: 18),
                 title: Text(context.l10n.shareRecording, style: Theme.of(sheetContext).textTheme.bodyMedium),
                 onTap: () {
                   Navigator.pop(sheetContext);
@@ -599,12 +603,12 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   }
 
   Future<void> _handleShare(SyncProvider syncProvider) async {
-    setState(() => _isSharing = true);
     try {
       await syncProvider.shareWalAsWav(widget.wal);
-    } finally {
+    } catch (e) {
+      Logger.error('AudioPlayerUtils: Failed to share WAL audio: $e');
       if (mounted) {
-        setState(() => _isSharing = false);
+        AppSnackbar.showSnackbarError(context.l10n.audioPlaybackFailed);
       }
     }
   }

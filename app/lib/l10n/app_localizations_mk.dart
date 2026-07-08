@@ -431,6 +431,12 @@ class AppLocalizationsMk extends AppLocalizations {
   String get offlineSync => 'Синхронизирање без интернет';
 
   @override
+  String get autoSync => 'Автоматска синхронизација';
+
+  @override
+  String get autoSyncDescription => 'Автоматски синхронизирај офлајн снимки кога ќе се поврзе уредот';
+
+  @override
   String get deviceSettings => 'Поставки на уред';
 
   @override
@@ -4710,10 +4716,7 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription и е $triggerDescription.';
   }
 
@@ -7805,6 +7808,9 @@ class AppLocalizationsMk extends AppLocalizations {
   String get viewAll => 'Преглед на сите';
 
   @override
+  String get expand => 'Прошири';
+
+  @override
   String get addTask => 'Додај задача';
 
   @override
@@ -9349,6 +9355,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get backgroundModeNote => 'Засега работи само со уреди Omi и постојано се подобрува.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Режимот во заднина не е достапен бидејќи не е поврзан компатибилен уред. Поврзете Omi, OpenGlass или Friend Pendant уред за да ја користите оваа функција.';
+
+  @override
   String get regenerateRecap => 'Регенерирај резиме';
 
   @override
@@ -9362,4 +9372,191 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Нема разговори за сумирање за овој ден.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Синхронизацијата користи транскрипција од Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Користите сопствен провајдер за транскрипција. Синхронизирањето на овие снимки ги транскрибира на серверите на Omi и се сметаат во лимитот за транскрипција на вашиот план.';
+
+  @override
+  String get transcribeLaterTitle => 'Транскрибирај подоцна';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Снимај аудио сега, а транскрибирај го подоцна по потреба наместо во живо. Снимките се чуваат на твојот телефон, а потоа ги прикачуваш за да создадеш разговори.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Засега работи со Omi и Limitless уреди. Аудиото останува на твојот телефон сè додека сам не одлучиш да го прикачиш.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'На телефонот ти снема простор, па снимањето е паузирано. Ослободи простор или прикачи ги снимките и тогаш ќе продолжи автоматски.';
+
+  @override
+  String get recordingMode => 'Режим на снимање';
+
+  @override
+  String get captureModeLater => 'Подоцна';
+
+  @override
+  String get captureModeLiveDescription => 'Транскрибирајте во реално време додека зборувате.';
+
+  @override
+  String get captureModeLaterDescription => 'Зачувајте го звукот сега и транскрибирајте кога сакате.';
+
+  @override
+  String get unmute => 'Вклучи звук';
+
+  @override
+  String get newRecording => 'Ново снимање';
+
+  @override
+  String get transcribeLaterPaused => 'Паузирано — аудиото не се снима';
+
+  @override
+  String get memoryThisDevice => 'Овој уред';
+
+  @override
+  String get memoryThisIphone => 'Овој iPhone';
+
+  @override
+  String get memoryThisPhone => 'Овој телефон';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Како да го користите Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Зборувајте во вашиот Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Кажете неколку зборови и гледајте како се појавуваат во реално време';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Браво!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Почнете да зборувате...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Поставете прашање на Omi';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Притиснете го копчето еднаш, изговорете го прашањето, па притиснете повторно кога ќе завршите';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Се обработува вашето прашање...';
+
+  @override
+  String get deviceOnboardingListening => 'Слуша...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Исклучи';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Вклучи';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Држете го копчето 3 секунди';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Притиснете го копчето за да го вклучите повторно';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Држете го копчето цврсто додека светлото не се изгасне';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Поврзано';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Поврзано!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Исклучено';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Се исклучува...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Прилагодете го двојниот допир';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Заврши разговор';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Зачувај и заврши го тековниот разговор';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Исклучи / вклучи звук';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Вклучи или исклучи го микрофонот';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Означи го разговорот со ѕвезда';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Означи го разговорот како важен';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Тоа беше еден допир — обидете се да допрете двапати брзо!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Обидете се сега! Допрете двапати на вашиот Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Продолжи';
+
+  @override
+  String get deviceOnboardingFinish => 'Заврши';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Запознајте се со вашиот Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Брза, практична прошетка низ сè што може да направи вашиот Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Околу 1 минута';
+
+  @override
+  String get jumpToLatestMessage => 'Оди до последната порака';
+
+  @override
+  String get latest => 'Најново';
+
+  @override
+  String get flashFirmware => 'Инсталирај фирмвер';
+
+  @override
+  String get pendantRecordingTitle => 'Снимање на приврзокот';
+
+  @override
+  String get pendantRecordingNote =>
+      'Твојот приврзок снима самостојно. Снимките се синхронизираат со телефонот додека апликацијата е отворена.';
+
+  @override
+  String get pendantSyncingRecordings => 'Синхронизирање снимки од твојот приврзок…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes мин зачувано';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Меморијата на приврзокот е речиси полна — држи ја апликацијата отворена за синхронизација.';
 }

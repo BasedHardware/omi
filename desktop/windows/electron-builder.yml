@@ -1,0 +1,87 @@
+appId: com.omiwindows.app
+productName: Omi for Windows
+directories:
+  buildResources: build
+files:
+  # Explicit default; positive patterns below would otherwise replace it.
+  - '**/*'
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!electron.vite.config.{js,ts,mjs,cjs}'
+  - '!{.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
+  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - '!{tailwind.config.ts,postcss.config.js}'
+  - '!resources/win-ocr-helper/*.pdb'
+  - '!resources/win-automation-helper/*.pdb'
+asarUnpack:
+  - resources/**
+  # koffi loads its native .node at runtime, resolved relative to its own package
+  # dir — it must live outside the asar archive or the foreground monitor fails.
+  - node_modules/koffi/**
+  # kgWorker.js is loaded via new Worker(path) which bypasses Electron's asar
+  # virtual-fs patch — it must be a real file on disk.
+  - out/main/kgWorker.js
+win:
+  executableName: omi-windows
+  target:
+    - target: nsis
+      arch: [x64]
+  # --- CODE SIGNING (unsigned today → Windows SmartScreen warns "unknown publisher") ---
+  # Signing requires a certificate that must be procured separately; until one is
+  # wired in, leave this commented so unsigned builds still succeed. Recommended:
+  # Azure Trusted Signing (no hardware token, CI-friendly). Once you have an
+  # account, uncomment and set the values (store secrets in CI, never here):
+  #
+  # azureSignOptions:
+  #   publisherName: "Based Hardware"
+  #   endpoint: "https://<region>.codesigning.azure.net/"
+  #   certificateProfileName: "<profile>"
+  #   codeSigningAccountName: "<account>"
+  #
+  # Traditional OV/EV cert alternative:
+  # signtoolOptions:
+  #   certificateSubjectName: "Based Hardware"   # EV cert in the machine store
+  #   # or: certificateFile / certificatePassword via CSC_LINK / CSC_KEY_PASSWORD env
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: ${productName}-Setup-${version}.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+mac:
+  entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    - NSCameraUsageDescription: Application requests access to the device's camera.
+    - NSMicrophoneUsageDescription: Application requests access to the device's microphone.
+    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
+    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}.${ext}
+linux:
+  target:
+    - AppImage
+    - snap
+    - deb
+  maintainer: Based Hardware <team@basedhardware.com>
+  category: Utility
+appImage:
+  artifactName: ${name}-${version}.${ext}
+npmRebuild: false
+
+# --- AUTO-UPDATE (NOT configured today) ---
+# Finding: the Windows app has no updater — `electron-updater` is not a
+# dependency, there is no `autoUpdater` wiring in src/main, and no `publish`
+# target. Shipped users cannot receive fixes without a manual re-download.
+# To enable (do this deliberately, then test on a real release channel):
+#   1. pnpm add electron-updater
+#   2. wire autoUpdater.checkForUpdatesAndNotify() in src/main (guarded to
+#      packaged builds), with a NSIS differential-update-friendly flow.
+#   3. uncomment and point this at your release host:
+# publish:
+#   - provider: github
+#     owner: BasedHardware
+#     repo: omi

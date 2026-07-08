@@ -17,19 +17,48 @@ import tempfile
 import threading
 import wave as _wave
 from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List, Optional, cast
 
 import httpx
 import numpy as np
-from langdetect import detect as langdetect_detect
+import torch  # type: ignore[reportMissingImports]
+from langdetect import detect as langdetect_detect  # type: ignore[reportUnknownVariableType]  # langdetect ships no py.typed marker
 from langdetect.lang_detect_exception import LangDetectException
-from scipy.spatial.distance import cdist
-from transcribe import transcribe_file, _stream_model as _asr_model, INFERENCE_MODE as _INFERENCE_MODE
+from speaker_math import cosine_distance
+import transcribe as _transcribe_mod
 
 try:
-    from pyannote.audio import Model as _PyannoteModel, Inference as _PyannoteInference
+    from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig  # type: ignore[reportMissingImports,reportUnknownVariableType]
+    from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses  # type: ignore[reportMissingImports,reportUnknownVariableType]
+    from nemo.collections.asr.parts.utils.streaming_utils import (  # type: ignore[reportMissingImports]
+        ContextSize,  # type: ignore[reportUnknownVariableType]
+        StreamingBatchedAudioBuffer,  # type: ignore[reportUnknownVariableType]
+    )
+    from omegaconf import open_dict
 except ImportError:
-    _PyannoteModel = None
-    _PyannoteInference = None
+    RNNTDecodingConfig = None
+    batched_hyps_to_hypotheses = None
+    ContextSize = None
+    StreamingBatchedAudioBuffer = None
+    open_dict = None
+# NeMo streaming helpers come from optional, untyped imports. Type-erase to Any
+# so downstream call sites are not flagged as Unknown/Optional-call boundaries.
+_RNNTDecodingConfig: Any = cast(Any, RNNTDecodingConfig)
+_batched_hyps_to_hypotheses: Any = cast(Any, batched_hyps_to_hypotheses)
+_ContextSize: Any = cast(Any, ContextSize)
+_StreamingBatchedAudioBuffer: Any = cast(Any, StreamingBatchedAudioBuffer)
+_open_dict: Any = cast(Any, open_dict)
+# parakeet/transcribe is not enrolled in strict mode; its private/untyped
+# symbols are imported with explicit type erasure to Any below.
+from transcribe import (
+    transcribe_file,
+    _stream_model as _asr_model_raw,  # type: ignore[reportPrivateUsage,reportUnknownVariableType]
+    INFERENCE_MODE as _INFERENCE_MODE,
+    has_builtin_embedding,
+    wav_bytes_to_waveform,
+)
+
+_asr_model: Any = cast(Any, _asr_model_raw)
 
 logger = logging.getLogger(__name__)
 
@@ -45,83 +74,46 @@ SPEAKER_MATCH_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_THRESHOLD", "0.45"))
 SPEAKER_EMBEDDING_URL = os.getenv("HOSTED_SPEAKER_EMBEDDING_API_URL", "")
 MIN_EMBEDDING_AUDIO_S = 0.5
 
-_embedding_model = None
-_embedding_lock = threading.Lock()
 
-
-def _get_builtin_embedding_model():
-    global _embedding_model
-    if _embedding_model is not None:
-        return _embedding_model
-    with _embedding_lock:
-        if _embedding_model is not None:
-            return _embedding_model
-        try:
-            if _PyannoteModel is None or _PyannoteInference is None:
-                logger.warning("pyannote.audio not installed, built-in embedding unavailable")
-                return None
-            model = _PyannoteModel.from_pretrained(
-                "pyannote/wespeaker-voxceleb-resnet34-LM", token=os.getenv("HUGGINGFACE_TOKEN")
-            )
-            inference = _PyannoteInference(model, window="whole")
-            if _torch is not None:
-                device = _torch.device("cuda" if _torch.cuda.is_available() else "cpu")
-                inference.to(device)
-            _embedding_model = inference
-            logger.info("Built-in speaker embedding model loaded (wespeaker-voxceleb-resnet34-LM)")
-            return _embedding_model
-        except Exception as e:
-            logger.warning(f"Could not load built-in embedding model: {e}")
-            return None
-
-
-_vad_model = None
+_vad_model: Any = None
 _vad_lock = threading.Lock()
 _asr_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="parakeet_asr")
-_streaming_import_error_logged = False
 _rnnt_model_initialized = False
 
-try:
-    import torch
-
-    _torch = torch
-except ImportError:
-    _torch = None
-
-try:
-    import torchaudio
-except ImportError:
-    torchaudio = None
+_torch: Any = torch
 
 
-def _make_divisible_by(num, factor: int) -> int:
+def _make_divisible_by(num: int, factor: int) -> int:
     return (num // factor) * factor
 
 
-def _cfg_get(cfg, path: str, default=None):
-    cur = cfg
+def _cfg_get(cfg: Any, path: str, default: Any = None) -> Any:
+    cur: Any = cfg
     for part in path.split("."):
         if cur is None:
             return default
         if isinstance(cur, dict):
-            cur = cur.get(part, default)
+            cur = cast(Dict[Any, Any], cur).get(part, default)
         else:
             cur = getattr(cur, part, default)
     return cur
 
 
-def _cfg_set(cfg, path: str, value):
-    cur = cfg
+def _cfg_set(cfg: Any, path: str, value: Any) -> None:
+    cur: Any = cfg
     parts = path.split(".")
     for part in parts[:-1]:
-        cur = cur[part] if isinstance(cur, dict) else getattr(cur, part)
+        if isinstance(cur, dict):
+            cur = cast(Dict[Any, Any], cur)[part]
+        else:
+            cur = getattr(cur, part)
     if isinstance(cur, dict):
-        cur[parts[-1]] = value
+        cast(Dict[Any, Any], cur)[parts[-1]] = value
     else:
         setattr(cur, parts[-1], value)
 
 
-def warmup_rnnt_decoder(sample_rate: int = 16000):
+def warmup_rnnt_decoder(sample_rate: int = 16000) -> None:
     """Run a dummy chunk through the RNNT decoder to pre-compile CUDA kernels.
 
     Call once at service startup to eliminate 15-20s cold-start latency
@@ -131,9 +123,8 @@ def warmup_rnnt_decoder(sample_rate: int = 16000):
         logger.info("RNNT warmup skipped (no stream model or NIM mode)")
         return
 
-    if not hasattr(_asr_model, 'decoding') or not hasattr(
-        getattr(_asr_model.decoding, 'decoding', None), 'decoding_computer'
-    ):
+    asr_decoding = getattr(_asr_model, "decoding", None)
+    if not hasattr(_asr_model, 'decoding') or not hasattr(getattr(asr_decoding, 'decoding', None), 'decoding_computer'):
         logger.info("RNNT warmup skipped (model does not support RNNT streaming)")
         return
 
@@ -163,25 +154,35 @@ class _NemoRNNTStreamingDecoder:
 
     def __init__(
         self,
-        model,
+        model: Any,
         sample_rate: int,
         chunk_seconds: float,
         left_context_seconds: float,
         right_context_seconds: float,
-    ):
-        self._model = model
-        self._sr = sample_rate
-        self._chunk_seconds = chunk_seconds
-        self._left_context_seconds = left_context_seconds
-        self._right_context_seconds = right_context_seconds
-        self._initialized = False
-        self._started = False
-        self._state = None
-        self._current_batched_hyps = None
-        self._text = ""
+    ) -> None:
+        self._model: Any = model
+        self._sr: int = sample_rate
+        self._chunk_seconds: float = chunk_seconds
+        self._left_context_seconds: float = left_context_seconds
+        self._right_context_seconds: float = right_context_seconds
+        self._initialized: bool = False
+        self._started: bool = False
+        self._state: Any = None
+        self._current_batched_hyps: Any = None
+        self._text: str = ""
+        # NeMo streaming helpers captured at construction time. Typed as Any
+        # because they originate from optional, untyped NeMo imports.
+        self._batched_hyps_to_hypotheses: Any = _batched_hyps_to_hypotheses
+        self._ContextSize: Any = _ContextSize
+        self._StreamingBatchedAudioBuffer: Any = _StreamingBatchedAudioBuffer
+        self._encoder_frame2audio_samples: int = 0
+        self._buffer: Any = None
+        self._context_samples: Any = None
+        self._device: Any = None
+        self._decoding_computer: Any = None
 
-    def _ensure_initialized(self):
-        global _streaming_import_error_logged, _rnnt_model_initialized
+    def _ensure_initialized(self) -> None:
+        global _rnnt_model_initialized
 
         if self._initialized:
             return
@@ -189,23 +190,14 @@ class _NemoRNNTStreamingDecoder:
         if _torch is None:
             raise RuntimeError("torch is required for NeMo RNNT streaming")
 
-        try:
-            from omegaconf import open_dict
+        if RNNTDecodingConfig is None:
+            raise RuntimeError("NeMo RNNT streaming utilities not installed")
 
-            from nemo.collections.asr.parts.submodules.rnnt_decoding import RNNTDecodingConfig
-            from nemo.collections.asr.parts.utils.rnnt_utils import batched_hyps_to_hypotheses
-            from nemo.collections.asr.parts.utils.streaming_utils import ContextSize, StreamingBatchedAudioBuffer
-        except Exception as e:
-            if not _streaming_import_error_logged:
-                logger.warning(f"NeMo RNNT streaming utilities unavailable, using batch fallback: {e}")
-                _streaming_import_error_logged = True
-            raise
+        self._batched_hyps_to_hypotheses = _batched_hyps_to_hypotheses
+        self._ContextSize = _ContextSize
+        self._StreamingBatchedAudioBuffer = _StreamingBatchedAudioBuffer
 
-        self._batched_hyps_to_hypotheses = batched_hyps_to_hypotheses
-        self._ContextSize = ContextSize
-        self._StreamingBatchedAudioBuffer = StreamingBatchedAudioBuffer
-
-        model = self._model
+        model: Any = self._model
 
         if not _rnnt_model_initialized:
             model.freeze() if hasattr(model, "freeze") else None
@@ -213,9 +205,9 @@ class _NemoRNNTStreamingDecoder:
 
             decoding_cfg = copy.deepcopy(_cfg_get(getattr(model, "cfg", None), "decoding", None))
             if decoding_cfg is None:
-                decoding_cfg = RNNTDecodingConfig()
+                decoding_cfg = _RNNTDecodingConfig()
 
-            with open_dict(decoding_cfg):
+            with _open_dict(decoding_cfg):
                 _cfg_set(decoding_cfg, "strategy", "greedy_batch")
                 _cfg_set(decoding_cfg, "greedy.loop_labels", True)
                 _cfg_set(decoding_cfg, "greedy.preserve_alignments", False)
@@ -248,12 +240,12 @@ class _NemoRNNTStreamingDecoder:
         )
         self._encoder_frame2audio_samples = features_frame2audio_samples * encoder_subsampling_factor
 
-        context_encoder_frames = ContextSize(
+        context_encoder_frames = _ContextSize(
             left=int(self._left_context_seconds * features_per_sec / encoder_subsampling_factor),
             chunk=int(self._chunk_seconds * features_per_sec / encoder_subsampling_factor),
             right=int(self._right_context_seconds * features_per_sec / encoder_subsampling_factor),
         )
-        self._context_samples = ContextSize(
+        self._context_samples = _ContextSize(
             left=context_encoder_frames.left * encoder_subsampling_factor * features_frame2audio_samples,
             chunk=context_encoder_frames.chunk * encoder_subsampling_factor * features_frame2audio_samples,
             right=context_encoder_frames.right * encoder_subsampling_factor * features_frame2audio_samples,
@@ -273,7 +265,7 @@ class _NemoRNNTStreamingDecoder:
         self._device = getattr(model, "device", None)
         if self._device is None:
             self._device = next(model.parameters()).device
-        self._buffer = StreamingBatchedAudioBuffer(
+        self._buffer = _StreamingBatchedAudioBuffer(
             batch_size=1,
             context_samples=self._context_samples,
             dtype=_torch.float32,
@@ -292,7 +284,7 @@ class _NemoRNNTStreamingDecoder:
     def next_input_bytes(self, bytes_per_sample: int) -> int:
         self._ensure_initialized()
         if not self._started:
-            samples = self._context_samples.chunk + self._context_samples.right
+            samples: int = self._context_samples.chunk + self._context_samples.right
         else:
             samples = self._context_samples.chunk
         return samples * bytes_per_sample
@@ -336,7 +328,7 @@ class _NemoRNNTStreamingDecoder:
                 multi_biasing_ids=None,
             )
             if isinstance(decode_result, tuple):
-                chunk_batched_hyps = decode_result[0]
+                chunk_batched_hyps: Any = cast(Any, decode_result[0])
                 self._state = decode_result[1]
             else:
                 chunk_batched_hyps = decode_result
@@ -353,7 +345,7 @@ class _NemoRNNTStreamingDecoder:
             return self._text
 
 
-def _get_vad_model():
+def _get_vad_model() -> Any:
     global _vad_model
     if _vad_model is not None:
         return _vad_model
@@ -381,35 +373,40 @@ class StreamSession:
     the latest decoded text delta as a segment.
     """
 
-    def __init__(self, sample_rate: int = 16000, vad_threshold: float = None, hangover_s: float = None):
-        self._sr = sample_rate
-        self._bytes_per_sample = 2
-        self._vad_chunk_samples = 512
-        self._vad_chunk_bytes = self._vad_chunk_samples * self._bytes_per_sample
-        self._speech_threshold = vad_threshold if vad_threshold is not None else SPEECH_THRESHOLD
-        self._hangover_s = hangover_s if hangover_s is not None else HANGOVER_S
+    def __init__(
+        self,
+        sample_rate: int = 16000,
+        vad_threshold: Optional[float] = None,
+        hangover_s: Optional[float] = None,
+    ) -> None:
+        self._sr: int = sample_rate
+        self._bytes_per_sample: int = 2
+        self._vad_chunk_samples: int = 512
+        self._vad_chunk_bytes: int = self._vad_chunk_samples * self._bytes_per_sample
+        self._speech_threshold: float = vad_threshold if vad_threshold is not None else SPEECH_THRESHOLD
+        self._hangover_s: float = hangover_s if hangover_s is not None else HANGOVER_S
 
-        self._pcm_buf = bytearray()
-        self._audio_buf = bytearray()
-        self._stream_offset_s = 0.0
-        self._is_speaking = False
-        self._speech_start_s = None
-        self._silence_count = 0
-        self._hangover_chunks = int(self._hangover_s * self._sr / self._vad_chunk_samples)
-        self._chunk_bytes = int(CHUNK_SECONDS * self._sr * self._bytes_per_sample)
-        self._left_context_bytes = int(LEFT_CONTEXT_SECONDS * self._sr * self._bytes_per_sample)
-        self._pending_audio = bytearray()
-        self._asr_audio_buf = bytearray()
-        self._streaming_decoder = None
-        self._streaming_failed = False
-        self._streaming_text = ""
-        self._last_emitted_text = ""
+        self._pcm_buf: bytearray = bytearray()
+        self._audio_buf: bytearray = bytearray()
+        self._stream_offset_s: float = 0.0
+        self._is_speaking: bool = False
+        self._speech_start_s: Optional[float] = None
+        self._silence_count: int = 0
+        self._hangover_chunks: int = int(self._hangover_s * self._sr / self._vad_chunk_samples)
+        self._chunk_bytes: int = int(CHUNK_SECONDS * self._sr * self._bytes_per_sample)
+        self._left_context_bytes: int = int(LEFT_CONTEXT_SECONDS * self._sr * self._bytes_per_sample)
+        self._pending_audio: bytearray = bytearray()
+        self._asr_audio_buf: bytearray = bytearray()
+        self._streaming_decoder: Any = None
+        self._streaming_failed: bool = False
+        self._streaming_text: str = ""
+        self._last_emitted_text: str = ""
 
-        self._spk_centroids = []
-        self._spk_counts = []
-        self._last_speaker = 0
+        self._spk_centroids: List[np.ndarray[Any, Any]] = []
+        self._spk_counts: List[int] = []
+        self._last_speaker: int = 0
 
-        self._vad = _get_vad_model()
+        self._vad: Any = _get_vad_model()
 
     @staticmethod
     def _normalize_pcm16(pcm: bytes) -> bytes:
@@ -423,9 +420,9 @@ class StreamSession:
         normalized = np.clip(samples * gain, -32768, 32767).astype(np.int16)
         return normalized.tobytes()
 
-    async def feed(self, data: bytes):
+    async def feed(self, data: bytes) -> List[Dict[str, Any]]:
         self._pcm_buf.extend(data)
-        segments = []
+        segments: List[Dict[str, Any]] = []
 
         while len(self._pcm_buf) >= self._vad_chunk_bytes:
             vad_chunk = bytes(self._pcm_buf[: self._vad_chunk_bytes])
@@ -451,7 +448,7 @@ class StreamSession:
                     self._silence_count += 1
                     if self._silence_count >= self._hangover_chunks:
                         speech_dur = len(self._pending_audio) / (self._sr * self._bytes_per_sample)
-                        result = []
+                        result: List[Dict[str, Any]] = []
                         if speech_dur >= MIN_SPEECH_DURATION_S:
                             await self._drain_streaming_asr(pad_partial=True)
                             result = await self._transcribe_utterance(trim_trailing_word=True)
@@ -491,7 +488,7 @@ class StreamSession:
 
         return segments
 
-    async def flush(self):
+    async def flush(self) -> List[Dict[str, Any]]:
         if self._streaming_enabled():
             await self._drain_streaming_asr(force=True)
         if not self._pending_audio or self._speech_start_s is None:
@@ -501,7 +498,7 @@ class StreamSession:
             return []
         return await self._transcribe_utterance()
 
-    def cleanup(self):
+    def cleanup(self) -> None:
         self._pcm_buf.clear()
         self._audio_buf.clear()
         self._pending_audio.clear()
@@ -523,11 +520,10 @@ class StreamSession:
     def _streaming_enabled(self) -> bool:
         if self._streaming_failed or _INFERENCE_MODE == "nim" or _asr_model is None or _torch is None:
             return False
-        return hasattr(_asr_model, 'decoding') and hasattr(
-            getattr(_asr_model.decoding, 'decoding', None), 'decoding_computer'
-        )
+        asr_decoding = getattr(_asr_model, "decoding", None)
+        return hasattr(_asr_model, 'decoding') and hasattr(getattr(asr_decoding, 'decoding', None), 'decoding_computer')
 
-    def _get_streaming_decoder(self):
+    def _get_streaming_decoder(self) -> Any:
         if self._streaming_decoder is None:
             self._streaming_decoder = _NemoRNNTStreamingDecoder(
                 model=_asr_model,
@@ -538,7 +534,7 @@ class StreamSession:
             )
         return self._streaming_decoder
 
-    async def _drain_streaming_asr(self, force: bool = False, pad_partial: bool = False):
+    async def _drain_streaming_asr(self, force: bool = False, pad_partial: bool = False) -> None:
         if not self._streaming_enabled():
             return
         loop = asyncio.get_running_loop()
@@ -551,7 +547,7 @@ class StreamSession:
             self._streaming_text = ""
             self._asr_audio_buf.clear()
 
-    def _drain_streaming_asr_sync(self, force: bool, pad_partial: bool = False):
+    def _drain_streaming_asr_sync(self, force: bool, pad_partial: bool = False) -> None:
         decoder = self._get_streaming_decoder()
         while True:
             required_bytes = decoder.next_input_bytes(self._bytes_per_sample)
@@ -590,9 +586,9 @@ class StreamSession:
                 overlap = i + 1
         return " ".join(new_words[overlap:]).strip() if overlap > 0 else text
 
-    async def _transcribe_utterance(self, trim_trailing_word: bool = False):
+    async def _transcribe_utterance(self, trim_trailing_word: bool = False) -> List[Dict[str, Any]]:
         speech_pcm = bytes(self._pending_audio)
-        speech_start = self._speech_start_s or self._stream_offset_s
+        speech_start: float = self._speech_start_s or self._stream_offset_s
 
         if self._streaming_enabled():
             text = self._new_streaming_text_since_last_emit()
@@ -614,20 +610,22 @@ class StreamSession:
         result = await loop.run_in_executor(_asr_executor, self._transcribe_pcm, speech_pcm)
 
         text = result.get("text", "")
-        raw_segments = result.get("segments", [])
+        raw_segments_obj: object = result.get("segments", [])
+        raw_segments = cast(List[Dict[str, Any]], raw_segments_obj)
 
         if not raw_segments and text:
             dur = len(speech_pcm) / (self._sr * self._bytes_per_sample)
-            raw_segments = [{"text": text, "start": 0.0, "end": dur}]
+            new_seg: Dict[str, Any] = {"text": text, "start": 0.0, "end": dur}
+            raw_segments = [new_seg]
 
-        detected_lang = "en"
+        detected_lang: str = "en"
         if text and len(text.strip()) >= 10:
             try:
-                detected_lang = langdetect_detect(text)
+                detected_lang = cast(str, langdetect_detect(text))
             except LangDetectException:
                 pass
 
-        output = []
+        output: List[Dict[str, Any]] = []
         for seg in raw_segments:
             seg_text = (seg.get("text") or "").strip()
             if not seg_text:
@@ -655,13 +653,19 @@ class StreamSession:
 
         return output
 
-    def _build_segments(self, text, start_s, dur_s, pcm):
+    def _build_segments(
+        self,
+        text: str,
+        start_s: float,
+        dur_s: float,
+        pcm: bytes,
+    ) -> List[Dict[str, Any]]:
         if not text.strip():
             return []
-        detected_lang = "en"
+        detected_lang: str = "en"
         if len(text.strip()) >= 10:
             try:
-                detected_lang = langdetect_detect(text)
+                detected_lang = cast(str, langdetect_detect(text))
             except LangDetectException:
                 pass
         speaker = self._assign_speaker(pcm, 0, dur_s)
@@ -677,7 +681,7 @@ class StreamSession:
             }
         ]
 
-    def _transcribe_pcm(self, pcm_bytes: bytes):
+    def _transcribe_pcm(self, pcm_bytes: bytes) -> Dict[str, Any]:
         wav_bytes = self._pcm_to_wav(pcm_bytes)
         tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
         tmp.write(wav_bytes)
@@ -707,7 +711,7 @@ class StreamSession:
 
             best_i, best_dist = -1, 1e9
             for i, c in enumerate(self._spk_centroids):
-                d = float(cdist(emb, c, metric="cosine")[0, 0])
+                d = cosine_distance(emb, c)
                 if d < best_dist:
                     best_i, best_dist = i, d
 
@@ -727,31 +731,34 @@ class StreamSession:
             logger.warning(f"Speaker assignment failed: {e}")
             return f"SPEAKER_{self._last_speaker}"
 
-    def _get_embedding(self, wav_bytes: bytes):
-        model = _get_builtin_embedding_model()
-        if model is not None:
-            return self._get_embedding_builtin(wav_bytes, model)
+    def _get_embedding(self, wav_bytes: bytes) -> Optional[np.ndarray[Any, Any]]:
+        if has_builtin_embedding():
+            return self._get_embedding_builtin(wav_bytes)
         if SPEAKER_EMBEDDING_URL:
             return self._get_embedding_http(wav_bytes)
         return None
 
-    def _get_embedding_builtin(self, wav_bytes: bytes, model):
+    def _get_embedding_builtin(self, wav_bytes: bytes) -> Optional[np.ndarray[Any, Any]]:
         try:
-            buf = io.BytesIO(wav_bytes)
-            waveform, sample_rate = torchaudio.load(buf)
-            dur = waveform.shape[1] / sample_rate
+            waveform, sample_rate = wav_bytes_to_waveform(wav_bytes)
+            dur: float = waveform.shape[1] / sample_rate
             if dur < MIN_EMBEDDING_AUDIO_S:
                 return None
-            emb = model({"waveform": waveform, "sample_rate": sample_rate})
-            emb = np.array(emb, dtype=np.float32)
-            if emb.ndim == 1:
-                emb = emb.reshape(1, -1)
-            return emb
+            # transcribe._gpu_worker is a private, untyped module attribute; the
+            # has_builtin_embedding() guard above ensures it is non-None here.
+            worker: Any = cast(Any, _transcribe_mod)._gpu_worker
+            emb = worker.submit_embedding_sync({"waveform": waveform, "sample_rate": sample_rate})
+            if emb is None:
+                return None
+            emb_arr = np.array(emb, dtype=np.float32)
+            if emb_arr.ndim == 1:
+                emb_arr = emb_arr.reshape(1, -1)
+            return emb_arr
         except Exception as e:
             logger.warning(f"Built-in embedding failed: {e}")
             return None
 
-    def _get_embedding_http(self, wav_bytes: bytes):
+    def _get_embedding_http(self, wav_bytes: bytes) -> Optional[np.ndarray[Any, Any]]:
         try:
             with httpx.Client(timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0)) as client:
                 resp = client.post(
@@ -759,11 +766,11 @@ class StreamSession:
                     files={"file": ("segment.wav", wav_bytes, "audio/wav")},
                 )
             resp.raise_for_status()
-            result = resp.json()
+            result: object = resp.json()
             if isinstance(result, list):
                 emb = np.array(result, dtype=np.float32)
             else:
-                emb = np.array(result["embedding"], dtype=np.float32)
+                emb = np.array(cast(Dict[str, Any], result)["embedding"], dtype=np.float32)
             if emb.ndim == 1:
                 emb = emb.reshape(1, -1)
             return emb

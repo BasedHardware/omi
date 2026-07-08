@@ -31,7 +31,7 @@ def config_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     target = tmp_path / "config.toml"
     monkeypatch.setenv(cfg.ENV_CONFIG_PATH, str(target))
     # Clean up any inherited credentials from the user's real env.
-    for var in (cfg.ENV_API_KEY, cfg.ENV_API_BASE, cfg.ENV_PROFILE):
+    for var in (cfg.ENV_API_KEY, cfg.ENV_API_BASE, cfg.ENV_LOCAL_API_URL, cfg.ENV_LOCAL_TOKEN, cfg.ENV_PROFILE):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.delenv("NO_COLOR", raising=False)
     monkeypatch.delenv("OMI_NO_COLOR", raising=False)
@@ -59,6 +59,11 @@ def cli_runner() -> CliRunner:
     argument was removed). Tests can read ``result.stderr`` directly to assert
     the JSON-mode agent contract.
     """
+    try:
+        return CliRunner(mix_stderr=False)
+    except TypeError:
+        # Click 8.2+ removed mix_stderr and always captures stderr separately.
+        pass
     return CliRunner()
 
 

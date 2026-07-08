@@ -431,6 +431,12 @@ class AppLocalizationsHu extends AppLocalizations {
   String get offlineSync => 'Offline szinkronizálás';
 
   @override
+  String get autoSync => 'Automatikus szinkronizálás';
+
+  @override
+  String get autoSyncDescription => 'Offline felvételek automatikus szinkronizálása az eszköz csatlakozásakor';
+
+  @override
   String get deviceSettings => 'Eszköz beállításai';
 
   @override
@@ -4709,10 +4715,7 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription és $triggerDescription.';
   }
 
@@ -7797,6 +7800,9 @@ class AppLocalizationsHu extends AppLocalizations {
   String get viewAll => 'Összes megtekintése';
 
   @override
+  String get expand => 'Kibontás';
+
+  @override
   String get addTask => 'Feladat hozzáadása';
 
   @override
@@ -9340,6 +9346,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get backgroundModeNote => 'Egyelőre csak Omi eszközökkel működik, és folyamatosan fejlesztjük.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'A Háttér mód nem érhető el, mert nincs csatlakoztatva kompatibilis eszköz. A funkció használatához csatlakoztass egy Omi, OpenGlass vagy Friend Pendant eszközt.';
+
+  @override
   String get regenerateRecap => 'Összegzés újragenerálása';
 
   @override
@@ -9353,4 +9363,190 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Erre a napra nincsenek összegezhető beszélgetések.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'A szinkronizálás az Omi átiratát használja';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.';
+
+  @override
+  String get transcribeLaterTitle => 'Átírás később';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Vedd fel a hangot most, és írd át igény szerint, az élő átírás helyett. A felvételek a telefonodon tárolódnak, majd feltöltve beszélgetéseket hozhatsz létre belőlük.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.';
+
+  @override
+  String get recordingMode => 'Felvételi mód';
+
+  @override
+  String get captureModeLater => 'Később';
+
+  @override
+  String get captureModeLiveDescription => 'Átírás valós időben, miközben beszélsz.';
+
+  @override
+  String get captureModeLaterDescription => 'Mentsd el a hangot most, és írd át, amikor csak akarod.';
+
+  @override
+  String get unmute => 'Némítás feloldása';
+
+  @override
+  String get newRecording => 'Új felvétel';
+
+  @override
+  String get transcribeLaterPaused => 'Szüneteltetve – nem rögzít hangot';
+
+  @override
+  String get memoryThisDevice => 'Ez az eszköz';
+
+  @override
+  String get memoryThisIphone => 'Ez az iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ez a telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Az Omi használata';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Beszélj az Omihoz';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Mondj néhány szót, és nézd, ahogy valós időben megjelennek';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Szép munka!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Kezdj el beszélni...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tegyél fel kérdést az Ominak';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Nyomd meg egyszer a gombot, mondd el a kérdésed, majd nyomd meg újra, ha végeztél';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Kérdés feldolgozása...';
+
+  @override
+  String get deviceOnboardingListening => 'Hallgatom...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Kikapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Bekapcsolás';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tartsd nyomva a gombot 3 másodpercig';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nyomd meg a gombot a visszakapcsoláshoz';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tartsd határozottan nyomva a gombot, amíg a fény ki nem alszik';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Csatlakoztatva';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Csatlakoztatva!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Leválasztva';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Kikapcsolás...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dupla koppintás testreszabása';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Beszélgetés befejezése';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Aktuális beszélgetés mentése és lezárása';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Némítás / Feloldás';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Mikrofon be- vagy kikapcsolása';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Folyamatban lévő beszélgetés csillagozása';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Beszélgetés megjelölése fontosként';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Ez egyszeri koppintás volt – próbálj meg gyorsan kétszer koppintani!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Próbáld ki most! Koppints duplán az Omira';
+
+  @override
+  String get deviceOnboardingContinue => 'Folytatás';
+
+  @override
+  String get deviceOnboardingFinish => 'Befejezés';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Ismerd meg az Omidat';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Gyors, gyakorlatias bemutató mindarról, amire az Omid képes.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Körülbelül 1 perc';
+
+  @override
+  String get jumpToLatestMessage => 'Ugrás a legújabb üzenethez';
+
+  @override
+  String get latest => 'Legújabb';
+
+  @override
+  String get flashFirmware => 'Firmware flashelése';
+
+  @override
+  String get pendantRecordingTitle => 'Felvétel a medálon';
+
+  @override
+  String get pendantRecordingNote =>
+      'A medálod önállóan rögzít. A felvételek a telefonodra szinkronizálódnak, amíg az alkalmazás nyitva van.';
+
+  @override
+  String get pendantSyncingRecordings => 'Felvételek szinkronizálása a medálodról…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes perc tárolva';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'A medál tárhelye majdnem megtelt — tartsd nyitva az alkalmazást a szinkronizáláshoz.';
 }

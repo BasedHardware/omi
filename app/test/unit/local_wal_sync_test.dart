@@ -1,5 +1,7 @@
+import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,6 +9,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
+import 'package:omi/services/wals/flash_page_wal_sync.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -35,6 +38,13 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall call) async {
+        if (call.method == 'getApplicationDocumentsDirectory') return Directory.systemTemp.path;
+        return null;
+      },
+    );
 
     listener = _MockListener();
     sync = LocalWalSyncImpl(listener);
@@ -42,10 +52,7 @@ void main() {
 
   group('onFrameCaptured', () {
     test('adds frame with synced=false', () {
-      final frame = WalFrame(
-        payload: [0xAA, 0xBB],
-        syncKey: FrameSyncKey([1]),
-      );
+      final frame = WalFrame(payload: [0xAA, 0xBB], syncKey: FrameSyncKey([1]));
 
       sync.onFrameCaptured(frame);
 
@@ -57,10 +64,7 @@ void main() {
 
     test('preserves insertion order for multiple frames', () {
       for (int i = 0; i < 5; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: [i],
-          syncKey: FrameSyncKey([i]),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: [i], syncKey: FrameSyncKey([i])));
       }
 
       expect(sync.testFrames.length, 5);
@@ -107,7 +111,8 @@ void main() {
 
       sync.markFrameSynced(key); // marks index 2
       sync.markFrameSynced(
-          key); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
+        key,
+      ); // marks index 1 (2 is already true, but reverse scan finds 2 first and breaks — so second call marks 2 again? No — it checks syncKey equality, not synced status)
 
       // Actually: markFrameSynced scans backward and breaks on FIRST syncKey match,
       // regardless of synced status. So second call marks index 2 again (already true).
@@ -151,10 +156,7 @@ void main() {
 
     test('correctly matches phone-mic-style 1-byte index keys', () {
       for (int i = 0; i < 5; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: List.filled(320, i),
-          syncKey: FrameSyncKey.fromIndex(i),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: List.filled(320, i), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
       sync.markFrameSynced(FrameSyncKey.fromIndex(3));
@@ -320,10 +322,7 @@ void main() {
     test('phone mic frames with wrapping index keys', () {
       // Simulate phone mic producing 256+ frames (index wraps at 255)
       for (int i = 0; i < 260; i++) {
-        sync.onFrameCaptured(WalFrame(
-          payload: List.filled(320, i & 0xFF),
-          syncKey: FrameSyncKey.fromIndex(i),
-        ));
+        sync.onFrameCaptured(WalFrame(payload: List.filled(320, i & 0xFF), syncKey: FrameSyncKey.fromIndex(i)));
       }
 
       expect(sync.testFrames.length, 260);
@@ -365,10 +364,7 @@ void main() {
 
       // BleDeviceSource strips header
       final payload = blePacket.sublist(3); // [0xAA, 0xBB, 0xCC]
-      final frame = WalFrame(
-        payload: payload,
-        syncKey: FrameSyncKey.fromBleHeader(blePacket),
-      );
+      final frame = WalFrame(payload: payload, syncKey: FrameSyncKey.fromBleHeader(blePacket));
 
       // _chunk stores payload only
       final chunk = [frame].map((f) => f.payload).toList();
@@ -377,6 +373,28 @@ void main() {
       // No firmware header in stored data
       expect(chunk[0].length, 3);
       expect(chunk[0][0], 0xAA); // First byte is audio, not header
+    });
+  });
+
+  group('syncWal — orphan WAL guard', () {
+    // A WAL the user taps "sync" on may already be gone from `_wals` (a
+    // concurrent delete/reload). Previously `.first` on the empty match list
+    // threw an uncaught StateError; the guard now bails out to null instead.
+    test('LocalWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+      final orphan = Wal(timerStart: 123, codec: BleAudioCodec.opus, seconds: 10);
+
+      final result = await sync.syncWal(wal: orphan);
+
+      expect(result, isNull);
+    });
+
+    test('FlashPageWalSyncImpl.syncWal returns null when the WAL is not tracked', () async {
+      final flashSync = FlashPageWalSyncImpl(listener);
+      final orphan = Wal(timerStart: 456, codec: BleAudioCodec.opus, seconds: 10);
+
+      final result = await flashSync.syncWal(wal: orphan);
+
+      expect(result, isNull);
     });
   });
 }

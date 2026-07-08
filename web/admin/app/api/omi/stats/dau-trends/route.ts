@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyAdmin } from "@/lib/auth";
+import { posthogResults } from "@/lib/posthog";
 
 export const dynamic = "force-dynamic";
 
@@ -30,41 +31,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: cache.data, days });
     }
 
-    // Use PostHog HogQL for daily unique macOS users with "App Became Active"
+    // Daily unique macOS users = distinct clients emitting ANY event (rename-proof;
+    // the old `App Became Active` lifecycle event was removed from the desktop app).
     const hogql = `
       SELECT
         toDate(timestamp) as day,
         count(DISTINCT distinct_id) as users
       FROM events
-      WHERE event = 'App Became Active'
-        AND properties.$os_name = 'macOS'
+      WHERE properties.$os_name = 'macOS'
         AND timestamp >= now() - interval ${days} day
       GROUP BY day
       ORDER BY day
     `;
 
-    const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        query: { kind: "HogQLQuery", query: hogql },
-      }),
-    });
-
-    if (!response.ok) {
-      const text = await response.text();
-      console.error("PostHog query error:", response.status, text);
-      return NextResponse.json(
-        { error: `PostHog API error: ${response.status}` },
-        { status: 502 }
-      );
+    let results: [string, number][];
+    try {
+      results = (await posthogResults(host, projectId, apiKey, hogql)) as [string, number][];
+    } catch (err) {
+      console.error("PostHog query error:", err);
+      return NextResponse.json({ error: "PostHog API error" }, { status: 502 });
     }
-
-    const raw = await response.json();
-    const results: [string, number][] = raw.results || [];
 
     // Build map from results
     const dateMap: Record<string, number> = {};

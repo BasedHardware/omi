@@ -2,94 +2,215 @@
 
 Verifies that process_segment() applies user vocabulary, language, and model
 selection matching the realtime transcription path.
+
+``routers.sync`` pulls a heavy transitive chain (Firestore/GCS clients, Firebase
+Admin, typesense, deepgram SDK, opus/pydub native audio) that constructs clients
+and reads credentials at import time. Importing it therefore requires fakes to
+be active *before* the import. This is the sanctioned Tier-2 "fake must precede
+import" case (see ``backend/docs/test_isolation.md`` and
+``testing.import_isolation``): the fakes live inside a module-scoped fixture that
+uses ``stub_modules`` + ``load_module_fresh``, so nothing leaks to ``sys.modules``
+after the module's tests finish.
 """
 
+import io
 import os
-import sys
+import re
 import threading
+import wave
+from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 
-# ---------------------------------------------------------------------------
-# Module-level stubs: routers.sync has heavy transitive imports (Firestore,
-# GCS, Firebase Admin) that require credentials.  We stub them out so unit
-# tests can import process_segment without cloud access.
-# ---------------------------------------------------------------------------
+from testing.import_isolation import load_module_fresh, stub_modules
 
-# Stub database package
-_database_pkg = ModuleType('database')
-_database_pkg.__path__ = ['database']
-_database_pkg.__package__ = 'database'
-sys.modules.setdefault('database', _database_pkg)
+_BACKEND = Path(__file__).resolve().parents[2]
 
-for _sub in [
-    '_client',
-    'action_items',
-    'announcements',
-    'apps',
-    'auth',
-    'cache',
-    'cache_manager',
-    'calendar_meetings',
-    'chat',
-    'conversations',
-    'daily_summaries',
-    'dev_api_key',
-    'fair_use',
-    'folders',
-    'goals',
-    'helpers',
-    'import_jobs',
-    'knowledge_graph',
-    'llm_usage',
-    'mcp_api_key',
-    'mem_db',
-    'memories',
-    'notifications',
-    'phone_calls',
-    'redis_db',
-    'redis_pubsub',
-    'screen_activity',
-    'tasks',
-    'trends',
-    'user_usage',
-    'users',
-    'vector_db',
-    'wrapped',
-    'people',
-    'processing_memories',
-    'plugins',
-]:
-    _full = f'database.{_sub}'
-    if _full not in sys.modules:
-        _m = MagicMock()
-        sys.modules[_full] = _m
-        setattr(_database_pkg, _sub, _m)
 
-# Stub firebase_admin
-_fb = MagicMock()
-_fb.__path__ = ['firebase_admin']
-sys.modules.setdefault('firebase_admin', _fb)
-sys.modules.setdefault('firebase_admin.messaging', _fb.messaging)
-sys.modules.setdefault('firebase_admin.auth', _fb.auth)
+def _detect_speaker_from_text(text: str):
+    match = re.search(r'\b(?:my name is|i am)\s+([a-z][a-z-]*)', text, re.IGNORECASE)
+    return match.group(1).capitalize() if match else None
 
-# Stub google.cloud.storage.Client to avoid GCS credentials
-import google.cloud.storage as _gcs
 
-_orig_storage_client = _gcs.Client
-_gcs.Client = MagicMock
+def _compare_embeddings(embedding1: np.ndarray, embedding2: np.ndarray) -> float:
+    embedding1 = np.atleast_2d(embedding1)
+    embedding2 = np.atleast_2d(embedding2)
+    if embedding1.shape[1] != embedding2.shape[1]:
+        return 2.0
+    norm_product = np.linalg.norm(embedding1) * np.linalg.norm(embedding2)
+    if norm_product == 0:
+        return 2.0
+    similarity = float(np.dot(embedding1.reshape(-1), embedding2.reshape(-1)) / norm_product)
+    return 1.0 - similarity
 
-# Ensure env vars for modules that read them at import time
-os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
-os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
+
+def _build_fakes() -> dict:
+    """Build the stub-module mapping that lets ``routers.sync`` import cleanly."""
+    fakes: dict[str, ModuleType] = {}
+
+    # database package + submodules
+    database_pkg = ModuleType('database')
+    database_pkg.__path__ = ['database']
+    database_pkg.__package__ = 'database'
+    fakes['database'] = database_pkg
+    for _sub in [
+        '_client',
+        'action_items',
+        'announcements',
+        'apps',
+        'auth',
+        'cache',
+        'cache_manager',
+        'calendar_meetings',
+        'chat',
+        'conversations',
+        'daily_summaries',
+        'dev_api_key',
+        'fair_use',
+        'folders',
+        'goals',
+        'helpers',
+        'import_jobs',
+        'knowledge_graph',
+        'llm_usage',
+        'mcp_api_key',
+        'mem_db',
+        'memories',
+        'notifications',
+        'phone_calls',
+        'redis_db',
+        'redis_pubsub',
+        'screen_activity',
+        'sync_jobs',
+        'tasks',
+        'trends',
+        'user_usage',
+        'users',
+        'vector_db',
+        'wrapped',
+        'people',
+        'processing_memories',
+        'plugins',
+    ]:
+        fakes[f'database.{_sub}'] = MagicMock()
+
+    # firebase_admin
+    fb = MagicMock()
+    fb.__path__ = ['firebase_admin']
+    fakes['firebase_admin'] = fb
+    fakes['firebase_admin.messaging'] = fb.messaging
+    fakes['firebase_admin.auth'] = fb.auth
+
+    # deepgram SDK
+    deepgram = ModuleType('deepgram')
+    deepgram.DeepgramClient = MagicMock
+    deepgram.DeepgramClientOptions = MagicMock
+    fakes['deepgram'] = deepgram
+
+    # native audio / optional SDKs
+    opuslib = ModuleType('opuslib')
+    opuslib.Decoder = MagicMock
+    fakes['opuslib'] = opuslib
+
+    pydub = ModuleType('pydub')
+    pydub.AudioSegment = MagicMock
+    fakes['pydub'] = pydub
+
+    fal_client = ModuleType('fal_client')
+    fal_client.subscribe = MagicMock()
+    fakes['fal_client'] = fal_client
+
+    fakes['stripe'] = ModuleType('stripe')
+
+    python_multipart = ModuleType('python_multipart')
+    python_multipart.__version__ = '0.0.99'
+    fakes['python_multipart'] = python_multipart
+
+    python_multipart_parser = ModuleType('python_multipart.multipart')
+    python_multipart_parser.parse_options_header = MagicMock(return_value={})
+    fakes['python_multipart.multipart'] = python_multipart_parser
+
+    # utils heavy/optional modules
+    process_conversation = ModuleType('utils.conversations.process_conversation')
+    process_conversation.process_conversation = MagicMock()
+    fakes['utils.conversations.process_conversation'] = process_conversation
+
+    vad = ModuleType('utils.stt.vad')
+    vad.vad_is_empty = MagicMock(return_value=False)
+    fakes['utils.stt.vad'] = vad
+
+    speaker_identification = ModuleType('utils.speaker_identification')
+    speaker_identification.detect_speaker_from_text = _detect_speaker_from_text
+    fakes['utils.speaker_identification'] = speaker_identification
+
+    speaker_embedding = ModuleType('utils.stt.speaker_embedding')
+    speaker_embedding.extract_embedding_from_bytes = MagicMock()
+    speaker_embedding.compare_embeddings = _compare_embeddings
+    speaker_embedding.SPEAKER_MATCH_THRESHOLD = 0.45
+    fakes['utils.stt.speaker_embedding'] = speaker_embedding
+
+    cloud_tasks = ModuleType('utils.cloud_tasks')
+    cloud_tasks.enqueue_audio_merge_job = MagicMock()
+    cloud_tasks.enqueue_sync_job = MagicMock()
+    cloud_tasks.get_sync_tasks_max_attempts = MagicMock(return_value=5)
+    cloud_tasks.is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
+    cloud_tasks.verify_cloud_tasks_oidc = MagicMock(return_value=0)
+    fakes['utils.cloud_tasks'] = cloud_tasks
+
+    # google.cloud.tasks_v2
+    tasks_v2 = ModuleType('google.cloud.tasks_v2')
+    tasks_v2.CloudTasksClient = MagicMock
+    tasks_v2.Task = MagicMock
+    tasks_v2.HttpRequest = MagicMock
+    tasks_v2.OidcToken = MagicMock
+    tasks_v2.HttpMethod = MagicMock(POST='POST')
+    fakes['google.cloud.tasks_v2'] = tasks_v2
+
+    return fakes
+
+
+@pytest.fixture(scope="module", autouse=True)
+def sync_module():
+    """Load routers.sync + utils.stt.pre_recorded under stubbed heavy deps.
+
+    Ensures the heavy transitive imports (database/google/firebase/deepgram/native
+    audio) are faked *before* the target modules are exec'd, then evicts the
+    stub-fed modules on teardown so nothing leaks to other test files.
+    """
+    os.environ.setdefault('OPENAI_API_KEY', 'sk-fake-for-test')
+    os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
+
+    import google.cloud.storage as _gcs
+
+    fakes = _build_fakes()
+    _orig_storage_client = getattr(_gcs, 'Client', None)
+    _gcs.Client = MagicMock
+
+    try:
+        with stub_modules(fakes):
+            load_module_fresh("routers.sync", os.path.join(str(_BACKEND), "routers", "sync.py"))
+            load_module_fresh("utils.stt.pre_recorded", os.path.join(str(_BACKEND), "utils", "stt", "pre_recorded.py"))
+            yield
+    finally:
+        if _orig_storage_client is not None:
+            _gcs.Client = _orig_storage_client
+        else:
+            delattr(_gcs, 'Client')
 
 
 # ---------------------------------------------------------------------------
 # deepgram_prerecorded: keywords parameter
 # ---------------------------------------------------------------------------
+
+
+def test_compare_embeddings_accepts_1d_vectors():
+    """Speaker embedding stub should match production's 1D vector tolerance."""
+    assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0, 0.0])) == pytest.approx(0.0)
+    assert _compare_embeddings(np.array([1.0, 0.0]), np.array([1.0])) == 2.0
 
 
 class TestDeepgramPrerecordedKeywords:
@@ -276,6 +397,7 @@ class TestDeepgramPrerecordedKeywords:
 # ---------------------------------------------------------------------------
 
 
+@patch('routers.sync.run_blocking', MagicMock())
 class TestProcessSegmentPreferences:
     """Verify process_segment applies user transcription preferences."""
 
@@ -288,7 +410,7 @@ class TestProcessSegmentPreferences:
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_vocabulary_passed_to_deepgram(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
@@ -320,13 +442,13 @@ class TestProcessSegmentPreferences:
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_single_language_mode_selects_model(
+    def test_single_language_mode_passes_user_language(
         self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
     ):
-        """Single language mode with a language should select the right model."""
+        """Single language mode with a language should pass the user language."""
         from routers.sync import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
@@ -342,16 +464,16 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'en'
-        assert kwargs['model'] == 'nova-3'
+        assert kwargs['return_language'] is True
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_chinese_selects_nova3(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
-        """Chinese language should select nova-3 model."""
+    def test_chinese_passes_user_language(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+        """Chinese language should be passed through in single-language mode."""
         from routers.sync import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'zh')
@@ -367,16 +489,16 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'zh'
-        assert kwargs['model'] == 'nova-3'
+        assert kwargs['return_language'] is True
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_no_prefs_uses_defaults(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
-        """Without preferences, should use multi/nova-3 defaults."""
+        """Without preferences, should use multi-language defaults."""
         from routers.sync import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
@@ -390,14 +512,14 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'multi'
-        assert kwargs['model'] == 'nova-3'
+        assert kwargs['return_language'] is True
         # Vocabulary should still include "Omi" even without prefs
         assert 'Omi' in kwargs['keywords']
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_vocabulary_capped_at_100(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
@@ -424,13 +546,13 @@ class TestProcessSegmentPreferences:
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_single_language_empty_language_falls_back(
         self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
     ):
-        """single_language_mode=True with empty language should fall back to multi/nova-3."""
+        """single_language_mode=True with empty language should fall back to multi."""
         from routers.sync import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
@@ -446,12 +568,12 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'multi'
-        assert kwargs['model'] == 'nova-3'
+        assert kwargs['return_language'] is True
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_multi_language_mode_default(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
@@ -471,12 +593,12 @@ class TestProcessSegmentPreferences:
 
         _, kwargs = mock_dg.call_args
         assert kwargs['language'] == 'multi'
-        assert kwargs['model'] == 'nova-3'
+        assert kwargs['return_language'] is True
 
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     def test_single_language_trusts_user_language(
@@ -502,6 +624,37 @@ class TestProcessSegmentPreferences:
         # The language arg is the second positional argument
         assert call_args[0][1] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
 
+    @patch('routers.sync.process_conversation')
+    @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
+    @patch('routers.sync.prerecorded')
+    @patch('routers.sync.delete_syncing_temporal_file')
+    @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_private_cloud_sync_flag_passed_to_new_conversation(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+    ):
+        """New offline sync conversations must retain private-cloud audio metadata intent."""
+        from routers.sync import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'en')
+        mock_process.return_value = MagicMock(id='test-id')
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        process_segment(
+            'test/path.bin',
+            'uid123',
+            response,
+            lock,
+            errors,
+            private_cloud_sync_enabled=True,
+        )
+
+        create_conversation = mock_process.call_args[0][2]
+        assert create_conversation.private_cloud_sync_enabled is True
+
 
 # ---------------------------------------------------------------------------
 # Structural: endpoint wires transcription_prefs into threads
@@ -514,7 +667,7 @@ class TestSyncEndpointPrefsWiring:
     @staticmethod
     def _read_sync_source():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
     def test_endpoint_fetches_transcription_prefs(self):
@@ -530,6 +683,22 @@ class TestSyncEndpointPrefsWiring:
         fn_start = source.index('async def sync_local_files(')
         fn_body = source[fn_start:]
         assert 'transcription_prefs' in fn_body
+
+    def test_endpoint_forwards_private_cloud_and_data_protection(self):
+        """Private-cloud v1 sync must persist chunks with the user's protection level and finalize audio metadata."""
+        source = self._read_sync_source()
+        fn_start = source.index('async def sync_local_files(')
+        fn_end = source.index(
+            '# ---------------------------------------------------------------------------\n# v2 async sync-local-files',
+            fn_start,
+        )
+        fn_body = source[fn_start:fn_end]
+
+        assert 'get_user_private_cloud_sync_enabled' in fn_body
+        assert 'get_data_protection_level' in fn_body
+        assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in fn_body
+        assert 'data_protection_level=data_protection_level' in fn_body
+        assert '_finalize_sync_audio_files' in fn_body
 
 
 # ---------------------------------------------------------------------------
@@ -636,12 +805,6 @@ class TestGetDeepgramModelForLanguage:
 # Speaker identification for sync path
 # ---------------------------------------------------------------------------
 
-import io
-import struct
-import wave
-
-import numpy as np
-
 
 def _make_wav_bytes(duration_sec: float = 2.0, sample_rate: int = 16000) -> bytes:
     """Generate silent WAV bytes of the given duration for testing."""
@@ -695,9 +858,9 @@ class TestBuildPersonEmbeddingsCache:
 
         mock_users_db.get_user_speaker_embedding.return_value = None
         mock_users_db.get_people.return_value = [
-            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': [0.2] * 512},
+            {'id': 'p1', 'name': 'Alice', 'speaker_embedding': [0.2] * 512, 'speech_samples': ['sample-1']},
             {'id': 'p2', 'name': 'Bob'},  # no embedding
-            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': [0.3] * 512},
+            {'id': 'p3', 'name': 'Carol', 'speaker_embedding': [0.3] * 512, 'speech_samples': ['sample-3']},
         ]
 
         cache = build_person_embeddings_cache('uid1')
@@ -1101,6 +1264,7 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id == 'p2'
 
 
+@patch('routers.sync.run_blocking', MagicMock())
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
 
@@ -1114,7 +1278,7 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     @patch('routers.sync.identify_speakers_for_segments')
@@ -1149,7 +1313,7 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     @patch('routers.sync.identify_speakers_for_segments')
@@ -1187,7 +1351,7 @@ class TestSyncEndpointSpeakerIdWiring:
     @staticmethod
     def _read_sync_source():
         sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path) as f:
+        with open(sync_path, encoding='utf-8') as f:
             return f.read()
 
     def test_endpoint_builds_embeddings_cache(self):
@@ -1213,29 +1377,30 @@ class TestSyncEndpointSpeakerIdWiring:
 class TestDownloadAudioBytes:
     """Verify _download_audio_bytes handles success and failure."""
 
-    @patch('routers.sync.requests')
-    def test_download_success(self, mock_requests):
+    @patch('routers.sync.httpx')
+    def test_download_success(self, mock_httpx):
         from routers.sync import _download_audio_bytes
 
         mock_resp = MagicMock()
         mock_resp.content = b'wav-bytes'
         mock_resp.raise_for_status.return_value = None
-        mock_requests.get.return_value = mock_resp
+        mock_httpx.get.return_value = mock_resp
 
         result = _download_audio_bytes('http://example.com/audio.wav')
         assert result == b'wav-bytes'
-        mock_requests.get.assert_called_once_with('http://example.com/audio.wav', timeout=60)
+        mock_httpx.get.assert_called_once_with('http://example.com/audio.wav', timeout=60.0)
 
-    @patch('routers.sync.requests')
-    def test_download_failure_returns_none(self, mock_requests):
+    @patch('routers.sync.httpx')
+    def test_download_failure_returns_none(self, mock_httpx):
         from routers.sync import _download_audio_bytes
 
-        mock_requests.get.side_effect = Exception("Connection refused")
+        mock_httpx.get.side_effect = Exception("Connection refused")
 
         result = _download_audio_bytes('http://example.com/audio.wav')
         assert result is None
 
 
+@patch('routers.sync.run_blocking', MagicMock())
 class TestSpeakerIdExceptionHandling:
     """Verify process_segment swallows speaker ID exceptions gracefully."""
 
@@ -1249,7 +1414,7 @@ class TestSpeakerIdExceptionHandling:
     @patch('routers.sync.process_conversation')
     @patch('routers.sync.get_closest_conversation_to_timestamps', return_value=None)
     @patch('routers.sync.get_timestamp_from_path', return_value=1700000000)
-    @patch('routers.sync.deepgram_prerecorded')
+    @patch('routers.sync.prerecorded')
     @patch('routers.sync.delete_syncing_temporal_file')
     @patch('routers.sync.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
     @patch('routers.sync.identify_speakers_for_segments', side_effect=RuntimeError("embedding API down"))

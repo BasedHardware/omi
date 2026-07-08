@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -86,6 +88,13 @@ sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenErr
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
 
+# utils.other.endpoints is stubbed above, so with_rate_limit would be a MagicMock and the
+# rate-limited dev read routes would depend on a MagicMock instead of their real scope
+# dependency. Make it a transparent pass-through so the routes resolve to the underlying
+# scope dependency (which these tests override); the rate-limit wiring itself is covered by
+# test_dev_read_rate_limits.py.
+sys.modules['utils.other.endpoints'].with_rate_limit = lambda auth_dependency, policy_name: auth_dependency
+
 # ---- Mock populate_folder_names / populate_speaker_names ----
 # We patch these directly on routers.developer in each test class's setup_method,
 # so that the real utils.conversations.render module is never polluted regardless
@@ -97,6 +106,7 @@ _mock_populate_speaker_names = MagicMock()
 
 import database.conversations as conversations_db
 import database.folders as folders_db
+from dependencies import ApiKeyAuth, get_api_key_auth, get_auth_with_conversations_read, get_uid_with_conversations_read
 
 _mock_get_conversations = MagicMock(return_value=[])
 conversations_db.get_conversations = _mock_get_conversations
@@ -108,6 +118,15 @@ folders_db.initialize_system_folders = _mock_initialize_system_folders
 
 
 # ---- Helper factories ----
+
+
+def _read_auth():
+    return ApiKeyAuth(
+        uid='uid1',
+        scopes=['conversations:read'],
+        app_id='test-app',
+        key_id='test-key',
+    )
 
 
 def _make_folder(folder_id='f1', name='Work'):
@@ -228,7 +247,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id='f1',
             starred=None,
         )
@@ -242,7 +261,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id=None,
             starred=True,
         )
@@ -256,7 +275,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id=None,
             starred=False,
         )
@@ -270,7 +289,7 @@ class TestDevGetConversationsFolderFilters:
         from routers.developer import get_conversations
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             folder_id='f1',
             starred=True,
         )
@@ -301,7 +320,7 @@ class TestDevGetConversationsFolderFilters:
         end = datetime(2025, 1, 31, tzinfo=timezone.utc)
 
         get_conversations(
-            uid='uid1',
+            uid=_read_auth(),
             start_date=start,
             end_date=end,
             categories='work,personal',
@@ -338,7 +357,7 @@ class TestDevGetConversationsFolderFilters:
 
         from routers.developer import get_conversations
 
-        result = get_conversations(uid='uid1', folder_id='nonexistent-folder')
+        result = get_conversations(uid=_read_auth(), folder_id='nonexistent-folder')
 
         assert result == []
 
@@ -353,12 +372,54 @@ def _build_test_app():
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers.developer import router as developer_router
-    from dependencies import get_uid_with_conversations_read
 
     app = FastAPI()
     app.include_router(developer_router)
     app.dependency_overrides[get_uid_with_conversations_read] = lambda: 'uid1'
+    app.dependency_overrides[get_auth_with_conversations_read] = _read_auth
     return app, TestClient(app)
+
+
+def _build_memories_test_app():
+    """Build a minimal FastAPI app for Developer API memories routes."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.developer import router as developer_router
+    import routers.developer as developer_module
+    from dependencies import get_developer_memory_default_memory_read_context
+    from utils.memory.product_authorization import ProductAuthorizationDecision
+
+    auth_context = developer_module.ProductAuthorizationContext(
+        uid='uid1', consumer='developer_api', surface='developer_api', app_id='test-app', key_id='test-key'
+    )
+    developer_module.authorize_memory_external_default_memory_read = MagicMock(
+        return_value=ProductAuthorizationDecision(
+            allowed=True,
+            context=auth_context,
+            db_client=None,
+            read_decision=developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
+            reason='test_legacy_safe',
+            observability={'enabled': True},
+            status_code=200,
+        )
+    )
+    developer_module.search_memory_default_developer_memories = MagicMock(
+        return_value=type(
+            'LegacySafeMemoryResult',
+            (),
+            {
+                'read_decision': developer_module.MemoryReadDecision.USE_LEGACY_SAFE,
+                'memories': [],
+                'fallback_reason': 'test_legacy_safe',
+                'should_use_legacy_fallback': True,
+            },
+        )()
+    )
+
+    app = FastAPI()
+    app.include_router(developer_router)
+    app.dependency_overrides[get_developer_memory_default_memory_read_context] = lambda: auth_context
+    return app, TestClient(app, raise_server_exceptions=False)
 
 
 class TestDevApiHttpLayer:
@@ -407,7 +468,6 @@ class TestDevApiHttpLayer:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routers.developer import router as developer_router
-        from dependencies import get_api_key_auth, ApiKeyAuth
 
         app = FastAPI()
         app.include_router(developer_router)
@@ -428,7 +488,6 @@ class TestDevApiHttpLayer:
         from fastapi import FastAPI
         from fastapi.testclient import TestClient
         from routers.developer import router as developer_router
-        from dependencies import get_api_key_auth, ApiKeyAuth
 
         app = FastAPI()
         app.include_router(developer_router)
@@ -461,3 +520,118 @@ class TestDevApiHttpLayer:
         assert len(body) == 1
         assert body[0]['id'] == 'f1'
         assert body[0]['name'] == 'Work'
+
+
+class TestDevApiMemoriesHttpLayer:
+    """HTTP layer tests for Developer API memory list resilience."""
+
+    def setup_method(self):
+        import database.memories as memories_db
+
+        memories_db.get_memories = MagicMock()
+
+    def test_memories_page_tolerates_legacy_malformed_record(self):
+        """A single legacy record must not turn an offset page into HTTP 500."""
+        import database.memories as memories_db
+
+        now = datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        memories_db.get_memories.return_value = [
+            {
+                'id': 'mem-ok',
+                'content': 'normal memory',
+                'category': 'manual',
+                'visibility': 'private',
+                'tags': ['source'],
+                'created_at': now,
+                'updated_at': now,
+                'manually_added': True,
+                'scoring': '01_998_1736935200',
+                'reviewed': True,
+                'user_review': True,
+                'edited': False,
+            },
+            {
+                'id': 'mem-legacy',
+                'content': 'legacy memory',
+                'category': 'unexpected-legacy-category',
+                'visibility': None,
+                'tags': None,
+                'created_at': 'not-a-date',
+                'updated_at': {'bad': 'date'},
+                'user_review': 'yes',
+            },
+            {
+                'id': 'mem-locked-legacy',
+                'content': None,
+                'category': None,
+                'is_locked': True,
+                'scoring': 123,
+            },
+            {
+                'content': 'no id should be skipped',
+                'category': 'manual',
+            },
+        ]
+
+        _, client = _build_memories_test_app()
+        resp = client.get('/v1/dev/user/memories?limit=3&offset=7')
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 3
+        legacy = body[1]
+        assert legacy['id'] == 'mem-legacy'
+        assert legacy['content'] == 'legacy memory'
+        assert legacy['category'] == 'interesting'
+        assert legacy['visibility'] == 'private'
+        assert legacy['tags'] == []
+        assert legacy['created_at'] is None
+        assert legacy['updated_at'] is None
+        assert legacy['manually_added'] is False
+        assert legacy['reviewed'] is False
+        assert legacy['user_review'] is True
+        assert legacy['edited'] is False
+
+        locked_legacy = body[2]
+        assert locked_legacy['id'] == 'mem-locked-legacy'
+        assert locked_legacy['content'] == ''
+        assert locked_legacy['category'] == 'interesting'
+        assert locked_legacy['scoring'] == '123'
+
+    def test_cleaner_memory_coerces_edge_values(self):
+        """CleanerMemory validators should be resilient outside the endpoint pre-filter too."""
+        from routers.developer import CleanerMemory
+
+        memory = CleanerMemory(
+            id='mem-edge',
+            content=None,
+            category=None,
+            created_at=1736935200,
+            updated_at=[],
+            manually_added='1',
+            reviewed='true',
+            user_review='no',
+            edited='',
+        )
+
+        assert memory.id == 'mem-edge'
+        assert memory.content == ''
+        assert memory.category == 'interesting'
+        assert memory.created_at == datetime(2025, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        assert memory.updated_at is None
+        assert memory.manually_added is True
+        assert memory.reviewed is True
+        assert memory.user_review is False
+        assert memory.edited is False
+
+    def test_cleaner_memory_rejects_empty_id(self):
+        """CleanerMemory should not serialize malformed responses with an empty id."""
+        from pydantic import ValidationError
+        from routers.developer import CleanerMemory
+
+        with pytest.raises(ValidationError):
+            CleanerMemory(
+                id=None,
+                content='legacy memory',
+                category='manual',
+            )

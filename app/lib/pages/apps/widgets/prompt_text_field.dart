@@ -31,11 +31,11 @@ class PromptTextField extends StatelessWidget {
           contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12.0),
-            borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+            borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12.0),
-            borderSide: BorderSide(color: Colors.grey.withOpacity(0.3), width: 1),
+            borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12.0),

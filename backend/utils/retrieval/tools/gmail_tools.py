@@ -2,18 +2,19 @@
 Tools for accessing Gmail messages.
 """
 
-import contextvars
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List
+import base64
+import traceback
+from email.utils import parsedate_to_datetime
+from typing import Any, Dict, List, Optional, cast
 
-from langchain_core.tools import tool
+from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from langchain_core.runnables import RunnableConfig
 
-import database.users as users_db
+from utils.executors import db_executor, run_blocking
 from utils.retrieval.tools.integration_base import (
     ensure_capped,
     prepare_access,
-    retry_on_auth,
+    retry_on_auth_async,
 )
 
 # Import shared Google utilities
@@ -22,20 +23,13 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Import the context variable from agentic module
-try:
-    from utils.retrieval.agentic import agent_config_context
-except ImportError:
-    # Fallback if import fails
-    agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
-
-def get_gmail_messages(
+async def get_gmail_messages(
     access_token: str,
     query: Optional[str] = None,
     max_results: int = 10,
     label_ids: Optional[List[str]] = None,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Fetch messages from Gmail API.
 
@@ -48,7 +42,7 @@ def get_gmail_messages(
     Returns:
         List of message metadata
     """
-    params = {
+    params: Dict[str, Any] = {
         'maxResults': min(max_results, 50),  # Gmail API limit is 50
     }
 
@@ -59,7 +53,7 @@ def get_gmail_messages(
     if label_ids:
         params['labelIds'] = label_ids
 
-    message_ids = []
+    message_ids: List[Any] = []
     page_token = None
 
     while True:
@@ -67,7 +61,7 @@ def get_gmail_messages(
         if page_token:
             page_params['pageToken'] = page_token
 
-        data = google_api_request(
+        data = await google_api_request(
             "GET",
             'https://www.googleapis.com/gmail/v1/users/me/messages',
             access_token,
@@ -85,9 +79,9 @@ def get_gmail_messages(
         if not page_token:
             break
 
-    messages = []
+    messages: List[Dict[str, Any]] = []
     for msg_id in message_ids:
-        msg_data = google_api_request(
+        msg_data = await google_api_request(
             "GET",
             f'https://www.googleapis.com/gmail/v1/users/me/messages/{msg_id}',
             access_token,
@@ -98,7 +92,7 @@ def get_gmail_messages(
     return messages
 
 
-def parse_gmail_message(message: dict) -> dict:
+def parse_gmail_message(message: Dict[str, Any]) -> Dict[str, Any]:
     """
     Parse a Gmail message object into a readable format.
 
@@ -122,16 +116,12 @@ def parse_gmail_message(message: dict) -> dict:
             if part.get('mimeType') == 'text/plain':
                 data = part.get('body', {}).get('data', '')
                 if data:
-                    import base64
-
                     body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
                     break
             elif part.get('mimeType') == 'text/html':
                 # Fallback to HTML if plain text not available
                 data = part.get('body', {}).get('data', '')
                 if data:
-                    import base64
-
                     body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
                     break
     else:
@@ -139,19 +129,14 @@ def parse_gmail_message(message: dict) -> dict:
         if payload.get('mimeType') == 'text/plain':
             data = payload.get('body', {}).get('data', '')
             if data:
-                import base64
-
                 body_text = base64.urlsafe_b64decode(data).decode('utf-8', errors='ignore')
-
+    date_str: str = header_dict.get('Date', '')
     # Parse date
-    date_str = header_dict.get('Date', '')
     date_parsed = None
     if date_str:
         try:
-            from email.utils import parsedate_to_datetime
-
             date_parsed = parsedate_to_datetime(date_str)
-        except:
+        except Exception:
             pass
 
     return {
@@ -167,11 +152,11 @@ def parse_gmail_message(message: dict) -> dict:
 
 
 @tool
-def get_gmail_messages_tool(
+async def get_gmail_messages_tool(
     query: Optional[str] = None,
     max_results: int = 10,
     label: Optional[str] = None,
-    config: RunnableConfig = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Retrieve emails from the user's Gmail inbox.
@@ -208,8 +193,10 @@ def get_gmail_messages_tool(
     Returns:
         Formatted list of emails with their details.
     """
-    uid, integration, access_token, access_err = prepare_access(
-        config,
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
+        cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Gmail',
         'Gmail is not connected. Please connect your Google account from settings to view your emails.',
@@ -218,6 +205,9 @@ def get_gmail_messages_tool(
     )
     if access_err:
         return access_err
+    assert uid is not None
+    assert integration is not None
+    assert access_token is not None
 
     try:
         max_results = ensure_capped(max_results, 50, "⚠️ get_gmail_messages_tool - max_results capped from {} to {}")
@@ -238,7 +228,7 @@ def get_gmail_messages_tool(
                 label_ids = [label_upper]
 
         # Fetch messages
-        messages, err = retry_on_auth(
+        messages, err = await retry_on_auth_async(
             get_gmail_messages,
             {
                 'access_token': access_token,
@@ -254,12 +244,11 @@ def get_gmail_messages_tool(
                 "Authentication failed",
                 "401",
                 "token may be expired",
+                "Google API error 401",
             ),
         )
         if err:
             return err
-
-        messages_count = len(messages) if messages else 0
 
         if not messages:
             query_info = f" matching '{query}'" if query else ""
@@ -285,7 +274,5 @@ def get_gmail_messages_tool(
         return result.strip()
     except Exception as e:
         logger.error(f"❌ Unexpected error in get_gmail_messages_tool: {e}")
-        import traceback
-
         traceback.print_exc()
         return f"Unexpected error fetching Gmail messages: {str(e)}"

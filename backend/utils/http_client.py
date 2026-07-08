@@ -62,6 +62,10 @@ class WebhookCircuitBreaker:
                 self._half_open_in_flight = 0
         return self._state
 
+    @property
+    def last_access_time(self) -> float:
+        return self._last_access_time
+
     def allow_request(self) -> bool:
         self._last_access_time = time.monotonic()
         s = self.state
@@ -120,7 +124,7 @@ def _evict_stale_circuit_breakers():
     """
     now = time.monotonic()
     stale_keys = [
-        k for k, cb in _webhook_circuit_breakers.items() if now - cb._last_access_time > _CIRCUIT_BREAKER_IDLE_TTL
+        k for k, cb in _webhook_circuit_breakers.items() if now - cb.last_access_time > _CIRCUIT_BREAKER_IDLE_TTL
     ]
     for k in stale_keys:
         del _webhook_circuit_breakers[k]
@@ -260,12 +264,23 @@ def get_maps_client() -> httpx.AsyncClient:
 
 
 def get_auth_client() -> httpx.AsyncClient:
-    """Return a shared async HTTP client for OAuth/auth token exchanges."""
+    """Return a shared async HTTP client for OAuth/auth token exchanges.
+
+    Keep-alive is disabled (`max_keepalive_connections=0`) for the same reason
+    as `get_tts_client()`: in Cloud Run we observed stale keep-alive sockets
+    being reused after the remote (Google/Apple/Firebase token endpoints) or an
+    intermediate NAT silently dropped them, raising asyncio's "handler is
+    closed" RuntimeError mid-request. That surfaced as intermittent HTTP 500s
+    on `/v1/auth/callback/{google,apple}` and `/v1/auth/token`, breaking both
+    Sign in with Google and Sign in with Apple (both providers share this
+    client). Auth token-exchange volume is low, so paying a TLS handshake per
+    request is a fine trade for eliminating the stale-socket failures.
+    """
     global _auth_client
     if _auth_client is None:
         _auth_client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=2.0),
-            limits=httpx.Limits(max_connections=20, max_keepalive_connections=8),
+            limits=httpx.Limits(max_connections=20, max_keepalive_connections=0),
         )
     return _auth_client
 

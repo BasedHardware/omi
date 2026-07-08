@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Синхронизовање без интернета",
+    "autoSync": "Аутоматска синхронизација",
+    "autoSyncDescription": "Аутоматски синхронизуј офлајн снимке када се уређај повеже",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -9535,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Погледај све",
+    "expand": "Прошири",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10624,5 +10627,72 @@
     "recapRegeneratedSnackbar": "Резиме је поново генерисан",
     "recapRegenerateFailed": "Није могуће поново генерисати резиме. Покушајте поново касније.",
     "recapRegenerateCooldown": "Сачекајте неколико секунди пре поновног генерисања.",
-    "recapRegenerateNoConversations": "Нема разговора за сумирање за овај дан."
+    "recapRegenerateNoConversations": "Нема разговора за сумирање за овај дан.",
+    "syncCustomSttWarningTitle": "Синхронизација користи Omi транскрипцију",
+    "syncCustomSttWarningMessage": "Користите сопственог пружаоца транскрипције. Синхронизација ових снимака их транскрибује на Omi серверима и рачунају се у лимит транскрипције вашег плана.",
+    "transcribeLaterTitle": "Transkripcija kasnije",
+    "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kada vam zatreba, umesto uživo. Snimci se čuvaju na telefonu, a zatim ih otpremate da biste kreirali razgovore.",
+    "transcribeLaterNote": "Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.",
+    "transcribeLaterStorageFull": "Na telefonu je ostalo malo prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite snimke i automatski će se nastaviti.",
+    "unmute": "Uključi zvuk",
+    "newRecording": "Novi snimak",
+    "transcribeLaterPaused": "Pauzirano — zvuk se ne snima",
+    "recordingMode": "Режим снимања",
+    "captureModeLater": "Касније",
+    "captureModeLiveDescription": "Транскрибујте у реалном времену док говорите.",
+    "captureModeLaterDescription": "Сачувајте звук сада и транскрибујте кад год желите.",
+    "backgroundModeUnavailable": "Режим у позадини није доступан јер није повезан компатибилан уређај. Повежите Omi, OpenGlass или Friend Pendant уређај да бисте користили ову функцију.",
+    "memoryThisDevice": "Овај уређај",
+    "memoryThisIphone": "Овај iPhone",
+    "memoryThisPhone": "Овај телефон",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Како да користите Omi",
+    "deviceOnboardingTranscriptionTitle": "Говорите у свој Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Изговорите неколико речи и гледајте како се појављују у реалном времену",
+    "deviceOnboardingGoodJob": "Браво!",
+    "deviceOnboardingStartSpeaking": "Почните да говорите...",
+    "deviceOnboardingAskQuestionTitle": "Поставите Omi-ју питање",
+    "deviceOnboardingAskQuestionSubtitle": "Притисните дугме једном, изговорите питање, па притисните поново када завршите",
+    "deviceOnboardingProcessingQuestion": "Обрада вашег питања...",
+    "deviceOnboardingListening": "Слушам...",
+    "deviceOnboardingTurnOffTitle": "Искључи",
+    "deviceOnboardingTurnOnTitle": "Укључи",
+    "deviceOnboardingTurnOffSubtitle": "Држите дугме 3 секунде",
+    "deviceOnboardingTurnOnSubtitle": "Притисните дугме да га поново укључите",
+    "deviceOnboardingHoldButtonHint": "Чврсто држите дугме док се светло не угаси",
+    "deviceOnboardingStatusConnected": "Повезано",
+    "deviceOnboardingStatusConnectedDone": "Повезано!",
+    "deviceOnboardingStatusDisconnected": "Прекинута веза",
+    "deviceOnboardingStatusTurningOff": "Искључивање...",
+    "deviceOnboardingDoubleTapTitle": "Прилагодите двоструки додир",
+    "deviceOnboardingEndConversation": "Заврши разговор",
+    "deviceOnboardingEndConversationDesc": "Сачувајте и завршите тренутни разговор",
+    "deviceOnboardingMuteUnmute": "Искључи / Укључи звук",
+    "deviceOnboardingMuteUnmuteDesc": "Укључите или искључите микрофон",
+    "deviceOnboardingStarConversation": "Означи звездицом текући разговор",
+    "deviceOnboardingStarConversationDesc": "Означите разговор као важан",
+    "deviceOnboardingSingleTapHint": "То је био један додир — покушајте да брзо додирнете двапут!",
+    "deviceOnboardingTryDoubleTap": "Покушајте сада! Двапут додирните свој Omi",
+    "deviceOnboardingContinue": "Настави",
+    "deviceOnboardingFinish": "Заврши",
+    "deviceOnboardingIntroTitle": "Упознајте свој Omi",
+    "deviceOnboardingIntroSubtitle": "Брз, практичан обилазак свега што ваш Omi може.",
+    "deviceOnboardingIntroDuration": "Око 1 минута",
+    "jumpToLatestMessage": "Иди на најновију поруку",
+    "latest": "Најновије",
+    "flashFirmware": "Инсталирај фирмвер",
+    "pendantRecordingTitle": "Snimanje na privesku",
+    "pendantRecordingNote": "Vaš privezak snima samostalno. Snimci se sinhronizuju sa telefonom dok je aplikacija otvorena.",
+    "pendantSyncingRecordings": "Sinhronizacija snimaka sa vašeg priveska…",
+    "pendantMinutesStored": "~{minutes} min sačuvano",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Memorija priveska je skoro puna — držite aplikaciju otvorenom radi sinhronizacije."
 }

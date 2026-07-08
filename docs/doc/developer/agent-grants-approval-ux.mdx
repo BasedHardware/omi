@@ -1,0 +1,163 @@
+# Agent Grants and Approval UX Design
+
+**Status:** Design-only for TICKET-005. Do not treat this document as implementation scope.
+
+This document narrows the approval and grant UX design that follows the Agent Control Plane spec, especially sections 6.8, 11.2, 17, and 24. It does not change code, cloud relay behavior, artifact lifecycle, or adapter contracts.
+
+## Current Inventory
+
+### Grants
+
+The Phase 2 runtime has a durable `grants` schema and TypeScript grant types:
+
+- `grants.grant_id`
+- `session_id`
+- optional `run_id`
+- `capability`
+- `operation`
+- `resource_pattern`
+- `effect`: `allow` or `deny`
+- `source`: `legacy_default`, `policy`, `user`, or `system`
+- `constraints_json`
+- `created_at_ms`
+- optional `expires_at_ms`
+- optional `revoked_at_ms`
+
+That schema is present, but grants are currently dormant state. There is no live insertion path for `legacy_default`, `policy`, `user`, or `system` grants in the merged Phase 2 runtime.
+
+The intended meaning remains section 6.8: a grant is a recorded capability decision scoped to a session or run. Until implementation work explicitly activates grant writes, UI must not imply that Omi already has user-managed grant records.
+
+### Live Approval Behavior
+
+Live ACP approval behavior is currently handled by `LegacyPermissionPolicy`, not by a user-facing approval queue.
+
+When ACP sends `session/request_permission`, the policy selects:
+
+1. an option with kind `allow_always`, if present;
+2. otherwise `allow_once`, if present;
+3. otherwise the first supplied option;
+4. otherwise a synthetic fallback option id `allow`.
+
+The runtime then immediately responds to ACP with the selected option. This preserves the high-trust legacy behavior required by section 17.
+
+The policy also creates an audit payload shaped as `approval.resolved` with:
+
+- `policy: "legacy_high_trust"`
+- `adapterId: "acp"`
+- the ACP `requestId`, when supplied
+- `optionId`
+- `optionKind`
+- `automatic: true`
+
+That audit payload is logged, but it is not currently appended as a canonical kernel event and does not create a grant row. Therefore `approval.resolved` is live as policy audit behavior, not yet live as persisted ACP event state.
+
+### Terms
+
+`legacy_high_trust` names the temporary policy mode that auto-resolves ACP permission prompts. It is policy identity and UX copy must not present it as an end-user trust grant.
+
+`legacy_default` is the planned grant source for run-scoped records that describe broad legacy authority once grant writes are implemented. It is not the same thing as `legacy_high_trust`: one is stored grant provenance, the other is the current policy mode.
+
+## Design Goals
+
+- Make approval state visible without claiming dormant grants are already active.
+- Keep all approval decisions inside a policy module.
+- Keep runtime adapters as request emitters, not approval authorities.
+- Provide event shapes that fit section 11.2 without adding an approvals table.
+- Avoid broad ACP trust defaults for Hermes, OpenClaw, A2A, AgentVM, or future adapters.
+
+## User-Facing States
+
+Approval UI should project from kernel events and policy decisions:
+
+| State | Meaning | User action |
+| --- | --- | --- |
+| `not_required` | The action is covered by policy and needs no user prompt. | None. |
+| `auto_allowed_legacy` | ACP was auto-approved by `legacy_high_trust`. | Optional audit details only. |
+| `requested` | A policy module requires explicit user input. | Allow or deny. |
+| `allowed_once` | User allowed this request for the current run or attempt. | None. |
+| `allowed_for_session` | User allowed matching requests in this session under constraints. | May revoke later. |
+| `denied` | User denied the request. | Retry only if the agent asks again with changed context. |
+| `expired` | A prior allow no longer applies. | Re-prompt if needed. |
+| `revoked` | User or system removed an existing grant. | Re-prompt if needed. |
+| `failed` | The approval decision could not be applied or delivered. | Show retry or stop the run. |
+
+The UI should show a compact action summary, the requesting adapter, the affected resource pattern, and the scope before asking. It should not expose raw ACP option labels as the primary copy.
+
+## Event Shapes
+
+Approval requests and resolutions remain events as required by section 11.2.
+
+```json
+{
+  "type": "approval.requested",
+  "payload": {
+    "approvalId": "apr_...",
+    "policy": "default_user_approval",
+    "adapterId": "acp",
+    "capability": "filesystem",
+    "operation": "write",
+    "resourcePattern": "/Users/example/project/**",
+    "reason": "Agent wants to edit files in the current project.",
+    "options": [
+      { "id": "allow_once", "effect": "allow", "scope": "run" },
+      { "id": "allow_session", "effect": "allow", "scope": "session" },
+      { "id": "deny", "effect": "deny", "scope": "request" }
+    ],
+    "defaultOptionId": "deny",
+    "expiresAtMs": 1782240300000
+  }
+}
+```
+
+```json
+{
+  "type": "approval.resolved",
+  "payload": {
+    "approvalId": "apr_...",
+    "policy": "default_user_approval",
+    "adapterId": "acp",
+    "decision": "allow",
+    "selectedOptionId": "allow_once",
+    "grantId": "grant_...",
+    "automatic": false,
+    "resolvedBy": "user",
+    "resolvedAtMs": 1782240020000
+  }
+}
+```
+
+Legacy automatic ACP approvals should use the same event name when persisted, but with `policy: "legacy_high_trust"`, `automatic: true`, `resolvedBy: "policy"`, and no `grantId` unless a matching `legacy_default` row is actually inserted in the same transaction.
+
+## Grant Write Rules
+
+When grant writes are pulled into implementation scope:
+
+- only the policy module may create, renew, revoke, or consume grants;
+- adapter code may describe a requested capability, but may not choose allow or deny;
+- `legacy_default` rows should be run-scoped and describe existing broad legacy authority;
+- user choices should use `source: "user"`;
+- automatic non-legacy decisions should use `source: "policy"`;
+- operating-system or managed-admin decisions should use `source: "system"`;
+- every persisted grant write must have a paired `approval.resolved` event in the same transaction.
+
+Grant rows should be narrow by default. Use exact capability, operation, and resource pattern fields rather than storing generic "trusted adapter" state.
+
+## Adapter Policy Boundaries
+
+ACP may continue to opt into `legacy_high_trust` only as a named legacy policy.
+
+Hermes, OpenClaw, A2A, AgentVM, and future adapters must not inherit ACP's legacy auto-approval behavior by default. Each adapter must explicitly choose a policy profile, and new profiles should start from explicit user approval or narrow policy grants.
+
+## Deferred
+
+This design does not implement:
+
+- a new approvals table;
+- grant persistence;
+- Swift approval UI;
+- runtime event persistence changes;
+- cloud relay or cross-device approval sync;
+- artifact lifecycle changes;
+- broad capability generation for future standards.
+
+Those remain implementation tickets. Section 24 still applies: a new user-facing approval UX is deferred until it is explicitly pulled into scope.

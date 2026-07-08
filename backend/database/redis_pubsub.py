@@ -9,11 +9,15 @@ import json
 import logging
 import threading
 import time
-from typing import Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional, cast
 
 import redis
 
 logger = logging.getLogger(__name__)
+
+# redis.Redis is untyped under strict Pyright; treat the client/pubsub objects
+# as Any at this SDK boundary.
+RedisClientT = Any
 
 
 class RedisPubSubManager:
@@ -37,21 +41,21 @@ class RedisPubSubManager:
     CHANNEL = 'cache_invalidation'
     RECONNECT_DELAY = 5  # seconds
 
-    def __init__(self, redis_client: redis.Redis):
+    def __init__(self, redis_client: RedisClientT) -> None:
         """
         Initialize pub/sub manager.
 
         Args:
             redis_client: Redis client instance
         """
-        self.redis_client = redis_client
-        self.pubsub = None
-        self.subscriber_thread = None
+        self.redis_client: RedisClientT = redis_client
+        self.pubsub: Optional[Any] = None
+        self.subscriber_thread: Optional[threading.Thread] = None
         self.running = False
-        self.callbacks: Dict[str, List[Callable]] = {}
+        self.callbacks: Dict[str, List[Callable[[List[str]], None]]] = {}
         self.lock = threading.Lock()
 
-    def start(self):
+    def start(self) -> None:
         """Start the pub/sub subscription thread."""
         if self.running:
             logger.warning("PubSub manager already running")
@@ -60,8 +64,9 @@ class RedisPubSubManager:
         self.running = True
 
         try:
-            self.pubsub = self.redis_client.pubsub()
-            self.pubsub.subscribe(self.CHANNEL)
+            pubsub = self.redis_client.pubsub()
+            pubsub.subscribe(self.CHANNEL)
+            self.pubsub = pubsub
 
             self.subscriber_thread = threading.Thread(
                 target=self._subscribe_loop, daemon=True, name='redis-pubsub-subscriber'
@@ -73,23 +78,28 @@ class RedisPubSubManager:
             self.running = False
             raise
 
-    def stop(self):
+    def stop(self) -> None:
         """Stop the subscription and clean up."""
         self.running = False
 
         if self.pubsub:
             try:
                 self.pubsub.unsubscribe(self.CHANNEL)
-                self.pubsub.close()
             except Exception as e:
                 logger.error(f"Error closing pub/sub connection: {e}")
 
         if self.subscriber_thread:
             self.subscriber_thread.join(timeout=5)
 
+        if self.pubsub:
+            try:
+                self.pubsub.close()
+            except Exception as e:
+                logger.error(f"Error closing pub/sub connection: {e}")
+
         logger.info("Stopped Redis pub/sub manager")
 
-    def register_callback(self, key_pattern: str, callback: Callable[[List[str]], None]):
+    def register_callback(self, key_pattern: str, callback: Callable[[List[str]], None]) -> None:
         """
         Register a callback for cache invalidation events.
 
@@ -103,7 +113,7 @@ class RedisPubSubManager:
             self.callbacks[key_pattern].append(callback)
             logger.debug(f"Registered callback for pattern: {key_pattern}")
 
-    def publish_invalidation(self, keys: List[str]):
+    def publish_invalidation(self, keys: List[str]) -> None:
         """
         Publish cache invalidation event.
 
@@ -118,21 +128,28 @@ class RedisPubSubManager:
         except Exception as e:
             logger.error(f"Failed to publish invalidation: {e}")
 
-    def _subscribe_loop(self):
+    def _subscribe_loop(self) -> None:
         """Background loop for receiving pub/sub messages."""
         while self.running:
             try:
-                message = self.pubsub.get_message(timeout=1.0)
-                if message and message['type'] == 'message':
-                    self._handle_message(message['data'])
+                if self.pubsub is None:
+                    time.sleep(self.RECONNECT_DELAY)
+                    continue
+                message: Optional[Dict[str, Any]] = self.pubsub.get_message(timeout=1.0)
+                if message and message.get('type') == 'message':
+                    self._handle_message(message.get('data'))
             except redis.ConnectionError as e:
+                if not self.running:
+                    break
                 logger.error(f"Redis connection error in pub/sub: {e}")
                 self._reconnect()
             except Exception as e:
+                if not self.running:
+                    break
                 logger.error(f"Error in pub/sub loop: {e}")
                 time.sleep(self.RECONNECT_DELAY)
 
-    def _reconnect(self):
+    def _reconnect(self) -> None:
         """Attempt to reconnect to Redis pub/sub."""
         logger.info("Attempting to reconnect to Redis pub/sub...")
         time.sleep(self.RECONNECT_DELAY)
@@ -140,13 +157,14 @@ class RedisPubSubManager:
         try:
             if self.pubsub:
                 self.pubsub.close()
-            self.pubsub = self.redis_client.pubsub()
-            self.pubsub.subscribe(self.CHANNEL)
+            pubsub = self.redis_client.pubsub()
+            pubsub.subscribe(self.CHANNEL)
+            self.pubsub = pubsub
             logger.info("Successfully reconnected to Redis pub/sub")
         except Exception as e:
             logger.error(f"Failed to reconnect: {e}")
 
-    def _handle_message(self, data: bytes):
+    def _handle_message(self, data: Any) -> None:
         """
         Handle incoming pub/sub message.
 
@@ -154,9 +172,16 @@ class RedisPubSubManager:
             data: Raw message data
         """
         try:
-            message = json.loads(data.decode('utf-8'))
+            if isinstance(data, bytes):
+                payload = data.decode('utf-8')
+            elif isinstance(data, str):
+                payload = data
+            else:
+                return
+            message = json.loads(payload)
             event = message.get('event')
-            keys = message.get('keys', [])
+            keys_raw = message.get('keys', [])
+            keys: List[str] = [str(k) for k in cast(List[Any], keys_raw)] if isinstance(keys_raw, list) else []
 
             if event == 'invalidate':
                 logger.debug(f"Received invalidation for keys: {keys}")
@@ -164,12 +189,12 @@ class RedisPubSubManager:
         except Exception as e:
             logger.error(f"Error handling pub/sub message: {e}")
 
-    def _trigger_callbacks(self, keys: List[str]):
+    def _trigger_callbacks(self, keys: List[str]) -> None:
         """
         Trigger registered callbacks for invalidated keys.
 
         Args:
-            keys: List of invalidated cache keys
+            keys: List of invalidated keys
         """
         with self.lock:
             for key in keys:

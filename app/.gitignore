@@ -47,3 +47,6 @@ app.*.map.json
 /android/app/release
 # Local clone of forked dependencies
 whisper_flutter_new/
+
+# Maestro test reports (generated)
+.maestro/reports/

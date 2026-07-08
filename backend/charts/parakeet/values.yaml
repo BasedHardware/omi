@@ -103,8 +103,53 @@ metrics:
     enabled: false
     interval: "15s"
     labels: {}
-  prometheusAdapter:
-    enabled: false
+# Prometheus adapter sub-chart — translates Prometheus metrics to K8s metrics API for HPA.
+prometheus-adapter:
+  enabled: false
+  prometheus:
+    url: ""
+  rules:
+    default: false
+    custom:
+      - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_streams"
+        metricsQuery: 'sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+      - seriesQuery: 'parakeet_active_batch_requests{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_batch_requests"
+        metricsQuery: 'sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>)'
+      - seriesQuery: 'parakeet_active_streams{namespace!="",pod!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+            pod: {resource: "pod"}
+        name:
+          as: "parakeet_active_requests_total"
+        metricsQuery: '(sum(parakeet_active_streams{<<.LabelMatchers>>}) by (<<.GroupBy>>) + sum(parakeet_active_batch_requests{<<.LabelMatchers>>}) by (<<.GroupBy>>))'
+    external:
+      - seriesQuery: 'parakeet_request_duration_seconds_bucket{namespace!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+        name:
+          as: "parakeet_request_latency_p99"
+        metricsQuery: 'histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le))'
+      - seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{namespace!=""}'
+        resources:
+          overrides:
+            namespace: {resource: "namespace"}
+        name:
+          as: "parakeet_gpu_utilization"
+        metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{<<.LabelMatchers>>}[1m]))'
 
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:

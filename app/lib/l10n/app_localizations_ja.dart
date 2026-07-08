@@ -422,6 +422,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get offlineSync => 'オフライン同期';
 
   @override
+  String get autoSync => '自動同期';
+
+  @override
+  String get autoSyncDescription => 'デバイスの接続時にオフライン録音を自動的に同期します';
+
+  @override
   String get deviceSettings => 'デバイス設定';
 
   @override
@@ -4601,10 +4607,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription、$triggerDescription。';
   }
 
@@ -7634,6 +7637,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get viewAll => 'すべて表示';
 
   @override
+  String get expand => '展開';
+
+  @override
   String get addTask => 'タスクを追加';
 
   @override
@@ -9149,6 +9155,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get backgroundModeNote => '現在は Omi デバイスのみ対応しており、継続的に改善しています。';
 
   @override
+  String get backgroundModeUnavailable =>
+      '互換性のあるデバイスが接続されていないため、バックグラウンドモードは利用できません。この機能を使用するには、Omi、OpenGlass、またはFriend Pendantデバイスを接続してください。';
+
+  @override
   String get regenerateRecap => '要約を再生成';
 
   @override
@@ -9162,4 +9172,184 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'この日の要約対象となる会話はありません。';
+
+  @override
+  String get syncCustomSttWarningTitle => '同期では Omi の文字起こしを使用します';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。';
+
+  @override
+  String get transcribeLaterTitle => '後で文字起こし';
+
+  @override
+  String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
+
+  @override
+  String get transcribeLaterNote => '現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+
+  @override
+  String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
+
+  @override
+  String get recordingMode => '録音モード';
+
+  @override
+  String get captureModeLater => '後で';
+
+  @override
+  String get captureModeLiveDescription => '話しながらリアルタイムで文字起こしします。';
+
+  @override
+  String get captureModeLaterDescription => '今すぐ音声を保存して、好きなときに文字起こしできます。';
+
+  @override
+  String get unmute => 'ミュート解除';
+
+  @override
+  String get newRecording => '新規録音';
+
+  @override
+  String get transcribeLaterPaused => '一時停止中 — 音声は録音されていません';
+
+  @override
+  String get memoryThisDevice => 'このデバイス';
+
+  @override
+  String get memoryThisIphone => 'このiPhone';
+
+  @override
+  String get memoryThisPhone => 'この電話';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi の使い方';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Omiに話しかけてみよう';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => '何か話して、リアルタイムで文字になる様子を見てみましょう';
+
+  @override
+  String get deviceOnboardingGoodJob => 'いいですね！';
+
+  @override
+  String get deviceOnboardingStartSpeaking => '話してみてください...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omiに質問してみよう';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'ボタンを1回押して質問を話し、終わったらもう一度押します';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => '質問を処理しています...';
+
+  @override
+  String get deviceOnboardingListening => '聞いています...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => '電源を切る';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => '電源を入れる';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'ボタンを3秒間長押しします';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'ボタンを押すと再び電源が入ります';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'ライトが消えるまでボタンをしっかり長押ししてください';
+
+  @override
+  String get deviceOnboardingStatusConnected => '接続済み';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => '接続しました！';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => '未接続';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => '電源を切っています...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'ダブルタップをカスタマイズ';
+
+  @override
+  String get deviceOnboardingEndConversation => '会話を終了';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => '現在の会話を保存して終了します';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'ミュート / 解除';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'マイクのオン・オフを切り替えます';
+
+  @override
+  String get deviceOnboardingStarConversation => '進行中の会話にスターを付ける';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => '会話を重要としてマークします';
+
+  @override
+  String get deviceOnboardingSingleTapHint => '今のはシングルタップです — 素早く2回タップしてみてください！';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => '今すぐ試そう！Omiをダブルタップしてください';
+
+  @override
+  String get deviceOnboardingContinue => '続ける';
+
+  @override
+  String get deviceOnboardingFinish => '完了';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Omi を知ろう';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Omi にできることを、すべて手軽に体験できるクイックツアー。';
+
+  @override
+  String get deviceOnboardingIntroDuration => '約1分';
+
+  @override
+  String get jumpToLatestMessage => '最新のメッセージにジャンプ';
+
+  @override
+  String get latest => '最新';
+
+  @override
+  String get flashFirmware => 'ファームウェアを書き込む';
+
+  @override
+  String get pendantRecordingTitle => 'ペンダントで録音中';
+
+  @override
+  String get pendantRecordingNote => 'ペンダントが自動的に録音しています。アプリを開いている間に録音がスマートフォンに同期されます。';
+
+  @override
+  String get pendantSyncingRecordings => 'ペンダントから録音を同期しています…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes 分保存済み';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'ペンダントのストレージがまもなくいっぱいになります。同期するにはアプリを開いたままにしてください。';
 }

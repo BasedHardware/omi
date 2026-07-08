@@ -1,0 +1,7 @@
+{
+  "version": "0.12.19",
+  "date": "2026-07-05",
+  "changes": [
+    "Fixed onboarding permission checks so notification permission is reported and can be requested correctly"
+  ]
+}

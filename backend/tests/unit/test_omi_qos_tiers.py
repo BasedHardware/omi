@@ -2,6 +2,8 @@
 
 import os
 import sys
+import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -9,6 +11,103 @@ import pytest
 # ---------------------------------------------------------------------------
 # Pre-mock heavy deps before any imports touch them
 # ---------------------------------------------------------------------------
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+
+
+def _install_module(name: str, **attrs) -> types.ModuleType:
+    module = types.ModuleType(name)
+    for attr, value in attrs.items():
+        setattr(module, attr, value)
+    if '.' in name:
+        parent_name, child_name = name.rsplit('.', 1)
+        parent = sys.modules.setdefault(parent_name, types.ModuleType(parent_name))
+        if not hasattr(parent, '__path__'):
+            parent.__path__ = []
+        setattr(parent, child_name, module)
+    sys.modules[name] = module
+    return module
+
+
+class _BaseCallbackHandler:
+    pass
+
+
+class _LLMResult:
+    pass
+
+
+class _BaseChatModel:
+    def invoke(self, *_args, **_kwargs):
+        return MagicMock()
+
+    async def ainvoke(self, *_args, **_kwargs):
+        return MagicMock()
+
+    def stream(self, *_args, **_kwargs):
+        return iter(())
+
+    def with_structured_output(self, *_args, **_kwargs):
+        return self
+
+    def bind(self, **kwargs):
+        bound = self.__class__(**self._constructor_kwargs)
+        bound.bound_kwargs = kwargs
+        return bound
+
+
+class _ChatOpenAI(_BaseChatModel):
+    def __init__(self, **kwargs):
+        self._constructor_kwargs = dict(kwargs)
+        self.model_name = kwargs.get('model')
+        self.model = self.model_name
+        self.temperature = kwargs.get('temperature')
+        self.openai_api_base = kwargs.get('base_url', '')
+
+
+class _ChatGoogleGenerativeAI(_BaseChatModel):
+    def __init__(self, **kwargs):
+        self._constructor_kwargs = dict(kwargs)
+        self.model_name = kwargs.get('model')
+        self.model = self.model_name
+
+
+class _OpenAIEmbeddings:
+    def __init__(self, **_kwargs):
+        pass
+
+    def embed_query(self, _text):
+        return [0.0]
+
+    def embed_documents(self, texts):
+        return [[0.0] for _text in texts]
+
+
+class _PydanticOutputParser:
+    def __init__(self, **kwargs):
+        self.pydantic_object = kwargs.get('pydantic_object')
+
+
+class _Encoding:
+    def encode(self, text):
+        return list(text)
+
+
+class _AsyncAnthropic:
+    def __init__(self, **_kwargs):
+        pass
+
+
+_install_module('anthropic', AsyncAnthropic=_AsyncAnthropic)
+_install_module('langchain_core')
+_install_module('langchain_core.callbacks', BaseCallbackHandler=_BaseCallbackHandler)
+_install_module('langchain_core.outputs', LLMResult=_LLMResult)
+_install_module('langchain_core.language_models', BaseChatModel=_BaseChatModel)
+_install_module('langchain_core.output_parsers', PydanticOutputParser=_PydanticOutputParser)
+_install_module('langchain_openai', ChatOpenAI=_ChatOpenAI, OpenAIEmbeddings=_OpenAIEmbeddings)
+_install_module('langchain_google_genai', ChatGoogleGenerativeAI=_ChatGoogleGenerativeAI)
+_install_module('tiktoken', encoding_for_model=MagicMock(return_value=_Encoding()))
+_install_module('utils.byok', get_byok_key=MagicMock(return_value=None), get_byok_uid=MagicMock(return_value=None))
+
 _HEAVY_MOCKS = {
     'firebase_admin': MagicMock(),
     'firebase_admin.firestore': MagicMock(),
@@ -23,15 +122,71 @@ _HEAVY_MOCKS = {
 for _mod, _mock in _HEAVY_MOCKS.items():
     sys.modules.setdefault(_mod, _mock)
 
+for _package, _path in {
+    'utils': BACKEND_DIR / 'utils',
+    'utils.llm': BACKEND_DIR / 'utils' / 'llm',
+}.items():
+    module = sys.modules.get(_package)
+    if module is None or not hasattr(module, '__path__'):
+        module = types.ModuleType(_package)
+        sys.modules[_package] = module
+    module.__path__ = [str(_path)]
+    if '.' in _package:
+        parent_name, child_name = _package.rsplit('.', 1)
+        setattr(sys.modules[parent_name], child_name, module)
+
+_clients_stub = sys.modules.get('utils.llm.clients')
+if _clients_stub is not None and not hasattr(_clients_stub, 'MODEL_QOS_PROFILES'):
+    sys.modules.pop('utils.llm.clients', None)
+
+_usage_tracker_stub = sys.modules.get('utils.llm.usage_tracker')
+if _usage_tracker_stub is not None and not hasattr(_usage_tracker_stub, 'get_usage_callback'):
+    sys.modules.pop('utils.llm.usage_tracker', None)
+
 # Set required env vars before importing clients
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-fake-key-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'sk-ant-test-fake-key')
+
+
+def _clients_subprocess_script(assertion: str) -> str:
+    lines = [
+        "import os",
+        "import sys",
+        "from unittest.mock import MagicMock",
+        "for module_name in [",
+        "    'anthropic',",
+        "    'cachetools',",
+        "    'firebase_admin',",
+        "    'firebase_admin.firestore',",
+        "    'google.cloud.firestore',",
+        "    'google.cloud.firestore_v1',",
+        "    'google.cloud.firestore_v1.base_query',",
+        "    'langchain_core',",
+        "    'langchain_core.callbacks',",
+        "    'langchain_core.language_models',",
+        "    'langchain_core.output_parsers',",
+        "    'langchain_core.outputs',",
+        "    'langchain_google_genai',",
+        "    'langchain_openai',",
+        "    'tiktoken',",
+        "    'database',",
+        "    'database._client',",
+        "    'database.llm_usage',",
+        "    'models.structured_extraction',",
+        "    'prometheus_client',",
+        "]:",
+        "    sys.modules.setdefault(module_name, MagicMock())",
+        "os.environ['OPENAI_API_KEY'] = 'sk-test'",
+        "os.environ['ANTHROPIC_API_KEY'] = 'sk-ant-test'",
+        *assertion.splitlines(),
+    ]
+    return "\n".join(lines) + "\n"
+
 
 # Now import the module under test
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
     _ANTHROPIC_ONLY_FEATURES,
-    _CACHE_KEY_MODELS,
     _PERPLEXITY_ONLY_FEATURES,
     _PINNED_FEATURES,
     _STRUCTURED_OUTPUT_FEATURES,
@@ -48,6 +203,7 @@ from utils.llm.clients import (
     get_model,
     get_provider,
     get_qos_info,
+    supports_prompt_cache,
 )
 
 # ---------------------------------------------------------------------------
@@ -247,9 +403,9 @@ class TestGetLlm:
         assert hasattr(llm_with_key, 'invoke')
 
     def test_cache_key_ignored_for_non_cacheable_model(self):
-        # memories uses gpt-4.1-mini which is not in _CACHE_KEY_MODELS
-        llm_with_key = get_llm('memories', cache_key='omi-test-key')
-        llm_without_key = get_llm('memories')
+        # followup uses Gemini in the premium profile, which does not support OpenAI prompt_cache_key.
+        llm_with_key = get_llm('followup', cache_key='omi-test-key')
+        llm_without_key = get_llm('followup')
         assert llm_with_key is llm_without_key
 
     def test_new_features_return_clients(self):
@@ -390,8 +546,9 @@ class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
     def test_cache_key_models_contains_expected(self):
-        assert 'gpt-5.4' in _CACHE_KEY_MODELS
-        assert 'gpt-5.4-mini' in _CACHE_KEY_MODELS
+        assert supports_prompt_cache('gpt-5.4')
+        assert supports_prompt_cache('gpt-5.4-mini')
+        assert not supports_prompt_cache('claude-sonnet-4-6')
 
 
 class TestGetQosInfo:
@@ -506,24 +663,17 @@ class TestProfileSelectionAtImportTime:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
-                (
-                    "import sys; from unittest.mock import MagicMock; "
-                    "[sys.modules.setdefault(m, MagicMock()) for m in "
-                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
-                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
-                    "'database','database._client','database.llm_usage']]; "
-                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
-                    "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
-                    "os.environ['MODEL_QOS']='premium'; "
-                    "from utils.llm.clients import _active_profile_name; "
+                _clients_subprocess_script(
+                    "os.environ['MODEL_QOS'] = 'premium'\n"
+                    "from utils.llm.clients import _active_profile_name\n"
                     "assert _active_profile_name == 'premium', f'Expected premium, got {_active_profile_name}'"
                 ),
             ],
             capture_output=True,
             text=True,
-            cwd=str(os.path.join(os.path.dirname(__file__), '..', '..')),
+            cwd=str(BACKEND_DIR),
         )
         assert result.returncode == 0, f"premium profile test failed: {result.stderr}"
 
@@ -533,24 +683,18 @@ class TestProfileSelectionAtImportTime:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
-                (
-                    "import sys; from unittest.mock import MagicMock; "
-                    "[sys.modules.setdefault(m, MagicMock()) for m in "
-                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
-                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
-                    "'database','database._client','database.llm_usage']]; "
-                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
-                    "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
-                    "os.environ['MODEL_QOS']='bogus'; "
-                    "from utils.llm.clients import _active_profile_name; "
-                    "assert _active_profile_name == 'premium', f'Expected premium fallback, got {_active_profile_name}'"
+                _clients_subprocess_script(
+                    "os.environ['MODEL_QOS'] = 'bogus'\n"
+                    "from utils.llm.clients import _active_profile_name\n"
+                    "assert _active_profile_name == 'premium', "
+                    "f'Expected premium fallback, got {_active_profile_name}'"
                 ),
             ],
             capture_output=True,
             text=True,
-            cwd=str(os.path.join(os.path.dirname(__file__), '..', '..')),
+            cwd=str(BACKEND_DIR),
         )
         assert result.returncode == 0, f"invalid profile fallback test failed: {result.stderr}"
 
@@ -562,7 +706,7 @@ class TestExpandedCallsiteCoverage:
         from pathlib import Path
 
         backend_dir = Path(__file__).resolve().parent.parent.parent
-        return (backend_dir / rel_path).read_text()
+        return (backend_dir / rel_path).read_text(encoding='utf-8')
 
     def test_conversation_processing_all_keys(self):
         import re
@@ -814,6 +958,44 @@ class TestBYOKWrapperArchitecture:
             assert not hasattr(mod, name), f'{name} should have been removed from clients.py'
 
 
+class TestBYOKEmbeddingsProxy:
+    def test_model_access_403_falls_back_to_default_embeddings(self, monkeypatch):
+        """BYOK OpenAI projects can reject text-embedding-3-large with model_not_found."""
+        import utils.llm.clients as mod
+
+        class _FailingBYOKEmbeddings:
+            def embed_documents(self, _texts):
+                raise RuntimeError(
+                    "openai.PermissionDeniedError: Error code: 403 - project does not have access "
+                    "to model text-embedding-3-large; code: model_not_found"
+                )
+
+            def embed_query(self, _text):
+                raise RuntimeError(
+                    "openai.PermissionDeniedError: Error code: 403 - project does not have access "
+                    "to model text-embedding-3-large; code: model_not_found"
+                )
+
+        default = MagicMock()
+        default.embed_documents.return_value = [[0.1, 0.2]]
+        default.embed_query.return_value = [0.1, 0.2]
+
+        monkeypatch.setattr(mod, 'get_byok_key', lambda provider: 'sk-byok' if provider == 'openai' else None)
+        monkeypatch.setattr(mod, 'OpenAIEmbeddings', lambda **_kwargs: _FailingBYOKEmbeddings())
+        mod._openai_cache.clear()
+
+        proxy = mod._OpenAIEmbeddingsProxy(
+            model='text-embedding-3-large',
+            default=default,
+            ctor_kwargs={},
+        )
+
+        assert proxy.embed_documents(['hello']) == [[0.1, 0.2]]
+        assert proxy.embed_query('hello') == [0.1, 0.2]
+        default.embed_documents.assert_called_once_with(['hello'])
+        default.embed_query.assert_called_once_with('hello')
+
+
 class TestBYOKProfile:
     """Verify BYOK QoS profile structure and model selections."""
 
@@ -865,25 +1047,18 @@ class TestBYOKProfileFixed:
 
         result = subprocess.run(
             [
-                'python3',
+                sys.executable,
                 '-c',
-                (
-                    "import sys; from unittest.mock import MagicMock; "
-                    "[sys.modules.setdefault(m, MagicMock()) for m in "
-                    "['firebase_admin','firebase_admin.firestore','google.cloud.firestore',"
-                    "'google.cloud.firestore_v1','google.cloud.firestore_v1.base_query',"
-                    "'database','database._client','database.llm_usage']]; "
-                    "import os; os.environ['OPENAI_API_KEY']='sk-test'; "
-                    "os.environ['ANTHROPIC_API_KEY']='sk-ant-test'; "
-                    "os.environ['MODEL_QOS']='max'; "
-                    "from utils.llm.clients import _byok_profile_name, _byok_profile; "
-                    "assert _byok_profile_name == 'byok', f'Expected byok, got {_byok_profile_name}'; "
+                _clients_subprocess_script(
+                    "os.environ['MODEL_QOS'] = 'max'\n"
+                    "from utils.llm.clients import _byok_profile_name, _byok_profile\n"
+                    "assert _byok_profile_name == 'byok', f'Expected byok, got {_byok_profile_name}'\n"
                     "assert _byok_profile is not None"
                 ),
             ],
             capture_output=True,
             text=True,
-            cwd=str(os.path.join(os.path.dirname(__file__), '..', '..')),
+            cwd=str(BACKEND_DIR),
         )
         assert result.returncode == 0, f"byok profile test failed: {result.stderr}"
 
@@ -933,3 +1108,88 @@ class TestStructuredOutputFeatureTracking:
         profile = MODEL_QOS_PROFILES['byok']
         for feature in _STRUCTURED_OUTPUT_FEATURES:
             assert profile[feature][1] == 'openai', f'byok {feature} should be openai, got {profile[feature][1]}'
+
+
+class TestGeminiThinkingBudget:
+    """thinking_budget is a native google-genai SDK param — it must never reach the OpenAI-compat fallback.
+
+    Regression for the pusher crash: pusher has no GEMINI_API_KEY/USE_VERTEX_AI, so the Gemini client
+    resolves to the ChatOpenAI OpenAI-compat fallback. Passing thinking_budget there leaks it into
+    model_kwargs and crashes at invoke ("Completions.parse() got an unexpected keyword argument
+    'thinking_budget'"), disabling trends/memory-discard for all users.
+    """
+
+    def test_openai_compat_fallback_omits_thinking_budget(self):
+        from unittest.mock import patch as _patch
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        captured = {}
+
+        def fake_openai(*args, **kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        try:
+            with _patch.dict(os.environ, {'GEMINI_API_KEY': '', 'USE_VERTEX_AI': ''}), _patch(
+                'utils.llm.clients.ChatOpenAI', side_effect=fake_openai
+            ), _patch('utils.llm.clients.ChatGoogleGenerativeAI', side_effect=lambda *a, **k: MagicMock()):
+                _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
+            assert 'thinking_budget' not in captured, 'thinking_budget must not reach the ChatOpenAI fallback'
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_native_gemini_receives_thinking_budget(self):
+        from unittest.mock import patch as _patch
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        captured = {}
+
+        def fake_genai(*args, **kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        try:
+            with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                _get_or_create_gemini_llm('gemini-2.5-flash-lite', thinking_budget=0)
+            assert captured.get('thinking_budget') == 0, 'native ChatGoogleGenerativeAI must receive thinking_budget'
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_non_25_model_omits_thinking_budget(self):
+        from unittest.mock import patch as _patch
+
+        saved = dict(_llm_cache)
+        _llm_cache.clear()
+        captured = {}
+
+        def fake_genai(*args, **kwargs):
+            captured.update(kwargs)
+            return MagicMock()
+
+        try:
+            with _patch.dict(os.environ, {'GEMINI_API_KEY': 'test-key', 'USE_VERTEX_AI': ''}), _patch(
+                'utils.llm.providers.ChatGoogleGenerativeAI', side_effect=fake_genai
+            ), _patch('utils.llm.providers.ChatOpenAI', side_effect=lambda *a, **k: MagicMock()):
+                _get_or_create_gemini_llm('gemini-3-flash-preview', thinking_budget=0)
+            assert 'thinking_budget' not in captured, 'thinking_budget only applies to gemini-2.5* models'
+        finally:
+            _llm_cache.clear()
+            _llm_cache.update(saved)
+
+    def test_structured_output_route_omits_thinking_budget(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('trends', 'gemini-2.5-flash-lite', 'gemini')
+        assert 'thinking_budget' not in opts
+
+    def test_non_structured_gemini_route_sets_thinking_budget_zero(self):
+        from utils.llm.model_config import get_route_options
+
+        opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
+        assert opts.get('thinking_budget') == 0

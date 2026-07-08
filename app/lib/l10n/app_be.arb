@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Аўтаномная сінхранізацыя",
+    "autoSync": "Аўтасінхранізацыя",
+    "autoSyncDescription": "Аўтаматычна сінхранізаваць офлайн-запісы пры падключэнні прылады",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -9535,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Паглядзець ўсё",
+    "expand": "Разгарнуць",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10624,5 +10627,72 @@
     "recapRegeneratedSnackbar": "Рэзюмэ перагенеравана",
     "recapRegenerateFailed": "Не атрымалася перагенераваць рэзюмэ. Паспрабуйце пазней.",
     "recapRegenerateCooldown": "Калі ласка, пачакайце некалькі секунд перад паўторнай генерацыяй.",
-    "recapRegenerateNoConversations": "Няма размоў для рэзюмавання гэтага дня."
+    "recapRegenerateNoConversations": "Няма размоў для рэзюмавання гэтага дня.",
+    "syncCustomSttWarningTitle": "Сінхранізацыя выкарыстоўвае транскрыпцыю Omi",
+    "syncCustomSttWarningMessage": "Вы карыстаецеся ўласным сэрвісам транскрыпцыі. Сінхранізацыя гэтых запісаў транскрыбуе іх на серверах Omi, і яны залічацца ў ліміт транскрыпцыі вашага тарыфу.",
+    "transcribeLaterTitle": "Транскрыпцыя пазней",
+    "transcribeLaterDescription": "Запісвайце аўдыя зараз, а транскрыбуйце яго пры неабходнасці, а не ў рэжыме рэальнага часу. Запісы захоўваюцца на тэлефоне, а потым вы загружаеце іх, каб стварыць размовы.",
+    "transcribeLaterNote": "Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.",
+    "transcribeLaterStorageFull": "На тэлефоне мала вольнага месца, таму запіс прыпынены. Вызваліце месца ці загрузіце свае запісы — і ён аднавіцца аўтаматычна.",
+    "unmute": "Уключыць гук",
+    "newRecording": "Новы запіс",
+    "transcribeLaterPaused": "Прыпынена — аўдыя не запісваецца",
+    "recordingMode": "Рэжым запісу",
+    "captureModeLater": "Пазней",
+    "captureModeLiveDescription": "Транскрыбаванне ў рэальным часе падчас размовы.",
+    "captureModeLaterDescription": "Захавайце аўдыя зараз і транскрыбуйце калі заўгодна.",
+    "backgroundModeUnavailable": "Фонавы рэжым недаступны, бо не падключана сумяшчальная прылада. Падключыце Omi, OpenGlass або Friend Pendant, каб выкарыстоўваць гэту функцыю.",
+    "memoryThisDevice": "Гэта прылада",
+    "memoryThisIphone": "Гэты iPhone",
+    "memoryThisPhone": "Гэты тэлефон",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Як карыстацца Omi",
+    "deviceOnboardingTranscriptionTitle": "Скажыце нешта свайму Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Скажыце некалькі слоў і паглядзіце, як яны з'яўляюцца ў рэальным часе",
+    "deviceOnboardingGoodJob": "Выдатна!",
+    "deviceOnboardingStartSpeaking": "Пачніце гаварыць...",
+    "deviceOnboardingAskQuestionTitle": "Задайце Omi пытанне",
+    "deviceOnboardingAskQuestionSubtitle": "Націсніце кнопку адзін раз, задайце пытанне, а пасля скончыўшы націсніце зноў",
+    "deviceOnboardingProcessingQuestion": "Апрацоўка вашага пытання...",
+    "deviceOnboardingListening": "Слухаю...",
+    "deviceOnboardingTurnOffTitle": "Выключыць",
+    "deviceOnboardingTurnOnTitle": "Уключыць",
+    "deviceOnboardingTurnOffSubtitle": "Утрымлівайце кнопку 3 секунды",
+    "deviceOnboardingTurnOnSubtitle": "Націсніце кнопку, каб уключыць зноў",
+    "deviceOnboardingHoldButtonHint": "Моцна ўтрымлівайце кнопку, пакуль не патухне індыкатар",
+    "deviceOnboardingStatusConnected": "Падключана",
+    "deviceOnboardingStatusConnectedDone": "Падключана!",
+    "deviceOnboardingStatusDisconnected": "Адключана",
+    "deviceOnboardingStatusTurningOff": "Выключэнне...",
+    "deviceOnboardingDoubleTapTitle": "Налада двайнога націску",
+    "deviceOnboardingEndConversation": "Завяршыць размову",
+    "deviceOnboardingEndConversationDesc": "Захаваць і завяршыць бягучую размову",
+    "deviceOnboardingMuteUnmute": "Мікрафон укл./выкл.",
+    "deviceOnboardingMuteUnmuteDesc": "Уключыць або выключыць мікрафон",
+    "deviceOnboardingStarConversation": "Пазначыць бягучую размову",
+    "deviceOnboardingStarConversationDesc": "Пазначыць размову як важную",
+    "deviceOnboardingSingleTapHint": "Гэта быў адзіночны націск — паспрабуйце націснуць двойчы хутка!",
+    "deviceOnboardingTryDoubleTap": "Паспрабуйце цяпер! Двойчы націсніце свой Omi",
+    "deviceOnboardingContinue": "Працягнуць",
+    "deviceOnboardingFinish": "Гатова",
+    "deviceOnboardingIntroTitle": "Пазнаёмцеся з Omi",
+    "deviceOnboardingIntroSubtitle": "Хуткі практычны агляд усяго, што ўмее ваш Omi.",
+    "deviceOnboardingIntroDuration": "Каля 1 хвіліны",
+    "jumpToLatestMessage": "Перайсці да апошняга паведамлення",
+    "latest": "Апошні",
+    "flashFirmware": "Усталяваць прашыўку",
+    "pendantRecordingTitle": "Запіс на кулоне",
+    "pendantRecordingNote": "Ваш кулон запісвае самастойна. Запісы сінхранізуюцца з тэлефонам, пакуль праграма адкрыта.",
+    "pendantSyncingRecordings": "Сінхранізацыя запісаў з вашага кулона…",
+    "pendantMinutesStored": "~{minutes} хв захавана",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Памяць кулона амаль запоўнена — трымайце праграму адкрытай для сінхранізацыі."
 }

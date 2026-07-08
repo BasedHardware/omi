@@ -181,7 +181,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
                       context.read<CaptureProvider>().onTranscriptionSettingsChanged();
                     }
                   },
-                  activeColor: const Color(0xFF22C55E),
+                  activeThumbColor: const Color(0xFF22C55E),
                 ),
             ],
           ),
@@ -356,7 +356,7 @@ class _LanguageSettingsPageState extends State<LanguageSettingsPage> {
         backgroundColor: const Color(0xFF0D0D0D),
         elevation: 0,
         leading: IconButton(
-          icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+          icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text(

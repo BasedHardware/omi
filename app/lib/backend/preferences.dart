@@ -30,6 +30,17 @@ class SharedPreferencesUtil {
     _preferences = await SharedPreferences.getInstance();
   }
 
+  /// Picks up values written natively (the Dart cache doesn't see those otherwise).
+  static Future<void> reload() async {
+    await _preferences?.reload();
+  }
+
+  int get pendantPagesStored => getInt('pendantPagesStored');
+
+  bool get pendantDraining => getBool('pendantDraining');
+
+  bool get pendantStorageAlmostFull => getBool('pendantStorageAlmostFull');
+
   set uid(String value) => saveString('uid', value);
 
   String get uid => getString('uid');
@@ -58,9 +69,46 @@ class SharedPreferencesUtil {
 
   set deviceIsV2(bool value) => saveBool('deviceIsV2', value);
 
+  bool get deviceOnboardingCompleted => getBool('deviceOnboardingCompleted');
+
+  set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
+
   bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
+
+  // Batch (offline) capture mode: when on, BLE audio is stored to local .bin files
+  // by the native layer instead of being transcribed in real time. Mutually
+  // exclusive with the realtime transcription socket (see CaptureProvider).
+  bool get batchModeEnabled => getBool('batchModeEnabled');
+
+  set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
+
+  // Transcribe Later: pause capture (native writer drops packets, keeps the file
+  // open) so the user can mute a sensitive moment and resume the same recording.
+  bool get batchMuted => getBool('batchMuted');
+
+  set batchMuted(bool value) => saveBool('batchMuted', value);
+
+  // Realtime device mute (double-tap pause). Persisted so the mute survives an
+  // app kill/restart — otherwise the device silently resumes recording on the
+  // next reconnect even though the user muted it. Restored into
+  // CaptureProvider._isPaused at startup and re-applied on reconnect.
+  bool get deviceMuted => getBool('deviceMuted');
+
+  set deviceMuted(bool value) => saveBool('deviceMuted', value);
+
+  // Transcribe Later: one-shot flag — when set, the native writer finalizes the
+  // current file and starts a fresh one (manual "New recording" cut), then clears it.
+  bool get batchCutRequested => getBool('batchCutRequested');
+
+  set batchCutRequested(bool value) => saveBool('batchCutRequested', value);
+
+  // Set while interactive device onboarding has temporarily suspended Transcribe Later so the
+  // realtime demo works. Persisted so an app-kill mid-onboarding is self-healed on next capture start.
+  bool get batchModeSuspendedForOnboarding => getBool('batchModeSuspendedForOnboarding');
+
+  set batchModeSuspendedForOnboarding(bool value) => saveBool('batchModeSuspendedForOnboarding', value);
 
   // Double tap behavior: 0 = end conversation (default), 1 = pause/mute, 2 = star ongoing conversation
   int get doubleTapAction => getInt('doubleTapAction');
@@ -90,6 +138,12 @@ class SharedPreferencesUtil {
   }
 
   bool get useCustomStt => customSttConfig.isEnabled;
+
+  // Whether offline recordings auto-sync to Omi when the device connects.
+  // Defaults to true (auto-sync on) — the feature is opt-out from introduction.
+  bool get autoSyncOfflineRecordings => getBool('autoSyncOfflineRecordings', defaultValue: true);
+
+  set autoSyncOfflineRecordings(bool value) => saveBool('autoSyncOfflineRecordings', value);
 
   // Per-provider config storage
   CustomSttConfig? getConfigForProvider(SttProvider provider) {

@@ -120,7 +120,9 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/omi_diagnostics_${DateTime.now().millisecondsSinceEpoch}.json');
     await file.writeAsString(json);
-    await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'Omi Device Diagnostics'));
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], title: 'Omi Device Diagnostics', subject: 'Omi Device Diagnostics'),
+    );
     PlatformManager.instance.analytics.track(
       'Diagnostics Exported',
       properties: {
@@ -267,7 +269,7 @@ class _DeviceDiagnosticsState extends State<DeviceDiagnostics> {
   }
 
   Widget _statusCard({
-    required IconData icon,
+    required FaIconData icon,
     required String label,
     required String value,
     Color? valueColor,

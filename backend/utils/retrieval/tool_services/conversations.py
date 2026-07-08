@@ -5,15 +5,17 @@ Used by both LangChain tools (mobile chat) and REST router (desktop/web).
 
 import re
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import List, Optional, Set
 
 import database.conversations as conversations_db
+import database.notifications as notification_db
 import database.users as users_db
 import database.vector_db as vector_db
 from models.conversation import Conversation
 from models.other import Person
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.render import conversations_to_string
+from utils.conversations.search import keyword_search_conversation_ids, merge_conversation_search_ids
 import logging
 
 logger = logging.getLogger(__name__)
@@ -67,7 +69,7 @@ def get_conversations_text(
             return f"Error: Invalid end_date format: {e}"
 
     # Parse statuses
-    status_list = []
+    status_list: List[str] = []
     if statuses:
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
 
@@ -101,9 +103,9 @@ def get_conversations_text(
         return f"No conversations found{date_info}."
 
     # Load people for speaker names
-    people = []
+    people: List[Person] = []
     if include_transcript:
-        all_person_ids = set()
+        all_person_ids: Set[str] = set()
         for conv_data in conversations_data:
             segments = conv_data.get('transcript_segments', [])
             all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -112,7 +114,7 @@ def get_conversations_text(
             people = [Person(**p) for p in people_data]
 
     # Convert to objects
-    conversations = []
+    conversations: List[Conversation] = []
     for conv_data in conversations_data:
         try:
             conversation = deserialize_conversation(conv_data)
@@ -128,7 +130,11 @@ def get_conversations_text(
             continue
 
     return conversations_to_string(
-        conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+        conversations,
+        use_transcript=include_transcript,
+        include_timestamps=include_timestamps,
+        people=people,
+        tz=notification_db.get_user_time_zone(uid),
     )
 
 
@@ -142,7 +148,7 @@ def search_conversations_text(
     include_transcript: bool = True,
     include_timestamps: bool = False,
 ) -> str:
-    """Semantic vector search for conversations, formatted as LLM-ready text."""
+    """Hybrid keyword + semantic vector search for conversations, formatted as LLM-ready text."""
     logger.info(f"search_conversations_text - uid: {uid}, query: {query}, limit: {limit}")
 
     # Cap limits
@@ -174,7 +180,13 @@ def search_conversations_text(
         starts_at = 0  # epoch
 
     try:
-        conversation_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        # Hybrid search: keyword (Typesense, exact matches on title/overview — catches proper
+        # names that embeddings miss, see #5072) + semantic vector search, keyword hits first.
+        keyword_ids = keyword_search_conversation_ids(
+            uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at
+        )
+        vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit)
+        conversation_ids = merge_conversation_search_ids(keyword_ids, vector_ids)
 
         if not conversation_ids:
             date_info = ""
@@ -196,9 +208,9 @@ def search_conversations_text(
             return f"No conversations found matching query: '{query}'"
 
         # Load people
-        people = []
+        people: List[Person] = []
         if include_transcript:
-            all_person_ids = set()
+            all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
                 segments = conv_data.get('transcript_segments', [])
                 all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
@@ -207,7 +219,7 @@ def search_conversations_text(
                 people = [Person(**p) for p in people_data]
 
         # Convert
-        conversations = []
+        conversations: List[Conversation] = []
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
@@ -222,9 +234,13 @@ def search_conversations_text(
                 logger.error(f"Error parsing conversation {conv_data.get('id')}: {e}")
                 continue
 
-        result = f"Found {len(conversations)} conversations semantically matching '{query}':\n\n"
+        result = f"Found {len(conversations)} conversations matching '{query}':\n\n"
         result += conversations_to_string(
-            conversations, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people
+            conversations,
+            use_transcript=include_transcript,
+            include_timestamps=include_timestamps,
+            people=people,
+            tz=notification_db.get_user_time_zone(uid),
         )
         return result
 

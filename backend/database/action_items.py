@@ -1,5 +1,7 @@
+from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
-from typing import Optional, List
+from typing import Any, Dict, Iterable, List, Optional, Protocol, cast
+from google.api_core.exceptions import NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -13,7 +15,54 @@ logger = logging.getLogger(__name__)
 action_items_collection = 'action_items'
 
 
-def _prepare_action_item_for_write(action_item_data: dict) -> dict:
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    """Typed adapter for a Firestore DocumentSnapshot.to_dict() result.
+
+    Returns an empty dict when the document has no fields (None payload),
+    so callers can safely mutate the result without None checks.
+    """
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
+class _BatchUpdateEntry(Protocol):
+    """Structural type for batch update entries (matches BatchUpdateActionItemEntry)."""
+
+    id: str
+    sort_order: Optional[int]
+    indent_level: Optional[int]
+
+
+@dataclass
+class BatchMutationResult:
+    """Outcome for partial batch mutations where missing ids must be explicit."""
+
+    updated_ids: List[str] = field(default_factory=list[str])
+    missing_ids: List[str] = field(default_factory=list[str])
+    noop_ids: List[str] = field(default_factory=list[str])
+
+    @property
+    def updated_count(self) -> int:
+        return len(self.updated_ids)
+
+    def model(self) -> Dict[str, Any]:
+        return {
+            'updated_count': len(self.updated_ids),
+            'updated_ids': self.updated_ids,
+            'missing_ids': self.missing_ids,
+            'noop_ids': self.noop_ids,
+        }
+
+
+def get_action_item_ids(uid: str) -> List[str]:
+    """Return all action item document IDs for a user (IDs-only projection, no field reads).
+
+    Used for bulk operations like account deletion (e.g. to purge derived Pinecone vectors)."""
+    coll = db.collection('users').document(uid).collection(action_items_collection)
+    return [doc.id for doc in coll.select([]).stream()]
+
+
+def _prepare_action_item_for_write(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for writing to database"""
     # Ensure timestamps are properly formatted
     if 'created_at' in action_item_data and action_item_data['created_at']:
@@ -41,7 +90,7 @@ def _prepare_action_item_for_write(action_item_data: dict) -> dict:
     return action_item_data
 
 
-def _prepare_action_item_for_read(action_item_data: dict) -> dict:
+def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
     for field in ['created_at', 'updated_at', 'due_at', 'completed_at']:
         if field in action_item_data and action_item_data[field]:
@@ -55,21 +104,55 @@ def _prepare_action_item_for_read(action_item_data: dict) -> dict:
 # *****************************
 
 
-def create_action_item(uid: str, action_item_data: dict) -> str:
+def create_action_item(uid: str, action_item_data: Dict[str, Any], idempotency_key: Optional[str] = None) -> str:
     """
     Create a new action item for a user.
 
     Args:
         uid: User ID
         action_item_data: Action item data including description, dates, etc.
+        idempotency_key: Optional opaque key. When supplied, the function looks
+            for an existing action_item with the same key (any state) and returns
+            its id without creating a new document. This makes the call safe to
+            retry on flaky networks or duplicate event delivery — the previous
+            behaviour silently allocated a fresh Firestore id on every call,
+            producing user-visible duplicates. The key is stored on the
+            document so future calls can find it. Callers that want
+            content-based idempotency typically pass
+            ``hashlib.sha256(f"{uid}:{normalized_description}".encode()).hexdigest()``.
 
     Returns:
-        The ID of the created action item
+        The ID of the created (or pre-existing, when idempotency_key matches)
+        action item.
     """
     action_item_data = _prepare_action_item_for_write(action_item_data)
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
+
+    # Idempotency check: if the caller supplied a key and we already have an
+    # *active* (not completed, not soft-deleted) document with that key,
+    # return its id rather than creating a duplicate. Completed/deleted
+    # matches are treated as "the user is recreating the task" and we fall
+    # through to the normal create path — otherwise a permanent content hash
+    # would silently swallow legitimate re-creation of recurring tasks.
+    if idempotency_key:
+        existing_query = (
+            action_items_ref.where(filter=FieldFilter('idempotency_key', '==', idempotency_key))
+            .where(filter=FieldFilter('completed', '==', False))
+            .limit(5)
+        )
+        for doc in existing_query.stream():
+            data: Dict[str, Any] = _typed_doc(doc)
+            if data.get('deleted'):
+                continue
+            logger.info(
+                "create_action_item: idempotency hit for uid=%s key=%s -> existing id=%s",
+                uid,
+                idempotency_key,
+                doc.id,
+            )
+            return doc.id
 
     if 'created_at' not in action_item_data:
         action_item_data['created_at'] = datetime.now(timezone.utc)
@@ -80,12 +163,15 @@ def create_action_item(uid: str, action_item_data: dict) -> str:
     if action_item_data.get('completed', False) and 'completed_at' not in action_item_data:
         action_item_data['completed_at'] = datetime.now(timezone.utc)
 
+    if idempotency_key:
+        action_item_data['idempotency_key'] = idempotency_key
+
     doc_ref = action_items_ref.add(action_item_data)[1]
 
     return doc_ref.id
 
 
-def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[str]:
+def create_action_items_batch(uid: str, action_items_data: List[Dict[str, Any]]) -> List[str]:
     """
     Create multiple action items in a batch operation.
 
@@ -103,7 +189,7 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
     action_items_ref = user_ref.collection(action_items_collection)
 
     batch = db.batch()
-    doc_refs = []
+    doc_refs: List[str] = []
 
     for action_item_data in action_items_data:
         action_item_data = _prepare_action_item_for_write(action_item_data)
@@ -132,7 +218,7 @@ def create_action_items_batch(uid: str, action_items_data: List[dict]) -> List[s
 # *****************************
 
 
-def get_action_item(uid: str, action_item_id: str) -> Optional[dict]:
+def get_action_item(uid: str, action_item_id: str) -> Optional[Dict[str, Any]]:
     """
     Get a single action item by ID.
 
@@ -150,7 +236,7 @@ def get_action_item(uid: str, action_item_id: str) -> Optional[dict]:
     if not doc.exists:
         return None
 
-    data = doc.to_dict()
+    data: Dict[str, Any] = _typed_doc(doc)
     data['id'] = doc.id
     return _prepare_action_item_for_read(data)
 
@@ -165,7 +251,7 @@ def get_action_items(
     due_end_date: Optional[datetime] = None,
     limit: Optional[int] = None,
     offset: int = 0,
-) -> List[dict]:
+) -> List[Dict[str, Any]]:
     """
     Get action items for a user with optional filters.
 
@@ -218,23 +304,20 @@ def get_action_items(
 
         query = query.order_by('created_at', direction=firestore.Query.DESCENDING)
 
-    # Apply pagination
-    if offset > 0:
-        query = query.offset(offset)
-    if limit:
-        query = query.limit(limit)
-
     # Execute query
     docs = query.stream()
 
-    action_items = []
+    action_items: List[Dict[str, Any]] = []
     for doc in docs:
-        data = doc.to_dict()
+        data: Dict[str, Any] = _typed_doc(doc)
         data['id'] = doc.id
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
 
-    # Sort results by due_at first (items without due_at come last), then by created_at
+    # Sort results by due_at first (items without due_at come last), then by created_at.
+    # The final order differs from the Firestore order_by (due_at/created_at DESC), so pagination
+    # must be applied AFTER this sort. Slicing the Firestore-ordered set with offset/limit and then
+    # re-sorting only that slice returns the wrong items for any page (even page 0 with a limit).
     action_items.sort(
         key=lambda x: (
             x.get('due_at') is None,
@@ -243,10 +326,64 @@ def get_action_items(
         )
     )
 
+    # Apply pagination after sorting so it matches the returned order.
+    if offset > 0:
+        action_items = action_items[offset:]
+    if limit is not None and limit > 0:
+        action_items = action_items[:limit]
+
     return action_items
 
 
-def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dict]:
+def _normalize_description(desc: Optional[str]) -> str:
+    """Normalize a task description for case-insensitive duplicate matching.
+
+    Strips whitespace + the legacy ``[screen]`` prefix/suffix marker that the
+    AI promotion pipeline used to add to AI-generated tasks (still appears in
+    historical data and on tasks that round-tripped through ``migrate_ai_tasks``).
+    """
+    if not desc:
+        return ''
+    s = desc.strip()
+    if s.startswith('[screen] '):
+        s = s[len('[screen] ') :]
+    if s.endswith(' [screen]'):
+        s = s[: -len(' [screen]')]
+    return s.strip().lower()
+
+
+def get_active_action_item_by_description(uid: str, description: str) -> Optional[Dict[str, Any]]:
+    """Find an active (not completed, not deleted) action_item with a matching
+    description for the given user, or return None.
+
+    Match is case-insensitive and ignores ``[screen]`` markers and surrounding
+    whitespace, mirroring ``database.staged_tasks.create_staged_task``'s
+    dedup logic so that the staged → action_item promotion path can avoid
+    creating semantic duplicates.
+
+    Streams active items (typically a small bounded set per user) rather than
+    relying on a Firestore equality filter, because Firestore cannot do
+    case-insensitive matching natively without a normalized companion field.
+    """
+    target = _normalize_description(description)
+    if not target:
+        return None
+
+    user_ref = db.collection('users').document(uid)
+    query = user_ref.collection(action_items_collection).where(filter=FieldFilter('completed', '==', False))
+
+    for doc in query.stream():
+        data: Dict[str, Any] = _typed_doc(doc)
+        if data.get('deleted'):
+            continue
+        if _normalize_description(data.get('description')) == target:
+            data['id'] = doc.id
+            return _prepare_action_item_for_read(data)
+
+    return None
+
+
+def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
     """
     Get all action items for a specific conversation.
 
@@ -260,7 +397,7 @@ def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[dic
     return get_action_items(uid, conversation_id=conversation_id)
 
 
-def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
+def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:
     """
     Get multiple action items by their IDs in a single batch operation.
 
@@ -282,16 +419,16 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
     docs = db.get_all(doc_refs)
 
     # Create a map to preserve order
-    action_items_map = {}
+    action_items_map: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if doc.exists:
-            data = doc.to_dict()
+            data: Dict[str, Any] = _typed_doc(doc)
             data['id'] = doc.id
             action_item = _prepare_action_item_for_read(data)
             action_items_map[doc.id] = action_item
 
     # Return in the same order as input IDs
-    action_items = []
+    action_items: List[Dict[str, Any]] = []
     for item_id in action_item_ids:
         if item_id in action_items_map:
             action_items.append(action_items_map[item_id])
@@ -304,7 +441,7 @@ def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[dict]:
 # *****************************
 
 
-def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool:
+def update_action_item(uid: str, action_item_id: str, update_data: Dict[str, Any]) -> bool:
     """
     Update an action item.
 
@@ -335,43 +472,41 @@ def update_action_item(uid: str, action_item_id: str, update_data: dict) -> bool
     return True
 
 
-def batch_update_action_items(uid: str, items: list) -> None:
+def batch_update_action_items(uid: str, items: Iterable[_BatchUpdateEntry]) -> BatchMutationResult:
     """
-    Batch update sort_order and/or indent_level for multiple action items.
 
-    Args:
-        uid: User ID
-        items: List of objects with id, sort_order (optional), indent_level (optional)
+    Missing IDs are returned explicitly. Each document update is applied
+    independently so a concurrent delete cannot make Firestore reject an entire
+    mutation after an earlier existence pre-read succeeded.
     """
+    result = BatchMutationResult()
     if not items:
-        return
+        return result
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for item in items:
-        update_data = {'updated_at': now}
+        doc_ref = action_items_ref.document(item.id)
+        update_data: Dict[str, Any] = {'updated_at': now}
         if item.sort_order is not None:
             update_data['sort_order'] = item.sort_order
         if item.indent_level is not None:
             update_data['indent_level'] = item.indent_level
 
-        if len(update_data) > 1:  # More than just updated_at
-            doc_ref = action_items_ref.document(item.id)
-            batch.update(doc_ref, update_data)
-            count += 1
+        if len(update_data) == 1:
+            result.noop_ids.append(item.id)
+            continue
 
-        if count >= 499:  # Firestore batch limit is 500
-            batch.commit()
-            batch = db.batch()
-            count = 0
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(item.id)
+            continue
+        result.updated_ids.append(item.id)
 
-    if count > 0:
-        batch.commit()
+    return result
 
 
 def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = True) -> bool:
@@ -386,7 +521,10 @@ def mark_action_item_completed(uid: str, action_item_id: str, completed: bool = 
     Returns:
         True if updated successfully, False otherwise
     """
-    update_data = {'completed': completed, 'completed_at': datetime.now(timezone.utc) if completed else None}
+    update_data: Dict[str, Any] = {
+        'completed': completed,
+        'completed_at': datetime.now(timezone.utc) if completed else None,
+    }
     return update_action_item(uid, action_item_id, update_data)
 
 
@@ -502,7 +640,7 @@ def batch_set_sync_requested(uid: str, item_ids: List[str]) -> None:
     batch.commit()
 
 
-def get_pending_apple_reminders_sync(uid: str) -> dict:
+def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     """
     Get items needing Apple Reminders sync:
     - pending_export: sync_requested=True but not yet exported (FCM missed items)
@@ -515,9 +653,9 @@ def get_pending_apple_reminders_sync(uid: str) -> dict:
     # (avoids composite index + handles missing 'exported' field)
     pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
     pending_docs = pending_query.stream()
-    pending_export = []
+    pending_export: List[Dict[str, Any]] = []
     for doc in pending_docs:
-        data = doc.to_dict()
+        data: Dict[str, Any] = _typed_doc(doc)
         if data.get('exported') is True:
             continue
         data['id'] = doc.id
@@ -531,9 +669,9 @@ def get_pending_apple_reminders_sync(uid: str) -> dict:
         .limit(100)
     )
     synced_docs = synced_query.stream()
-    synced_items = []
+    synced_items: List[Dict[str, Any]] = []
     for doc in synced_docs:
-        data = doc.to_dict()
+        data = _typed_doc(doc)
         data['id'] = doc.id
         synced_items.append(_prepare_action_item_for_read(data))
     # Sort by updated_at desc in Python instead of Firestore (avoids composite index)
@@ -542,44 +680,41 @@ def get_pending_apple_reminders_sync(uid: str) -> dict:
     return {"pending_export": pending_export, "synced_items": synced_items}
 
 
-def batch_sync_update_action_items(uid: str, updates: List[dict]) -> None:
+def batch_sync_update_action_items(uid: str, updates: List[Dict[str, Any]]) -> BatchMutationResult:
     """
-    Batch update action items during reminders sync. Single Firestore batch commit.
+    Batch update action items during reminders sync.
 
-    Args:
-        uid: User ID
-        updates: List of {'id': str, 'data': dict} entries
+    Missing IDs are returned explicitly; each document update is applied
+    independently so a concurrent delete cannot fail the whole request after an
+    existence pre-read. Callers should use only updated_ids for downstream
+    vector/cache work.
     """
+    result = BatchMutationResult()
     if not updates:
-        return
+        return result
 
     user_ref = db.collection('users').document(uid)
     action_items_ref = user_ref.collection(action_items_collection)
     now = datetime.now(timezone.utc)
 
-    batch = db.batch()
-    count = 0
-
     for entry in updates:
+        doc_ref = action_items_ref.document(entry['id'])
         update_data = _prepare_action_item_for_write(entry['data'])
         update_data['updated_at'] = now
         # Clear sync_requested when item is successfully exported
         if update_data.get('exported') is True:
             update_data['sync_requested'] = False
-        doc_ref = action_items_ref.document(entry['id'])
-        batch.update(doc_ref, update_data)
-        count += 1
+        try:
+            doc_ref.update(update_data)
+        except NotFound:
+            result.missing_ids.append(entry['id'])
+            continue
+        result.updated_ids.append(entry['id'])
 
-        if count >= 499:
-            batch.commit()
-            batch = db.batch()
-            count = 0
-
-    if count > 0:
-        batch.commit()
+    return result
 
 
-def unlock_all_action_items(uid: str):
+def unlock_all_action_items(uid: str) -> None:
     """
     Finds all action items for a user with is_locked: True and updates them to is_locked = False.
     """
@@ -606,7 +741,7 @@ def unlock_all_action_items(uid: str):
 # ============================================================================
 
 
-def get_daily_score(uid: str, date: str = None) -> dict:
+def get_daily_score(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     """Compute productivity score for a single day from action_items."""
     if date:
         day = datetime.strptime(date, '%Y-%m-%d').replace(tzinfo=timezone.utc)
@@ -621,7 +756,7 @@ def get_daily_score(uid: str, date: str = None) -> dict:
     total = 0
     completed = 0
     for doc in due_query.stream():
-        data = doc.to_dict()
+        data: Dict[str, Any] = _typed_doc(doc)
         if data.get('deleted'):
             continue
         total += 1
@@ -632,7 +767,7 @@ def get_daily_score(uid: str, date: str = None) -> dict:
     return {'date': day.strftime('%Y-%m-%d'), 'score': score, 'completed_tasks': completed, 'total_tasks': total}
 
 
-def get_scores(uid: str, date: str = None) -> dict:
+def get_scores(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     """Compute daily, weekly, and overall scores (matching Rust backend behavior).
 
     Takes a single date (or defaults to today) and returns:
@@ -651,14 +786,14 @@ def get_scores(uid: str, date: str = None) -> dict:
 
     col = db.collection('users').document(uid).collection(action_items_collection)
 
-    def _score(completed, total):
+    def _score(completed: int, total: int) -> float:
         return round((completed / total * 100) if total > 0 else 0, 1)
 
     # Daily: tasks due today
     daily_q = col.where(filter=FieldFilter('due_at', '>=', day_start)).where(filter=FieldFilter('due_at', '<', day_end))
     daily_completed = daily_total = 0
     for doc in daily_q.stream():
-        data = doc.to_dict()
+        data: Dict[str, Any] = _typed_doc(doc)
         if data.get('deleted'):
             continue
         daily_total += 1
@@ -671,7 +806,7 @@ def get_scores(uid: str, date: str = None) -> dict:
     )
     weekly_completed = weekly_total = 0
     for doc in weekly_q.stream():
-        data = doc.to_dict()
+        data = _typed_doc(doc)
         if data.get('deleted'):
             continue
         weekly_total += 1
@@ -681,24 +816,24 @@ def get_scores(uid: str, date: str = None) -> dict:
     # Overall: all non-deleted tasks
     overall_completed = overall_total = 0
     for doc in col.stream():
-        data = doc.to_dict()
+        data = _typed_doc(doc)
         if data.get('deleted'):
             continue
         overall_total += 1
         if data.get('completed'):
             overall_completed += 1
 
-    daily = {
+    daily: Dict[str, Any] = {
         'score': _score(daily_completed, daily_total),
         'completed_tasks': daily_completed,
         'total_tasks': daily_total,
     }
-    weekly = {
+    weekly: Dict[str, Any] = {
         'score': _score(weekly_completed, weekly_total),
         'completed_tasks': weekly_completed,
         'total_tasks': weekly_total,
     }
-    overall = {
+    overall: Dict[str, Any] = {
         'score': _score(overall_completed, overall_total),
         'completed_tasks': overall_completed,
         'total_tasks': overall_total,

@@ -16,6 +16,7 @@ import time
 import pytest
 from starlette.testclient import TestClient
 from starlette.applications import Starlette
+from starlette.requests import Request
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
@@ -29,7 +30,7 @@ def _make_app(methods_timeout=None):
         return PlainTextResponse("ok")
 
     async def slow_endpoint(request):
-        await asyncio.sleep(10)
+        await asyncio.Event().wait()
         return PlainTextResponse("slow")
 
     app = Starlette(
@@ -40,6 +41,26 @@ def _make_app(methods_timeout=None):
     )
     app.add_middleware(TimeoutMiddleware, methods_timeout=methods_timeout or {})
     return app
+
+
+def _make_request(method: str = "GET", path: str = "/slow") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": [],
+            "scheme": "http",
+            "server": ("testserver", 80),
+            "client": ("testclient", 50000),
+            "query_string": b"",
+        }
+    )
+
+
+async def _never_returns(request):
+    await asyncio.Event().wait()
+    return PlainTextResponse("slow")
 
 
 def test_fresh_request_passes():
@@ -176,50 +197,30 @@ def test_zero_skew_allowance_original_behavior(monkeypatch):
     assert response.status_code == 408
 
 
-def test_timeout_returns_504():
+@pytest.mark.asyncio
+async def test_timeout_returns_504():
     """Request exceeding timeout returns 504."""
-    app = _make_app(methods_timeout={"GET": 0.1})
-    client = TestClient(app)
-    response = client.get("/slow")
+    middleware = TimeoutMiddleware(Starlette(), methods_timeout={"GET": 0.001})
+    response = await middleware.dispatch(_make_request(), _never_returns)
     assert response.status_code == 504
 
 
-def test_post_timeout_override():
+@pytest.mark.asyncio
+async def test_post_timeout_override():
     """POST requests use HTTP_POST_TIMEOUT when set (#5941)."""
-
-    async def slow_post(request):
-        await asyncio.sleep(10)
-        return PlainTextResponse("slow post")
-
-    app = Starlette(
-        routes=[
-            Route("/upload", slow_post, methods=["POST"]),
-        ],
-    )
-    app.add_middleware(TimeoutMiddleware, methods_timeout={"POST": 0.1})
-    client = TestClient(app)
-    response = client.post("/upload")
+    middleware = TimeoutMiddleware(Starlette(), methods_timeout={"POST": 0.001})
+    response = await middleware.dispatch(_make_request(method="POST", path="/upload"), _never_returns)
     assert response.status_code == 504
 
 
-def test_post_timeout_none_falls_back_to_default(monkeypatch):
+@pytest.mark.asyncio
+async def test_post_timeout_none_falls_back_to_default(monkeypatch):
     """POST with None timeout falls back to HTTP_DEFAULT_TIMEOUT (#5941)."""
-    monkeypatch.setenv("HTTP_DEFAULT_TIMEOUT", "0.1")
-
-    async def slow_post(request):
-        await asyncio.sleep(10)
-        return PlainTextResponse("slow post")
-
-    app = Starlette(
-        routes=[
-            Route("/upload", slow_post, methods=["POST"]),
-        ],
-    )
+    monkeypatch.setenv("HTTP_DEFAULT_TIMEOUT", "0.001")
     # POST: None mirrors main.py when HTTP_POST_TIMEOUT env var is unset.
-    # _parse_methods_timeout skips None → falls back to default (0.1s)
-    app.add_middleware(TimeoutMiddleware, methods_timeout={"POST": None})
-    client = TestClient(app)
-    response = client.post("/upload")
+    # _parse_methods_timeout skips None and falls back to HTTP_DEFAULT_TIMEOUT.
+    middleware = TimeoutMiddleware(Starlette(), methods_timeout={"POST": None})
+    response = await middleware.dispatch(_make_request(method="POST", path="/upload"), _never_returns)
     assert response.status_code == 504
 
 
@@ -234,7 +235,7 @@ def test_main_methods_timeout_includes_post():
     from pathlib import Path
 
     main_py = Path(__file__).resolve().parents[2] / "main.py"
-    tree = ast.parse(main_py.read_text())
+    tree = ast.parse(main_py.read_text(encoding="utf-8"), filename=str(main_py))
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
             for target in node.targets:

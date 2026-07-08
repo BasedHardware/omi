@@ -978,10 +978,15 @@ class MessageProvider extends ChangeNotifier {
 
   Future sendInitialAppMessage(App? app) async {
     setSendingMessage(true);
-    ServerMessage message = await getInitialAppMessage(app?.id);
-    addMessage(message);
-    setSendingMessage(false);
-    notifyListeners();
+    try {
+      ServerMessage message = await getInitialAppMessage(app?.id);
+      addMessage(message);
+    } catch (e) {
+      Logger.error('sendInitialAppMessage failed: $e');
+    } finally {
+      setSendingMessage(false);
+      notifyListeners();
+    }
   }
 
   App? messageSenderApp(String? appId) {

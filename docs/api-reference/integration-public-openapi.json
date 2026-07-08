@@ -1,0 +1,2592 @@
+{
+  "components": {
+    "responses": {
+      "Error401": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        },
+        "description": "Missing or invalid authentication credentials."
+      },
+      "Error403": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        },
+        "description": "Authenticated, but the token does not grant the required scope."
+      },
+      "Error404": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        },
+        "description": "Requested resource was not found."
+      }
+    },
+    "schemas": {
+      "ActionItem": {
+        "properties": {
+          "completed": {
+            "default": false,
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "description": {
+            "description": "The action item to be completed",
+            "title": "Description",
+            "type": "string"
+          },
+          "export_date": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Date"
+          },
+          "export_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Export Platform"
+          },
+          "exported": {
+            "default": false,
+            "title": "Exported",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "description"
+        ],
+        "title": "ActionItem",
+        "type": "object"
+      },
+      "ConversationItem": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "discarded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": false,
+            "title": "Discarded"
+          },
+          "external_data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Data"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationItemGeolocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "structured": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationItemStructured"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transcript_segments": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ConversationItemTranscriptSegment"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transcript Segments"
+          }
+        },
+        "required": [
+          "id",
+          "created_at",
+          "source"
+        ],
+        "title": "ConversationItem",
+        "type": "object"
+      },
+      "ConversationItemGeolocation": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "ConversationItemGeolocation",
+        "type": "object"
+      },
+      "ConversationItemStructured": {
+        "properties": {
+          "action_items": {
+            "items": {
+              "$ref": "#/components/schemas/ActionItem"
+            },
+            "title": "Action Items",
+            "type": "array"
+          },
+          "category": {
+            "default": "other",
+            "title": "Category",
+            "type": "string"
+          },
+          "emoji": {
+            "default": "🧠",
+            "title": "Emoji",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "overview": {
+            "title": "Overview",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "overview"
+        ],
+        "title": "ConversationItemStructured",
+        "type": "object"
+      },
+      "ConversationItemTranscriptSegment": {
+        "properties": {
+          "end": {
+            "default": 0.0,
+            "title": "End",
+            "type": "number"
+          },
+          "is_user": {
+            "default": false,
+            "title": "Is User",
+            "type": "boolean"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker"
+          },
+          "start": {
+            "default": 0.0,
+            "title": "Start",
+            "type": "number"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ConversationItemTranscriptSegment",
+        "type": "object"
+      },
+      "ConversationSource": {
+        "enum": [
+          "friend",
+          "omi",
+          "fieldy",
+          "bee",
+          "plaud",
+          "frame",
+          "friend_com",
+          "apple_watch",
+          "phone",
+          "phone_call",
+          "desktop",
+          "openglass",
+          "screenpipe",
+          "workflow",
+          "sdcard",
+          "external_integration",
+          "limitless",
+          "onboarding",
+          "unknown"
+        ],
+        "title": "ConversationSource",
+        "type": "string"
+      },
+      "ConversationsResponse": {
+        "properties": {
+          "conversations": {
+            "description": "List of user conversations",
+            "items": {
+              "$ref": "#/components/schemas/ConversationItem"
+            },
+            "title": "Conversations",
+            "type": "array"
+          }
+        },
+        "required": [
+          "conversations"
+        ],
+        "title": "ConversationsResponse",
+        "type": "object"
+      },
+      "EmptyResponse": {
+        "description": "200 response with no body. Use for endpoints that return nothing meaningful.",
+        "properties": {},
+        "title": "EmptyResponse",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array"
+              },
+              {
+                "type": "object"
+              }
+            ],
+            "description": "Error detail returned by the API."
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "Event": {
+        "properties": {
+          "created": {
+            "default": false,
+            "title": "Created",
+            "type": "boolean"
+          },
+          "description": {
+            "default": "",
+            "description": "A brief description of the event",
+            "title": "Description",
+            "type": "string"
+          },
+          "duration": {
+            "default": 30,
+            "description": "The duration of the event in minutes",
+            "title": "Duration",
+            "type": "integer"
+          },
+          "start": {
+            "description": "The start date and time of the event",
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          },
+          "title": {
+            "description": "The title of the event",
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "start"
+        ],
+        "title": "Event",
+        "type": "object"
+      },
+      "Evidence": {
+        "properties": {
+          "artifact_ref": {
+            "additionalProperties": true,
+            "title": "Artifact Ref",
+            "type": "object"
+          },
+          "capture_confidence": {
+            "default": 0.5,
+            "title": "Capture Confidence",
+            "type": "number"
+          },
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Device Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "evidence_id": {
+            "title": "Evidence Id",
+            "type": "string"
+          },
+          "extractor_id": {
+            "default": "unknown",
+            "title": "Extractor Id",
+            "type": "string"
+          },
+          "extractor_version": {
+            "default": "unknown",
+            "title": "Extractor Version",
+            "type": "string"
+          },
+          "independence_group": {
+            "title": "Independence Group",
+            "type": "string"
+          },
+          "redaction_status": {
+            "default": "active",
+            "title": "Redaction Status",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_signal": {
+            "default": "unknown",
+            "title": "Source Signal",
+            "type": "string"
+          },
+          "source_type": {
+            "default": "unknown",
+            "title": "Source Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "evidence_id",
+          "independence_group"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "ExternalIntegrationConversationSource": {
+        "enum": [
+          "audio_transcript",
+          "message",
+          "other_text"
+        ],
+        "title": "ExternalIntegrationConversationSource",
+        "type": "string"
+      },
+      "ExternalIntegrationCreateConversation": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "client_device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Device Id"
+          },
+          "client_platform": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Platform"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "geolocation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Geolocation"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Language"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ConversationSource",
+            "default": "workflow"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "text_source": {
+            "$ref": "#/components/schemas/ExternalIntegrationConversationSource",
+            "default": "audio_transcript"
+          },
+          "text_source_spec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text Source Spec"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExternalIntegrationCreateConversation",
+        "type": "object"
+      },
+      "ExternalIntegrationCreateMemory": {
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "artifact_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source-specific provenance pointer for the text",
+            "title": "Artifact Ref"
+          },
+          "memories": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ExternalIntegrationMemory"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "List of explicit memories(facts) to be created",
+            "title": "Memories"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "External source object id for the provided text",
+            "title": "Source Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "External source URL for the provided text",
+            "title": "Source Url"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The original text from which the fact was extracted",
+            "title": "Text"
+          },
+          "text_source": {
+            "$ref": "#/components/schemas/ExternalIntegrationMemorySource",
+            "default": "other",
+            "description": "The source of the text"
+          },
+          "text_source_spec": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Additional specification about the source",
+            "title": "Text Source Spec"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "ExternalIntegrationCreateMemory",
+        "type": "object"
+      },
+      "ExternalIntegrationMemory": {
+        "properties": {
+          "artifact_ref": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Source-specific provenance pointer",
+            "title": "Artifact Ref"
+          },
+          "content": {
+            "description": "The content of the memory (fact)",
+            "title": "Content",
+            "type": "string"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "External source object id for provenance",
+            "title": "Source Id"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "External source URL for provenance",
+            "title": "Source Url"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Tags associated with the memory (fact)",
+            "title": "Tags"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "ExternalIntegrationMemory",
+        "type": "object"
+      },
+      "ExternalIntegrationMemorySource": {
+        "enum": [
+          "email",
+          "social_post",
+          "other"
+        ],
+        "title": "ExternalIntegrationMemorySource",
+        "type": "string"
+      },
+      "Geolocation": {
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
+          },
+          "google_place_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Place Id"
+          },
+          "latitude": {
+            "title": "Latitude",
+            "type": "number"
+          },
+          "location_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Location Type"
+          },
+          "longitude": {
+            "title": "Longitude",
+            "type": "number"
+          }
+        },
+        "required": [
+          "latitude",
+          "longitude"
+        ],
+        "title": "Geolocation",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "IntegrationNotificationResponse": {
+        "properties": {
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "IntegrationNotificationResponse",
+        "type": "object"
+      },
+      "MemoriesResponse": {
+        "properties": {
+          "memories": {
+            "description": "List of user memories (facts)",
+            "items": {
+              "$ref": "#/components/schemas/MemoryItem"
+            },
+            "title": "Memories",
+            "type": "array"
+          }
+        },
+        "required": [
+          "memories"
+        ],
+        "title": "MemoriesResponse",
+        "type": "object"
+      },
+      "MemoryCategory": {
+        "enum": [
+          "interesting",
+          "system",
+          "manual",
+          "workflow",
+          "core",
+          "hobbies",
+          "lifestyle",
+          "interests",
+          "habits",
+          "work",
+          "skills",
+          "learnings",
+          "other",
+          "auto"
+        ],
+        "title": "MemoryCategory",
+        "type": "string"
+      },
+      "MemoryItem": {
+        "description": "Memory item model that extends MemoryDB for API responses",
+        "properties": {
+          "app_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "App Id"
+          },
+          "arguments": {
+            "additionalProperties": true,
+            "description": "Canonical proposition arguments keyed by semantic slot",
+            "title": "Arguments",
+            "type": "object"
+          },
+          "capture_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Fixed confidence that the source was captured correctly",
+            "title": "Capture Confidence"
+          },
+          "capture_device_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Capture Device Ids",
+            "type": "array"
+          },
+          "category": {
+            "$ref": "#/components/schemas/MemoryCategory",
+            "default": "interesting",
+            "description": "The category of the memory"
+          },
+          "content": {
+            "description": "The content of the memory",
+            "title": "Content",
+            "type": "string"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_protection_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Protection Level"
+          },
+          "durability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Expected durability horizon for the fact",
+            "title": "Durability"
+          },
+          "edited": {
+            "default": false,
+            "title": "Edited",
+            "type": "boolean"
+          },
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "headline": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Short headline for notification preview (max 5 words)",
+            "title": "Headline"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "invalid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invalid At"
+          },
+          "is_locked": {
+            "default": false,
+            "title": "Is Locked",
+            "type": "boolean"
+          },
+          "kg_extracted": {
+            "default": false,
+            "title": "Kg Extracted",
+            "type": "boolean"
+          },
+          "layer": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only.",
+            "readOnly": true,
+            "title": "Layer"
+          },
+          "manually_added": {
+            "default": false,
+            "title": "Manually Added",
+            "type": "boolean"
+          },
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id"
+          },
+          "memory_tier": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryLayer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "object_entity_ids": {
+            "description": "Stable entity ids referenced by the fact arguments",
+            "items": {
+              "type": "string"
+            },
+            "title": "Object Entity Ids",
+            "type": "array"
+          },
+          "predicate": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Canonical relation for the fact, e.g. resides_in, works_at, prefers",
+            "title": "Predicate"
+          },
+          "primary_capture_device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Capture Device"
+          },
+          "qualifiers": {
+            "additionalProperties": true,
+            "description": "Optional proposition qualifiers such as scope, valid_time, or epistemic_status",
+            "title": "Qualifiers",
+            "type": "object"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "scoring": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scoring"
+          },
+          "subject_attribution": {
+            "$ref": "#/components/schemas/SubjectAttribution",
+            "default": "unknown",
+            "description": "How the memory subject was attributed"
+          },
+          "subject_entity_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Stable entity id for who/what the fact is about",
+            "title": "Subject Entity Id"
+          },
+          "superseded_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Superseded By"
+          },
+          "tags": {
+            "description": "The tags of the memory and learning",
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "uid": {
+            "title": "Uid",
+            "type": "string"
+          },
+          "uncertainty_reasons": {
+            "description": "Reasons this fact needs caution or review",
+            "items": {
+              "type": "string"
+            },
+            "title": "Uncertainty Reasons",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "user_review": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Review"
+          },
+          "valid_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid At"
+          },
+          "veracity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Current belief that the fact is true",
+            "title": "Veracity"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "public",
+            "title": "Visibility"
+          }
+        },
+        "required": [
+          "content",
+          "id",
+          "uid",
+          "created_at",
+          "updated_at",
+          "layer"
+        ],
+        "title": "MemoryItem",
+        "type": "object"
+      },
+      "MemoryLayer": {
+        "enum": [
+          "short_term",
+          "long_term",
+          "archive"
+        ],
+        "title": "MemoryLayer",
+        "type": "string"
+      },
+      "SearchConversationsResponse": {
+        "properties": {
+          "conversations": {
+            "description": "List of user conversations",
+            "items": {
+              "$ref": "#/components/schemas/ConversationItem"
+            },
+            "title": "Conversations",
+            "type": "array"
+          },
+          "current_page": {
+            "description": "Current page number",
+            "title": "Current Page",
+            "type": "integer"
+          },
+          "per_page": {
+            "description": "Number of items per page",
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "total_pages": {
+            "description": "Total number of pages",
+            "title": "Total Pages",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "conversations",
+          "total_pages",
+          "current_page",
+          "per_page"
+        ],
+        "title": "SearchConversationsResponse",
+        "type": "object"
+      },
+      "SearchRequest": {
+        "properties": {
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "include_discarded": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": true,
+            "title": "Include Discarded"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 1,
+            "title": "Page"
+          },
+          "per_page": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 10,
+            "title": "Per Page"
+          },
+          "query": {
+            "default": "",
+            "title": "Query",
+            "type": "string"
+          },
+          "speaker_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Id"
+          },
+          "start_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Date"
+          }
+        },
+        "title": "SearchRequest",
+        "type": "object"
+      },
+      "SubjectAttribution": {
+        "enum": [
+          "user",
+          "third_party",
+          "unknown",
+          "legacy_assumed"
+        ],
+        "title": "SubjectAttribution",
+        "type": "string"
+      },
+      "TaskItem": {
+        "description": "Task (action item) model for API responses",
+        "properties": {
+          "completed": {
+            "title": "Completed",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "id",
+          "description",
+          "completed"
+        ],
+        "title": "TaskItem",
+        "type": "object"
+      },
+      "TasksResponse": {
+        "properties": {
+          "tasks": {
+            "description": "List of user tasks (action items)",
+            "items": {
+              "$ref": "#/components/schemas/TaskItem"
+            },
+            "title": "Tasks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "tasks"
+        ],
+        "title": "TasksResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "integrationApiKey": {
+        "bearerFormat": "Omi Integration API key",
+        "description": "Send `Authorization: Bearer <omi_integration_api_key>`.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "contact": {
+      "name": "Omi",
+      "url": "https://omi.me/"
+    },
+    "description": "Programmatic access to your Omi data - memories, conversations, action items, goals, folders, and API keys. Build custom integrations, analytics dashboards, and automation workflows.",
+    "license": {
+      "name": "MIT",
+      "url": "https://github.com/BasedHardware/omi/blob/main/LICENSE"
+    },
+    "title": "Omi Integration API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/integrations/notification": {
+      "post": {
+        "operationId": "send_app_notification_to_user_v1_integrations_notification_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Data",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationNotificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Send App Notification To User"
+      }
+    },
+    "/v2/integrations/{app_id}/conversations": {
+      "get": {
+        "description": "Get all conversations for a user via integration API.\nAuthentication is required via API key in the Authorization header.\n\nOptional date range filtering:\n- start_date: Filter conversations after this date (ISO format)\n- end_date: Filter conversations before this date (ISO format)",
+        "operationId": "get_conversations_via_integration_v2_integrations__app_id__conversations_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_discarded",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Discarded",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "statuses",
+            "required": false,
+            "schema": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Statuses",
+              "type": "array"
+            }
+          },
+          {
+            "description": "Filter conversations after this date (ISO format)",
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter conversations after this date (ISO format)",
+              "title": "Start Date"
+            }
+          },
+          {
+            "description": "Filter conversations before this date (ISO format)",
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter conversations before this date (ISO format)",
+              "title": "End Date"
+            }
+          },
+          {
+            "description": "Maximum number of transcript segments to include per conversation. Use -1 for no limit.",
+            "in": "query",
+            "name": "max_transcript_segments",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "description": "Maximum number of transcript segments to include per conversation. Use -1 for no limit.",
+              "maximum": 1000,
+              "minimum": -1,
+              "title": "Max Transcript Segments",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConversationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Get Conversations Via Integration",
+        "tags": [
+          "integration",
+          "conversations"
+        ]
+      }
+    },
+    "/v2/integrations/{app_id}/memories": {
+      "get": {
+        "description": "Get all memories (facts) for a user via integration API.\nAuthentication is required via API key in the Authorization header.",
+        "operationId": "get_memories_via_integration_v2_integrations__app_id__memories_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoriesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Get Memories Via Integration",
+        "tags": [
+          "integration",
+          "memories"
+        ]
+      }
+    },
+    "/v2/integrations/{app_id}/notification": {
+      "post": {
+        "operationId": "send_notification_via_integration_v2_integrations__app_id__notification_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "message",
+            "required": true,
+            "schema": {
+              "title": "Message",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationNotificationResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Send Notification Via Integration",
+        "tags": [
+          "integration",
+          "notifications"
+        ]
+      }
+    },
+    "/v2/integrations/{app_id}/search/conversations": {
+      "post": {
+        "description": "Search conversations for a user via integration API.\nAuthentication is required via API key in the Authorization header.",
+        "operationId": "search_conversations_via_integration_v2_integrations__app_id__search_conversations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Maximum number of transcript segments to include per conversation. Use -1 for no limit.",
+            "in": "query",
+            "name": "max_transcript_segments",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "description": "Maximum number of transcript segments to include per conversation. Use -1 for no limit.",
+              "maximum": 1000,
+              "minimum": -1,
+              "title": "Max Transcript Segments",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchConversationsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Search Conversations Via Integration",
+        "tags": [
+          "integration",
+          "conversations"
+        ]
+      }
+    },
+    "/v2/integrations/{app_id}/tasks": {
+      "get": {
+        "description": "Get all tasks (action items) for a user via integration API.\nAuthentication is required via API key in the Authorization header.\n\nOptional filters:\n- **completed**: Filter by completion status (true/false/null for all)\n- **conversation_id**: Filter by conversation ID\n- **start_date**: Filter by creation start date (ISO format or YYYY-MM-DD)\n- **end_date**: Filter by creation end date (ISO format or YYYY-MM-DD)\n- **due_start_date**:  Filter by due start date (ISO format or YYYY-MM-DD)\n- **due_end_date**: Filter by due end date (ISO format or YYYY-MM-DD)",
+        "operationId": "get_tasks_via_integration_v2_integrations__app_id__tasks_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Filter by completion status",
+            "in": "query",
+            "name": "completed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by completion status",
+              "title": "Completed"
+            }
+          },
+          {
+            "description": "Filter by conversation ID",
+            "in": "query",
+            "name": "conversation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by conversation ID",
+              "title": "Conversation Id"
+            }
+          },
+          {
+            "description": "Filter by creation start date (ISO format or YYYY-MM-DD)",
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by creation start date (ISO format or YYYY-MM-DD)",
+              "title": "Start Date"
+            }
+          },
+          {
+            "description": "Filter by creation end date (ISO format or YYYY-MM-DD)",
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by creation end date (ISO format or YYYY-MM-DD)",
+              "title": "End Date"
+            }
+          },
+          {
+            "description": "Filter by due start date (ISO format or YYYY-MM-DD)",
+            "in": "query",
+            "name": "due_start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by due start date (ISO format or YYYY-MM-DD)",
+              "title": "Due Start Date"
+            }
+          },
+          {
+            "description": "Filter by due end date (ISO format or YYYY-MM-DD)",
+            "in": "query",
+            "name": "due_end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by due end date (ISO format or YYYY-MM-DD)",
+              "title": "Due End Date"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TasksResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Get Tasks Via Integration",
+        "tags": [
+          "integration",
+          "tasks"
+        ]
+      }
+    },
+    "/v2/integrations/{app_id}/user/conversations": {
+      "post": {
+        "operationId": "create_conversation_via_integration_v2_integrations__app_id__user_conversations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalIntegrationCreateConversation"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Create Conversation Via Integration",
+        "tags": [
+          "integration",
+          "conversations"
+        ]
+      }
+    },
+    "/v2/integrations/{app_id}/user/memories": {
+      "post": {
+        "operationId": "create_memories_via_integration_v2_integrations__app_id__user_memories_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "uid",
+            "required": true,
+            "schema": {
+              "title": "Uid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExternalIntegrationCreateMemory"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmptyResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "integrationApiKey": []
+          }
+        ],
+        "summary": "Create Memories Via Integration",
+        "tags": [
+          "integration",
+          "memories"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "description": "Production",
+      "url": "https://api.omi.me"
+    }
+  ],
+  "tags": [
+    {
+      "description": "Read and write user memories - timeless facts, preferences, and insights.",
+      "name": "Memories"
+    },
+    {
+      "description": "Create and retrieve conversation transcripts with AI-generated summaries.",
+      "name": "Conversations"
+    },
+    {
+      "description": "Retrieve user-defined folders for organizing conversations.",
+      "name": "Folders"
+    },
+    {
+      "description": "Manage tasks and to-dos extracted from conversations or created manually.",
+      "name": "Action Items"
+    },
+    {
+      "description": "Manage user goals and progress history.",
+      "name": "Goals"
+    },
+    {
+      "description": "Create, list, and revoke developer API keys.",
+      "name": "API Keys"
+    }
+  ]
+}

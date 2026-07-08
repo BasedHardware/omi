@@ -5,11 +5,39 @@ from xml.sax.saxutils import escape as xml_escape
 
 from fastapi import APIRouter, HTTPException, Header, Query
 from fastapi.responses import RedirectResponse, Response, HTMLResponse
+from pydantic import BaseModel, Field
 
-from routers.firmware import get_omi_github_releases, extract_key_value_pairs
+from database.desktop_update_policy import get_desktop_update_policy
 from database.redis_db import delete_generic_cache
+from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 
 router = APIRouter()
+
+
+class DesktopUpdatePolicyResponse(BaseModel):
+    """Server-controlled desktop update banner policy."""
+
+    id: str = Field(description='Policy document identifier.')
+    active: bool = Field(description='Whether the update banner is active.')
+    severity: str = Field(description='Banner severity (none|banner|required).')
+    maximum_build_number: Optional[int] = Field(default=None, description='Max build unaffected by this policy.')
+    latest_build_number: Optional[int] = Field(default=None, description='Latest available build number.')
+    title: Optional[str] = Field(default=None, description='Banner title.')
+    message: Optional[str] = Field(default=None, description='Banner message body.')
+    cta_text: str = Field(default='Download latest', description='Call-to-action button text.')
+    download_url: str = Field(description='Download URL for the latest release.')
+    can_dismiss: bool = Field(default=True, description='Whether the user can dismiss the banner.')
+    platforms: Optional[List[str]] = Field(
+        default=None, description='Platforms this policy applies to (empty/None = all).'
+    )
+
+
+class ClearCacheResponse(BaseModel):
+    """Ack for clearing the desktop releases cache."""
+
+    success: bool = Field(description='Whether the cache was cleared.')
+    message: str = Field(description='Human-readable confirmation.')
+
 
 VALID_CHANNELS = {"beta", "stable"}
 
@@ -25,16 +53,19 @@ def _parse_desktop_version(tag_name: str) -> Optional[Dict[str, str]]:
     """
     Parse desktop version from tag name.
     Expected format: v1.0.77+464-desktop-cm or v1.0.77+464-macos-cm or v1.0.77+464-desktop-auto or v0.6.4+6004-macos
+    The patch component is optional (newer tags use 2-component versions, e.g. v11.0+11000-macos);
+    it defaults to "0" when absent.
     Returns dict with version info or None if invalid.
     """
-    # Match pattern: v{major}.{minor}.{patch}+{build}-{platform}[-{cm|auto}]
-    pattern = r'^v?(\d+)\.(\d+)\.(\d+)\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
+    # Match pattern: v{major}.{minor}[.{patch}]+{build}-{platform}[-{cm|auto}]
+    pattern = r'^v?(\d+)\.(\d+)(?:\.(\d+))?\+(\d+)-(?:desktop|macos|windows|linux)(?:-(?:cm|auto))?$'
     match = re.match(pattern, tag_name, re.IGNORECASE)
 
     if not match:
         return None
 
     major, minor, patch, build = match.groups()
+    patch = patch if patch is not None else '0'
 
     return {
         'major': major,
@@ -460,7 +491,22 @@ async def download_beta_desktop_release(
     return await download_latest_desktop_release(platform=platform, channel="beta")
 
 
-@router.post("/v2/desktop/clear-cache")
+@router.get("/v2/desktop/update-policy", response_model=DesktopUpdatePolicyResponse)
+def get_desktop_update_policy_endpoint(
+    platform: str = Query(default="macos", pattern="^(macos|windows|linux)$"),
+    current_build: Optional[int] = Query(default=None, ge=0),
+):
+    """
+    Server-controlled desktop update banner policy.
+
+    Defaults to inactive when the Firestore document is missing. Configure
+    ``desktop_update_policy/current`` to show a dismissible banner or a required
+    manual-update prompt to future desktop clients.
+    """
+    return get_desktop_update_policy(current_build=current_build, platform=platform)
+
+
+@router.post("/v2/desktop/clear-cache", response_model=ClearCacheResponse)
 def clear_desktop_cache(secret_key: str = Header(...)):
     """
     Clear the GitHub releases cache for desktop updates.

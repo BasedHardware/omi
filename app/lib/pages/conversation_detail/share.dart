@@ -6,5 +6,6 @@ import 'package:omi/backend/schema/conversation.dart';
 
 void shareConversationLink(ServerConversation conversation, {Rect? sharePositionOrigin}) {
   final content = 'https://h.omi.me/conversations/${conversation.id}';
-  Share.share(content, subject: conversation.structured.title, sharePositionOrigin: sharePositionOrigin);
+  final subject = conversation.structured.title;
+  Share.share(content, subject: subject.isEmpty ? null : subject, sharePositionOrigin: sharePositionOrigin);
 }

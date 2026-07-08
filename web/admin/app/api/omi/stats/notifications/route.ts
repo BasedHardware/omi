@@ -1,8 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/firebase/admin';
 import { verifyAdmin } from '@/lib/auth';
+import { cachedPosthogFetch } from '@/lib/posthog';
+import { getPayload, setPayload } from '@/lib/payload-cache';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
+
+function cacheKey(days: number): string {
+  return `notifications:v1:${days}`;
+}
+
+export { cacheKey as notificationsCacheKey };
 
 const MENTOR_APP_ID = 'mentor';
 const MARKETPLACE_MENTOR_APP_ID = 'omi-your-mentor-and-teacher-01JCPRSZ7FS40FHFNSJZEWR8R1';
@@ -28,15 +37,7 @@ type FloatingBarCtrStats = {
 };
 
 async function queryPostHog(host: string, projectId: string, apiKey: string, query: string) {
-  const response = await fetch(`${host}/api/projects/${projectId}/query/`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ query: { kind: 'HogQLQuery', query } }),
-    signal: AbortSignal.timeout(15000),
-  });
+  const response = await cachedPosthogFetch(host, projectId, apiKey, query);
 
   if (!response.ok) {
     const text = await response.text();
@@ -46,14 +47,8 @@ async function queryPostHog(host: string, projectId: string, apiKey: string, que
   return response.json();
 }
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
-
-  try {
+export async function computeNotifications(days: number) {
     const db = getDb();
-    const searchParams = request.nextUrl.searchParams;
-    const days = parseInt(searchParams.get('days') || '30', 10);
     const posthogHost = (process.env.POSTHOG_HOST || 'https://us.posthog.com').replace(/\/$/, '');
     const posthogApiKey = process.env.POSTHOG_PERSONAL_API_KEY;
     const posthogProjectId = process.env.POSTHOG_PROJECT_ID;
@@ -380,7 +375,7 @@ export async function GET(request: NextRequest) {
       total: hourlyTimeline[hk].mentor + hourlyTimeline[hk].marketplace,
     }));
 
-    return NextResponse.json({
+    return {
       dailyData,
       weeklyData,
       hourlyData,
@@ -390,7 +385,26 @@ export async function GET(request: NextRequest) {
         disabled: disabledCount,
         total: totalUsers,
       },
-    });
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const searchParams = request.nextUrl.searchParams;
+    const days = parseInt(searchParams.get('days') || '30', 10);
+    const key = cacheKey(days);
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeNotifications>>>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    const payload = await computeNotifications(days);
+    await setPayload(key, payload);
+    return NextResponse.json(payload);
   } catch (error) {
     console.error('Error fetching notification stats:', error);
     return NextResponse.json(

@@ -429,6 +429,12 @@ class AppLocalizationsMs extends AppLocalizations {
   String get offlineSync => 'Segerak Luar Talian';
 
   @override
+  String get autoSync => 'Penyegerakan automatik';
+
+  @override
+  String get autoSyncDescription => 'Segerakkan rakaman luar talian secara automatik apabila peranti anda disambungkan';
+
+  @override
   String get deviceSettings => 'Tetapan Peranti';
 
   @override
@@ -4703,10 +4709,7 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription dan $triggerDescription.';
   }
 
@@ -7784,6 +7787,9 @@ class AppLocalizationsMs extends AppLocalizations {
   String get viewAll => 'Lihat semua';
 
   @override
+  String get expand => 'Kembangkan';
+
+  @override
   String get addTask => 'Tambah tugas';
 
   @override
@@ -9323,6 +9329,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get backgroundModeNote => 'Buat masa ini hanya berfungsi dengan peranti Omi dan sentiasa diperbaiki.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Mod Latar Belakang tidak tersedia kerana tiada peranti serasi yang disambungkan. Sambungkan peranti Omi, OpenGlass atau Friend Pendant untuk menggunakan ciri ini.';
+
+  @override
   String get regenerateRecap => 'Jana semula ringkasan';
 
   @override
@@ -9336,4 +9346,191 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Tiada perbualan untuk diringkaskan untuk hari ini.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Penyegerakan menggunakan transkripsi Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Anda menggunakan penyedia transkripsi sendiri. Menyegerakkan rakaman ini akan mentranskripsikannya di pelayan Omi dan dikira dalam had transkripsi pelan anda.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkrip Kemudian';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Rakam audio sekarang dan transkripkannya bila perlu, bukan secara langsung. Rakaman disimpan dalam telefon anda, kemudian anda memuat naiknya untuk menghasilkan perbualan.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Buat masa ini berfungsi dengan peranti Omi dan Limitless. Audio kekal dalam telefon anda sehingga anda memilih untuk memuat naiknya.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Storan telefon anda hampir penuh, jadi rakaman dijeda. Kosongkan ruang atau muat naik rakaman anda, kemudian ia akan disambung semula secara automatik.';
+
+  @override
+  String get recordingMode => 'Mod rakaman';
+
+  @override
+  String get captureModeLater => 'Kemudian';
+
+  @override
+  String get captureModeLiveDescription => 'Transkripsi secara masa nyata semasa anda bercakap.';
+
+  @override
+  String get captureModeLaterDescription => 'Simpan audio sekarang dan transkripsi bila-bila masa.';
+
+  @override
+  String get unmute => 'Nyahsenyap';
+
+  @override
+  String get newRecording => 'Rakaman baharu';
+
+  @override
+  String get transcribeLaterPaused => 'Dijeda — audio tidak dirakam';
+
+  @override
+  String get memoryThisDevice => 'Peranti ini';
+
+  @override
+  String get memoryThisIphone => 'iPhone ini';
+
+  @override
+  String get memoryThisPhone => 'Telefon ini';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Cara Menggunakan Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Bercakap dengan Omi Anda';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle =>
+      'Sebut beberapa patah perkataan dan lihat ia muncul secara langsung';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Syabas!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Mula bercakap...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Tanya Omi Satu Soalan';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tekan butang sekali, sebut soalan anda, kemudian tekan sekali lagi apabila selesai';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Memproses soalan anda...';
+
+  @override
+  String get deviceOnboardingListening => 'Mendengar...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Matikan';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Hidupkan';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Tekan dan tahan butang selama 3 saat';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tekan butang untuk menghidupkannya semula';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Tekan dan tahan butang dengan kemas sehingga lampu padam';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Bersambung';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Bersambung!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Terputus';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Sedang dimatikan...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Sesuaikan Ketuk Dua Kali';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Tamatkan Perbualan';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Simpan dan tamatkan perbualan semasa';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Senyap / Nyahsenyap';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Hidupkan atau matikan mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Bintangkan Perbualan Semasa';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Tandakan perbualan sebagai penting';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Itu satu ketukan sahaja — cuba ketuk dua kali dengan pantas!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Cuba sekarang! Ketuk Omi anda dua kali';
+
+  @override
+  String get deviceOnboardingContinue => 'Teruskan';
+
+  @override
+  String get deviceOnboardingFinish => 'Selesai';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Kenali Omi Anda';
+
+  @override
+  String get deviceOnboardingIntroSubtitle =>
+      'Lawatan ringkas dan praktikal tentang semua yang Omi anda boleh lakukan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Kira-kira 1 minit';
+
+  @override
+  String get jumpToLatestMessage => 'Lompat ke mesej terkini';
+
+  @override
+  String get latest => 'Terkini';
+
+  @override
+  String get flashFirmware => 'Flash Perisian Tegar';
+
+  @override
+  String get pendantRecordingTitle => 'Merakam pada loket';
+
+  @override
+  String get pendantRecordingNote =>
+      'Loket anda merakam dengan sendirinya. Rakaman disegerakkan ke telefon anda semasa aplikasi dibuka.';
+
+  @override
+  String get pendantSyncingRecordings => 'Menyegerakkan rakaman daripada loket anda…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min disimpan';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Storan loket hampir penuh — biarkan aplikasi terbuka untuk penyegerakan.';
 }

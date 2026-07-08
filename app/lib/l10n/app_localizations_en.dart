@@ -428,6 +428,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get offlineSync => 'Offline Sync';
 
   @override
+  String get autoSync => 'Auto-Sync';
+
+  @override
+  String get autoSyncDescription => 'Automatically sync offline recordings when your device connects';
+
+  @override
   String get deviceSettings => 'Device Settings';
 
   @override
@@ -4689,10 +4695,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription and is $triggerDescription.';
   }
 
@@ -7759,6 +7762,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get viewAll => 'View All';
 
   @override
+  String get expand => 'Expand';
+
+  @override
   String get addTask => 'Add Task';
 
   @override
@@ -9295,6 +9301,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundModeNote => 'Works with Omi devices only for now, and is being improved continuously.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Background Mode is not available because no compatible device is connected. Connect an Omi, OpenGlass, or Friend Pendant device to use this feature.';
+
+  @override
   String get regenerateRecap => 'Regenerate recap';
 
   @override
@@ -9308,4 +9318,189 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'No conversations to summarize for this day.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Sync uses Omi transcription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'You use your own transcription provider. Syncing these recordings transcribes them on Omi\'s servers instead, and they count toward your plan\'s transcription limit.';
+
+  @override
+  String get transcribeLaterTitle => 'Transcribe Later';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Record audio now and transcribe it on demand instead of live. Recordings are saved on your phone, then you upload them to create conversations.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Your phone is low on storage, so recording is paused. Free up space or upload your recordings, then it will resume automatically.';
+
+  @override
+  String get recordingMode => 'Recording mode';
+
+  @override
+  String get captureModeLater => 'Later';
+
+  @override
+  String get captureModeLiveDescription => 'Transcribe in real time as you speak.';
+
+  @override
+  String get captureModeLaterDescription => 'Save audio now and transcribe whenever you want.';
+
+  @override
+  String get unmute => 'Unmute';
+
+  @override
+  String get newRecording => 'New recording';
+
+  @override
+  String get transcribeLaterPaused => 'Paused — audio isn\'t being recorded';
+
+  @override
+  String get memoryThisDevice => 'This device';
+
+  @override
+  String get memoryThisIphone => 'This iPhone';
+
+  @override
+  String get memoryThisPhone => 'This phone';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'How to Use Your Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Speak Into Your Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Say a few words and watch them appear in real-time';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Good job!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Start speaking...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Ask Omi a Question';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Press the button once, speak your question, then press again when done';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Processing your question...';
+
+  @override
+  String get deviceOnboardingListening => 'Listening...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Turn Off';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Turn On';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Hold the button for 3 seconds';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Press the button to turn it back on';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Hold the button firmly until the light turns off';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Connected';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Connected!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Disconnected';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Turning off...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Customize Double Tap';
+
+  @override
+  String get deviceOnboardingEndConversation => 'End Conversation';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Save and end current conversation';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Mute / Unmute';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Toggle microphone on or off';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Star Ongoing Conversation';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Mark conversation as important';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'That was a single tap — try tapping twice quickly!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Try it now! Double tap your Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Continue';
+
+  @override
+  String get deviceOnboardingFinish => 'Finish';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Get to Know Your Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'A quick, hands-on tour of everything your Omi can do.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'About 1 minute';
+
+  @override
+  String get jumpToLatestMessage => 'Jump to latest message';
+
+  @override
+  String get latest => 'Latest';
+
+  @override
+  String get flashFirmware => 'Flash Firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Recording on Pendant';
+
+  @override
+  String get pendantRecordingNote =>
+      'Your pendant is recording on its own. Recordings sync to your phone while the app is open.';
+
+  @override
+  String get pendantSyncingRecordings => 'Syncing recordings from your pendant…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min stored';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Pendant storage is almost full — keep the app open to sync.';
 }

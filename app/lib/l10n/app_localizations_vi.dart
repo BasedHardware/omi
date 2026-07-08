@@ -429,6 +429,12 @@ class AppLocalizationsVi extends AppLocalizations {
   String get offlineSync => 'Đồng bộ Ngoại tuyến';
 
   @override
+  String get autoSync => 'Tự động đồng bộ';
+
+  @override
+  String get autoSyncDescription => 'Tự động đồng bộ các bản ghi ngoại tuyến khi thiết bị của bạn kết nối';
+
+  @override
   String get deviceSettings => 'Cài đặt thiết bị';
 
   @override
@@ -4694,10 +4700,7 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription và $triggerDescription.';
   }
 
@@ -7763,6 +7766,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get viewAll => 'Xem tất cả';
 
   @override
+  String get expand => 'Mở rộng';
+
+  @override
   String get addTask => 'Thêm nhiệm vụ';
 
   @override
@@ -9298,6 +9304,10 @@ class AppLocalizationsVi extends AppLocalizations {
   String get backgroundModeNote => 'Hiện chỉ hoạt động với thiết bị Omi và đang được cải thiện liên tục.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Chế độ nền không khả dụng vì chưa có thiết bị tương thích nào được kết nối. Kết nối thiết bị Omi, OpenGlass hoặc Friend Pendant để sử dụng tính năng này.';
+
+  @override
   String get regenerateRecap => 'Tạo lại tóm tắt';
 
   @override
@@ -9311,4 +9321,188 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Không có cuộc trò chuyện nào để tóm tắt cho ngày này.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Đồng bộ sử dụng phiên âm của Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Bạn đang dùng nhà cung cấp phiên âm riêng. Đồng bộ các bản ghi này sẽ phiên âm chúng trên máy chủ của Omi và được tính vào giới hạn phiên âm của gói của bạn.';
+
+  @override
+  String get transcribeLaterTitle => 'Phiên âm sau';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Ghi âm ngay bây giờ và phiên âm khi cần thay vì xử lý trực tiếp. Bản ghi được lưu trên điện thoại của bạn, sau đó bạn tải lên để tạo cuộc trò chuyện.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Điện thoại của bạn sắp hết dung lượng nên việc ghi âm đã tạm dừng. Hãy giải phóng dung lượng hoặc tải bản ghi lên, sau đó quá trình ghi âm sẽ tự động tiếp tục.';
+
+  @override
+  String get recordingMode => 'Chế độ ghi';
+
+  @override
+  String get captureModeLater => 'Sau';
+
+  @override
+  String get captureModeLiveDescription => 'Phiên âm theo thời gian thực khi bạn nói.';
+
+  @override
+  String get captureModeLaterDescription => 'Lưu âm thanh ngay bây giờ và phiên âm bất cứ khi nào bạn muốn.';
+
+  @override
+  String get unmute => 'Bật tiếng';
+
+  @override
+  String get newRecording => 'Ghi âm mới';
+
+  @override
+  String get transcribeLaterPaused => 'Đã tạm dừng — không ghi lại âm thanh';
+
+  @override
+  String get memoryThisDevice => 'Thiết bị này';
+
+  @override
+  String get memoryThisIphone => 'iPhone này';
+
+  @override
+  String get memoryThisPhone => 'Điện thoại này';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Cách sử dụng Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Nói vào Omi của bạn';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Nói vài câu và xem chúng hiện ra theo thời gian thực';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Tuyệt vời!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Bắt đầu nói...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Hỏi Omi một câu';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'Nhấn nút một lần, nói câu hỏi của bạn, rồi nhấn lại khi xong';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Đang xử lý câu hỏi của bạn...';
+
+  @override
+  String get deviceOnboardingListening => 'Đang lắng nghe...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Tắt thiết bị';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Bật thiết bị';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Giữ nút trong 3 giây';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Nhấn nút để bật lại';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Giữ chặt nút cho đến khi đèn tắt';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Đã kết nối';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Đã kết nối!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Đã ngắt kết nối';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Đang tắt...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Tùy chỉnh nhấn đúp';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Kết thúc cuộc trò chuyện';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Lưu và kết thúc cuộc trò chuyện hiện tại';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Tắt / Bật tiếng';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Bật hoặc tắt micrô';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Gắn sao cuộc trò chuyện đang diễn ra';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Đánh dấu cuộc trò chuyện là quan trọng';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Đó là nhấn một lần — hãy thử nhấn hai lần thật nhanh!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Thử ngay! Nhấn đúp lên Omi của bạn';
+
+  @override
+  String get deviceOnboardingContinue => 'Tiếp tục';
+
+  @override
+  String get deviceOnboardingFinish => 'Hoàn tất';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Tìm hiểu về Omi của bạn';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Một chuyến tham quan nhanh, thực tế về mọi điều Omi của bạn có thể làm.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Khoảng 1 phút';
+
+  @override
+  String get jumpToLatestMessage => 'Đi đến tin nhắn mới nhất';
+
+  @override
+  String get latest => 'Mới nhất';
+
+  @override
+  String get flashFirmware => 'Nạp firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Đang ghi âm trên mặt dây chuyền';
+
+  @override
+  String get pendantRecordingNote =>
+      'Mặt dây chuyền của bạn đang tự ghi âm. Các bản ghi được đồng bộ về điện thoại khi ứng dụng đang mở.';
+
+  @override
+  String get pendantSyncingRecordings => 'Đang đồng bộ các bản ghi từ mặt dây chuyền của bạn…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes phút đã lưu';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Bộ nhớ của mặt dây chuyền sắp đầy — hãy giữ ứng dụng mở để đồng bộ.';
 }

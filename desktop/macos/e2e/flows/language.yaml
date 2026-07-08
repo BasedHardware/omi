@@ -1,0 +1,30 @@
+version: 2
+name: language
+tier: 2
+description: Transcription language settings navigation via automation bridge
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings transcription section
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
+
+  - id: S2
+    name: Assert settings section loaded
+    state.expect:
+      state.selectedSettingsSection: Transcription
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

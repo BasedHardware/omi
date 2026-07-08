@@ -1,14 +1,19 @@
 """Unit tests for utils/async_tasks.py — structured concurrency utilities."""
 
 import asyncio
+import importlib
+import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
 from unittest.mock import patch
 
+import utils.async_tasks as async_tasks_mod
 from utils.async_tasks import (
     GatherResult,
     SupervisorResult,
+    WebSocketTaskSupervisor,
     supervise_tasks,
     drain_tasks,
     gather_safe,
@@ -16,6 +21,81 @@ from utils.async_tasks import (
     create_named_task,
     wait_for_event,
 )
+
+
+def test_metrics_are_reused_after_module_cache_eviction():
+    utils_pkg = sys.modules.get('utils')
+    previous_attr = getattr(utils_pkg, 'async_tasks', None) if utils_pkg is not None else None
+    sys.modules.pop('utils.async_tasks', None)
+    try:
+        reimported = importlib.import_module('utils.async_tasks')
+        assert reimported.SUPERVISOR_EXIT_TOTAL is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+        assert reimported.DRAIN_TIMEOUT_TOTAL is async_tasks_mod.DRAIN_TIMEOUT_TOTAL
+        assert reimported.DRAIN_DURATION is async_tasks_mod.DRAIN_DURATION
+        assert reimported.GATHER_FAILURES_TOTAL is async_tasks_mod.GATHER_FAILURES_TOTAL
+        assert reimported.GATHER_DURATION is async_tasks_mod.GATHER_DURATION
+    finally:
+        sys.modules['utils.async_tasks'] = async_tasks_mod
+        if utils_pkg is not None:
+            if previous_attr is None:
+                utils_pkg.__dict__.pop('async_tasks', None)
+            else:
+                utils_pkg.async_tasks = previous_attr
+
+
+def test_metrics_are_tracked_in_module_cache():
+    cache = async_tasks_mod._metric_cache()
+    assert async_tasks_mod._METRIC_CACHE_MODULE in sys.modules
+    supervisor_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Counter,
+        'async_supervisor_exit_total',
+        ['label', 'reason'],
+    )
+    drain_duration_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'async_drain_duration_seconds',
+        ['label'],
+        buckets=[0.1, 0.5, 1.0, 2.0, 5.0, 10.0, 30.0, 60.0],
+    )
+
+    assert cache[supervisor_key] is async_tasks_mod.SUPERVISOR_EXIT_TOTAL
+    assert cache[drain_duration_key] is async_tasks_mod.DRAIN_DURATION
+
+
+def test_metric_cache_key_handles_nested_lists():
+    cache_key = async_tasks_mod._metric_cache_key(
+        async_tasks_mod.Histogram,
+        'nested_bucket_metric',
+        ['label'],
+        buckets=[[0.1, 0.2], [0.3, 0.4]],
+    )
+
+    hash(cache_key)
+
+
+def test_metric_creation_is_lock_guarded():
+    class FakeMetric:
+        created = 0
+
+        def __init__(self, name, documentation, labelnames=(), **kwargs):
+            type(self).created += 1
+            self.name = name
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        metrics = list(
+            executor.map(
+                lambda _: async_tasks_mod._get_or_create_metric(
+                    FakeMetric,
+                    'threaded_cache_metric',
+                    'Threaded cache metric',
+                ),
+                range(8),
+            )
+        )
+
+    assert len({id(metric) for metric in metrics}) == 1
+    assert FakeMetric.created == 1
+
 
 # ---------------------------------------------------------------------------
 # Tests for create_named_task
@@ -66,11 +146,85 @@ class TestCreateNamedTask:
         asyncio.run(_run())
 
 
+class TestWebSocketTaskSupervisor:
+    def test_pairs_gauge_start_and_end(self):
+        class FakeGauge:
+            def __init__(self):
+                self.count = 0
+
+            def inc(self):
+                self.count += 1
+
+            def dec(self):
+                self.count -= 1
+
+        gauge = FakeGauge()
+        supervisor = WebSocketTaskSupervisor(uid="u1", label="listen", gauge=gauge)
+        supervisor.start_session()
+        supervisor.start_session()
+        assert gauge.count == 1
+        supervisor.end_session()
+        supervisor.end_session()
+        assert gauge.count == 0
+        assert supervisor.shutdown_event.is_set()
+
+    def test_names_tasks_with_ws_uid_prefix(self):
+        async def _run():
+            supervisor = WebSocketTaskSupervisor(uid="u1", label="listen")
+
+            async def noop():
+                pass
+
+            task = supervisor.create_task(noop(), name="worker")
+            assert task.get_name() == "ws:u1:worker"
+            await task
+
+        asyncio.run(_run())
+
+    def test_rejects_preformatted_task_names(self):
+        async def _run():
+            supervisor = WebSocketTaskSupervisor(uid="u1", label="listen")
+
+            async def noop():
+                pass
+
+            coro = noop()
+            with pytest.raises(ValueError):
+                supervisor.create_task(coro, name="ws:u1:worker")
+            coro.close()
+
+        asyncio.run(_run())
+
+    def test_finite_task_completion_does_not_end_session(self):
+        async def _run():
+            supervisor = WebSocketTaskSupervisor(uid="u1", label="listen")
+
+            async def receive():
+                await asyncio.sleep(1)
+
+            async def finite():
+                await asyncio.sleep(0.01)
+
+            async def lifetime():
+                await asyncio.sleep(0.05)
+
+            recv = supervisor.create_task(receive(), name="receive")
+            supervisor.create_finite_task(finite(), name="finite")
+            supervisor.create_lifetime_task(lifetime(), name="lifetime")
+            result = await supervisor.supervise(receive_task=recv)
+            await supervisor.drain_all(timeout=1.0)
+            assert result.reason == "lifetime_done"
+            assert result.task_name == "ws:u1:lifetime"
+
+        asyncio.run(_run())
+
+
 # ---------------------------------------------------------------------------
 # Tests for drain_tasks
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasks:
     def test_drain_empty_list(self):
         async def _run():
@@ -138,6 +292,7 @@ class TestDrainTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestSuperviseTasks:
     def test_disconnect_exit(self):
         async def _run():
@@ -257,6 +412,7 @@ class TestSuperviseTasks:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestGatherWithLogging:
     def test_all_succeed(self):
         async def _run():
@@ -456,6 +612,7 @@ class TestGatherChunked:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.slow
 class TestDrainTasksEdgeCases:
     def test_drain_force_cancel_reports_count(self):
         """After timeout, force-cancelled tasks are counted correctly."""
@@ -547,7 +704,7 @@ class TestStructuralUsage:
     def test_pusher_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/pusher.py') as f:
+        with open(self.BACKEND_DIR / 'routers/pusher.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -562,7 +719,7 @@ class TestStructuralUsage:
     def test_transcribe_imports_async_tasks(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'routers/transcribe.py') as f:
+        with open(self.BACKEND_DIR / 'routers/transcribe.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []
@@ -570,14 +727,14 @@ class TestStructuralUsage:
             if isinstance(node, ast.ImportFrom) and node.module == 'utils.async_tasks':
                 imports.extend(alias.name for alias in node.names)
 
-        assert 'supervise_tasks' in imports
+        assert 'WebSocketTaskSupervisor' in imports
         assert 'drain_tasks' in imports
-        assert 'create_named_task' in imports
+        assert 'wait_for_event' in imports
 
     def test_no_raw_gather_in_ws_supervisor(self):
         """Verify that WS handlers don't use raw asyncio.gather for task supervision."""
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(self.BACKEND_DIR / filename) as f:
+            with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             assert (
                 'asyncio.gather(*tasks)' not in source
@@ -591,7 +748,7 @@ class TestStructuralUsage:
         import re
 
         for filename in ['routers/pusher.py', 'routers/transcribe.py']:
-            with open(self.BACKEND_DIR / filename) as f:
+            with open(self.BACKEND_DIR / filename, encoding='utf-8') as f:
                 source = f.read()
             for match in re.finditer(r'label=f"[^"]*\{uid\}', source):
                 pytest.fail(f"{filename}: dynamic uid in metric label: {match.group()}")
@@ -601,7 +758,7 @@ class TestStructuralUsage:
     def test_app_integrations_uses_gather_safe(self):
         import ast
 
-        with open(self.BACKEND_DIR / 'utils/app_integrations.py') as f:
+        with open(self.BACKEND_DIR / 'utils/app_integrations.py', encoding='utf-8') as f:
             tree = ast.parse(f.read())
 
         imports = []

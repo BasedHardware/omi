@@ -4,52 +4,10 @@ Verifies that connect_to_deepgram returns None when dg_connection.start()
 returns False, preventing dead connections from being passed to callers.
 """
 
-import os
-import sys
-from types import ModuleType
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Minimal stubs — only what streaming.py actually needs at import time
-# ---------------------------------------------------------------------------
-
-# Stub database, heavy deps, and deepgram before importing.
-# deepgram stubs must match test_streaming_deepgram_backoff.py pattern to avoid
-# import-order pollution when pytest collects both files in the same process.
-for _mod_name in [
-    'database',
-    'database._client',
-    'database.redis_db',
-    'database.conversations',
-    'database.memories',
-    'database.users',
-    'firebase_admin',
-    'firebase_admin.auth',
-    'firebase_admin.messaging',
-    'models',
-    'models.other',
-    'models.transcript_segment',
-    'models.chat',
-    'models.conversation',
-    'models.notification_message',
-    'utils.log_sanitizer',
-    'deepgram',
-    'deepgram.clients',
-    'deepgram.clients.live',
-    'deepgram.clients.live.v1',
-    'websockets',
-    'websockets.exceptions',
-]:
-    sys.modules.setdefault(_mod_name, MagicMock())
-
-os.environ.setdefault('DEEPGRAM_API_KEY', 'fake-for-test')
-# NOTE: Do NOT set sys.modules['deepgram'].LiveTranscriptionEvents here.
-# MagicMock auto-generates attributes on access, and overwriting would pollute
-# shared pytest state for test_streaming_deepgram_backoff.py's close/error handler tests.
-
-# Now import the real streaming module
 from utils.stt.streaming import connect_to_deepgram
 
 

@@ -264,7 +264,15 @@ class WalSyncs implements IWalSync {
     // Phase 1b: Download flash page data to phone
     Logger.debug("WalSyncs: Phase 1b - Downloading flash page data to phone");
     DebugLogManager.logInfo('Sync Phase 1b: Downloading flash page data to phone');
-    await _flashPageSync.syncAll(progress: progress);
+    // Re-enumerate from the device first (mirrors the ring/storage phases
+    // above) so a repeat Sync tap resumes from the device's current flash-page
+    // pointer instead of a stale cached WAL — no app relaunch needed.
+    await _flashPageSync.refreshWalsFromDevice();
+    final flashMissing = (await _flashPageSync.getMissingWals()).where((w) => w.status == WalStatus.miss).toList();
+    if (flashMissing.isNotEmpty) {
+      progress?.onWalSyncedProgress(0.0, phase: SyncPhase.downloadingFromDevice);
+      await _flashPageSync.syncAll(progress: progress);
+    }
 
     if (_isCancelled) {
       Logger.debug("WalSyncs: Cancelled after flash page phase");

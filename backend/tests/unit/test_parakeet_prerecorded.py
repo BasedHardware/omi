@@ -6,8 +6,6 @@ compatibility with postprocess_words().
 """
 
 import os
-import sys
-import types
 import wave as _wave
 from io import BytesIO
 from unittest.mock import MagicMock, patch
@@ -18,14 +16,28 @@ import pytest
 
 os.environ.setdefault('DEEPGRAM_API_KEY', 'x')
 os.environ.setdefault('HOSTED_PARAKEET_API_URL', 'http://fake-parakeet:8080')
-os.environ.setdefault('ENCRYPTION_SECRET', 'test-secret')
-
-_db_client = types.ModuleType('database._client')
-_db_client.db = MagicMock()
-_db_client.document_id_from_seed = lambda s: f'id-{s}'
-sys.modules.setdefault('database._client', _db_client)
 
 import utils.stt.pre_recorded as pr  # noqa: E402
+
+
+def _cdist(a, b, metric='cosine'):
+    if metric != 'cosine':
+        raise ValueError(f'unsupported metric: {metric}')
+
+    a_mat = np.asarray(a, dtype=np.float32)
+    b_mat = np.asarray(b, dtype=np.float32)
+    if a_mat.ndim == 1:
+        a_mat = a_mat.reshape(1, -1)
+    if b_mat.ndim == 1:
+        b_mat = b_mat.reshape(1, -1)
+
+    a_mat = a_mat.reshape(a_mat.shape[0], -1)
+    b_mat = b_mat.reshape(b_mat.shape[0], -1)
+    denom = np.linalg.norm(a_mat, axis=1)[:, None] * np.linalg.norm(b_mat, axis=1)[None, :]
+    with np.errstate(divide='ignore', invalid='ignore'):
+        distances = 1.0 - (a_mat @ b_mat.T) / denom
+    distances = np.where(denom <= 0.0, 2.0, distances)
+    return np.clip(distances, 0.0, 2.0).astype(np.float32)
 
 
 def _make_wav(duration_s: float = 1.0, sample_rate: int = 16000) -> bytes:
@@ -47,6 +59,17 @@ def _mock_parakeet_response(text="Hello world", segments=None):
     resp.raise_for_status = MagicMock()
     resp.json.return_value = {"text": text, "segments": segments}
     return resp
+
+
+def test_cdist_stub_handles_pairwise_rows():
+    distances = _cdist(
+        np.array([[1.0, 0.0], [0.0, 1.0]], dtype=np.float32),
+        np.array([[1.0, 0.0], [1.0, 1.0]], dtype=np.float32),
+    )
+
+    assert distances.shape == (2, 2)
+    assert distances[0, 0] == pytest.approx(0.0)
+    assert distances[1, 0] == pytest.approx(1.0)
 
 
 class TestFactoryRouting:

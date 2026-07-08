@@ -4,10 +4,20 @@ Verifies cache refresh on ID change, 30s staleness, translation persist uses cac
 and cleanup on disconnect.
 """
 
+import sys
 import time
 from unittest.mock import MagicMock, patch
 
-from google.api_core.exceptions import NotFound
+try:
+    from google.api_core.exceptions import NotFound
+except ImportError:
+    # Some lightweight tests leave an empty google.api_core.exceptions stub behind.
+    class NotFound(Exception):
+        pass
+
+    exceptions_module = sys.modules.get('google.api_core.exceptions')
+    if exceptions_module is not None:
+        exceptions_module.NotFound = NotFound
 
 
 class FakeConversationsDb:

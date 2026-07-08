@@ -1,0 +1,29 @@
+lanes:
+  - lane_id: omi:auto:chat-structured
+    surface: openai.chat_completions
+    capabilities:
+      text_input: true
+      streaming: false
+      structured_output: json_schema
+      tools: false
+    objective:
+      quality: 0.60
+      latency: 0.20
+      cost: 0.20
+    credential_policy:
+      mode: omi_paid
+      allow_byok_to_omi_paid_fallback: false
+      fallback_eligible_failure_classes:
+        - timeout_before_output
+        - provider_429_omi_paid
+        - provider_5xx_omi_paid
+      never_fallback_failure_classes:
+        - byok_auth
+        - byok_quota
+        - byok_rate_limit
+        - byok_unsupported_provider
+        - missing_byok_key
+        - capability_mismatch
+        - invalid_config
+    active_route: route.chat_structured.2026_06_27.001
+    last_known_good: route.chat_structured.2026_06_20.001

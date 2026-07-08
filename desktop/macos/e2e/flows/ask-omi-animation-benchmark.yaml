@@ -1,0 +1,52 @@
+version: 1
+name: ask-omi-animation-benchmark
+tier: 3
+description: Capture short frame sequences for Ask Omi open and close transitions.
+app: non-prod
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Reset Ask Omi
+    bridge.action:
+      name: close_ask_omi
+
+  - id: S2
+    name: Capture Open Animation
+    visual.action_sequence:
+      action: open_ask_omi
+      params:
+        reset: false
+        wait: false
+      target: floating
+      frames: 8
+      interval_ms: 16
+
+  - id: S3
+    name: Assert Open State
+    state.expect:
+      state.askOmiOpen: true
+      state.askOmiFocused: true
+
+  - id: S4
+    name: Capture Close Animation
+    visual.action_sequence:
+      action: close_ask_omi
+      params:
+        wait: false
+      target: floating
+      frames: 8
+      interval_ms: 16
+
+  - id: S5
+    name: Assert Closed State
+    state.expect:
+      state.askOmiOpen: false
+
+  - id: S6
+    name: Assert Logs Are Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"

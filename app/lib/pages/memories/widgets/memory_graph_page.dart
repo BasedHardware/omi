@@ -265,7 +265,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
-  Set<String> _highlightedNodeIds = {};
+  final Set<String> _highlightedNodeIds = {};
   int _autoRebuildAttempts = 0;
 
   @override
@@ -326,6 +326,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
       final newEdges = data['edges'] as List<dynamic>? ?? [];
+
+      if (_error != null && mounted) {
+        setState(() {
+          _error = null;
+        });
+      }
 
       if (_isSameGraph(newNodes, newEdges)) {
         if (!silent) {
@@ -542,16 +548,16 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       canvas.drawImage(image, Offset.zero, paint);
 
       // Draw minimal branding "omi.me" at top center
-      final textSpan = TextSpan(
+      const textSpan = TextSpan(
         text: 'omi.me',
-        style: const TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
+        style: TextStyle(color: Colors.white, fontSize: 72, fontWeight: FontWeight.bold, letterSpacing: -1.0),
       );
       final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
       textPainter.layout();
 
       // Center horizontally, near top
       final xPos = (image.width - textPainter.width) / 2;
-      final yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
+      const yPos = 140.0; // Margin from top (increased to avoid notch/edge feeling)
 
       textPainter.paint(canvas, Offset(xPos, yPos));
 
@@ -586,7 +592,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
               elevation: 0,
               leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [IconButton(icon: FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
                   : null,
             )
           : null,
@@ -623,7 +629,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadGraph, child: Text(context.l10n.retry)),
+              // Explicit colors: the bare button resolved to theme primary/onPrimary
+              // (black-on-black on this theme), an invisible label.
+              ElevatedButton(
+                onPressed: _loadGraph,
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
+                child: Text(context.l10n.retry),
+              ),
             ],
           ),
         ),
@@ -678,7 +690,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
                     icon: const Icon(Icons.auto_fix_high),
                     label: Text(context.l10n.buildGraphButton),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purpleAccent.withOpacity(0.2),
+                      backgroundColor: Colors.purpleAccent.withValues(alpha: 0.2),
                       foregroundColor: Colors.purpleAccent,
                     ),
                   ),
@@ -817,7 +829,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _highlightedNodeIds.clear();
 
       if (hitNodeId != null) {
-        _highlightedNodeIds.add(hitNodeId!);
+        _highlightedNodeIds.add(hitNodeId);
 
         final node = simulation.nodeMap[hitNodeId];
         if (node != null) {
@@ -950,7 +962,7 @@ class GraphPainter3D extends CustomPainter {
       final alpha = ((p1.alpha + p2.alpha) / 2.0 * 0.10).clamp(0.0, 1.0);
       if (alpha < 0.05) continue;
 
-      _edgePaint.color = Colors.white.withOpacity(alpha);
+      _edgePaint.color = Colors.white.withValues(alpha: alpha);
       _edgePaint.strokeWidth = 0.8 * ((p1.scale + p2.scale) / 2);
 
       // Drawn above with logic
@@ -963,9 +975,9 @@ class GraphPainter3D extends CustomPainter {
       final isDimmed = highlightedNodeIds.isNotEmpty && !isHighlightedEdge;
 
       if (isDimmed) {
-        _edgePaint.color = _edgePaint.color.withOpacity(alpha * 0.1);
+        _edgePaint.color = _edgePaint.color.withValues(alpha: alpha * 0.1);
       } else if (isHighlightedEdge) {
-        _edgePaint.color = Colors.white.withOpacity(max(alpha, 0.8)); // Pop
+        _edgePaint.color = Colors.white.withValues(alpha: max(alpha, 0.8)); // Pop
       }
 
       canvas.drawLine(Offset(p1.x, p1.y), Offset(p2.x, p2.y), _edgePaint);
@@ -975,7 +987,10 @@ class GraphPainter3D extends CustomPainter {
         final midY = (p1.y + p2.y) / 2;
         final textSpan = TextSpan(
           text: edge.label,
-          style: TextStyle(color: Colors.white54.withOpacity(alpha * 2), fontSize: (9 * avgScale).clamp(7, 11)),
+          style: TextStyle(
+            color: Colors.white54.withValues(alpha: alpha * 2),
+            fontSize: (9 * avgScale).clamp(7, 11),
+          ),
         );
         final tp = TextPainter(text: textSpan, textDirection: TextDirection.ltr);
         tp.layout();
@@ -991,11 +1006,11 @@ class GraphPainter3D extends CustomPainter {
       if (radius < 0.5) continue;
 
       if (radius > 3) {
-        _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.3);
+        _ringPaint.color = node.baseColor.withValues(alpha: p.alpha * 0.3);
         _ringPaint.strokeWidth = 1.5 * p.scale;
         canvas.drawCircle(centerOffset, radius * 1.8, _ringPaint);
 
-        _ringPaint.color = node.baseColor.withOpacity(p.alpha * 0.15);
+        _ringPaint.color = node.baseColor.withValues(alpha: p.alpha * 0.15);
         _ringPaint.strokeWidth = 1.0 * p.scale;
         canvas.drawCircle(centerOffset, radius * 2.5, _ringPaint);
       }
@@ -1004,9 +1019,9 @@ class GraphPainter3D extends CustomPainter {
         centerOffset + Offset(-radius * 0.25, -radius * 0.25),
         radius * 1.2,
         [
-          Colors.white.withOpacity(p.alpha * 0.9),
-          Color.lerp(Colors.white, node.baseColor, 0.5)!.withOpacity(p.alpha),
-          node.baseColor.withOpacity(p.alpha),
+          Colors.white.withValues(alpha: p.alpha * 0.9),
+          Color.lerp(Colors.white, node.baseColor, 0.5)!.withValues(alpha: p.alpha),
+          node.baseColor.withValues(alpha: p.alpha),
         ],
         [0.0, 0.3, 1.0],
       );
@@ -1019,7 +1034,7 @@ class GraphPainter3D extends CustomPainter {
         final textSpan = TextSpan(
           text: node.label,
           style: TextStyle(
-            color: Colors.white.withOpacity(screenshotMode ? 0.95 : p.alpha * 0.9),
+            color: Colors.white.withValues(alpha: screenshotMode ? 0.95 : p.alpha * 0.9),
             fontSize: screenshotMode ? 11.0 : (10 * p.scale).clamp(8, 14),
             fontWeight: FontWeight.w600,
           ),

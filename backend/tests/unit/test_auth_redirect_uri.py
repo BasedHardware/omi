@@ -20,8 +20,11 @@ Mapping to real-world clients:
 
 from __future__ import annotations
 
+import json
 import os
 import sys
+import types
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -38,15 +41,87 @@ os.environ.setdefault("BASE_API_URL", "http://localhost:8080")
 
 # Pre-mock heavy deps before importing the module under test (Python 3.9 compat —
 # database.redis_db uses dict | None syntax that requires 3.10+).
-_mock = MagicMock()
-for mod in ['firebase_admin.auth', 'database.redis_db', 'utils.http_client', 'utils.log_sanitizer']:
-    sys.modules.setdefault(mod, _mock)
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+
+
+def _ensure_package(name, path):
+    module = sys.modules.get(name)
+    if module is None or not hasattr(module, "__path__"):
+        module = types.ModuleType(name)
+        sys.modules[name] = module
+    module.__path__ = [str(path)]
+
+    if "." in name:
+        parent_name, attr_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if parent is not None:
+            setattr(parent, attr_name, module)
+
+    return module
+
+
+def _install_module(name):
+    module = types.ModuleType(name)
+    sys.modules[name] = module
+    parent_name, _, attr_name = name.rpartition(".")
+    parent = sys.modules.get(parent_name)
+    if parent is not None:
+        setattr(parent, attr_name, module)
+    return module
+
+
+_ensure_package("database", BACKEND_DIR / "database")
+_ensure_package("utils", BACKEND_DIR / "utils")
+_ensure_package("firebase_admin", BACKEND_DIR / "tests")
+
+firebase_admin_stub = _install_module("firebase_admin")
+firebase_admin_stub.__path__ = []
+firebase_auth_stub = _install_module("firebase_admin.auth")
+firebase_auth_stub.verify_id_token = MagicMock()
+
+jwt_stub = _install_module("jwt")
+jwt_stub.__path__ = []
+jwt_stub.encode = MagicMock(return_value="test-jwt")
+jwt_algorithms_stub = _install_module("jwt.algorithms")
+jwt_algorithms_stub.RSAAlgorithm = MagicMock()
+
+python_multipart_stub = _install_module("python_multipart")
+python_multipart_stub.__version__ = "0.0.20"
+
+redis_stub = _install_module("database.redis_db")
+redis_stub.set_auth_session = MagicMock()
+redis_stub.get_auth_session = MagicMock()
+redis_stub.set_auth_code = MagicMock()
+redis_stub.get_auth_code = MagicMock()
+redis_stub.delete_auth_code = MagicMock()
+
+http_client_stub = _install_module("utils.http_client")
+http_client_stub.get_auth_client = MagicMock()
+
+log_sanitizer_stub = _install_module("utils.log_sanitizer")
+log_sanitizer_stub.sanitize = MagicMock(side_effect=lambda value: value)
+
+jwt_stub = _install_module("jwt")
+jwt_stub.__path__ = []
+jwt_stub.encode = MagicMock(return_value="test-client-secret")
+jwt_stub.decode = MagicMock(return_value={})
+jwt_stub.get_unverified_header = MagicMock(return_value={"kid": "test-key"})
+
+jwt_algorithms_stub = _install_module("jwt.algorithms")
+jwt_algorithms_stub.RSAAlgorithm = MagicMock()
+jwt_algorithms_stub.RSAAlgorithm.from_jwk = MagicMock(return_value="test-public-key")
+
+try:
+    import jinja2  # noqa: F401
+except ImportError:
+    _templating_mod = types.ModuleType("fastapi.templating")
+    _templating_mod.Jinja2Templates = MagicMock(return_value=MagicMock())
+    sys.modules["fastapi.templating"] = _templating_mod
 
 # Allow importing ``backend.routers.auth`` without running the full backend
 # entrypoint — same trick the rest of tests/unit uses.
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 from routers.auth import _validate_redirect_uri  # noqa: E402
 
@@ -151,10 +226,86 @@ def test_default_omi_redirect_unchanged() -> None:
 # at /v1/auth/token exchange time (#7020)
 # ---------------------------------------------------------------------------
 
-import json
 from unittest.mock import AsyncMock
 
-from routers.auth import auth_token, _DEFAULT_MOBILE_REDIRECT  # noqa: E402
+from routers.auth import (  # noqa: E402
+    _DEFAULT_MOBILE_REDIRECT,
+    _code_challenge_for_verifier,
+    _validate_pkce_challenge,
+    _verify_pkce_code_verifier,
+    auth_authorize,
+    auth_token,
+)
+
+_PKCE_VERIFIER = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+_PKCE_CHALLENGE = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+
+class TestPkceBinding:
+    """Test that native-app OAuth auth codes are PKCE-bound."""
+
+    def test_rfc7636_s256_vector(self):
+        assert _code_challenge_for_verifier(_PKCE_VERIFIER) == _PKCE_CHALLENGE
+
+    @pytest.mark.parametrize(
+        ("challenge", "method"),
+        [
+            (None, "S256"),
+            ("short", "S256"),
+            (_PKCE_CHALLENGE, None),
+            (_PKCE_CHALLENGE, "plain"),
+        ],
+    )
+    def test_validate_pkce_challenge_rejects_missing_or_weak_inputs(self, challenge, method):
+        with pytest.raises(HTTPException):
+            _validate_pkce_challenge(challenge, method)
+
+    def test_verify_pkce_code_verifier_accepts_matching_pair(self):
+        _verify_pkce_code_verifier(_PKCE_VERIFIER, _PKCE_CHALLENGE, "S256")
+
+    def test_verify_pkce_code_verifier_rejects_mismatch(self):
+        with pytest.raises(HTTPException) as exc_info:
+            _verify_pkce_code_verifier("A" * 64, _PKCE_CHALLENGE, "S256")
+        assert exc_info.value.status_code == 400
+
+    def test_authorize_requires_pkce_challenge(self):
+        import asyncio
+
+        request = MagicMock()
+        with pytest.raises(HTTPException) as exc_info:
+            asyncio.get_event_loop().run_until_complete(
+                auth_authorize(
+                    request=request,
+                    provider="google",
+                    redirect_uri="omi://auth/callback",
+                    state="state",
+                )
+            )
+        assert exc_info.value.status_code == 400
+        assert "code_challenge" in exc_info.value.detail
+
+    def test_authorize_stores_pkce_challenge_in_session(self):
+        import asyncio
+
+        request = MagicMock()
+        with patch("routers.auth.set_auth_session") as mock_set_session, patch(
+            "routers.auth._google_auth_redirect",
+            new_callable=AsyncMock,
+            return_value=MagicMock(),
+        ):
+            asyncio.get_event_loop().run_until_complete(
+                auth_authorize(
+                    request=request,
+                    provider="google",
+                    redirect_uri="omi://auth/callback",
+                    state="state",
+                    code_challenge=_PKCE_CHALLENGE,
+                    code_challenge_method="S256",
+                )
+            )
+        session_data = mock_set_session.call_args[0][1]
+        assert session_data["code_challenge"] == _PKCE_CHALLENGE
+        assert session_data["code_challenge_method"] == "S256"
 
 
 class TestAuthCodeBinding:
@@ -173,6 +324,8 @@ class TestAuthCodeBinding:
                     }
                 ),
                 'redirect_uri': 'omi-computer://auth/callback',
+                'code_challenge': _PKCE_CHALLENGE,
+                'code_challenge_method': 'S256',
             }
         )
 
@@ -207,6 +360,8 @@ class TestAuthCodeBinding:
                     }
                 ),
                 'redirect_uri': 'omi-computer://auth/callback',
+                'code_challenge': _PKCE_CHALLENGE,
+                'code_challenge_method': 'S256',
             }
         )
 
@@ -222,10 +377,84 @@ class TestAuthCodeBinding:
                     code='test-code',
                     redirect_uri='omi-computer://auth/callback',  # match
                     use_custom_token=False,
+                    code_verifier=_PKCE_VERIFIER,
                 )
             )
             assert result['provider'] == 'google'
             assert result['id_token'] == 'fake-id-token'
+
+    @pytest.mark.parametrize(
+        ("code_verifier", "expected_detail"),
+        [
+            (None, "code_verifier"),
+            ("A" * 64, "invalid code_verifier"),
+        ],
+    )
+    def test_token_rejects_missing_or_wrong_pkce_verifier(self, code_verifier, expected_detail):
+        """PKCE-bound auth codes cannot be exchanged without the matching verifier."""
+        code_data = json.dumps(
+            {
+                'credentials': json.dumps(
+                    {
+                        'provider': 'google',
+                        'id_token': 'fake-id-token',
+                        'access_token': 'fake-access-token',
+                        'provider_id': 'google.com',
+                    }
+                ),
+                'redirect_uri': 'omi://auth/callback',
+                'code_challenge': _PKCE_CHALLENGE,
+                'code_challenge_method': 'S256',
+            }
+        )
+
+        with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'):
+            import asyncio
+
+            request = MagicMock()
+
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.get_event_loop().run_until_complete(
+                    auth_token(
+                        request=request,
+                        grant_type='authorization_code',
+                        code='test-code',
+                        redirect_uri='omi://auth/callback',
+                        use_custom_token=False,
+                        code_verifier=code_verifier,
+                    )
+                )
+            assert exc_info.value.status_code == 400
+            assert expected_detail in exc_info.value.detail
+
+    def test_token_rejects_new_format_without_pkce_challenge(self):
+        """New-format auth codes must be PKCE-bound, even when redirect_uri matches."""
+        code_data = json.dumps(
+            {
+                'credentials': json.dumps(
+                    {'provider': 'google', 'id_token': 't', 'access_token': 'a', 'provider_id': 'google.com'}
+                ),
+                'redirect_uri': 'omi://auth/callback',
+            }
+        )
+
+        with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'):
+            import asyncio
+
+            request = MagicMock()
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.get_event_loop().run_until_complete(
+                    auth_token(
+                        request=request,
+                        grant_type='authorization_code',
+                        code='test-code',
+                        redirect_uri='omi://auth/callback',
+                        use_custom_token=False,
+                        code_verifier=_PKCE_VERIFIER,
+                    )
+                )
+            assert exc_info.value.status_code == 400
+            assert "code_challenge" in exc_info.value.detail
 
     def test_token_handles_legacy_format(self):
         """Verify /v1/auth/token still works with legacy code format (no redirect_uri binding)."""
@@ -288,6 +517,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_uses_dynamic_redirect_uri(self):
         """Verify auth_callback.html renders with the session's redirect_uri, not hardcoded."""
+        pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
 
@@ -306,6 +536,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_json_escapes_redirect_uri(self):
         """Verify redirect_uri is JSON-escaped in the template (XSS prevention)."""
+        pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
 
@@ -323,6 +554,7 @@ class TestCallbackTemplateRendering:
 
     def test_template_defaults_when_redirect_uri_missing(self):
         """Verify template falls back to omi://auth/callback when redirect_uri not provided."""
+        pytest.importorskip("jinja2")
         from jinja2 import Environment, FileSystemLoader
         import pathlib
 
@@ -351,6 +583,8 @@ class TestCallbackEndpoints:
             'redirect_uri': 'omi-computer://auth/callback',
             'state': 'test-state',
             'flow_type': 'user_auth',
+            'code_challenge': _PKCE_CHALLENGE,
+            'code_challenge_method': 'S256',
         }
         fake_creds = json.dumps(
             {'provider': 'google', 'id_token': 'tok', 'access_token': 'at', 'provider_id': 'google.com'}
@@ -371,6 +605,8 @@ class TestCallbackEndpoints:
             ttl = mock_set_code.call_args[0][2]
             stored = json.loads(stored_json)
             assert stored['redirect_uri'] == 'omi-computer://auth/callback'
+            assert stored['code_challenge'] == _PKCE_CHALLENGE
+            assert stored['code_challenge_method'] == 'S256'
             assert 'credentials' in stored
             assert ttl == 300
 
@@ -383,6 +619,8 @@ class TestCallbackEndpoints:
             'provider': 'google',
             'state': 'test-state',
             'flow_type': 'user_auth',
+            'code_challenge': _PKCE_CHALLENGE,
+            'code_challenge_method': 'S256',
         }
         fake_creds = json.dumps(
             {'provider': 'google', 'id_token': 't', 'access_token': 'a', 'provider_id': 'google.com'}
@@ -398,6 +636,7 @@ class TestCallbackEndpoints:
             asyncio.get_event_loop().run_until_complete(auth_callback_google(request=request, code='c', state='s'))
             stored = json.loads(mock_set_code.call_args[0][1])
             assert stored['redirect_uri'] == _DEFAULT_MOBILE_REDIRECT
+            assert stored['code_challenge'] == _PKCE_CHALLENGE
 
 
 class TestTokenEdgeCases:
@@ -458,6 +697,8 @@ class TestTokenEdgeCases:
                     'provider_id': 'google.com',
                 },
                 'redirect_uri': 'omi://auth/callback',
+                'code_challenge': _PKCE_CHALLENGE,
+                'code_challenge_method': 'S256',
             }
         )
         request = MagicMock()
@@ -470,10 +711,52 @@ class TestTokenEdgeCases:
                     code='c',
                     redirect_uri='omi://auth/callback',
                     use_custom_token=False,
+                    code_verifier=_PKCE_VERIFIER,
                 )
             )
             assert result['provider'] == 'google'
             assert result['id_token'] == 'dict-tok'
+
+    def test_token_fails_when_custom_token_generation_fails(self):
+        """Custom-token flows must fail clearly instead of returning 200 without custom_token."""
+        import asyncio
+
+        code_data = json.dumps(
+            {
+                'credentials': json.dumps(
+                    {
+                        'provider': 'apple',
+                        'id_token': 'fake-id-token',
+                        'access_token': 'fake-access-token',
+                        'provider_id': 'apple.com',
+                    }
+                ),
+                'redirect_uri': 'omi://auth/callback',
+                'code_challenge': _PKCE_CHALLENGE,
+                'code_challenge_method': 'S256',
+                'provider': 'apple',
+                'auth_flow_id': 'flow-123',
+                'created_at': 1000,
+            }
+        )
+        request = MagicMock()
+
+        with patch('routers.auth.get_auth_code', return_value=code_data), patch('routers.auth.delete_auth_code'), patch(
+            'routers.auth._generate_custom_token', new_callable=AsyncMock, side_effect=RuntimeError("firebase down")
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                asyncio.get_event_loop().run_until_complete(
+                    auth_token(
+                        request=request,
+                        grant_type='authorization_code',
+                        code='c',
+                        redirect_uri='omi://auth/callback',
+                        use_custom_token=True,
+                        code_verifier=_PKCE_VERIFIER,
+                    )
+                )
+            assert exc_info.value.status_code == 502
+            assert 'authentication token' in exc_info.value.detail
 
     def test_token_rejects_unsupported_grant_type(self):
         """Non-authorization_code grant type returns 400."""

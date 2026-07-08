@@ -1,9 +1,12 @@
 import json
+import logging
 from datetime import datetime
 from enum import Enum
-from typing import List, Literal, Optional, Set
+from typing import Any, List, Literal, Mapping, Optional, Set
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 # Fields to exclude when reducing App data for list views and cache
 APP_REDUCE_EXCLUDE_FIELDS = {
@@ -32,15 +35,16 @@ class AppReview(BaseModel):
     responded_at: Optional[datetime] = None
 
     @classmethod
-    def from_json(cls, json_data: dict):
+    def from_json(cls, json_data: Mapping[str, Any]) -> "AppReview":
+        responded_at = json_data.get('responded_at')
         return cls(
             uid=json_data['uid'],
-            ratedAt=datetime.fromisoformat(json_data['rated_at']),
+            rated_at=datetime.fromisoformat(json_data['rated_at']),
             score=json_data['score'],
             review=json_data['review'],
             username=json_data.get('username'),
             response=json_data.get('response'),
-            responded_at=datetime.fromisoformat(json_data['responded_at']) if json_data.get('responded_at') else None,
+            responded_at=datetime.fromisoformat(responded_at) if isinstance(responded_at, str) else None,
         )
 
 
@@ -67,9 +71,9 @@ class ExternalIntegration(BaseModel):
     setup_completed_url: Optional[str] = None
     setup_instructions_file_path: Optional[str] = None
     is_instructions_url: bool = True
-    auth_steps: Optional[List[AuthStep]] = []
+    auth_steps: Optional[List[AuthStep]] = Field(default_factory=list)
     app_home_url: Optional[str] = None
-    actions: Optional[List[Action]] = []
+    actions: Optional[List[Action]] = Field(default_factory=list)
     # URL to fetch chat tools manifest from (e.g., https://my-app.com/.well-known/omi-tools.json)
     chat_tools_manifest_url: Optional[str] = None
     # Chat messages configuration from manifest (enabled, target, notify)
@@ -79,7 +83,7 @@ class ExternalIntegration(BaseModel):
     # MCP server URL (e.g., https://mcp.example.com/mcp)
     mcp_server_url: Optional[str] = None
     # OAuth tokens for MCP server authentication
-    mcp_oauth_tokens: Optional[dict] = None
+    mcp_oauth_tokens: Optional[dict[str, Any]] = None
 
 
 class ProactiveNotification(BaseModel):
@@ -93,7 +97,7 @@ class ChatTool(BaseModel):
     description: str  # Tool description for LLM
     endpoint: str  # URL endpoint to call when tool is invoked
     method: str = "POST"  # HTTP method (GET, POST, etc.)
-    parameters: Optional[dict] = None  # JSON schema for parameters (optional)
+    parameters: Optional[dict[str, Any]] = None  # JSON schema for parameters (optional)
     auth_required: bool = True  # Whether to include user auth in request
     status_message: Optional[str] = (
         None  # Optional status message shown to user when tool is called (e.g., "Searching Slack")
@@ -103,10 +107,14 @@ class ChatTool(BaseModel):
 
     @field_validator('parameters', mode='before')
     @classmethod
-    def deserialize_parameters(cls, v):
+    def deserialize_parameters(cls, v: Any) -> Any:
         """Deserialize parameters from JSON string (stored that way in Firestore to avoid nesting limits)."""
         if isinstance(v, str):
-            return json.loads(v)
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, ValueError):
+                logger.warning('ChatTool.parameters is not valid JSON; dropping malformed parameters')
+                return None
         return v
 
 
@@ -132,7 +140,7 @@ class AppBaseModel(BaseModel):
     image: str
     capabilities: Set[str]
     username: Optional[str] = None
-    connected_accounts: List[str] = []
+    connected_accounts: List[str] = Field(default_factory=list)
     external_integration: Optional[ExternalIntegration] = None
     rating_avg: Optional[float] = 0
     rating_count: int = 0
@@ -147,15 +155,37 @@ class AppBaseModel(BaseModel):
     payment_plan: Optional[str] = None
     payment_link: Optional[str] = None
     is_user_paid: Optional[bool] = False
-    thumbnails: Optional[List[str]] = []
-    thumbnail_urls: Optional[List[str]] = []
+    thumbnails: Optional[List[str]] = Field(default_factory=list)
+    thumbnail_urls: Optional[List[str]] = Field(default_factory=list)
     is_influencer: Optional[bool] = False
     is_popular: Optional[bool] = False
     official: Optional[bool] = False
-    chat_tools: Optional[List[ChatTool]] = []
+    chat_tools: Optional[List[ChatTool]] = Field(default_factory=list)
     source_code_url: Optional[str] = None
     disabled: Optional[bool] = False
     disabled_reason: Optional[str] = None
+
+
+class AppCatalogItem(BaseModel):
+    """Desktop app catalog response item for list/search views."""
+
+    id: str
+    name: str = ''
+    description: str = ''
+    image: str = ''
+    category: str = 'other'
+    author: str = ''
+    capabilities: List[str] = Field(default_factory=list)
+    approved: bool = False
+    status: str = 'approved'
+    private: bool = False
+    installs: int = 0
+    rating_avg: Optional[float] = None
+    rating_count: int = 0
+    external_integration: Optional[ExternalIntegration] = None
+    is_paid: Optional[bool] = False
+    price: Optional[float] = None
+    enabled: bool = False
 
 
 class App(AppBaseModel):
@@ -166,8 +196,8 @@ class App(AppBaseModel):
     memory_prompt: Optional[str] = None
     chat_prompt: Optional[str] = None
     persona_prompt: Optional[str] = None
-    twitter: Optional[dict] = None
-    reviews: List[AppReview] = []
+    twitter: Optional[dict[str, Any]] = None
+    reviews: List[AppReview] = Field(default_factory=list)
     user_review: Optional[AppReview] = None
     money_made: Optional[float] = None
     usage_count: Optional[int] = None
@@ -194,15 +224,27 @@ class App(AppBaseModel):
         return self.has_capability('external_integration')
 
     def triggers_on_conversation_creation(self) -> bool:
-        return self.works_externally() and self.external_integration.triggers_on == 'memory_creation'
+        return bool(
+            self.works_externally()
+            and self.external_integration
+            and self.external_integration.triggers_on == 'memory_creation'
+        )
 
     def triggers_realtime(self) -> bool:
-        return self.works_externally() and self.external_integration.triggers_on == 'transcript_processed'
+        return bool(
+            self.works_externally()
+            and self.external_integration
+            and self.external_integration.triggers_on == 'transcript_processed'
+        )
 
     def triggers_realtime_audio_bytes(self) -> bool:
-        return self.works_externally() and self.external_integration.triggers_on == 'audio_bytes'
+        return bool(
+            self.works_externally()
+            and self.external_integration
+            and self.external_integration.triggers_on == 'audio_bytes'
+        )
 
-    def filter_proactive_notification_scopes(self, params: [str]) -> []:
+    def filter_proactive_notification_scopes(self, params: List[str]) -> List[str]:
         if not self.proactive_notification:
             return []
         return [param for param in params if param in self.proactive_notification.scopes]
@@ -214,7 +256,7 @@ class App(AppBaseModel):
         """Check if app provides chat tools"""
         return bool(self.chat_tools and len(self.chat_tools) > 0)
 
-    def to_reduced_dict(self) -> dict:
+    def to_reduced_dict(self) -> dict[str, Any]:
         """Serialize for list views with reduced fields.
 
         Excludes large/redundant fields that are not needed in app list displays.
@@ -223,7 +265,7 @@ class App(AppBaseModel):
         return self.model_dump(mode='json', exclude=APP_REDUCE_EXCLUDE_FIELDS)
 
     @staticmethod
-    def reduce_dict(app_dict: dict) -> dict:
+    def reduce_dict(app_dict: Mapping[str, Any]) -> dict[str, Any]:
         """Reduce a raw app dict by excluding large/redundant fields.
 
         Use this for reducing dicts before caching. For App instances, use to_reduced_dict().
@@ -248,16 +290,16 @@ class AppCreate(BaseModel):
     chat_prompt: Optional[str] = None
     persona_prompt: Optional[str] = None
     username: Optional[str] = None
-    connected_accounts: List[str] = []
-    twitter: Optional[dict] = None
+    connected_accounts: List[str] = Field(default_factory=list)
+    twitter: Optional[dict[str, Any]] = None
     external_integration: Optional[ExternalIntegration] = None
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None
     is_paid: Optional[bool] = False
     price: Optional[float] = 0.0  # cents/100
     payment_plan: Optional[str] = None
-    thumbnails: Optional[List[str]] = []  # List of thumbnail IDs
-    chat_tools: Optional[List[ChatTool]] = []
+    thumbnails: Optional[List[str]] = Field(default_factory=list)  # List of thumbnail IDs
+    chat_tools: Optional[List[ChatTool]] = Field(default_factory=list)
     source_code_url: Optional[str] = None
 
 
@@ -277,7 +319,7 @@ class AppUpdate(BaseModel):
     persona_prompt: Optional[str] = None
     username: Optional[str] = None
     connected_accounts: Optional[List[str]] = None
-    twitter: Optional[dict] = None
+    twitter: Optional[dict[str, Any]] = None
     external_integration: Optional[ExternalIntegration] = None
     proactive_notification: Optional[ProactiveNotification] = None
     created_at: Optional[datetime] = None

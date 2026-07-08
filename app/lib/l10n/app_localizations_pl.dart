@@ -428,6 +428,12 @@ class AppLocalizationsPl extends AppLocalizations {
   String get offlineSync => 'Synchronizacja offline';
 
   @override
+  String get autoSync => 'Automatyczna synchronizacja';
+
+  @override
+  String get autoSyncDescription => 'Automatycznie synchronizuj nagrania offline po połączeniu urządzenia';
+
+  @override
   String get deviceSettings => 'Ustawienia urządzenia';
 
   @override
@@ -4695,10 +4701,7 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription i jest $triggerDescription.';
   }
 
@@ -7779,6 +7782,9 @@ class AppLocalizationsPl extends AppLocalizations {
   String get viewAll => 'Pokaż wszystko';
 
   @override
+  String get expand => 'Rozwiń';
+
+  @override
   String get addTask => 'Dodaj zadanie';
 
   @override
@@ -9325,6 +9331,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get backgroundModeNote => 'Na razie działa tylko z urządzeniami Omi i jest stale ulepszany.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Tryb w tle jest niedostępny, ponieważ nie podłączono zgodnego urządzenia. Podłącz urządzenie Omi, OpenGlass lub Friend Pendant, aby użyć tej funkcji.';
+
+  @override
   String get regenerateRecap => 'Wygeneruj podsumowanie ponownie';
 
   @override
@@ -9338,4 +9348,190 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Brak rozmów do podsumowania w tym dniu.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synchronizacja korzysta z transkrypcji Omi';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.';
+
+  @override
+  String get transcribeLaterTitle => 'Transkrypcja później';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Nagrywaj dźwięk teraz, a transkrypcję uruchamiaj na żądanie zamiast na żywo. Nagrania są zapisywane w telefonie, a następnie przesyłasz je, aby utworzyć rozmowy.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Na razie działa z urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.';
+
+  @override
+  String get recordingMode => 'Tryb nagrywania';
+
+  @override
+  String get captureModeLater => 'Później';
+
+  @override
+  String get captureModeLiveDescription => 'Transkrybuj w czasie rzeczywistym podczas mówienia.';
+
+  @override
+  String get captureModeLaterDescription => 'Zapisz dźwięk teraz i transkrybuj, kiedy chcesz.';
+
+  @override
+  String get unmute => 'Wyłącz wyciszenie';
+
+  @override
+  String get newRecording => 'Nowe nagranie';
+
+  @override
+  String get transcribeLaterPaused => 'Wstrzymano — dźwięk nie jest nagrywany';
+
+  @override
+  String get memoryThisDevice => 'To urządzenie';
+
+  @override
+  String get memoryThisIphone => 'Ten iPhone';
+
+  @override
+  String get memoryThisPhone => 'Ten telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Jak korzystać z Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Mów do Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Powiedz kilka słów i zobacz, jak pojawiają się na żywo';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Świetna robota!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Zacznij mówić...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Zadaj Omi pytanie';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Naciśnij przycisk raz, zadaj pytanie, a po zakończeniu naciśnij ponownie';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Przetwarzanie pytania...';
+
+  @override
+  String get deviceOnboardingListening => 'Słucham...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Wyłącz';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Włącz';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Przytrzymaj przycisk przez 3 sekundy';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Naciśnij przycisk, aby włączyć ponownie';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Przytrzymaj mocno przycisk, aż zgaśnie światło';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Połączono';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Połączono!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Rozłączono';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Wyłączanie...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Dostosuj podwójne dotknięcie';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Zakończ rozmowę';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Zapisz i zakończ bieżącą rozmowę';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Wycisz / Wyłącz wyciszenie';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Włącz lub wyłącz mikrofon';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Oznacz gwiazdką trwającą rozmowę';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Oznacz rozmowę jako ważną';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'To było pojedyncze dotknięcie — spróbuj dotknąć dwa razy szybko!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Spróbuj teraz! Dotknij dwukrotnie Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Kontynuuj';
+
+  @override
+  String get deviceOnboardingFinish => 'Zakończ';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Poznaj swoje Omi';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'Szybki, praktyczny przegląd wszystkiego, co potrafi Twoje Omi.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Około 1 minuty';
+
+  @override
+  String get jumpToLatestMessage => 'Przejdź do najnowszej wiadomości';
+
+  @override
+  String get latest => 'Najnowsza';
+
+  @override
+  String get flashFirmware => 'Wgraj oprogramowanie układowe';
+
+  @override
+  String get pendantRecordingTitle => 'Nagrywanie na zawieszce';
+
+  @override
+  String get pendantRecordingNote =>
+      'Twoja zawieszka nagrywa samodzielnie. Nagrania synchronizują się z telefonem, gdy aplikacja jest otwarta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synchronizowanie nagrań z zawieszki…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min zapisane';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pamięć zawieszki jest prawie pełna — pozostaw aplikację otwartą, aby zsynchronizować.';
 }

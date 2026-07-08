@@ -73,10 +73,14 @@ flutter test           # same thing
 flutter test test/unit/  # specific directory
 ```
 
+`bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Test state machine logic via minimal abstractions mirroring production flow
-- No integration tests currently (integration_test dependency exists but unused)
+- Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
+- A test that needs a live service, device, or real API goes under `integration_test/`, which `test.sh`/CI never runs. For integration tests against a local backend, set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`; use `OMI_APP_TEST_USE_PROD_API_DEFAULT=1` only when a test intentionally needs the prod API default. State in the PR how you ran it; it must not be the only evidence the change works.
+- Coverage rules (bug fix → regression test; feature → core + main error path): see root `AGENTS.md` → Testing.
 
 ## Localization (l10n)
 
@@ -120,4 +124,3 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
 - agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
-

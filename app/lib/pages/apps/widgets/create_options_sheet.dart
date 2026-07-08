@@ -31,7 +31,7 @@ class CreateOptionsSheet extends StatelessWidget {
           const SizedBox(height: 24),
           Card(
             elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -43,7 +43,7 @@ class CreateOptionsSheet extends StatelessWidget {
               ),
               subtitle: Text(
                 context.l10n.createAndShareYourApp,
-                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               ),
               onTap: () {
                 Navigator.pop(context);
@@ -55,7 +55,7 @@ class CreateOptionsSheet extends StatelessWidget {
           const SizedBox(height: 12),
           Card(
             elevation: 0,
-            color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             child: ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -67,7 +67,7 @@ class CreateOptionsSheet extends StatelessWidget {
               ),
               subtitle: Text(
                 context.l10n.connectExternalAiTools,
-                style: TextStyle(color: Colors.white.withOpacity(0.7)),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
               ),
               onTap: () {
                 Navigator.pop(context);

@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:permission_handler/permission_handler.dart';
 
@@ -39,7 +38,7 @@ class SpeechProfileProvider extends ChangeNotifier
   final targetWordsCount = 70;
   final maxDuration = 150;
 
-  StreamSubscription<OnConnectionStateChangedEvent>? connectionStateListener;
+  StreamSubscription? connectionStateListener;
   List<TranscriptSegment> segments = [];
   double? streamStartedAtSecond;
   late WavBytesUtil audioStorage;
@@ -170,17 +169,16 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
-        ? SharedPreferencesUtil().userPrimaryLanguage
-        : "multi";
+    String language =
+        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
     _socket = await ServiceManager.instance().socket.speechProfile(
-      codec: codec,
-      sampleRate: rate,
-      language: language,
-      force: force,
-    );
+          codec: codec,
+          sampleRate: rate,
+          language: language,
+          force: force,
+        );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }

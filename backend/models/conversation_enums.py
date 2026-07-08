@@ -60,7 +60,7 @@ class ConversationSource(str, Enum):
     unknown = 'unknown'
 
     @classmethod
-    def _missing_(cls, value):
+    def _missing_(cls, value: object):
         if isinstance(value, str):
             return cls.unknown
         return None

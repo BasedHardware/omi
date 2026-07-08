@@ -60,6 +60,16 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     super.initState();
   }
 
+  // iPad requires a non-zero sharePositionOrigin (popover anchor) for the share sheet.
+  Rect _shareOrigin() {
+    if (!mounted) return const Rect.fromLTWH(0, 0, 100, 100);
+    final box = context.findRenderObject() as RenderBox?;
+    if (box != null && box.hasSize && box.size.width > 0 && box.size.height > 0) {
+      return box.localToGlobal(Offset.zero) & box.size;
+    }
+    return const Rect.fromLTWH(0, 0, 100, 100);
+  }
+
   Widget _buildSectionContainer({required List<Widget> children}) {
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
@@ -110,7 +120,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildExperimentalItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool value,
     required ValueChanged<bool>? onChanged,
   }) {
@@ -136,7 +146,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             ],
           ),
         ),
-        Switch(value: value, onChanged: onChanged, activeColor: const Color(0xFF22C55E)),
+        Switch(value: value, onChanged: onChanged, activeThumbColor: const Color(0xFF22C55E)),
       ],
     );
   }
@@ -144,7 +154,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   Widget _buildWebhookItem({
     required String title,
     required String description,
-    required IconData icon,
+    required FaIconData icon,
     required bool isEnabled,
     required ValueChanged<bool> onToggle,
     required TextEditingController controller,
@@ -174,7 +184,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                 ],
               ),
             ),
-            Switch(value: isEnabled, onChanged: onToggle, activeColor: const Color(0xFF22C55E)),
+            Switch(value: isEnabled, onChanged: onToggle, activeThumbColor: const Color(0xFF22C55E)),
           ],
         ),
         if (isEnabled) ...[
@@ -255,6 +265,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       builder: (context, provider, child) {
         if (provider.isLoading && provider.keys.isEmpty) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
@@ -262,6 +273,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         }
         if (provider.error != null) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Center(
@@ -271,6 +283,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
         }
         if (provider.keys.isEmpty) {
           return Container(
+            width: double.infinity,
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
             child: Column(
@@ -326,11 +339,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
+            FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
             const SizedBox(width: 6),
             Text(
               context.l10n.createKey,
@@ -358,8 +371,10 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
           TextButton(
             onPressed: () async {
               Navigator.of(ctx).pop();
+              final message = context.l10n.apiEnvSavedRestartRequired;
               await SharedPreferencesUtil().saveString('testFlightApiEnvironment', targetEnvironment);
-              AppSnackbar.showSnackbar(context.l10n.apiEnvSavedRestartRequired, duration: const Duration(seconds: 5));
+              if (!context.mounted) return;
+              AppSnackbar.showSnackbar(message, duration: const Duration(seconds: 5));
             },
             child: Text(context.l10n.switchAndRestart, style: const TextStyle(color: Colors.orange)),
           ),
@@ -368,7 +383,6 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
-  @override
   Widget _buildManualFirmwareFlash(DeviceProvider provider) {
     return _buildSectionContainer(
       children: [
@@ -398,7 +412,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
             child: Row(
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 24,
                   height: 24,
                   child: Center(child: FaIcon(FontAwesomeIcons.microchip, color: Colors.white, size: 16)),
@@ -416,6 +430,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     );
   }
 
+  @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
@@ -427,7 +442,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
+                icon: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 onPressed: () => Navigator.of(context).pop(),
               ),
               title: Text(
@@ -663,7 +678,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                 await DebugLogManager.setEnabled(v);
                                 setState(() {});
                               },
-                              activeColor: const Color(0xFF22C55E),
+                              activeThumbColor: const Color(0xFF22C55E),
                             ),
                           ],
                         ),
@@ -682,16 +697,18 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       return;
                                     }
                                     if (files.length == 1) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(files.first.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(files.first.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
                                       return;
                                     }
 
-                                    if (!mounted) return;
+                                    if (!context.mounted) return;
                                     final selected = await showModalBottomSheet<File>(
                                       context: context,
                                       backgroundColor: const Color(0xFF1C1C1E),
@@ -734,7 +751,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                                     final name = f.uri.pathSegments.last;
                                                     return ListTile(
                                                       title: Text(name, style: const TextStyle(color: Colors.white)),
-                                                      trailing: const FaIcon(
+                                                      trailing: FaIcon(
                                                         FontAwesomeIcons.chevronRight,
                                                         color: Color(0xFF3C3C43),
                                                         size: 14,
@@ -751,9 +768,11 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                     );
 
                                     if (selected != null) {
-                                      final result = await Share.shareXFiles([
-                                        XFile(selected.path),
-                                      ], text: 'Omi debug log');
+                                      final result = await Share.shareXFiles(
+                                        [XFile(selected.path)],
+                                        text: 'Omi debug log',
+                                        sharePositionOrigin: _shareOrigin(),
+                                      );
                                       if (result.status == ShareResultStatus.success) {
                                         Logger.debug('Log shared');
                                       }
@@ -786,18 +805,20 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               const SizedBox(width: 12),
                               GestureDetector(
                                 onTap: () async {
+                                  final message = context.l10n.debugLogCleared;
                                   await DebugLogManager.clear();
-                                  AppSnackbar.showSnackbar(context.l10n.debugLogCleared);
+                                  if (!context.mounted) return;
+                                  AppSnackbar.showSnackbar(message);
                                 },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                                   decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.15),
+                                    color: Colors.red.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Row(
                                     children: [
-                                      const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
+                                      FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
                                       const SizedBox(width: 6),
                                       Text(
                                         context.l10n.clear,
@@ -851,6 +872,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               [XFile(exportedPath)],
                               subject: exportTitle,
                               text: exportTitle,
+                              sharePositionOrigin: _shareOrigin(),
                             );
                             if (result.status == ShareResultStatus.success) {
                               Logger.debug('Export shared');
@@ -1573,7 +1595,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                                         decoration: BoxDecoration(
-                                          color: Colors.purple.withOpacity(0.2),
+                                          color: Colors.purple.withValues(alpha: 0.2),
                                           borderRadius: BorderRadius.circular(10),
                                         ),
                                         child: const Text(
@@ -1606,7 +1628,7 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
                               Switch(
                                 value: provider.claudeAgentEnabled,
                                 onChanged: (v) => provider.onClaudeAgentChanged(v),
-                                activeColor: const Color(0xFF22C55E),
+                                activeThumbColor: const Color(0xFF22C55E),
                               ),
                           ],
                         ),
@@ -1899,7 +1921,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: Colors.black,
-        title: const Text('Flash Firmware', style: TextStyle(color: Colors.white)),
+        title: Text(context.l10n.flashFirmware, style: const TextStyle(color: Colors.white)),
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
       ),
@@ -1914,7 +1936,7 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
               decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
               child: Row(
                 children: [
-                  const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
+                  FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -1969,9 +1991,9 @@ class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with
                     backgroundColor: Colors.deepPurple,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   ),
-                  child: const Text(
-                    'Flash Firmware',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  child: Text(
+                    context.l10n.flashFirmware,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                 ),
               ),

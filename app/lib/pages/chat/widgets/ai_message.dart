@@ -84,10 +84,17 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
           placeholder: (context, url) => SizedBox(
             width: size,
             height: size,
-            child: Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
+            child: Icon(
+              Icons.apps,
+              size: size * 0.7,
+              color: Colors.white.withValues(alpha: opacity),
+            ),
           ),
-          errorWidget: (context, url, error) =>
-              Icon(Icons.apps, size: size * 0.7, color: Colors.white.withOpacity(opacity)),
+          errorWidget: (context, url, error) => Icon(
+            Icons.apps,
+            size: size * 0.7,
+            color: Colors.white.withValues(alpha: opacity),
+          ),
         ),
       ),
     );
@@ -96,7 +103,11 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
   // Fallback to generic icon if app not found
   return Opacity(
     opacity: opacity,
-    child: Icon(Icons.apps, size: size, color: Colors.white.withOpacity(opacity)),
+    child: Icon(
+      Icons.apps,
+      size: size,
+      color: Colors.white.withValues(alpha: opacity),
+    ),
   );
 }
 
@@ -120,7 +131,7 @@ String? _getIntegrationLogoPath(String thinkingText) {
 }
 
 /// Get the fallback icon for thinking text (used when no integration logo)
-IconData _getThinkingIcon(String thinkingText) {
+FaIconData _getThinkingIcon(String thinkingText) {
   final text = thinkingText.toLowerCase();
   if (text.contains('thinking')) {
     return FontAwesomeIcons.brain;
@@ -869,7 +880,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               strokeWidth: 2,
                             ),
                           )
-                        : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                        : FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
                   ],
                 ),
               ),
@@ -1013,7 +1024,7 @@ class _FeedbackBottomSheetState extends State<FeedbackBottomSheet> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: isSelected ? Colors.blue.withOpacity(0.2) : const Color(0xFF2C2C2E),
+                      color: isSelected ? Colors.blue.withValues(alpha: 0.2) : const Color(0xFF2C2C2E),
                       borderRadius: BorderRadius.circular(20),
                       border: isSelected ? Border.all(color: Colors.blue, width: 1.5) : null,
                     ),
@@ -1210,6 +1221,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
           _buildActionButton(
             icon: FontAwesomeIcons.share,
             onTap: () async {
+              if (widget.messageText.isEmpty) return;
               HapticFeedback.lightImpact();
               await Share.share(widget.messageText);
               PlatformManager.instance.analytics.track(
@@ -1228,7 +1240,7 @@ class _MessageActionBarState extends State<MessageActionBar> {
     );
   }
 
-  Widget _buildActionButton({required IconData icon, required VoidCallback onTap, bool isSelected = false}) {
+  Widget _buildActionButton({required FaIconData icon, required VoidCallback onTap, bool isSelected = false}) {
     return InkWell(
       splashColor: Colors.transparent,
       focusColor: Colors.transparent,

@@ -45,11 +45,15 @@ from utils.retrieval.tools import (
     search_screen_activity_tool,
     save_user_preference_tool,
     fetch_url_tool,
+    traverse_knowledge_graph_tool,
 )
 from utils.retrieval.tools.app_tools import load_app_tools, get_tool_status_message
+from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_result_boundary
 from utils.retrieval.safety import AgentSafetyGuard, SafetyGuardError
+from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL
-from utils.llm.chat import _get_agentic_qa_prompt
+from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
+from utils.llm.chat import _get_agentic_qa_prompt, get_current_datetime_block, get_user_timezone
 from utils.other.endpoints import timeit
 from utils.observability.langsmith import is_langsmith_enabled
 import logging
@@ -98,6 +102,7 @@ CORE_TOOLS = [
     search_screen_activity_tool,
     save_user_preference_tool,
     fetch_url_tool,
+    traverse_knowledge_graph_tool,
 ]
 
 # Standard tool names (used to detect app tools by exclusion)
@@ -126,6 +131,7 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
         'search_conversations_tool': 'Searching conversations',
         'get_memories_tool': 'Searching memories',
         'search_memories_tool': 'Searching memories',
+        'traverse_knowledge_graph_tool': 'Traversing knowledge graph',
         'get_action_items_tool': 'Checking action items',
         'create_action_item_tool': 'Creating action item',
         'update_action_item_tool': 'Updating action item',
@@ -271,7 +277,8 @@ async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, config
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
     result = await tool_obj.ainvoke(tool_input, config=config)
-    return str(result)
+    result = preserve_chat_memory_tool_result_boundary(tool_name, str(result))
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +347,32 @@ def _messages_to_anthropic(messages: List[Message]) -> list:
     return anthropic_messages
 
 
+def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> list:
+    """Prepend the current-datetime block to the latest user turn.
+
+    The datetime changes every request, so it is kept out of the cache_control system
+    prefix (which must stay byte-identical for prompt-cache hits) and delivered here in the
+    user turn instead. Handles both string content (prepended as text) and list/multimodal
+    content (prepended as a leading text block). Falls back to appending a new user message
+    only if there is no user turn to attach it to.
+    """
+    if not datetime_block:
+        return anthropic_messages
+    for msg in reversed(anthropic_messages):
+        if msg["role"] != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            msg["content"] = f"{datetime_block}\n\n{content}"
+        elif isinstance(content, list):
+            msg["content"] = [{"type": "text", "text": datetime_block}, *content]
+        else:
+            break  # unexpected content shape — fall back to a separate user message
+        return anthropic_messages
+    anthropic_messages.append({"role": "user", "content": datetime_block})
+    return anthropic_messages
+
+
 # ---------------------------------------------------------------------------
 # Core Anthropic agent streaming loop
 # ---------------------------------------------------------------------------
@@ -362,7 +395,9 @@ async def _run_anthropic_agent_stream(
     and feeds results back until the model stops requesting tools.
     """
     # System prompt with cache_control for Anthropic prompt caching
-    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral"}}]
+    # TTL=1h: Anthropic changed default from 1h→5m on 2026-03-06; interactive chat
+    # sessions have gaps >5min between turns, so the 5-min default kills cache hit rate.
+    system_blocks = [{"type": "text", "text": system_prompt, "cache_control": {"type": "ephemeral", "ttl": "1h"}}]
 
     loop_iteration = 0
 
@@ -423,7 +458,7 @@ async def _run_anthropic_agent_stream(
                 response = await stream.get_final_message()
 
         except Exception as e:
-            logger.error(f"Anthropic API error: {e}")
+            await handle_llm_error_async(e, 'anthropic', feature='chat_agent', model=ANTHROPIC_AGENT_MODEL)
             await callback.put_data(f"\n\nSorry, I encountered an error. Please try again.")
             await callback.end()
             return
@@ -523,8 +558,12 @@ async def execute_agentic_chat_stream(
 
     Yields formatted chunks with "data: " or "think: " prefixes.
     """
+    # Resolve the user's timezone once and reuse it for both the system prompt and the
+    # injected datetime block, avoiding a duplicate notification_db lookup per request.
+    tz = get_user_timezone(uid)
+
     # Build system prompt
-    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context)
+    system_prompt = _get_agentic_qa_prompt(uid, app, messages, context=context, tz=tz)
 
     # Get prompt metadata for tracing/versioning
     prompt_name, prompt_commit, prompt_source = None, None, None
@@ -575,8 +614,12 @@ You have fetch_url_tool available. When the user shares any URL (starting with h
     # Convert tools to Anthropic format (core = visible, app = defer_loading)
     tool_schemas, tool_registry = _convert_tools(core_tools, app_tools)
 
-    # Convert messages to Anthropic format
+    # Convert messages to Anthropic format. The current datetime is injected into the user
+    # turn (not the system prompt) so the cache_control system prefix stays byte-stable.
     anthropic_messages = _messages_to_anthropic(messages)
+    anthropic_messages = _inject_current_datetime(anthropic_messages, get_current_datetime_block(uid, tz=tz))
+
+    raise_if_gateway_feature_mode_blocks_direct_model_surface('chat_agent.anthropic_stream')
 
     callback = AsyncStreamingCallback()
 

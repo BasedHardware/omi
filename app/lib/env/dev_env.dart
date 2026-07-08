@@ -21,10 +21,6 @@ final class DevEnv implements EnvFields {
   final String? apiBaseUrl = _DevEnv.apiBaseUrl;
 
   @override
-  @EnviedField(varName: 'GROWTHBOOK_API_KEY', obfuscate: true)
-  final String? growthbookApiKey = _DevEnv.growthbookApiKey;
-
-  @override
   @EnviedField(varName: 'GOOGLE_MAPS_API_KEY', obfuscate: true)
   final String? googleMapsApiKey = _DevEnv.googleMapsApiKey;
 

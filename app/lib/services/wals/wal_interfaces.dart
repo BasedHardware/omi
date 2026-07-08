@@ -120,4 +120,5 @@ abstract class FlashPageWalSync implements IWalSync {
   Future<void> deleteAllSyncedWals();
   Future<void> deleteAllPendingWals();
   bool get isSyncing;
+  Future<void> refreshWalsFromDevice();
 }

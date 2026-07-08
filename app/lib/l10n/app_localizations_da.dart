@@ -429,6 +429,12 @@ class AppLocalizationsDa extends AppLocalizations {
   String get offlineSync => 'Offline-synkronisering';
 
   @override
+  String get autoSync => 'Automatisk synkronisering';
+
+  @override
+  String get autoSyncDescription => 'Synkroniser offline-optagelser automatisk, når din enhed opretter forbindelse';
+
+  @override
   String get deviceSettings => 'Enhedsindstillinger';
 
   @override
@@ -4672,10 +4678,7 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription og er $triggerDescription.';
   }
 
@@ -7745,6 +7748,9 @@ class AppLocalizationsDa extends AppLocalizations {
   String get viewAll => 'Vis alle';
 
   @override
+  String get expand => 'Udvid';
+
+  @override
   String get addTask => 'Tilføj opgave';
 
   @override
@@ -9285,6 +9291,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get backgroundModeNote => 'Fungerer indtil videre kun med Omi-enheder og forbedres løbende.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'Baggrundstilstand er ikke tilgængelig, fordi der ikke er tilsluttet en kompatibel enhed. Tilslut en Omi-, OpenGlass- eller Friend Pendant-enhed for at bruge denne funktion.';
+
+  @override
   String get regenerateRecap => 'Generér resumé igen';
 
   @override
@@ -9298,4 +9308,189 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'Ingen samtaler at opsummere for denne dag.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'Synkronisering bruger Omi-transskription';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'Du bruger din egen transskriptionsudbyder. Synkronisering af disse optagelser transskriberer dem på Omis servere i stedet, og de tæller med i din plans transskriptionsgrænse.';
+
+  @override
+  String get transcribeLaterTitle => 'Transskriber senere';
+
+  @override
+  String get transcribeLaterDescription =>
+      'Optag lyd nu, og transskriber den efter behov i stedet for live. Optagelserne gemmes på din telefon, hvorefter du uploader dem for at oprette samtaler.';
+
+  @override
+  String get transcribeLaterNote =>
+      'Fungerer indtil videre med Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'Din telefon er ved at løbe tør for lagerplads, så optagelsen er sat på pause. Frigør plads, eller upload dine optagelser, så fortsætter den automatisk.';
+
+  @override
+  String get recordingMode => 'Optagetilstand';
+
+  @override
+  String get captureModeLater => 'Senere';
+
+  @override
+  String get captureModeLiveDescription => 'Transskriber i realtid, mens du taler.';
+
+  @override
+  String get captureModeLaterDescription => 'Gem lyden nu, og transskriber den, når du vil.';
+
+  @override
+  String get unmute => 'Slå lyd til';
+
+  @override
+  String get newRecording => 'Ny optagelse';
+
+  @override
+  String get transcribeLaterPaused => 'Sat på pause — lyden optages ikke';
+
+  @override
+  String get memoryThisDevice => 'Denne enhed';
+
+  @override
+  String get memoryThisIphone => 'Denne iPhone';
+
+  @override
+  String get memoryThisPhone => 'Denne telefon';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Sådan bruger du Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'Tal til din Omi';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'Sig et par ord, og se dem dukke op i realtid';
+
+  @override
+  String get deviceOnboardingGoodJob => 'Godt klaret!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'Begynd at tale...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Stil Omi et spørgsmål';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle =>
+      'Tryk én gang på knappen, stil dit spørgsmål, og tryk igen, når du er færdig';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'Behandler dit spørgsmål...';
+
+  @override
+  String get deviceOnboardingListening => 'Lytter...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'Sluk';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'Tænd';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'Hold knappen nede i 3 sekunder';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'Tryk på knappen for at tænde igen';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'Hold knappen fast nede, indtil lyset slukker';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'Forbundet';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'Forbundet!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'Afbrudt';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'Slukker...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'Tilpas dobbelttryk';
+
+  @override
+  String get deviceOnboardingEndConversation => 'Afslut samtale';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'Gem og afslut den aktuelle samtale';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'Slå lyd fra / til';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'Slå mikrofonen til eller fra';
+
+  @override
+  String get deviceOnboardingStarConversation => 'Stjernemarkér igangværende samtale';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'Markér samtalen som vigtig';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'Det var ét enkelt tryk – prøv at trykke to gange hurtigt!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'Prøv det nu! Dobbelttryk på din Omi';
+
+  @override
+  String get deviceOnboardingContinue => 'Fortsæt';
+
+  @override
+  String get deviceOnboardingFinish => 'Afslut';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'Lær din Omi at kende';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'En hurtig, praktisk rundvisning i alt, hvad din Omi kan.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'Cirka 1 minut';
+
+  @override
+  String get jumpToLatestMessage => 'Gå til nyeste besked';
+
+  @override
+  String get latest => 'Nyeste';
+
+  @override
+  String get flashFirmware => 'Flash firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Optager på vedhænget';
+
+  @override
+  String get pendantRecordingNote =>
+      'Dit vedhæng optager af sig selv. Optagelser synkroniseres til din telefon, mens appen er åben.';
+
+  @override
+  String get pendantSyncingRecordings => 'Synkroniserer optagelser fra dit vedhæng…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min gemt';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'Vedhængets lager er næsten fuldt — hold appen åben for at synkronisere.';
 }

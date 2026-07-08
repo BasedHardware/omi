@@ -11,12 +11,21 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+import pytest
 
 
 def _read_source(rel_path):
     base = os.path.join(os.path.dirname(__file__), '..', '..')
-    with open(os.path.join(base, rel_path)) as f:
+    with open(os.path.join(base, rel_path), encoding='utf-8') as f:
         return f.read()
+
+
+def _function_body(src, function_name):
+    func_start = src.index(f'def {function_name}')
+    next_def_idx = src.find('\ndef ', func_start + 1)
+    if next_def_idx == -1:
+        return src[func_start:]
+    return src[func_start:next_def_idx]
 
 
 class TestChunkDownloadSlidingWindow:
@@ -91,9 +100,13 @@ class TestPrecacheFileSemaphore:
         assert '_PRECACHE_FILE_SEM' in src
 
     def test_precache_file_semaphore_is_4(self):
-        """Global precache file semaphore must be BoundedSemaphore(4)."""
+        """Global precache file semaphore must be BoundedSemaphore(4).
+
+        Was 2 while storage_executor was saturated by per-file sleep(480)
+        deletion timers; restored to 4 once the janitor thread took those
+        over (see test_deferred_blob_janitor.py)."""
         src = _read_source('utils/other/storage.py')
-        assert 'BoundedSemaphore(4)' in src
+        assert '_PRECACHE_FILE_SEM = threading.BoundedSemaphore(4)' in src
 
     def test_precache_conversation_audio_uses_semaphore(self):
         """precache_conversation_audio must gate submissions with _PRECACHE_FILE_SEM."""
@@ -124,26 +137,36 @@ class TestPrecacheFileSemaphore:
 
 
 class TestPrecacheSyncImport:
-    """sync.py must import and use _PRECACHE_FILE_SEM from storage."""
+    """Playback sync service must import and use _PRECACHE_FILE_SEM from storage."""
 
     def test_sync_imports_precache_file_sem(self):
-        """routers/sync.py must import _PRECACHE_FILE_SEM."""
-        src = _read_source('routers/sync.py')
+        """utils/sync/playback.py must import _PRECACHE_FILE_SEM."""
+        src = _read_source('utils/sync/playback.py')
         assert '_PRECACHE_FILE_SEM' in src
 
     def test_sync_precache_all_uses_semaphore(self):
-        """_precache_all_parallel in sync.py must reference _PRECACHE_FILE_SEM."""
-        src = _read_source('routers/sync.py')
+        """_precache_all_parallel must delegate to the semaphore-gated helper."""
+        src = _read_source('utils/sync/playback.py')
+        helper_body = _function_body(src, '_run_parallel_precache')
+        assert '_PRECACHE_FILE_SEM.acquire()' in helper_body
+        assert '_PRECACHE_FILE_SEM.release()' in helper_body
+        assert 'add_done_callback' in helper_body
+
         func_start = src.index('def _precache_all_parallel')
-        func_body = src[func_start : func_start + 600]
-        assert '_PRECACHE_FILE_SEM' in func_body
+        func_body = src[func_start : func_start + 400]
+        assert '_run_parallel_precache(' in func_body
 
     def test_sync_cache_uncached_uses_semaphore(self):
-        """_cache_uncached_parallel in sync.py must reference _PRECACHE_FILE_SEM."""
-        src = _read_source('routers/sync.py')
+        """_cache_uncached_parallel must delegate to the semaphore-gated helper."""
+        src = _read_source('utils/sync/playback.py')
+        helper_body = _function_body(src, '_run_parallel_precache')
+        assert '_PRECACHE_FILE_SEM.acquire()' in helper_body
+        assert '_PRECACHE_FILE_SEM.release()' in helper_body
+        assert 'add_done_callback' in helper_body
+
         func_start = src.index('def _cache_uncached_parallel')
-        func_body = src[func_start : func_start + 600]
-        assert '_PRECACHE_FILE_SEM' in func_body
+        func_body = src[func_start : func_start + 400]
+        assert '_run_parallel_precache(' in func_body
 
 
 class TestKGRebuildExecutorAndSemaphore:
@@ -230,6 +253,7 @@ class TestNotificationsFanOut:
         assert '_BATCH_SIZE' in func_body
 
 
+@pytest.mark.slow
 class TestSlidingWindowBehavior:
     """Behavioral tests verifying the sliding-window + semaphore pattern at runtime."""
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +14,9 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
@@ -55,6 +60,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   AudioPlayer? _audioPlayer;
   bool _isAudioLoading = false;
   bool _isAudioInitialized = false;
+  Completer<void>? _initCompleter;
   Duration _totalDuration = Duration.zero;
   List<Duration> _trackStartOffsets = [];
 
@@ -210,6 +216,16 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       return;
     }
 
+    // If a concurrent init is already in flight, wait for it instead of starting
+    // a second one — otherwise both calls would create/init the same AudioPlayer
+    // and trigger PlatformException "Platform player already exists".
+    if (_initCompleter != null) {
+      await _initCompleter!.future;
+      return;
+    }
+
+    _initCompleter = Completer<void>();
+
     setState(() {
       _isAudioLoading = true;
     });
@@ -219,29 +235,44 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     try {
       _audioPlayer = AudioPlayer();
 
-      final signedUrlInfos = await getConversationAudioSignedUrls(widget.conversation!.id);
-      final sortedAudioFiles = _getSortedAudioFiles();
-
-      List<AudioSource> audioSources = [];
-      Map<String, String>? fallbackHeaders;
-
-      for (final audioFile in sortedAudioFiles) {
-        final fileId = audioFile.id;
-        // Find matching signed URL info
-        final urlInfo = signedUrlInfos.firstWhere(
-          (info) => info.id == fileId,
-          orElse: () => AudioFileUrlInfo(id: fileId, status: 'pending', duration: 0),
-        );
-
-        if (urlInfo.isCached && urlInfo.signedUrl != null) {
-          // Use signed URL directly
-          audioSources.add(AudioSource.uri(Uri.parse(urlInfo.signedUrl!)));
-        } else {
-          // Fall back to API URL
-          fallbackHeaders ??= await getAudioHeaders();
-          final apiUrl = getAudioStreamUrl(conversationId: widget.conversation!.id, audioFileId: fileId, format: 'wav');
-          audioSources.add(AudioSource.uri(Uri.parse(apiUrl), headers: fallbackHeaders));
+      // The backend builds playback artifacts asynchronously; poll while any
+      // file is pending instead of streaming through the merge-in-request
+      // endpoint that used to time out on long conversations.
+      final deadline = DateTime.now().add(const Duration(seconds: 90));
+      var urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      while (urlsResponse.files.isEmpty || urlsResponse.hasPending) {
+        if (!mounted) return;
+        if (DateTime.now().isAfter(deadline)) {
+          Logger.debug('Audio still pending after poll budget for ${widget.conversation!.id}');
+          AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'pending_timeout');
+          setState(() {
+            _isAudioLoading = false;
+          });
+          if (mounted) {
+            AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+          }
+          return;
         }
+        await Future.delayed(Duration(milliseconds: urlsResponse.pollAfterMs ?? 3000));
+        if (!mounted) return;
+        urlsResponse = await getConversationAudioSignedUrls(widget.conversation!.id);
+      }
+
+      final sortedAudioFiles = _getSortedAudioFiles();
+      List<AudioSource> audioSources = [];
+      for (final audioFile in sortedAudioFiles) {
+        final urlInfo = urlsResponse.files.where((info) => info.id == audioFile.id && info.isCached).firstOrNull;
+        if (urlInfo?.signedUrl != null) {
+          audioSources.add(AudioSource.uri(Uri.parse(urlInfo!.signedUrl!)));
+        }
+      }
+      if (audioSources.isEmpty) {
+        Logger.debug('No cached audio sources for ${widget.conversation!.id}');
+        AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'no_matching_sources');
+        if (mounted) {
+          AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+        }
+        return;
       }
 
       final playlist = ConcatenatingAudioSource(useLazyPreparation: true, children: audioSources);
@@ -250,12 +281,16 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       _isAudioInitialized = true;
     } catch (e) {
       Logger.debug('Error initializing audio: $e');
+      AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation?.id ?? '', reason: e.toString());
     } finally {
+      final completer = _initCompleter;
+      _initCompleter = null;
       if (mounted) {
         setState(() {
           _isAudioLoading = false;
         });
       }
+      completer?.complete();
     }
   }
 
@@ -330,7 +365,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: const Color(0xFF1A0B2E),
           borderRadius: BorderRadius.circular(28),
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Row(
@@ -426,7 +466,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: const Color(0xFF6B46C1),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -443,7 +488,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
-  Widget _buildCircularButtonContent({required IconData icon, required bool isSelected, required VoidCallback onTap}) {
+  Widget _buildCircularButtonContent({
+    required FaIconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
     return Container(
       height: 56,
       width: 56,
@@ -451,7 +500,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
         shape: BoxShape.circle,
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -531,7 +585,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         color: const Color(0xFF6B46C1),
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            spreadRadius: 1,
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Material(
@@ -628,7 +687,10 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             child: Container(
               width: progressBarWidth,
               height: 4,
-              decoration: BoxDecoration(color: Colors.white.withOpacity(0.3), borderRadius: BorderRadius.circular(2)),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
           ),
           const SizedBox(width: 8),
@@ -675,7 +737,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                       width: progressBarWidth,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
                       child: FractionallySizedBox(
@@ -737,7 +799,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Widget _buildCircularButton({
     Key? key,
-    required IconData icon,
+    required FaIconData icon,
     required bool isSelected,
     required VoidCallback onTap,
   }) {
@@ -753,7 +815,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
           shape: BoxShape.circle,
           boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.3), spreadRadius: 1, blurRadius: 5, offset: const Offset(0, 2)),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              spreadRadius: 1,
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
           ],
         ),
         child: Material(
@@ -779,7 +846,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       decoration: BoxDecoration(
         color: Colors.red,
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.4), spreadRadius: 1, blurRadius: 4)],
+        boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.4), spreadRadius: 1, blurRadius: 4)],
       ),
       child: Material(
         color: Colors.transparent,

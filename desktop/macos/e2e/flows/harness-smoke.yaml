@@ -1,0 +1,69 @@
+version: 1
+name: harness-smoke
+tier: 1
+description: Cursor-free smoke flow for the Omi desktop experience harness.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
+  - desktop/macos/Desktop/Sources/ViewExporter.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Dashboard
+    bridge.navigate:
+      target: dashboard
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 0
+
+  - id: S2
+    name: Capture Dashboard Visual
+    visual.export:
+      name: dashboard
+
+  - id: S3
+    name: Assert Dashboard State
+    state.expect:
+      state.selectedTabIndex: 0
+
+  - id: S4
+    name: Navigate to Memories
+    bridge.navigate:
+      target: memories
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 3
+
+  - id: S5
+    name: Refresh Data
+    bridge.action:
+      name: refresh_all_data
+
+  - id: S6
+    name: Assert Refresh Trace
+    trace.expect:
+      trace.path: /action
+      trace.statusCode: 200
+
+  - id: S7
+    name: Assert Logs Are Clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"
+        - "unsupported_route"
+
+  - id: S8
+    name: Capture Memories Visual
+    visual.export:
+      name: memories
+
+  - id: S9
+    name: Optional AX Smoke
+    ax.expect:
+      text_visible:
+        - Memories

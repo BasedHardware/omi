@@ -4,157 +4,40 @@ on:
   push:
     branches: ["main"]
     paths:
-      - 'desktop/**'
-      - '!desktop/CHANGELOG.json'
+      - 'desktop/macos/**'
+      - '!desktop/macos/CHANGELOG.json'
+      - '!desktop/macos/changelog/**'
+  schedule:
+    # Pick up desktop merges that accumulated while Codemagic was busy.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
+    inputs:
+      release_mode:
+        description: 'Release behavior'
+        required: false
+        default: 'release_now'
+        type: choice
+        options:
+          - release_now
+          - force_release
+      next_version:
+        description: 'Optional explicit desktop version to tag (for example, 0.12.0)'
+        required: false
+        type: string
 
 permissions:
   contents: write
   pull-requests: write
 
-concurrency:
-  group: desktop-auto-release-main
-  cancel-in-progress: false
-
-env:
-  SERVICE: desktop-backend
-  REGION: us-central1
-
 jobs:
-  deploy-desktop-backend:
-    environment: development
-    permissions:
-      contents: read
-      id-token: write
-
-    runs-on: ubuntu-latest-m
-    steps:
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Login to GCR
-        run: gcloud auth configure-docker
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/Backend-Rust/google-credentials.json
-
-      - name: Build and Push Desktop Backend Image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./desktop/Backend-Rust
-          file: ./desktop/Backend-Rust/Dockerfile
-          push: true
-          tags: |
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Deploy Desktop Backend to Development
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
-          flags: '--allow-unauthenticated'
-          env_vars: |
-            FIREBASE_PROJECT_ID=based-hardware
-            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-            AGENT_GCS_BUCKET=based-hardware-agent
-          secrets: |
-            GEMINI_API_KEY=GEMINI_API_KEY:latest
-            OPENAI_API_KEY=OPENAI_API_KEY:latest
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            REDIS_DB_PASSWORD=REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=FIREBASE_API_KEY:latest
-            PINECONE_API_KEY=PINECONE_API_KEY:latest
-            REDIS_DB_HOST=REDIS_DB_HOST:latest
-            REDIS_DB_PORT=REDIS_DB_PORT:latest
-            PINECONE_HOST=PINECONE_HOST:latest
-            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
-            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
-            DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
-            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
-
-  deploy-desktop-backend-prod:
-    needs: deploy-desktop-backend
-    environment: prod
-    permissions:
-      contents: read
-      id-token: write
-
-    runs-on: ubuntu-latest-m
-    steps:
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
-
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Google Auth
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-
-      - name: Login to GCR
-        run: gcloud auth configure-docker
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/Backend-Rust/google-credentials.json
-
-      - name: Build and Push Desktop Backend Image
-        uses: docker/build-push-action@v6
-        with:
-          context: ./desktop/Backend-Rust
-          file: ./desktop/Backend-Rust/Dockerfile
-          push: true
-          tags: |
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
-            gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
-          cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
-          cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
-
-      - name: Deploy Desktop Backend to Production
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ github.sha }}
-          flags: '--allow-unauthenticated'
-          env_vars: |
-            FIREBASE_PROJECT_ID=based-hardware
-            GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-            AGENT_GCS_BUCKET=based-hardware-agent
-          secrets: |
-            ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest
-            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
-            OPENAI_API_KEY=OPENAI_API_KEY:latest
-            REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest
-            FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest
-            REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest
-            REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest
-            DEEPGRAM_API_KEY=DESKTOP_DEEPGRAM_API_KEY:latest
-            ANTHROPIC_API_KEY=DESKTOP_ANTHROPIC_API_KEY:latest
-            DESKTOP_LEGACY_ANTHROPIC_KEY=DESKTOP_LEGACY_ANTHROPIC_KEY:latest
-            GOOGLE_CALENDAR_API_KEY=DESKTOP_GOOGLE_CALENDAR_API_KEY:latest
-
-  tag-release:
-    needs: [deploy-desktop-backend, deploy-desktop-backend-prod]
+  plan-release:
     runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-release-planner-main
+      cancel-in-progress: ${{ github.event_name == 'push' }}
+    outputs:
+      should_release: ${{ steps.plan.outputs.should_release }}
+      reason: ${{ steps.plan.outputs.reason }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -168,54 +51,77 @@ jobs:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
 
-      - name: Wait for previous desktop release build
+      - name: Debounce desktop app release
+        if: github.event_name == 'push'
+        run: sleep 180
+
+      - name: Plan desktop release
+        id: plan
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_MODE: ${{ github.event.inputs.release_mode || 'auto' }}
+        run: |
+          python3 .github/scripts/plan-desktop-release.py \
+            --repository "${{ github.repository }}" \
+            --mode "$RELEASE_MODE"
+
+      - name: Show release plan
+        run: echo "${{ steps.plan.outputs.reason }}"
+
+  tag-release:
+    needs: [plan-release]
+    if: needs.plan-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-auto-release-tag-main
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Recheck desktop release queue before tagging
+        id: recheck
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_MODE: ${{ github.event.inputs.release_mode || 'auto' }}
         run: |
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "Omi Bot token not available; cannot inspect previous release build status."
             exit 1
           fi
 
-          LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
-          if [ -z "$LATEST" ]; then
-            echo "No previous macOS tag found."
-            exit 0
-          fi
-
-          SHA=$(gh api "repos/${{ github.repository }}/git/ref/tags/$LATEST" --jq '.object.sha')
-          echo "Latest tag: $LATEST ($SHA)"
-
-          for i in {1..120}; do
-            STATUS=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
-              --jq '.check_runs[] | select(.name=="Release OMI Desktop (Swift)") | .status' | head -n1 || true)
-            CONCLUSION=$(gh api "repos/${{ github.repository }}/commits/$SHA/check-runs" \
-              --jq '.check_runs[] | select(.name=="Release OMI Desktop (Swift)") | .conclusion' | head -n1 || true)
-
-            if [ -z "$STATUS" ]; then
-              echo "No Codemagic release check found for $LATEST yet; continuing."
-              exit 0
-            fi
-
-            echo "Previous release build status: $STATUS (${CONCLUSION:-n/a})"
-
-            if [ "$STATUS" = "completed" ]; then
-              exit 0
-            fi
-
-            sleep 60
-          done
-
-          echo "Timed out waiting for previous desktop release build to finish."
-          exit 1
+          python3 .github/scripts/plan-desktop-release.py \
+            --repository "${{ github.repository }}" \
+            --mode "$RELEASE_MODE"
 
       - name: Compute next version and consolidate changelog
+        if: steps.recheck.outputs.should_release == 'true'
         id: version
+        env:
+          NEXT_VERSION: ${{ github.event.inputs.next_version || '' }}
         run: |
           # Get latest desktop release tag
           LATEST=$(git tag -l 'v*-macos' | sort -V | tail -1)
 
-          if [ -z "$LATEST" ]; then
+          if [ -n "$NEXT_VERSION" ]; then
+            if ! [[ "$NEXT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "next_version must be a semantic version like 0.12.0" >&2
+              exit 1
+            fi
+            VERSION="$NEXT_VERSION"
+            if [ -n "$LATEST" ]; then
+              python3 -c 'import sys; latest=sys.argv[1].removeprefix("v").split("+", 1)[0]; candidate=sys.argv[2]; parse=lambda v: tuple(int(p) for p in v.split(".")); sys.exit(0 if parse(candidate) > parse(latest) else f"next_version {candidate} must be greater than latest desktop version {latest}")' "$LATEST" "$VERSION"
+            fi
+          elif [ -z "$LATEST" ]; then
             VERSION="0.0.1"
           else
             # Strip v prefix and +build-macos suffix  e.g. v0.11.11+11011-macos -> 0.11.11
@@ -238,42 +144,22 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
-          # Consolidate unreleased changelog entries into a versioned release
+          # Consolidate unreleased changelog fragments into a versioned release
           TODAY=$(date -u +%Y-%m-%d)
-          python3 -c "
-          import json, sys
-
-          with open('desktop/CHANGELOG.json', 'r') as f:
-              data = json.load(f)
-
-          unreleased = data.get('unreleased', [])
-          if not unreleased:
-              unreleased = ['Bug fixes and improvements']
-
-          new_release = {
-              'version': '$VERSION',
-              'date': '$TODAY',
-              'changes': unreleased
-          }
-
-          data.setdefault('releases', []).insert(0, new_release)
-          data['unreleased'] = []
-
-          with open('desktop/CHANGELOG.json', 'w') as f:
-              json.dump(data, f, indent=2)
-              f.write('\n')
-
-          print(f'Consolidated {len(unreleased)} changelog entries for v$VERSION')
-          "
+          python3 .github/scripts/desktop-changelog.py consolidate \
+            --version "$VERSION" \
+            --date "$TODAY" \
+            --write
 
       - name: Commit changelog and create tag
+        if: steps.recheck.outputs.should_release == 'true'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add desktop/CHANGELOG.json
+          git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
           # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
@@ -282,6 +168,7 @@ jobs:
           git push origin "$RELEASE_TAG"
 
       - name: Create and auto-merge PR to sync changelog back to main
+        if: steps.recheck.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -305,8 +192,8 @@ jobs:
 
           if [ -z "$PR_NUMBER" ]; then
             PR_URL=$(gh pr create \
-              --title "Update CHANGELOG.json for v${VERSION} [skip ci]" \
-              --body "Auto-generated: consolidates unreleased entries into v${VERSION} and clears the unreleased array." \
+              --title "Update desktop changelog for v${VERSION} [skip ci]" \
+              --body "Auto-generated: consolidates unreleased changelog fragments into v${VERSION} and regenerates CHANGELOG.json." \
               --base main \
               --head "$BRANCH")
             PR_NUMBER=$(echo "$PR_URL" | awk -F/ '{print $NF}')

@@ -7,6 +7,7 @@ import stat
 from pathlib import Path
 
 from omi_cli import config as cfg
+from omi_cli.main import app
 
 
 def test_default_config_path_honors_env(monkeypatch, tmp_path: Path) -> None:
@@ -28,6 +29,8 @@ def test_save_and_round_trip_preserves_unknown_keys(config_path: Path) -> None:
     profile.auth_method = "api_key"
     profile.api_key = "omi_dev_abc"
     profile.api_base = "https://api.staging.omi.me"
+    profile.local_api_url = "http://127.0.0.1:47778"
+    profile.local_token = "local_secret"
     profile.extra = {"future_setting": True}
     config.set_profile(profile)
     config.active_profile = "work"
@@ -39,6 +42,8 @@ def test_save_and_round_trip_preserves_unknown_keys(config_path: Path) -> None:
     p2 = reloaded.profiles["work"]
     assert p2.api_key == "omi_dev_abc"
     assert p2.api_base == "https://api.staging.omi.me"
+    assert p2.local_api_url == "http://127.0.0.1:47778"
+    assert p2.local_token == "local_secret"
     assert p2.extra.get("future_setting") is True
 
 
@@ -122,6 +127,25 @@ def test_masked_credential_short_token_still_redacts() -> None:
 def test_masked_credential_empty_when_no_auth() -> None:
     profile = cfg.Profile(name="default")
     assert profile.masked_credential() == "(none)"
+
+
+def test_masked_local_token() -> None:
+    profile = cfg.Profile(name="default", local_token="local_secret_token")
+    masked = profile.masked_local_token()
+    assert "local_secret_token" not in masked
+    assert "…" in masked
+
+
+def test_config_set_local_token_masks_success_output(config_path: Path, cli_runner) -> None:
+    result = cli_runner.invoke(
+        app,
+        ["config", "set", "local_token", "local_secret_token"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "local_secret_token" not in result.stderr
+    assert "…" in result.stderr
+    assert cfg.load().get_profile("default").local_token == "local_secret_token"
 
 
 def test_resolve_profile_name_precedence(config_path: Path, monkeypatch) -> None:

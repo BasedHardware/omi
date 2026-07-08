@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
@@ -248,7 +249,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   bool get isFetchingConversations => _syncState.isFetchingConversations;
   double get walsSyncedProgress => _syncState.progress;
   double? get syncSpeedKBps => _syncState.speedKBps;
-  List<SyncedConversationPointer> get syncedConversationsPointers => _syncState.syncedConversations;
+  List<SyncedConversationPointer> get syncedConversationsPointers {
+    final sorted = List<SyncedConversationPointer>.from(_syncState.syncedConversations);
+    sorted.sort((a, b) => (b.conversation.createdAt).compareTo(a.conversation.createdAt));
+    return sorted;
+  }
+
   String? get syncError => _syncState.errorMessage;
   Wal? get failedWal => _syncState.failedWal;
   SyncMethod? get currentSyncMethod => _syncState.syncMethod;
@@ -332,6 +338,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   void _autoUploadPendingPhoneFiles() async {
     if (_isDisposed) return;
+    // Custom STT users sync manually (with confirmation) — never auto-upload.
+    if (SharedPreferencesUtil().useCustomStt) return;
+    // Respect the user's auto-sync opt-out (device settings). Defaults to on.
+    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) return;
     if (_syncState.isProcessing) return;
     if (_walService.getSyncs().isStorageSyncing || _walService.getSyncs().isSdCardSyncing) return;
     final phoneWals = _allWals

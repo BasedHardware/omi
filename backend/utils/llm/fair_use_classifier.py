@@ -8,21 +8,20 @@ patterns (audiobook transcription, podcast transcription, pre-recorded content).
 import json
 import logging
 import os
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, cast
 
 import database.conversations as conversations_db
-from langchain_openai import ChatOpenAI
-from utils.llm.usage_tracker import get_usage_callback
+from utils.executors import db_executor, run_blocking
+from utils.llm.clients import get_llm
+from utils.llm.model_config import get_model, get_provider
 
 logger = logging.getLogger(__name__)
 
-CLASSIFIER_MODEL = os.getenv('FAIR_USE_CLASSIFIER_MODEL', 'gpt-5.1')
-_classifier_llm = ChatOpenAI(
-    model=CLASSIFIER_MODEL, callbacks=[get_usage_callback()], request_timeout=120, max_retries=1
-)
+CLASSIFIER_ROUTE = f"{get_provider('fair_use')}/{get_model('fair_use')}"
 CLASSIFIER_LOOKBACK_DAYS = int(os.getenv('FAIR_USE_CLASSIFIER_LOOKBACK_DAYS', '7'))
 CLASSIFIER_MAX_CONVERSATIONS = 30
+_classifier_llm = None
 
 # ---------------------------------------------------------------------------
 # Prompt recipes for different non-personal usage scenarios
@@ -116,15 +115,14 @@ Look specifically for:
 """
 
 
-def _select_recipes(conversation_summaries: list) -> str:
+def _select_recipes(conversation_summaries: List[Dict[str, Any]]) -> str:
     """Select which additional detection recipes to apply based on conversation patterns."""
-    recipes = []
+    recipes: List[str] = []
 
     if not conversation_summaries:
         return ""
 
     # Check for signs that suggest specific recipes
-    titles = [c.get('title', '') for c in conversation_summaries]
     durations = [c.get('duration_minutes', 0) for c in conversation_summaries]
     categories = [c.get('category', '') for c in conversation_summaries]
 
@@ -156,9 +154,9 @@ def _select_recipes(conversation_summaries: list) -> str:
     return '\n'.join(recipes)
 
 
-def _prepare_conversation_summaries(uid: str) -> list:
+def _prepare_conversation_summaries(uid: str) -> List[Dict[str, Any]]:
     """Fetch recent conversations and extract metadata for classification."""
-    start_date = datetime.utcnow() - timedelta(days=CLASSIFIER_LOOKBACK_DAYS)
+    start_date = datetime.now(timezone.utc) - timedelta(days=CLASSIFIER_LOOKBACK_DAYS)
 
     conversations = conversations_db.get_conversations(
         uid,
@@ -166,9 +164,9 @@ def _prepare_conversation_summaries(uid: str) -> list:
         start_date=start_date,
     )
 
-    summaries = []
+    summaries: List[Dict[str, Any]] = []
     for conv in conversations:
-        structured = conv.get('structured', {}) or {}
+        structured = cast(Dict[str, Any], conv.get('structured') or {})
         started = conv.get('started_at')
         ended = conv.get('finished_at') or conv.get('ended_at')
 
@@ -195,23 +193,23 @@ def _prepare_conversation_summaries(uid: str) -> list:
     return summaries
 
 
-async def classify_user_purpose(uid: str) -> dict:
+async def classify_user_purpose(uid: str) -> Dict[str, Any]:
     """Run LLM classification on a user's recent conversations.
 
     Returns a dict matching the ClassifierResult model:
       {misuse_score, usage_type, confidence, evidence, model, prompt_version}
     """
-    default_result = {
+    default_result: Dict[str, Any] = {
         'misuse_score': 0.0,
         'usage_type': 'none',
         'confidence': 0.0,
         'evidence': [],
-        'model': CLASSIFIER_MODEL,
+        'model': CLASSIFIER_ROUTE,
         'prompt_version': 'v2',
     }
 
     try:
-        summaries = _prepare_conversation_summaries(uid)
+        summaries = await run_blocking(db_executor, _prepare_conversation_summaries, uid)
         if not summaries:
             logger.info(f'fair_use: no conversations to classify for {uid}')
             return default_result
@@ -227,14 +225,15 @@ CONVERSATIONS:
 
 Respond with ONLY the JSON output, no other text."""
 
-        response = await _classifier_llm.ainvoke(
+        classifier_llm = _classifier_llm or get_llm('fair_use')
+        response = await classifier_llm.ainvoke(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ]
         )
 
-        content = response.content if hasattr(response, 'content') else str(response)
+        content = cast(str, cast(Any, response).content) if hasattr(response, 'content') else str(response)
 
         # Parse JSON from response
         # Handle potential markdown code blocks
@@ -250,7 +249,7 @@ Respond with ONLY the JSON output, no other text."""
         result['confidence'] = max(0.0, min(1.0, float(result.get('confidence', 0.0))))
         result['usage_type'] = result.get('usage_type', 'none')
         result['evidence'] = result.get('evidence', [])[:10]  # Cap evidence entries
-        result['model'] = CLASSIFIER_MODEL
+        result['model'] = CLASSIFIER_ROUTE
         result['prompt_version'] = 'v2'
 
         return result

@@ -12,15 +12,16 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/ui/molecules/omi_confirm_dialog.dart';
+import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/other/time_utils.dart';
+import 'package:omi/utils/sync_confirmation.dart';
 import 'local_storage_page.dart';
 import 'private_cloud_sync_page.dart';
 import 'synced_conversations_page.dart';
 import 'wal_item_detail/wal_item_detail_page.dart';
 
-Widget _buildFaIcon(IconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
+Widget _buildFaIcon(FaIconData icon, {double size = 18, Color color = const Color(0xFF8E8E93)}) {
   return Padding(
     padding: const EdgeInsets.only(left: 2, top: 1),
     child: FaIcon(icon, size: size, color: color),
@@ -96,8 +97,10 @@ class WalListItem extends StatelessWidget {
             color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(100),
           ),
-          child: Text(context.l10n.retry,
-              style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500)),
+          child: Text(
+            context.l10n.retry,
+            style: const TextStyle(color: Colors.deepPurpleAccent, fontSize: 13, fontWeight: FontWeight.w500),
+          ),
         ),
       );
     }
@@ -196,15 +199,19 @@ class WalListItem extends StatelessWidget {
                           ),
                           if (wal.syncSpeedKBps != null && wal.syncSpeedKBps! > 0) ...[
                             const SizedBox(width: 12),
-                            Text('${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 11)),
+                            Text(
+                              '${wal.syncSpeedKBps!.toStringAsFixed(1)} KB/s',
+                              style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                            ),
                           ],
                         ],
                       ),
                       if (wal.syncEtaSeconds != null && wal.syncEtaSeconds! > 0) ...[
                         const SizedBox(height: 4),
-                        Text(context.l10n.etaLabel(_formatEta(wal.syncEtaSeconds!)),
-                            style: TextStyle(color: Colors.grey.shade600, fontSize: 11)),
+                        Text(
+                          context.l10n.etaLabel(_formatEta(wal.syncEtaSeconds!)),
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
+                        ),
                       ],
                     ],
                   ],
@@ -234,12 +241,7 @@ class _SyncPageState extends State<SyncPage> {
     });
   }
 
-  Widget _buildSettingsItem({
-    required IconData icon,
-    required String title,
-    String? status,
-    VoidCallback? onTap,
-  }) {
+  Widget _buildSettingsItem({required FaIconData icon, required String title, String? status, VoidCallback? onTap}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -250,8 +252,10 @@ class _SyncPageState extends State<SyncPage> {
             FaIcon(icon, color: const Color(0xFF8E8E93), size: 18),
             const SizedBox(width: 14),
             Expanded(
-              child:
-                  Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400)),
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w400),
+              ),
             ),
             if (status != null) Text(status, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
             const SizedBox(width: 10),
@@ -416,6 +420,11 @@ class _SyncPageState extends State<SyncPage> {
   }
 
   void _handleSyncWals(BuildContext context, SyncProvider syncProvider) async {
+    // Custom STT users: offline files are transcribed on Omi and count toward
+    // the limit. Confirm before proceeding.
+    if (!await confirmSyncForCustomStt(context)) return;
+    if (!context.mounted) return;
+
     final sdCardWals = syncProvider.missingWals.where((wal) => wal.storage == WalStorage.sdcard).toList();
 
     if (sdCardWals.isNotEmpty) {
@@ -605,7 +614,10 @@ class _SyncPageState extends State<SyncPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(100)),
-        child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500)),
+        child: Text(
+          label,
+          style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+        ),
       ),
     );
   }
@@ -621,7 +633,7 @@ class _SyncPageState extends State<SyncPage> {
       ),
       child: Row(
         children: [
-          const FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
+          FaIcon(FontAwesomeIcons.circleExclamation, color: Colors.redAccent, size: 16),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -730,7 +742,7 @@ class _SyncPageState extends State<SyncPage> {
 
     // Build a single flattened list with source headers interleaved
     final List<_PendingListItem> items = [];
-    void addSection(String label, IconData icon, Color color, List<Wal> wals) {
+    void addSection(String label, FaIconData icon, Color color, List<Wal> wals) {
       items.add(_PendingListItem.header(label, icon, color, wals.length));
       for (final wal in wals) {
         items.add(_PendingListItem.wal(wal));
@@ -822,7 +834,7 @@ class _SyncPageState extends State<SyncPage> {
               backgroundColor: const Color(0xFF0D0D0D),
               elevation: 0,
               leading: IconButton(
-                icon: const Padding(
+                icon: Padding(
                   padding: EdgeInsets.only(left: 2, top: 1),
                   child: FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
                 ),
@@ -1020,7 +1032,7 @@ class WalItem extends ListItem {
 class _PendingListItem {
   final bool isHeader;
   final String? label;
-  final IconData? icon;
+  final FaIconData? icon;
   final Color? color;
   final int? count;
   final Wal? wal;
@@ -1132,7 +1144,7 @@ class _ManageStorageSheet extends StatelessWidget {
 }
 
 class _StorageRow extends StatelessWidget {
-  final IconData icon;
+  final FaIconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;

@@ -554,6 +554,8 @@
         "description": "Plan and usage menu item"
     },
     "offlineSync": "Offline Sync",
+    "autoSync": "Awtomatikong pag-sync",
+    "autoSyncDescription": "Awtomatikong i-sync ang mga offline na recording kapag nakakonekta ang iyong device",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -9535,6 +9537,7 @@
         "description": "Button text for creating a new task"
     },
     "viewAll": "Tingnan Lahat",
+    "expand": "Palawakin",
     "@viewAll": {
         "description": "Button text to view all items"
     },
@@ -10624,5 +10627,72 @@
     "recapRegeneratedSnackbar": "Nabuo muli ang buod",
     "recapRegenerateFailed": "Hindi nagawang muling buuin ang buod. Subukang muli mamaya.",
     "recapRegenerateCooldown": "Mangyaring maghintay ng ilang segundo bago bumuo muli.",
-    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito."
+    "recapRegenerateNoConversations": "Walang mga pag-uusap na ibubuod para sa araw na ito.",
+    "syncCustomSttWarningTitle": "Gumagamit ang pag-sync ng transcription ng Omi",
+    "syncCustomSttWarningMessage": "Gumagamit ka ng sarili mong transcription provider. Kapag in-sync ang mga recording na ito, ita-transcribe ang mga ito sa mga server ng Omi at mabibilang sa limitasyon ng transcription ng iyong plan.",
+    "transcribeLaterTitle": "I-transcribe Mamaya",
+    "transcribeLaterDescription": "Mag-record ng audio ngayon at i-transcribe ito kapag kailangan mo, sa halip na live. Naka-save ang mga recording sa iyong telepono, tapos i-a-upload mo ang mga ito para gumawa ng mga usapan.",
+    "transcribeLaterNote": "Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga't hindi mo ito ina-upload.",
+    "transcribeLaterStorageFull": "Kapos na sa storage ang iyong telepono, kaya naka-pause ang pag-record. Magbakante ng espasyo o i-upload ang iyong mga recording, at awtomatiko itong magpapatuloy.",
+    "unmute": "I-unmute",
+    "newRecording": "Bagong recording",
+    "transcribeLaterPaused": "Naka-pause — hindi nire-record ang audio",
+    "recordingMode": "Mode ng pag-record",
+    "captureModeLater": "Mamaya",
+    "captureModeLiveDescription": "I-transcribe nang real time habang nagsasalita ka.",
+    "captureModeLaterDescription": "I-save ang audio ngayon at i-transcribe kahit kailan mo gusto.",
+    "backgroundModeUnavailable": "Hindi available ang Background Mode dahil walang nakakonektang compatible na device. Magkonekta ng Omi, OpenGlass, o Friend Pendant device para magamit ang feature na ito.",
+    "memoryThisDevice": "Device na ito",
+    "memoryThisIphone": "iPhone na ito",
+    "memoryThisPhone": "Teleponong ito",
+    "memoryProvenanceMac": "Mac",
+    "memoryProvenanceIphone": "iPhone",
+    "memoryProvenanceAndroid": "Android",
+    "deviceTutorial": "Paano Gamitin ang Omi",
+    "deviceOnboardingTranscriptionTitle": "Magsalita sa Iyong Omi",
+    "deviceOnboardingTranscriptionSubtitle": "Magsabi ng ilang salita at panoorin itong lumitaw nang real-time",
+    "deviceOnboardingGoodJob": "Magaling!",
+    "deviceOnboardingStartSpeaking": "Magsimulang magsalita...",
+    "deviceOnboardingAskQuestionTitle": "Magtanong sa Omi",
+    "deviceOnboardingAskQuestionSubtitle": "Pindutin ang button nang isang beses, sabihin ang iyong tanong, pagkatapos ay pindutin muli kapag tapos na",
+    "deviceOnboardingProcessingQuestion": "Pinoproseso ang iyong tanong...",
+    "deviceOnboardingListening": "Nakikinig...",
+    "deviceOnboardingTurnOffTitle": "Patayin",
+    "deviceOnboardingTurnOnTitle": "Buksan",
+    "deviceOnboardingTurnOffSubtitle": "Pindutin nang matagal ang button sa loob ng 3 segundo",
+    "deviceOnboardingTurnOnSubtitle": "Pindutin ang button para muling buksan ito",
+    "deviceOnboardingHoldButtonHint": "Pindutin nang matatag ang button hanggang mamatay ang ilaw",
+    "deviceOnboardingStatusConnected": "Nakakonekta",
+    "deviceOnboardingStatusConnectedDone": "Nakakonekta!",
+    "deviceOnboardingStatusDisconnected": "Nadiskonekta",
+    "deviceOnboardingStatusTurningOff": "Pinapatay...",
+    "deviceOnboardingDoubleTapTitle": "I-customize ang Double Tap",
+    "deviceOnboardingEndConversation": "Tapusin ang Usapan",
+    "deviceOnboardingEndConversationDesc": "I-save at tapusin ang kasalukuyang usapan",
+    "deviceOnboardingMuteUnmute": "I-mute / I-unmute",
+    "deviceOnboardingMuteUnmuteDesc": "I-on o i-off ang mikropono",
+    "deviceOnboardingStarConversation": "I-star ang Kasalukuyang Usapan",
+    "deviceOnboardingStarConversationDesc": "Markahan ang usapan bilang mahalaga",
+    "deviceOnboardingSingleTapHint": "Isang tap lang iyon — subukang mag-tap nang dalawang beses nang mabilis!",
+    "deviceOnboardingTryDoubleTap": "Subukan mo ngayon! I-double tap ang iyong Omi",
+    "deviceOnboardingContinue": "Magpatuloy",
+    "deviceOnboardingFinish": "Tapusin",
+    "deviceOnboardingIntroTitle": "Kilalanin ang Iyong Omi",
+    "deviceOnboardingIntroSubtitle": "Isang mabilis at praktikal na pamamasyal sa lahat ng kayang gawin ng iyong Omi.",
+    "deviceOnboardingIntroDuration": "Mga 1 minuto",
+    "jumpToLatestMessage": "Tumalon sa pinakabagong mensahe",
+    "latest": "Pinakabago",
+    "flashFirmware": "I-flash ang Firmware",
+    "pendantRecordingTitle": "Nagre-record sa pendant",
+    "pendantRecordingNote": "Kusang nagre-record ang iyong pendant. Nasi-sync ang mga recording sa iyong telepono habang nakabukas ang app.",
+    "pendantSyncingRecordings": "Sini-sync ang mga recording mula sa iyong pendant…",
+    "pendantMinutesStored": "~{minutes} min ang nakaimbak",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Halos puno na ang storage ng pendant — panatilihing bukas ang app para makapag-sync."
 }

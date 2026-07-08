@@ -1,0 +1,7 @@
+{
+  "version": "0.12.25",
+  "date": "2026-07-05",
+  "changes": [
+    "Conversations, memories, action items, and goals now decode from backend-generated wire DTOs, fixing field drift (Event.start vs starts_at, message app_id) and hardening against backend schema changes"
+  ]
+}

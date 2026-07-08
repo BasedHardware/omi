@@ -118,3 +118,35 @@ class TestConversationsToStringDedup:
         )
         result = conversations_to_string([conv])
         assert "Summarization:" not in result
+
+
+class TestConversationsToStringTimezone:
+    """Timestamps must render in the user's timezone when tz is provided (issue #6214)."""
+
+    def test_default_is_utc(self):
+        # created_at is 10:00 UTC
+        conv = _make_conversation()
+        result = conversations_to_string([conv])
+        assert "15 Jan 2026 at 10:00 UTC" in result
+        assert "Started: 15 Jan 2026 at 10:00 UTC" in result
+        assert "Finished: 15 Jan 2026 at 10:30 UTC" in result
+
+    def test_converts_to_user_timezone(self):
+        # 10:00 UTC -> 07:00 in America/Sao_Paulo (UTC-3), matching the issue's "off by 3 hours" report
+        conv = _make_conversation()
+        result = conversations_to_string([conv], tz="America/Sao_Paulo")
+        assert "15 Jan 2026 at 07:00 America/Sao_Paulo" in result
+        assert "Started: 15 Jan 2026 at 07:00 America/Sao_Paulo" in result
+        assert "Finished: 15 Jan 2026 at 07:30 America/Sao_Paulo" in result
+        assert "UTC" not in result
+
+    def test_kolkata_half_hour_offset(self):
+        # 10:00 UTC -> 15:30 IST (UTC+5:30)
+        conv = _make_conversation()
+        result = conversations_to_string([conv], tz="Asia/Kolkata")
+        assert "15 Jan 2026 at 15:30 Asia/Kolkata" in result
+
+    def test_invalid_timezone_falls_back_to_utc(self):
+        conv = _make_conversation()
+        result = conversations_to_string([conv], tz="Not/AZone")
+        assert "15 Jan 2026 at 10:00 UTC" in result

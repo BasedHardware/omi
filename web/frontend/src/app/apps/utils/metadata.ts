@@ -101,7 +101,7 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
 const productInfo = {
   name: 'OMI Necklace',
   description: 'AI-powered wearable necklace. Real-time AI voice assistant.',
-  price: '69.99',
+  price: '89',
   currency: 'USD',
   url: 'https://www.omi.me/products/friend-dev-kit-2',
 };

@@ -16,6 +16,7 @@ Validates:
 import os
 import time
 from pathlib import Path
+from typing import Any, cast
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -26,7 +27,7 @@ from models.users import TrialMetadata, PlanType
 
 
 def _read_source(path):
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         return f.read()
 
 
@@ -106,7 +107,7 @@ class TestGetTrialMetadataExists:
 
 def _get_trial_metadata_fn():
     """Extract get_trial_metadata from subscription.py source and compile it."""
-    source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text()
+    source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text(encoding='utf-8')
     func_start = source.index('def get_trial_metadata(')
     next_func = source.index('\ndef ', func_start + 1)
     func_source = source[func_start:next_func]
@@ -118,8 +119,9 @@ def _get_trial_metadata_fn():
 
     # Get TRIAL_LENGTH_SECONDS
     tls_line = [l for l in source.split('\n') if l.startswith('TRIAL_LENGTH_SECONDS')][0]
+    cutoff_line = [l for l in source.split('\n') if l.startswith('NEO_DESKTOP_GRANDFATHER_CUTOFF')][0]
 
-    namespace = {
+    namespace: dict[str, Any] = {
         'PlanType': PlanType,
         'TrialMetadata': TrialMetadata,
         'time': time,
@@ -130,7 +132,25 @@ def _get_trial_metadata_fn():
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
         '_request_has_all_byok_keys': lambda: False,
+        # These tests exercise the trial-expiry computation, which only runs when the
+        # paywall is enabled (it's OFF by default in prod / freemium).
+        'TRIAL_PAYWALL_ENABLED': True,
     }
+    exec(compile(cutoff_line, '<subscription.py>', 'exec'), namespace)
+
+    def _plan_grants_desktop_stub(plan, subscription=None):
+        if plan in {PlanType.operator, PlanType.architect}:
+            return True
+        if plan == PlanType.unlimited and subscription is not None:
+            current_period_start = getattr(subscription, 'current_period_start', None)
+            return current_period_start is None or current_period_start < namespace['NEO_DESKTOP_GRANDFATHER_CUTOFF']
+        return False
+
+    namespace['plan_grants_desktop'] = _plan_grants_desktop_stub
+    # _get_user wraps firebase_auth.get_user — subscription.py extracts it
+    # into a module-level helper for type safety. cast is used for type narrowing.
+    namespace['_get_user'] = lambda uid: namespace['firebase_auth'].get_user(uid)
+    namespace['cast'] = cast
     # Execute TRIAL_LENGTH_SECONDS
     exec(compile(tls_line, '<subscription.py>', 'exec'), namespace)
     # Execute TRIAL_FEATURES
@@ -213,6 +233,20 @@ class TestGetTrialMetadataBehavior:
         result = self.fn('uid_test')
         assert result.trial_expired is False
         assert result.trial_started_at is None
+
+    def test_neo_grandfather_trial_not_expired(self):
+        """Grandfathered Neo user: trial_expired=False without Firebase lookup."""
+        sub = MagicMock()
+        sub.plan = PlanType.unlimited
+        sub.current_period_start = None
+        self.ns['users_db'].get_user_valid_subscription.return_value = sub
+        self.ns['users_db'].is_byok_active.return_value = False
+
+        result = self.fn('uid_test')
+
+        assert result.trial_expired is False
+        assert result.trial_started_at is None
+        self.ns['firebase_auth'].get_user.assert_not_called()
 
     def test_firebase_failure_fails_open(self):
         """Firebase lookup failure: trial_expired=False."""
@@ -484,7 +518,7 @@ class TestTrialBoundaryDynamic:
         fn, ns = _get_trial_metadata_fn()
         ns['TRIAL_LENGTH_SECONDS'] = 3600  # 1 hour
         # Re-exec the function with new constant
-        source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text()
+        source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text(encoding='utf-8')
         func_start = source.index('def get_trial_metadata(')
         next_func = source.index('\ndef ', func_start + 1)
         func_source = source[func_start:next_func]
@@ -509,7 +543,7 @@ class TestTrialBoundaryDynamic:
         """With custom 1-hour trial, user at 2 hours is expired."""
         fn, ns = _get_trial_metadata_fn()
         ns['TRIAL_LENGTH_SECONDS'] = 3600
-        source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text()
+        source = (Path(__file__).resolve().parents[2] / "utils" / "subscription.py").read_text(encoding='utf-8')
         func_start = source.index('def get_trial_metadata(')
         next_func = source.index('\ndef ', func_start + 1)
         func_source = source[func_start:next_func]

@@ -1,0 +1,1110 @@
+#!/usr/bin/env python3
+"""Run Omi desktop experience flows through the local automation bridge."""
+
+from __future__ import annotations
+
+import argparse
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import json
+import os
+import re
+import shutil
+import statistics
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+import typing
+
+
+SCHEMA_VERSION = 2
+MIN_COMPATIBLE_FLOW_VERSION = 1
+SCRIPT_DIR = Path(__file__).resolve().parent
+DESKTOP_DIR = SCRIPT_DIR.parent
+DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
+DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
+DEFAULT_RUN_ROOT = DESKTOP_DIR / ".harness/runs"
+POLL_INTERVAL_SECONDS = 0.02
+
+
+@dataclass
+class HarnessContext:
+    base_url: str
+    flow_path: Path
+    run_dir: Path
+    steps_dir: Path
+    lane: str
+    log_path: Path
+    log_start: int
+    bundle_id: str | None
+    process_match: str | None
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+
+def slug(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9_.-]+", "-", value.strip().lower()).strip("-")
+    return cleaned or "flow"
+
+
+def read_yaml(path: Path) -> dict[str, typing.Any]:
+    try:
+        import yaml
+    except ImportError as exc:
+        print(
+            "omi-harness: PyYAML is required to run flow files; install it with `python3 -m pip install PyYAML`",
+            file=sys.stderr,
+        )
+        raise SystemExit(2) from exc
+
+    with path.open("r", encoding="utf-8") as handle:
+        return yaml.safe_load(handle) or {}
+
+
+def env_flag(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def validate_flow_schema(flow: dict[str, typing.Any], args: argparse.Namespace) -> int:
+    raw_version = flow.get("version")
+    if isinstance(raw_version, bool) or not isinstance(raw_version, int):
+        raise SystemExit("omi-harness: flow version must be an integer")
+    if raw_version > SCHEMA_VERSION:
+        raise SystemExit(
+            f"omi-harness: flow schema version {raw_version} is newer than supported version {SCHEMA_VERSION}"
+        )
+    if raw_version < MIN_COMPATIBLE_FLOW_VERSION:
+        raise SystemExit(
+            f"omi-harness: flow schema version {raw_version} is older than compatible version "
+            f"{MIN_COMPATIBLE_FLOW_VERSION}"
+        )
+    if raw_version < SCHEMA_VERSION and not getattr(args, "allow_legacy_flow_version", False):
+        raise SystemExit(
+            f"omi-harness: flow schema version {raw_version} requires explicit compatibility; "
+            "pass --allow-legacy-flow-version or set OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION=1"
+        )
+    return raw_version
+
+
+def write_json(path: Path, data: typing.Any) -> None:
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def automation_token(port: int) -> str | None:
+    token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
+    if token:
+        return token
+    token_file = Path(
+        os.environ.get("OMI_AUTOMATION_TOKEN_FILE")
+        or os.path.join(os.environ.get("TMPDIR", "/tmp"), f"omi-automation-{port}.token")
+    )
+    try:
+        token = token_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    return token or None
+
+
+def automation_port_from_base_url(base_url: str) -> int:
+    return int(base_url.rsplit(":", 1)[1])
+
+
+def request_json(base_url: str, method: str, route: str, body: dict[str, typing.Any] | None = None) -> dict[str, typing.Any]:
+    data = None
+    headers = {"Accept": "application/json"}
+    token = automation_token(automation_port_from_base_url(base_url))
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(f"{base_url}{route}", data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        payload = exc.read().decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(payload)
+        except json.JSONDecodeError:
+            parsed = {"ok": False, "error": payload}
+        parsed["http_status"] = exc.code
+        return parsed
+    except urllib.error.URLError as exc:
+        return {"ok": False, "error": f"connection_failed: {exc.reason}"}
+    except TimeoutError as exc:
+        return {"ok": False, "error": f"connection_timeout: {exc}"}
+
+
+def git_sha() -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
+def tool_version(command: list[str]) -> str | None:
+    try:
+        result = subprocess.run(
+            command,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            timeout=5,
+        )
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return None
+    return result.stdout.strip().splitlines()[0] if result.stdout.strip() else None
+
+
+def nested_get(data: dict[str, typing.Any], dotted: str) -> typing.Any:
+    current: typing.Any = data
+    for part in dotted.split("."):
+        if isinstance(current, dict):
+            current = current.get(part)
+        else:
+            return None
+    return current
+
+
+def normalize_state_response(response: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    result = response.get("result")
+    return result if isinstance(result, dict) else {}
+
+
+def state_snapshot(ctx: HarnessContext) -> dict[str, typing.Any]:
+    return normalize_state_response(request_json(ctx.base_url, "GET", "/state"))
+
+
+def recent_traces(ctx: HarnessContext) -> list[dict[str, typing.Any]]:
+    response = request_json(ctx.base_url, "GET", "/traces/recent")
+    result = response.get("result")
+    return result if isinstance(result, list) else []
+
+
+def expectation_matches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> bool:
+    return all(nested_get(data, key) == value for key, value in expectations.items())
+
+
+def expectation_mismatches(data: dict[str, typing.Any], expectations: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    return {
+        key: {"expected": value, "actual": nested_get(data, key)}
+        for key, value in expectations.items()
+        if nested_get(data, key) != value
+    }
+
+
+def wait_for_state(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, dict[str, typing.Any]]:
+    deadline = time.monotonic() + timeout
+    latest: dict[str, typing.Any] = {}
+    while time.monotonic() < deadline:
+        latest = state_snapshot(ctx)
+        if expectation_matches({"state": latest}, expectations):
+            return True, latest
+        time.sleep(POLL_INTERVAL_SECONDS)
+    return False, latest
+
+
+def wait_for_trace(ctx: HarnessContext, expectations: dict[str, typing.Any], timeout: float = 5.0) -> tuple[bool, list[dict[str, typing.Any]]]:
+    deadline = time.monotonic() + timeout
+    traces: list[dict[str, typing.Any]] = []
+    while time.monotonic() < deadline:
+        traces = recent_traces(ctx)
+        if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+            return True, traces
+        time.sleep(POLL_INTERVAL_SECONDS)
+    return False, traces
+
+
+def log_cursor(path: Path) -> int:
+    try:
+        return path.stat().st_size
+    except FileNotFoundError:
+        return 0
+
+
+def read_log_tail(ctx: HarnessContext) -> str:
+    if not ctx.log_path.exists():
+        return ""
+    with ctx.log_path.open("rb") as handle:
+        handle.seek(ctx.log_start)
+        raw = handle.read(256_000)
+    return raw.decode("utf-8", errors="replace")
+
+
+def collect_logs(ctx: HarnessContext) -> dict[str, typing.Any]:
+    text = read_log_tail(ctx)
+    out = ctx.run_dir / "logs.txt"
+    out.write_text(text, encoding="utf-8")
+    error_count = len(re.findall(r"\b(error|failed|exception|crash)\b", text, flags=re.IGNORECASE))
+    return {"path": str(out), "available": ctx.log_path.exists(), "bytes": len(text.encode("utf-8")), "error_count": error_count}
+
+
+def _ancestor_pids() -> set[int]:
+    """Return PIDs of this process and all its ancestors (parent chain).
+
+    macOS ``pgrep`` has no ``-A`` (exclude-ancestors) flag, so when the harness
+    is launched from a scripted shell/CI command whose command line contains the
+    process-match string (e.g. ``--process-match omi-harness-test``), ``pgrep``
+    returns that ancestor as well as the app.  Filtering the ancestor chain
+    here keeps ``resolve_sample_pid`` from failing the uniqueness check.
+    """
+    pids: set[int] = {os.getpid()}
+    try:
+        current = os.getppid()
+        while current > 1 and current not in pids:
+            pids.add(current)
+            # Walk up the parent chain via ps (portable; no /proc on macOS).
+            result = subprocess.run(
+                ["ps", "-o", "ppid=", "-p", str(current)],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                timeout=3,
+            )
+            parent = result.stdout.strip()
+            if not parent.isdigit():
+                break
+            current = int(parent)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return pids
+
+
+def process_matches(match: str) -> list[dict[str, typing.Any]]:
+    completed = subprocess.run(
+        ["pgrep", "-fl", match],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=5,
+    )
+    skip_pids = _ancestor_pids()
+    matches: list[dict[str, typing.Any]] = []
+    for line in completed.stdout.splitlines():
+        parts = line.strip().split(maxsplit=1)
+        if not parts or not parts[0].isdigit():
+            continue
+        command = parts[1] if len(parts) > 1 else ""
+        pid = int(parts[0])
+        # Only skip the harness runner itself and its ancestor shells (whose
+        # command lines may contain the match string). Do NOT filter by the
+        # substring "omi-harness" because the target app may be launched as a
+        # named bundle like "omi-harness-test" that legitimately matches.
+        if pid in skip_pids:
+            continue
+        matches.append({"pid": pid, "command": command})
+    return matches
+
+
+def resolve_sample_pid(ctx: HarnessContext, spec: dict[str, typing.Any]) -> tuple[int, str]:
+    if spec.get("pid") is not None:
+        return int(spec["pid"]), f"pid:{spec['pid']}"
+    match = str(spec.get("process_match") or ctx.process_match or "").strip()
+    if not match:
+        raise RuntimeError("power.sample requires pid, process_match, or --process-match")
+    matches = process_matches(match)
+    if not matches:
+        raise RuntimeError(f"no process matched {match!r}")
+    if len(matches) > 1:
+        commands = ", ".join(f"{item['pid']}:{item['command']}" for item in matches[:5])
+        raise RuntimeError(f"process_match {match!r} matched {len(matches)} processes: {commands}")
+    return int(matches[0]["pid"]), match
+
+
+def read_process_sample(pid: int) -> dict[str, typing.Any] | None:
+    completed = subprocess.run(
+        ["ps", "-o", "%cpu=", "-o", "rss=", "-p", str(pid)],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        timeout=5,
+    )
+    if completed.returncode != 0:
+        return None
+    parts = completed.stdout.strip().split()
+    if len(parts) < 2:
+        return None
+    return {
+        "at": now_iso(),
+        "cpu_percent": float(parts[0]),
+        "rss_mb": round(float(parts[1]) / 1024, 2),
+    }
+
+
+def sample_process_power(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None, dict[str, typing.Any]]:
+    pid, match = resolve_sample_pid(ctx, spec)
+    duration_ms = max(250, int(spec.get("duration_ms", 5000)))
+    interval_ms = max(100, int(spec.get("interval_ms", 250)))
+    warmup_ms = max(0, int(spec.get("warmup_ms", 0)))
+    if warmup_ms:
+        time.sleep(warmup_ms / 1000)
+
+    deadline = time.monotonic() + duration_ms / 1000
+    samples: list[dict[str, typing.Any]] = []
+    while time.monotonic() < deadline:
+        sample = read_process_sample(pid)
+        if sample is None:
+            raise RuntimeError(f"process {pid} died or became unreadable while sampling")
+        samples.append(sample)
+        time.sleep(interval_ms / 1000)
+
+    if not samples:
+        raise RuntimeError(f"no samples collected for pid {pid}")
+
+    cpu_values = [float(sample["cpu_percent"]) for sample in samples]
+    rss_values = [float(sample["rss_mb"]) for sample in samples]
+    summary = {
+        "pid": pid,
+        "process_match": match,
+        "duration_ms": duration_ms,
+        "interval_ms": interval_ms,
+        "sample_count": len(samples),
+        "avg_cpu_percent": round(statistics.fmean(cpu_values), 2),
+        "peak_cpu_percent": round(max(cpu_values), 2),
+        "avg_rss_mb": round(statistics.fmean(rss_values), 2),
+        "peak_rss_mb": round(max(rss_values), 2),
+    }
+
+    errors: list[str] = []
+    max_avg_cpu = spec.get("max_avg_cpu_percent")
+    if max_avg_cpu is not None and summary["avg_cpu_percent"] > float(max_avg_cpu):
+        errors.append(f"avg_cpu_percent {summary['avg_cpu_percent']} exceeded {max_avg_cpu}")
+    max_peak_cpu = spec.get("max_peak_cpu_percent")
+    if max_peak_cpu is not None and summary["peak_cpu_percent"] > float(max_peak_cpu):
+        errors.append(f"peak_cpu_percent {summary['peak_cpu_percent']} exceeded {max_peak_cpu}")
+    max_avg_rss = spec.get("max_avg_rss_mb")
+    if max_avg_rss is not None and summary["avg_rss_mb"] > float(max_avg_rss):
+        errors.append(f"avg_rss_mb {summary['avg_rss_mb']} exceeded {max_avg_rss}")
+
+    write_json(path, {"summary": summary, "samples": samples})
+    return not errors, "; ".join(errors) if errors else None, summary
+
+
+def step_prefix(index: int, step: dict[str, typing.Any]) -> str:
+    return f"{index:03d}-{slug(str(step.get('id') or step.get('name') or 'step'))}"
+
+
+def run_agent_swift(ctx: HarnessContext, args: list[str]) -> subprocess.CompletedProcess[str]:
+    if not ctx.bundle_id:
+        raise RuntimeError("ax.expect requires --bundle-id")
+    connect = subprocess.run(
+        ["agent-swift", "connect", "--bundle-id", ctx.bundle_id],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        timeout=10,
+    )
+    if connect.returncode != 0:
+        return connect
+    return subprocess.run(["agent-swift", *args], check=False, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=20)
+
+
+def action_payload(spec: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    payload = dict(spec)
+    params = dict(payload.get("params") or {})
+    for key in list(payload.keys()):
+        if key not in {"name", "params"}:
+            params[key] = payload.pop(key)
+    if params:
+        payload["params"] = params
+    return payload
+
+
+def assert_state(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    state = state_snapshot(ctx)
+    write_json(path, state)
+    expectations = spec.get("equals") or spec
+    if not isinstance(expectations, dict):
+        return False, "state.expect requires a mapping"
+    if expectation_matches({"state": state}, expectations):
+        return True, None
+    return False, f"state assertions failed: {expectations}"
+
+
+def assert_log(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    text = read_log_tail(ctx)
+    path.write_text(text, encoding="utf-8")
+    contains = spec.get("contains", [])
+    absent = spec.get("absent", [])
+    if isinstance(contains, str):
+        contains = [contains]
+    if isinstance(absent, str):
+        absent = [absent]
+    missing = [item for item in contains if item not in text]
+    present = [item for item in absent if item in text]
+    if missing:
+        return False, f"log missing expected text: {missing}"
+    if present:
+        return False, f"log contained forbidden text: {present}"
+    return True, None
+
+
+def assert_trace(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    traces = recent_traces(ctx)
+    write_json(path, traces)
+    expectations = spec.get("equals") or spec
+    if not isinstance(expectations, dict):
+        return False, "trace.expect requires a mapping"
+    if any(expectation_matches({"trace": trace}, expectations) for trace in traces):
+        return True, None
+    return False, f"no trace matched: {expectations}"
+
+
+def assert_ax(ctx: HarnessContext, spec: dict[str, typing.Any], path: Path) -> tuple[bool, str | None]:
+    if ctx.lane != "ui":
+        return True, "skipped outside ui lane"
+    result = run_agent_swift(ctx, ["snapshot", "-i", "--json"])
+    path.write_text(result.stdout, encoding="utf-8")
+    if result.returncode != 0:
+        return False, "agent-swift snapshot failed"
+    text = result.stdout
+    visible = spec.get("text_visible", [])
+    if isinstance(visible, str):
+        visible = [visible]
+    missing = [item for item in visible if item not in text]
+    if missing:
+        return False, f"AX snapshot missing text: {missing}"
+    return True, None
+
+
+def export_visual(ctx: HarnessContext, path: Path, target: str | None = None) -> dict[str, typing.Any]:
+    payload = {"path": str(path)}
+    if target:
+        payload["target"] = target
+    return request_json(ctx.base_url, "POST", "/visual/export", payload)
+
+
+def apply_wait(ctx: HarnessContext, step: dict[str, typing.Any], prefix: str, result: dict[str, typing.Any]) -> None:
+    wait_spec = step.get("wait") or {}
+    if not result["ok"] or not isinstance(wait_spec, dict) or not wait_spec:
+        return
+    timeout = float(step.get("timeout_seconds", 5))
+    if "trace" in wait_spec:
+        waited_ok, traces = wait_for_trace(ctx, wait_spec["trace"], timeout)
+        trace_path = ctx.steps_dir / f"{prefix}-traces.json"
+        write_json(trace_path, traces)
+        result["artifacts"]["traces"] = str(trace_path)
+        if not waited_ok:
+            result["ok"] = False
+            result["error"] = f"trace wait timed out after {timeout}s"
+    else:
+        waited_ok, state = wait_for_state(ctx, wait_spec, timeout)
+        state_path = ctx.steps_dir / f"{prefix}-state.json"
+        write_json(state_path, state)
+        result["artifacts"]["state"] = str(state_path)
+        if not waited_ok:
+            result["ok"] = False
+            result["error"] = f"state wait timed out after {timeout}s"
+
+
+def execute_step(ctx: HarnessContext, index: int, step: dict[str, typing.Any]) -> dict[str, typing.Any]:
+    prefix = step_prefix(index, step)
+    started = time.perf_counter()
+    result: dict[str, typing.Any] = {
+        "id": step.get("id", f"S{index}"),
+        "name": step.get("name", f"Step {index}"),
+        "started_at": now_iso(),
+        "ok": True,
+        "warnings": [],
+        "artifacts": {},
+    }
+
+    try:
+        if "bridge.navigate" in step:
+            payload = dict(step["bridge.navigate"] or {})
+            payload.setdefault("activateApp", False)
+            response = request_json(ctx.base_url, "POST", "/navigate", payload)
+            response_path = ctx.steps_dir / f"{prefix}-navigate.json"
+            write_json(response_path, response)
+            result.update(operation="bridge.navigate", response_path=str(response_path), ok=bool(response.get("ok")))
+            if not result["ok"]:
+                result["error"] = response.get("error")
+
+        elif "bridge.action" in step:
+            payload = action_payload(dict(step["bridge.action"] or {}))
+            response = request_json(ctx.base_url, "POST", "/action", payload)
+            response_path = ctx.steps_dir / f"{prefix}-action.json"
+            write_json(response_path, response)
+            result.update(operation="bridge.action", response_path=str(response_path), ok=bool(response.get("ok")))
+            if not result["ok"]:
+                result["error"] = response.get("error")
+            expectations = step.get("expect")
+            if result["ok"] and expectations is not None:
+                if not isinstance(expectations, dict):
+                    result.update(ok=False, error="bridge.action expect requires a mapping")
+                else:
+                    mismatches = expectation_mismatches(response, expectations)
+                    if mismatches:
+                        result.update(ok=False, error=f"bridge.action expectations failed: {mismatches}")
+
+        elif "visual.export" in step:
+            if ctx.lane not in {"visual", "ui"}:
+                result["operation"] = "visual.export"
+                result["warnings"].append(f"skipped in {ctx.lane} lane")
+            else:
+                options = dict(step["visual.export"] or {})
+                name = slug(str(options.get("name") or step.get("id") or f"step-{index}"))
+                png_path = ctx.steps_dir / f"{prefix}-{name}.png"
+                response = export_visual(ctx, png_path, str(options["target"]) if "target" in options else None)
+                response_path = ctx.steps_dir / f"{prefix}-visual.json"
+                write_json(response_path, response)
+                result.update(operation="visual.export", response_path=str(response_path), ok=bool(response.get("ok")))
+                result["artifacts"]["screenshot"] = str(png_path)
+                if not result["ok"]:
+                    result["error"] = response.get("error")
+
+        elif "visual.action_sequence" in step:
+            if ctx.lane not in {"visual", "ui"}:
+                result["operation"] = "visual.action_sequence"
+                result["warnings"].append(f"skipped in {ctx.lane} lane")
+            else:
+                options = dict(step["visual.action_sequence"] or {})
+                action_name = str(options.get("action") or "")
+                if not action_name:
+                    result.update(operation="visual.action_sequence", ok=False, error="visual.action_sequence requires action")
+                else:
+                    frames = max(1, int(options.get("frames", 8)))
+                    interval_ms = max(1, int(options.get("interval_ms", 16)))
+                    target = str(options.get("target") or "floating")
+                    params = dict(options.get("params") or {})
+                    action_path = ctx.steps_dir / f"{prefix}-action.json"
+                    frame_records = []
+                    with ThreadPoolExecutor(max_workers=1) as executor:
+                        action_future = executor.submit(
+                            request_json,
+                            ctx.base_url,
+                            "POST",
+                            "/action",
+                            {"name": action_name, "params": params},
+                        )
+                        ok = True
+                        for frame_index in range(frames):
+                            frame_path = ctx.steps_dir / f"{prefix}-frame-{frame_index:02d}.png"
+                            captured_at = now_iso()
+                            response = export_visual(ctx, frame_path, target)
+                            frame_records.append(
+                                {
+                                    "index": frame_index,
+                                    "captured_at": captured_at,
+                                    "path": str(frame_path),
+                                    "ok": bool(response.get("ok")),
+                                    "response": response,
+                                }
+                            )
+                            ok = ok and bool(response.get("ok"))
+                            if frame_index < frames - 1:
+                                time.sleep(interval_ms / 1000)
+                        try:
+                            action_response = action_future.result(timeout=25)
+                        except FutureTimeoutError:
+                            action_response = {"ok": False, "error": "action request timed out after capture"}
+                    write_json(action_path, action_response)
+                    ok = ok and bool(action_response.get("ok"))
+                    manifest_path = ctx.steps_dir / f"{prefix}-sequence.json"
+                    write_json(
+                        manifest_path,
+                        {
+                            "action": action_name,
+                            "capture_mode": "concurrent",
+                            "params": params,
+                            "target": target,
+                            "frames": frame_records,
+                            "interval_ms": interval_ms,
+                            "action_response": str(action_path),
+                        },
+                    )
+                    result.update(operation="visual.action_sequence", ok=ok, response_path=str(action_path))
+                    result["artifacts"]["sequence"] = str(manifest_path)
+                    result["artifacts"]["frames"] = [record["path"] for record in frame_records]
+                    if not ok:
+                        result["error"] = "action sequence capture failed"
+
+        elif "state.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-state.json"
+            ok, error = assert_state(ctx, dict(step["state.expect"] or {}), path)
+            result.update(operation="state.expect", ok=ok)
+            result["artifacts"]["state"] = str(path)
+            if error:
+                result["error"] = error
+
+        elif "log.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-logs.txt"
+            ok, error = assert_log(ctx, dict(step["log.expect"] or {}), path)
+            result.update(operation="log.expect", ok=ok)
+            result["artifacts"]["logs"] = str(path)
+            if error:
+                result["error"] = error
+
+        elif "trace.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-traces.json"
+            ok, error = assert_trace(ctx, dict(step["trace.expect"] or {}), path)
+            result.update(operation="trace.expect", ok=ok)
+            result["artifacts"]["traces"] = str(path)
+            if error:
+                result["error"] = error
+
+        elif "ax.expect" in step:
+            path = ctx.steps_dir / f"{prefix}-ax.json"
+            ok, error = assert_ax(ctx, dict(step["ax.expect"] or {}), path)
+            result.update(operation="ax.expect", ok=ok)
+            result["artifacts"]["ax"] = str(path)
+            if error and ok:
+                result["warnings"].append(error)
+            elif error:
+                result["error"] = error
+
+        elif "power.sample" in step:
+            path = ctx.steps_dir / f"{prefix}-power.json"
+            ok, error, summary = sample_process_power(ctx, dict(step["power.sample"] or {}), path)
+            result.update(operation="power.sample", ok=ok, metrics=summary)
+            result["artifacts"]["power"] = str(path)
+            if error:
+                result["error"] = error
+
+        else:
+            result.update(operation="unsupported", ok=False, error="step has no typed harness operation")
+
+        apply_wait(ctx, step, prefix, result)
+
+    except Exception as exc:  # noqa: BLE001 - runner records failures as artifacts.
+        result["ok"] = False
+        result["error"] = f"{type(exc).__name__}: {exc}"
+
+    result["duration_ms"] = round((time.perf_counter() - started) * 1000, 2)
+    result["finished_at"] = now_iso()
+    return result
+
+
+def create_context(args: argparse.Namespace, flow_path: Path, run_dir: Path, lane: str) -> HarnessContext:
+    return HarnessContext(
+        base_url=f"http://127.0.0.1:{args.port}",
+        flow_path=flow_path,
+        run_dir=run_dir,
+        steps_dir=run_dir / "steps",
+        lane=lane,
+        log_path=Path(args.log),
+        log_start=log_cursor(Path(args.log)),
+        bundle_id=getattr(args, "bundle_id", None),
+        process_match=getattr(args, "process_match", None),
+    )
+
+
+def unique_run_dir(run_root: Path, timestamp: str, flow_name: str) -> Path:
+    run_root.mkdir(parents=True, exist_ok=True)
+    slugged_name = slug(flow_name)
+    for index in range(1, 1000):
+        suffix = "" if index == 1 else f"-{index}"
+        candidate = run_root / f"{timestamp}-{slugged_name}{suffix}"
+        try:
+            candidate.mkdir()
+            return candidate
+        except FileExistsError:
+            continue
+    raise RuntimeError(f"unable to allocate run directory for {timestamp}-{slugged_name}")
+
+
+def run_flow_once(args: argparse.Namespace) -> tuple[int, Path, dict[str, typing.Any]]:
+    flow_path = Path(args.flow).resolve()
+    flow = read_yaml(flow_path)
+    flow_version = validate_flow_schema(flow, args)
+    flow_name = str(flow.get("name") or flow_path.stem)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_root = Path(args.out).resolve()
+    run_dir = unique_run_dir(run_root, timestamp, flow_name)
+    steps_dir = run_dir / "steps"
+    steps_dir.mkdir()
+
+    ctx = create_context(args, flow_path, run_dir, args.lane)
+    started = time.perf_counter()
+    setup_errors: list[str] = []
+    initial_state = request_json(ctx.base_url, "GET", "/state")
+    capabilities = request_json(ctx.base_url, "GET", "/capabilities")
+    if initial_state.get("ok") and capabilities.get("ok"):
+        clear_response = request_json(ctx.base_url, "POST", "/traces/clear")
+        if not clear_response.get("ok"):
+            setup_errors.append(f"failed to clear traces: {clear_response.get('error')}")
+    write_json(run_dir / "initial-state.json", initial_state)
+    write_json(run_dir / "capabilities.json", capabilities)
+
+    step_results = []
+    if not setup_errors:
+        step_results = [execute_step(ctx, index, step) for index, step in enumerate(flow.get("steps", []), 1)]
+    logs = collect_logs(ctx)
+    final_state = request_json(ctx.base_url, "GET", "/state")
+    traces = recent_traces(ctx)
+    write_json(run_dir / "final-state.json", final_state)
+    write_json(run_dir / "traces.json", traces)
+
+    bridge_ready = bool(initial_state.get("ok")) and bool(capabilities.get("ok"))
+    metrics = {
+        "schema_version": SCHEMA_VERSION,
+        "runner": "omi-harness",
+        "runner_version": 2,
+        "flow": {"name": flow_name, "path": str(flow_path), "version": flow_version},
+        "environment": {
+            "git_sha": git_sha(),
+            "lane": args.lane,
+            "port": args.port,
+            "base_url": ctx.base_url,
+            "bundle_id": args.bundle_id,
+            "process_match": args.process_match,
+            "agent_swift_version": tool_version(["agent-swift", "--version"]),
+        },
+        "cursor_safety": {"coordinate_clicks": 0, "external_screenshot_tool": False},
+        "artifacts": {"captures_gitignored": True},
+        "timing": {
+            "total_ms": round((time.perf_counter() - started) * 1000, 2),
+            "step_ms": [step["duration_ms"] for step in step_results],
+            "bridge_trace_ms": [trace.get("durationMs") for trace in traces],
+        },
+        "steps": step_results,
+        "setup_errors": setup_errors,
+        "logs": logs,
+        "ok": bridge_ready and not setup_errors and all(step["ok"] for step in step_results),
+        "bridge_ready": bridge_ready,
+        "started_at": now_iso(),
+    }
+    write_json(run_dir / "metrics.json", metrics)
+    write_summary(run_dir, metrics)
+    return (0 if metrics["ok"] else 1), run_dir, metrics
+
+
+def run_flow(args: argparse.Namespace) -> int:
+    exit_code, run_dir, _ = run_flow_once(args)
+    print(str(run_dir))
+    return exit_code
+
+
+def write_summary(run_dir: Path, metrics: dict[str, typing.Any]) -> None:
+    lines = [
+        f"# {metrics['flow']['name']}",
+        "",
+        f"- status: {'PASS' if metrics['ok'] else 'FAIL'}",
+        f"- lane: {metrics['environment']['lane']}",
+        f"- total_ms: {metrics['timing']['total_ms']}",
+        f"- coordinate_clicks: {metrics['cursor_safety']['coordinate_clicks']}",
+        f"- log_error_count: {metrics['logs'].get('error_count', 0)}",
+        "",
+        "## Steps",
+    ]
+    for error in metrics.get("setup_errors", []):
+        lines.append(f"- FAIL setup {error}")
+    for step in metrics["steps"]:
+        status = "PASS" if step["ok"] else "FAIL"
+        lines.append(f"- {status} {step['id']} {step['name']} ({step['duration_ms']} ms)")
+        if step.get("error"):
+            lines.append(f"  error: {step['error']}")
+        for warning in step.get("warnings", []):
+            lines.append(f"  warning: {warning}")
+        step_metrics = step.get("metrics")
+        if step.get("operation") == "power.sample" and isinstance(step_metrics, dict):
+            lines.append(
+                "  power: "
+                f"avg_cpu={step_metrics.get('avg_cpu_percent')}%, "
+                f"peak_cpu={step_metrics.get('peak_cpu_percent')}%, "
+                f"avg_rss={step_metrics.get('avg_rss_mb')}MB"
+            )
+    screenshots = [
+        step["artifacts"]["screenshot"]
+        for step in metrics["steps"]
+        if isinstance(step.get("artifacts"), dict) and step["artifacts"].get("screenshot")
+    ]
+    if screenshots:
+        lines.extend(["", "## Visual Evidence"])
+        lines.extend(f"- {path}" for path in screenshots)
+    sequences = [
+        step["artifacts"]["sequence"]
+        for step in metrics["steps"]
+        if isinstance(step.get("artifacts"), dict) and step["artifacts"].get("sequence")
+    ]
+    if sequences:
+        lines.extend(["", "## Animation Evidence"])
+        lines.extend(f"- {path}" for path in sequences)
+    (run_dir / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def run_root(path: str | None) -> Path:
+    return Path(path or DEFAULT_RUN_ROOT)
+
+
+def latest_run(root: Path) -> Path:
+    runs = sorted([path for path in root.glob("*") if path.is_dir()])
+    if not runs:
+        raise SystemExit(f"omi-harness: no runs under {root}")
+    return runs[-1]
+
+
+def summarize_run(args: argparse.Namespace) -> int:
+    run_dir = latest_run(run_root(args.out)).resolve() if args.run == "latest" else Path(args.run).resolve()
+    summary = run_dir / "summary.md"
+    if not summary.exists():
+        raise SystemExit(f"omi-harness: missing summary: {summary}")
+    print(summary.read_text(encoding="utf-8"), end="")
+    return 0
+
+
+def latest_cmd(args: argparse.Namespace) -> int:
+    print(str(latest_run(run_root(args.out)).resolve()))
+    return 0
+
+
+def repeat_flow(args: argparse.Namespace) -> int:
+    count = max(1, args.count)
+    runs: list[dict[str, typing.Any]] = []
+    exit_code = 0
+    for index in range(count):
+        code, run_dir, metrics = run_flow_once(args)
+        exit_code = exit_code or code
+        total_ms = float(metrics["timing"]["total_ms"])
+        runs.append({"path": str(run_dir), "metrics": metrics, "total_ms": total_ms})
+        print(f"{index + 1}/{count} {run_dir} total_ms={total_ms:.2f} ok={metrics.get('ok')}")
+
+    successful_runs = [run for run in runs if run["metrics"].get("ok")]
+    sample_runs = successful_runs or runs
+    totals = [run["total_ms"] for run in sample_runs]
+    best = min(sample_runs, key=lambda run: run["total_ms"])
+    worst = max(sample_runs, key=lambda run: run["total_ms"])
+    print("")
+    if successful_runs:
+        print(f"successful_runs={len(successful_runs)}/{len(runs)}")
+    else:
+        print(f"successful_runs=0/{len(runs)} (timing stats include failed runs)")
+    print(f"best_ms={best['total_ms']:.2f} path={best['path']}")
+    print(f"median_ms={statistics.median(totals):.2f}")
+    print(f"worst_ms={worst['total_ms']:.2f} path={worst['path']}")
+
+    step_ids = [str(step.get("id")) for step in sample_runs[0]["metrics"].get("steps", [])]
+    if step_ids:
+        print("")
+        print("| step | median | best | worst |")
+        print("| --- | ---: | ---: | ---: |")
+        for step_id in step_ids:
+            values = []
+            name = step_id
+            for run in sample_runs:
+                by_id = {str(step.get("id")): step for step in run["metrics"].get("steps", [])}
+                step = by_id.get(step_id)
+                if not step:
+                    continue
+                name = f"{step_id} {step.get('name', '')}".strip()
+                values.append(float(step.get("duration_ms") or 0))
+            if values:
+                print(
+                    f"| {name} | {statistics.median(values):.2f} ms | "
+                    f"{min(values):.2f} ms | {max(values):.2f} ms |"
+                )
+    return exit_code
+
+
+def percent_delta(before: float, after: float) -> float | None:
+    if before == 0:
+        return None
+    return (after - before) / before * 100
+
+
+def speedup(before: float, after: float) -> float | None:
+    if before <= 0 or after <= 0:
+        return None
+    return before / after
+
+
+def format_percent(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:+.1f}%"
+
+
+def format_speedup(value: float | None) -> str:
+    return "n/a" if value is None else f"{value:.2f}x"
+
+
+def comparable_steps(left: dict[str, typing.Any], right: dict[str, typing.Any]) -> list[dict[str, typing.Any]]:
+    left_steps = {str(step.get("id")): step for step in left.get("steps", [])}
+    right_steps = {str(step.get("id")): step for step in right.get("steps", [])}
+    ordered_ids = [str(step.get("id")) for step in left.get("steps", [])]
+    ordered_ids.extend(step_id for step_id in right_steps if step_id not in left_steps)
+    rows = []
+    for step_id in ordered_ids:
+        before_step = left_steps.get(step_id)
+        after_step = right_steps.get(step_id)
+        if not before_step or not after_step:
+            rows.append(
+                {
+                    "id": step_id,
+                    "name": (before_step or after_step or {}).get("name", ""),
+                    "operation": (before_step or after_step or {}).get("operation", ""),
+                    "before_ms": None if not before_step else before_step.get("duration_ms"),
+                    "after_ms": None if not after_step else after_step.get("duration_ms"),
+                    "delta_ms": None,
+                    "delta_percent": None,
+                    "speedup": None,
+                    "ok": [before_step.get("ok") if before_step else None, after_step.get("ok") if after_step else None],
+                }
+            )
+            continue
+        before_ms = float(before_step.get("duration_ms") or 0)
+        after_ms = float(after_step.get("duration_ms") or 0)
+        rows.append(
+            {
+                "id": step_id,
+                "name": after_step.get("name") or before_step.get("name") or "",
+                "operation": after_step.get("operation") or before_step.get("operation") or "",
+                "before_ms": before_ms,
+                "after_ms": after_ms,
+                "delta_ms": round(after_ms - before_ms, 2),
+                "delta_percent": percent_delta(before_ms, after_ms),
+                "speedup": speedup(before_ms, after_ms),
+                "ok": [before_step.get("ok"), after_step.get("ok")],
+            }
+        )
+    return rows
+
+
+def compare_runs(args: argparse.Namespace) -> int:
+    left = json.loads((Path(args.left) / "metrics.json").read_text(encoding="utf-8"))
+    right = json.loads((Path(args.right) / "metrics.json").read_text(encoding="utf-8"))
+    total_before = float(left["timing"]["total_ms"])
+    total_after = float(right["timing"]["total_ms"])
+    comparison = {
+        "left": str(Path(args.left).resolve()),
+        "right": str(Path(args.right).resolve()),
+        "ok_changed": [left.get("ok"), right.get("ok")],
+        "total_before_ms": total_before,
+        "total_after_ms": total_after,
+        "total_ms_delta": round(total_after - total_before, 2),
+        "total_delta_percent": percent_delta(total_before, total_after),
+        "total_speedup": speedup(total_before, total_after),
+        "log_error_count_delta": right["logs"].get("error_count", 0) - left["logs"].get("error_count", 0),
+        "step_count_delta": len(right.get("steps", [])) - len(left.get("steps", [])),
+        "steps": comparable_steps(left, right),
+    }
+    if args.markdown:
+        print("| metric | value |")
+        print("| --- | --- |")
+        for key, value in comparison.items():
+            if key == "steps":
+                continue
+            if key.endswith("_percent"):
+                value = format_percent(value)
+            elif key.endswith("_speedup"):
+                value = format_speedup(value)
+            print(f"| {key} | `{value}` |")
+        print("")
+        print("| step | operation | before | after | delta | change | speedup | ok |")
+        print("| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |")
+        for row in comparison["steps"]:
+            before = "n/a" if row["before_ms"] is None else f"{row['before_ms']:.2f} ms"
+            after = "n/a" if row["after_ms"] is None else f"{row['after_ms']:.2f} ms"
+            delta = "n/a" if row["delta_ms"] is None else f"{row['delta_ms']:+.2f} ms"
+            print(
+                "| "
+                f"{row['id']} {row['name']} | "
+                f"{row['operation']} | "
+                f"{before} | "
+                f"{after} | "
+                f"{delta} | "
+                f"{format_percent(row['delta_percent'])} | "
+                f"{format_speedup(row['speedup'])} | "
+                f"{row['ok']} |"
+            )
+    else:
+        print(json.dumps(comparison, indent=2, sort_keys=True))
+    return 0
+
+
+def cleanup_runs(args: argparse.Namespace) -> int:
+    root = run_root(args.out).resolve()
+    default_root = DEFAULT_RUN_ROOT.resolve()
+    if root != default_root and default_root not in root.parents:
+        raise SystemExit(f"omi-harness: refusing cleanup outside harness run storage: {root}")
+    runs = sorted([path for path in root.glob("*") if path.is_dir()])
+    keep = max(0, args.keep)
+    remove = runs[:-keep] if keep else runs
+    for path in remove:
+        resolved = path.resolve()
+        if path.is_symlink() or path.parent.resolve() != root or root not in resolved.parents:
+            raise SystemExit(f"omi-harness: refusing unsafe cleanup path: {path}")
+        shutil.rmtree(path)
+        print(f"removed {path}")
+    return 0
+
+
+def add_run_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("flow")
+    parser.add_argument("--lane", choices=["bridge", "visual", "ui"], default="bridge")
+    parser.add_argument("--port", type=int, default=DEFAULT_PORT)
+    parser.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    parser.add_argument("--log", default=str(DEFAULT_LOG))
+    parser.add_argument("--bundle-id")
+    parser.add_argument(
+        "--process-match",
+        default=os.environ.get("OMI_HARNESS_PROCESS_MATCH"),
+        help="unique pgrep pattern for power.sample steps",
+    )
+    parser.add_argument(
+        "--allow-legacy-flow-version",
+        action="store_true",
+        default=env_flag("OMI_HARNESS_ALLOW_LEGACY_FLOW_VERSION"),
+        help="explicitly allow compatible flows older than the current harness schema",
+    )
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    run = subparsers.add_parser("run", help="run a typed harness flow")
+    add_run_args(run)
+    run.set_defaults(func=run_flow)
+
+    baseline = subparsers.add_parser("baseline", help="alias for run, intended for before/after comparisons")
+    add_run_args(baseline)
+    baseline.set_defaults(func=run_flow)
+
+    repeat = subparsers.add_parser("repeat", help="run a flow sequentially and summarize timing spread")
+    add_run_args(repeat)
+    repeat.add_argument("--count", type=int, default=3)
+    repeat.set_defaults(func=repeat_flow)
+
+    compare = subparsers.add_parser("compare", help="compare two harness run directories")
+    compare.add_argument("left")
+    compare.add_argument("right")
+    compare.add_argument("--markdown", action="store_true")
+    compare.set_defaults(func=compare_runs)
+
+    summarize = subparsers.add_parser("summarize", help="print a run summary")
+    summarize.add_argument("run", nargs="?", default="latest")
+    summarize.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    summarize.set_defaults(func=summarize_run)
+
+    latest = subparsers.add_parser("latest", help="print the latest run directory")
+    latest.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    latest.set_defaults(func=latest_cmd)
+
+    cleanup = subparsers.add_parser("cleanup", help="delete old local run artifacts")
+    cleanup.add_argument("--out", default=str(DEFAULT_RUN_ROOT))
+    cleanup.add_argument("--keep", type=int, default=10)
+    cleanup.set_defaults(func=cleanup_runs)
+
+    args = parser.parse_args()
+    return args.func(args)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

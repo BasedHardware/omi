@@ -1,7 +1,13 @@
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky AS builder
+ARG PYTHON_BASE_IMAGE=gcr.io/based-hardware-dev/python:3.11-slim-forky
+ARG UV_VERSION=0.11.13
 
-ENV PATH="/opt/venv/bin:$PATH"
+FROM ${PYTHON_BASE_IMAGE} AS builder
+
+ARG UV_VERSION
+
 RUN python -m venv /opt/venv
+RUN python3 -m pip install --no-cache-dir "uv==${UV_VERSION}"
+ENV PATH="/opt/venv/bin:$PATH"
 
 # Install build dependencies for liblc3
 RUN apt-get update && apt-get install -y \
@@ -28,12 +34,12 @@ RUN git clone https://github.com/google/liblc3.git && \
     cd /tmp/liblc3 && \
     python3 -m pip wheel --no-cache-dir --wheel-dir /tmp/wheels .
 
-# Install Python requirements — pusher-specific (no torch/onnxruntime/pyannote)
+# Install Python requirements from the pusher-specific checked-in lock.
 WORKDIR /opt/venv
-COPY backend/pusher/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir --upgrade -r /tmp/requirements.txt
+COPY backend/pusher/pylock.toml /tmp/pylock.toml
+RUN uv pip sync /tmp/pylock.toml --python /opt/venv/bin/python --compile-bytecode
 
-FROM gcr.io/based-hardware-dev/python:3.11-slim-forky
+FROM ${PYTHON_BASE_IMAGE}
 
 WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
@@ -58,13 +64,12 @@ RUN ldconfig && \
 COPY --from=builder /opt/venv /opt/venv
 
 # Whitelist-copy only the modules pusher reaches
+COPY backend/config/ ./config/
 COPY backend/database/ ./database/
 COPY backend/models/ ./models/
 COPY backend/routers/ ./routers/
 COPY backend/utils/ ./utils/
 COPY backend/pusher/ ./pusher/
-# CI writes google-credentials.json to backend/ before build (gcp_backend_pusher.yml)
-COPY backend/google-credentials.json ./google-credentials.json
 
 EXPOSE 8080
 CMD ["uvicorn", "pusher.main:app", "--host", "0.0.0.0", "--port", "8080", "--ws-ping-interval", "20", "--ws-ping-timeout", "20", "--loop", "uvloop"]

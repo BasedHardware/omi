@@ -1,73 +1,58 @@
 """Tests for get_conversations_count logic and /v1/conversations/count endpoint.
 
-The DB function is tested inline because database.conversations requires
-Firestore client init at import time. The test_source_matches_implementation
-test verifies that the real module's source matches this test's logic.
+The DB function is tested inline against a module-local MagicMock ``mock_db``; the
+test never imports ``database.*`` (it only reads production source via ``open()`` for
+the parity assertions), so no import-time stubbing is required. The inline copy is
+kept hermetic and fast; ``test_source_matches_implementation`` guards against drift.
 """
 
 import os
-import sys
-import types
-
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
-)
-
 from unittest.mock import MagicMock
 
-from google.cloud.firestore_v1 import FieldFilter
+try:
+    from google.cloud.firestore_v1 import FieldFilter
+except ImportError:
+    # Lightweight test runs may not install Firestore.
+
+    class FieldFilter:
+        def __init__(self, field_path, op_string, value):
+            self.field_path = field_path
+            self.op_string = op_string
+            self.value = value
 
 
-def _stub_module(name):
-    mod = types.ModuleType(name)
-    sys.modules[name] = mod
-    return mod
-
-
-# Stub database to avoid Firestore init
-if "database" not in sys.modules:
-    database_mod = _stub_module("database")
-    database_mod.__path__ = []
-else:
-    database_mod = sys.modules["database"]
-
-for sub in [
-    "_client",
-    "redis_db",
-    "users",
-    "conversations",
-    "chat",
-    "memories",
-    "action_items",
-    "apps",
-    "auth",
-    "notifications",
-    "daily_summaries",
-    "folders",
-    "goals",
-    "knowledge_graph",
-    "phone_calls",
-    "vector_db",
-]:
-    full = f"database.{sub}"
-    if full not in sys.modules:
-        mod = _stub_module(full)
-        setattr(database_mod, sub, mod)
-
-# Set up mock db on _client
 mock_db = MagicMock()
-sys.modules["database._client"].db = mock_db
-sys.modules["database._client"].document_id_from_seed = lambda *a: "test"
 
 
-def get_conversations_count(uid, include_discarded=False, statuses=[]):
+def get_conversations_count(
+    uid,
+    include_discarded=False,
+    statuses=None,
+    start_date=None,
+    end_date=None,
+    categories=None,
+    folder_id=None,
+    starred=None,
+    sources=None,
+):
     """Mirrors database.conversations.get_conversations_count."""
     conversations_ref = mock_db.collection('users').document(uid).collection('conversations')
     if not include_discarded:
         conversations_ref = conversations_ref.where(filter=FieldFilter('discarded', '==', False))
+    if sources:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('source', 'in', sources))
     if statuses:
         conversations_ref = conversations_ref.where(filter=FieldFilter('status', 'in', statuses))
+    if categories:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('structured.category', 'in', categories))
+    if folder_id:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('folder_id', '==', folder_id))
+    if starred is not None:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('starred', '==', starred))
+    if start_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '>=', start_date))
+    if end_date:
+        conversations_ref = conversations_ref.where(filter=FieldFilter('created_at', '<=', end_date))
     result = conversations_ref.count().get()
     return int(result[0][0].value)
 
@@ -84,11 +69,16 @@ class TestConversationsCount:
     def test_source_matches_implementation(self):
         """Verify the real function's core logic matches this test's inline copy."""
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'database', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'def get_conversations_count(' in source
         assert "FieldFilter('discarded', '==', False)" in source
+        assert "FieldFilter('source', 'in', sources)" in source
         assert "FieldFilter('status', 'in', statuses)" in source
+        assert "FieldFilter('folder_id', '==', folder_id)" in source
+        assert "FieldFilter('starred', '==', starred)" in source
+        assert "FieldFilter('created_at', '>=', start_date)" in source
+        assert "FieldFilter('created_at', '<=', end_date)" in source
         assert '.count().get()' in source
         assert 'result[0][0].value' in source
 
@@ -165,6 +155,32 @@ class TestConversationsCount:
         assert f.field_path == 'status'
         assert f.value == ['processing']
 
+    def test_count_applies_list_filter_parity(self):
+        ref = MagicMock()
+        mock_db.collection.return_value.document.return_value.collection.return_value = ref
+        ref.where.return_value = ref
+        ref.count.return_value.get.return_value = self._make_result(3)
+
+        result = get_conversations_count(
+            'uid1',
+            statuses=['completed'],
+            start_date='2026-06-01T00:00:00Z',
+            end_date='2026-06-02T00:00:00Z',
+            folder_id='folder-a',
+            starred=False,
+        )
+
+        assert result == 3
+        filters = [call.kwargs['filter'] for call in ref.where.call_args_list]
+        assert [(f.field_path, f.op_string, f.value) for f in filters] == [
+            ('discarded', '==', False),
+            ('status', 'in', ['completed']),
+            ('folder_id', '==', 'folder-a'),
+            ('starred', '==', False),
+            ('created_at', '>=', '2026-06-01T00:00:00Z'),
+            ('created_at', '<=', '2026-06-02T00:00:00Z'),
+        ]
+
 
 class TestConversationsCountEndpointParsing:
     """Test the router-level statuses parsing logic."""
@@ -217,27 +233,56 @@ class TestConversationsCountRouteSource:
 
     def test_route_registered_with_correct_path(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert "'/v1/conversations/count'" in source
 
     def test_route_forwards_include_discarded(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'include_discarded=include_discarded' in source
 
     def test_route_forwards_statuses_as_list(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'statuses=status_list' in source
 
+    def test_route_forwards_visible_list_filters(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'start_date=start_date' in source
+        assert 'end_date=end_date' in source
+        assert 'folder_id=folder_id' in source
+        assert 'starred=starred' in source
+
     def test_route_returns_count_dict(self):
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert "{'count': count}" in source or "{'count':count}" in source
+
+    def test_route_forwards_sources_as_list(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'sources=source_list' in source
+
+    def test_route_rejects_statuses_combined_with_sources(self):
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert 'statuses and sources filters cannot be combined' in source
+
+    def test_route_echoes_sources_when_filtered(self):
+        # Clients rely on the echo to distinguish a filtered count from an
+        # older backend that ignored the unknown sources param.
+        source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'conversations.py')
+        with open(source_path, encoding='utf-8') as f:
+            source = f.read()
+        assert "{'count': count, 'sources': source_list}" in source
 
 
 class TestAppsV2LimitBoundary:
@@ -246,14 +291,14 @@ class TestAppsV2LimitBoundary:
     def test_source_has_le_100(self):
         """Verify the real route source has le=100 (not le=50 or other)."""
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'apps.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'le=100' in source
 
     def test_source_has_ge_1(self):
         """Verify the real route source has ge=1."""
         source_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'apps.py')
-        with open(source_path) as f:
+        with open(source_path, encoding='utf-8') as f:
             source = f.read()
         assert 'ge=1' in source
 

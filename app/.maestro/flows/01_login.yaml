@@ -1,0 +1,47 @@
+# Flow: Login & Sign-In
+# Tags: core, auth
+# Tests: Auth screen → Google Sign-In → consent → landing
+# Requires: App signed out (cleared state)
+
+appId: com.friend.ios.dev
+tags:
+  - core
+  - auth
+
+---
+
+# Verify auth screen is displayed
+- assertVisible: "Sign in with Google"
+- takeScreenshot: "01_login_auth_screen"
+
+# Tap Sign in with Google
+- tapOn: "Sign in with Google"
+
+# Handle consent bottom sheet
+- assertVisible:
+    text: "Continue with Google"
+    optional: true
+- tapOn:
+    text: "Continue with Google"
+    optional: true
+- takeScreenshot: "01_login_consent"
+
+# Google account picker is a system UI — Maestro handles it via native tap
+- extendedWaitUntil:
+    visible:
+      text: ".*@gmail.com"
+    timeout: 10000
+    optional: true
+
+# Select first Google account (system UI)
+- tapOn:
+    text: ".*@gmail.com"
+    optional: true
+- takeScreenshot: "01_login_account_picker"
+
+# Wait for OAuth redirect and landing
+- extendedWaitUntil:
+    visible:
+      text: "Conversations|Home|What's on your mind"
+    timeout: 30000
+- takeScreenshot: "01_login_success"

@@ -430,6 +430,12 @@ class AppLocalizationsTe extends AppLocalizations {
   String get offlineSync => 'ఆఫ్‌లైన్ సమకాలీకరణ';
 
   @override
+  String get autoSync => 'ఆటో సింక్';
+
+  @override
+  String get autoSyncDescription => 'మీ పరికరం కనెక్ట్ అయినప్పుడు ఆఫ్‌లైన్ రికార్డింగ్‌లను స్వయంచాలకంగా సింక్ చేయండి';
+
+  @override
   String get deviceSettings => 'ডివైస్ సెట్టింగ్‌లు';
 
   @override
@@ -4713,10 +4719,7 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String accessesAndTriggeredBy(
-    String accessDescription,
-    String triggerDescription,
-  ) {
+  String accessesAndTriggeredBy(String accessDescription, String triggerDescription) {
     return '$accessDescription మరియు $triggerDescription.';
   }
 
@@ -7807,6 +7810,9 @@ class AppLocalizationsTe extends AppLocalizations {
   String get viewAll => 'అన్నీ చూడండి';
 
   @override
+  String get expand => 'విస్తరించు';
+
+  @override
   String get addTask => 'కార్యం జోడించండి';
 
   @override
@@ -9349,6 +9355,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get backgroundModeNote => 'ప్రస్తుతం Omi పరికరాలతో మాత్రమే పనిచేస్తుంది మరియు నిరంతరం మెరుగుపరచబడుతోంది.';
 
   @override
+  String get backgroundModeUnavailable =>
+      'అనుకూలమైన పరికరం కనెక్ట్ కాలేదు కాబట్టి బ్యాక్‌గ్రౌండ్ మోడ్ అందుబాటులో లేదు. ఈ ఫీచర్‌ను ఉపయోగించడానికి Omi, OpenGlass లేదా Friend Pendant పరికరాన్ని కనెక్ట్ చేయండి.';
+
+  @override
   String get regenerateRecap => 'సారాంశాన్ని పునరుత్పత్తి చేయండి';
 
   @override
@@ -9362,4 +9372,188 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get recapRegenerateNoConversations => 'ఈ రోజుకి సారాంశీకరించడానికి సంభాషణలు లేవు.';
+
+  @override
+  String get syncCustomSttWarningTitle => 'సింక్ Omi ట్రాన్స్‌క్రిప్షన్‌ను ఉపయోగిస్తుంది';
+
+  @override
+  String get syncCustomSttWarningMessage =>
+      'మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.';
+
+  @override
+  String get transcribeLaterTitle => 'తర్వాత ట్రాన్‌స్క్రైబ్ చేయండి';
+
+  @override
+  String get transcribeLaterDescription =>
+      'లైవ్‌గా కాకుండా ఆడియోను ఇప్పుడు రికార్డ్ చేసి, మీకు కావలసినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి. రికార్డింగ్‌లు మీ ఫోన్‌లోనే సేవ్ చేయబడతాయి, తర్వాత వాటిని అప్‌లోడ్ చేయడం ద్వారా సంభాషణలను రూపొందించవచ్చు.';
+
+  @override
+  String get transcribeLaterNote =>
+      'ప్రస్తుతానికి Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.';
+
+  @override
+  String get transcribeLaterStorageFull =>
+      'మీ ఫోన్‌లో నిల్వ స్థలం తక్కువగా ఉంది, అందుకే రికార్డింగ్ నిలిపివేయబడింది. స్థలాన్ని ఖాళీ చేయండి లేదా మీ రికార్డింగ్‌లను అప్‌లోడ్ చేయండి, ఆ తర్వాత అది దానంతటదే మళ్లీ ప్రారంభమవుతుంది.';
+
+  @override
+  String get recordingMode => 'రికార్డింగ్ మోడ్';
+
+  @override
+  String get captureModeLater => 'తర్వాత';
+
+  @override
+  String get captureModeLiveDescription => 'మీరు మాట్లాడుతున్నప్పుడు రియల్ టైమ్‌లో ట్రాన్‌స్క్రైబ్ చేయండి.';
+
+  @override
+  String get captureModeLaterDescription => 'ఇప్పుడు ఆడియోను సేవ్ చేసి, మీకు నచ్చినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి.';
+
+  @override
+  String get unmute => 'అన్‌మ్యూట్ చేయి';
+
+  @override
+  String get newRecording => 'కొత్త రికార్డింగ్';
+
+  @override
+  String get transcribeLaterPaused => 'పాజ్ చేయబడింది — ఆడియో రికార్డ్ కావడం లేదు';
+
+  @override
+  String get memoryThisDevice => 'ఈ పరికరం';
+
+  @override
+  String get memoryThisIphone => 'ఈ iPhone';
+
+  @override
+  String get memoryThisPhone => 'ఈ ఫోన్';
+
+  @override
+  String get memoryProvenanceMac => 'Mac';
+
+  @override
+  String get memoryProvenanceIphone => 'iPhone';
+
+  @override
+  String get memoryProvenanceAndroid => 'Android';
+
+  @override
+  String get deviceTutorial => 'Omi ని ఎలా ఉపయోగించాలి';
+
+  @override
+  String get deviceOnboardingTranscriptionTitle => 'మీ Omiతో మాట్లాడండి';
+
+  @override
+  String get deviceOnboardingTranscriptionSubtitle => 'కొన్ని మాటలు చెప్పి, అవి తక్షణమే కనిపించడం చూడండి';
+
+  @override
+  String get deviceOnboardingGoodJob => 'శభాష్!';
+
+  @override
+  String get deviceOnboardingStartSpeaking => 'మాట్లాడటం ప్రారంభించండి...';
+
+  @override
+  String get deviceOnboardingAskQuestionTitle => 'Omiని ఒక ప్రశ్న అడగండి';
+
+  @override
+  String get deviceOnboardingAskQuestionSubtitle => 'బటన్‌ను ఒకసారి నొక్కి, మీ ప్రశ్న అడిగి, పూర్తయ్యాక మళ్లీ నొక్కండి';
+
+  @override
+  String get deviceOnboardingProcessingQuestion => 'మీ ప్రశ్నను ప్రాసెస్ చేస్తోంది...';
+
+  @override
+  String get deviceOnboardingListening => 'వింటోంది...';
+
+  @override
+  String get deviceOnboardingTurnOffTitle => 'ఆఫ్ చేయండి';
+
+  @override
+  String get deviceOnboardingTurnOnTitle => 'ఆన్ చేయండి';
+
+  @override
+  String get deviceOnboardingTurnOffSubtitle => 'బటన్‌ను 3 సెకన్ల పాటు నొక్కి ఉంచండి';
+
+  @override
+  String get deviceOnboardingTurnOnSubtitle => 'మళ్లీ ఆన్ చేయడానికి బటన్‌ను నొక్కండి';
+
+  @override
+  String get deviceOnboardingHoldButtonHint => 'లైట్ ఆరిపోయే వరకు బటన్‌ను గట్టిగా నొక్కి ఉంచండి';
+
+  @override
+  String get deviceOnboardingStatusConnected => 'కనెక్ట్ అయింది';
+
+  @override
+  String get deviceOnboardingStatusConnectedDone => 'కనెక్ట్ అయింది!';
+
+  @override
+  String get deviceOnboardingStatusDisconnected => 'డిస్‌కనెక్ట్ అయింది';
+
+  @override
+  String get deviceOnboardingStatusTurningOff => 'ఆఫ్ అవుతోంది...';
+
+  @override
+  String get deviceOnboardingDoubleTapTitle => 'డబుల్ ట్యాప్‌ను అనుకూలీకరించండి';
+
+  @override
+  String get deviceOnboardingEndConversation => 'సంభాషణ ముగించు';
+
+  @override
+  String get deviceOnboardingEndConversationDesc => 'ప్రస్తుత సంభాషణను సేవ్ చేసి ముగించండి';
+
+  @override
+  String get deviceOnboardingMuteUnmute => 'మ్యూట్ / అన్‌మ్యూట్';
+
+  @override
+  String get deviceOnboardingMuteUnmuteDesc => 'మైక్రోఫోన్‌ను ఆన్ లేదా ఆఫ్ చేయండి';
+
+  @override
+  String get deviceOnboardingStarConversation => 'జరుగుతున్న సంభాషణకు స్టార్ ఇవ్వండి';
+
+  @override
+  String get deviceOnboardingStarConversationDesc => 'సంభాషణను ముఖ్యమైనదిగా గుర్తించండి';
+
+  @override
+  String get deviceOnboardingSingleTapHint => 'అది ఒకే ట్యాప్ — రెండుసార్లు వేగంగా ట్యాప్ చేయడానికి ప్రయత్నించండి!';
+
+  @override
+  String get deviceOnboardingTryDoubleTap => 'ఇప్పుడే ప్రయత్నించండి! మీ Omiని డబుల్ ట్యాప్ చేయండి';
+
+  @override
+  String get deviceOnboardingContinue => 'కొనసాగించండి';
+
+  @override
+  String get deviceOnboardingFinish => 'ముగించు';
+
+  @override
+  String get deviceOnboardingIntroTitle => 'మీ Omiని తెలుసుకోండి';
+
+  @override
+  String get deviceOnboardingIntroSubtitle => 'మీ Omi చేయగలిగే ప్రతిదాని గురించి త్వరిత, ప్రత్యక్ష పరిచయం.';
+
+  @override
+  String get deviceOnboardingIntroDuration => 'సుమారు 1 నిమిషం';
+
+  @override
+  String get jumpToLatestMessage => 'తాజా సందేశానికి వెళ్ళు';
+
+  @override
+  String get latest => 'తాజా';
+
+  @override
+  String get flashFirmware => 'ఫర్మ్‌వేర్ ఫ్లాష్ చేయండి';
+
+  @override
+  String get pendantRecordingTitle => 'పెండెంట్‌లో రికార్డింగ్ జరుగుతోంది';
+
+  @override
+  String get pendantRecordingNote =>
+      'మీ పెండెంట్ దానంతట అదే రికార్డ్ చేస్తోంది. యాప్ తెరిచి ఉన్నప్పుడు రికార్డింగ్‌లు మీ ఫోన్‌కు సింక్ అవుతాయి.';
+
+  @override
+  String get pendantSyncingRecordings => 'మీ పెండెంట్ నుండి రికార్డింగ్‌లను సింక్ చేస్తోంది…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes నిమిషాలు నిల్వ చేయబడ్డాయి';
+  }
+
+  @override
+  String get pendantStorageAlmostFull => 'పెండెంట్ నిల్వ దాదాపు నిండిపోయింది — సింక్ చేయడానికి యాప్‌ను తెరిచి ఉంచండి.';
 }

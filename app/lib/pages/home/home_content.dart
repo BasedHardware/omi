@@ -7,10 +7,8 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
-import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
@@ -114,21 +112,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
               // big "get started" options so the home page doesn't feel
               // empty for new users.
               if (_nonDiscardedConversationCount(convoProvider) >= 3) ...[
-                SliverToBoxAdapter(
-                  child: _buildSectionHeader(
-                    context,
-                    context.l10n.conversations,
-                    onViewAll: () {
-                      // Reset the daily-summaries flag so the conversations tab
-                      // actually shows conversations (it persists from Daily
-                      // Recaps' View All otherwise).
-                      if (convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
-                  ),
-                ),
-                _buildConversationsPreview(convoProvider),
-
                 // Mind Map section — only shown for users with enough activity.
                 SliverToBoxAdapter(
                   child: _buildSectionHeader(
@@ -138,6 +121,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                       context,
                       MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
                     ),
+                    buttonLabel: context.l10n.expand,
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildMindMapPreview(context)),
@@ -189,12 +173,11 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       PlatformManager.instance.analytics.phoneMicRecordingStarted();
     }
     if (!context.mounted) return;
-    final topConvoId = (captureProvider.conversationProvider?.conversations ?? []).isNotEmpty
-        ? captureProvider.conversationProvider!.conversations.first.id
-        : null;
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => ConversationCapturingPage(topConversationId: topConvoId)),
+      MaterialPageRoute(
+        builder: (context) => ConversationCapturingPage(topConversationId: captureProvider.topConversationId),
+      ),
     );
   }
 
@@ -280,15 +263,18 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     );
   }
 
-  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll}) {
+  Widget _buildSectionHeader(BuildContext context, String title, {VoidCallback? onViewAll, String? buttonLabel}) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          GestureDetector(
+            onTap: onViewAll,
+            child: Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+            ),
           ),
           if (onViewAll != null)
             GestureDetector(
@@ -300,7 +286,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   borderRadius: BorderRadius.circular(18),
                 ),
                 child: Text(
-                  context.l10n.viewAll,
+                  buttonLabel ?? context.l10n.viewAll,
                   style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
@@ -311,7 +297,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   Widget _buildDailyRecapsPreview(BuildContext context) {
-    final cardHeight = 130.0;
+    const cardHeight = 130.0;
     if (_loadingSummaries) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
@@ -495,6 +481,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
 
   Widget _buildMindMapPreview(BuildContext context) {
     return GestureDetector(
+      behavior: HitTestBehavior.opaque,
       onTap: () => Navigator.push(
         context,
         MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
@@ -503,7 +490,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
-          child: SizedBox(
+          child: const SizedBox(
             height: 180,
             child: IgnorePointer(
               child: MemoryGraphPage(
@@ -519,59 +506,6 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildConversationsPreview(ConversationProvider convoProvider) {
-    if (convoProvider.isLoadingConversations && convoProvider.conversations.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Column(
-            children: List.generate(
-              2,
-              (_) => Padding(
-                padding: const EdgeInsets.only(top: 12),
-                child: ShimmerWithTimeout(
-                  baseColor: AppStyles.backgroundSecondary,
-                  highlightColor: AppStyles.backgroundTertiary,
-                  child: Container(
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    // Use groupedConversations because it has the user's filters already applied
-    // (discarded / short / starred / date). conversations.take(3) ignores
-    // showDiscardedConversations and would show items that aren't on the
-    // conversations page.
-    final sortedDates = convoProvider.groupedConversations.keys.toList()..sort((a, b) => b.compareTo(a));
-    final recent = <ServerConversation>[];
-    for (final date in sortedDates) {
-      final list = convoProvider.groupedConversations[date] ?? const [];
-      for (final c in list) {
-        recent.add(c);
-        if (recent.length >= 3) break;
-      }
-      if (recent.length >= 3) break;
-    }
-    if (recent.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
-
-    return SliverList(
-      delegate: SliverChildBuilderDelegate(childCount: recent.length, (context, index) {
-        final c = recent[index];
-        final dateKey = DateTime(c.createdAt.year, c.createdAt.month, c.createdAt.day);
-        return ConversationListItem(key: ValueKey(c.id), conversation: c, date: dateKey, conversationIdx: index);
-      }),
     );
   }
 }

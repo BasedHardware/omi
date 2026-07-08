@@ -8,7 +8,13 @@ from unittest.mock import patch, MagicMock, AsyncMock
 import os
 import pytest
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
+
+from tests.unit.memory_import_isolation import (
+    WS_I_HEAVY_STUB_MODULE_NAMES,
+    restore_sys_modules,
+    snapshot_sys_modules,
+)
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -73,16 +79,139 @@ _stubs = [
     'utils.llm.knowledge_graph',
     'database.dev_api_key',
 ]
-for mod_name in _stubs:
-    if mod_name not in sys.modules:
-        sys.modules[mod_name] = _AutoMockModule(mod_name)
 
-# Override specific attributes
-sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
-sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
-sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+def _install_dev_api_lock_bypass_stubs() -> None:
+    for mod_name in _stubs:
+        if mod_name not in sys.modules:
+            sys.modules[mod_name] = _AutoMockModule(mod_name)
+
+    sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
+    sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+
+
+def _repair_polluted_dev_api_lock_bypass_stubs() -> None:
+    from utils.memory.memory_system_pin import clear_memory_system_pin
+
+    clear_memory_system_pin()
+    for name in _DEV_API_REAL_IMPORT_MODULES:
+        sys.modules.pop(name, None)
+    for name in (
+        *_DEV_API_REAL_IMPORT_MODULES,
+        'google.api_core',
+        'google.api_core.exceptions',
+        'google.cloud',
+        'utils.cloud_tasks',
+        'utils.other.storage',
+        'utils.subscription',
+    ):
+        mod = sys.modules.get(name)
+        if mod is not None and getattr(mod, '__file__', None) is None:
+            sys.modules.pop(name, None)
+            if "." in name:
+                parent_name, child_name = name.rsplit(".", 1)
+                parent = sys.modules.get(parent_name)
+                if isinstance(parent, ModuleType) and getattr(parent, child_name, None) is mod:
+                    delattr(parent, child_name)
+    _install_dev_api_lock_bypass_stubs()
+    _rebind_memory_service_database_stubs()
+
+
+def _rebind_memory_service_database_stubs() -> None:
+    import importlib
+    import utils.memory.memory_service as memory_service_mod
+
+    memories = sys.modules.get('database.memories')
+    if memories is not None:
+        memory_service_mod.memories_db = memories
+    vector_db = sys.modules.get('database.vector_db')
+    if vector_db is not None:
+        memory_service_mod.vector_db = vector_db
+    importlib.reload(memory_service_mod)
+
+
+_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES = tuple(_stubs)
+
+_DEV_API_REAL_IMPORT_MODULES = (
+    'routers.developer',
+    'routers.knowledge_graph',
+    'utils.conversations.process_conversation',
+    'utils.llm.knowledge_graph',
+)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _dev_api_lock_bypass_import_isolation():
+    saved = snapshot_sys_modules(_DEV_API_LOCK_BYPASS_STUB_MODULE_NAMES)
+    _install_dev_api_lock_bypass_stubs()
+    yield
+    restore_sys_modules(saved)
+
+
+@pytest.fixture(autouse=True)
+def _reinstall_dev_api_lock_bypass_stubs():
+    _repair_polluted_dev_api_lock_bypass_stubs()
+
+
+def _install_legacy_safe_memory_developer_defaults(monkeypatch):
+    """Keep dev API lock tests focused on lock checks rather than memory write gating."""
+    import utils.memory.default_read_rollout as rollout
+    import utils.memory.developer_memory_adapter as developer_adapter
+
+    def _legacy_rollout(uid='test-uid', **_kwargs):
+        return rollout.legacy_safe_default_read_rollout_decision(
+            uid=uid,
+            source_path='test/dev-legacy-safe',
+            consumer='developer_api',
+            reason='dev_api_lock_fixture_legacy_safe',
+        )
+
+    allowed_write = rollout.LegacyMemoryWriteGuardDecision(allowed=True, detail={'enabled': True})
+    ready_gate = rollout.WriteConvergencePolicy(source_path='test/dev-convergence', ready=True)
+
+    monkeypatch.setattr(
+        rollout,
+        'guard_legacy_memory_write',
+        MagicMock(return_value=allowed_write),
+        raising=False,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _legacy_safe_memory_developer_for_lock_tests(monkeypatch):
+    _install_legacy_safe_memory_developer_defaults(monkeypatch)
+    import routers.developer as developer_module
+
+    monkeypatch.setattr(
+        developer_module,
+        'authorize_memory_external_default_memory_write',
+        MagicMock(return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})),
+        raising=False,
+    )
+
+
+def _developer_memory_write_context(uid='test-uid'):
+    from utils.memory.product_authorization import ProductAuthorizationContext
+
+    return ProductAuthorizationContext(
+        uid=uid,
+        consumer='developer_api',
+        surface='developer_api',
+        app_id='test-app',
+        key_id='test-key',
+        scopes=('memories.write',),
+    )
+
+
+def _allow_developer_memory_write_grant():
+    import routers.developer as developer_module
+
+    developer_module.authorize_memory_external_default_memory_write = MagicMock(
+        return_value=SimpleNamespace(allowed=True, status_code=200, observability={'reason': 'test'})
+    )
 
 
 def _make_conversation(locked=False, conversation_id='conv-1'):
@@ -223,9 +352,11 @@ class TestDevApiMemoryLockEnforcement:
         from routers.developer import update_memory, UpdateMemoryRequest
         from fastapi import HTTPException
 
+        _allow_developer_memory_write_grant()
+
         request = UpdateMemoryRequest(content='New content')
         with pytest.raises(HTTPException) as exc_info:
-            update_memory(memory_id='mem-1', request=request, uid='test-uid')
+            update_memory(memory_id='mem-1', request=request, auth_context=_developer_memory_write_context())
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -238,8 +369,10 @@ class TestDevApiMemoryLockEnforcement:
 
         from routers.developer import update_memory, UpdateMemoryRequest
 
+        _allow_developer_memory_write_grant()
+
         request = UpdateMemoryRequest(content='New content')
-        update_memory(memory_id='mem-1', request=request, uid='test-uid')
+        update_memory(memory_id='mem-1', request=request, auth_context=_developer_memory_write_context())
         memories_db.edit_memory.assert_called_once()
 
     def test_delete_memory_rejects_locked(self):
@@ -251,8 +384,10 @@ class TestDevApiMemoryLockEnforcement:
         from routers.developer import delete_memory
         from fastapi import HTTPException
 
+        _allow_developer_memory_write_grant()
+
         with pytest.raises(HTTPException) as exc_info:
-            delete_memory(memory_id='mem-1', uid='test-uid')
+            delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
         assert exc_info.value.status_code == 402
         assert 'paid plan' in exc_info.value.detail.lower()
 
@@ -265,7 +400,9 @@ class TestDevApiMemoryLockEnforcement:
 
         from routers.developer import delete_memory
 
-        result = delete_memory(memory_id='mem-1', uid='test-uid')
+        _allow_developer_memory_write_grant()
+
+        result = delete_memory(memory_id='mem-1', auth_context=_developer_memory_write_context())
         assert result == {"success": True}
         memories_db.delete_memory.assert_called_once_with('test-uid', 'mem-1')
 
@@ -434,6 +571,68 @@ class TestKnowledgeGraphLockEnforcement:
         args = rebuild_knowledge_graph.call_args[0]
         assert len(args[1]) == 1
 
+    def test_rebuild_reads_canonical_memories_via_memory_service(self):
+        """Canonical cohort must rebuild KG from MemoryService.read, not legacy DB."""
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+
+        from models.memories import MemoryDB, MemoryCategory
+        from utils.memory.memory_system import MemorySystem
+        from utils.llm.knowledge_graph import rebuild_knowledge_graph
+
+        canonical_memory = MemoryDB(
+            id='mem-canonical',
+            uid='uid-canonical',
+            content='Canonical KG fact',
+            category=MemoryCategory.interesting,
+            created_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+        service = MagicMock()
+        service.read.return_value = [canonical_memory]
+        rebuild_knowledge_graph.reset_mock()
+
+        import database.memories as memories_db
+
+        with patch('routers.knowledge_graph.pin_memory_system', return_value=MemorySystem.CANONICAL):
+            with patch('routers.knowledge_graph.MemoryService', return_value=service):
+                with patch.object(memories_db, 'get_memories') as legacy_get:
+                    from routers.knowledge_graph import _rebuild_graph_task
+
+                    _rebuild_graph_task('uid-canonical', 'Test User')
+
+        service.read.assert_called_once_with('uid-canonical', limit=500)
+        legacy_get.assert_not_called()
+        rebuild_knowledge_graph.assert_called_once()
+        passed_memories = rebuild_knowledge_graph.call_args[0][1]
+        assert passed_memories == [{'id': 'mem-canonical', 'content': 'Canonical KG fact'}]
+
+    def test_rebuild_reads_legacy_memories_via_memories_db(self):
+        """Non-canonical cohort must keep legacy memories_db.get_memories."""
+        from unittest.mock import patch
+
+        from utils.memory.memory_system import MemorySystem
+        from utils.llm.knowledge_graph import rebuild_knowledge_graph
+
+        legacy_mem = _make_memory(locked=False, memory_id='mem-legacy')
+        service = MagicMock()
+        rebuild_knowledge_graph.reset_mock()
+
+        import database.memories as memories_db
+
+        memories_db.get_memories = MagicMock(return_value=[legacy_mem])
+
+        with patch('routers.knowledge_graph.pin_memory_system', return_value=MemorySystem.LEGACY):
+            with patch('routers.knowledge_graph.MemoryService', return_value=service):
+                from routers.knowledge_graph import _rebuild_graph_task
+
+                _rebuild_graph_task('uid-legacy', 'Test User')
+
+        memories_db.get_memories.assert_called_once_with('uid-legacy', limit=500)
+        service.read.assert_not_called()
+        rebuild_knowledge_graph.assert_called_once()
+        assert rebuild_knowledge_graph.call_args[0][1][0]['id'] == 'mem-legacy'
+
 
 # =============================================================================
 # Process conversation — KG extraction must skip locked memories
@@ -460,7 +659,7 @@ class TestProcessConversationKGLockEnforcement:
             / 'conversations'
             / 'process_conversation.py'
         )
-        tree = ast.parse(src.read_text(), filename=str(src))
+        tree = ast.parse(src.read_text(encoding="utf-8"), filename=str(src))
 
         found = False
         for node in ast.walk(tree):

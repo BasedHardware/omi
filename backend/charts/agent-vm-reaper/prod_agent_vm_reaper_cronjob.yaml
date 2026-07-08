@@ -2,7 +2,7 @@
 # Reaper for leaked `omi-agent-*` GCE VMs (desktop agent sandboxes).
 #
 # Why this exists: the desktop agent feature provisions one e2-small VM per user
-# (desktop/Backend-Rust/src/routes/agent.rs `create_gce_vm`) but NOTHING ever
+# (desktop/macos/Backend-Rust/src/routes/agent.rs `create_gce_vm`) but NOTHING ever
 # deletes them. `delete_agent_vm` only clears the Firestore `agentVm` field
 # (services/firestore.rs) — it never calls the GCE delete API, and there is no
 # deprovision route. VMs auto-stop when idle (→ TERMINATED) but linger forever,

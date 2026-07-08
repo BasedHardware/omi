@@ -1,24 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdmin } from '@/lib/auth';
 import { getOptionalStripe } from '@/lib/stripe';
+import { getPayload, setPayload } from '@/lib/payload-cache';
 export const dynamic = 'force-dynamic';
+export const maxDuration = 3600;
 
-export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
-  if (authResult instanceof NextResponse) return authResult;
+function cacheKey(): string {
+  return `subscriptions:v1`;
+}
 
-  try {
+export { cacheKey as subscriptionsCacheKey };
+
+// Thrown when every Stripe leg fails — GET maps it to a 502.
+class AllSourcesFailedError extends Error {}
+
+export async function computeSubscriptions() {
     const stripe = getOptionalStripe();
     const priceIdOne = process.env.STRIPE_UNLIMITED_MONTHLY_PRICE_ID;
     const priceIdTwo = process.env.STRIPE_UNLIMITED_ANNUAL_PRICE_ID;
 
     if (!stripe || !priceIdOne || !priceIdTwo) {
-      return NextResponse.json({
+      return {
         totalSubscriptions: 0,
         priceIdOne: { count: 0, priceId: priceIdOne || '' },
         priceIdTwo: { count: 0, priceId: priceIdTwo || '' },
         unavailable: true,
-      });
+      };
     }
 
     // Fetch all active subscriptions for both price IDs with pagination
@@ -65,18 +72,15 @@ export async function GET(request: NextRequest) {
       console.error('Error fetching annual subscriptions:', results[1].reason);
     }
 
-    // If ALL legs failed, return an error — don't serve fabricated zeros
+    // If ALL legs failed, throw — don't serve fabricated zeros (GET maps to 502)
     if (results.every((r) => r.status === 'rejected')) {
-      return NextResponse.json(
-        { error: 'All subscription data sources failed' },
-        { status: 502 }
-      );
+      throw new AllSourcesFailedError('All subscription data sources failed');
     }
 
     const partial = results.some((r) => r.status === 'rejected');
     const totalSubscriptions = subscriptionsOne.length + subscriptionsTwo.length;
 
-    return NextResponse.json({
+    return {
       totalSubscriptions,
       partial,
       priceIdOne: {
@@ -87,8 +91,28 @@ export async function GET(request: NextRequest) {
         count: subscriptionsTwo.length,
         priceId: priceIdTwo,
       },
-    });
+    };
+}
+
+export async function GET(request: NextRequest) {
+  const authResult = await verifyAdmin(request);
+  if (authResult instanceof NextResponse) return authResult;
+
+  try {
+    const key = cacheKey();
+
+    const cached = await getPayload<Awaited<ReturnType<typeof computeSubscriptions>>>(key);
+    if (cached) {
+      return NextResponse.json(cached.data);
+    }
+
+    const payload = await computeSubscriptions();
+    await setPayload(key, payload);
+    return NextResponse.json(payload);
   } catch (error) {
+    if (error instanceof AllSourcesFailedError) {
+      return NextResponse.json({ error: error.message }, { status: 502 });
+    }
     console.error('Error fetching subscription stats:', error);
     return NextResponse.json(
       { error: 'Failed to fetch subscription data' },
