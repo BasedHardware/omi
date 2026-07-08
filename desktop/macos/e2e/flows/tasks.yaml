@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift
 preconditions:
   - automation_bridge_ready
