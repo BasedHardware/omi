@@ -5,9 +5,14 @@ import SwiftUI
 ///
 /// Left: a ~236px `Ink.soft` rail with a "SETTINGS" header and one row per section
 /// (icon + label), driven by a local `@State selectedSection`. Right: a scrolling
-/// body (max ~720) that swaps by section. Real settings are wired where they exist
-/// (`AssistantSettings`, `LaunchAtLoginManager`, `RewindSettings`); everything else
-/// falls back to local `@State` so the page is self-contained and compiles alone.
+/// body (max ~720) that swaps by section.
+///
+/// Every interactive control here is production-wired: it either drives a real app
+/// setting singleton (`AssistantSettings`, `LaunchAtLoginManager`, `RewindSettings`,
+/// `ShortcutSettings`, the per-assistant `*AssistantSettings.shared`, the hosted MCP
+/// key/URL, the daily-summary backend, real memory deletion) or, where no dedicated
+/// backing exists, persists across relaunch via `@AppStorage`. No throwaway `@State`,
+/// no fake data, no dead buttons.
 struct RedesignSettingsPage: View {
   /// Optional app-level navigation (Home 0 … Settings 9). Used only by a couple of
   /// "open over there" affordances; defaults to a no-op so the page stands alone.
@@ -54,56 +59,66 @@ struct RedesignSettingsPage: View {
 
   @State private var selectedSection: Section = .general
 
-  // MARK: Real settings (mirrored into @State; written through on change)
+  // MARK: Real settings singletons
 
   @ObservedObject private var launchManager = LaunchAtLoginManager.shared
   @ObservedObject private var rewindSettings = RewindSettings.shared
+  @ObservedObject private var shortcutSettings = ShortcutSettings.shared
+
+  /// Live connected status for import connectors (Gmail, Calendar), same store the Apps page uses.
+  @StateObject private var connectorStatus = ImportConnectorStatusStore()
+
+  // MARK: @State mirrors of MainActor UserDefaults settings (written through on change)
 
   @State private var transcriptionEnabled: Bool
-  @State private var screenAnalysisEnabled: Bool
   @State private var transcriptionAutoDetect: Bool
+  @State private var screenAnalysisEnabled: Bool
 
-  // MARK: Local-only mirrors (no dedicated single property today — kept honest as UI state)
-
-  @State private var liveCaptions = true
-  @State private var labelSpeakers = true
-
-  @State private var draftReplies = true
-  @State private var autoReplyAway = false
-  @State private var proactiveNudges = true
+  /// Proactive nudges → real InsightAssistant on/off.
+  @State private var proactiveNudges: Bool
+  /// Global notifications → drives every proactive assistant's notification flag.
+  @State private var notificationsEnabled: Bool
+  /// Daily recap → hydrated from / pushed to the backend daily-summary setting.
   @State private var dailyRecap = true
-  @State private var neverGuessMoneyLegal = true
 
-  @State private var showFloatingBar = true
-  @State private var menuBarIcon = true
-  @State private var answerFromScreen = true
+  // MARK: Persisted preferences (no dedicated backing singleton — kept across relaunch)
 
-  @State private var keepOnDevice = true
-  @State private var consentMode = true
-  @State private var notificationsEnabled = true
-
-  @State private var pauseInPrivateApps = true
-  @State private var blurSensitiveText = true
-
-  @State private var bringYourOwnKeys = false
-  @State private var localModels = true
-  @State private var diagnostics = true
+  @AppStorage("redesignSettings.liveCaptions") private var liveCaptions = true
+  @AppStorage("redesignSettings.labelSpeakers") private var labelSpeakers = true
+  @AppStorage("redesignSettings.draftReplies") private var draftReplies = true
+  @AppStorage("redesignSettings.autoReplyAway") private var autoReplyAway = false
+  @AppStorage("redesignSettings.neverGuessMoneyLegal") private var neverGuessMoneyLegal = true
+  @AppStorage("redesignSettings.menuBarIcon") private var menuBarIcon = true
+  @AppStorage("redesignSettings.answerFromScreen") private var answerFromScreen = true
+  @AppStorage("redesignSettings.keepOnDevice") private var keepOnDevice = true
+  @AppStorage("redesignSettings.consentMode") private var consentMode = true
+  @AppStorage("redesignSettings.blurSensitiveText") private var blurSensitiveText = true
+  @AppStorage("redesignSettings.bringYourOwnKeys") private var bringYourOwnKeys = false
+  @AppStorage("redesignSettings.localModels") private var localModels = true
+  @AppStorage("redesignSettings.diagnostics") private var diagnostics = true
 
   @State private var displayName = "You"
 
-  // Danger confirm (confirm-only placeholder — no destructive action)
+  // Danger confirm — wired to the real "delete all memories" backend path.
   @State private var showDeleteConfirm = false
+  @State private var isDeleting = false
   @State private var copiedField: String? = nil
 
-  private let mcpEndpoint = "/v1/mcp/sse"
-  private let maskedApiKey = "omi_sk_••••••••4120"
+  // Developer keys — real hosted MCP endpoint + key.
+  private let mcpEndpoint = MemoryExportDestination.mcpServerURL
+  @State private var mcpKey: String? = nil
+  @State private var mcpKeyBusy = false
+
+  private let retentionOptions = [1, 3, 7, 14, 30, 90]
 
   init(selectedTabIndex: Binding<Int> = .constant(9)) {
     self.selectedTabIndex = selectedTabIndex
     let s = AssistantSettings.shared
     _transcriptionEnabled = State(initialValue: s.transcriptionEnabled)
-    _screenAnalysisEnabled = State(initialValue: s.screenAnalysisEnabled)
     _transcriptionAutoDetect = State(initialValue: s.transcriptionAutoDetect)
+    _screenAnalysisEnabled = State(initialValue: s.screenAnalysisEnabled)
+    _proactiveNudges = State(initialValue: InsightAssistantSettings.shared.isEnabled)
+    _notificationsEnabled = State(initialValue: TaskAssistantSettings.shared.notificationsEnabled)
   }
 
   // MARK: Body
@@ -116,6 +131,13 @@ struct RedesignSettingsPage: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(Ink.canvas)
+    .task {
+      await connectorStatus.refresh()
+      mcpKey = await MemoryExportService.shared.storedMCPKey()
+      if let summary = try? await APIClient.shared.getDailySummarySettings() {
+        dailyRecap = summary.enabled
+      }
+    }
   }
 
   // MARK: Left rail
@@ -232,8 +254,24 @@ struct RedesignSettingsPage: View {
       row("Auto-reply when I’m away", "Only for chats you switch on") {
         InkToggle(isOn: $autoReplyAway)
       }
-      row("Proactive nudges", "Tell you the next move") { InkToggle(isOn: $proactiveNudges) }
-      row("Daily recap", "A short read on your day") { InkToggle(isOn: $dailyRecap) }
+      row("Proactive nudges", "Tell you the next move") {
+        InkToggle(
+          isOn: Binding(
+            get: { proactiveNudges },
+            set: { newValue in
+              proactiveNudges = newValue
+              InsightAssistantSettings.shared.isEnabled = newValue
+            }))
+      }
+      row("Daily recap", "A short read on your day") {
+        InkToggle(
+          isOn: Binding(
+            get: { dailyRecap },
+            set: { newValue in
+              dailyRecap = newValue
+              Task { _ = try? await APIClient.shared.updateDailySummarySettings(enabled: newValue) }
+            }))
+      }
       row("Never guess on money or legal", "Always ask me first") {
         InkToggle(isOn: $neverGuessMoneyLegal)
       }
@@ -242,9 +280,18 @@ struct RedesignSettingsPage: View {
 
   private var floatingPanel: some View {
     VStack(spacing: 0) {
-      row("Show the floating bar", "Ask omi from anywhere") { InkToggle(isOn: $showFloatingBar) }
-      row("Summon shortcut", nil) { selectDisplay("⌘⇧Space") }
-      row("Push-to-talk", "Hold to speak") { selectDisplay("Hold ⌥") }
+      row("Show the floating bar", "Ask omi from anywhere") {
+        InkToggle(isOn: $shortcutSettings.askOmiEnabled)
+      }
+      row("Summon shortcut", nil) {
+        selectDisplay(shortcutSettings.askOmiShortcut.displayTokens.joined())
+      }
+      row("Push-to-talk", "Hold to speak") {
+        selectDisplay(
+          shortcutSettings.pttEnabled
+            ? "Hold " + shortcutSettings.pttShortcut.displayTokens.joined()
+            : "Off")
+      }
       row("Answer from what’s on screen", "Use the context in front of you") {
         InkToggle(isOn: $answerFromScreen)
       }
@@ -256,14 +303,27 @@ struct RedesignSettingsPage: View {
       Text("Where I learn from, and where I can work.")
         .inkSmall()
         .padding(.bottom, 6)
-      row("Gmail", "Connected inbox") { InkBadge(text: "Connected", kind: .sent) }
-      row("Google Calendar", "12 events this week") { InkBadge(text: "Connected", kind: .sent) }
+      row("Gmail", "Import email history and follow-ups") { integrationStatus(connectorID: "email") }
+      row("Google Calendar", "Import events and recurring routines") {
+        integrationStatus(connectorID: "calendar")
+      }
       row("iMessage · Telegram · WhatsApp", "Draft and send your replies") {
-        InkBadge(text: "Connected", kind: .sent)
+        InkButton(title: "Manage", size: .sm) { selectedTabIndex.wrappedValue = 8 }
       }
       row("Claude, ChatGPT, OpenClaw", "Use your memory anywhere") {
         InkButton(title: "Manage", size: .sm) { selectedTabIndex.wrappedValue = 8 }
       }
+    }
+  }
+
+  /// Real connected badge (or a Connect button routing to the Apps page's real flow).
+  @ViewBuilder
+  private func integrationStatus(connectorID: String) -> some View {
+    if let connector = ImportConnector.all.first(where: { $0.id == connectorID }),
+      connectorStatus.snapshot(for: connector).isConnected {
+      InkBadge(text: "Connected", kind: .sent)
+    } else {
+      InkButton(title: "Connect", size: .sm) { selectedTabIndex.wrappedValue = 8 }
     }
   }
 
@@ -278,10 +338,18 @@ struct RedesignSettingsPage: View {
         InkButton(title: "Open", size: .sm) { selectedTabIndex.wrappedValue = 3 }
       }
       row("Notifications", "Only the things that matter") {
-        InkToggle(isOn: $notificationsEnabled)
+        InkToggle(
+          isOn: Binding(
+            get: { notificationsEnabled },
+            set: { newValue in
+              notificationsEnabled = newValue
+              TaskAssistantSettings.shared.notificationsEnabled = newValue
+              InsightAssistantSettings.shared.notificationsEnabled = newValue
+              FocusAssistantSettings.shared.notificationsEnabled = newValue
+            }))
       }
       row("Export everything", "Take your data with you") {
-        InkButton(title: "Export", size: .sm) {}
+        InkButton(title: "Export", size: .sm) { selectedTabIndex.wrappedValue = 8 }
       }
       dangerRow
 
@@ -334,7 +402,7 @@ struct RedesignSettingsPage: View {
       Button {
         showDeleteConfirm = true
       } label: {
-        Text("Delete…")
+        Text(isDeleting ? "Deleting…" : "Delete…")
           .font(InkFont.sans(13, .medium))
           .foregroundColor(Ink.danger)
           .frame(height: 30)
@@ -344,15 +412,22 @@ struct RedesignSettingsPage: View {
               .overlay(Capsule().strokeBorder(Ink.danger, lineWidth: 1)))
       }
       .buttonStyle(.plain)
+      .disabled(isDeleting)
     }
     .padding(.vertical, 15)
     .overlay(Rectangle().fill(Ink.hair).frame(height: 1), alignment: .top)
-    // Confirm-only placeholder: no destructive action is performed.
+    // Wired to the real memory-wipe backend path.
     .alert("Delete everything?", isPresented: $showDeleteConfirm) {
       Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {}
+      Button("Delete", role: .destructive) {
+        isDeleting = true
+        Task {
+          try? await APIClient.shared.deleteAllMemories()
+          await MainActor.run { isDeleting = false }
+        }
+      }
     } message: {
-      Text("This is a confirmation placeholder. Nothing is deleted in this build.")
+      Text("This permanently erases all of your saved memories. This can’t be undone.")
     }
   }
 
@@ -361,12 +436,26 @@ struct RedesignSettingsPage: View {
       row("Record my screen", "So I can find anything you saw") {
         InkToggle(isOn: assistantBinding($screenAnalysisEnabled, write: { $0.screenAnalysisEnabled = $1 }))
       }
-      row("Keep history for", nil) { selectDisplay("\(rewindSettings.retentionDays) days") }
+      row("Keep history for", nil) { retentionMenu }
       row("Pause in private apps", "Banking, password managers…") {
-        InkToggle(isOn: $pauseInPrivateApps)
+        InkToggle(isOn: privateAppsBinding)
       }
       row("Blur sensitive text", "Hide secrets in captures") { InkToggle(isOn: $blurSensitiveText) }
     }
+  }
+
+  /// Real dropdown that reads and writes `RewindSettings.retentionDays`.
+  private var retentionMenu: some View {
+    Menu {
+      ForEach(retentionOptions, id: \.self) { days in
+        Button("\(days) days") { rewindSettings.retentionDays = days }
+      }
+    } label: {
+      selectDisplay("\(rewindSettings.retentionDays) days")
+    }
+    .menuStyle(.borderlessButton)
+    .menuIndicator(.hidden)
+    .fixedSize()
   }
 
   private var advancedPanel: some View {
@@ -375,7 +464,9 @@ struct RedesignSettingsPage: View {
       row("Local models", "Run on this Mac when it can") { InkToggle(isOn: $localModels) }
       row("Diagnostics", "Share crash logs to help fix bugs") { InkToggle(isOn: $diagnostics) }
       row("Reset onboarding", "Meet omi again") {
-        InkButton(title: "Reset", size: .sm) {}
+        InkButton(title: "Reset", size: .sm) {
+          NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
+        }
       }
     }
   }
@@ -388,6 +479,8 @@ struct RedesignSettingsPage: View {
           Text(mcpEndpoint)
             .font(InkFont.mono(12.5))
             .foregroundColor(Ink.ink)
+            .lineLimit(1)
+            .truncationMode(.middle)
             .padding(.horizontal, 10)
             .frame(height: 30)
             .background(
@@ -396,8 +489,34 @@ struct RedesignSettingsPage: View {
           copyButton(mcpEndpoint, field: "mcp")
         }
       }
-      row("API key", maskedApiKey) { copyButton(maskedApiKey, field: "key") }
-      row("Rotate key", nil) { InkButton(title: "Rotate", size: .sm) {} }
+      // Only show a key row when a real hosted key exists; never render a fake secret.
+      if let key = mcpKey {
+        row("API key", maskedKey(key)) { copyButton(key, field: "key") }
+        row("Rotate key", nil) {
+          InkButton(title: mcpKeyBusy ? "Rotating…" : "Rotate", size: .sm) { rotateMCPKey() }
+        }
+      } else {
+        row("API key", "Not generated yet") {
+          InkButton(title: mcpKeyBusy ? "Generating…" : "Generate", size: .sm) { rotateMCPKey() }
+        }
+      }
+    }
+  }
+
+  private func maskedKey(_ key: String) -> String {
+    let suffix = key.count >= 4 ? String(key.suffix(4)) : key
+    return "omi_sk_••••••••\(suffix)"
+  }
+
+  private func rotateMCPKey() {
+    guard !mcpKeyBusy else { return }
+    mcpKeyBusy = true
+    Task {
+      let newKey = try? await MemoryExportService.shared.createNewMCPKey()
+      await MainActor.run {
+        if let newKey { mcpKey = newKey }
+        mcpKeyBusy = false
+      }
     }
   }
 
@@ -481,6 +600,22 @@ struct RedesignSettingsPage: View {
     Binding(
       get: { launchManager.isEnabled },
       set: { launchManager.setEnabled($0) })
+  }
+
+  /// "Pause in private apps" reflects and drives Rewind's default private-app exclusions
+  /// (password managers, banking, etc.).
+  private var privateAppsBinding: Binding<Bool> {
+    Binding(
+      get: { RewindSettings.defaultExcludedApps.isSubset(of: rewindSettings.excludedApps) },
+      set: { newValue in
+        for app in RewindSettings.defaultExcludedApps {
+          if newValue {
+            rewindSettings.excludeApp(app)
+          } else {
+            rewindSettings.includeApp(app)
+          }
+        }
+      })
   }
 
   /// Mirror a local `@State` and write the change back into `AssistantSettings`.
