@@ -1,0 +1,25 @@
+desktop/macos/Desktop/Sources/MainWindow/Pages/WhatsAppInboxPage.swift
+  s_30ed98fb730498::t_db5642ee8b159a 1
+desktop/macos/Desktop/Sources/MainWindow/Pages/MessagingInboxKit.swift
+  s_30ed98fb730498::t_cd082b41ac6fa7 2
+desktop/macos/Desktop/Sources/MainWindow/Pages/IMessageInboxPage.swift
+  s_30ed98fb730498::t_4a6c5f399f2607 1
+desktop/macos/Desktop/Sources/MainWindow/Pages/TelegramInboxPage.swift
+  s_30ed98fb730498::t_ff4803934e94dc 1
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "bd332e0fc3656ad6cd0495bc54c441b3ee613397",
+  "prompts": {},
+  "sessions": {
+    "s_30ed98fb730498": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6b021695-b518-4da8-abbe-222af1d7a947",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Archit Lal <architdraftid@gmail.com>"
+    }
+  }
+}
