@@ -435,6 +435,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                                 child: Container(
                                                   width: 16,
                                                   height: 16,
+                                                  alignment: Alignment.center,
                                                   decoration: BoxDecoration(
                                                     color: Colors.white,
                                                     borderRadius: BorderRadius.circular(10),
