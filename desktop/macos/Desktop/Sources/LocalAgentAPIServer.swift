@@ -19,7 +19,8 @@ enum LocalAgentAPISettings {
   private static let tokenKey = "localAgentAPIToken"
   private static let tokenKeychainAccount = "local-agent-api-token"
   private static let portKey = "localAgentAPIPort"
-  /// Team-scoped so local Apple Development builds cannot poison the notarized item.
+  /// Team+bundle scoped so local Apple Development / named bundles cannot poison
+  /// each other or the notarized item. Never query the unscoped legacy service.
   private static var tokenKeychainService: String {
     DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyLocalAgentTokenService)
   }
@@ -68,12 +69,17 @@ enum LocalAgentAPISettings {
     if let token = storedToken() {
       return token
     }
+    // No readable scoped/UserDefaults token. Mint a fresh one into the scoped
+    // service. We deliberately do NOT read the unscoped legacy Keychain item
+    // (that query can show the login-keychain password dialog). Callers that
+    // still hold the pre-scoping token must re-copy the new token from Settings.
     let token = "omi_local_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
     guard DesktopKeychainStore.setString(token, service: tokenKeychainService, account: tokenKeychainAccount) else {
       log("LocalAgentAPISettings: failed to save token to Keychain")
       throw LocalAgentAPIError.tokenStorageUnavailable
     }
     UserDefaults.standard.removeObject(forKey: tokenKey)
+    log("LocalAgentAPISettings: minted replacement local-agent token into scoped Keychain (re-copy token for clients)")
     return token
   }
 
@@ -117,6 +123,16 @@ final class LocalAgentAPIServer {
 
   func startIfNeeded() {
     guard LocalAgentAPISettings.isEnabled else { return }
+    // If the feature was enabled before team+bundle scoping, the old Keychain
+    // token is intentionally unread (to avoid password prompts). Mint a fresh
+    // scoped token so the server can authenticate again; clients must re-copy it.
+    do {
+      _ = try LocalAgentAPISettings.ensureToken()
+    } catch {
+      log("LocalAgentAPIServer: cannot start — token storage unavailable (\(error.localizedDescription))")
+      LocalAgentAPISettings.isEnabled = false
+      return
+    }
     guard listener == nil else { return }
 
     do {

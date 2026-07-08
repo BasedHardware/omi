@@ -68,12 +68,12 @@ if [ -z "$TEAM_ID" ] || [ "$TEAM_ID" = "not set" ]; then
 fi
 KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}.bundle.${SRC}"
 
-python3 - "$SRC" "$OUT" "${UD_KEYS[@]}" "$KC_SERVICE" "$KC_SERVICE_BASE" "$KC_ACCOUNT" <<'PY'
+python3 - "$SRC" "$OUT" "${UD_KEYS[@]}" "$KC_SERVICE" "$KC_ACCOUNT" <<'PY'
 import json, subprocess, sys
 
 src, out = sys.argv[1], sys.argv[2]
-ud_keys = sys.argv[3:-3]
-kc_service, kc_service_legacy, kc_account = sys.argv[-3], sys.argv[-2], sys.argv[-1]
+ud_keys = sys.argv[3:-2]
+kc_service, kc_account = sys.argv[-2], sys.argv[-1]
 
 def defaults(*args):
     return subprocess.run(["defaults", *args], capture_output=True, text=True)
@@ -97,11 +97,11 @@ for k in ud_keys:
         continue
     data[k] = {"type": t.stdout.strip().replace("Type is ", ""), "value": v.stdout.strip()}
 
-# Prefer the team+bundle scoped v2 item. Optionally try the unscoped legacy name
-# for pre-migration sessions — `security` may itself prompt if that ACL is
-# poisoned; Prefer Always Allow once, or delete the poisoned item. The app never
-# queries the legacy name (that is what caused the Beta password dialog).
-payload = read_keychain(kc_service) or read_keychain(kc_service_legacy)
+# Only the team+bundle scoped v2 item. Never query the unscoped legacy service —
+# `security find-generic-password` on a poisoned ACL can show the same login-
+# keychain password dialog this PR eliminates. Pre-migration sessions fall
+# through to UserDefaults token keys below.
+payload = read_keychain(kc_service)
 if payload:
     try:
         tokens = json.loads(payload)

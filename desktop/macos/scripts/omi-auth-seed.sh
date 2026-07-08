@@ -77,6 +77,45 @@ skip = set(sys.argv[3].split())
 kc_service, kc_account = sys.argv[4], sys.argv[5]
 data = json.load(open(inp))
 
+id_token = data.get("auth_idToken", {}).get("value", "")
+refresh_token = data.get("auth_refreshToken", {}).get("value", "")
+token_expiry = data.get("auth_tokenExpiry", {}).get("value", "0")
+token_uid = data.get("auth_tokenUserId", {}).get("value", "")
+
+# Bundle-scoped Keychain items are not shared across apps. Refuse to seed a
+# signed-in UserDefaults state without credentials — that leaves a ghost session.
+if not id_token or not refresh_token:
+    print("ERROR: dump has no auth_idToken/auth_refreshToken — refusing to seed "
+          "signed-in state without Keychain credentials. Re-run omi-auth-dump.sh "
+          "from a signed-in source bundle.", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    expiry = float(token_expiry)
+except (ValueError, TypeError):
+    expiry = 0.0
+blob = json.dumps({
+    "idToken": id_token,
+    "refreshToken": refresh_token,
+    "expiryTime": expiry,
+    "tokenUserId": token_uid,
+})
+# Delete any existing item first so -U update cannot hit a poisoned ACL.
+subprocess.run(
+    ["security", "delete-generic-password", "-s", kc_service, "-a", kc_account],
+    capture_output=True, text=True,
+)
+r = subprocess.run(
+    ["security", "add-generic-password", "-s", kc_service, "-a", kc_account,
+     "-w", blob, "-U"],
+    capture_output=True, text=True,
+)
+if r.returncode != 0:
+    print(f"ERROR: could not write token blob to Keychain ({kc_service}): "
+          f"{r.stderr.strip()}", file=sys.stderr)
+    sys.exit(1)
+print(f"Wrote token blob to Keychain ({kc_service}/{kc_account})")
+
 flag = {"boolean": "-bool", "string": "-string", "integer": "-int",
         "float": "-float", "date": "-date", "data": "-data"}
 
@@ -92,43 +131,6 @@ for k, info in data.items():
     subprocess.run(["defaults", "write", target, k, flag.get(typ, "-string"), val], check=True)
     n += 1
 print(f"Seeded {n} keys into {target}")
-
-# Always write the token blob into the target bundle's scoped Keychain item —
-# bundles no longer share a team-only item.
-id_token = data.get("auth_idToken", {}).get("value", "")
-refresh_token = data.get("auth_refreshToken", {}).get("value", "")
-token_expiry = data.get("auth_tokenExpiry", {}).get("value", "0")
-token_uid = data.get("auth_tokenUserId", {}).get("value", "")
-
-if id_token and refresh_token:
-    try:
-        expiry = float(token_expiry)
-    except (ValueError, TypeError):
-        expiry = 0.0
-    blob = json.dumps({
-        "idToken": id_token,
-        "refreshToken": refresh_token,
-        "expiryTime": expiry,
-        "tokenUserId": token_uid,
-    })
-    # Delete any existing item first so -U update cannot hit a poisoned ACL.
-    subprocess.run(
-        ["security", "delete-generic-password", "-s", kc_service, "-a", kc_account],
-        capture_output=True, text=True,
-    )
-    r = subprocess.run(
-        ["security", "add-generic-password", "-s", kc_service, "-a", kc_account,
-         "-w", blob, "-U"],
-        capture_output=True, text=True,
-    )
-    if r.returncode == 0:
-        print(f"Wrote token blob to Keychain ({kc_service}/{kc_account})")
-    else:
-        print(f"WARNING: could not write token blob to Keychain: {r.stderr.strip()}",
-              file=sys.stderr)
-else:
-    print("WARNING: no token values in dump — target bundle will not have Keychain tokens",
-          file=sys.stderr)
 PY
 
 echo "Done — launch $TARGET and it boots signed-in (no web login)."
