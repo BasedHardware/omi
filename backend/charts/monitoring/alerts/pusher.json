@@ -735,6 +735,8 @@
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "4",
       "runbook": "backend/docs/runbooks/pusher-degraded.md",
       "threshold": "0.05 (5% degraded sessions)"
     },

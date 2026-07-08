@@ -432,11 +432,24 @@ actor GeminiClient {
         {
           return "timeout"
         }
+        if lower.contains("429")
+          || lower.contains("rate limit")
+          || lower.contains("too many requests")
+        {
+          return "provider_429"
+        }
+        if lower.contains("quota")
+          || lower.contains("resource exhausted")
+        {
+          return "quota"
+        }
         if lower.contains("503")
           || lower.contains("502")
           || lower.contains("500")
           || lower.contains("service unavailable")
           || lower.contains("internal error")
+          || lower.contains("overloaded")
+          || lower.contains("high demand")
         {
           return "provider_5xx"
         }

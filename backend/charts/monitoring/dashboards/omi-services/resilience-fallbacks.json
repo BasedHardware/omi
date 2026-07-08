@@ -34,7 +34,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "**Paging SLOs (Phase 1):** page only on `outcome=exhausted`, sync `enqueue_failed` share, and pusher degraded-session ratio. `outcome=recovered` heals are dashboard-only — do not page.\n\n**Noise budget:** ≤2 new PAGE alerts in the first 2 weeks after deploy (pusher degraded ratio + sync enqueue_failed share). Reclassify or tune before adding more pages. LLM gateway fallback is ticket-tier.\n\nRunbooks: `backend/docs/runbooks/resilience-dashboards.md`.",
+        "content": "**Paging SLOs (Phase 1):** page only on `outcome=exhausted`, pusher degraded-session ratio. `outcome=recovered` heals are dashboard-only — do not page.\n\n**Noise budget:** ≤2 new PAGE alerts in the first 2 weeks after deploy (pusher degraded ratio). Sync enqueue_failed PAGE is paused until Cloud Run custom metrics reach Prometheus — use Cloud Logging meanwhile (see sync-dispatch runbook). LLM gateway fallback is ticket-tier.\n\nRunbooks: `backend/docs/runbooks/resilience-dashboards.md`.",
         "mode": "markdown"
       },
       "pluginVersion": "12.1.0",
@@ -237,6 +237,7 @@
         }
       ],
       "title": "Sync dispatch — enqueue_failed share (PAGE SLO)",
+      "description": "**Scrape gap:** `omi_sync_dispatch_attempts_total` and `omi_fallback_total{component=\"sync_dispatch\"}` are emitted by Cloud Run `backend-sync`, but GKE Prometheus only scrapes backend-listen and pusher. This panel may show no data until Cloud Run custom metrics are exported. Until then, use Cloud Logging for `omi_fallback_event component=sync_dispatch reason=enqueue_failed`. PAGE alert is paused.",
       "type": "timeseries"
     },
     {

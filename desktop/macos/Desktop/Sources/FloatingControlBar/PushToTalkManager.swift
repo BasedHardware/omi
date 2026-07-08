@@ -1797,6 +1797,7 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
     batchAudioLock.unlock()
     guard !audio.isEmpty else { sendTranscript(); return }
     barState?.voiceTranscript = "Transcribing…"
+    let capturedReason = reason
     Task { @MainActor [weak self] in
       guard let self else { return }
       do {
@@ -1811,7 +1812,7 @@ extension PushToTalkManager: RealtimeOmniServiceDelegate {
           area: "ptt_cascade",
           from: "omni",
           to: "deepgram",
-          reason: "other",
+          reason: capturedReason,
           outcome: .exhausted,
           extra: ["user_visible": false])
       }

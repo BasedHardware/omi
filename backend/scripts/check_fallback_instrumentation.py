@@ -22,10 +22,10 @@ _RECORD_FALLBACK = re.compile(
     r'record_fallback|recordFallback',
     re.IGNORECASE,
 )
-_DIFF_HUNK = re.compile(r'^@@')
+_DIFF_HUNK = re.compile(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@')
 
 
-def _added_lines(path: Path) -> list[str]:
+def _added_lines(path: Path) -> list[tuple[int, str]]:
     try:
         import subprocess
 
@@ -36,16 +36,28 @@ def _added_lines(path: Path) -> list[str]:
             check=False,
         )
         if result.returncode != 0 or not result.stdout.strip():
-            return path.read_text(encoding='utf-8', errors='replace').splitlines()
+            return [
+                (idx, line)
+                for idx, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), start=1)
+            ]
     except Exception:
-        return path.read_text(encoding='utf-8', errors='replace').splitlines()
+        return [
+            (idx, line)
+            for idx, line in enumerate(path.read_text(encoding='utf-8', errors='replace').splitlines(), start=1)
+        ]
 
-    added: list[str] = []
+    added: list[tuple[int, str]] = []
+    line_no = 1
     for line in result.stdout.splitlines():
-        if line.startswith('+++') or line.startswith('---') or _DIFF_HUNK.match(line):
+        if line.startswith('+++') or line.startswith('---'):
+            continue
+        hunk_match = _DIFF_HUNK.match(line)
+        if hunk_match:
+            line_no = int(hunk_match.group(1))
             continue
         if line.startswith('+') and not line.startswith('+++'):
-            added.append(line[1:])
+            added.append((line_no, line[1:]))
+            line_no += 1
     return added
 
 
@@ -55,7 +67,7 @@ def check_file(path: Path) -> list[str]:
         return []
 
     warnings: list[str] = []
-    for line_no, line in enumerate(_added_lines(path), start=1):
+    for line_no, line in _added_lines(path):
         if _FALLBACK_BRANCH.search(line):
             warnings.append(f'{path}:{line_no}: fallback-like branch without record_fallback/recordFallback')
     return warnings

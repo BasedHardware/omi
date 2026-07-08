@@ -17,9 +17,9 @@ Cross-platform view of backend Prometheus fallbacks, desktop PostHog heals, and 
 | Panel | PromQL / source | Alert tier |
 |-------|-----------------|------------|
 | Fallback rate by component & outcome | `sum by (component, outcome) (rate(omi_fallback_total[5m]))` | Dashboard only (`recovered` is expected) |
-| Sync enqueue_failed share | `rate(omi_fallback_total{component="sync_dispatch",reason="enqueue_failed"}[10m]) / clamp_min(rate(omi_sync_dispatch_attempts_total[10m]), 1e-9)` | **PAGE** — see [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
+| Sync enqueue_failed share | `sum(rate(omi_fallback_total{component="sync_dispatch",reason="enqueue_failed"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)` | Dashboard only until Cloud Run scrape — see [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
 | Pusher degraded sessions & ratio | `pusher_sessions_degraded`, `pusher_active_ws_connections`, ratio | **PAGE** — see [pusher-degraded.md](./pusher-degraded.md) |
-| LLM gateway fallback rate | `rate(llm_gateway_requests_total{fallback_used="true"}[30m]) / clamp_min(rate(llm_gateway_requests_total[30m]), 1e-9)` | **Ticket** — see [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
+| LLM gateway fallback rate | `sum(rate(llm_gateway_requests_total{fallback_used="true"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total[30m])), 1e-9)` | **Ticket** — see [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 
 The dashboard text panel repeats paging policy: page only on exhausted outcomes, sync `enqueue_failed`, and pusher degraded ratio. Successful `outcome=recovered` heals are dashboard-only.
 
@@ -54,7 +54,7 @@ After Phase 1 deploy, cap **new PAGE alerts** at **≤2** for the first two week
 | Alert | Tier | Runbook |
 |-------|------|---------|
 | Pusher degraded session ratio | PAGE | [pusher-degraded.md](./pusher-degraded.md) |
-| Sync dispatch enqueue_failed share | PAGE | [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
+| Sync dispatch enqueue_failed share | Paused (Cloud Run scrape gap) — use Cloud Logging | [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
 | LLM gateway fallback rate | Ticket (Slack / Linear) | [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 
 Before adding a third PAGE alert:

@@ -295,6 +295,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
   private var fallbackProvider: RealtimeHubProvider?
+  /// Reason passed to ``failoverToAlternateProvider``; cleared after a successful connect on the alternate.
+  private var pendingFailoverReason: String?
 
   private override init() {
     super.init()
@@ -323,12 +325,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     let primary = RealtimeHubSettings.shared.provider
     fallbackProvider = primary.alternate
+    pendingFailoverReason = reason
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",
       from: primary.rawValue,
       to: primary.alternate.rawValue,
       reason: reason,
-      outcome: .recovered,
+      outcome: .degraded,
       extra: ["user_visible": false])
     log("RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)")
     teardownSession()
@@ -582,6 +585,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // A new pick (user or Auto/AutoModelSelector) re-evaluates from the primary, dropping
     // any active failover so the freshly-selected provider is honored.
     fallbackProvider = nil
+    pendingFailoverReason = nil
     // Only reconnect if the provider actually changed — avoids redundant
     // teardown/recreate races on unrelated notifications.
     if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
@@ -1340,6 +1344,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
+    if let fallback = fallbackProvider, let reason = pendingFailoverReason, sessionProvider == fallback {
+      let primary = RealtimeHubSettings.shared.provider
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_hub",
+        from: primary.rawValue,
+        to: fallback.rawValue,
+        reason: reason,
+        outcome: .recovered,
+        extra: ["user_visible": false])
+      pendingFailoverReason = nil
+    }
     if inputTurnInProgress,
       inputTurnActivityStartPending || sessionProvider == .gemini
     {
@@ -2094,6 +2109,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if aliveFor > 60 {
       hubReconnectStrikes = 0
       fallbackProvider = nil
+    pendingFailoverReason = nil
     }
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else { return }
     hubReconnectStrikes += 1

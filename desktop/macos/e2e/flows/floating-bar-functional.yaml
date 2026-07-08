@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
 preconditions:
   - automation_bridge_ready
 

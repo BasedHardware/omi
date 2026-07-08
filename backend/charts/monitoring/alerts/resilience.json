@@ -9,7 +9,7 @@
     "data": [
       {
         "refId": "A",
-        "queryType": "range",
+        "queryType": "",
         "relativeTimeRange": {
           "from": 1800,
           "to": 0

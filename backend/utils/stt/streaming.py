@@ -262,7 +262,7 @@ def _normalize_language(language: str) -> str:
     return language.split('-')[0].split('_')[0].lower()
 
 
-def _stt_selection_from_mode(language: str, base_lang: str) -> str:
+def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     if base_lang and base_lang != 'en':
         return 'requested_non_en'
     if any(m.strip() for m in stt_service_models):

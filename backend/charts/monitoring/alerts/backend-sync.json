@@ -1044,9 +1044,10 @@
     "keep_firing_for": "0s",
     "annotations": {
       "runbook": "backend/docs/runbooks/sync-dispatch-fallback.md",
+      "summary": "Paused: backend-sync metrics not scraped by GKE Prometheus — use Cloud Logging",
       "threshold": "0.2 (20% enqueue_failed)"
     },
-    "isPaused": false,
+    "isPaused": true,
     "notification_settings": {
       "receiver": "Omi - Services Alerting (Telegram)"
     },

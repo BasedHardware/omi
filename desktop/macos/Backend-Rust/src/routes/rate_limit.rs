@@ -147,7 +147,7 @@ impl GeminiRateLimiter {
                 "redis_ratelimit",
                 "enforced",
                 "unmetered",
-                "other",
+                "config_incomplete",
                 FallbackOutcome::Degraded,
             );
             tracing::warn!(

@@ -24,8 +24,11 @@ def _hosted_vad_fallback_reason(exc: BaseException) -> str:
     response = getattr(exc, 'response', None)
     if response is not None:
         status_code = getattr(response, 'status_code', None)
-        if isinstance(status_code, int) and status_code >= 500:
-            return 'provider_5xx'
+        if isinstance(status_code, int):
+            if status_code == 429:
+                return 'provider_429'
+            if status_code >= 500:
+                return 'provider_5xx'
     return 'other'
 
 

@@ -143,4 +143,8 @@ def test_hosted_vad_fallback_reason_buckets(monkeypatch):
     response.status_code = 503
     assert vad_mod._hosted_vad_fallback_reason(requests.HTTPError(response=response)) == 'provider_5xx'
 
+    response429 = requests.Response()
+    response429.status_code = 429
+    assert vad_mod._hosted_vad_fallback_reason(requests.HTTPError(response=response429)) == 'provider_429'
+
     assert vad_mod._hosted_vad_fallback_reason(RuntimeError('boom')) == 'other'

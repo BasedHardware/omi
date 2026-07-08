@@ -389,6 +389,8 @@ def _load_sync_router_for_fast_path():
         'utils.fair_use',
         'utils.subscription',
         'utils.observability',
+        'utils.observability.fallback',
+        'utils.metrics',
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.request_validation',

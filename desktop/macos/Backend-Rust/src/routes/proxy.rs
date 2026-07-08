@@ -275,7 +275,7 @@ async fn gemini_proxy(
         if effective_path != path {
             record_fallback(
                 "gemini_proxy",
-                bucket_gemini_tier(extract_gemini_model(&path)),
+                bucket_gemini_tier(model),
                 bucket_gemini_tier(extract_gemini_model(&effective_path)),
                 "quota",
                 FallbackOutcome::Degraded,
@@ -599,8 +599,8 @@ async fn gemini_stream_proxy(
         let effective_path = rate_limit::maybe_rewrite_model_path(&path, &decision, action);
         if effective_path != path {
             record_fallback(
-                "gemini_proxy",
-                bucket_gemini_tier(extract_gemini_model(&path)),
+                "gemini_stream_proxy",
+                bucket_gemini_tier(model),
                 bucket_gemini_tier(extract_gemini_model(&effective_path)),
                 "quota",
                 FallbackOutcome::Degraded,
