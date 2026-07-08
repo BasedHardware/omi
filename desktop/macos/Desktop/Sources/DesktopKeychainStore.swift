@@ -9,8 +9,10 @@ import Security
 ///   non-sandboxed Developer ID app has no `keychain-access-groups` entitlement.
 /// - Never present the macOS keychain password dialog. Reads/writes that would require UI
 ///   fail closed (`nil` / `false`).
-/// - Scope service names by signing Team ID so Apple Development / named-bundle builds
-///   cannot create or overwrite the notarized Beta/Prod item (and vice versa).
+/// - Scope service names by signing Team ID **and** bundle id so:
+///   - Apple Development / named-bundle builds cannot poison notarized Beta/Prod
+///   - Local contributors' Omi Dev / `omi-*` / ad-hoc rebuilds cannot poison each other
+///     (path/signature ACL mismatches between same-team apps)
 /// - Do **not** query the pre-scoping legacy service names from app code. Those items may
 ///   carry a foreign-team ACL; even with `LAContext.interactionNotAllowed`, SecItem can
 ///   still surface the login-keychain password sheet (`errSecUserCanceled` / -128). Leave
@@ -20,6 +22,7 @@ enum DesktopKeychainStore {
   /// app runtime must not SecItem-query these (see file header).
   static let legacyAuthTokenService = "com.omi.desktop.firebase-rest-session"
   static let legacyLocalAgentTokenService = "com.omi.desktop.local-agent-api"
+  static let legacyClientDeviceService = "com.omi.client-device-id"
 
   /// Signing Team ID of the running binary (e.g. `9536L8KLMP` for Developer ID,
   /// `JVMXE5G542` for a personal Apple Development cert). Falls back to an ad-hoc
@@ -35,12 +38,20 @@ enum DesktopKeychainStore {
 
   private static var _cachedSigningTeamID: String?
 
-  /// Team-scoped service name. Production Beta/Prod and local Dev builds get different
-  /// items, so a local rebuild cannot poison the notarized app's ACL. Same-team named
-  /// bundles intentionally share (auth dump/seed). The `v2` marker avoids colliding with
-  /// any accidental `.team.*` suffix on the legacy unscoped name.
-  static func scopedService(_ base: String, teamID: String = signingTeamID) -> String {
-    "\(base).v2.team.\(teamID)"
+  /// Team + bundle scoped service name.
+  ///
+  /// Format: `<base>.v2.team.<TeamID>.bundle.<bundleID>`
+  ///
+  /// Beta and stable share `com.omi.computer-macos` + Developer ID team, so they keep one
+  /// auth item. Every local contributor bundle (`com.omi.desktop-dev`, `com.omi.omi-*`,
+  /// ad-hoc) gets its own item — dump/seed scripts write into the *target* bundle's
+  /// scoped service explicitly.
+  static func scopedService(
+    _ base: String,
+    teamID: String = signingTeamID,
+    bundleID: String = Bundle.main.bundleIdentifier ?? "unknown.bundle"
+  ) -> String {
+    "\(base).v2.team.\(teamID).bundle.\(bundleID)"
   }
 
   private static func baseQuery(service: String, account: String) -> [String: Any] {

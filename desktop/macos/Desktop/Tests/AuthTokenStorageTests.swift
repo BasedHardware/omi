@@ -134,8 +134,8 @@ final class AuthTokenStorageTests: XCTestCase {
 
   /// Regression: never show the login-keychain password dialog. Local Apple Development
   /// builds previously wrote the unscoped `firebase-rest-session` item; notarized Beta then
-  /// prompted on every launch. Team-scoped v2 service names + never querying the legacy
-  /// unscoped item close that path (LAContext alone does not suppress file-based ACL sheets).
+  /// prompted on every launch. Team+bundle scoped v2 service names + never querying the
+  /// legacy unscoped item close that path (LAContext alone does not suppress file-based ACL sheets).
   func testKeychainStoreNeverPresentsAuthenticationUI() throws {
     let source = try sourceFile("DesktopKeychainStore.swift")
     XCTAssertTrue(
@@ -146,10 +146,13 @@ final class AuthTokenStorageTests: XCTestCase {
       "DesktopKeychainStore must pass an LAContext via kSecUseAuthenticationContext")
     XCTAssertTrue(
       source.contains("scopedService"),
-      "DesktopKeychainStore must team-scope service names so Dev and Developer ID items diverge")
+      "DesktopKeychainStore must scope service names so Dev and Developer ID items diverge")
     XCTAssertTrue(
       source.contains(".v2.team."),
-      "Scoped service names must include a v2 marker so they never collide with the legacy item")
+      "Scoped service names must include a v2.team marker")
+    XCTAssertTrue(
+      source.contains(".bundle."),
+      "Scoped service names must include bundle id so local contributor apps cannot poison each other")
     XCTAssertFalse(
       source.contains("legacyServices"),
       "DesktopKeychainStore must not offer a legacy-service migration path that SecItem-queries "
@@ -160,7 +163,7 @@ final class AuthTokenStorageTests: XCTestCase {
     let source = try sourceFile("AuthService.swift")
     XCTAssertTrue(
       source.contains("DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)"),
-      "AuthService must store tokens under the team-scoped Keychain service")
+      "AuthService must store tokens under the team+bundle scoped Keychain service")
     XCTAssertFalse(
       source.contains("private let authTokenKeychainService = \"com.omi.desktop.firebase-rest-session\""),
       "AuthService must not hardcode the unscoped firebase-rest-session service name")
@@ -173,12 +176,51 @@ final class AuthTokenStorageTests: XCTestCase {
       "AuthService must not delete the unscoped legacy Keychain item (can itself prompt)")
   }
 
-  func testScopedServiceIncludesTeamID() {
-    let scoped = DesktopKeychainStore.scopedService("com.omi.desktop.firebase-rest-session", teamID: "9536L8KLMP")
-    XCTAssertEqual(scoped, "com.omi.desktop.firebase-rest-session.v2.team.9536L8KLMP")
-    let other = DesktopKeychainStore.scopedService("com.omi.desktop.firebase-rest-session", teamID: "JVMXE5G542")
-    XCTAssertEqual(other, "com.omi.desktop.firebase-rest-session.v2.team.JVMXE5G542")
-    XCTAssertNotEqual(scoped, other)
+  func testScopedServiceIncludesTeamAndBundle() {
+    let prod = DesktopKeychainStore.scopedService(
+      "com.omi.desktop.firebase-rest-session",
+      teamID: "9536L8KLMP",
+      bundleID: "com.omi.computer-macos"
+    )
+    XCTAssertEqual(
+      prod,
+      "com.omi.desktop.firebase-rest-session.v2.team.9536L8KLMP.bundle.com.omi.computer-macos")
+
+    let sameTeamDifferentBundle = DesktopKeychainStore.scopedService(
+      "com.omi.desktop.firebase-rest-session",
+      teamID: "JVMXE5G542",
+      bundleID: "com.omi.desktop-dev"
+    )
+    let named = DesktopKeychainStore.scopedService(
+      "com.omi.desktop.firebase-rest-session",
+      teamID: "JVMXE5G542",
+      bundleID: "com.omi.omi-fix-rewind"
+    )
+    XCTAssertEqual(
+      sameTeamDifferentBundle,
+      "com.omi.desktop.firebase-rest-session.v2.team.JVMXE5G542.bundle.com.omi.desktop-dev")
+    XCTAssertEqual(
+      named,
+      "com.omi.desktop.firebase-rest-session.v2.team.JVMXE5G542.bundle.com.omi.omi-fix-rewind")
+    XCTAssertNotEqual(prod, sameTeamDifferentBundle)
+    XCTAssertNotEqual(sameTeamDifferentBundle, named)
+  }
+
+  func testClientDeviceServiceNeverUsesSharedLegacyKeychain() throws {
+    let source = try sourceFile("ClientDeviceService.swift")
+    XCTAssertTrue(
+      source.contains("DesktopKeychainStore.scopedService"),
+      "ClientDeviceService must use a scoped Keychain service on production builds")
+    XCTAssertTrue(
+      source.contains("interactionNotAllowed = true"),
+      "ClientDeviceService Keychain access must be silent")
+    XCTAssertFalse(
+      source.contains("private let keychainService = \"com.omi.client-device-id\""),
+      "ClientDeviceService must not hardcode the shared legacy device-id Keychain service")
+    // All non-production bundles must stay on UserDefaults (no Keychain prompt risk).
+    XCTAssertTrue(
+      source.contains("productionBundleIdentifier"),
+      "ClientDeviceService must gate Keychain use to the production bundle only")
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {

@@ -4,14 +4,10 @@
 # Writes the auth-state UserDefaults keys (isSignedIn, userEmail, userId,
 # names, onboarding) captured by omi-auth-dump.sh into the target bundle's
 # domain. Auth tokens (idToken, refreshToken, expiry, tokenUserId) live in the
-# login Keychain under a Team-ID-scoped service name (see
-# DesktopKeychainStore.scopedService). Named test bundles signed with the same
-# Apple Development team as Omi Dev share that scoped item — no per-bundle
-# Keychain seed is needed when the dump came from the same team.
-#
-# If the dump captured tokens from UserDefaults (pre-migration source) or the
-# target team differs, those token values are written into the target team's
-# scoped Keychain item so the target bundle can read them on launch.
+# login Keychain under a Team+bundle scoped service name (see
+# DesktopKeychainStore.scopedService). Each bundle has its own Keychain item, so
+# this script always writes the token blob into the *target* bundle's scoped
+# service (dump from Omi Dev → seed into com.omi.omi-fix-rewind copies tokens).
 #
 # Run this BEFORE launching the bundle (UserDefaults is read at startup).
 #
@@ -66,11 +62,11 @@ fi
 if [ -z "$TEAM_ID" ] || [ "$TEAM_ID" = "not set" ]; then
   TEAM_ID="adhoc.${TARGET}"
 fi
-KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}"
+KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}.bundle.${TARGET}"
 
 # Token secrets are never written to the target bundle's UserDefaults — that
-# was the plaintext path this PR removed. If tokens are present in the dump,
-# they are written to the team-scoped Keychain item.
+# was the plaintext path this PR removed. Tokens from the dump are written to
+# the target bundle's team+bundle scoped Keychain item.
 SKIP_KEYS="auth_idToken auth_refreshToken auth_tokenExpiry auth_tokenUserId _keychainService"
 
 python3 - "$TARGET" "$IN" "$SKIP_KEYS" "$KC_SERVICE" "$KC_ACCOUNT" <<'PY'
@@ -97,9 +93,8 @@ for k, info in data.items():
     n += 1
 print(f"Seeded {n} keys into {target}")
 
-# Write token blob into the target team's scoped Keychain item. Same-team dumps
-# already share the item; this still refreshes the blob when the dump carried
-# explicit token values (pre-migration source or cross-team seed).
+# Always write the token blob into the target bundle's scoped Keychain item —
+# bundles no longer share a team-only item.
 id_token = data.get("auth_idToken", {}).get("value", "")
 refresh_token = data.get("auth_refreshToken", {}).get("value", "")
 token_expiry = data.get("auth_tokenExpiry", {}).get("value", "0")
@@ -116,8 +111,7 @@ if id_token and refresh_token:
         "expiryTime": expiry,
         "tokenUserId": token_uid,
     })
-    # Delete any existing item first so -U update cannot hit a poisoned ACL
-    # from a different signing identity under the same service name.
+    # Delete any existing item first so -U update cannot hit a poisoned ACL.
     subprocess.run(
         ["security", "delete-generic-password", "-s", kc_service, "-a", kc_account],
         capture_output=True, text=True,
@@ -133,7 +127,8 @@ if id_token and refresh_token:
         print(f"WARNING: could not write token blob to Keychain: {r.stderr.strip()}",
               file=sys.stderr)
 else:
-    print(f"No token values in dump — relying on existing Keychain item for {kc_service}")
+    print("WARNING: no token values in dump — target bundle will not have Keychain tokens",
+          file=sys.stderr)
 PY
 
 echo "Done — launch $TARGET and it boots signed-in (no web login)."

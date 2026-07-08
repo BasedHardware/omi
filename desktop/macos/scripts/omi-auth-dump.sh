@@ -2,8 +2,9 @@
 # omi-auth-dump.sh — capture a signed-in dev bundle's auth session to JSON.
 #
 # Auth tokens (idToken, refreshToken, expiry, tokenUserId) live in the macOS
-# Keychain on ALL builds under a Team-ID-scoped service name derived from
+# Keychain on ALL builds under a Team+bundle scoped service name derived from
 # "com.omi.desktop.firebase-rest-session" (see DesktopKeychainStore.scopedService).
+# Format: <base>.v2.team.<TeamID>.bundle.<bundleID>
 # The remaining auth-state keys (isSignedIn, userEmail, userId, names, onboarding)
 # are in UserDefaults. This script reads BOTH so the captured session can be
 # replayed into other test bundles with omi-auth-seed.sh, letting an agent skip
@@ -24,7 +25,7 @@ OUT="${2:-$(cd "$(dirname "$0")/.." && pwd)/tmp/desktop-auth.json}"
 UD_KEYS=(auth_isSignedIn auth_userEmail auth_userId auth_givenName auth_familyName \
          hasCompletedOnboarding)
 
-# Keychain base service/account. The actual service is team-scoped at runtime.
+# Keychain base service/account. The actual service is team+bundle scoped at runtime.
 KC_SERVICE_BASE="com.omi.desktop.firebase-rest-session"
 KC_ACCOUNT="firebase-rest-tokens"
 
@@ -65,7 +66,7 @@ fi
 if [ -z "$TEAM_ID" ] || [ "$TEAM_ID" = "not set" ]; then
   TEAM_ID="adhoc.${SRC}"
 fi
-KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}"
+KC_SERVICE="${KC_SERVICE_BASE}.v2.team.${TEAM_ID}.bundle.${SRC}"
 
 python3 - "$SRC" "$OUT" "${UD_KEYS[@]}" "$KC_SERVICE" "$KC_SERVICE_BASE" "$KC_ACCOUNT" <<'PY'
 import json, subprocess, sys
@@ -96,18 +97,17 @@ for k in ud_keys:
         continue
     data[k] = {"type": t.stdout.strip().replace("Type is ", ""), "value": v.stdout.strip()}
 
-# Prefer the team-scoped v2 item. Optionally try the unscoped legacy name for
-# pre-migration sessions — `security` may itself prompt if that ACL is poisoned;
-# Prefer Always Allow once, or delete the poisoned item. The app never queries
-# the legacy name (that is what caused the Beta password dialog).
+# Prefer the team+bundle scoped v2 item. Optionally try the unscoped legacy name
+# for pre-migration sessions — `security` may itself prompt if that ACL is
+# poisoned; Prefer Always Allow once, or delete the poisoned item. The app never
+# queries the legacy name (that is what caused the Beta password dialog).
 payload = read_keychain(kc_service) or read_keychain(kc_service_legacy)
 if payload:
     try:
         tokens = json.loads(payload)
         # Validate tokenUserId against the UserDefaults auth_userId to avoid
         # seeding signed-in state for one user with Keychain tokens belonging
-        # to a different user (the login Keychain is shared across all bundles
-        # of the same signing team).
+        # to a different user.
         kc_uid = tokens.get("tokenUserId", "")
         ud_uid = data.get("auth_userId", {}).get("value", "")
         if ud_uid and kc_uid != ud_uid:

@@ -359,9 +359,9 @@ class AuthService {
     // Keys are defined once in `DefaultsKey` and read/written through the typed
     // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
     //
-    // Keychain service is team-scoped so Apple Development / named-bundle builds
-    // cannot poison the notarized Beta/Prod item (and trigger a login-keychain
-    // password dialog). See DesktopKeychainStore.scopedService.
+    // Keychain service is team+bundle scoped so local Dev / named-bundle builds
+    // cannot poison each other or notarized Beta/Prod (login-keychain password
+    // dialog). See DesktopKeychainStore.scopedService.
     private let authTokenKeychainAccount = "firebase-rest-tokens"
     private var authTokenKeychainService: String {
         DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
@@ -403,10 +403,10 @@ class AuthService {
             usesKeychainTokenStorage: { true },
             allowsUserDefaultsFallback: { false },
             readKeychainString: { service, account in
-                // Only the team-scoped service. Never query the unscoped legacy
-                // `com.omi.desktop.firebase-rest-session` item — a foreign-team ACL
-                // on that name is what triggers the login-keychain password dialog.
-                // Pre-scoping installs recover via the UserDefaults migration path below.
+                // Only the team+bundle scoped service. Never query the unscoped
+                // legacy `com.omi.desktop.firebase-rest-session` item — a foreign
+                // ACL on that name is what triggers the login-keychain password
+                // dialog. Pre-scoping installs recover via UserDefaults migration.
                 DesktopKeychainStore.string(service: service, account: account)
             },
             writeKeychainString: { value, service, account in
