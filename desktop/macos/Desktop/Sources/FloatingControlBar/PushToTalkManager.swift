@@ -546,6 +546,9 @@ class PushToTalkManager: ObservableObject {
   nonisolated private static let hubMaxSpeechZeroCrossingRate: Double = 0.24
   nonisolated private static let hubMinTurnAudioSeconds: Double = 0.35
   nonisolated private static let hubMinSpeechLikeSeconds: Double = 0.16
+  nonisolated private static let hubShortTurnMaxAudioSeconds: Double = 0.75
+  nonisolated private static let hubShortTurnMinSpeechLikeSeconds: Double = 0.22
+  nonisolated private static let hubShortTurnMinSpeechLikeRatio: Double = 0.45
 
   /// Returns (totalSeconds, voicedSeconds) for raw PCM16 mono 16kHz audio,
   /// where voiced = 20ms frames whose RMS exceeds `rmsThreshold`.
@@ -649,7 +652,16 @@ class PushToTalkManager: ObservableObject {
     // Speech-like energy gate FIRST: clear/audible speech must pass without
     // waiting on model inference, but broadband noise/clicks should not.
     let (total, speechLike) = speechLikeAudioSeconds(pcm16k: data)
-    if total >= hubMinTurnAudioSeconds && speechLike >= hubMinSpeechLikeSeconds { return true }
+    if total < hubShortTurnMaxAudioSeconds {
+      let coverage = total > 0 ? speechLike / total : 0
+      if speechLike >= hubShortTurnMinSpeechLikeSeconds
+        && coverage >= hubShortTurnMinSpeechLikeRatio
+      {
+        return true
+      }
+    } else if speechLike >= hubMinSpeechLikeSeconds {
+      return true
+    }
     // Softer speech that didn't clear the energy bar: a lenient Silero pass as a fallback
     // (only to catch quiet speech — it must never be the sole gate that drops loud speech).
     guard let vad = hubVAD, count >= 512 else { return false }
@@ -674,7 +686,11 @@ class PushToTalkManager: ObservableObject {
       }
       i += 512
     }
-    // ~96ms contiguous speech, or ~192ms total. Each Silero frame is 512 samples = 32ms.
+    // Each Silero frame is 512 samples = 32ms. Short turns need denser evidence so
+    // clicks, clipped starts, and half-syllables do not become realtime tool calls.
+    if total < hubShortTurnMaxAudioSeconds {
+      return maxRun >= 5 || speechFrames >= 8
+    }
     return maxRun >= 3 || speechFrames >= 6
   }
 

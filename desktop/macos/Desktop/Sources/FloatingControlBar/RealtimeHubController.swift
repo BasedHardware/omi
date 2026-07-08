@@ -1419,6 +1419,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     case .askHigherModel:
       let query = arg("query")
       let context = (arguments["context"] as? String) ?? ""
+      if RealtimeHubTools.shouldRejectEscalationQueryForLanguage(
+        query, userLanguages: AssistantSettings.shared.voiceBaseLanguages)
+      {
+        log(
+          "RealtimeHub[\(providerTag)]: tool ask_higher_model rejected unexpected-language query=\"\(query.prefix(80))\""
+        )
+        sendToolResultIfCurrent(
+          source: source, callId: callId, name: name,
+          output: "I may have misheard that. Please ask again.",
+          expectedTurnEpoch: toolTurnEpoch)
+        return
+      }
       log(
         "RealtimeHub[\(providerTag)]: tool ask_higher_model → POST /v2/chat/completions (\(ModelQoS.Claude.defaultSelection)) query=\"\(query.prefix(80))\""
       )
