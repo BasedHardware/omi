@@ -4,10 +4,13 @@ PYTHON ?= $(shell if [ -x backend/venv/bin/python ]; then printf backend/venv/bi
 DESKTOP_USER ?= alice
 DESKTOP_APP_NAME ?=
 
-.PHONY: setup setup-hooks dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
+.PHONY: setup setup-main setup-hooks dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local run-canonical-promotion
 
-setup: setup-hooks
+setup: setup-main setup-hooks
 	@echo "Worktree setup complete."
+
+setup-main:
+	@bash scripts/setup-refresh-main.sh
 
 setup-hooks:
 	@bash scripts/install-git-hooks.sh
