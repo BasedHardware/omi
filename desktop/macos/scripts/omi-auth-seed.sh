@@ -1,9 +1,11 @@
 #!/bin/bash
 # omi-auth-seed.sh — replay a captured auth session into a test bundle.
 #
-# Writes the auth_* UserDefaults keys (and hasCompletedOnboarding) captured by
-# omi-auth-dump.sh into the target bundle's domain. On next launch the app's
-# restoreAuthState() picks them up and boots already-signed-in — no browser.
+# Writes the auth-state UserDefaults keys (isSignedIn, userEmail, userId,
+# names, onboarding) captured by omi-auth-dump.sh into the target bundle's
+# domain.  Auth tokens (idToken, refreshToken, expiry, tokenUserId) are shared
+# via the login Keychain under a fixed service/account on ALL builds, so they
+# are already available to the named bundle — no per-bundle seed needed.
 #
 # Run this BEFORE launching the bundle (UserDefaults is read at startup).
 #
@@ -22,9 +24,15 @@ IN="${2:-$(cd "$(dirname "$0")/.." && pwd)/tmp/desktop-auth.json}"
 
 [ -f "$IN" ] || { echo "No auth file at $IN — run omi-auth-dump.sh first." >&2; exit 1; }
 
-python3 - "$TARGET" "$IN" <<'PY'
+# Token secrets live in the shared login Keychain — never write them to the
+# target bundle's UserDefaults (that was the plaintext path this PR removed).
+SKIP_KEYS="auth_idToken auth_refreshToken auth_tokenExpiry auth_tokenUserId"
+
+python3 - "$TARGET" "$IN" "$SKIP_KEYS" <<'PY'
 import json, subprocess, sys
+
 target, inp = sys.argv[1], sys.argv[2]
+skip = set(sys.argv[3].split())
 data = json.load(open(inp))
 
 flag = {"boolean": "-bool", "string": "-string", "integer": "-int",
@@ -32,6 +40,8 @@ flag = {"boolean": "-bool", "string": "-string", "integer": "-int",
 
 n = 0
 for k, info in data.items():
+    if k in skip:
+        continue
     typ, val = info["type"], info["value"]
     # `defaults read` prints booleans as 1/0, but `defaults write -bool` only
     # accepts true/false/yes/no — convert so the write doesn't fail.
@@ -43,3 +53,4 @@ print(f"Seeded {n} keys into {target}")
 PY
 
 echo "Done — launch $TARGET and it boots signed-in (no web login)."
+echo "Auth tokens are shared via the login Keychain — no per-bundle token seed needed."
