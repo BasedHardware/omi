@@ -1120,10 +1120,12 @@ private func statusBadge(isGranted: Bool) -> some View {
     )
 }
 
+/// Numbered how-to row. Neutral styling by default — purple is off-brand
+/// (repo UI rule: never use purple anywhere).
 private func instructionStep(
     number: Int, text: String,
-    numberColor: Color = .white,
-    circleFill: Color = OmiColors.purplePrimary
+    numberColor: Color = OmiColors.textPrimary,
+    circleFill: Color = OmiColors.backgroundTertiary
 ) -> some View {
     HStack(alignment: .top, spacing: 12) {
         Text("\(number)")
@@ -1138,12 +1140,9 @@ private func instructionStep(
     }
 }
 
-/// Neutral (non-purple) variant used by the System Audio section.
+/// Kept as an alias for the System Audio section (now identical to the default).
 private func neutralInstructionStep(number: Int, text: String) -> some View {
-    instructionStep(
-        number: number, text: text,
-        numberColor: OmiColors.textPrimary,
-        circleFill: OmiColors.backgroundTertiary)
+    instructionStep(number: number, text: text)
 }
 
 #if canImport(PreviewsMacros)

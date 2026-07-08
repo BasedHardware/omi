@@ -277,7 +277,7 @@ final class AudioSourceManager: ObservableObject {
                     AppState.current?.recordSystemAudioCaptureOutcome(
                         SystemAudioPermissionStatus.classify(captureError: error))
                 }
-                print("AudioSourceManager: system audio capture failed, continuing mic-only: \(error)")
+                logger.error("System audio capture failed, continuing mic-only: \(error)")
             }
         }
 
