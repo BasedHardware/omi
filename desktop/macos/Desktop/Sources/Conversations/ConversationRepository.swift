@@ -56,6 +56,16 @@ struct ConversationEntityMetadata: Sendable, Equatable {
   }
 }
 
+private enum MutationDrainWakeup {
+  case retry
+  case completed(Result<Bool, Error>)
+}
+
+private struct MutationDrainWaiter {
+  let value: ConversationMutationValue
+  let continuation: CheckedContinuation<MutationDrainWakeup, Never>
+}
+
 protocol ConversationRemoteServing: Sendable {
   func list(query: ConversationQuery) async throws -> [ServerConversation]
   func count(query: ConversationQuery) async throws -> Int
@@ -166,11 +176,15 @@ final class ConversationRepository: ObservableObject {
   private let cache: any ConversationCachePersisting
   private let now: @Sendable () -> Date
   private let accountIdProvider: @MainActor () -> String
+  private let onMutationWaiterRegistered: @MainActor (String, ConversationMutationValue) -> Void
   private var pendingMutations: [String: ConversationPendingMutation] = [:]
+  private var pendingMutationVersions: [String: UInt64] = [:]
   private var currentQuery = ConversationQuery()
+  private var activeQuerySnapshotIds: [String] = []
   private var generation: UInt64 = 0
   private var searchGeneration: UInt64 = 0
   private var mutationDrainTokens: [String: UUID] = [:]
+  private var mutationDrainWaiters: [String: [MutationDrainWaiter]] = [:]
   private var didAttemptLegacyMigration = false
   private let legacyMigrationEnabled: Bool
 
@@ -181,12 +195,14 @@ final class ConversationRepository: ObservableObject {
     accountIdProvider: @escaping @MainActor () -> String = {
       RewindDatabase.currentUserId ?? "anonymous"
     },
+    onMutationWaiterRegistered: @escaping @MainActor (String, ConversationMutationValue) -> Void = { _, _ in },
     legacyMigrationEnabled: Bool = true
   ) {
     self.remote = remote
     self.cache = cache
     self.now = now
     self.accountIdProvider = accountIdProvider
+    self.onMutationWaiterRegistered = onMutationWaiterRegistered
     self.legacyMigrationEnabled = legacyMigrationEnabled
   }
 
@@ -199,23 +215,40 @@ final class ConversationRepository: ObservableObject {
   }
 
   func seed(_ conversation: ServerConversation) {
-    if let existing = entitiesById[conversation.id],
-       let existingUpdatedAt = existing.updatedAt,
-       let incomingUpdatedAt = conversation.updatedAt,
-       existingUpdatedAt > incomingUpdatedAt {
-      return
-    }
-    entitiesById[conversation.id] = applyPending(to: conversation)
-    let completeness: ConversationCompleteness = conversation.transcriptSegmentsIncluded
+    let incomingCompleteness: ConversationCompleteness = conversation.transcriptSegmentsIncluded
       ? [.list, .detail, .transcript] : [.list]
     let seededAt = now()
+    let existingMetadata = metadataById[conversation.id]
+    let existingEntry = entitiesById[conversation.id].map { existing in
+      ConversationCacheEntry(
+        conversation: existing,
+        completeness: existingMetadata?.completeness ?? [.list],
+        cacheWrittenAt: existingMetadata?.fetchedAt ?? seededAt,
+        listFetchedAt: existingMetadata?.listFetchedAt,
+        detailFetchedAt: existingMetadata?.detailFetchedAt,
+        transcriptFetchedAt: existingMetadata?.transcriptFetchedAt
+      )
+    }
+    let merged = ConversationProjectionMerge.merge(
+      incoming: conversation,
+      incomingCompleteness: incomingCompleteness,
+      cached: existingEntry,
+      fetchedAt: seededAt
+    )
+    let displayed = applyPending(to: merged.conversation)
+    if let existing = entitiesById[conversation.id],
+       Self.hasIdenticalProjectionContent(existing, displayed),
+       existingMetadata?.completeness == merged.completeness {
+      return
+    }
+    entitiesById[conversation.id] = displayed
     metadataById[conversation.id] = ConversationEntityMetadata(
-      completeness: completeness,
-      source: .seeded,
-      fetchedAt: seededAt,
-      listFetchedAt: seededAt,
-      detailFetchedAt: completeness.contains(.detail) ? seededAt : nil,
-      transcriptFetchedAt: completeness.contains(.transcript) ? seededAt : nil,
+      completeness: merged.completeness,
+      source: existingMetadata?.source ?? .seeded,
+      fetchedAt: merged.cacheWrittenAt,
+      listFetchedAt: merged.listFetchedAt,
+      detailFetchedAt: merged.detailFetchedAt,
+      transcriptFetchedAt: merged.transcriptFetchedAt,
       syncState: pendingMutations[conversation.id] == nil ? .synced : .pending
     )
   }
@@ -231,11 +264,12 @@ final class ConversationRepository: ObservableObject {
     await migrateLegacyCacheIfNeeded(query: query, accountId: accountId, requestGeneration: requestGeneration)
 
     do {
+      let pendingVersions = pendingMutationVersions
       async let cachedTask = cache.load(query: query, accountId: accountId)
       async let pendingTask = cache.loadPendingMutations(accountId: accountId)
       let (cached, pending) = try await (cachedTask, pendingTask)
       guard requestGeneration == generation, accountId == accountIdProvider() else { return }
-      pendingMutations = pending
+      mergeLoadedPendingMutations(pending, versionsAtLoadStart: pendingVersions)
       publish(cached.map(\.conversation), ids: cached.map { $0.conversation.id })
       publishMetadata(cached, source: .cache)
       if !cached.isEmpty {
@@ -267,6 +301,7 @@ final class ConversationRepository: ObservableObject {
       guard requestGeneration == generation, query == currentQuery, accountId == accountIdProvider() else { return }
       publish(cached.map(\.conversation), ids: cached.map { $0.conversation.id })
       publishMetadata(cached, source: .server)
+      error = nil
 
       do {
         let count = try await countTask
@@ -301,6 +336,7 @@ final class ConversationRepository: ObservableObject {
         guard requestGeneration == generation, accountId == accountIdProvider() else { return }
         entitiesById[id] = applyPending(to: cached.conversation)
         metadataById[id] = metadata(for: cached, source: .cache)
+        reconcileVisibleMembership(for: id)
       }
     } catch {
       logError("ConversationRepository: cached detail load failed", error: error)
@@ -327,6 +363,7 @@ final class ConversationRepository: ObservableObject {
         guard requestGeneration == generation, accountId == accountIdProvider() else { return }
         metadataById[id] = metadata(for: entry, source: .server)
       }
+      reconcileVisibleMembership(for: id)
     } catch {
       guard requestGeneration == generation else { return }
       if case APIError.httpError(let statusCode, _) = error, statusCode == 404 {
@@ -334,6 +371,7 @@ final class ConversationRepository: ObservableObject {
         guard requestGeneration == generation, accountId == accountIdProvider() else { return }
         entitiesById.removeValue(forKey: id)
         metadataById.removeValue(forKey: id)
+        activeQuerySnapshotIds.removeAll { $0 == id }
         conversationIds.removeAll { $0 == id }
         searchResultIds.removeAll { $0 == id }
         return
@@ -359,6 +397,7 @@ final class ConversationRepository: ObservableObject {
           listFetchedAt: redactedAt,
           syncState: .synced
         )
+        reconcileVisibleMembership(for: id)
         return
       }
       logError("ConversationRepository: detail refresh failed", error: error)
@@ -422,43 +461,67 @@ final class ConversationRepository: ObservableObject {
   func updateTitle(id: String, title: String) async throws {
     let requestGeneration = generation
     let accountId = accountIdProvider()
-    var mutation = pendingMutations[id] ?? ConversationPendingMutation()
-    mutation.setTitle(title)
-    try await stage(
-      mutation: mutation,
-      conversationId: id,
-      accountId: accountId,
-      requestGeneration: requestGeneration
+    let value = ConversationMutationValue.title(title)
+    if !pendingMutation(value, matches: pendingMutations[id]) {
+      var mutation = pendingMutations[id] ?? ConversationPendingMutation()
+      mutation.setTitle(title)
+      try await stage(
+        mutation: mutation,
+        conversationId: id,
+        accountId: accountId,
+        requestGeneration: requestGeneration
+      )
+    }
+    _ = try await drainMutation(
+      id: id,
+      value: value,
+      requestGeneration: requestGeneration,
+      accountId: accountId
     )
-    try await drainMutations(id: id, requestGeneration: requestGeneration, accountId: accountId)
   }
 
   func updateStarred(id: String, starred: Bool) async throws {
     let requestGeneration = generation
     let accountId = accountIdProvider()
-    var mutation = pendingMutations[id] ?? ConversationPendingMutation()
-    mutation.setStarred(starred)
-    try await stage(
-      mutation: mutation,
-      conversationId: id,
-      accountId: accountId,
-      requestGeneration: requestGeneration
+    let value = ConversationMutationValue.starred(starred)
+    if !pendingMutation(value, matches: pendingMutations[id]) {
+      var mutation = pendingMutations[id] ?? ConversationPendingMutation()
+      mutation.setStarred(starred)
+      try await stage(
+        mutation: mutation,
+        conversationId: id,
+        accountId: accountId,
+        requestGeneration: requestGeneration
+      )
+    }
+    _ = try await drainMutation(
+      id: id,
+      value: value,
+      requestGeneration: requestGeneration,
+      accountId: accountId
     )
-    try await drainMutations(id: id, requestGeneration: requestGeneration, accountId: accountId)
   }
 
   func moveToFolder(id: String, folderId: String?) async throws {
     let requestGeneration = generation
     let accountId = accountIdProvider()
-    var mutation = pendingMutations[id] ?? ConversationPendingMutation()
-    mutation.setFolderId(folderId)
-    try await stage(
-      mutation: mutation,
-      conversationId: id,
-      accountId: accountId,
-      requestGeneration: requestGeneration
+    let value = ConversationMutationValue.folder(folderId)
+    if !pendingMutation(value, matches: pendingMutations[id]) {
+      var mutation = pendingMutations[id] ?? ConversationPendingMutation()
+      mutation.setFolderId(folderId)
+      try await stage(
+        mutation: mutation,
+        conversationId: id,
+        accountId: accountId,
+        requestGeneration: requestGeneration
+      )
+    }
+    _ = try await drainMutation(
+      id: id,
+      value: value,
+      requestGeneration: requestGeneration,
+      accountId: accountId
     )
-    try await drainMutations(id: id, requestGeneration: requestGeneration, accountId: accountId)
   }
 
   func delete(id: String) async throws {
@@ -470,9 +533,10 @@ final class ConversationRepository: ObservableObject {
         throw CancellationError()
       }
       try await cache.remove(id: id, accountId: accountId)
-      pendingMutations.removeValue(forKey: id)
+      setPendingMutation(nil, for: id)
       try await cache.savePendingMutation(nil, conversationId: id, accountId: accountId)
       entitiesById.removeValue(forKey: id)
+      activeQuerySnapshotIds.removeAll { $0 == id }
       conversationIds.removeAll { $0 == id }
       searchResultIds.removeAll { $0 == id }
     } catch {
@@ -503,7 +567,13 @@ final class ConversationRepository: ObservableObject {
     conversationIds = []
     searchResultIds = []
     pendingMutations = [:]
+    pendingMutationVersions = [:]
     mutationDrainTokens = [:]
+    mutationDrainWaiters.values.flatMap { $0 }.forEach {
+      $0.continuation.resume(returning: .completed(.failure(CancellationError())))
+    }
+    mutationDrainWaiters = [:]
+    activeQuerySnapshotIds = []
     totalCount = nil
     filteredCount = nil
     isLoading = false
@@ -525,7 +595,8 @@ final class ConversationRepository: ObservableObject {
     for conversation in conversations {
       entitiesById[conversation.id] = applyPending(to: conversation)
     }
-    conversationIds = ids.filter { id in
+    activeQuerySnapshotIds = ids
+    conversationIds = activeQuerySnapshotIds.filter { id in
       guard let conversation = entitiesById[id] else { return false }
       return matchesCurrentQuery(conversation)
     }
@@ -573,20 +644,9 @@ final class ConversationRepository: ObservableObject {
   }
 
   private func reconcileVisibleMembership(for id: String) {
-    guard let conversation = entitiesById[id] else {
-      conversationIds.removeAll { $0 == id }
-      return
-    }
-    if matchesCurrentQuery(conversation) {
-      if !conversationIds.contains(id) { conversationIds.append(id) }
-      conversationIds.sort {
-        (entitiesById[$0]?.createdAt ?? .distantPast) > (entitiesById[$1]?.createdAt ?? .distantPast)
-      }
-      if conversationIds.count > currentQuery.limit {
-        conversationIds = Array(conversationIds.prefix(currentQuery.limit))
-      }
-    } else {
-      conversationIds.removeAll { $0 == id }
+    conversationIds = activeQuerySnapshotIds.filter { candidateId in
+      guard let conversation = entitiesById[candidateId] else { return false }
+      return matchesCurrentQuery(conversation)
     }
   }
 
@@ -595,6 +655,29 @@ final class ConversationRepository: ObservableObject {
       mutation: pendingMutations[conversation.id],
       to: conversation
     )
+  }
+
+  private func setPendingMutation(_ mutation: ConversationPendingMutation?, for id: String) {
+    let normalized = mutation.flatMap { $0.isEmpty ? nil : $0 }
+    guard pendingMutations[id] != normalized else { return }
+    if let normalized {
+      pendingMutations[id] = normalized
+    } else {
+      pendingMutations.removeValue(forKey: id)
+    }
+    pendingMutationVersions[id, default: 0] &+= 1
+  }
+
+  private func mergeLoadedPendingMutations(
+    _ loaded: [String: ConversationPendingMutation],
+    versionsAtLoadStart: [String: UInt64]
+  ) {
+    let ids = Set(loaded.keys).union(pendingMutations.keys).union(versionsAtLoadStart.keys)
+    for id in ids where pendingMutationVersions[id, default: 0] == versionsAtLoadStart[id, default: 0] {
+      if pendingMutations[id] == nil, let loadedMutation = loaded[id] {
+        setPendingMutation(loadedMutation, for: id)
+      }
+    }
   }
 
   private func stage(
@@ -606,8 +689,17 @@ final class ConversationRepository: ObservableObject {
     guard requestGeneration == generation, accountId == accountIdProvider() else {
       throw CancellationError()
     }
-    pendingMutations[conversationId] = mutation
-    try await cache.savePendingMutation(mutation, conversationId: conversationId, accountId: accountId)
+    let previous = pendingMutations[conversationId]
+    setPendingMutation(mutation, for: conversationId)
+    let stagedVersion = pendingMutationVersions[conversationId, default: 0]
+    do {
+      try await cache.savePendingMutation(mutation, conversationId: conversationId, accountId: accountId)
+    } catch {
+      if pendingMutationVersions[conversationId, default: 0] == stagedVersion {
+        setPendingMutation(previous, for: conversationId)
+      }
+      throw error
+    }
     guard requestGeneration == generation, accountId == accountIdProvider() else {
       throw CancellationError()
     }
@@ -659,10 +751,10 @@ final class ConversationRepository: ObservableObject {
       mutation?.clearResolvedFields(matching: canonical)
     }
     if let mutation, !mutation.isEmpty {
-      pendingMutations[canonical.id] = mutation
+      setPendingMutation(mutation, for: canonical.id)
       try await cache.savePendingMutation(mutation, conversationId: canonical.id, accountId: accountId)
     } else {
-      pendingMutations.removeValue(forKey: canonical.id)
+      setPendingMutation(nil, for: canonical.id)
       try await cache.savePendingMutation(nil, conversationId: canonical.id, accountId: accountId)
     }
     entitiesById[canonical.id] = applyPending(to: mergedCanonical)
@@ -672,68 +764,126 @@ final class ConversationRepository: ObservableObject {
     reconcileVisibleMembership(for: canonical.id)
   }
 
-  private func drainMutations(
+  private func drainMutation(
     id: String,
+    value: ConversationMutationValue,
     requestGeneration: UInt64,
     accountId: String
-  ) async throws {
-    guard mutationDrainTokens[id] == nil else { return }
+  ) async throws -> Bool {
+    if mutationDrainTokens[id] != nil {
+      onMutationWaiterRegistered(id, value)
+      let wakeup = await withCheckedContinuation { continuation in
+        mutationDrainWaiters[id, default: []].append(
+          MutationDrainWaiter(value: value, continuation: continuation)
+        )
+      }
+      switch wakeup {
+      case .completed(let result):
+        return try result.get()
+      case .retry:
+        guard requestGeneration == generation, accountId == accountIdProvider() else {
+          throw CancellationError()
+        }
+        return try await drainMutation(
+          id: id,
+          value: value,
+          requestGeneration: requestGeneration,
+          accountId: accountId
+        )
+      }
+    }
+
     let drainToken = UUID()
     mutationDrainTokens[id] = drainToken
-    defer {
-      if mutationDrainTokens[id] == drainToken {
-        mutationDrainTokens.removeValue(forKey: id)
-      }
+    do {
+      let result = try await performMutationDrain(
+        id: id,
+        value: value,
+        requestGeneration: requestGeneration,
+        accountId: accountId
+      )
+      finishMutationDrain(id: id, value: value, token: drainToken, result: .success(result))
+      return result
+    } catch {
+      finishMutationDrain(id: id, value: value, token: drainToken, result: .failure(error))
+      throw error
     }
-    var firstPermanentFailure: Error?
+  }
 
-    while let mutation = pendingMutations[id], !mutation.isEmpty {
-      guard requestGeneration == generation, accountId == accountIdProvider() else {
-        throw CancellationError()
+  private func performMutationDrain(
+    id: String,
+    value: ConversationMutationValue,
+    requestGeneration: UInt64,
+    accountId: String
+  ) async throws -> Bool {
+    guard requestGeneration == generation, accountId == accountIdProvider() else {
+      throw CancellationError()
+    }
+    guard pendingMutation(value, matches: pendingMutations[id]) else { return true }
+
+    do {
+      let acknowledgement: ConversationMutationAcknowledgement
+      switch value {
+      case .title(let title):
+        acknowledgement = try await remote.updateTitle(id: id, title: title)
+      case .starred(let starred):
+        acknowledgement = try await remote.updateStarred(id: id, starred: starred)
+      case .folder(let folderId):
+        acknowledgement = try await remote.moveToFolder(id: id, folderId: folderId)
       }
-      let attemptedValue: ConversationMutationValue
-      if let title = mutation.title {
-        attemptedValue = .title(title)
-      } else if let starred = mutation.starred {
-        attemptedValue = .starred(starred)
-      } else if mutation.hasFolderIdMutation {
-        attemptedValue = .folder(mutation.folderId)
+      return try await acceptAcknowledgement(
+        acknowledgement,
+        requestGeneration: requestGeneration,
+        accountId: accountId
+      )
+    } catch {
+      try await handleMutationFailure(
+        error,
+        attemptedValue: value,
+        id: id,
+        requestGeneration: requestGeneration,
+        accountId: accountId
+      )
+      throw error
+    }
+  }
+
+  private func finishMutationDrain(
+    id: String,
+    value: ConversationMutationValue,
+    token: UUID,
+    result: Result<Bool, Error>
+  ) {
+    guard mutationDrainTokens[id] == token else { return }
+    mutationDrainTokens.removeValue(forKey: id)
+    let waiters = mutationDrainWaiters.removeValue(forKey: id) ?? []
+    for waiter in waiters {
+      if waiter.value == value {
+        waiter.continuation.resume(returning: .completed(result))
       } else {
-        return
-      }
-      do {
-        let acknowledgement: ConversationMutationAcknowledgement
-        switch attemptedValue {
-        case .title(let title):
-          acknowledgement = try await remote.updateTitle(id: id, title: title)
-        case .starred(let starred):
-          acknowledgement = try await remote.updateStarred(id: id, starred: starred)
-        case .folder(let folderId):
-          acknowledgement = try await remote.moveToFolder(id: id, folderId: folderId)
-        }
-        let confirmed = try await acceptAcknowledgement(
-          acknowledgement,
-          requestGeneration: requestGeneration,
-          accountId: accountId
-        )
-        if !confirmed { return }
-      } catch {
-        let permanent = Self.isPermanentMutationFailure(error)
-        try await handleMutationFailure(
-          error,
-          attemptedValue: attemptedValue,
-          id: id,
-          requestGeneration: requestGeneration,
-          accountId: accountId
-        )
-        if permanent {
-          if firstPermanentFailure == nil { firstPermanentFailure = error }
-          continue
-        }
-        throw error
+        waiter.continuation.resume(returning: .retry)
       }
     }
-    if let firstPermanentFailure { throw firstPermanentFailure }
+  }
+
+  private func pendingMutation(
+    _ value: ConversationMutationValue,
+    matches mutation: ConversationPendingMutation?
+  ) -> Bool {
+    guard let mutation else { return false }
+    switch value {
+    case .title(let title): return mutation.title == title
+    case .starred(let starred): return mutation.starred == starred
+    case .folder(let folderId): return mutation.hasFolderIdMutation && mutation.folderId == folderId
+    }
+  }
+
+  private func nextPendingMutation(for id: String) -> ConversationMutationValue? {
+    guard let mutation = pendingMutations[id] else { return nil }
+    if let title = mutation.title { return .title(title) }
+    if let starred = mutation.starred { return .starred(starred) }
+    if mutation.hasFolderIdMutation { return .folder(mutation.folderId) }
+    return nil
   }
 
   private func acceptAcknowledgement(
@@ -760,26 +910,32 @@ final class ConversationRepository: ObservableObject {
       return false
     }
 
-    guard let current = entitiesById[acknowledgement.id] else { return true }
+    let current = entitiesById[acknowledgement.id]
+    let cached = try await cache.load(id: acknowledgement.id, accountId: accountId)
+    guard current != nil || cached != nil else { return true }
     var acknowledgedMutation = ConversationPendingMutation()
     switch acknowledgement.value {
     case .title(let title): acknowledgedMutation.setTitle(title)
     case .starred(let starred): acknowledgedMutation.setStarred(starred)
     case .folder(let folderId): acknowledgedMutation.setFolderId(folderId)
     }
-    let acknowledged = Self.withServerVersion(
-      ConversationReconciliationPolicy.apply(mutation: acknowledgedMutation, to: current),
-      updatedAt: acknowledgement.updatedAt,
-      revision: acknowledgement.revision
-    )
-    let cached = try await cache.load(id: acknowledgement.id, accountId: accountId)
-    try await cache.upsertServerConversation(
-      acknowledged,
-      completeness: cached?.completeness ?? [.list],
-      fetchedAt: now(),
-      accountId: accountId,
-      preserveProjectionFreshness: true
-    )
+    if let cached {
+      let acknowledged = Self.withServerVersion(
+        ConversationReconciliationPolicy.apply(
+          mutation: acknowledgedMutation,
+          to: cached.conversation
+        ),
+        updatedAt: acknowledgement.updatedAt,
+        revision: acknowledgement.revision
+      )
+      try await cache.upsertServerConversation(
+        acknowledged,
+        completeness: cached.completeness,
+        fetchedAt: now(),
+        accountId: accountId,
+        preserveProjectionFreshness: true
+      )
+    }
     guard requestGeneration == generation, accountId == accountIdProvider() else {
       throw CancellationError()
     }
@@ -787,14 +943,14 @@ final class ConversationRepository: ObservableObject {
     var pending = pendingMutations[acknowledgement.id]
     pending?.clearAcknowledged(acknowledgement.value)
     if let pending, !pending.isEmpty {
-      pendingMutations[acknowledgement.id] = pending
+      setPendingMutation(pending, for: acknowledgement.id)
       try await cache.savePendingMutation(
         pending,
         conversationId: acknowledgement.id,
         accountId: accountId
       )
     } else {
-      pendingMutations.removeValue(forKey: acknowledgement.id)
+      setPendingMutation(nil, for: acknowledgement.id)
       try await cache.savePendingMutation(nil, conversationId: acknowledgement.id, accountId: accountId)
     }
     let merged = try await cache.load(id: acknowledgement.id, accountId: accountId)
@@ -804,6 +960,15 @@ final class ConversationRepository: ObservableObject {
     if let merged {
       entitiesById[acknowledgement.id] = applyPending(to: merged.conversation)
       metadataById[acknowledgement.id] = metadata(for: merged, source: .server)
+      reconcileVisibleMembership(for: acknowledgement.id)
+    } else if let current {
+      entitiesById[acknowledgement.id] = applyPending(
+        to: Self.withServerVersion(
+          current,
+          updatedAt: acknowledgement.updatedAt,
+          revision: acknowledgement.revision
+        )
+      )
       reconcileVisibleMembership(for: acknowledgement.id)
     }
     return true
@@ -835,10 +1000,10 @@ final class ConversationRepository: ObservableObject {
     var pending = pendingMutations[id]
     pending?.clearAcknowledged(attemptedValue)
     if let pending, !pending.isEmpty {
-      pendingMutations[id] = pending
+      setPendingMutation(pending, for: id)
       try await cache.savePendingMutation(pending, conversationId: id, accountId: accountId)
     } else {
-      pendingMutations.removeValue(forKey: id)
+      setPendingMutation(nil, for: id)
       try await cache.savePendingMutation(nil, conversationId: id, accountId: accountId)
     }
     await loadDetail(id: id)
@@ -873,10 +1038,10 @@ final class ConversationRepository: ObservableObject {
       }
       mutation.clearResolvedFields(matching: conversation)
       if mutation.isEmpty {
-        pendingMutations.removeValue(forKey: conversation.id)
+        setPendingMutation(nil, for: conversation.id)
         try await cache.savePendingMutation(nil, conversationId: conversation.id, accountId: accountId)
       } else {
-        pendingMutations[conversation.id] = mutation
+        setPendingMutation(mutation, for: conversation.id)
         try await cache.savePendingMutation(mutation, conversationId: conversation.id, accountId: accountId)
       }
     }
@@ -885,6 +1050,20 @@ final class ConversationRepository: ObservableObject {
   private static func isPermanentMutationFailure(_ error: Error) -> Bool {
     guard case APIError.httpError(let statusCode, _) = error else { return false }
     return (400..<500).contains(statusCode) && ![408, 425, 429].contains(statusCode)
+  }
+
+  private static func hasIdenticalProjectionContent(
+    _ lhs: ServerConversation,
+    _ rhs: ServerConversation
+  ) -> Bool {
+    // ServerConversation.== is intentionally list-oriented and omits rich
+    // detail fields. Seed idempotence must include transcript/speaker changes.
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.sortedKeys]
+    guard let lhsData = try? encoder.encode(lhs),
+          let rhsData = try? encoder.encode(rhs)
+    else { return false }
+    return lhsData == rhsData
   }
 
   private static func withServerVersion(
@@ -954,11 +1133,20 @@ final class ConversationRepository: ObservableObject {
 
   private func retryPendingMutations(requestGeneration: UInt64, accountId: String) async {
     for id in Array(pendingMutations.keys) {
-      guard requestGeneration == generation, accountId == accountIdProvider() else { return }
-      do {
-        try await drainMutations(id: id, requestGeneration: requestGeneration, accountId: accountId)
-      } catch {
-        logError("ConversationRepository: pending mutation retry failed", error: error)
+      while let value = nextPendingMutation(for: id) {
+        guard requestGeneration == generation, accountId == accountIdProvider() else { return }
+        do {
+          let confirmed = try await drainMutation(
+            id: id,
+            value: value,
+            requestGeneration: requestGeneration,
+            accountId: accountId
+          )
+          if !confirmed { break }
+        } catch {
+          logError("ConversationRepository: pending mutation retry failed", error: error)
+          if !Self.isPermanentMutationFailure(error) { break }
+        }
       }
     }
   }

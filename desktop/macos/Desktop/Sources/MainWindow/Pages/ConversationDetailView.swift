@@ -765,6 +765,7 @@ struct ConversationDetailView: View {
                 translations: oldSegment.translations
             )
         }
+        guard repository.conversation(id: updatedConversation.id) != nil else { return }
         repository.seed(updatedConversation)
     }
 

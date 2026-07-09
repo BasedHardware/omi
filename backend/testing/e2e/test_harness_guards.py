@@ -55,11 +55,11 @@ def test_network_guard_blocks_sendto_three_arg_form():
 
 
 def test_backend_storage_client_is_fake_after_app_import(client):
-    """The backend storage module should hold the fake GCS client, not google's real client."""
+    """The backend's lazy storage getter should construct the fake GCS client."""
     from fakes.storage import FakeStorageClient
     import utils.other.storage as storage_helpers
 
-    assert isinstance(storage_helpers.storage_client, FakeStorageClient)
+    assert isinstance(storage_helpers._get_storage_client(), FakeStorageClient)
 
 
 def test_backend_database_globals_are_fake_after_app_import(client, fake_firestore, fake_redis):
@@ -72,5 +72,7 @@ def test_backend_database_globals_are_fake_after_app_import(client, fake_firesto
 
     assert db_client.db is fake_firestore
     assert redis_db.r is fake_redis
+    assert redis_db._RATE_LIMIT_LUA.registered_client is fake_redis
+    assert redis_db._TTS_RATE_LIMIT_LUA.registered_client is fake_redis
     assert webhook_health.r is fake_redis
     assert fair_use.redis_client is fake_redis

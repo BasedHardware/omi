@@ -1,5 +1,7 @@
 from typing import Any, Dict, Optional
 
+from models.conversation_version import server_version_data
+
 CONVERSATION_LIST_FIELDS = (
     'id',
     'created_at',
@@ -41,6 +43,7 @@ def conversation_snapshot_data(snapshot) -> Optional[Dict[str, Any]]:
     data.setdefault('id', snapshot.id)
     update_time = getattr(snapshot, 'update_time', None)
     if update_time is not None:
-        data['updated_at'] = update_time
-        data['revision'] = update_time.isoformat()
+        updated_at, revision = server_version_data(update_time)
+        data['updated_at'] = updated_at
+        data['revision'] = revision
     return data

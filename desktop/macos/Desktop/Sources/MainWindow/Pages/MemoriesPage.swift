@@ -1356,7 +1356,6 @@ struct MemoriesPage: View {
     Group {
       if let conversation = viewModel.linkedConversation {
         // Show conversation detail view
-        let _ = ConversationRepository.shared.seed(conversation)
         ConversationDetailView(
           conversationId: conversation.id,
           repository: ConversationRepository.shared,

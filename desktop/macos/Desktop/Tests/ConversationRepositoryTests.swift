@@ -1,3 +1,4 @@
+import Combine
 import XCTest
 @testable import Omi_Computer
 
@@ -33,6 +34,7 @@ private enum ConversationRemoteStubError: Error {
 
 private actor ConversationRemoteStub: ConversationRemoteServing {
   var listResult: [ServerConversation]
+  var listError: Error?
   var detailById: [String: ServerConversation]
   var detailError: Error?
   var titleResult: ServerConversation?
@@ -44,14 +46,17 @@ private actor ConversationRemoteStub: ConversationRemoteServing {
   let searchGates: [String: ConversationTestGate]
   let titleResults: [String: ServerConversation]
   let titleGates: [String: ConversationTestGate]
+  let starredGate: ConversationTestGate?
   let deleteGate: ConversationTestGate?
   let titleErrors: [String: Error]
+  let starredError: Error?
   let lightweightAcks: Bool
   let statusOnlyAcks: Bool
   private var titleRequests: [String] = []
 
   init(
     list: [ServerConversation],
+    listError: Error? = nil,
     detailById: [String: ServerConversation] = [:],
     detailError: Error? = nil,
     titleResult: ServerConversation? = nil,
@@ -63,12 +68,15 @@ private actor ConversationRemoteStub: ConversationRemoteServing {
     searchGates: [String: ConversationTestGate] = [:],
     titleResults: [String: ServerConversation] = [:],
     titleGates: [String: ConversationTestGate] = [:],
+    starredGate: ConversationTestGate? = nil,
     deleteGate: ConversationTestGate? = nil,
     titleErrors: [String: Error] = [:],
+    starredError: Error? = nil,
     lightweightAcks: Bool = false,
     statusOnlyAcks: Bool = false
   ) {
     listResult = list
+    self.listError = listError
     self.detailById = detailById
     self.detailError = detailError
     self.titleResult = titleResult
@@ -80,14 +88,17 @@ private actor ConversationRemoteStub: ConversationRemoteServing {
     self.searchGates = searchGates
     self.titleResults = titleResults
     self.titleGates = titleGates
+    self.starredGate = starredGate
     self.deleteGate = deleteGate
     self.titleErrors = titleErrors
+    self.starredError = starredError
     self.lightweightAcks = lightweightAcks
     self.statusOnlyAcks = statusOnlyAcks
   }
 
   func list(query: ConversationQuery) async throws -> [ServerConversation] {
     await listGate?.wait()
+    if let listError { throw listError }
     return listResult
   }
 
@@ -119,6 +130,8 @@ private actor ConversationRemoteStub: ConversationRemoteServing {
   }
 
   func updateStarred(id: String, starred: Bool) async throws -> ConversationMutationAcknowledgement {
+    await starredGate?.wait()
+    if let starredError { throw starredError }
     if let mutationError { throw mutationError }
     let conversation = starredResult ?? listResult.first { $0.id == id }!
     return ConversationMutationAcknowledgement(
@@ -148,27 +161,42 @@ private actor ConversationRemoteStub: ConversationRemoteServing {
   }
 
   func requestedTitles() -> [String] { titleRequests }
+
+  func setListError(_ error: Error?) { listError = error }
 }
 
 private actor ConversationCacheStub: ConversationCachePersisting {
+  private struct PendingTitleObserver {
+    let conversationId: String
+    let title: String
+    let continuation: CheckedContinuation<Void, Never>
+  }
+
   private var entries: [String: ConversationCacheEntry]
   private var order: [String]
   private var pending: [String: ConversationPendingMutation]
   private let idLoadGate: ConversationTestGate?
   private let listLoadGate: ConversationTestGate?
+  private let pendingLoadGate: ConversationTestGate?
+  private let pendingSaveError: Error?
   private var serverUpsertAccounts: [String] = []
+  private var pendingTitleObservers: [PendingTitleObserver] = []
 
   init(
     entries: [ConversationCacheEntry] = [],
     pending: [String: ConversationPendingMutation] = [:],
     idLoadGate: ConversationTestGate? = nil,
-    listLoadGate: ConversationTestGate? = nil
+    listLoadGate: ConversationTestGate? = nil,
+    pendingLoadGate: ConversationTestGate? = nil,
+    pendingSaveError: Error? = nil
   ) {
     self.entries = Dictionary(uniqueKeysWithValues: entries.map { ($0.conversation.id, $0) })
     order = entries.map { $0.conversation.id }
     self.pending = pending
     self.idLoadGate = idLoadGate
     self.listLoadGate = listLoadGate
+    self.pendingLoadGate = pendingLoadGate
+    self.pendingSaveError = pendingSaveError
   }
 
   func load(query: ConversationQuery, accountId: String) async throws -> [ConversationCacheEntry] {
@@ -239,23 +267,48 @@ private actor ConversationCacheStub: ConversationCachePersisting {
     order.removeAll { $0 == id }
   }
 
-  func loadPendingMutations(accountId: String) async throws -> [String: ConversationPendingMutation] { pending }
+  func loadPendingMutations(accountId: String) async throws -> [String: ConversationPendingMutation] {
+    let snapshot = pending
+    await pendingLoadGate?.wait()
+    return snapshot
+  }
 
   func savePendingMutation(
     _ mutation: ConversationPendingMutation?,
     conversationId: String,
     accountId: String
   ) async throws {
+    if let pendingSaveError { throw pendingSaveError }
     if let mutation, !mutation.isEmpty {
       pending[conversationId] = mutation
     } else {
       pending.removeValue(forKey: conversationId)
     }
+    let ready = pendingTitleObservers.filter {
+      $0.conversationId == conversationId && pending[conversationId]?.title == $0.title
+    }
+    pendingTitleObservers.removeAll { observer in
+      ready.contains { $0.conversationId == observer.conversationId && $0.title == observer.title }
+    }
+    ready.forEach { $0.continuation.resume() }
   }
 
   func invalidateCache() async {}
 
   func recordedServerUpsertAccounts() -> [String] { serverUpsertAccounts }
+
+  func waitUntilPendingTitle(_ title: String, conversationId: String) async {
+    if pending[conversationId]?.title == title { return }
+    await withCheckedContinuation { continuation in
+      pendingTitleObservers.append(
+        PendingTitleObserver(
+          conversationId: conversationId,
+          title: title,
+          continuation: continuation
+        )
+      )
+    }
+  }
 }
 
 @MainActor
@@ -316,6 +369,121 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(merged.conversation.structured.overview, "fresh")
     XCTAssertEqual(merged.conversation.transcriptSegments.map(\.text), ["offline transcript"])
     XCTAssertTrue(merged.completeness.contains(.transcript))
+  }
+
+  func testSeedIsIdempotentAndCannotDowngradeEqualVersionDetail() {
+    let rich = makeConversation(
+      id: "c1",
+      title: "Canonical",
+      revision: "2",
+      transcript: [makeSegment(text: "complete transcript")],
+      transcriptIncluded: true
+    )
+    let listProjection = makeConversation(id: "c1", title: "Canonical", revision: "2")
+    let repository = ConversationRepository(
+      remote: ConversationRemoteStub(list: []),
+      cache: ConversationCacheStub(),
+      legacyMigrationEnabled: false
+    )
+    repository.seed(rich)
+    var notifications = 0
+    let cancellable = repository.objectWillChange.sink { notifications += 1 }
+
+    repository.seed(listProjection)
+
+    XCTAssertEqual(repository.conversation(id: "c1")?.transcriptSegments.map(\.text), ["complete transcript"])
+    XCTAssertTrue(repository.metadata(id: "c1")?.completeness.contains(.detail) == true)
+    XCTAssertEqual(notifications, 0)
+    withExtendedLifetime(cancellable) {}
+  }
+
+  func testSeedPublishesSameVersionTranscriptSpeakerChanges() {
+    let originalSegment = TranscriptSegment(
+      id: "segment-1",
+      text: "Speaker text",
+      speaker: "SPEAKER_00",
+      isUser: false,
+      personId: nil,
+      start: 0,
+      end: 1
+    )
+    let reassignedSegment = TranscriptSegment(
+      id: "segment-1",
+      text: "Speaker text",
+      speaker: "SPEAKER_00",
+      isUser: true,
+      personId: "person-1",
+      start: 0,
+      end: 1
+    )
+    let original = makeConversation(
+      id: "c1",
+      revision: "2",
+      transcript: [originalSegment],
+      transcriptIncluded: true
+    )
+    let reassigned = makeConversation(
+      id: "c1",
+      revision: "2",
+      transcript: [reassignedSegment],
+      transcriptIncluded: true
+    )
+    let repository = ConversationRepository(
+      remote: ConversationRemoteStub(list: []),
+      cache: ConversationCacheStub(),
+      legacyMigrationEnabled: false
+    )
+    repository.seed(original)
+    var notifications = 0
+    let cancellable = repository.objectWillChange.sink { notifications += 1 }
+
+    repository.seed(reassigned)
+
+    XCTAssertGreaterThan(notifications, 0)
+    XCTAssertEqual(repository.conversation(id: "c1")?.transcriptSegments.first?.personId, "person-1")
+    XCTAssertTrue(repository.conversation(id: "c1")?.transcriptSegments.first?.isUser == true)
+    withExtendedLifetime(cancellable) {}
+  }
+
+  func testPendingJournalLoadCannotEraseConcurrentlyStagedIntent() async throws {
+    let original = makeConversation(id: "c1", title: "Original", revision: "1")
+    let gate = ConversationTestGate()
+    let cache = ConversationCacheStub(entries: [entry(original)], pendingLoadGate: gate)
+    let repository = ConversationRepository(
+      remote: ConversationRemoteStub(list: [original], statusOnlyAcks: true),
+      cache: cache,
+      legacyMigrationEnabled: false
+    )
+
+    let load = Task { await repository.load(query: ConversationQuery()) }
+    await gate.waitUntilBlocked()
+    try await repository.updateTitle(id: "c1", title: "Durable rename")
+    await gate.release()
+    await load.value
+
+    XCTAssertEqual(repository.conversation(id: "c1")?.structured.title, "Durable rename")
+    let pending = try await cache.loadPendingMutations(accountId: "anonymous")
+    XCTAssertEqual(pending["c1"]?.title, "Durable rename")
+  }
+
+  func testJournalSaveFailureRestoresInMemoryIntentAndNeverCallsRemote() async throws {
+    let original = makeConversation(id: "c1", title: "Original", revision: "1")
+    let cache = ConversationCacheStub(
+      entries: [entry(original)],
+      pendingSaveError: ConversationRemoteStubError.mutationFailed
+    )
+    let remote = ConversationRemoteStub(list: [original])
+    let repository = ConversationRepository(remote: remote, cache: cache, legacyMigrationEnabled: false)
+    repository.seed(original)
+
+    do {
+      try await repository.updateTitle(id: "c1", title: "Must not linger")
+      XCTFail("journal failure should surface")
+    } catch {}
+
+    XCTAssertEqual(repository.conversation(id: "c1")?.structured.title, "Original")
+    let requestedTitles = await remote.requestedTitles()
+    XCTAssertTrue(requestedTitles.isEmpty)
   }
 
   func testFailedMutationSurvivesRestartAndClearsOnlyAfterCanonicalAck() async throws {
@@ -467,11 +635,13 @@ final class ConversationRepositoryTests: XCTestCase {
     await firstGate.waitUntilBlocked()
     let requestsWhileFirstBlocked = await remote.requestedTitles()
     XCTAssertEqual(requestsWhileFirstBlocked, ["First"])
-    try await repository.updateTitle(id: "c1", title: "Second")
+    let second = Task { try await repository.updateTitle(id: "c1", title: "Second") }
+    await cache.waitUntilPendingTitle("Second", conversationId: "c1")
     let requestsAfterSecondIntent = await remote.requestedTitles()
     XCTAssertEqual(requestsAfterSecondIntent, ["First"])
     await firstGate.release()
     try await first.value
+    try await second.value
 
     XCTAssertEqual(repository.conversation(id: "c1")?.structured.title, "Second")
     let completedRequests = await remote.requestedTitles()
@@ -618,9 +788,11 @@ final class ConversationRepositoryTests: XCTestCase {
 
     let first = Task { try? await repository.updateTitle(id: "c1", title: "First") }
     await firstGate.waitUntilBlocked()
-    try await repository.updateTitle(id: "c1", title: "Second")
+    let second = Task { try await repository.updateTitle(id: "c1", title: "Second") }
+    await cache.waitUntilPendingTitle("Second", conversationId: "c1")
     await firstGate.release()
     await first.value
+    try await second.value
 
     XCTAssertEqual(repository.conversation(id: "c1")?.structured.title, "Second")
     let requests = await remote.requestedTitles()
@@ -713,6 +885,179 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.metadata(id: "c1")?.syncState, .synced)
     let cached = try await cache.load(id: "c1", accountId: "anonymous")
     XCTAssertEqual(cached?.listFetchedAt, Date(timeIntervalSince1970: 1))
+  }
+
+  func testConcurrentMutationFailureReturnsToItsCallerWithoutLeakingOverlayIntoCanonicalCache() async throws {
+    let original = makeConversation(id: "c1", title: "Original", revision: "1", starred: false)
+    let starredAck = makeConversation(id: "c1", title: "Original", revision: "2", starred: true)
+    let starredGate = ConversationTestGate()
+    let cache = ConversationCacheStub(entries: [entry(original)])
+    let remote = ConversationRemoteStub(
+      list: [original],
+      detailError: ConversationRemoteStubError.mutationFailed,
+      starredResult: starredAck,
+      starredGate: starredGate,
+      titleErrors: ["Rejected": APIError.httpError(statusCode: 400, detail: "invalid title")],
+      lightweightAcks: true
+    )
+    let repository = ConversationRepository(remote: remote, cache: cache, legacyMigrationEnabled: false)
+    repository.seed(original)
+
+    let starTask = Task { try await repository.updateStarred(id: "c1", starred: true) }
+    await starredGate.waitUntilBlocked()
+    let titleTask = Task { try await repository.updateTitle(id: "c1", title: "Rejected") }
+    await cache.waitUntilPendingTitle("Rejected", conversationId: "c1")
+    await starredGate.release()
+
+    try await starTask.value
+    do {
+      try await titleTask.value
+      XCTFail("the rejected title caller must receive its own failure")
+    } catch {}
+
+    let cachedCanonical = try await cache.load(id: "c1", accountId: "anonymous")
+    let canonical = try XCTUnwrap(cachedCanonical)
+    XCTAssertEqual(canonical.conversation.structured.title, "Original")
+    XCTAssertTrue(canonical.conversation.starred)
+
+    let restartGate = ConversationTestGate()
+    let restarted = ConversationRepository(
+      remote: ConversationRemoteStub(list: [starredAck], listGate: restartGate),
+      cache: cache,
+      legacyMigrationEnabled: false
+    )
+    let load = Task { await restarted.load(query: ConversationQuery()) }
+    await restartGate.waitUntilBlocked()
+    XCTAssertEqual(restarted.conversation(id: "c1")?.structured.title, "Original")
+    XCTAssertTrue(restarted.conversation(id: "c1")?.starred == true)
+    await restartGate.release()
+    await load.value
+  }
+
+  func testConcurrentDuplicateMutationCallersSharePermanentFailure() async throws {
+    let original = makeConversation(id: "c1", title: "Original", revision: "1")
+    let gate = ConversationTestGate()
+    let remote = ConversationRemoteStub(
+      list: [original],
+      detailById: ["c1": original],
+      titleGates: ["Rejected": gate],
+      titleErrors: ["Rejected": APIError.httpError(statusCode: 400, detail: "invalid title")]
+    )
+    let waiterRegistered = expectation(description: "duplicate caller joined the in-flight mutation")
+    let repository = ConversationRepository(
+      remote: remote,
+      cache: ConversationCacheStub(entries: [entry(original)]),
+      onMutationWaiterRegistered: { id, value in
+        if id == "c1", value == .title("Rejected") { waiterRegistered.fulfill() }
+      },
+      legacyMigrationEnabled: false
+    )
+    repository.seed(original)
+
+    let first = Task { try await repository.updateTitle(id: "c1", title: "Rejected") }
+    await gate.waitUntilBlocked()
+    let second = Task { try await repository.updateTitle(id: "c1", title: "Rejected") }
+    await fulfillment(of: [waiterRegistered], timeout: 1)
+    await gate.release()
+
+    for task in [first, second] {
+      do {
+        try await task.value
+        XCTFail("every caller of the rejected intent must receive the permanent failure")
+      } catch {}
+    }
+    let requestedTitles = await remote.requestedTitles()
+    XCTAssertEqual(requestedTitles, ["Rejected"])
+    XCTAssertEqual(repository.conversation(id: "c1")?.structured.title, "Original")
+  }
+
+  func testStarredFilterMembershipReturnsAfterPermanentRollback() async throws {
+    let original = makeConversation(id: "c1", revision: "1", starred: true)
+    let repository = ConversationRepository(
+      remote: ConversationRemoteStub(
+        list: [original],
+        detailById: ["c1": original],
+        starredError: APIError.httpError(statusCode: 400, detail: "rejected")
+      ),
+      cache: ConversationCacheStub(entries: [entry(original)]),
+      legacyMigrationEnabled: false
+    )
+    await repository.load(query: ConversationQuery(showStarredOnly: true))
+
+    do {
+      try await repository.updateStarred(id: "c1", starred: false)
+      XCTFail("permanent failure should surface")
+    } catch {}
+
+    XCTAssertEqual(repository.conversationIds, ["c1"])
+    XCTAssertTrue(repository.conversation(id: "c1")?.starred == true)
+  }
+
+  func testFolderFilterMembershipReturnsAfterPermanentRollback() async throws {
+    let original = makeConversation(id: "c1", revision: "1", folderId: "inbox")
+    let repository = ConversationRepository(
+      remote: ConversationRemoteStub(
+        list: [original],
+        detailById: ["c1": original],
+        mutationError: APIError.httpError(statusCode: 404, detail: "folder missing")
+      ),
+      cache: ConversationCacheStub(entries: [entry(original)]),
+      legacyMigrationEnabled: false
+    )
+    await repository.load(query: ConversationQuery(folderId: "inbox"))
+
+    do {
+      try await repository.moveToFolder(id: "c1", folderId: "missing")
+      XCTFail("permanent failure should surface")
+    } catch {}
+
+    XCTAssertEqual(repository.conversationIds, ["c1"])
+    XCTAssertEqual(repository.conversation(id: "c1")?.folderId, "inbox")
+  }
+
+  func testMutatingSearchOnlyEntityCannotInjectItIntoActiveListSnapshot() async throws {
+    let listed = makeConversation(id: "listed", revision: "1")
+    let searched = makeConversation(id: "searched", title: "Search result", revision: "2")
+    let renamed = makeConversation(id: "searched", title: "Renamed", revision: "3")
+    let repository = ConversationRepository(
+      remote: ConversationRemoteStub(
+        list: [listed],
+        searchResults: ["needle": [searched]],
+        titleResults: ["Renamed": renamed],
+        lightweightAcks: true
+      ),
+      cache: ConversationCacheStub(entries: [entry(listed)]),
+      legacyMigrationEnabled: false
+    )
+    await repository.load(query: ConversationQuery(limit: 1))
+    await repository.search("needle")
+
+    try await repository.updateTitle(id: "searched", title: "Renamed")
+
+    XCTAssertEqual(repository.conversationIds, ["listed"])
+    XCTAssertEqual(repository.conversation(id: "searched")?.structured.title, "Renamed")
+  }
+
+  func testSuccessfulRefreshClearsStaleRepositoryError() async {
+    let original = makeConversation(id: "c1", revision: "1")
+    let remote = ConversationRemoteStub(
+      list: [original],
+      listError: ConversationRemoteStubError.mutationFailed
+    )
+    let repository = ConversationRepository(
+      remote: remote,
+      cache: ConversationCacheStub(),
+      legacyMigrationEnabled: false
+    )
+
+    await repository.load(query: ConversationQuery())
+    XCTAssertNotNil(repository.error)
+
+    await remote.setListError(nil)
+    await repository.refresh()
+
+    XCTAssertNil(repository.error)
+    XCTAssertEqual(repository.conversationIds, ["c1"])
   }
 
   func testStatusOnlyAckKeepsOverlayUntilListConfirmsRequestedValue() async throws {
@@ -981,6 +1326,7 @@ final class ConversationRepositoryTests: XCTestCase {
     overview: String = "Overview",
     revision: String,
     starred: Bool = false,
+    folderId: String? = nil,
     transcript: [TranscriptSegment] = [],
     transcriptIncluded: Bool = false,
     deleted: Bool = false,
@@ -1013,7 +1359,7 @@ final class ConversationRepositoryTests: XCTestCase {
       deleted: deleted,
       isLocked: isLocked,
       starred: starred,
-      folderId: nil,
+      folderId: folderId,
       inputDeviceName: inputDeviceName,
       updatedAt: Date(timeIntervalSince1970: Double(revision) ?? 1),
       revision: revision

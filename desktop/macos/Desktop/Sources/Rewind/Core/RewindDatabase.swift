@@ -2367,6 +2367,15 @@ actor RewindDatabase {
             }
         }
 
+        // Keep server ordering at sub-millisecond precision. The legacy
+        // datetime column remains readable for developer databases created by
+        // the earlier unreleased migration.
+        migrator.registerMigration("addConversationServerUpdatedAtEpoch") { db in
+            try db.alter(table: "conversation_cache") { t in
+                t.add(column: "serverUpdatedAtEpoch", .double)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

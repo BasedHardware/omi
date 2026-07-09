@@ -13,10 +13,12 @@ from typing import Optional
 
 from fake_firestore import MockFirestore
 from fake_firestore.document import FakeDocumentReference, NotFound, apply_transformations, get_by_path
+from fake_firestore._helpers import Timestamp
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
 _original_document_set = None
+_original_document_update = None
 
 
 def _patch_document_merge_preserves_subcollections():
@@ -26,11 +28,20 @@ def _patch_document_merge_preserves_subcollections():
     collections inside the parent dict and can overwrite them on merge sets
     when the parent document was not explicitly written yet.
     """
-    global _original_document_set
+    global _original_document_set, _original_document_update
     if _original_document_set is not None:
         return
 
     _original_document_set = FakeDocumentReference.set
+    _original_document_update = FakeDocumentReference.update
+
+    def _update(self, data: dict, timeout: Optional[float] = None):
+        _original_document_update(self, data, timeout=timeout)
+        # Match google-cloud-firestore's update contract so mutation routes can
+        # return the authoritative server revision they use in production.
+        return type('FakeWriteResult', (), {'update_time': Timestamp.from_now()})()
+
+    FakeDocumentReference.update = _update
 
     def _set(self, data: dict, merge: bool = False, timeout: Optional[float] = None) -> None:
         if not merge:

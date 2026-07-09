@@ -84,7 +84,6 @@ struct ChatPage: View {
     }
     .background(OmiColors.backgroundPrimary)
     .sheet(item: $citedConversation) { conversation in
-      let _ = ConversationRepository.shared.seed(conversation)
       ConversationDetailView(
         conversationId: conversation.id,
         repository: ConversationRepository.shared,
@@ -511,6 +510,7 @@ struct ChatPage: View {
     Task {
       await ConversationRepository.shared.loadDetail(id: citation.id)
       if let conversation = ConversationRepository.shared.conversation(id: citation.id) {
+        ConversationRepository.shared.seed(conversation)
         citedConversation = conversation
       } else {
         selectedCitation = nil

@@ -15,6 +15,7 @@ from models.conversation_enums import (
     PostProcessingStatus,
 )
 from models.conversation_photo import ConversationPhoto
+from models.conversation_version import server_version_data
 from models.geolocation import Geolocation
 from models.other import Person
 from models.structured import Structured
@@ -51,10 +52,11 @@ __all__ = [
 def conversation_mutation_data(conversation_id: str, write_result) -> dict:
     """Project the opaque server version from a Firestore write result."""
     update_time = getattr(write_result, 'update_time', None)
+    updated_at, revision = server_version_data(update_time)
     return {
         'id': conversation_id,
-        'updated_at': update_time,
-        'revision': update_time.isoformat() if update_time is not None else None,
+        'updated_at': updated_at,
+        'revision': revision,
     }
 
 

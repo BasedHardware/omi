@@ -4,6 +4,11 @@ tier: 2
 description: Dashboard load and refresh via automation bridge
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/ConversationReconciliationPolicy.swift
+  - desktop/macos/Desktop/Sources/Conversations/ConversationCacheStorage.swift
+  - desktop/macos/Desktop/Sources/Conversations/ConversationRepository.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationRowView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+DataLoading.swift
   - desktop/macos/Desktop/Sources/Stores/DashboardTaskRefreshService.swift

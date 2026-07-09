@@ -23,6 +23,7 @@ actor APIClient {
 
   let session: URLSession
   private let decoder: JSONDecoder
+  private let conversationListFallbackRecorder: @Sendable () -> Void
 
   /// When set, `buildHeaders` uses this instead of calling AuthService (test-only).
   var testAuthHeader: String?
@@ -40,12 +41,32 @@ actor APIClient {
     self.session = URLSession(configuration: config)
 
     self.decoder = Self.makeDecoder()
+    self.conversationListFallbackRecorder = { APIClient.recordConversationListFallback() }
   }
 
   /// Test-only initializer that accepts a custom URLSession for request interception.
-  init(session: URLSession) {
+  init(
+    session: URLSession,
+    conversationListFallbackRecorder: (@Sendable () -> Void)? = nil
+  ) {
     self.session = session
     self.decoder = Self.makeDecoder()
+    self.conversationListFallbackRecorder = conversationListFallbackRecorder
+      ?? { APIClient.recordConversationListFallback() }
+  }
+
+  private nonisolated static func recordConversationListFallback() {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "other",
+      from: "conversation_list_projection",
+      to: "conversation_full_list",
+      reason: "other",
+      outcome: .degraded,
+      extra: [
+        "detail": "rolling_deploy_route_missing",
+        "http_status_code": 404,
+      ]
+    )
   }
 
   private static func makeDecoder() -> JSONDecoder {
@@ -653,6 +674,7 @@ extension APIClient {
     } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
       // During a rolling backend deploy, an older instance treats `list` as a
       // conversation ID. Fall back once to the compatible list route.
+      conversationListFallbackRecorder()
       return try await getConversations(
         limit: limit,
         offset: offset,

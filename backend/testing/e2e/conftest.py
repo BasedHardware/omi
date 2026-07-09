@@ -275,6 +275,12 @@ def _create_backend_app(fake_firestore_instance, fake_redis_instance, fake_stora
     old_r = redis_db.r
     db_client.db = fake_firestore_instance
     redis_db.r = fake_redis_instance
+    # Redis Script objects retain the client used at registration time. Rebind
+    # them explicitly so a module imported before the boundary patch cannot
+    # leak rate-limit calls to a developer's local Redis instance.
+    for script_name in ('_RATE_LIMIT_LUA', '_TTS_RATE_LIMIT_LUA'):
+        script = getattr(redis_db, script_name)
+        setattr(redis_db, script_name, fake_redis_instance.register_script(script.script))
     for module in list(sys.modules.values()):
         if module is None:
             continue

@@ -116,6 +116,23 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
     }
 }
 
+private final class FallbackRecorderSpy: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    func record() {
+        lock.lock()
+        count += 1
+        lock.unlock()
+    }
+
+    var recordedCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return count
+    }
+}
+
 // MARK: - Assertion helpers
 
 private func assertRoutes(
@@ -329,11 +346,16 @@ final class APIClientRoutingTests: XCTestCase {
 
     // MARK: - Routing behavior: Python-routed endpoints (default baseURL)
 
-    private func makeTestClient() async -> APIClient {
+    private func makeTestClient(
+        conversationListFallbackRecorder: @escaping @Sendable () -> Void = {}
+    ) async -> APIClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [URLCapture.self]
         let session = URLSession(configuration: config)
-        let client = APIClient(session: session)
+        let client = APIClient(
+            session: session,
+            conversationListFallbackRecorder: conversationListFallbackRecorder
+        )
         await client.setTestAuthHeader("Bearer test-token")
         return client
     }
@@ -375,7 +397,10 @@ final class APIClientRoutingTests: XCTestCase {
             (404, Data("{\"detail\":\"Conversation not found\"}".utf8)),
             (200, Data("[]".utf8)),
         ])
-        let client = await makeTestClient()
+        let fallbackRecorder = FallbackRecorderSpy()
+        let client = await makeTestClient {
+            fallbackRecorder.record()
+        }
 
         let result = try await client.getConversationList(limit: 50)
 
@@ -384,6 +409,7 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(requests.count, 2)
         XCTAssertTrue(requests[0].url.absoluteString.contains("v1/conversations/list?"))
         XCTAssertTrue(requests[1].url.absoluteString.contains("v1/conversations?"))
+        XCTAssertEqual(fallbackRecorder.recordedCount, 1)
     }
 
     func testDeleteConversationRoutesToPython() async {

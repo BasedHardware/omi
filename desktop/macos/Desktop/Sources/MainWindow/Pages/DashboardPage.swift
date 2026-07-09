@@ -379,7 +379,6 @@ struct DashboardPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
         .sheet(item: $citedConversation) { conversation in
-            let _ = ConversationRepository.shared.seed(conversation)
             ConversationDetailView(
                 conversationId: conversation.id,
                 repository: ConversationRepository.shared,

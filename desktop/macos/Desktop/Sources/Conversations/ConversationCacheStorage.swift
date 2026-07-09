@@ -96,6 +96,7 @@ private struct ConversationCacheRecord: Codable, FetchableRecord, PersistableRec
   let payload: Data
   let serverRevision: String?
   let serverUpdatedAt: Date?
+  let serverUpdatedAtEpoch: Double?
   let cacheWrittenAt: Date
   let listFetchedAt: Date?
   let detailFetchedAt: Date?
@@ -231,7 +232,31 @@ enum ConversationProjectionMerge {
 actor ConversationCacheStorage: ConversationCachePersisting {
   static let shared = ConversationCacheStorage()
 
-  private init() {}
+  private let currentAccountIdProvider: @Sendable () async -> String
+  private let initializeDatabase: @Sendable () async throws -> Void
+  private let databaseQueueProvider: @Sendable () async -> DatabasePool?
+  private let beforeMergeTransaction: @Sendable (String) -> Void
+  private let afterCachedRecordRead: @Sendable (String) -> Void
+
+  init(
+    currentAccountIdProvider: @escaping @Sendable () async -> String = {
+      RewindDatabase.currentUserId ?? "anonymous"
+    },
+    initializeDatabase: @escaping @Sendable () async throws -> Void = {
+      try await RewindDatabase.shared.initialize()
+    },
+    databaseQueueProvider: @escaping @Sendable () async -> DatabasePool? = {
+      RewindDatabase.shared.getDatabaseQueue()
+    },
+    beforeMergeTransaction: @escaping @Sendable (String) -> Void = { _ in },
+    afterCachedRecordRead: @escaping @Sendable (String) -> Void = { _ in }
+  ) {
+    self.currentAccountIdProvider = currentAccountIdProvider
+    self.initializeDatabase = initializeDatabase
+    self.databaseQueueProvider = databaseQueueProvider
+    self.beforeMergeTransaction = beforeMergeTransaction
+    self.afterCachedRecordRead = afterCachedRecordRead
+  }
 
   func invalidateCache() async {}
 
@@ -239,21 +264,20 @@ actor ConversationCacheStorage: ConversationCachePersisting {
     // RewindDatabase owns account scoping. Resolve its current pool on every
     // operation so a delayed sign-out task can never leave this actor holding
     // the previous account's DatabasePool.
-    guard Self.currentAccountId == accountId else {
+    guard await currentAccountIdProvider() == accountId else {
       throw ConversationCacheScopeError.accountChanged
     }
-    try await RewindDatabase.shared.initialize()
-    guard Self.currentAccountId == accountId else {
+    try await initializeDatabase()
+    guard await currentAccountIdProvider() == accountId else {
       throw ConversationCacheScopeError.accountChanged
     }
-    guard let queue = await RewindDatabase.shared.getDatabaseQueue() else {
+    guard let queue = await databaseQueueProvider() else {
       throw TranscriptionStorageError.databaseNotInitialized
     }
+    guard await currentAccountIdProvider() == accountId else {
+      throw ConversationCacheScopeError.accountChanged
+    }
     return queue
-  }
-
-  private static var currentAccountId: String {
-    RewindDatabase.currentUserId ?? "anonymous"
   }
 
   func isEmpty(accountId: String) async throws -> Bool {
@@ -316,25 +340,21 @@ actor ConversationCacheStorage: ConversationCachePersisting {
     let queue = try await db(accountId: accountId)
     let idsData = try JSONEncoder().encode(conversations.map(\.id))
     let idsJson = String(decoding: idsData, as: UTF8.self)
-    var records: [ConversationCacheRecord] = []
-    for conversation in conversations {
-      let incomingCompleteness = Self.listCompleteness(for: conversation)
-      let cachedRecord = try await queue.read { db in
-        try ConversationCacheRecord.fetchOne(db, key: conversation.id)
-      }
-      let cached = try cachedRecord.map(Self.decode)
-      let merged = ConversationProjectionMerge.merge(
-        incoming: conversation,
-        incomingCompleteness: incomingCompleteness,
-        cached: cached,
-        fetchedAt: fetchedAt
-      )
-      records.append(try Self.record(from: merged, writtenAt: fetchedAt))
-    }
-    let recordsToSave = records
+    let beforeMergeTransaction = self.beforeMergeTransaction
+    let afterCachedRecordRead = self.afterCachedRecordRead
+    conversations.forEach { beforeMergeTransaction($0.id) }
     try await queue.write { db in
-      for record in recordsToSave {
-        try record.save(db)
+      for conversation in conversations {
+        let cachedRecord = try ConversationCacheRecord.fetchOne(db, key: conversation.id)
+        afterCachedRecordRead(conversation.id)
+        let cached = try cachedRecord.map(Self.decode)
+        let merged = ConversationProjectionMerge.merge(
+          incoming: conversation,
+          incomingCompleteness: Self.listCompleteness(for: conversation),
+          cached: cached,
+          fetchedAt: fetchedAt
+        )
+        try Self.record(from: merged, writtenAt: fetchedAt).save(db)
       }
       try ConversationQuerySnapshotRecord(
         queryKey: query.key,
@@ -352,29 +372,29 @@ actor ConversationCacheStorage: ConversationCachePersisting {
     preserveProjectionFreshness: Bool = false
   ) async throws {
     let queue = try await db(accountId: accountId)
-    let cachedRecord = try await queue.read { db in
-      try ConversationCacheRecord.fetchOne(db, key: conversation.id)
-    }
-    let cached = try cachedRecord.map(Self.decode)
-    var merged = ConversationProjectionMerge.merge(
-      incoming: conversation,
-      incomingCompleteness: completeness,
-      cached: cached,
-      fetchedAt: fetchedAt
-    )
-    if preserveProjectionFreshness, let cached {
-      merged = ConversationCacheEntry(
-        conversation: merged.conversation,
-        completeness: merged.completeness,
-        cacheWrittenAt: fetchedAt,
-        listFetchedAt: cached.listFetchedAt,
-        detailFetchedAt: cached.detailFetchedAt,
-        transcriptFetchedAt: cached.transcriptFetchedAt
-      )
-    }
-    let updated = try Self.record(from: merged, writtenAt: fetchedAt)
+    beforeMergeTransaction(conversation.id)
+    let afterCachedRecordRead = self.afterCachedRecordRead
     try await queue.write { db in
-      try updated.save(db)
+      let cachedRecord = try ConversationCacheRecord.fetchOne(db, key: conversation.id)
+      afterCachedRecordRead(conversation.id)
+      let cached = try cachedRecord.map(Self.decode)
+      var merged = ConversationProjectionMerge.merge(
+        incoming: conversation,
+        incomingCompleteness: completeness,
+        cached: cached,
+        fetchedAt: fetchedAt
+      )
+      if preserveProjectionFreshness, let cached {
+        merged = ConversationCacheEntry(
+          conversation: merged.conversation,
+          completeness: merged.completeness,
+          cacheWrittenAt: fetchedAt,
+          listFetchedAt: cached.listFetchedAt,
+          detailFetchedAt: cached.detailFetchedAt,
+          transcriptFetchedAt: cached.transcriptFetchedAt
+        )
+      }
+      try Self.record(from: merged, writtenAt: fetchedAt).save(db)
     }
   }
 
@@ -452,6 +472,11 @@ actor ConversationCacheStorage: ConversationCachePersisting {
 
   private static func decode(_ record: ConversationCacheRecord) throws -> ConversationCacheEntry {
     var conversation = try decoder().decode(ServerConversation.self, from: record.payload)
+    conversation = restoringServerVersion(
+      conversation,
+      updatedAt: record.serverUpdatedAtEpoch.map { Date(timeIntervalSince1970: $0) } ?? record.serverUpdatedAt,
+      revision: record.serverRevision
+    )
     let completeness = ConversationCompleteness(rawValue: record.completeness)
     conversation.transcriptSegmentsIncluded = completeness.contains(.transcript)
     return ConversationCacheEntry(
@@ -470,7 +495,8 @@ actor ConversationCacheStorage: ConversationCachePersisting {
       id: conversation.id,
       payload: try encoder().encode(conversation),
       serverRevision: conversation.revision,
-      serverUpdatedAt: conversation.updatedAt,
+      serverUpdatedAt: nil,
+      serverUpdatedAtEpoch: conversation.updatedAt?.timeIntervalSince1970,
       cacheWrittenAt: writtenAt,
       listFetchedAt: entry.listFetchedAt,
       detailFetchedAt: entry.detailFetchedAt,
@@ -485,9 +511,45 @@ actor ConversationCacheStorage: ConversationCachePersisting {
     )
   }
 
+  private static func restoringServerVersion(
+    _ conversation: ServerConversation,
+    updatedAt: Date?,
+    revision: String?
+  ) -> ServerConversation {
+    ServerConversation(
+      id: conversation.id,
+      createdAt: conversation.createdAt,
+      startedAt: conversation.startedAt,
+      finishedAt: conversation.finishedAt,
+      structured: conversation.structured,
+      transcriptSegments: conversation.transcriptSegments,
+      transcriptSegmentsIncluded: conversation.transcriptSegmentsIncluded,
+      geolocation: conversation.geolocation,
+      photos: conversation.photos,
+      appsResults: conversation.appsResults,
+      source: conversation.source,
+      language: conversation.language,
+      status: conversation.status,
+      discarded: conversation.discarded,
+      deleted: conversation.deleted,
+      isLocked: conversation.isLocked,
+      starred: conversation.starred,
+      folderId: conversation.folderId,
+      inputDeviceName: conversation.inputDeviceName,
+      deferred: conversation.deferred,
+      updatedAt: updatedAt,
+      revision: revision
+    )
+  }
+
   private static func encoder() -> JSONEncoder {
     let encoder = JSONEncoder()
-    encoder.dateEncodingStrategy = .iso8601
+    encoder.dateEncodingStrategy = .custom { date, encoder in
+      let formatter = ISO8601DateFormatter()
+      formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+      var container = encoder.singleValueContainer()
+      try container.encode(formatter.string(from: date))
+    }
     return encoder
   }
 

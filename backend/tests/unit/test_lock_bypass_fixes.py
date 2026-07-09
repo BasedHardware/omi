@@ -1519,14 +1519,18 @@ class TestIntegrationListLockRedaction:
 class TestConversationListRedaction:
     """get_conversations router endpoint must redact locked conversation content."""
 
-    def test_conversation_list_redacts_locked(self):
+    def test_conversation_list_redacts_locked(self, monkeypatch):
         """Main conversation list must clear action_items/events/transcript for locked."""
         import database.conversations as conversations_db
 
         locked_conv = _make_conversation(locked=True)
         unlocked_conv = _make_conversation(locked=False, conversation_id='conv-2')
 
-        conversations_db.get_conversations_without_photos = MagicMock(return_value=[locked_conv, unlocked_conv])
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversations_without_photos',
+            MagicMock(return_value=[locked_conv, unlocked_conv]),
+        )
 
         with patch('routers.conversations.auth') as mock_auth:
             mock_auth.get_current_user_uid = MagicMock(return_value='test-uid')
@@ -1561,23 +1565,39 @@ class TestConversationListRedaction:
 class TestConversationMutationCanonicalResponse:
     """Desktop mutations acknowledge a lightweight server-owned revision."""
 
-    def test_title_mutation_returns_canonical_conversation(self):
+    def test_title_mutation_returns_canonical_conversation(self, monkeypatch):
         import database.conversations as conversations_db
         from routers.conversations import patch_conversation_title
 
-        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': False})
-        conversations_db.update_conversation_title = MagicMock()
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversation_access_state',
+            MagicMock(return_value={'id': 'conv-1', 'is_locked': False}),
+        )
+        monkeypatch.setattr(
+            conversations_db,
+            'update_conversation_title',
+            MagicMock(return_value=SimpleNamespace(update_time=datetime(2026, 7, 9, tzinfo=timezone.utc))),
+        )
 
         result = patch_conversation_title('conv-1', 'Canonical title', uid='test-uid')
 
         assert result['id'] == 'conv-1'
 
-    def test_star_mutation_returns_canonical_conversation(self):
+    def test_star_mutation_returns_canonical_conversation(self, monkeypatch):
         import database.conversations as conversations_db
         from routers.conversations import set_conversation_starred
 
-        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': False})
-        conversations_db.set_conversation_starred = MagicMock()
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversation_access_state',
+            MagicMock(return_value={'id': 'conv-1', 'is_locked': False}),
+        )
+        monkeypatch.setattr(
+            conversations_db,
+            'set_conversation_starred',
+            MagicMock(return_value=SimpleNamespace(update_time=datetime(2026, 7, 9, tzinfo=timezone.utc))),
+        )
 
         result = set_conversation_starred('conv-1', True, uid='test-uid')
 
@@ -1585,11 +1605,12 @@ class TestConversationMutationCanonicalResponse:
 
 
 class TestConversationListProjection:
-    def test_explicit_list_route_requests_firestore_projection(self):
+    def test_explicit_list_route_requests_firestore_projection(self, monkeypatch):
         import database.conversations as conversations_db
         from routers.conversations import get_conversation_list_projection
 
-        conversations_db.get_conversations_without_photos = MagicMock(return_value=[])
+        get_conversations = MagicMock(return_value=[])
+        monkeypatch.setattr(conversations_db, 'get_conversations_without_photos', get_conversations)
 
         result = get_conversation_list_projection(
             limit=100,
@@ -1604,7 +1625,7 @@ class TestConversationListProjection:
         )
 
         assert result == []
-        assert conversations_db.get_conversations_without_photos.call_args.kwargs['list_projection'] is True
+        assert get_conversations.call_args.kwargs['list_projection'] is True
 
 
 # =============================================================================
@@ -1839,10 +1860,14 @@ class TestMcpSseMemoryLockEnforcement:
 class TestFolderMoveLockEnforcement:
     """Gap 10 + bonus: Folder move must reject locked conversations."""
 
-    def test_move_conversation_rejects_locked(self):
+    def test_move_conversation_rejects_locked(self, monkeypatch):
         import database.conversations as conversations_db
 
-        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': True})
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversation_access_state',
+            MagicMock(return_value={'id': 'conv-1', 'is_locked': True}),
+        )
 
         from routers.folders import move_conversation_to_folder, MoveConversationRequest
 
@@ -1853,13 +1878,21 @@ class TestFolderMoveLockEnforcement:
         except Exception as e:
             assert e.status_code == 402
 
-    def test_move_conversation_allows_unlocked(self):
+    def test_move_conversation_allows_unlocked(self, monkeypatch):
         import database.conversations as conversations_db
         import database.folders as folders_db
 
-        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': False})
-        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
-        folders_db.move_conversation_to_folder = MagicMock()
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversation_access_state',
+            MagicMock(return_value={'id': 'conv-1', 'is_locked': False}),
+        )
+        monkeypatch.setattr(folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1', 'name': 'Test'}))
+        monkeypatch.setattr(
+            folders_db,
+            'move_conversation_to_folder',
+            MagicMock(return_value=SimpleNamespace(update_time=datetime(2026, 7, 9, tzinfo=timezone.utc))),
+        )
 
         from routers.folders import move_conversation_to_folder, MoveConversationRequest
 
@@ -1868,17 +1901,21 @@ class TestFolderMoveLockEnforcement:
         assert result["status"] == "ok"
         assert result["id"] == "conv-1"
 
-    def test_bulk_move_rejects_if_any_locked(self):
+    def test_bulk_move_rejects_if_any_locked(self, monkeypatch):
         import database.conversations as conversations_db
         import database.folders as folders_db
 
-        conversations_db.get_conversation = MagicMock(
-            side_effect=[
-                _make_conversation(locked=False, conversation_id='conv-1'),
-                _make_conversation(locked=True, conversation_id='conv-2'),
-            ]
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversation',
+            MagicMock(
+                side_effect=[
+                    _make_conversation(locked=False, conversation_id='conv-1'),
+                    _make_conversation(locked=True, conversation_id='conv-2'),
+                ]
+            ),
         )
-        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
+        monkeypatch.setattr(folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1', 'name': 'Test'}))
 
         from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
 
@@ -1889,18 +1926,22 @@ class TestFolderMoveLockEnforcement:
         except Exception as e:
             assert e.status_code == 402
 
-    def test_bulk_move_allows_all_unlocked(self):
+    def test_bulk_move_allows_all_unlocked(self, monkeypatch):
         import database.conversations as conversations_db
         import database.folders as folders_db
 
-        conversations_db.get_conversation = MagicMock(
-            side_effect=[
-                _make_conversation(locked=False, conversation_id='conv-1'),
-                _make_conversation(locked=False, conversation_id='conv-2'),
-            ]
+        monkeypatch.setattr(
+            conversations_db,
+            'get_conversation',
+            MagicMock(
+                side_effect=[
+                    _make_conversation(locked=False, conversation_id='conv-1'),
+                    _make_conversation(locked=False, conversation_id='conv-2'),
+                ]
+            ),
         )
-        folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
-        folders_db.bulk_move_conversations_to_folder = MagicMock(return_value=2)
+        monkeypatch.setattr(folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1', 'name': 'Test'}))
+        monkeypatch.setattr(folders_db, 'bulk_move_conversations_to_folder', MagicMock(return_value=2))
 
         from routers.folders import bulk_move_conversations, BulkMoveConversationsRequest
 

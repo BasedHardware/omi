@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
 
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from database.conversation_projection import (
     CONVERSATION_LIST_FIELDS,
     apply_conversation_list_field_mask,
@@ -30,6 +32,30 @@ def test_firestore_update_time_is_exposed_as_opaque_conversation_revision():
     assert data['updated_at'] == _Snapshot.update_time
     assert data['revision'] == '2026-07-09T12:30:00+00:00'
     assert Conversation.model_validate(data).revision == data['revision']
+
+
+def test_protobuf_update_time_is_normalized_with_subsecond_precision():
+    update_time = Timestamp()
+    expected = datetime(2026, 7, 9, 21, 52, 19, 342802, tzinfo=timezone.utc)
+    update_time.FromDatetime(expected)
+    snapshot = _Snapshot()
+    snapshot.update_time = update_time
+
+    data = conversation_snapshot_data(snapshot)
+
+    assert data['updated_at'] == expected
+    assert data['revision'] == '2026-07-09T21:52:19.342802+00:00'
+
+
+def test_firestore_fake_timestamp_shape_is_normalized_with_subsecond_precision():
+    update_time = type('FakeTimestamp', (), {'seconds': '1783633939', 'nanos': '342802'})()
+    snapshot = _Snapshot()
+    snapshot.update_time = update_time
+
+    data = conversation_snapshot_data(snapshot)
+
+    assert data['updated_at'] == datetime(2026, 7, 9, 21, 52, 19, 342802, tzinfo=timezone.utc)
+    assert data['revision'] == '2026-07-09T21:52:19.342802+00:00'
 
 
 def test_missing_snapshot_has_no_conversation_projection():
