@@ -84,7 +84,8 @@ class MetaWearablesProvider extends ChangeNotifier {
   static const String _selectedDeviceUuidPrefKey = 'metaWearablesSelectedDeviceUuid';
 
   /// Native audio-session bridge (AppDelegate `com.omi.ios/audioSession`):
-  /// `configureForBluetooth` routes recording input to the glasses' BT mic.
+  /// Meta capture uses `configureForMediaSafeCapture`; other recorder flows
+  /// may still opt into the coupled Bluetooth HFP route.
   static const MethodChannel _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
 
   /// Native gesture bridge (AppDelegate `com.omi/meta_gestures`). Glasses
@@ -783,8 +784,8 @@ class MetaWearablesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Starts glasses capture: DAT camera frames are cached directly to the
-  /// backend. Phone microphone/listen socket audio is not started.
+  /// Starts glasses capture: DAT camera frames and media-safe phone-mic audio
+  /// share the transcription socket without taking over Bluetooth playback.
   ///
   /// [displayStatusText] is rendered on Ray-Ban Display glasses while
   /// capturing; pass a localized string from the UI.
@@ -831,17 +832,19 @@ class MetaWearablesProvider extends ChangeNotifier {
         _appendRuntimeProof('MetaGlassStreamDiag start-photo-loop skipped captureMode=${captureMode.name}');
       }
 
-      // Glasses-to-backend audio: route the shared audio session to the
-      // glasses' Bluetooth (HFP) microphone, then open the transcription
-      // socket. The socket carries both the STT audio and the image_chunk
-      // photo uploads — it is the only ingestion path deployed on prod.
+      // HFP couples the glasses mic and speaker routes. Record from the iPhone
+      // built-in mic instead, keep the glasses on A2DP, then open the shared
+      // transcription socket for STT audio and image_chunk photo uploads.
+      Map<String, String>? route;
       try {
-        await _audioSessionChannel.invokeMethod('configureForBluetooth');
+        route = await _audioSessionChannel.invokeMapMethod<String, String>('configureForMediaSafeCapture');
       } catch (e) {
-        Logger.debug('MetaGlassStreamDiag: configureForBluetooth failed: $e');
+        Logger.debug('MetaGlassStreamDiag: configureForMediaSafeCapture failed: $e');
       }
       await captureController.streamRecording();
-      _appendRuntimeProof('MetaGlassRuntimeProof audio-stream-started route=bluetooth');
+      final input = route?['input'] ?? 'unknown';
+      final output = route?['output'] ?? 'unknown';
+      _appendRuntimeProof('MetaGlassRuntimeProof audio-stream-started input=$input output=$output');
 
       await _startGestureListening();
 

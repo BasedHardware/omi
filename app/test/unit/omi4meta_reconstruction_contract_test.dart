@@ -238,8 +238,8 @@ void main() {
       expect(provider, contains('micOnly'));
       expect(provider, contains('startCapture'));
       expect(provider, contains('stopCapture'));
-      expect(provider, contains("invokeMethod('configureForBluetooth')"),
-          reason: 'Mic capture must route audio from the glasses Bluetooth (HFP) microphone.');
+      expect(provider, contains("invokeMapMethod<String, String>('configureForMediaSafeCapture')"),
+          reason: 'Mic capture must preserve media playback by avoiding the coupled Bluetooth HFP route.');
       expect(provider, contains('ingestCapturedImage'),
           reason: 'Camera mode must feed DAT photos into the conversation image pipeline.');
       expect(provider, contains('enableBackgroundStreaming'));

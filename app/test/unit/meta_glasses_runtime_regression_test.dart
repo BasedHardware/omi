@@ -147,23 +147,44 @@ void main() {
       expect(eventHandler, contains('_completePhotoUploadAck'));
     });
 
-    test('glasses capture streams photos and BT-mic audio over the transcription socket (prod path)', () {
+    test('glasses capture preserves media playback while streaming phone-mic audio', () {
       // The REST photo-cache endpoint (v1/meta-wearables/photos/cache) exists
       // only in the local repo backend — api.omi.me returns 404 for it, so
       // every REST upload fails and photos never reach history (observed
       // 2026-07-05: 4 frames stuck in the sync queue). The only ingestion
       // path deployed on prod is the transcription socket: image_chunk
-      // messages for photos and PCM16 audio for STT. Audio must be routed to
-      // the glasses' Bluetooth mic (configureForBluetooth) so "Mic" means the
-      // glasses mic, not the phone mic.
+      // messages for photos and PCM16 audio for STT. Bluetooth HFP couples the
+      // glasses input and output routes, so capture must use the built-in phone
+      // mic while leaving media on the glasses' A2DP output.
       final provider = _read('lib/providers/meta_wearables_provider.dart');
       final controller = _read('lib/services/capture/capture_controller.dart');
+      final appDelegate = _read('ios/Runner/AppDelegate.swift');
+      final backgroundStreaming = _read(
+        'third_party/meta_wearables_dat_flutter/ios/meta_wearables_dat_flutter/Sources/'
+        'meta_wearables_dat_flutter/BackgroundStreamingController.swift',
+      );
+      final mediaSafeSession = _functionBody(appDelegate, 'private func configureMediaSafeCaptureSession');
       final startCapture = _asyncMethodBody(provider, 'Future<bool> startCapture');
       final stopCapture = _asyncMethodBody(provider, 'Future<void> stopCapture');
       final flushPhotoQueue = _functionBody(provider, 'Future<void> flushPhotoQueue');
 
-      expect(startCapture, contains('configureForBluetooth'),
-          reason: 'audio session must route to the glasses BT mic before streaming');
+      expect(startCapture, contains('configureForMediaSafeCapture'));
+      expect(startCapture, contains("route?['input']"));
+      expect(startCapture, contains("route?['output']"));
+      expect(startCapture, contains(r'audio-stream-started input=$input output=$output'));
+      expect(startCapture, isNot(contains('configureForBluetooth')));
+      for (final nativeSource in [mediaSafeSession, backgroundStreaming]) {
+        expect(nativeSource, contains('.mixWithOthers'));
+        expect(nativeSource, contains('.allowBluetoothA2DP'));
+        expect(nativeSource, contains('.builtInMic'));
+        expect(nativeSource, contains('setPreferredInput'));
+        expect(nativeSource, isNot(contains('.allowBluetoothHFP')));
+      }
+      expect(mediaSafeSession, contains('audioSession.currentRoute'));
+      expect(mediaSafeSession, contains('AVAudioSession.Port'));
+      expect(mediaSafeSession, isNot(contains('.defaultToSpeaker')));
+      expect(appDelegate, contains('call.method == "configureForBluetooth"'),
+          reason: 'non-Meta voice-recorder flows still use the legacy Bluetooth route');
       expect(startCapture, contains('streamRecording'),
           reason: 'the transcription socket is the only prod transport for photos + audio');
       expect(stopCapture, contains('stopStreamRecording'), reason: 'capture stop must close the audio stream');

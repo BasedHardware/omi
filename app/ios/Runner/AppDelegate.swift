@@ -241,18 +241,19 @@ final class QuickActionsIconPatcher: NSObject {
     // ended — flutter_sound does not auto-resume on its own.
     audioInterruptionManager.register(with: controller.binaryMessenger)
 
-    // Audio session configuration for Bluetooth microphone support
+    // Audio session configuration that preserves A2DP media playback while
+    // Omi records from the iPhone microphone.
     let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller.binaryMessenger)
     audioSessionChannel.setMethodCallHandler { (call, result) in
-        if call.method == "configureForBluetooth" {
-            let audioSession = AVAudioSession.sharedInstance()
+        if call.method == "configureForMediaSafeCapture" {
             do {
-                try audioSession.setCategory(
-                    .playAndRecord,
-                    mode: .default,
-                    options: [.allowBluetooth, .allowBluetoothA2DP, .defaultToSpeaker]
-                )
-                try audioSession.setActive(true)
+                result(try self.configureMediaSafeCaptureSession())
+            } catch {
+                result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
+            }
+        } else if call.method == "configureForBluetooth" {
+            do {
+                try self.configureBluetoothCaptureSession()
                 result(true)
             } catch {
                 result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
@@ -276,7 +277,7 @@ final class QuickActionsIconPatcher: NSObject {
     // Meta glasses gesture bridge. The DAT SDK has no gesture API; glasses
     // stalk taps arrive as Bluetooth media-remote (AVRCP) commands, which iOS
     // only delivers to the current Now Playing app with an active audio
-    // session. Capture already activates the session (configureForBluetooth
+    // session. Capture already activates the media-safe recording session
     // + recording); startListening claims Now Playing and registers
     // target-safe remote-command handlers, stopListening releases them.
     metaGesturesChannel = FlutterMethodChannel(name: "com.omi/meta_gestures", binaryMessenger: controller.binaryMessenger)
@@ -345,6 +346,36 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  private func configureMediaSafeCaptureSession() throws -> [String: String] {
+    let audioSession = AVAudioSession.sharedInstance()
+    try audioSession.setCategory(
+      .playAndRecord,
+      mode: .default,
+      options: [.mixWithOthers, .allowBluetoothA2DP]
+    )
+    try audioSession.setActive(true)
+    if let builtInMic = audioSession.availableInputs?.first(where: { $0.portType == .builtInMic }) {
+      try audioSession.setPreferredInput(builtInMic)
+    }
+    try audioSession.overrideOutputAudioPort(.none)
+    let inputPort: AVAudioSession.Port? = audioSession.currentRoute.inputs.first?.portType
+    let outputPort: AVAudioSession.Port? = audioSession.currentRoute.outputs.first?.portType
+    return [
+      "input": inputPort?.rawValue ?? "none",
+      "output": outputPort?.rawValue ?? "none",
+    ]
+  }
+
+  private func configureBluetoothCaptureSession() throws {
+    let audioSession = AVAudioSession.sharedInstance()
+    try audioSession.setCategory(
+      .playAndRecord,
+      mode: .default,
+      options: [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker]
+    )
+    try audioSession.setActive(true)
   }
 
   override func application(
