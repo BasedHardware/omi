@@ -315,6 +315,25 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
+                    label { class: "settings-label", "Mic Gain" }
+                    div { style: "display:flex;align-items:center;gap:8px;",
+                        input {
+                            r#type: "range",
+                            min: "1",
+                            max: "50",
+                            step: "1",
+                            value: "{config.read().mic_gain}",
+                            oninput: move |e| {
+                                if let Ok(v) = e.value().parse::<f32>() {
+                                    config.write().mic_gain = v;
+                                    let _ = config.read().save();
+                                }
+                            },
+                        }
+                        span { class: "text-muted", "{config.read().mic_gain:.0}x" }
+                    }
+                }
+                div { class: "settings-row",
                     span { class: "settings-label", "System Audio" }
                     label { class: "toggle",
                         input {

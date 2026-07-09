@@ -94,6 +94,10 @@ pub struct AppConfig {
     #[serde(default)]
     pub screenshot_auto_save_action_items: bool,
 
+    /// Software mic gain multiplier (1.0 = no boost, 10.0 = 10x, etc.)
+    #[serde(default = "default_mic_gain")]
+    pub mic_gain: f32,
+
     /// Whether system audio capture is enabled
     #[serde(default)]
     pub system_audio_enabled: bool,
@@ -262,6 +266,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_mic_gain() -> f32 {
+    50.0
+}
+
 fn default_screen_context_count() -> usize { 5 }
 
 fn default_ocr_summary_max_chars() -> usize { 800 }
@@ -322,6 +330,7 @@ impl Default for AppConfig {
             screenshot_auto_extract_enabled: true,
             screenshot_auto_save_memory: false,
             screenshot_auto_save_action_items: false,
+            mic_gain: default_mic_gain(),
             system_audio_enabled: false,
             mic_enabled: true,
             mic_device_name: String::new(),

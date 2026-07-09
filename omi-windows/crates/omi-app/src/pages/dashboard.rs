@@ -38,7 +38,20 @@ pub fn DashboardPage() -> Element {
     let mut recent_conversations = use_signal(Vec::<Conversation>::new);
     let mut recent_memories = use_signal(Vec::<Memory>::new);
 
+    let mut refresh_tick = use_signal(|| 0u64);
+
+    // Periodic refresh: bump tick every 10 seconds
     use_effect(move || {
+        spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                refresh_tick.set(refresh_tick() + 1);
+            }
+        });
+    });
+
+    use_effect(move || {
+        let _tick = *refresh_tick.read();
         let db_snap = db.read().clone();
         if let Some(Db(d)) = db_snap {
             if let Ok(s) = d.get_today_stats() {

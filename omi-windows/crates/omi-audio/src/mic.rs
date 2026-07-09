@@ -27,6 +27,14 @@ pub fn start_mic_capture(
     tx: broadcast::Sender<AudioChunk>,
     preferred_device: Option<&str>,
 ) -> Result<MicStream> {
+    start_mic_capture_with_gain(tx, preferred_device, 1.0)
+}
+
+pub fn start_mic_capture_with_gain(
+    tx: broadcast::Sender<AudioChunk>,
+    preferred_device: Option<&str>,
+    gain: f32,
+) -> Result<MicStream> {
     let host = cpal::default_host();
     let device = if let Some(name) = preferred_device {
         if name.is_empty() {
@@ -96,18 +104,38 @@ pub fn start_mic_capture(
                     }
 
                     let mono = downmix_to_mono_f32(data, device_channels);
+
+                    // Auto-gain: compute RMS and boost to target level
+                    let rms = if mono.is_empty() {
+                        0.0
+                    } else {
+                        let sum_sq: f32 = mono.iter().map(|s| s * s).sum();
+                        (sum_sq / mono.len() as f32).sqrt()
+                    };
+
+                    // Target RMS ~0.05 (comfortable speech level for Deepgram)
+                    let auto_gain = if rms > 0.000001 {
+                        let target_rms = 0.05;
+                        let computed = target_rms / rms;
+                        // Clamp auto-gain between 1x and 5000x, then apply user gain as a ceiling
+                        computed.clamp(1.0, gain.max(1.0) * 100.0)
+                    } else {
+                        gain.max(1.0)
+                    };
+
+                    let boosted: Vec<f32> = mono.iter().map(|&s| (s * auto_gain).clamp(-1.0, 1.0)).collect();
                     let mut max_mono = 0.0f32;
-                    for &s in &mono {
+                    for &s in &boosted {
                         let abs = s.abs();
                         if abs > max_mono {
                             max_mono = abs;
                         }
                     }
-                    if max_mono > 0.00001 {
-                        tracing::debug!("[MIC] Mono max float: {}", max_mono);
+                    if max_mono > 0.001 {
+                        tracing::debug!("[MIC] Mono max after AGC (gain={auto_gain:.0}x rms={rms:.6}): {max_mono:.4}");
                     }
 
-                    let resampled = resample_f32(&mono, device_rate, SAMPLE_RATE);
+                    let resampled = resample_f32(&boosted, device_rate, SAMPLE_RATE);
                     let samples: Vec<i16> = resampled
                         .iter()
                         .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)
@@ -134,7 +162,21 @@ pub fn start_mic_capture(
                         .map(|&s| s as f32 / i16::MAX as f32)
                         .collect();
                     let mono = downmix_to_mono_f32(&f32_data, device_channels);
-                    let resampled = resample_f32(&mono, device_rate, SAMPLE_RATE);
+                    let rms = if mono.is_empty() {
+                        0.0
+                    } else {
+                        let sum_sq: f32 = mono.iter().map(|s| s * s).sum();
+                        (sum_sq / mono.len() as f32).sqrt()
+                    };
+                    let auto_gain = if rms > 0.000001 {
+                        let target_rms = 0.05;
+                        let computed = target_rms / rms;
+                        computed.clamp(1.0, gain.max(1.0) * 100.0)
+                    } else {
+                        gain.max(1.0)
+                    };
+                    let boosted: Vec<f32> = mono.iter().map(|&s| (s * auto_gain).clamp(-1.0, 1.0)).collect();
+                    let resampled = resample_f32(&boosted, device_rate, SAMPLE_RATE);
                     let samples: Vec<i16> = resampled
                         .iter()
                         .map(|&s| (s.clamp(-1.0, 1.0) * i16::MAX as f32) as i16)

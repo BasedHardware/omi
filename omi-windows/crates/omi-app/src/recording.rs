@@ -77,7 +77,9 @@ pub async fn start_recording_with_proactive(
     } else {
         Some(cfg.mic_device_name.as_str())
     };
-    let mic = match omi_audio::mic::start_mic_capture(audio_tx.clone(), preferred) {
+    let gain = cfg.mic_gain;
+    tracing::info!("[RECORDING] Mic software gain: {gain}x");
+    let mic = match omi_audio::mic::start_mic_capture_with_gain(audio_tx.clone(), preferred, gain) {
         Ok(m) => {
             tracing::info!("[RECORDING] Mic capture started on device: {}", m.device_name());
             status.set(RecordingStatus::Recording {
