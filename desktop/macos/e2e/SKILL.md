@@ -185,6 +185,30 @@ without the drag guard. `had_non_status_filters=false` means no filter is active
 requery path is inert (the suppression assertion is then vacuous — apply a date/tag
 filter first). Non-production bundles only.
 
+### 2g. Inspect the feedback payload without submitting (SET-02)
+`FeedbackView.submitFeedback()` always fires a real Sentry event and attaches the app log
+plus a `desktop_diagnostics.json`, so there's no way to verify the payload is token-free
+without spamming Sentry. `dump_feedback_payload_dryrun` (non-prod only) assembles the
+**same** payload — the report title (`feedbackReportTitle`) and the diagnostics JSON
+(`writeDiagnosticsAttachment`, the exact builder the real submit uses) — and returns it
+**without** calling `SentrySDK`, so the diagnostics JSON can be secret-scanned.
+
+```bash
+cd desktop/macos
+./scripts/omi-ctl action dump_feedback_payload_dryrun message="mic dropped mid-call" \
+  | python3 -c 'import json,sys,re; d=json.load(sys.stdin)["result"]["detail"]; \
+assert d["sentry_capture_invoked"]=="false" and d["would_submit_to_sentry"]=="false"; \
+dj=d["diagnostics_json"]; \
+pats=[r"eyJ[A-Za-z0-9_-]{10,}",r"AIza[0-9A-Za-z_-]{10,}",r"omi_(auto|mcp)_[0-9a-f]{8,}",r"AMf-[A-Za-z0-9_-]{10,}",r"[Bb]earer\s+\S{12,}",r"(?i)_API_KEY\s*[=:]\s*\S+"]; \
+hits=[p for p in pats if re.search(p,dj)]; \
+print("title:", d["sentry_message"]); print("secret hits:", hits or "NONE")'
+```
+Assert `sentry_capture_invoked=false`, `would_submit_to_sentry=false`, and **no secret
+hits** in `diagnostics_json`. Empty `message` yields the "User Report (logs only)" title.
+The action returns the log only as **metadata** (`log_attachment_filename`/`_exists`/`_bytes`) —
+never its contents — so the bridge response itself can't leak the raw log. To confirm no
+Sentry event fired, check the app log has no "User report submitted to Sentry" line.
+
 ### The full loop
 ```bash
 cd desktop/macos

@@ -1678,6 +1678,56 @@ final class DesktopAutomationActionRegistry {
         title: title, subtitle: subtitle, near: anchor)
       return CloudConnectorGuidanceOverlay.shared.automationState()
     }
+
+    // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
+    // attach — the report title + the desktop_diagnostics.json attachment + the
+    // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
+    // the diagnostics JSON for secrets without firing a real Sentry event. The
+    // title and diagnostics JSON come from the same builders the real submit
+    // uses (feedbackReportTitle / writeDiagnosticsAttachment), so the dry-run
+    // can't diverge from what ships. The raw log is attached unredacted to Sentry
+    // by design (trusted sink, explicit user report); we surface only its
+    // metadata here — never its contents — so the bridge response can't leak it.
+    register(
+      name: "dump_feedback_payload_dryrun",
+      summary: "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+      params: ["message"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "dump_feedback_payload_dryrun is disabled on production bundles"]
+      }
+      let message = (params["message"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      var detail: [String: String] = [
+        "sentry_message": feedbackReportTitle(for: message),
+        "diagnostics_filename": feedbackDiagnosticsAttachmentFilename,
+        "sentry_capture_invoked": "false",
+        "would_submit_to_sentry": "false",
+      ]
+
+      if let url = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+        defer { try? FileManager.default.removeItem(at: url) }
+        if let data = try? Data(contentsOf: url), let json = String(data: data, encoding: .utf8) {
+          detail["diagnostics_json"] = json
+          detail["diagnostics_byte_count"] = "\(data.count)"
+        } else {
+          detail["diagnostics_error"] = "unreadable_attachment"
+        }
+      } else {
+        detail["diagnostics_error"] = "attachment_write_failed"
+      }
+
+      let logPath = omiLogFilePath()
+      let logExists = FileManager.default.fileExists(atPath: logPath)
+      detail["log_attachment_filename"] = (logPath as NSString).lastPathComponent
+      detail["log_attachment_exists"] = logExists ? "true" : "false"
+      if logExists,
+        let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
+        let size = attributes[.size] as? NSNumber
+      {
+        detail["log_attachment_bytes"] = "\(size.intValue)"
+      }
+      return detail
+    }
   }
 }
 
