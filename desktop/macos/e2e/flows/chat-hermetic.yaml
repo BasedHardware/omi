@@ -11,6 +11,7 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
   - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCapabilityRegistry.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift

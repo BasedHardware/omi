@@ -85,8 +85,17 @@ def bridge_action_timeout_sec(
     return 60.0
 
 
+class AutomationTokenError(RuntimeError):
+    """Token file exists but cannot be read (permissions/encoding). Fail closed."""
+
+
 def automation_token(port: int) -> str | None:
-    """Load the per-launch bridge bearer token (same contract as omi-ctl)."""
+    """Load the per-launch bridge bearer token (same contract as omi-ctl).
+
+    Missing token file → None (caller may proceed unauthenticated or fail later).
+    Unreadable/corrupt token file → AutomationTokenError (fail closed; do not
+    silently omit Authorization).
+    """
     token = os.environ.get("OMI_AUTOMATION_TOKEN", "").strip()
     if token:
         return token
@@ -96,8 +105,12 @@ def automation_token(port: int) -> str | None:
     )
     try:
         token = token_file.read_text(encoding="utf-8").strip()
-    except (OSError, UnicodeError):
+    except FileNotFoundError:
         return None
+    except (OSError, UnicodeError) as exc:
+        raise AutomationTokenError(
+            f"automation token file unreadable at {token_file}: {exc}"
+        ) from exc
     return token or None
 
 
@@ -111,7 +124,12 @@ def bridge_request(
 ) -> dict[str, Any]:
     payload = None
     headers = {"Accept": "application/json"}
-    token = automation_token(port)
+    try:
+        token = automation_token(port)
+    except AutomationTokenError as exc:
+        # Fail closed: never send an unauthenticated request when the token
+        # contract is broken. Still return a structured failure (no crash).
+        return {"ok": False, "error": f"automation_token_unreadable: {exc}"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     if body is not None:
@@ -2159,6 +2177,13 @@ def bridge_auth_self_check_failures(driver_source: str) -> list[str]:
         for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
     }
+    classes = {
+        node.name: node
+        for node in tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    if "AutomationTokenError" not in classes:
+        failures.append("AutomationTokenError class")
     token_fn = funcs.get("automation_token")
     if token_fn is None:
         failures.append("automation_token helper")
@@ -2167,6 +2192,10 @@ def bridge_auth_self_check_failures(driver_source: str) -> list[str]:
             failures.append("automation_token reads OMI_AUTOMATION_TOKEN")
         if not method_contains_string(token_fn, "omi-automation-"):
             failures.append("automation_token reads omi-automation-{port}.token")
+        if not method_references_name(token_fn, "FileNotFoundError"):
+            failures.append("automation_token treats missing file as optional")
+        if not method_references_name(token_fn, "AutomationTokenError"):
+            failures.append("automation_token fails closed on unreadable token")
     bridge = funcs.get("bridge_request")
     if bridge is None:
         failures.append("bridge_request function")
@@ -2178,6 +2207,8 @@ def bridge_auth_self_check_failures(driver_source: str) -> list[str]:
     # f"Bearer {token}" -> JoinedStr with Constant("Bearer ")
     if not method_contains_string(bridge, "Bearer "):
         failures.append("bridge_request uses Bearer token scheme")
+    if not method_contains_string_prefix(bridge, "automation_token_unreadable"):
+        failures.append("bridge_request fails closed on unreadable token")
     return failures
 
 
@@ -2281,6 +2312,22 @@ def ast_literal_set(tree: ast.Module, name: str, *, key: str | None = None) -> s
 def method_contains_string(node: ast.AST | None, text: str) -> bool:
     return node is not None and any(
         isinstance(child, ast.Constant) and child.value == text
+        for child in ast.walk(node)
+    )
+
+
+def method_contains_string_prefix(node: ast.AST | None, prefix: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Constant)
+        and isinstance(child.value, str)
+        and child.value.startswith(prefix)
+        for child in ast.walk(node)
+    )
+
+
+def method_references_name(node: ast.AST | None, name: str) -> bool:
+    return node is not None and any(
+        isinstance(child, ast.Name) and child.id == name
         for child in ast.walk(node)
     )
 
