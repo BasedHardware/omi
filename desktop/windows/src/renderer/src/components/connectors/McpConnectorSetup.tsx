@@ -9,23 +9,14 @@ import {
   Server,
   TestTube2
 } from 'lucide-react'
-import type { McpKeyMetadata, McpKeyRecord } from '../../../../shared/types'
-import { createWindowsMcpKey } from '../../lib/apiClient'
+import type { McpKeyMetadata } from '../../../../shared/types'
+import { fetchFirebaseIdToken } from '../../lib/apiClient'
 import { mcpDestinations, type McpDestination } from '../../lib/mcpDestinations'
 
 type CopyState = {
   target: string
   label: string
 } | null
-
-function maskKey(key: string): string {
-  if (key.length <= 10) return '********'
-  return `${key.slice(0, 6)}********${key.slice(-4)}`
-}
-
-function metadataFromRecord(record: McpKeyRecord): McpKeyMetadata {
-  return { id: record.id, name: record.name, maskedKey: maskKey(record.key) }
-}
 
 const MCP_KEY_PLACEHOLDER = 'YOUR_OMI_MCP_KEY'
 
@@ -176,9 +167,11 @@ export function McpConnectorSetup({
     setKeyError(null)
     setTestState({ kind: 'idle', message: '' })
     try {
-      const record = await createWindowsMcpKey()
-      await window.omi.mcpKeyCreate(record)
-      setStoredKey(metadataFromRecord(record))
+      // Main creates + stores the key and returns masked metadata only; the raw
+      // key never enters this renderer.
+      const token = await fetchFirebaseIdToken()
+      const metadata = await window.omi.mcpKeyCreateAndStore(token)
+      setStoredKey(metadata)
       onKeyStateChange?.(true)
     } catch (error) {
       setKeyError((error as Error).message)
