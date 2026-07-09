@@ -1,3 +1,0 @@
-{
-  "change": "Fixed rare crashes when the app received data with duplicate ids (tasks, apps list, chat artifacts)"
-}
