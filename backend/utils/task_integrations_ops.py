@@ -326,7 +326,7 @@ async def create_task_internal(
             if not list_id:
                 return {"success": False, "error": "No list configured", "error_code": "no_list"}
 
-            task_data = {'name': title}
+            task_data: dict[str, Any] = {'name': title}
             if description:
                 task_data['description'] = description
             if due_date:

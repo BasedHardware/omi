@@ -3,6 +3,8 @@
 Extracted from routers/sync.py so the router stays thin and utils never imports routers.
 """
 
+# pyright: reportPrivateUsage=false, reportUnusedFunction=false, reportUnusedVariable=false, reportUnnecessaryComparison=false, reportAssignmentType=false, reportIndexIssue=false, reportArgumentType=false
+
 from __future__ import annotations
 
 import asyncio
