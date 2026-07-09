@@ -51,6 +51,19 @@ def test_parse_forwarded_byok_headers_extracts_provider_keys():
     assert forwarded == {'openai': 'sk-openai', 'anthropic': 'sk-ant'}
 
 
+def test_parse_forwarded_byok_headers_ignores_invalid_provider_names():
+    forwarded = parse_forwarded_byok_headers(
+        {
+            'X-Omi-Byok-OpenAI-Key': 'sk-openai',
+            'X-Omi-Byok-Bad Name-Key': 'sk-bad',
+            'X-Omi-Byok-9openai-Key': 'sk-digit',
+            'X-Omi-Byok--openai-Key': 'sk-dash',
+        }
+    )
+
+    assert forwarded == {'openai': 'sk-openai'}
+
+
 def test_key_reference_credential_context_exposes_references_not_raw_keys():
     context = build_key_reference_credential_context(
         ServiceCaller(name='pusher'),

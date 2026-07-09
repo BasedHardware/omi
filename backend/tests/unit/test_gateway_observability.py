@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from utils.llm import gateway_observability
 
 
@@ -54,8 +52,10 @@ def test_record_gateway_request_result_maps_fallback_mode(monkeypatch):
 
 
 def test_record_direct_exception_surface_increments_counter(monkeypatch):
-    counter = _CounterStub()
-    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS', counter)
+    direct_counter = _CounterStub()
+    unified_counter = _CounterStub()
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS', direct_counter)
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', unified_counter)
     monkeypatch.setattr(gateway_observability, '_observability_logs_enabled', lambda: False)
 
     gateway_observability.record_direct_exception_surface(
@@ -63,7 +63,15 @@ def test_record_direct_exception_surface_increments_counter(monkeypatch):
         reason='acknowledged',
     )
 
-    assert counter.calls == [{'surface': 'chat_agent.anthropic_stream', 'reason': 'acknowledged'}]
+    assert direct_counter.calls == [{'surface': 'chat_agent.anthropic_stream', 'reason': 'acknowledged'}]
+    assert unified_counter.calls == [
+        {
+            'feature': 'chat_agent.anthropic_stream',
+            'mode': 'direct_exception',
+            'outcome': 'direct_exception',
+            'reason': 'acknowledged',
+        }
+    ]
 
 
 def test_raise_if_gateway_feature_mode_records_direct_exception_when_allowed(monkeypatch):

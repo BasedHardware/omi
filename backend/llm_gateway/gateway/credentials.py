@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from enum import Enum
 from typing import Any, Mapping
 
@@ -93,6 +94,9 @@ def build_byok_credential_context(
     )
 
 
+_BYOK_PROVIDER_NAME_RE = re.compile(r'^[a-z][a-z0-9_-]*$')
+
+
 def parse_forwarded_byok_headers(headers: Mapping[str, str]) -> dict[str, str]:
     """Parse service-forwarded BYOK keys from internal gateway envelope headers."""
     envelope_prefix = 'x-omi-byok-'
@@ -103,7 +107,7 @@ def parse_forwarded_byok_headers(headers: Mapping[str, str]) -> dict[str, str]:
         if not normalized_name.startswith(envelope_prefix) or not normalized_name.endswith(envelope_suffix):
             continue
         provider = normalized_name.removeprefix(envelope_prefix).removesuffix(envelope_suffix).strip().lower()
-        if not provider:
+        if not provider or not _BYOK_PROVIDER_NAME_RE.fullmatch(provider):
             continue
         stripped = raw_value.strip()
         if stripped:

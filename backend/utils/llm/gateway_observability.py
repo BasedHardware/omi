@@ -67,6 +67,16 @@ def record_direct_exception_surface(*, surface: str, reason: str = 'acknowledged
     except Exception:
         pass
 
+    try:
+        LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS.labels(
+            feature=surface_label,
+            mode=_GATEWAY_MODE_DIRECT_EXCEPTION,
+            outcome='direct_exception',
+            reason=reason_label,
+        ).inc()
+    except Exception:
+        pass
+
     _log_gateway_event(
         kind='direct_exception',
         feature=surface_label,

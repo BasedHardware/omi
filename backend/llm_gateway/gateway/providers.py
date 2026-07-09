@@ -92,7 +92,7 @@ class OpenAICompatibleChatCompletionProvider:
                     # body is never surfaced unless LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS
                     # is explicitly enabled.
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(status_code, error_preview)
+                    _raise_for_status(status_code, error_preview, credential_mode=credentials.mode)
                 body = await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
                 parsed = _parse_limited_json_response(body)
         except httpx.TimeoutException as exc:
@@ -131,7 +131,7 @@ class OpenAICompatibleChatCompletionProvider:
             ) as response:
                 if response.status_code >= 400:
                     error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
-                    _raise_for_status(response.status_code, error_preview)
+                    _raise_for_status(response.status_code, error_preview, credential_mode=credentials.mode)
                 async for chunk in response.aiter_bytes():
                     if chunk:
                         yield chunk
@@ -189,7 +189,11 @@ class AnthropicMessagesProvider:
                 timeout=timeout_ms / 1000.0,
             )
             if response.status_code >= 400:
-                _raise_for_status(response.status_code, response.content[:PROVIDER_ERROR_DETAIL_BYTES])
+                _raise_for_status(
+                    response.status_code,
+                    response.content[:PROVIDER_ERROR_DETAIL_BYTES],
+                    credential_mode=credentials.mode,
+                )
             parsed = response.json()
         except httpx.TimeoutException as exc:
             raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
@@ -378,16 +382,26 @@ def _default_fake_response(provider_ref: ProviderRef) -> dict[str, Any]:
     return fake_success_response(provider_ref)
 
 
-def _raise_for_status(status_code: int, body: bytes = b'') -> None:
+def _raise_for_status(
+    status_code: int,
+    body: bytes = b'',
+    *,
+    credential_mode: CredentialMode = CredentialMode.OMI_PAID,
+) -> None:
+    byok = credential_mode == CredentialMode.BYOK
     if status_code in {401, 403}:
-        raise ProviderFailure(FailureClass.INVALID_CONFIG, safe_message=_provider_error_message(status_code, body))
+        raise ProviderFailure(
+            FailureClass.BYOK_AUTH if byok else FailureClass.INVALID_CONFIG,
+            safe_message=_provider_error_message(status_code, body),
+        )
     if status_code == 408:
         raise ProviderFailure(
             FailureClass.TIMEOUT_BEFORE_OUTPUT, safe_message=_provider_error_message(status_code, body)
         )
     if status_code == 429:
         raise ProviderFailure(
-            FailureClass.PROVIDER_429_OMI_PAID, safe_message=_provider_error_message(status_code, body)
+            FailureClass.BYOK_RATE_LIMIT if byok else FailureClass.PROVIDER_429_OMI_PAID,
+            safe_message=_provider_error_message(status_code, body),
         )
     if status_code >= 500:
         raise ProviderFailure(

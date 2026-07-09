@@ -144,6 +144,24 @@ def test_anthropic_messages_stream_passthrough_preserves_server_tool_sse(_reset_
     assert b'text_delta' in body
 
 
+def test_anthropic_messages_stream_returns_upstream_error_status(_reset_anthropic_client):
+    fake: _FakeAsyncClient = _reset_anthropic_client
+    fake._stream_context = _FakeAsyncStreamContext(
+        status_code=529,
+        chunks=[b'{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'],
+    )
+
+    response = TestClient(app).post(
+        '/v1/messages',
+        json=_agentic_request(stream=True),
+        headers=_auth_headers(),
+    )
+
+    assert response.status_code == 529
+    assert response.json()['error']['type'] == 'overloaded_error'
+    assert response.headers.get('content-type', '').startswith('application/json')
+
+
 def test_anthropic_messages_uses_byok_key_header_when_present(_reset_anthropic_client, monkeypatch):
     fake: _FakeAsyncClient = _reset_anthropic_client
     fake._post_response = httpx.Response(

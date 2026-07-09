@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import anthropic
 import httpx
+from cachetools import TTLCache
 
 from utils.llm.gateway_byok import byok_gateway_default_headers
 from utils.llm.gateway_client import (
@@ -19,7 +21,12 @@ from utils.llm.gateway_observability import record_gateway_request_result
 from utils.llm.gateway_serving import is_gateway_transport_failure
 
 _CHAT_AGENT_FEATURE = 'chat_agent'
-_GATEWAY_CLIENT_CACHE: dict[str, anthropic.AsyncAnthropic] = {}
+_GATEWAY_CLIENT_CACHE_MAX_SIZE = 256
+_GATEWAY_CLIENT_CACHE_TTL_SECONDS = 3600
+_GATEWAY_CLIENT_CACHE: TTLCache[str, anthropic.AsyncAnthropic] = TTLCache(
+    maxsize=_GATEWAY_CLIENT_CACHE_MAX_SIZE,
+    ttl=_GATEWAY_CLIENT_CACHE_TTL_SECONDS,
+)
 
 
 def get_gateway_first_anthropic_client(
@@ -42,8 +49,6 @@ def _get_or_create_gateway_anthropic_client(*, byok_api_key: str | None = None) 
     token = get_llm_gateway_service_token() or 'gateway-dev'
     byok_fingerprint = 'none'
     if byok_api_key:
-        import hashlib
-
         byok_fingerprint = hashlib.sha256(byok_api_key.encode()).hexdigest()[:16]
     cache_key = f'{token}:{byok_fingerprint}'
     cached = _GATEWAY_CLIENT_CACHE.get(cache_key)

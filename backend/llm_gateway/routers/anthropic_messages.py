@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import AsyncIterator, Mapping
 from typing import Any, cast
@@ -52,10 +53,7 @@ async def create_anthropic_message(
 
     headers = _anthropic_forward_headers(request, api_key=api_key)
     if body.get('stream') is True:
-        return StreamingResponse(
-            _stream_anthropic_messages(body, headers=headers),
-            media_type='text/event-stream',
-        )
+        return await _streaming_anthropic_messages_response(body, headers=headers)
 
     try:
         response = await _get_anthropic_http_client().post(
@@ -118,28 +116,67 @@ def _anthropic_forward_headers(request: Request, *, api_key: str) -> dict[str, s
     return headers
 
 
-async def _stream_anthropic_messages(body: Mapping[str, Any], *, headers: Mapping[str, str]) -> AsyncIterator[bytes]:
+async def _streaming_anthropic_messages_response(
+    body: Mapping[str, Any],
+    *,
+    headers: Mapping[str, str],
+) -> JSONResponse | StreamingResponse:
+    """Open the upstream stream before committing HTTP status.
+
+    Upstream 4xx/5xx must be returned as JSON with the real status so gateway
+    clients can fall back. Yielding the error body under an already-committed
+    HTTP 200 breaks transport-failure detection.
+    """
     try:
-        async with _get_anthropic_http_client().stream(
+        stream_cm = _get_anthropic_http_client().stream(
             'POST',
             f'{ANTHROPIC_MESSAGES_BASE_URL}/messages',
             json=dict(body),
             headers=dict(headers),
-        ) as response:
-            if response.status_code >= 400:
-                yield await response.aread()
-                return
-            async for chunk in response.aiter_bytes():
-                yield chunk
+        )
+        response = await stream_cm.__aenter__()
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT, detail='anthropic request timed out') from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail='anthropic transport failure') from exc
+
+    if response.status_code >= 400:
+        try:
+            error_bytes = await response.aread()
+        finally:
+            await stream_cm.__aexit__(None, None, None)
+        return JSONResponse(status_code=response.status_code, content=_bytes_json_or_error(error_bytes))
+
+    return StreamingResponse(
+        _iter_open_anthropic_stream(stream_cm, response),
+        media_type='text/event-stream',
+    )
+
+
+async def _iter_open_anthropic_stream(stream_cm: Any, response: Any) -> AsyncIterator[bytes]:
+    try:
+        async for chunk in response.aiter_bytes():
+            yield chunk
     except httpx.TimeoutException:
         yield b'event: error\ndata: {"type":"error","error":{"type":"timeout_error"}}\n\n'
     except httpx.HTTPError:
         yield b'event: error\ndata: {"type":"error","error":{"type":"api_error"}}\n\n'
+    finally:
+        await stream_cm.__aexit__(None, None, None)
 
 
 def _response_json_or_error(response: httpx.Response) -> object:
     try:
         return response.json()
+    except ValueError:
+        return {'error': {'message': 'invalid anthropic response', 'type': 'api_error'}}
+
+
+def _bytes_json_or_error(body: bytes) -> object:
+    if not body:
+        return {'error': {'message': 'anthropic request failed', 'type': 'api_error'}}
+    try:
+        return json.loads(body)
     except ValueError:
         return {'error': {'message': 'invalid anthropic response', 'type': 'api_error'}}
 
