@@ -154,6 +154,17 @@ final class WALServiceUploadTests: XCTestCase {
     XCTAssertEqual(snapshot["recovery_action"] as? String, "retain_frames")
   }
 
+  func testStopRecordingRetainsFramesWhenPersistFails() throws {
+    service.setWalDirectoryForTesting(nil)
+    service.startRecording(device: "dev1", codec: "opus")
+    service.addFrame(Data([0x0A, 0x0B]))
+
+    service.stopRecording()
+
+    XCTAssertEqual(service.currentFrameCountForTesting, 1)
+    XCTAssertEqual(service.persistenceState, .degraded(reason: "wal_directory_unavailable"))
+  }
+
   func testUploadFailureRecordsHealthSnapshot() async throws {
     let wal = try seedWalOnDisk()
     service.uploadLocalFilesHandler = { _ in

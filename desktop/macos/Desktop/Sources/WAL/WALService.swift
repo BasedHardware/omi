@@ -248,6 +248,11 @@ final class WALService: ObservableObject {
 
     /// Start recording frames from a device
     func startRecording(device: String, codec: String) {
+        // Best-effort flush of frames retained after a prior degraded stop.
+        if !currentFrames.isEmpty {
+            _ = createWalFromCurrentFrames()
+        }
+
         currentDevice = device
         currentCodec = codec
         currentFrames = []
@@ -268,16 +273,22 @@ final class WALService: ObservableObject {
     func stopRecording() {
         stopTimers()
 
-        // Create WAL for remaining frames
+        // Create WAL for remaining frames. On write failure, frames stay in
+        // `currentFrames` so a later start/retry can persist them — do not clear.
         if !currentFrames.isEmpty {
-            createWalFromCurrentFrames()
+            _ = createWalFromCurrentFrames()
         }
 
-        currentDevice = nil
-        currentCodec = nil
-        currentFrames = []
-        currentFramesSynced = []
-        recordingStartTime = nil
+        if currentFrames.isEmpty {
+            currentDevice = nil
+            currentCodec = nil
+            currentFramesSynced = []
+            recordingStartTime = nil
+        } else {
+            log(
+                "WALService: stopRecording retained \(currentFrames.count) in-memory frames "
+                    + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
+        }
 
         logger.info("Stopped recording")
     }
@@ -326,11 +337,12 @@ final class WALService: ObservableObject {
         saveWals()
     }
 
-    private func createWalFromCurrentFrames() {
+    @discardableResult
+    private func createWalFromCurrentFrames() -> Bool {
         guard let device = currentDevice,
               let codec = currentCodec,
               let startTime = recordingStartTime,
-              !currentFrames.isEmpty else { return }
+              !currentFrames.isEmpty else { return true }
 
         guard walDirectory != nil else {
             let reason = "wal_directory_unavailable"
@@ -344,7 +356,7 @@ final class WALService: ObservableObject {
                 recoveryAction: "retain_frames",
                 recoveryResult: "degraded"
             )
-            return
+            return false
         }
 
         // Calculate actual duration based on frames
@@ -384,7 +396,7 @@ final class WALService: ObservableObject {
                 reason: "frame_write_failed"
             )
             updatePendingWals()
-            return
+            return false
         }
 
         // Clear current frames only after durable write succeeds (#9240).
@@ -394,6 +406,7 @@ final class WALService: ObservableObject {
 
         updatePendingWals()
         saveWals()
+        return true
     }
 
     private func writeFramesToDisk(frames: [Data], wal: WALEntry) {

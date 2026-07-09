@@ -959,7 +959,12 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var modeSwitchInProgress = false
     /// Continuations for callers waiting on an in-flight mode switch. Supports
     /// arbitrary overlap (A→B→A→B) without losing waiters.
-    private var modeSwitchWaiters: [CheckedContinuation<Void, Never>] = []
+    private struct ModeSwitchWaiter {
+        let id: UUID
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
+    private var modeSwitchWaiters: [ModeSwitchWaiter] = []
     private let modeSwitchWaitTimeoutSeconds: TimeInterval = 90
 
     enum BridgeMode: String {
@@ -1290,7 +1295,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Without this, a query arriving mid-switch could restart the OLD bridge
         // with the wrong harness mode. Skipped when called from switchBridgeMode
         // itself (which holds the flag). External callers join the waiters array
-        // and are woken when the switch (including warmup) completes — no timeout.
+        // and are woken when the switch (including warmup) completes. Waiters
+        // time out after modeSwitchWaitTimeoutSeconds without releasing the
+        // switcher's lock — only the switcher clears modeSwitchInProgress.
         while !fromModeSwitch && modeSwitchInProgress {
             guard await waitForModeSwitchCompletion() else {
                 return false
@@ -1465,7 +1472,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         while modeSwitchInProgress {
             log("ChatProvider: switchBridgeMode waiting for in-flight switch to finish")
             await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                modeSwitchWaiters.append(c)
+                modeSwitchWaiters.append(ModeSwitchWaiter(id: UUID(), continuation: c))
             }
         }
 
@@ -1518,27 +1525,41 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
     private func waitForModeSwitchCompletion() async -> Bool {
         log("ChatProvider: ensureBridgeStarted waiting for mode switch to complete")
-        let resumed = await withTaskGroup(of: Bool.self) { group in
+        let waiterID = UUID()
+        let completed = await withTaskGroup(of: Bool.self) { group in
             group.addTask { @MainActor in
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    self.modeSwitchWaiters.append(continuation)
+                    self.modeSwitchWaiters.append(
+                        ModeSwitchWaiter(id: waiterID, continuation: continuation))
                 }
                 return true
             }
             group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(self.modeSwitchWaitTimeoutSeconds * 1_000_000_000))
+                try? await Task.sleep(
+                    nanoseconds: UInt64(self.modeSwitchWaitTimeoutSeconds * 1_000_000_000))
                 return false
             }
-            return await group.next() ?? false
+            let first = await group.next() ?? false
+            group.cancelAll()
+            if first {
+                // Drain the cancelled timeout task.
+                _ = await group.next()
+            }
+            return first
         }
-        guard resumed else {
+        guard completed else {
+            // Timeout: drop only this waiter. Do NOT clear modeSwitchInProgress —
+            // the in-flight switchBridgeMode still owns the serialization lock.
+            if let idx = modeSwitchWaiters.firstIndex(where: { $0.id == waiterID }) {
+                let waiter = modeSwitchWaiters.remove(at: idx)
+                waiter.continuation.resume()
+            }
             log(
                 "ChatProvider: mode switch wait timed out after \(Int(modeSwitchWaitTimeoutSeconds))s "
-                    + "(failure_class=mode_switch_timeout recovery_action=clear_waiters recovery_result=degraded)")
+                    + "(failure_class=mode_switch_timeout recovery_action=fail_soft recovery_result=degraded)")
             DesktopDiagnosticsManager.shared.recordChatBridgeModeSwitchTimeout(
                 waitSeconds: Int(modeSwitchWaitTimeoutSeconds)
             )
-            finishModeSwitchWaiters()
             return false
         }
         return true
@@ -1549,7 +1570,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let waiters = modeSwitchWaiters
         modeSwitchWaiters.removeAll()
         for waiter in waiters {
-            waiter.resume()
+            waiter.continuation.resume()
         }
     }
 
