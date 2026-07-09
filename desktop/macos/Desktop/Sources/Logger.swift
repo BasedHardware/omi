@@ -200,7 +200,7 @@ func log(_ message: String) {
 /// offline, timeouts, dropped connections, cancellations. These dominate event
 /// volume (timeouts, "no internet", socket resets) without indicating an app bug.
 /// We still write them to the local log + breadcrumbs for debugging context.
-private func isNonActionableTransient(_ error: Error?) -> Bool {
+func isNonActionableTransient(_ error: Error?) -> Bool {
   guard let error = error else { return false }
   // Swift structured-concurrency cancellation: thrown when a Task/operation is
   // cancelled (assistant stopped, frame superseded). Expected, not an app bug.
@@ -221,7 +221,11 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
   // backfill loops don't create high-volume Sentry issues.
   if let embeddingError = error as? EmbeddingService.EmbeddingError,
      embeddingError.isNonActionableForSentry { return true }
-  let nsError = error as NSError
+  // Rewind encoder disk failures wrap the underlying OS error — inspect that so a
+  // full/read-only disk ("The file couldn't be saved") is classified below rather
+  // than captured as an opaque storage-error cluster (OMI-DESKTOP-28/29).
+  let inspected = (error as? RewindError)?.underlyingError ?? error
+  let nsError = inspected as NSError
   switch nsError.domain {
   case NSURLErrorDomain:
     // -999 cancelled, -1001 timed out, -1003 host not found, -1004 cannot connect,
@@ -237,7 +241,26 @@ private func isNonActionableTransient(_ error: Error?) -> Bool {
     return transient.contains(nsError.code)
   case NSPOSIXErrorDomain:
     // 54 connection reset, 57 socket not connected, 89 operation canceled.
-    return [54, 57, 89].contains(nsError.code)
+    // 28 ENOSPC (disk full), 69 EDQUOT (over quota), 30 EROFS (read-only fs) —
+    // environmental storage exhaustion, not app bugs.
+    return [54, 57, 89, 28, 69, 30].contains(nsError.code)
+  case NSCocoaErrorDomain:
+    // Environmental file-write failures (disk full / read-only volume / no write
+    // permission) surface here as "The file couldn't be saved". Not app bugs —
+    // keep them as local logs + breadcrumbs instead of Sentry error clusters.
+    let storageExhausted: Set<Int> = [
+      NSFileWriteOutOfSpaceError,      // 640 — disk full
+      NSFileWriteVolumeReadOnlyError,  // 642 — read-only volume
+      NSFileWriteNoPermissionError,    // 513 — no write permission
+    ]
+    if storageExhausted.contains(nsError.code) { return true }
+    // Cocoa file errors often wrap a POSIX cause in NSUnderlyingErrorKey.
+    if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError,
+       underlying.domain == NSPOSIXErrorDomain,
+       [28, 69, 30].contains(underlying.code) {
+      return true
+    }
+    return false
   default:
     return false
   }
