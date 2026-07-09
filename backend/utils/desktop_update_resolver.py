@@ -7,17 +7,21 @@ from typing import Any, cast
 from database.desktop_update_channels import get_channel_release, normalize_release_manifest
 from database.redis_db import get_generic_cache, set_generic_cache
 from utils.metrics import (
-    DESKTOP_UPDATE_FALLBACK_TOTAL,
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_LKG_AGE_SECONDS,
     DESKTOP_UPDATE_POINTER_AGE_SECONDS,
     DESKTOP_UPDATE_RESOLUTION_TOTAL,
 )
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
 LIVE_TTL_SECONDS = 300
 LKG_TTL_SECONDS = 30 * 24 * 60 * 60
+
+
+def _fallback_reason(reason: str) -> str:
+    return 'config_incomplete' if reason == 'pointer_missing' else 'other'
 
 
 def live_cache_key(platform: str, channel: str) -> str:
@@ -115,14 +119,15 @@ def resolve_pointer_release(platform: str, channel: str) -> tuple[dict[str, Any]
         reason = "lkg_invalid"
     if release is not None:
         release["cached_at"] = lkg.get("cached_at") if isinstance(lkg, dict) else None
-        DESKTOP_UPDATE_FALLBACK_TOTAL.labels(platform=platform, channel=channel, reason=reason).inc()
-        _record_success(platform, channel, "pointer_lkg", release)
-        logger.warning(
-            "desktop_update_fallback platform=%s channel=%s from=pointer to=pointer_lkg reason=%s",
-            platform,
-            channel,
-            reason,
+        record_fallback(
+            component='other',
+            from_mode='desktop_update_pointer',
+            to_mode='desktop_update_lkg',
+            reason=_fallback_reason(reason),
+            outcome='recovered',
+            log=logger,
         )
+        _record_success(platform, channel, "pointer_lkg", release)
         return release, "pointer_lkg", reason
 
     DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=channel).set(0)

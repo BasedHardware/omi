@@ -16,11 +16,11 @@ from utils.desktop_update_resolver import live_cache_key, resolve_pointer_releas
 from utils.executors import db_executor, run_blocking
 from utils.github_releases import get_omi_github_releases, extract_key_value_pairs
 from utils.metrics import (
-    DESKTOP_UPDATE_FALLBACK_TOTAL,
     DESKTOP_UPDATE_FEED_VALID,
     DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL,
     DESKTOP_UPDATE_RESOLUTION_TOTAL,
 )
+from utils.observability.fallback import record_fallback
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -330,6 +330,14 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
     """
     if os.getenv("DESKTOP_UPDATE_POINTERS_MODE", "primary").lower() == "legacy":
         releases = await _get_legacy_live_desktop_releases(platform)
+        record_fallback(
+            component='other',
+            from_mode='desktop_update_pointer',
+            to_mode='desktop_update_legacy',
+            reason='policy',
+            outcome='degraded',
+            log=logger,
+        )
         for entry in releases:
             DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(
                 platform=platform, channel=entry["channel"], source="legacy_forced"
@@ -362,15 +370,16 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
             continue
         legacy = {**legacy, "source": "legacy_fallback"}
         resolved.append(legacy)
-        DESKTOP_UPDATE_FALLBACK_TOTAL.labels(platform=platform, channel=channel, reason=reason).inc()
+        record_fallback(
+            component='other',
+            from_mode='desktop_update_pointer_lkg',
+            to_mode='desktop_update_legacy',
+            reason='config_incomplete' if reason == 'pointer_missing' else 'other',
+            outcome='recovered',
+            log=logger,
+        )
         DESKTOP_UPDATE_RESOLUTION_TOTAL.labels(platform=platform, channel=channel, source="legacy_fallback").inc()
         DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=channel).set(1)
-        logger.warning(
-            "desktop_update_fallback platform=%s channel=%s from=pointer_lkg to=legacy reason=%s",
-            platform,
-            channel,
-            reason,
-        )
 
     resolved.sort(key=lambda entry: entry["release"].get("published_at", ""), reverse=True)
     return resolved

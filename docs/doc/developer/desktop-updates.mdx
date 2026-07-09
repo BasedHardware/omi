@@ -48,3 +48,15 @@ This uses a dedicated detached worktree and `/Applications/omi-main.app`. It nev
 `willInstallUpdate` records an attempt ID plus source/target build and emits `Update Install Started`. `Update Installed` is emitted only after the relaunched app verifies that its current build equals the recorded target. A mismatch emits `Update Install Verification Failed` with the same attempt ID.
 
 Static GCS/CDN appcast delivery remains a follow-up. The existing beta download redirect may still be maintained, but it is not the source of channel truth.
+
+## First rollout after merge
+
+Merging this control-plane change does not make a beta live. For the first rollout:
+
+1. Deploy `main` to the production shared Python backend with `gcp_backend.yml` so manifest registration and pointer promotion endpoints exist.
+2. Wait for the weekday candidate workflow, or manually dispatch `desktop_auto_release.yml` when a candidate is wanted.
+3. Wait for Codemagic to publish the signed, notarized, non-live candidate and smoke evidence.
+4. Run `desktop/macos/scripts/bless-release.sh <tag>` on macOS. A successful T2 run dispatches beta promotion.
+5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Leave stable unchanged until the separately planned stable rollout.
+
+After the dual path has proven reliable, complete the removal and static CDN follow-ups tracked in issue `#9350`.

@@ -56,12 +56,6 @@ DESKTOP_UPDATE_RESOLUTION_TOTAL = Counter(
     ['platform', 'channel', 'source'],
 )
 
-DESKTOP_UPDATE_FALLBACK_TOTAL = Counter(
-    'desktop_update_fallback_total',
-    'Desktop update control-plane fallbacks by platform, channel, and reason',
-    ['platform', 'channel', 'reason'],
-)
-
 DESKTOP_UPDATE_POINTER_MISMATCH_TOTAL = Counter(
     'desktop_update_pointer_mismatch_total',
     'Desktop update pointer and legacy release mismatches',

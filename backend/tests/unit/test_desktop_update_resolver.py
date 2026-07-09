@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 
 from utils.desktop_update_resolver import resolve_pointer_release
 
@@ -66,12 +66,21 @@ def test_validated_lkg_is_used_when_pointer_is_invalid():
     with (
         patch("utils.desktop_update_resolver.get_generic_cache", side_effect=cache_values),
         patch("utils.desktop_update_resolver.get_channel_release", side_effect=ValueError("invalid pointer")),
+        patch("utils.desktop_update_resolver.record_fallback") as fallback,
     ):
         release, source, reason = resolve_pointer_release("macos", "beta")
 
     assert release is not None
     assert source == "pointer_lkg"
     assert reason == "pointer_invalid"
+    fallback.assert_called_once_with(
+        component="other",
+        from_mode="desktop_update_pointer",
+        to_mode="desktop_update_lkg",
+        reason="other",
+        outcome="recovered",
+        log=ANY,
+    )
 
 
 def test_invalid_lkg_falls_through_for_legacy_resolution():

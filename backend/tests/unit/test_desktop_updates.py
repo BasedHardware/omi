@@ -1,7 +1,7 @@
 """Tests for desktop update system (appcast XML, channel filtering, download endpoint)."""
 
 import xml.etree.ElementTree as ET
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -363,6 +363,37 @@ def _pointer_release(channel="beta", build=200):
 
 class TestResolveDesktopReleases:
     @pytest.mark.asyncio
+    async def test_legacy_kill_switch_records_degraded_mode(self):
+        from routers.updates import _get_live_desktop_releases
+
+        legacy_beta = {
+            "channel": "beta",
+            "release": {"published_at": "2026-02-01T00:00:00Z", "assets": [_zip_asset(), _dmg_asset()]},
+            "version_info": {"version": "0.12.0+12000", "build": "12000"},
+            "metadata": {"edSignature": "legacy"},
+        }
+        with (
+            patch.dict("os.environ", {"DESKTOP_UPDATE_POINTERS_MODE": "legacy"}),
+            patch(
+                "routers.updates._get_legacy_live_desktop_releases",
+                new_callable=AsyncMock,
+                return_value=[legacy_beta],
+            ),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            result = await _get_live_desktop_releases("macos")
+
+        assert result == [legacy_beta]
+        fallback.assert_called_once_with(
+            component="other",
+            from_mode="desktop_update_pointer",
+            to_mode="desktop_update_legacy",
+            reason="policy",
+            outcome="degraded",
+            log=ANY,
+        )
+
+    @pytest.mark.asyncio
     async def test_explicit_pointers_are_primary(self):
         from routers.updates import _get_live_desktop_releases
 
@@ -402,12 +433,22 @@ class TestResolveDesktopReleases:
                 new_callable=AsyncMock,
                 return_value=[legacy_stable],
             ),
+            patch("routers.updates.record_fallback") as fallback,
         ):
             result = await _get_live_desktop_releases("macos")
 
         by_channel = {entry["channel"]: entry for entry in result}
         assert by_channel["stable"]["source"] == "legacy_fallback"
         assert by_channel["beta"]["source"] == "pointer"
+        fallback.assert_called_once()
+        assert fallback.call_args.kwargs == {
+            "component": "other",
+            "from_mode": "desktop_update_pointer_lkg",
+            "to_mode": "desktop_update_legacy",
+            "reason": "config_incomplete",
+            "outcome": "recovered",
+            "log": ANY,
+        }
 
     @pytest.mark.asyncio
     async def test_validated_lkg_precedes_legacy(self):
