@@ -8,7 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
-  - desktop/macos/Desktop/Sources/OmiHTTPTransport.swift
+  - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
   - desktop/macos/Desktop/Sources/ConversationFinalizationService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
