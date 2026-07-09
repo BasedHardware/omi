@@ -214,10 +214,36 @@ pub fn FloatingBar() -> Element {
                             spawn(async move {
                                 loading.set(true);
                                 pt.set(String::new());
+
+                                // Web search augmentation
+                                let web_ctx = if cfg.web_search_enabled
+                                    && !cfg.tavily_api_key.is_empty()
+                                    && crate::web_search::should_search(&text)
+                                {
+                                    match crate::web_search::search(&text, &cfg).await {
+                                        Ok(resp) => Some(crate::web_search::format_search_context(&resp)),
+                                        Err(e) => {
+                                            tracing::warn!("[FBAR] Web search failed: {e:#}");
+                                            None
+                                        }
+                                    }
+                                } else {
+                                    None
+                                };
+
+                                let mut messages = Vec::new();
+                                if let Some(ref ctx) = web_ctx {
+                                    messages.push(crate::llm::LlmMessage {
+                                        role: "system".into(),
+                                        content: format!("{ctx}\n\nUse the above web search results to answer accurately. Cite sources when possible."),
+                                    });
+                                }
+                                messages.push(crate::llm::LlmMessage { role: "user".into(), content: text });
+
                                 let (api_key, url, model) = crate::llm::resolve_llm_endpoint(&cfg);
                                 let result = crate::llm::complete(
                                     &api_key, &url, &model,
-                                    vec![crate::llm::LlmMessage { role: "user".into(), content: text }],
+                                    messages,
                                     Some(300),
                                 )
                                 .await;

@@ -26,6 +26,7 @@ mod sidecar;
 mod sync;
 mod tts_engine;
 mod tray;
+mod web_search;
 
 
 pub const MAIN_CSS: &str = include_str!("assets/main.css");

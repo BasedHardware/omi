@@ -220,6 +220,33 @@ pub fn SettingsPage() -> Element {
                     }
                 }
                 div { class: "settings-row",
+                    label { class: "settings-label", "Tavily Key" }
+                    input {
+                        class: "settings-input",
+                        r#type: "password",
+                        placeholder: "tvly-...",
+                        value: "{config.read().tavily_api_key}",
+                        onchange: move |e| {
+                            config.write().tavily_api_key = e.value();
+                            let _ = config.read().save();
+                        },
+                    }
+                }
+                div { class: "settings-row",
+                    span { class: "settings-label", "Web Search" }
+                    label { class: "toggle",
+                        input {
+                            r#type: "checkbox",
+                            checked: config.read().web_search_enabled,
+                            onchange: move |e| {
+                                config.write().web_search_enabled = e.checked();
+                                let _ = config.read().save();
+                            },
+                        }
+                        span { class: "toggle-slider" }
+                    }
+                }
+                div { class: "settings-row",
                     label { class: "settings-label", "OpenAI Base URL" }
                     input {
                         class: "settings-input",

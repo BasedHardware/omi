@@ -199,7 +199,24 @@ impl AgentRuntime {
             None
         };
 
-        // Extend the system prompt with MCP + knowledge context
+        // ── Web search via Tavily ───────────────────────────────────────────────
+        let web_context = if cfg.web_search_enabled
+            && !cfg.tavily_api_key.is_empty()
+            && crate::web_search::should_search(user_query)
+        {
+            tracing::info!("[AGENT] Detected search intent — querying Tavily");
+            match crate::web_search::search(user_query, cfg).await {
+                Ok(resp) => Some(crate::web_search::format_search_context(&resp)),
+                Err(e) => {
+                    tracing::warn!("[AGENT] Web search failed: {e:#}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // Extend the system prompt with MCP + knowledge + web context
         let mut extended_system_prompt = system_prompt.to_string();
         if let Some(ref mcp_result) = mcp_context_text {
             extended_system_prompt.push_str(&format!(
@@ -208,6 +225,9 @@ impl AgentRuntime {
         }
         if let Some(ref kb) = knowledge_context {
             extended_system_prompt.push_str(&format!("\n\n{kb}\n\nUse the above knowledge base results to answer accurately."));
+        }
+        if let Some(ref web) = web_context {
+            extended_system_prompt.push_str(&format!("\n\n{web}\n\nUse the above web search results to provide an accurate, up-to-date answer. Cite sources when possible."));
         }
 
         // Build message list: system prompt first, then conversation history

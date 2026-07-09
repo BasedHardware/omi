@@ -51,6 +51,14 @@ pub struct AppConfig {
     #[serde(default = "default_anthropic_model")]
     pub anthropic_model: String,
 
+    /// Tavily API key for web search
+    #[serde(default)]
+    pub tavily_api_key: String,
+
+    /// Enable web search augmentation in agent/chat
+    #[serde(default)]
+    pub web_search_enabled: bool,
+
     /// Primary provider for interactive / low-latency requests (chat, agent).
     /// One of: "auto" | "openai" | "groq" | "anthropic"
     #[serde(default = "default_auto")]
@@ -320,6 +328,8 @@ impl Default for AppConfig {
             groq_background_api_key: String::new(),
             anthropic_api_key: String::new(),
             anthropic_model: default_anthropic_model(),
+            tavily_api_key: String::new(),
+            web_search_enabled: false,
             primary_provider: default_auto(),
             background_provider: default_auto(),
             capture_interval_secs: default_capture_interval(),
