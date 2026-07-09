@@ -64,6 +64,66 @@ describe('managed parakeet.cpp runtime', () => {
     expect(status.runtime.installState).toBe('installed')
   })
 
+  it('rejects without downloading anything when installs are not allowed', async () => {
+    const downloads: string[] = []
+    const deps = {
+      env: {
+        OMI_LOCAL_STT_RELEASE_BASE: 'https://downloads.example/parakeet',
+        OMI_LOCAL_STT_MODEL_URL: 'https://models.example/tdt.gguf'
+      },
+      platform: 'win32',
+      arch: 'x64',
+      rootDir: root,
+      detectNvidiaGpu: async () => true,
+      downloadFile: async (url: string): Promise<void> => {
+        downloads.push(url)
+        throw new Error('download must not be attempted when allowInstall is false')
+      },
+      extractZip: async (): Promise<void> => undefined
+    }
+
+    await expect(ensureManagedParakeetRuntime(deps, { allowInstall: false })).rejects.toThrow(
+      /not installed/
+    )
+    expect(downloads).toEqual([])
+
+    // The refusal must not poison the status: nothing was attempted, so the
+    // runtime still reports installable, not an install error.
+    const status = await getManagedParakeetStatus(deps)
+    expect(status.available).toBe(false)
+    expect(status.runtime.installState).toBe('not_installed')
+    expect(status.runtime.canInstall).toBe(true)
+  })
+
+  it('resolves an already-installed runtime even when installs are not allowed', async () => {
+    const deps = {
+      env: {
+        OMI_LOCAL_STT_RELEASE_BASE: 'https://downloads.example/parakeet',
+        OMI_LOCAL_STT_MODEL_URL: 'https://models.example/tdt.gguf'
+      },
+      platform: 'win32',
+      arch: 'x64',
+      rootDir: root,
+      detectNvidiaGpu: async () => true,
+      downloadFile: async (): Promise<void> => {
+        throw new Error('download must not be attempted for an installed runtime')
+      },
+      extractZip: async (): Promise<void> => undefined
+    }
+
+    await mkdir(join(root, 'bin'), { recursive: true })
+    await writeFile(join(root, 'bin', 'parakeet-cli.exe'), 'exe')
+    await mkdir(join(root, 'models'), { recursive: true })
+    await writeFile(join(root, 'models', 'tdt_ctc-110m-q8_0.gguf'), 'model')
+
+    const runtime = await ensureManagedParakeetRuntime(deps, { allowInstall: false })
+
+    expect(runtime).toMatchObject({
+      exePath: join(root, 'bin', 'parakeet-cli.exe'),
+      modelPath: join(root, 'models', 'tdt_ctc-110m-q8_0.gguf')
+    })
+  })
+
   it('uses the CPU artifact only when explicitly forced for test/dev', async () => {
     const downloads: string[] = []
     const deps = {
