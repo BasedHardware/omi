@@ -358,8 +358,14 @@ class AuthService {
     // UserDefaults keys for auth persistence (dev builds with ad-hoc signing).
     // Keys are defined once in `DefaultsKey` and read/written through the typed
     // `UserDefaults` accessors so a typo is a compile error, not a silent nil.
-    private let authTokenKeychainService = "com.omi.desktop.firebase-rest-session"
+    //
+    // Keychain service is team+bundle scoped so local Dev / named-bundle builds
+    // cannot poison each other or notarized Beta/Prod (login-keychain password
+    // dialog). See DesktopKeychainStore.scopedService.
     private let authTokenKeychainAccount = "firebase-rest-tokens"
+    private var authTokenKeychainService: String {
+        DesktopKeychainStore.scopedService(DesktopKeychainStore.legacyAuthTokenService)
+    }
 
     private struct StoredAuthTokens: Codable {
         let idToken: String
@@ -384,16 +390,31 @@ class AuthService {
         var deleteKeychainString: (_ service: String, _ account: String) -> Void
         var recordsFallbackTelemetry: Bool
 
+        // Security invariant: auth tokens live in the Keychain on EVERY build — including
+        // dev and the Sparkle-distributed beta — and the plaintext UserDefaults write
+        // fallback is OFF. The file-based Keychain write now works on all builds (see
+        // DesktopKeychainStore), so a fallback that spills OAuth/refresh tokens into
+        // UserDefaults (plaintext on disk, included in backups, readable by any process with
+        // disk access) is pure risk with no correctness benefit. If a Keychain write fails we
+        // surface it via AuthError.keychainTokenStorageUnavailable instead of leaking secrets.
+        // The UserDefaults *read* path in storedTokens() is intentionally retained only to
+        // migrate pre-existing tokens into the Keychain on first launch, then clear them.
         static let live = TokenStorageHooks(
-            usesKeychainTokenStorage: { !AppBuild.isNonProduction },
-            allowsUserDefaultsFallback: { true },
+            usesKeychainTokenStorage: { true },
+            allowsUserDefaultsFallback: { false },
             readKeychainString: { service, account in
+                // Only the team+bundle scoped service. Never query the unscoped
+                // legacy `com.omi.desktop.firebase-rest-session` item — a foreign
+                // ACL on that name is what triggers the login-keychain password
+                // dialog. Pre-scoping installs recover via UserDefaults migration.
                 DesktopKeychainStore.string(service: service, account: account)
             },
             writeKeychainString: { value, service, account in
                 DesktopKeychainStore.setString(value, service: service, account: account)
             },
             deleteKeychainString: { service, account in
+                // Only delete the scoped item. Touching the legacy unscoped name can
+                // itself prompt when the ACL belongs to another signing team.
                 DesktopKeychainStore.delete(service: service, account: account)
             },
             recordsFallbackTelemetry: true

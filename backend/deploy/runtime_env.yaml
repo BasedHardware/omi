@@ -15,20 +15,26 @@ environments:
           OMI_ENV_STAGE:
             value: dev
             category: runtime_identity
-          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+          OMI_LLM_GATEWAY_FEATURE_MODE:
+            value: gateway
+            category: rollout
+          OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
             value: "true"
+            category: rollout
+          OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+            value: "false"
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
             value: "1.0"
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-            value: "true"
+            value: "false"
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
             value: "1.0"
             category: rollout
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-            value: "true"
+            value: "false"
             category: rollout
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: "1.0"
@@ -75,20 +81,26 @@ environments:
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "true"
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "true"
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
@@ -143,20 +155,26 @@ environments:
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "true"
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "true"
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"
@@ -211,20 +229,26 @@ environments:
             OMI_LLM_GATEWAY_URL:
               value: http://172.16.63.232
               category: service_discovery
-            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+            OMI_LLM_GATEWAY_FEATURE_MODE:
+              value: gateway
+              category: rollout
+            OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
               value: "true"
+              category: rollout
+            OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "true"
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
               value: "1.0"
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "true"
+              value: "false"
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: "1.0"

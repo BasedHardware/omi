@@ -2,6 +2,26 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.54",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed connector import progress disappearing when the import window is closed and reopened — the running import, its result, and any error now stay visible, and an import can no longer be started twice",
+        "Local files connector now shows a concise status line instead of a raw scan report, with a clear message when folder access is denied",
+        "The ChatGPT/Claude import button now stays disabled until you paste something, instead of showing an error after the click",
+        "Tidied the ChatGPT/Claude paste box: it starts compact and grows as you add text, and the placeholder now lines up with the cursor",
+        "ChatGPT/Claude memory imports now say whether the pasted text had nothing to extract or the import itself failed, instead of one ambiguous error",
+        "Sign-in tokens are now stored in the macOS Keychain on every build; dev and beta builds no longer fall back to keeping credentials in plaintext UserDefaults",
+        "Fixed macOS Keychain password prompts for Beta/Prod and local contributor builds by isolating sign-in and device-id secrets per signing team and bundle, and never querying the old shared Keychain items"
+      ]
+    },
+    {
+      "version": "0.12.53",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.52",
       "date": "2026-07-08",
       "changes": [

@@ -1,0 +1,33 @@
+version: 2
+name: connector-import-progress
+tier: manual
+description: Connector import sheets keep progress and terminal status visible after close and reopen.
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportRunner.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingMemoryLogImportService.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
+preconditions:
+  - automation_bridge_ready
+  - auth_ready
+steps:
+  - id: S1
+    name: Open an import connector sheet
+    do: "Open Home, click a Connect data source, and verify the connector sheet appears with its primary action."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S2
+    name: Keep progress visible after dismiss
+    do: "Start an import, close the sheet while it runs, reopen the same connector, and verify progress or terminal status is still visible."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S3
+    name: Prevent duplicate starts
+    do: "While an import is running, verify the primary import action is disabled and reopening the sheet does not start a second run."
+    expect:
+      interactive_count: { min: 3 }

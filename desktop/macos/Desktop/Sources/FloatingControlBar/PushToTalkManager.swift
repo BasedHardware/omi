@@ -304,6 +304,7 @@ class PushToTalkManager: ObservableObject {
     }
     if isBlockedByUsageLimit() { return }
     RealtimeHubController.shared.prefetchVoiceSeedContextIfNeeded()
+    RealtimeHubController.shared.prefetchVoiceTurnScreenContextIfNeeded()
     // Reset the overflow flag under the buffer lock so it's atomic w.r.t. the
     // audio thread's appendBatchAudioBounded (fresh turn → allow the warning again).
     batchAudioLock.lock()
@@ -347,6 +348,7 @@ class PushToTalkManager: ObservableObject {
   private func enterLockedListening() {
     if isBlockedByUsageLimit() { return }
     RealtimeHubController.shared.prefetchVoiceSeedContextIfNeeded()
+    RealtimeHubController.shared.prefetchVoiceTurnScreenContextIfNeeded()
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if ShortcutSettings.shared.pttMuteSystemAudio {
       SystemAudioMuteController.shared.muteForListening()

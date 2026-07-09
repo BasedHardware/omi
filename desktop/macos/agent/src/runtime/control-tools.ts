@@ -610,7 +610,7 @@ export async function handleAgentControlToolCall(
           ...parsed,
           ownerId,
           requestId,
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          metadata: { ...(parsed.metadata ?? {}) },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.mode,
             cwd: parsed.cwd,
@@ -618,6 +618,7 @@ export async function handleAgentControlToolCall(
             requestId,
             clientId: parsed.clientId,
             adapterId,
+            screenContext: true,
           }),
         });
         return stringifyToolResult({
@@ -642,7 +643,7 @@ export async function handleAgentControlToolCall(
           ownerId,
           requestId,
           surfaceKind: parsed.surfaceKind ?? "floating_bar",
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          metadata: { ...(parsed.metadata ?? {}) },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.mode,
             cwd: parsed.cwd,
@@ -650,6 +651,7 @@ export async function handleAgentControlToolCall(
             requestId,
             clientId: parsed.clientId,
             adapterId,
+            screenContext: true,
           }),
         });
         return stringifyToolResult({
@@ -660,12 +662,20 @@ export async function handleAgentControlToolCall(
       }
       case "spawn_agent": {
         const parsed = agentControlToolSchemas.spawn_agent.parse(input);
+        if (parsed.parentRunId) {
+          assertCanonicalRunId(parsed.parentRunId, "parentRunId");
+        }
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `spawn-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId =
           parsed.adapterId ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
           (parsed.parentRunId ? undefined : "acp");
+        const visiblePillExternalRefId = parsed.visible
+          ? (parsed.externalRefId ?? randomUUID())
+          : parsed.externalRefId;
+        const childSurfaceKind = parsed.visible ? "floating_bar" : "delegated_agent";
+        const childExternalRefKind = parsed.visible ? "pill" : undefined;
         const mcpServers = buildControlRunMcpServers(context, {
           mode: "act",
           cwd: parsed.cwd,
@@ -673,10 +683,11 @@ export async function handleAgentControlToolCall(
           requestId,
           clientId: parsed.clientId,
           adapterId: adapterId ?? "acp",
+          surfaceKind: childSurfaceKind,
+          externalRefKind: childExternalRefKind,
+          externalRefId: visiblePillExternalRefId,
+          screenContext: true,
         });
-        const visiblePillExternalRefId = parsed.visible
-          ? (parsed.externalRefId ?? randomUUID())
-          : parsed.externalRefId;
         if (parsed.parentRunId) {
           const result = await context.kernel.delegateAgent({
             mode: "spawn",
@@ -686,15 +697,15 @@ export async function handleAgentControlToolCall(
             requestId,
             adapterId,
             defaultAdapterId: adapterId,
-            childSurfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
-            childExternalRefKind: parsed.visible ? "pill" : undefined,
+            childSurfaceKind,
+            childExternalRefKind,
             childExternalRefId: visiblePillExternalRefId,
             childTitle: parsed.title ?? `Delegated: ${parsed.objective.slice(0, 80)}`,
             cwd: parsed.cwd,
             model: parsed.model,
             runMode: "act",
             clientId: parsed.clientId,
-            metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true, visible: parsed.visible },
+            metadata: { ...(parsed.metadata ?? {}), visible: parsed.visible },
             mcpServers,
           });
           return stringifyToolResult({
@@ -710,8 +721,8 @@ export async function handleAgentControlToolCall(
           requestId,
           prompt: parsed.objective,
           title: parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`,
-          surfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
-          externalRefKind: parsed.visible ? "pill" : undefined,
+          surfaceKind: childSurfaceKind,
+          externalRefKind: childExternalRefKind,
           externalRefId: visiblePillExternalRefId,
           adapterId,
           defaultAdapterId: adapterId,
@@ -720,7 +731,6 @@ export async function handleAgentControlToolCall(
           mode: "act",
           metadata: {
             ...(parsed.metadata ?? {}),
-            disableSwiftBackedTools: true,
             visible: parsed.visible,
             provider: parsed.provider ?? null,
           },
@@ -734,6 +744,7 @@ export async function handleAgentControlToolCall(
       }
       case "run_agent_and_wait": {
         const parsed = agentControlToolSchemas.run_agent_and_wait.parse(input);
+        assertCanonicalRunId(parsed.parentRunId, "parentRunId");
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
         const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
@@ -752,7 +763,7 @@ export async function handleAgentControlToolCall(
           clientId: parsed.clientId,
           maxDepth: parsed.maxDepth,
           maxBudgetUsd: parsed.maxBudgetUsd,
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
+          metadata: { ...(parsed.metadata ?? {}) },
           mcpServers: buildControlRunMcpServers(context, {
             mode: parsed.runMode,
             cwd: parsed.cwd,
@@ -760,6 +771,7 @@ export async function handleAgentControlToolCall(
             requestId,
             clientId: parsed.clientId,
             adapterId,
+            screenContext: true,
           }),
         });
         return stringifyToolResult({
@@ -811,6 +823,10 @@ function buildControlRunMcpServers(
     requestId: string;
     clientId: string;
     adapterId: string;
+    surfaceKind?: string;
+    externalRefKind?: string;
+    externalRefId?: string;
+    screenContext?: boolean;
   }
 ): Record<string, unknown>[] | undefined {
   if (!context.buildMcpServers) {
@@ -822,13 +838,19 @@ function buildControlRunMcpServers(
     clientId: input.clientId,
     adapterId: input.adapterId,
     protocolVersion: 2,
-    includeSwiftBackedTools: false,
+    surfaceKind: input.surfaceKind,
+    externalRefKind: input.externalRefKind,
+    externalRefId: input.externalRefId,
+    includeSwiftBackedTools: true,
+    screenContext: input.screenContext === true,
   });
-  // Direct control-created runs do not have a Swift ActiveRequest with an
-  // onToolCall handler. Keep browser/stdio-independent MCPs available, but do
-  // not expose omi-tools, whose execute_sql/semantic_search calls must be
-  // answered by Swift-backed request routing.
-  return servers.filter((server) => server.name !== "omi-tools");
+  return servers;
+}
+
+function assertCanonicalRunId(value: string, fieldName: string): void {
+  if (!value.startsWith("run_")) {
+    throw new Error(`${fieldName} must be a canonical Omi run_id starting with "run_"; omit it for a top-level background agent`);
+  }
 }
 
 function controlToolOwnerId(context: AgentControlToolContext): string {
@@ -929,20 +951,28 @@ function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record
   const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
   const input = (run?.input as Record<string, unknown> | undefined) ?? {};
   const metadata = (session.metadata as Record<string, unknown> | undefined) ?? {};
+  const runId = typeof run?.runId === "string" && run.runId ? run.runId : null;
+  const sessionId = typeof session.sessionId === "string" && session.sessionId ? session.sessionId : null;
+  const errorMessage = typeof run?.errorMessage === "string" && run.errorMessage ? run.errorMessage : null;
+  const errorCode = typeof run?.errorCode === "string" && run.errorCode ? run.errorCode : null;
   const pillId =
     (typeof session.externalRefId === "string" && session.externalRefId) ||
-    (typeof run?.runId === "string" ? run.runId : null);
+    (typeof metadata.pillId === "string" && metadata.pillId) ||
+    runId ||
+    sessionId;
   return {
     id: pillId,
-    runId: run?.runId ?? null,
-    sessionId: session.sessionId ?? null,
+    runId,
+    sessionId,
     title: session.title ?? "Background agent",
     status: run?.status ?? session.status ?? "unknown",
-    latestActivity: run?.finalText ?? input.prompt ?? session.title ?? "",
+    latestActivity: run?.finalText ?? errorMessage ?? input.prompt ?? session.title ?? "",
     query: typeof input.prompt === "string" ? input.prompt : "",
     createdAtMs: session.createdAtMs ?? null,
     completedAtMs: run?.completedAtMs ?? null,
     provider: metadata.provider ?? null,
+    errorCode,
+    errorMessage,
   };
 }
 

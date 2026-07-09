@@ -1,0 +1,3 @@
+{
+  "change": "Fixed a main-thread freeze where chat text selection wrapped agent card headers and pegged CPU"
+}

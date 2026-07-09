@@ -31,8 +31,12 @@ export interface McpServerBuildContext {
   sessionId?: string;
   runId?: string;
   attemptId?: string;
+  surfaceKind?: string;
+  externalRefKind?: string;
+  externalRefId?: string;
   adapterId?: string;
   includeSwiftBackedTools?: boolean;
+  screenContext?: boolean;
 }
 
 export type McpServerBuilder = (

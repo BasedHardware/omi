@@ -112,8 +112,7 @@ struct OnboardingVoiceShortcutStepView: View {
         barState.showingAIConversation = false
         barState.showingAIResponse = false
         barState.aiInputText = ""
-        barState.currentAIMessage = nil
-        barState.chatHistory = []
+        barState.clearViewport()
         barState.isVoiceFollowUp = false
         barState.voiceFollowUpTranscript = ""
     }

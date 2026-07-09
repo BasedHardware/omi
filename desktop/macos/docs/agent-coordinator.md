@@ -40,7 +40,7 @@ The coordinator uses the existing TypeScript desktop runtime kernel as the execu
 
 ## Maintenance — migration shim burn-down
 
-Temporary shims from the platonic refactor are scheduled for deletion **two desktop releases after** the release that ships the platonic branch. Track in `.cursor/plans/desktop-agent-platonic-gap-closure.plan.md` (G6):
+Temporary shims from the platonic refactor are scheduled for deletion **two desktop releases after** the release that ships the platonic branch (gap-closure G6):
 
 | Shim | Site | Delete in |
 |------|------|-----------|

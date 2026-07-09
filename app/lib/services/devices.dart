@@ -63,7 +63,7 @@ class DeviceService implements IDeviceService {
   final List<DeviceDiscoverer> _discoverers = [
     NativeBluetoothDiscoverer(),
     AppleWatchDiscoverer(),
-    RayBanMetaDiscoverer()
+    RayBanMetaDiscoverer(),
   ];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};

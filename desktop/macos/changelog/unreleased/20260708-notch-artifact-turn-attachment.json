@@ -1,0 +1,3 @@
+{
+  "change": "Fixed notch and chat so agent artifacts stay attached to the turn that produced them, old orphan artifact cards no longer appear in the floating viewport, and agent list/card previews show the prompt instead of the response"
+}

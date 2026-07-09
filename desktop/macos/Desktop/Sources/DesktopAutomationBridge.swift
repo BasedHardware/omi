@@ -155,6 +155,10 @@ struct DesktopAutomationExecuteExportRequest: Codable {
   let destination: String
 }
 
+struct DesktopAutomationOpenImportRequest: Codable {
+  let connector: String
+}
+
 /// Describes a semantic action exposed over `GET /actions` so an agent can discover
 /// what it can drive without inspecting the UI tree.
 struct DesktopAutomationActionDescriptor: Codable {
@@ -488,6 +492,27 @@ final class DesktopAutomationActionRegistry {
 
   private var entries: [String: Entry] = [:]
   private var didRegisterBuiltins = false
+  /// Non-prod harness latch so race probes stay busy without relying on LLM latency.
+  private var harnessBusyUntil: Date?
+
+  private func harnessBusyLatchActive(now: Date = Date()) -> Bool {
+    guard let until = harnessBusyUntil else { return false }
+    if now >= until {
+      harnessBusyUntil = nil
+      return false
+    }
+    return true
+  }
+
+  private func clearHarnessBusyLatch() {
+    harnessBusyUntil = nil
+  }
+
+  private func armHarnessBusyLatch(holdBusyMs: Int) {
+    let ms = max(0, holdBusyMs)
+    guard ms > 0 else { return }
+    harnessBusyUntil = Date().addingTimeInterval(Double(ms) / 1000.0)
+  }
 
   func register(
     name: String,
@@ -544,6 +569,32 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       NotificationCenter.default.post(name: .refreshAllData, object: nil)
       return nil
+    }
+
+    // Runs the exact service + outcome mapping the ChatGPT/Claude import
+    // sheets use, so harnesses can assert outcome copy without driving the
+    // TextEditor. Writes real memories on success, like the sheet would.
+    register(
+      name: "memory_log_import_probe",
+      summary: "Import a ChatGPT/Claude memory-log text through the real connector pipeline and return the outcome message",
+      params: ["source", "text"]
+    ) { params in
+      guard let raw = params["source"], let source = OnboardingMemoryLogSource(rawValue: raw) else {
+        throw DesktopAutomationActionError.invalidParams("source must be chatgpt or claude")
+      }
+      guard let text = params["text"], !text.isEmpty else {
+        throw DesktopAutomationActionError.invalidParams("text must be non-empty")
+      }
+      switch await ConnectorImportOperations.importMemoryLog(text: text, source: source) {
+      case .success(let result, let message):
+        return [
+          "outcome": "success",
+          "message": message,
+          "memories": "\(result.memoryCount ?? 0)",
+        ]
+      case .failure(let message):
+        return ["outcome": "failure", "message": message]
+      }
     }
 
     register(
@@ -928,6 +979,78 @@ final class DesktopAutomationActionRegistry {
       return ["sent": query]
     }
 
+    // Fire-and-forget main-chat send for race/busy probes. Returns before the
+    // turn settles so harnesses can observe isSending / concurrent rejection.
+    // Optional hold_busy_ms arms a non-prod latch so R3 does not depend on LLM
+    // latency keeping isSending true.
+    register(
+      name: "ask_main_chat_no_wait",
+      summary: "Fire-and-forget main-chat send; returns immediately without waiting for the turn",
+      params: ["query", "hold_busy_ms"]
+    ) { params in
+      let query = (params["query"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !query.isEmpty else { return ["error": "missing 'query'"] }
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let isSending = provider.isSending
+      let isStreaming = provider.messages.contains(where: { $0.isStreaming })
+      let latchBusy = self.harnessBusyLatchActive()
+      let busy = isSending || isStreaming || latchBusy
+      if busy {
+        return [
+          "accepted": "false",
+          "busy": "true",
+          "is_sending": isSending ? "true" : "false",
+          "is_streaming": isStreaming ? "true" : "false",
+          "harness_busy_latch": latchBusy ? "true" : "false",
+          "reason": "already_sending",
+          "query": query,
+        ]
+      }
+      let holdBusyMs = intParam(params["hold_busy_ms"], default: 0)
+      if holdBusyMs > 0 {
+        guard AppBuild.isNonProduction else {
+          return ["error": "hold_busy_ms is disabled on production bundles"]
+        }
+        self.armHarnessBusyLatch(holdBusyMs: holdBusyMs)
+      }
+      Task { @MainActor in
+        let tracer = QueryTracer(query: query, inputMode: .text)
+        await QueryTracerContext.$current.withValue(tracer) {
+          _ = await provider.sendMessage(query)
+        }
+      }
+      return [
+        "accepted": "true",
+        "busy": "false",
+        "is_sending": "false",
+        "is_streaming": isStreaming ? "true" : "false",
+        "harness_busy_latch": holdBusyMs > 0 ? "true" : "false",
+        "hold_busy_ms": "\(max(0, holdBusyMs))",
+        "sent": query,
+      ]
+    }
+
+    register(
+      name: "main_chat_busy_state",
+      summary: "Return whether main chat is currently sending or streaming (race/busy probes)",
+      params: []
+    ) { _ in
+      guard let provider = ChatProvider.mainInstance else {
+        return ["error": "main ChatProvider not yet initialized"]
+      }
+      let isSending = provider.isSending
+      let isStreaming = provider.messages.contains(where: { $0.isStreaming })
+      let latchBusy = self.harnessBusyLatchActive()
+      return [
+        "is_sending": isSending ? "true" : "false",
+        "is_streaming": isStreaming ? "true" : "false",
+        "harness_busy_latch": latchBusy ? "true" : "false",
+        "busy": (isSending || isStreaming || latchBusy) ? "true" : "false",
+      ]
+    }
+
     // Gauntlet step 06: clear owner A kernel bindings, re-register synthetic owner B,
     // and run one assembled-context probe turn. Non-production bundles only.
     register(
@@ -1001,6 +1124,31 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "suspend_agent_stream",
+      summary: "Freeze the agent stdio stream (SIGSTOP) to induce a chat stall; auto-resumes after durationMs. Non-prod only.",
+      params: ["durationMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "suspend_agent_stream is disabled on production bundles"]
+      }
+      // Default just past the 180s send watchdog so CHAT-02 can assert the
+      // "Response took too long" error + recoverable retry; capped at 300s.
+      let durationMs = intParam(params["durationMs"], default: 190_000)
+      return await AgentRuntimeProcess.shared.debugSuspendStream(durationMs: durationMs)
+    }
+
+    register(
+      name: "resume_agent_stream",
+      summary: "Resume a suspended agent stdio stream (SIGCONT) immediately. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "resume_agent_stream is disabled on production bundles"]
+      }
+      return await AgentRuntimeProcess.shared.debugResumeStream()
+    }
+
+    register(
       name: "floating_bar_chat_snapshot",
       summary: "Export floating-bar chat transcript and stream state for harness assertions",
       params: ["limit"]
@@ -1044,11 +1192,14 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
+      // Drop harness race latch so later probes are not stuck "busy" after R3.
+      self.clearHarnessBusyLatch()
       let deadline = Date().addingTimeInterval(Double(timeoutMs) / 1000.0)
       while Date() < deadline {
         if !provider.isSending && !provider.messages.contains(where: { $0.isStreaming }) {
           var detail = provider.automationMainChatSnapshot(limit: 8)
           detail["idle"] = "true"
+          detail["harness_busy_latch"] = "false"
           return detail
         }
         try await Task.sleep(nanoseconds: UInt64(pollMs) * 1_000_000)
@@ -1823,6 +1974,7 @@ final class DesktopAutomationBridge {
           "POST /conversation/open",
           "POST /action",
           "POST /visual/export",
+          "POST /open-import",
         ],
         lanes: ["bridge", "visual", "ui"],
         waits: ["state", "log", "trace"],
@@ -1891,6 +2043,45 @@ final class DesktopAutomationBridge {
         return jsonResponse(
           DesktopAutomationResponse(
             ok: true, result: OpenResult(destination: payload.destination), error: nil))
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 500)
+      }
+    case ("POST", "/open-import"):
+      struct OpenResult: Codable { let connector: String }
+      let payload: DesktopAutomationOpenImportRequest
+      do {
+        payload = try JSONDecoder().decode(
+          DesktopAutomationOpenImportRequest.self, from: request.body)
+      } catch {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: error.localizedDescription),
+          statusCode: 400)
+      }
+      let knownIDs = await MainActor.run { ImportConnector.all.map(\.id) }
+      guard knownIDs.contains(payload.connector) else {
+        return jsonResponse(
+          DesktopAutomationResponse<OpenResult>(
+            ok: false, result: nil, error: "unknown connector: \(payload.connector)"),
+          statusCode: 400)
+      }
+      do {
+        await MainActor.run {
+          NSApp.activate()
+          if let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") }) {
+            window.makeKeyAndOrderFront(nil)
+          }
+          NotificationCenter.default.post(
+            name: .desktopAutomationOpenImportRequested, object: nil,
+            userInfo: ["connector": payload.connector])
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        return jsonResponse(
+          DesktopAutomationResponse(
+            ok: true, result: OpenResult(connector: payload.connector), error: nil))
       } catch {
         return jsonResponse(
           DesktopAutomationResponse<OpenResult>(

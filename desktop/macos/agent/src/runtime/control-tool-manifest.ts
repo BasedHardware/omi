@@ -25,14 +25,6 @@ export interface AgentControlManifestProperty {
 
 export type AgentControlSurface = "desktopChat" | "realtimeHub";
 
-export interface AgentControlMcpInputSchemaOptions {
-  anyOf?: unknown[];
-  allOf?: unknown[];
-  oneOf?: unknown[];
-  if?: unknown;
-  then?: unknown;
-}
-
 export interface AgentControlManifestTool {
   name:
     | "list_agent_sessions"
@@ -73,7 +65,6 @@ export interface AgentControlManifestTool {
   timeoutClass: AgentControlTimeoutClass;
   properties: Record<string, AgentControlManifestProperty>;
   required: string[];
-  mcpInputSchemaOptions?: AgentControlMcpInputSchemaOptions;
 }
 
 const agentControlReadPolicy = {
@@ -418,7 +409,16 @@ Use a runId returned by list_agent_sessions or a correlated Omi response. Return
       priority: { type: "number", description: "Priority integer." },
       title: { type: "string", description: "Short title." },
       decisionPrompt: { type: "string", description: "Exact decision prompt." },
+      recommendedDefault: { type: "string", description: "Optional recommended default decision label." },
+      sourceSessionId: { type: "string", description: "Optional source Omi session_id scope guard." },
+      sourceRunId: { type: "string", description: "Optional source Omi run_id scope guard." },
+      sourceAttemptId: { type: "string", description: "Optional source Omi attempt_id scope guard." },
+      sourceArtifactId: { type: "string", description: "Optional source Omi artifact_id scope guard." },
+      capability: { type: "string", description: "Capability being requested, e.g. desktop.context.screenshot_image." },
+      operation: { type: "string", description: "Operation being requested, e.g. get_screenshot." },
+      resourceRef: { type: "string", description: "Resource reference for scoped approval." },
       payload: { type: "object", description: "Small structured payload.", additionalProperties: true },
+      expiresAtMs: { type: "number", description: "Optional epoch-ms expiration for the decision item." },
     },
     required: ["kind", "priority", "title", "decisionPrompt"],
   },
@@ -521,14 +521,6 @@ Returns metadata and references only. It does not read arbitrary artifact conten
       limit: { type: "number", description: "Maximum artifacts to return. Default 50, max 200." },
     },
     required: [],
-    mcpInputSchemaOptions: {
-      anyOf: [
-        { required: ["artifactId"] },
-        { required: ["sessionId"] },
-        { required: ["runId"] },
-        { required: ["attemptId"] },
-      ],
-    },
   },
   {
     name: "update_agent_artifact_lifecycle",

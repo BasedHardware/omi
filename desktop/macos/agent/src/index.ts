@@ -619,12 +619,24 @@ function buildMcpServers(
       if (context.attemptId) {
         omiToolsEnv.push({ name: "OMI_ATTEMPT_ID", value: context.attemptId });
       }
+      if (context.surfaceKind) {
+        omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: context.surfaceKind });
+      }
+      if (context.externalRefKind) {
+        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_KIND", value: context.externalRefKind });
+      }
+      if (context.externalRefId) {
+        omiToolsEnv.push({ name: "OMI_EXTERNAL_REF_ID", value: context.externalRefId });
+      }
     }
     if (cwd) {
       omiToolsEnv.push({ name: "OMI_WORKSPACE", value: cwd });
     }
     if (sessionKey === "onboarding") {
       omiToolsEnv.push({ name: "OMI_ONBOARDING", value: "true" });
+    }
+    if (context?.screenContext === true) {
+      omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
     }
     servers.push({
       name: "omi-tools",

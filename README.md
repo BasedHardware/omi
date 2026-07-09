@@ -147,7 +147,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 - [macOS App Development](desktop/macos/README.md)
 - [Mobile App Setup](https://docs.omi.me/doc/developer/AppSetup)
 - [Backend Setup](https://docs.omi.me/doc/developer/backend/Backend_Setup)
-- [Contributing](https://docs.omi.me/doc/developer/Contribution)
+- [Contributing](https://docs.omi.me/doc/developer/Contribution) — also [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`PRODUCT.md`](PRODUCT.md)
 
 ### Building Apps
 - [App Development Guide](https://docs.omi.me/doc/developer/apps/Introduction)

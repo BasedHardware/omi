@@ -6,7 +6,7 @@
 
 These rules apply to every AI agent working in this repository. This file is the single source of truth; `CLAUDE.md` just points here.
 
-**Two audiences read this file.** Engineering standards (Definition of Done, coding guidelines, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about this repo's `main` branch, production app bundles, deploys, and local machine workflows assume a maintainer environment; if you are working in a fork, follow your user's process for landing changes and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`.
+**Two audiences read this file.** Engineering standards (Definition of Done, coding guidelines, testing, formatting) apply to everyone — maintainers and open-source contributors alike. Rules about this repo's `main` branch, production app bundles, deploys, and local machine workflows assume a maintainer environment; if you are working in a fork, follow your user's process for landing changes and skip those. Contributor flow: `docs/doc/developer/Contribution.mdx`. Product direction and locked invariants: `PRODUCT.md` and `docs/product/invariants/`.
 
 ## Definition of Done
 
@@ -17,7 +17,7 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 3. **You exercised the change yourself** — ran the real user-facing path, not just compiled or lint-passed. If you truly could not, say so explicitly instead of implying it works.
 4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
-6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR.
+6. **Docs moved with the code** — if you changed setup, test commands, service boundaries, env vars, or agent-relevant behavior, the matching doc (this file, a component `AGENTS.md`, or `docs/doc/developer/`) is updated in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
 
 ## Leave It Better Than You Found It
 
@@ -52,9 +52,15 @@ Improve the code you touch — within your blast radius:
 
 ## Coding Guidelines
 
+### Product invariants
+
+- Read [`PRODUCT.md`](PRODUCT.md) before changing product behavior. Locked rules live in [`docs/product/invariants/`](docs/product/invariants/) (shared chat continuity, memory tiers, agent control plane, integrations harness, brand UI).
+- If you touch a locked invariant’s path globs, name the invariant ID in the PR and update its guard test when behavior changes.
+- Do not paste product essays into this file — keep the registry as the SSOT and link here.
+
 ### UI / Design (all platforms)
 
-- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions.
+- **Never use purple.** Purple is off-brand — do not use it anywhere in the UI (icons, accents, glows, hover states, gradients). Use white/neutral for accent icons and primary actions. Enforced as a no-increase ratchet (`INV-UI-1`); see `docs/product/invariants/brand-ui.md`.
 
 ### Deferred Work Markers
 
@@ -197,6 +203,7 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 - `cd desktop/macos && ./run.sh --yolo` — quick start against the prod backend, no local services.
 - `OMI_SKIP_BACKEND=1` — app only, use remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
 - **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- **`run.sh` build lock is per-worktree, launch-phase only.** It serializes same-checkout builds that share `Desktop/.build/` + `build/$APP_NAME.app`, holds through install/seed/`open`, then releases before the long-running backend wait — never a per-user global mutex. Cross-worktree `./run.sh` must not block each other. Do not point two worktrees at the same explicit `OMI_APP_NAME` (shared `/Applications` path is not cross-locked).
 - `Omi Dev` is the canonical shared development profile: `/Applications/Omi Dev.app`, bundle id `com.omi.desktop-dev`, reusable permissions, and auth seed source. Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
@@ -346,6 +353,7 @@ Full RELEASE flow + `gh workflow run gcp_backend.yml -f environment=prod -f bran
 - **When a defect ships because guidance was misread or missing, tighten the guidance in the fix PR** — make the rule mechanical enough that the same misreading can't recur, or add a check that catches it.
 - If a PR changes setup, test commands, safety rules, service boundaries, or env vars — update this file in the same PR.
 - For architecture / core flow / API changes — update Mintlify docs (`docs/doc/developer/`) in the same PR.
+- For product direction or locked invariants — update `PRODUCT.md` and `docs/product/invariants/` (and guard tests) in the same PR.
 - If a PR changes audio streaming, transcription, conversation lifecycle, or listen/pusher WebSocket — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx`.
 
 ## Cursor Cloud specific instructions

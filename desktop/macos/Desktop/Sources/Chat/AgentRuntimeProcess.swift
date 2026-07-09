@@ -182,7 +182,9 @@ actor AgentRuntimeProcess {
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
   private var activeVoiceSeedRequests: [RuntimeMessage.RequestKey: ActiveVoiceSeedRequest] = [:]
   private var activeKernelTurnTailRequests: [RuntimeMessage.RequestKey: ActiveKernelTurnTailRequest] = [:]
-  private var turnRecordedHandlers: [TurnRecordedHandler] = []
+  /// Single UI apply gate for kernel `turn_recorded` (INV-6). Replace-only —
+  /// never append; a second ChatProvider attach must not fan out duplicates.
+  private var turnRecordedHandler: TurnRecordedHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
   private var receivedInit = false
@@ -386,12 +388,17 @@ actor AgentRuntimeProcess {
     sendJson(dict)
   }
 
-  func setTurnRecordedHandlers(_ handlers: [TurnRecordedHandler]) {
-    turnRecordedHandlers = handlers
+  func setTurnRecordedHandler(_ handler: TurnRecordedHandler?) {
+    turnRecordedHandler = handler
   }
 
-  func addTurnRecordedHandler(_ handler: @escaping TurnRecordedHandler) {
-    turnRecordedHandlers.append(handler)
+  func turnRecordedHandlerCount() -> Int {
+    turnRecordedHandler == nil ? 0 : 1
+  }
+
+  /// Test-only: fire the single turn_recorded apply gate without a live node runtime.
+  func dispatchTurnRecordedForTesting(_ turn: KernelTurnRecorded) {
+    turnRecordedHandler?(turn)
   }
 
   func recordSurfaceTurn(
@@ -568,6 +575,83 @@ actor AgentRuntimeProcess {
       }
     }
   }
+
+  // MARK: - Automation stall hook (non-production only)
+
+  /// Generation guard so a late auto-resume from an earlier suspend can't
+  /// SIGCONT a process that a newer suspend is deliberately holding.
+  private var debugSuspendGeneration: UInt64 = 0
+
+  /// Freeze the agent's stdio stream by sending SIGSTOP to the node bridge
+  /// process. With the process paused it emits no further events, so an in-flight
+  /// chat send stalls exactly like a hung ACP subprocess — driving the
+  /// StallDetector to `.stalled` (20s) and, if held long enough, ChatProvider's
+  /// 180s send watchdog (CHAT-02). A safety auto-resume fires after `durationMs`
+  /// (hard-capped) so the process can never stay frozen if `debugResumeStream`
+  /// is never called. Non-production bundles only.
+  func debugSuspendStream(durationMs: Int) -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "suspend_agent_stream is disabled on production bundles"]
+    }
+    guard let process, process.isRunning, process.processIdentifier > 0 else {
+      return ["error": "no running agent process to suspend"]
+    }
+    let pid = process.processIdentifier
+    guard kill(pid, SIGSTOP) == 0 else {
+      return ["error": "SIGSTOP failed for pid \(pid) (errno \(errno))"]
+    }
+    debugSuspendGeneration &+= 1
+    let generation = debugSuspendGeneration
+    // Cap the freeze window so a forgotten resume can't wedge the agent.
+    let cappedMs = max(1_000, min(durationMs, 300_000))
+    log("AgentRuntimeProcess: DEBUG suspended stream pid=\(pid) for \(cappedMs)ms (gen \(generation))")
+    Task { [weak self] in
+      try? await Task.sleep(nanoseconds: UInt64(cappedMs) * 1_000_000)
+      await self?.autoResumeStream(pid: pid, generation: generation)
+    }
+    return ["suspended": "true", "pid": "\(pid)", "durationMs": "\(cappedMs)"]
+  }
+
+  /// SIGCONT the agent process immediately (early clear of a debug suspend).
+  func debugResumeStream() -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "resume_agent_stream is disabled on production bundles"]
+    }
+    guard let process, process.isRunning, process.processIdentifier > 0 else {
+      return ["error": "no running agent process to resume"]
+    }
+    let pid = process.processIdentifier
+    guard kill(pid, SIGCONT) == 0 else {
+      // SIGCONT failed (pid raced to exit, or an unexpected errno). Do NOT bump
+      // the generation here: leaving the pending auto-resume armed is the safe
+      // choice, so a still-frozen process can't stay stuck until app restart.
+      return ["error": "SIGCONT failed for pid \(pid) (errno \(errno))"]
+    }
+    // Only cancel the pending safety auto-resume once the explicit resume
+    // actually succeeded.
+    debugSuspendGeneration &+= 1
+    log("AgentRuntimeProcess: DEBUG resumed stream pid=\(pid)")
+    return ["resumed": "true", "pid": "\(pid)"]
+  }
+
+  private func autoResumeStream(pid: pid_t, generation: UInt64) {
+    // Only the suspend that scheduled this auto-resume may clear it; a newer
+    // suspend or an explicit resume has already moved the generation on.
+    guard generation == debugSuspendGeneration else { return }
+    // Only resume if the SAME process is still alive. A stored Process that has
+    // already exited can still report its original pid (which the OS may have
+    // reused), so require isRunning as well as a pid match — never SIGCONT a
+    // reused pid. restart()/stop() already SIGKILL the old process, so a
+    // torn-down/relaunched agent has nothing to resume here.
+    guard let process, process.isRunning, process.processIdentifier == pid else { return }
+    _ = kill(pid, SIGCONT)
+    log("AgentRuntimeProcess: DEBUG auto-resumed stream pid=\(pid) (gen \(generation))")
+  }
+  // Caveat: autoResumeStream is actor-isolated, so it can only run once the
+  // actor is idle. The intended stall flow writes only the tiny 180s interrupt
+  // to the frozen process (far below the stdin pipe buffer), so the actor never
+  // blocks on a write while suspended; do not push large stdin payloads to a
+  // suspended agent or the auto-resume could be delayed until the actor frees.
 
   func interrupt(clientId: String, requestId: String) {
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
@@ -1144,9 +1228,7 @@ actor AgentRuntimeProcess {
 
     case .turnRecorded:
       if let recorded = kernelTurnRecorded(from: message) {
-        for handler in turnRecordedHandlers {
-          handler(recorded)
-        }
+        turnRecordedHandler?(recorded)
       }
 
     case .result:
@@ -1171,17 +1253,13 @@ actor AgentRuntimeProcess {
     let callId = message.payload["callId"] as? String ?? ""
     let name = message.payload["name"] as? String ?? ""
     guard let request = routedRequest(for: message) else {
-      if let requestKey = message.requestKey, activeControlRequests[requestKey] != nil {
-        log("AgentRuntimeProcess: rejecting Swift-backed tool call from control request")
-        completeToolCall(
-          callId: callId,
-          result: "Error: Swift-backed Omi tools are unavailable for control-created agent runs",
-          requestId: message.requestId,
-          clientId: message.clientId
-        )
-        return
-      }
-      log("AgentRuntimeProcess: dropping unroutable tool call")
+      log("AgentRuntimeProcess: rejecting unrouted tool call \(name)")
+      completeToolCall(
+        callId: callId,
+        result: Self.unroutedToolCallError(toolName: name),
+        requestId: message.requestId,
+        clientId: message.clientId
+      )
       return
     }
     if request.isInterrupted {
@@ -1193,6 +1271,23 @@ actor AgentRuntimeProcess {
       let result = await request.onToolCall(callId, name, input)
       completeToolCall(callId: callId, result: result, requestId: request.requestId, clientId: request.clientId)
     }
+  }
+
+  private static func unroutedToolCallError(toolName: String) -> String {
+    let payload: [String: Any] = [
+      "ok": false,
+      "error": [
+        "code": "unrouted_tool_call",
+        "message": "Tool call '\(toolName)' was rejected because it was not attached to an active trusted request.",
+      ],
+    ]
+    guard
+      let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
+      let text = String(data: data, encoding: .utf8)
+    else {
+      return #"{"ok":false,"error":{"code":"unrouted_tool_call"}}"#
+    }
+    return text
   }
 
   private func completeToolCall(callId: String, result: String, requestId: String? = nil, clientId: String? = nil) {
@@ -1354,10 +1449,7 @@ actor AgentRuntimeProcess {
   }
 
   private func currentOwnerId() -> String? {
-    guard let value = UserDefaults.standard.string(forKey: "auth_userId"), !value.isEmpty else {
-      return nil
-    }
-    return value
+    RuntimeOwnerIdentity.currentOwnerId()
   }
 
   private func handleTermination(
