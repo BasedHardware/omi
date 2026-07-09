@@ -1,6 +1,3 @@
 {
-    "type": "fix",
-    "area": "desktop",
-    "title": "Fail-soft fallbacks with health-event observability",
-    "description": "Desktop flaky paths (auth refresh, WAL persistence, agent bridge restart, API 401 retry, DB lock backoff, mode-switch waits, BLE decode, automation bind) now degrade gracefully and record structured health snapshots for diagnostics export."
+  "change": "Desktop flaky paths now fail soft with structured health-event snapshots for diagnostics export (auth, WAL, agent bridge, API retry, DB lock backoff, mode-switch waits, BLE decode, automation bind)"
 }
