@@ -1,15 +1,9 @@
-name: Auto Release Desktop on Main
+name: Build Desktop Release Candidate
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - 'desktop/macos/**'
-      - '!desktop/macos/CHANGELOG.json'
-      - '!desktop/macos/changelog/**'
   schedule:
-    # Pick up desktop merges that accumulated while Codemagic was busy.
-    - cron: '*/5 * * * *'
+    # One weekday candidate at most. Developers use scripts/omi-main for head.
+    - cron: '17 10 * * 1-5'
   workflow_dispatch:
     inputs:
       release_mode:
@@ -34,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency:
       group: desktop-release-planner-main
-      cancel-in-progress: ${{ github.event_name == 'push' }}
+      cancel-in-progress: false
     outputs:
       should_release: ${{ steps.plan.outputs.should_release }}
       reason: ${{ steps.plan.outputs.reason }}
@@ -50,10 +44,6 @@ jobs:
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Debounce desktop app release
-        if: github.event_name == 'push'
-        run: sleep 180
 
       - name: Plan desktop release
         id: plan

@@ -1,0 +1,210 @@
+name: Promote Qualified Desktop Beta
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Blessed v*-macos candidate to promote to beta'
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: desktop-beta-promotion
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    environment: prod
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout promotion controls
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+
+      - name: Download and validate qualified candidate
+        id: candidate
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s\n' "$RELEASE_TAG" | grep -qE '^v[0-9]+\.[0-9]+(\.[0-9]+)?\+[0-9]+-macos$'; then
+            echo "Invalid macOS release tag: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          git fetch --force origin "+refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          TARGET_SHA=$(git rev-list -n1 "$RELEASE_TAG")
+          mkdir -p /tmp/desktop-beta-assets
+          gh release view "$RELEASE_TAG" --repo "$REPO" \
+            --json tagName,body,isDraft,isPrerelease,publishedAt,assets \
+            > /tmp/desktop-beta-release.json
+          gh release download "$RELEASE_TAG" --repo "$REPO" \
+            --pattern 'Omi.zip' --pattern '*.dmg' --dir /tmp/desktop-beta-assets
+
+          ZIP_PATH=/tmp/desktop-beta-assets/Omi.zip
+          DMG_PATH=$(find /tmp/desktop-beta-assets -maxdepth 1 -type f -name '*.dmg' -print -quit)
+          test -f "$ZIP_PATH"
+          test -n "$DMG_PATH"
+          ZIP_SHA=$(sha256sum "$ZIP_PATH" | cut -d' ' -f1)
+          DMG_SHA=$(sha256sum "$DMG_PATH" | cut -d' ' -f1)
+
+          python3 .github/scripts/prepare-desktop-beta-promotion.py \
+            --release-json /tmp/desktop-beta-release.json \
+            --release-tag "$RELEASE_TAG" \
+            --target-sha "$TARGET_SHA" \
+            --zip-sha256 "$ZIP_SHA" \
+            --dmg-sha256 "$DMG_SHA" \
+            --output /tmp/desktop-release-manifest.json
+
+          {
+            echo "target_sha=$TARGET_SHA"
+            echo "dmg_path=$DMG_PATH"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Register immutable release manifest
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "secret-key: $ADMIN_KEY" \
+            --data-binary @/tmp/desktop-release-manifest.json \
+            https://api.omi.me/v2/desktop/releases \
+            > /tmp/desktop-manifest-response.json
+          python3 -m json.tool /tmp/desktop-manifest-response.json
+
+      - name: Mark GitHub release live beta
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$REPO" --json body -q .body > /tmp/release-body.md
+          python3 .github/scripts/mark-desktop-release-beta.py \
+            --input /tmp/release-body.md \
+            --output /tmp/release-body-beta.md
+          gh release edit "$RELEASE_TAG" --repo "$REPO" \
+            --title "Omi Desktop ${RELEASE_TAG#v}" \
+            --notes-file /tmp/release-body-beta.md
+
+      - name: Advance explicit beta pointer
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          python3 - "$RELEASE_TAG" <<'PY' > /tmp/desktop-beta-pointer.json
+          import json
+          import sys
+          print(json.dumps({"platform": "macos", "channel": "beta", "release_id": sys.argv[1]}))
+          PY
+          curl -fsS \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -H "secret-key: $ADMIN_KEY" \
+            --data-binary @/tmp/desktop-beta-pointer.json \
+            https://api.omi.me/v2/desktop/channels/promote \
+            > /tmp/desktop-pointer-response.json
+          python3 -m json.tool /tmp/desktop-pointer-response.json
+
+      - name: Bridge beta for legacy desktop clients
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          SERVICE_URL=$(gcloud run services describe desktop-backend \
+            --region us-central1 --project "$PROJECT_ID" --format='value(status.url)')
+          RELEASE_SECRET=$(gcloud secrets versions access latest --secret=RELEASE_SECRET --project "$PROJECT_ID")
+          python3 - <<'PY' > /tmp/legacy-desktop-release.json
+          import json
+          manifest = json.load(open('/tmp/desktop-release-manifest.json'))
+          print(json.dumps({
+              "version": manifest["version"],
+              "build_number": manifest["build_number"],
+              "download_url": manifest["zip_url"],
+              "ed_signature": manifest["ed_signature"],
+              "changelog": manifest["changelog"],
+              "is_live": True,
+              "is_critical": manifest["mandatory"],
+              "channel": "beta",
+          }))
+          PY
+          RESPONSE=$(curl -sS -w '\n%{http_code}' \
+            -X POST \
+            -H 'Content-Type: application/json' \
+            -H "X-Release-Secret: $RELEASE_SECRET" \
+            --data-binary @/tmp/legacy-desktop-release.json \
+            "${SERVICE_URL%/}/updates/releases")
+          CODE=$(printf '%s\n' "$RESPONSE" | tail -n1)
+          if [ "$CODE" != 201 ] && [ "$CODE" != 409 ]; then
+            printf '%s\n' "$RESPONSE" >&2
+            exit 1
+          fi
+
+      - name: Update existing beta download redirect
+        env:
+          GCS_DESKTOP_UPDATES_BUCKET: ${{ vars.GCS_DESKTOP_UPDATES_BUCKET }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GCS_DESKTOP_UPDATES_BUCKET" ]; then
+            echo "GCS_DESKTOP_UPDATES_BUCKET not configured; existing static redirect unchanged." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 - <<'PY' > /tmp/macos-beta-redirect.json
+          import json
+          manifest = json.load(open('/tmp/desktop-release-manifest.json'))
+          print(json.dumps({
+              "channel": "beta",
+              "version": manifest["version"],
+              "build_number": manifest["build_number"],
+              "tag": manifest["release_id"],
+              "download_url": manifest["dmg_url"],
+              "published_at": manifest["published_at"],
+          }, indent=2))
+          PY
+          python3 - <<'PY' > /tmp/macos-beta-index.html
+          import html
+          import json
+          url = json.load(open('/tmp/desktop-release-manifest.json'))['dmg_url']
+          escaped = html.escape(url, quote=True)
+          print(f'<!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url={escaped}"><a href="{escaped}">Download Omi Beta</a>')
+          PY
+          python3 -c "import json; print(json.load(open('/tmp/desktop-release-manifest.json'))['dmg_url'])" \
+            > /tmp/macos-beta-latest-url.txt
+          for file in index.html redirect.json latest-url.txt; do
+            gcloud storage cp --cache-control='no-store,max-age=0' \
+              "/tmp/macos-beta-${file}" "$GCS_DESKTOP_UPDATES_BUCKET/beta/$file"
+          done
+
+      - name: Clear live update caches
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          ADMIN_KEY=$(gcloud secrets versions access latest --secret=ADMIN_KEY --project "$PROJECT_ID")
+          curl -fsS -X POST -H "secret-key: $ADMIN_KEY" \
+            https://api.omi.me/v2/desktop/clear-cache >/dev/null
+          echo "Promoted ${{ inputs.release_tag }} to qualified beta." >> "$GITHUB_STEP_SUMMARY"

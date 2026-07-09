@@ -7,8 +7,10 @@ so the two scripts can't silently drift on how the block is parsed.
 
 from __future__ import annotations
 
+from typing import NoReturn
 
-def fail(message: str) -> None:
+
+def fail(message: str) -> NoReturn:
     raise SystemExit(f"FAIL: {message}")
 
 
