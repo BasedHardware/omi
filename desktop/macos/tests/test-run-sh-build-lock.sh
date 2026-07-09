@@ -37,12 +37,11 @@ lock_a="$(omi_run_sh_build_lock_dir)"
 OMI_DEV_DIR="$TMP_ROOT/wt-b/.dev"
 lock_b="$(omi_run_sh_build_lock_dir)"
 assert_ne "$lock_a" "$lock_b" "per-worktree lock dirs"
-case "$lock_a" in
-  *"/omi-run-sh-${USER}.lock.d") fail "lock_a still uses legacy per-user global path: $lock_a" ;;
-esac
-case "$lock_b" in
-  *"/omi-run-sh-${USER}.lock.d") fail "lock_b still uses legacy per-user global path: $lock_b" ;;
-esac
+# Basename must be the per-worktree lock dir, not the legacy omi-run-sh-$USER.lock.d.
+lock_a_base="$(basename "$lock_a")"
+lock_b_base="$(basename "$lock_b")"
+assert_eq "run-sh-build.lock.d" "$lock_a_base" "lock_a basename"
+assert_eq "run-sh-build.lock.d" "$lock_b_base" "lock_b basename"
 assert_eq "$TMP_ROOT/wt-a/.dev/run-sh-build.lock.d" "$lock_a" "lock_a path"
 assert_eq "$TMP_ROOT/wt-b/.dev/run-sh-build.lock.d" "$lock_b" "lock_b path"
 
@@ -51,6 +50,18 @@ unset OMI_DEV_DIR
 SCRIPT_DIR="$TMP_ROOT/fallback-macos"
 lock_fallback="$(omi_run_sh_build_lock_dir)"
 assert_eq "$TMP_ROOT/fallback-macos/.dev/run-sh-build.lock.d" "$lock_fallback" "SCRIPT_DIR fallback lock path"
+
+# Repo-root OMI_DEV_DIR (what run.sh uses after sourcing scripts/dev-instance.sh)
+# must not resolve under desktop/macos/.dev.
+REPO_ROOT_FAKE="$TMP_ROOT/repo"
+mkdir -p "$REPO_ROOT_FAKE"
+OMI_DEV_DIR="$REPO_ROOT_FAKE/.dev"
+SCRIPT_DIR="$REPO_ROOT_FAKE/desktop/macos"
+lock_repo="$(omi_run_sh_build_lock_dir)"
+assert_eq "$REPO_ROOT_FAKE/.dev/run-sh-build.lock.d" "$lock_repo" "repo-root OMI_DEV_DIR lock path"
+case "$lock_repo" in
+  */desktop/macos/.dev/*) fail "lock unexpectedly under desktop/macos/.dev: $lock_repo" ;;
+esac
 
 # Acquire in worktree A must not block acquire in worktree B.
 OMI_DEV_DIR="$TMP_ROOT/wt-a/.dev"

@@ -124,8 +124,10 @@ BACKEND_PORT="${PORT:-$RUST_PORT}"
 export PORT="$BACKEND_PORT"
 
 # Serialize same-worktree builds only (shared Desktop/.build + build/$APP_NAME.app).
-# Cross-worktree ./run.sh must not block each other. Hold through install, then release
-# before the long-running wait — see scripts/run-sh-build-lock.sh.
+# Cross-worktree ./run.sh must not block each other. Hold through install/seed/open,
+# then release before the long-running wait — see scripts/run-sh-build-lock.sh.
+# Explicit OMI_APP_NAME overrides that collide across worktrees are unsupported
+# (/Applications/$APP_NAME.app is machine-global and not cross-locked).
 source "$SCRIPT_DIR/scripts/run-sh-build-lock.sh"
 omi_run_sh_acquire_build_lock "another ./run.sh in this worktree" 600 || exit 1
 # Temporary until `trap cleanup EXIT` below chains release into cleanup().
@@ -823,11 +825,6 @@ step "Installing to /Applications/..."
 ditto "$APP_BUNDLE" "$APP_PATH"
 substep "Installed to $APP_PATH"
 
-# Build/stage/install finished — free this worktree's lock so other checkouts
-# (and a later rebuild here) are not blocked by the long-running wait below.
-omi_run_sh_release_build_lock
-substep "Released per-worktree build lock"
-
 step "Clearing stale LaunchServices registration..."
 # Unregister first to clear any launch-disabled flag from stale entries,
 # then let `open` re-register the app fresh. Without this, notifications
@@ -906,6 +903,12 @@ if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
 else
     open "$APP_PATH" || "$APP_PATH/Contents/MacOS/$BINARY_NAME" &
 fi
+
+# Launch finished — free this worktree's lock so other checkouts (and a later
+# rebuild here) are not blocked by the long-running wait below. Kept through
+# open so a same-worktree contender cannot rm -rf $APP_PATH mid-launch.
+omi_run_sh_release_build_lock
+substep "Released per-worktree build lock"
 
 # Keep script running until Ctrl+C
 echo "Press Ctrl+C to stop all services..."

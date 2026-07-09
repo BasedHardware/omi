@@ -3,16 +3,20 @@
 # Per-worktree ./run.sh build lock — source this (don't execute it).
 #
 # Invariant:
-#   - Scope is ONE git worktree / desktop/macos checkout (never per-user global).
-#   - Hold only across build → stage → /Applications install.
+#   - Scope is ONE git worktree (prefer OMI_DEV_DIR from scripts/dev-instance.sh;
+#     never a per-user global mutex).
+#   - Hold through build → stage → /Applications install → seed → open.
 #   - Release before the long-running backend wait / Ctrl+C loop so other
 #     worktrees (and a later rebuild in this worktree) are not blocked by a
 #     live session.
 #   - Same-worktree concurrent named-bundle builds still serialize: they share
 #     Desktop/.build/. Cross-worktree builds must not block each other.
+#   - Explicit OMI_APP_NAME overrides that collide across worktrees are unsupported;
+#     /Applications/$APP_NAME.app is machine-global and not cross-locked.
 #
-# Requires SCRIPT_DIR (absolute path to desktop/macos). Prefer OMI_DEV_DIR from
-# scripts/dev-instance.sh when available.
+# Prefer OMI_DEV_DIR (repo-root .dev/). SCRIPT_DIR fallback is for hermetic tests
+# only and resolves to $SCRIPT_DIR/.dev — callers that mirror run.sh should source
+# scripts/dev-instance.sh first.
 
 omi_run_sh_build_lock_dir() {
   local base="${OMI_DEV_DIR:-}"

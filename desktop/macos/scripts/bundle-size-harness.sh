@@ -76,13 +76,27 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cleanup_stale_run_lock_if_safe() {
-  # Per-worktree lock lives under this checkout's .dev/ (see run-sh-build-lock.sh).
-  # Also clear the legacy per-user global path if a crashed older run.sh left it.
-  local -a lock_dirs=(
-    "$MACOS_DIR/.dev/run-sh-build.lock.d"
-    "${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
-  )
+  # Match run.sh: after sourcing scripts/dev-instance.sh, OMI_DEV_DIR is the
+  # repo-root .dev/. Don't re-source dev-instance here — it would mutate ports.
+  # shellcheck source=/dev/null
+  source "$MACOS_DIR/scripts/run-sh-build-lock.sh"
+
+  local -a lock_dirs=()
   local lock_dir other_run_sh pid command
+  local current_user="${USER:-$(id -un 2>/dev/null || echo unknown)}"
+  local saved_omi_dev_dir="${OMI_DEV_DIR:-}"
+
+  OMI_DEV_DIR="${saved_omi_dev_dir:-$REPO_ROOT/.dev}"
+  if lock_dir="$(omi_run_sh_build_lock_dir)"; then
+    lock_dirs+=("$lock_dir")
+  fi
+  if [ -n "$saved_omi_dev_dir" ]; then
+    OMI_DEV_DIR="$saved_omi_dev_dir"
+  else
+    unset OMI_DEV_DIR
+  fi
+  # Legacy per-user global path from older run.sh — clear if abandoned.
+  lock_dirs+=("${TMPDIR:-/tmp}/omi-run-sh-${current_user}.lock.d")
 
   for lock_dir in "${lock_dirs[@]}"; do
     [[ -d "$lock_dir" ]] || continue
