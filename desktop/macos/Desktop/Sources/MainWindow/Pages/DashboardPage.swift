@@ -516,6 +516,11 @@ struct DashboardPage: View {
             ZStack(alignment: .topTrailing) {
                 HomeCanvasBackground()
 
+                InAppStatusControls(appState: appState)
+                    .padding(.top, 16)
+                    .padding(.trailing, 20)
+                    .zIndex(2)
+
                 // Clicking anywhere outside the chat / connect panel collapses
                 // back to the hub (panels and the ask bar consume their own
                 // clicks above this catcher).

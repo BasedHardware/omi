@@ -115,9 +115,8 @@ struct DesktopHomeView: View {
                 log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
                 selectedIndex = SidebarNavItem.dashboard.rawValue
               }
-            }
+          }
           mainContent
-            .toolbar { mainToolbar }
             .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
             .overlay {
               if appState.showUsageLimitPopup {
@@ -825,54 +824,6 @@ struct DesktopHomeView: View {
       index == SidebarNavItem.memories.rawValue
   }
 
-  /// Native unified-toolbar contents: Home affordance + page title on the
-  /// left, Capture/Listening status and settings on the right. System bar,
-  /// system sizes — no in-content chrome.
-  @ToolbarContentBuilder
-  private var mainToolbar: some ToolbarContent {
-    // Home is the root: it gets no leading toolbar items at all. Subpages
-    // get the house button plus the page title. The `if` must wrap the
-    // ToolbarItems (not live inside them): an item with empty content
-    // still renders as an empty slot in the unified bar. PlainToolbarItem
-    // opts every item out of the macOS 26 glass platter — bare glyphs on
-    // the app's own dark surface.
-    if !useLegacyHomeDesign, selectedIndex != SidebarNavItem.dashboard.rawValue {
-      PlainToolbarItem(placement: .navigation) {
-        Button {
-          withAnimation(Self.pageNavigationAnimation) {
-            selectedIndex = SidebarNavItem.dashboard.rawValue
-          }
-        } label: {
-          Image(systemName: "house")
-            .foregroundStyle(Color.secondary)
-        }
-        .help("Back to Home (\u{2318}[)")
-        .keyboardShortcut("[", modifiers: .command)
-      }
-      PlainToolbarItem(placement: .navigation) {
-        toolbarTitle
-      }
-    }
-    // On macOS `.primaryAction` maps to the *leading* toolbar edge, so a
-    // flexible spacer is what pushes the status cluster to the trailing side.
-    ToolbarItem(placement: .automatic) {
-      Spacer()
-    }
-    PlainToolbarItem(placement: .automatic) {
-      ToolbarStatusControls(appState: appState)
-    }
-  }
-
-  private var toolbarTitle: some View {
-    // Native macOS window-title metrics (13pt semibold), not a heading.
-    Text(currentPageTitle)
-      .font(.system(size: 13, weight: .semibold))
-  }
-
-  private var currentPageTitle: String {
-    SidebarNavItem(rawValue: selectedIndex)?.title ?? "Omi"
-  }
-
   private var mainContent: some View {
     HStack(spacing: 0) {
       // Sidebar slot: settings sidebar overlays main sidebar
@@ -924,10 +875,8 @@ struct DesktopHomeView: View {
         .clipped()
       }
 
-      // Main content area. New design: one continuous near-black sheet — the
-      // base surface extends under the unified toolbar (top safe area) so the
-      // glass toolbar controls float directly on the app surface instead of
-      // on a separate bar. Legacy design keeps its floating rounded card.
+      // Main content area. New design: one continuous near-black sheet.
+      // Legacy design keeps its floating rounded card.
       ZStack {
         if useLegacyHomeDesign {
           RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
@@ -948,13 +897,23 @@ struct DesktopHomeView: View {
             .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
         } else {
           HomePalette.paper
-            .ignoresSafeArea(edges: .top)
         }
 
         // Page content - switch recreates views on tab change
         // Extracted into a separate struct so that pages like TasksPage
         // are not re-rendered when AppState publishes unrelated changes.
         VStack(spacing: 0) {
+          if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue {
+            PageChromeBar(
+              onHome: {
+                selectedIndex = SidebarNavItem.dashboard.rawValue
+              }
+            )
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+            .padding(.bottom, 4)
+          }
+
           PageContentView(
             selectedIndex: selectedIndex,
             appState: appState,
@@ -1071,6 +1030,52 @@ struct DesktopHomeView: View {
       // but macOS restores the expanded window frame from the previous session.
       restorePreChatWindowWidth()
     }
+  }
+}
+
+private struct PageChromeBar: View {
+  let onHome: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      PageChromeButton(title: "Home", systemImage: "house.fill", action: onHome)
+      Spacer()
+    }
+    .frame(height: 34)
+  }
+}
+
+private struct PageChromeButton: View {
+  let title: String
+  let systemImage: String
+  let action: () -> Void
+  @State private var isHovering = false
+
+  var body: some View {
+    Button(action: action) {
+      HStack(spacing: 7) {
+        Image(systemName: systemImage)
+          .scaledFont(size: 12, weight: .semibold)
+        Text(title)
+          .scaledFont(size: 12, weight: .semibold)
+      }
+      .foregroundStyle(isHovering ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, 11)
+      .padding(.vertical, 7)
+      .background(
+        Capsule(style: .continuous)
+          .fill(.ultraThinMaterial)
+      )
+      .overlay(
+        Capsule(style: .continuous)
+          .stroke(isHovering ? OmiColors.success.opacity(0.34) : OmiColors.border.opacity(0.4), lineWidth: 1)
+      )
+      .contentShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .onHover { isHovering = $0 }
+    .help(title)
+    .accessibilityLabel(title)
   }
 }
 

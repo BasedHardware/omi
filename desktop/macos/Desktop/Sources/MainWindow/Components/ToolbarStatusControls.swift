@@ -1,36 +1,8 @@
 import SwiftUI
 
-/// ToolbarItem without the macOS 26 shared glass platter. Bare glyphs fit
-/// the app's dark custom surface; floating glass capsules read as foreign
-/// against it. Older toolbars have no platters, so the plain item is
-/// already correct there.
-struct PlainToolbarItem<Content: View>: ToolbarContent {
-    let placement: ToolbarItemPlacement
-    @ViewBuilder let content: () -> Content
-
-    init(placement: ToolbarItemPlacement = .automatic, @ViewBuilder content: @escaping () -> Content) {
-        self.placement = placement
-        self.content = content
-    }
-
-    var body: some ToolbarContent {
-        #if compiler(>=6.2)
-            if #available(macOS 26.0, *) {
-                ToolbarItem(placement: placement, content: content)
-                    .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: placement, content: content)
-            }
-        #else
-            ToolbarItem(placement: placement, content: content)
-        #endif
-    }
-}
-
-/// Capture/Listening status controls and the settings menu for the native
-/// window toolbar. Toolbar-scale, icon-first, system-styled — state reads
-/// through symbol tint plus a small status dot, details live in tooltips.
-struct ToolbarStatusControls: View {
+/// Capture/Listening status controls shown inside the Home surface.
+/// State reads through symbol tint and subtle capsule fill; details live in tooltips.
+struct InAppStatusControls: View {
     let appState: AppState
 
     @ObservedObject private var appStateObserved: AppState
@@ -44,7 +16,7 @@ struct ToolbarStatusControls: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            ToolbarStatusButton(
+            InAppStatusButton(
                 systemImage: "inset.filled.rectangle.badge.record",
                 title: "Capture",
                 state: captureDotState,
@@ -53,7 +25,7 @@ struct ToolbarStatusControls: View {
             )
             .disabled(controls.isTogglingCapture)
 
-            ToolbarStatusButton(
+            InAppStatusButton(
                 systemImage: appStateObserved.isTranscribing ? "waveform" : "mic",
                 title: "Listening",
                 state: appStateObserved.isTranscribing ? .active : .off,
@@ -69,25 +41,18 @@ struct ToolbarStatusControls: View {
                 }
             }
 
-            Menu {
-                Button("Settings…") { navigate(to: .settings) }
-                Divider()
-                Button("Refer a Friend") { Self.openReferFriend() }
-                Button("Join Discord") { Self.openDiscord() }
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            // The app's root purple tint must not color toolbar glyphs —
-            // native macOS toolbars use neutral symbols. Menu labels render
-            // as template images driven by tint, so override tint itself.
-            .tint(Color.secondary)
-            .menuIndicator(.hidden)
-            .help("Settings")
+            InAppStatusButton(
+                systemImage: "gearshape",
+                title: "Settings",
+                state: .off,
+                action: { navigate(to: .settings) },
+                helpText: "Settings"
+            )
         }
         .onAppear { controls.syncCaptureState() }
     }
 
-    private var captureDotState: ToolbarStatusButton.DotState {
+    private var captureDotState: InAppStatusButton.DotState {
         switch controls.captureStatus {
         case .active: return .active
         case .blocked: return .attention
@@ -111,25 +76,12 @@ struct ToolbarStatusControls: View {
         )
     }
 
-    static func openReferFriend() {
-        if let url = URL(string: "https://affiliate.omi.me") {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
-    static func openDiscord() {
-        if let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") {
-            NSWorkspace.shared.open(url)
-        }
-    }
 }
 
-/// A labeled toolbar toggle whose state must be readable at a glance:
+/// A labeled Home toggle whose state must be readable at a glance:
 /// running = green-tinted capsule fill with a green glyph, needs attention =
-/// amber-tinted fill with a warning badge, off = plain dimmed glyph. Owns
-/// its visuals (`.plain` style) so the toolbar doesn't stack button chrome
-/// on top of the state background.
-struct ToolbarStatusButton: View {
+/// amber-tinted fill with a warning badge, off = plain dimmed glyph.
+struct InAppStatusButton: View {
     enum DotState {
         case active
         case attention

@@ -124,10 +124,6 @@ struct OMIApp: App {
         }
     }
     .windowStyle(.titleBar)
-    // Native unified toolbar: traffic lights, page title, and controls in one
-    // system bar. The window title string stays set (isMainOmiWindow matches
-    // on it) but is hidden — the page name renders as a toolbar item.
-    .windowToolbarStyle(.unified(showsTitle: false))
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {

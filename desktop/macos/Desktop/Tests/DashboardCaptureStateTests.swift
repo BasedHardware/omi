@@ -6,7 +6,7 @@ final class DashboardCaptureStateTests: XCTestCase {
 
         XCTAssertTrue(
             source.contains("var isCaptureLive: Bool"),
-            "CaptureListeningController should centralize live capture state so the toolbar reflects the running monitor"
+            "CaptureListeningController should centralize live capture state so Home controls reflect the running monitor"
         )
         XCTAssertTrue(
             source.contains("return isCaptureLive ? .active : .inactive"),
@@ -31,30 +31,26 @@ final class DashboardCaptureStateTests: XCTestCase {
         )
     }
 
-    func testToolbarListeningControlShowsAndTogglesCaptureMode() throws {
+    func testHomeListeningControlShowsAndTogglesCaptureMode() throws {
         let controller = try captureControllerSource()
-        let toolbar = try toolbarControlsSource()
+        let controls = try homeControlsSource()
 
         // The listening control is labeled — an unlabeled mic glyph doesn't
         // tell the user what it controls.
-        XCTAssertTrue(toolbar.contains("title: \"Listening\""))
-        XCTAssertTrue(toolbar.contains("title: \"Capture\""))
-        XCTAssertTrue(toolbar.contains("controls.toggleListeningMode()"))
+        XCTAssertTrue(controls.contains("title: \"Listening\""))
+        XCTAssertTrue(controls.contains("title: \"Capture\""))
+        XCTAssertTrue(controls.contains("controls.toggleListeningMode()"))
         XCTAssertTrue(controller.contains("var listeningModeTitle: String"))
         XCTAssertTrue(controller.contains("return appState.isAwaitingMeeting ? \"Meetings only\" : \"In meeting\""))
         XCTAssertTrue(controller.contains("AssistantSettings.shared.systemAudioCaptureMode = nextMode"))
-        // Toolbar glyphs stay neutral — the app's purple accent is banned in
-        // the window chrome (and blocked state is amber, never red).
-        XCTAssertFalse(toolbar.contains("OmiColors.purplePrimary"))
-        XCTAssertFalse(toolbar.contains("Color.purple"))
-        XCTAssertTrue(
-            toolbar.contains(".tint(Color.secondary)"),
-            "The settings menu glyph must override the app's purple root tint"
-        )
+        // Home controls stay neutral — the app's purple accent is banned, and
+        // blocked state is amber rather than a brand-breaking red treatment.
+        XCTAssertFalse(controls.contains("OmiColors.purplePrimary"))
+        XCTAssertFalse(controls.contains("Color.purple"))
         // On/off must be readable at a glance: the running state fills the
         // control, it doesn't hide in a tiny badge.
-        XCTAssertTrue(toolbar.contains("return HomePalette.green.opacity(0.16)"))
-        XCTAssertTrue(toolbar.contains("return Color.yellow.opacity(0.12)"))
+        XCTAssertTrue(controls.contains("return HomePalette.green.opacity(0.16)"))
+        XCTAssertTrue(controls.contains("return Color.yellow.opacity(0.12)"))
     }
 
     func testHomeConnectorButtonsOpenSheetsDirectly() throws {
@@ -358,7 +354,7 @@ final class DashboardCaptureStateTests: XCTestCase {
         try componentSource(named: "CaptureListeningController.swift")
     }
 
-    private func toolbarControlsSource() throws -> String {
+    private func homeControlsSource() throws -> String {
         try componentSource(named: "ToolbarStatusControls.swift")
     }
 

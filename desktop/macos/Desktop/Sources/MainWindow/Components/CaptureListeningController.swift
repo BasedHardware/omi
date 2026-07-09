@@ -40,13 +40,13 @@ enum HomeStatusState {
     }
 }
 
-/// Shared state + actions behind the Capture and Listening toolbar controls.
-/// One instance per `ToolbarStatusControls`; the underlying truth lives in
+/// Shared state + actions behind the Capture and Listening Home controls.
+/// One instance per `InAppStatusControls`; the underlying truth lives in
 /// `ProactiveAssistantsPlugin` / `AssistantSettings` / `AppState`, so
 /// instances stay in sync via the monitoring notifications.
 ///
-/// Extracted from `DashboardPage` so the window toolbar can host the
-/// control cluster without duplicating the toggle logic.
+/// Extracted from `DashboardPage` so control surfaces can share the toggle
+/// logic without duplicating permission and monitoring state handling.
 @MainActor
 final class CaptureListeningController: ObservableObject {
     @Published private(set) var isCaptureMonitoring = false

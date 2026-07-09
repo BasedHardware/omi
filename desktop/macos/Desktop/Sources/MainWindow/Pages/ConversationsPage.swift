@@ -162,7 +162,7 @@ struct ConversationsPage: View {
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {
-    // Title and status controls live in the window toolbar.
+    // Title lives in the page chrome; status controls live on Home.
     conversationListSection
   }
 
