@@ -960,6 +960,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     /// Continuations for callers waiting on an in-flight mode switch. Supports
     /// arbitrary overlap (A→B→A→B) without losing waiters.
     private var modeSwitchWaiters: [CheckedContinuation<Void, Never>] = []
+    private let modeSwitchWaitTimeoutSeconds: TimeInterval = 90
 
     enum BridgeMode: String {
         case omiAI = "agentSDK"     // Legacy, auto-migrated to piMono
@@ -1291,9 +1292,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // itself (which holds the flag). External callers join the waiters array
         // and are woken when the switch (including warmup) completes — no timeout.
         while !fromModeSwitch && modeSwitchInProgress {
-            log("ChatProvider: ensureBridgeStarted waiting for mode switch to complete")
-            await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-                modeSwitchWaiters.append(c)
+            guard await waitForModeSwitchCompletion() else {
+                return false
             }
         }
         if agentBridgeStarted {
@@ -1483,6 +1483,11 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         // Block queries during the transition so sendMessage doesn't race and
         // restart the OLD bridge while we're replacing it.
         modeSwitchInProgress = true
+        defer {
+            if modeSwitchInProgress {
+                finishModeSwitchWaiters()
+            }
+        }
 
         // Stop the current bridge and wait for the subprocess to fully terminate.
         // This is critical: without the wait, the old Node.js process can still be
@@ -1508,10 +1513,44 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
 
         // Unblock queries and wake all waiting switches now that the bridge
         // is fully started and warmed.
+        finishModeSwitchWaiters()
+    }
+
+    private func waitForModeSwitchCompletion() async -> Bool {
+        log("ChatProvider: ensureBridgeStarted waiting for mode switch to complete")
+        let resumed = await withTaskGroup(of: Bool.self) { group in
+            group.addTask { @MainActor in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    self.modeSwitchWaiters.append(continuation)
+                }
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(self.modeSwitchWaitTimeoutSeconds * 1_000_000_000))
+                return false
+            }
+            return await group.next() ?? false
+        }
+        guard resumed else {
+            log(
+                "ChatProvider: mode switch wait timed out after \(Int(modeSwitchWaitTimeoutSeconds))s "
+                    + "(failure_class=mode_switch_timeout recovery_action=clear_waiters recovery_result=degraded)")
+            DesktopDiagnosticsManager.shared.recordChatBridgeModeSwitchTimeout(
+                waitSeconds: Int(modeSwitchWaitTimeoutSeconds)
+            )
+            finishModeSwitchWaiters()
+            return false
+        }
+        return true
+    }
+
+    private func finishModeSwitchWaiters() {
         modeSwitchInProgress = false
         let waiters = modeSwitchWaiters
         modeSwitchWaiters.removeAll()
-        for waiter in waiters { waiter.resume() }
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     /// Start Claude OAuth authentication (Mode B)
