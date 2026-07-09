@@ -1,10 +1,5 @@
-import axios, {
-  type AxiosInstance,
-  type AxiosRequestConfig,
-  type InternalAxiosRequestConfig
-} from 'axios'
+import axios, { type AxiosInstance, type InternalAxiosRequestConfig } from 'axios'
 import { auth } from './firebase'
-import type { McpKeyRecord } from '../../../shared/types'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
 // fast as before.
@@ -55,8 +50,12 @@ function makeClient(baseURL: string): AxiosInstance {
 export const omiApi = makeClient(import.meta.env.VITE_OMI_API_BASE as string)
 export const desktopApi = makeClient(import.meta.env.VITE_OMI_DESKTOP_API_BASE as string)
 
-export async function createWindowsMcpKey(): Promise<McpKeyRecord> {
-  const config: AxiosRequestConfig & { __noRetry: true } = { __noRetry: true }
-  const response = await omiApi.post<McpKeyRecord>('/v1/mcp/keys', { name: 'Omi Windows' }, config)
-  return response.data
+// The MCP key itself is created and stored in the main process
+// (window.omi.mcpKeyCreateAndStore) so the raw bearer key never reaches
+// renderer code. The renderer only supplies the short-lived Firebase ID token
+// main needs to authenticate the key-creating API call.
+export async function fetchFirebaseIdToken(): Promise<string> {
+  const user = auth.currentUser
+  if (!user) throw new Error('Sign in to Omi before generating an MCP key.')
+  return user.getIdToken()
 }
