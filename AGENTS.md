@@ -208,8 +208,9 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
-- Release builds are handled entirely by Codemagic CI (no local release script).
-- For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop/macos && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
+- **PR CI** (`desktop-swift-ci.yml`): debug build + parallel suite tests (`OMI_SWIFT_TEST_SUITE_WORKERS=4`). No release compile on ordinary PRs.
+- **Clean release compile** runs in CI on `main` pushes that touch desktop Swift, and on PRs that change `desktop/macos/Desktop/Package.swift`. Locally, for signature / cross-file type changes: `cd desktop/macos && rm -rf Desktop/.build && xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx` — incremental debug builds can miss stale-cache type errors.
+- **Ship builds** (universal, signed, notarized) are handled entirely by Codemagic CI (no local release script).
 
 #### Named Test Bundles
 
