@@ -186,7 +186,8 @@ final class FailLoudConfigTests: XCTestCase {
     XCTAssertTrue(src.contains("clearUserDefaultsTokens()"))
     XCTAssertTrue(src.contains("allowsUserDefaultsTokenFallback"))
     XCTAssertTrue(src.contains("AuthService: Keychain token storage failed; falling back to UserDefaults for desktop auth continuity"))
-    XCTAssertTrue(src.contains("\"update_channel\": AppBuild.currentUpdateChannel"))
+    XCTAssertTrue(src.contains("recordAuthTokenStorageFallback("))
+    XCTAssertTrue(src.contains("updateChannel: AppBuild.currentUpdateChannel"))
     XCTAssertTrue(src.contains("failed to migrate production auth tokens from UserDefaults to Keychain"))
     XCTAssertTrue(src.contains("cachedStoredTokens"))
   }
