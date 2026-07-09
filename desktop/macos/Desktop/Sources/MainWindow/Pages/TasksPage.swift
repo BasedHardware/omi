@@ -2513,6 +2513,7 @@ class TasksViewModel: ObservableObject {
 
 struct TasksPage: View {
     @ObservedObject var viewModel: TasksViewModel
+    let appState: AppState
     var chatProvider: ChatProvider?
 
     // Chat panel state
@@ -2548,8 +2549,12 @@ struct TasksPage: View {
     @State private var isDraggingDivider = false
     @State private var dragStartWidth: Double = 0
 
-    init(viewModel: TasksViewModel, chatCoordinator: TaskChatCoordinator, chatProvider: ChatProvider? = nil) {
+    init(
+        viewModel: TasksViewModel, appState: AppState, chatCoordinator: TaskChatCoordinator,
+        chatProvider: ChatProvider? = nil
+    ) {
         self.viewModel = viewModel
+        self.appState = appState
         self.chatCoordinator = chatCoordinator
         self.chatProvider = chatProvider
     }
@@ -2868,58 +2873,22 @@ struct TasksPage: View {
     // MARK: - Header View
 
     private var headerView: some View {
-        HStack(spacing: 10) {
-            // Search field
-            HStack(spacing: 8) {
-                if viewModel.isSearching || viewModel.isLoadingFiltered {
-                    ProgressView()
-                        .scaleEffect(0.7)
-                        .frame(width: 14, height: 14)
-                } else {
-                    Image(systemName: "magnifyingglass")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-
-                TextField("Search tasks...", text: $viewModel.searchText)
-                    .textFieldStyle(.plain)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                if !viewModel.searchText.isEmpty {
-                    Button {
-                        viewModel.searchText = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(8)
+        HStack(spacing: OmiHeader.controlSpacing) {
+            OmiSearchField(
+                placeholder: "Search tasks...",
+                text: $viewModel.searchText,
+                isBusy: viewModel.isSearching || viewModel.isLoadingFiltered
+            )
 
             // Saved filter view chips
             if !viewModel.savedFilterViews.isEmpty && !viewModel.isMultiSelectMode {
                 ForEach(viewModel.savedFilterViews) { savedView in
-                    let isActive = viewModel.isActiveSavedView(savedView)
-                    Button {
+                    OmiHeaderChip(
+                        title: savedView.name,
+                        isActive: viewModel.isActiveSavedView(savedView)
+                    ) {
                         viewModel.applySavedView(savedView)
-                    } label: {
-                        Text(savedView.name)
-                            .scaledFont(size: 11, weight: .medium)
-                            .foregroundColor(isActive ? .white : OmiColors.textSecondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(isActive ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
-                            .cornerRadius(6)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .stroke(isActive ? OmiColors.border : Color.clear, lineWidth: 1)
-                            )
                     }
-                    .buttonStyle(.plain)
                     .contextMenu {
                         Button(role: .destructive) {
                             viewModel.deleteSavedView(savedView)
@@ -2953,9 +2922,9 @@ struct TasksPage: View {
                 taskSettingsButton
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 16)
-        .padding(.bottom, 12)
+        .padding(.horizontal, OmiHeader.rowHorizontalPadding)
+        .padding(.top, OmiHeader.rowTopPadding)
+        .padding(.bottom, OmiHeader.rowBottomPadding)
         .alert("Save Filter View", isPresented: $showSaveFilterAlert) {
             TextField("View name", text: $saveFilterName)
             Button("Save") {
@@ -2974,36 +2943,18 @@ struct TasksPage: View {
     }
 
     private var saveFilterButton: some View {
-        Button {
+        OmiHeaderIconButton(systemImage: "bookmark") {
             saveFilterName = ""
             showSaveFilterAlert = true
-        } label: {
-            Image(systemName: "bookmark")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(8)
         }
-        .buttonStyle(.plain)
         .help("Save current filters as a view")
     }
 
     private var addTaskButton: some View {
-        Button {
+        OmiHeaderIconButton(systemImage: "plus") {
             viewModel.inlineCreateAfterTaskId = nil
             viewModel.isInlineCreating = true
-        } label: {
-            Image(systemName: "plus")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(OmiColors.backgroundSecondary)
-                .cornerRadius(8)
         }
-        .buttonStyle(.plain)
         .help("Add task (⌘N)")
     }
 
@@ -3050,25 +3001,16 @@ struct TasksPage: View {
     }
 
     private var filterDropdownButton: some View {
-        Button {
+        OmiHeaderIconButton(
+            systemImage: "line.3.horizontal.decrease",
+            isActive: viewModel.hasActiveFilters
+        ) {
             pendingSelectedTags = viewModel.selectedTags
             pendingSelectedDynamicTags = viewModel.selectedDynamicTags
             filterSearchText = ""
             showFilterPopover = true
-        } label: {
-            Image(systemName: "line.3.horizontal.decrease")
-                .scaledFont(size: 12)
-            .foregroundColor(viewModel.hasActiveFilters ? OmiColors.textPrimary : OmiColors.textSecondary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(OmiColors.backgroundSecondary)
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(viewModel.hasActiveFilters ? OmiColors.border : Color.clear, lineWidth: 1)
-            )
         }
-        .buttonStyle(.plain)
+        .help("Filter tasks")
         .popover(isPresented: $showFilterPopover, arrowEdge: .bottom) {
             filterPopover
         }
@@ -3331,57 +3273,37 @@ struct TasksPage: View {
                     .scaledFont(size: 13, weight: .medium)
             }
             .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.red)
-            )
+            .padding(.horizontal, 14)
+            .frame(height: OmiHeader.controlHeight)
+            .background(Capsule(style: .continuous).fill(Color.red))
         }
         .buttonStyle(.plain)
     }
 
     private var cancelMultiSelectButton: some View {
-        Button {
+        OmiHeaderChip(title: "Cancel") {
             viewModel.toggleMultiSelectMode()
-        } label: {
-            Text("Cancel")
-                .scaledFont(size: 13, weight: .medium)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
-                )
         }
-        .buttonStyle(.plain)
     }
 
 
 
     private var taskSettingsButton: some View {
-        Button {
+        OmiHeaderIconButton(systemImage: "gearshape") {
             NotificationCenter.default.post(
                 name: .navigateToTaskSettings,
                 object: nil
             )
-        } label: {
-            Image(systemName: "gearshape")
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.textSecondary)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(OmiColors.backgroundSecondary)
-                )
         }
-        .buttonStyle(.plain)
         .help("Task Settings")
     }
 
     private var chatToggleButton: some View {
-        Button {
+        OmiHeaderIconButton(
+            systemImage: showChatPanel
+                ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right",
+            isActive: showChatPanel
+        ) {
             if showChatPanel {
                 closeChatPanel()
             } else if let selectedId = viewModel.keyboardSelectedTaskId,
@@ -3395,17 +3317,7 @@ struct TasksPage: View {
                     showChatPanel = true
                 }
             }
-        } label: {
-            Image(systemName: showChatPanel ? "bubble.left.and.bubble.right.fill" : "bubble.left.and.bubble.right")
-                .scaledFont(size: 12)
-                .foregroundColor(showChatPanel ? OmiColors.purplePrimary : OmiColors.textSecondary)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(showChatPanel ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundSecondary)
-                )
         }
-        .buttonStyle(.plain)
         .help(showChatPanel ? "Close chat panel" : "Open task chat")
     }
 
@@ -3855,6 +3767,18 @@ struct TaskCategorySection: View {
 
                 Spacer()
 
+                // Every section shows its task count; Today additionally
+                // offers the clean-up action next to it.
+                Text("\(orderedTasks.count)")
+                    .scaledFont(size: 12, weight: .medium)
+                    .foregroundColor(OmiColors.textTertiary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(
+                        Capsule()
+                            .fill(OmiColors.textTertiary.opacity(0.1))
+                    )
+
                 if category == .today {
                     Button {
                         confirmClearTodayDeadlines()
@@ -3867,16 +3791,6 @@ struct TaskCategorySection: View {
                     .buttonStyle(.plain)
                     .contentShape(Rectangle())
                     .help("Clean today's tasks")
-                } else {
-                    Text("\(orderedTasks.count)")
-                        .scaledFont(size: 12, weight: .medium)
-                        .foregroundColor(OmiColors.textTertiary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(OmiColors.textTertiary.opacity(0.1))
-                        )
                 }
 
             }
@@ -4303,13 +4217,16 @@ struct TaskRow: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 0) {
+        HStack(alignment: .top, spacing: 0) {
             // Drag handle OUTSIDE swipeableContent so DragGesture doesn't intercept it
             if category != nil && !isMultiSelectMode && !isDeletedTask {
                 Image(systemName: "line.3.horizontal")
                     .scaledFont(size: 10)
                     .foregroundColor(isHovering ? OmiColors.textTertiary : .clear)
                     .frame(width: 16, height: 24)
+                    // Match taskRowContent's vertical inset so the handle lines
+                    // up with the checkbox in the top-aligned outer HStack.
+                    .padding(.top, 6)
                     .contentShape(Rectangle())
                     .onDrag {
                         log("DRAG: onDrag started for task \(task.id) — \(task.description.prefix(40))")
@@ -4338,11 +4255,11 @@ struct TaskRow: View {
         }
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.08) : Color.clear)
+                .fill(isActiveChatTask ? OmiColors.backgroundRaised : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isActiveChatTask ? OmiColors.purplePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+                .stroke(isActiveChatTask ? OmiColors.border.opacity(0.6) : Color.clear, lineWidth: 1)
         )
         .overlay(alignment: .topTrailing) {
             if showShareCopiedToast {
@@ -4527,7 +4444,9 @@ struct TaskRow: View {
     }
 
     private var taskRowContent: some View {
-        HStack(alignment: .center, spacing: 12) {
+        // Top-aligned so the checkbox sits on the first text line of wrapped
+        // rows instead of floating between lines.
+        HStack(alignment: .top, spacing: 12) {
             // Indent visual (vertical line for indented tasks)
             if indentLevel > 0 {
                 HStack(spacing: 0) {
@@ -4728,7 +4647,7 @@ struct TaskRow: View {
                                         Text("View chat")
                                             .scaledFont(size: 10, weight: .medium)
                                     }
-                                    .foregroundColor(OmiColors.purplePrimary)
+                                    .foregroundColor(OmiColors.textSecondary)
                                 }
                                 .buttonStyle(.plain)
                                 .help("View previous AI investigation")
@@ -4754,9 +4673,6 @@ struct TaskRow: View {
                         if let coordinator = chatCoordinator, TaskAgentSettings.shared.isChatEnabled {
                             ChatSessionStatusIndicator(task: task, coordinator: coordinator, onOpenChat: onOpenChat)
                         }
-
-                        // Task detail button (hover for preview, click for full detail)
-                        TaskDetailButton(task: task, showDetail: $showTaskDetail)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -4859,6 +4775,13 @@ struct TaskRow: View {
                         .help("Increase indent")
                     }
 
+                    // Task detail (hover for preview, click for full detail).
+                    // Lives with the other row actions instead of costing every
+                    // row a permanent badge line under the title.
+                    TaskDetailButton(task: task, showDetail: $showTaskDetail)
+                        .frame(width: 24, height: 24)
+                        .help("Task details")
+
                     // Share link button
                     Button {
                         Task { await copyShareLink() }
@@ -4908,7 +4831,7 @@ struct TaskRow: View {
         .padding(.vertical, 6)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isKeyboardSelected ? OmiColors.purplePrimary.opacity(0.10) : (isHovering || isDragging ? OmiColors.backgroundTertiary : (isNewlyCreated ? OmiColors.purplePrimary.opacity(0.15) : Color.clear)))
+                .fill(isKeyboardSelected ? OmiColors.backgroundQuaternary.opacity(0.55) : (isHovering || isDragging ? OmiColors.backgroundRaised : (isNewlyCreated ? OmiColors.backgroundQuaternary.opacity(0.45) : Color.clear)))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)

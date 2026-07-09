@@ -2,33 +2,13 @@ import Combine
 import SwiftUI
 import OmiTheme
 
-// MARK: - Search Debouncer
-
-/// Debounces search queries to avoid excessive API calls
-class SearchDebouncer: ObservableObject {
-  /// The input query (set immediately when user types)
-  @Published var inputQuery: String = ""
-  /// The debounced query (updated 250ms after user stops typing)
-  @Published var debouncedQuery: String = ""
-  private var cancellables = Set<AnyCancellable>()
-
-  init() {
-    // Observe input and debounce to output
-    $inputQuery
-      .debounce(for: .milliseconds(250), scheduler: DispatchQueue.main)
-      .removeDuplicates()
-      .sink { [weak self] value in
-        self?.debouncedQuery = value
-      }
-      .store(in: &cancellables)
-  }
-}
-
 // MARK: - Conversations Page
 
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
   @Binding var selectedConversation: ServerConversation?
+  /// Persistent search state — survives page recreation on tab switches.
+  @ObservedObject var searchModel: ConversationsSearchModel
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
   var embedded: Bool = false
@@ -36,12 +16,6 @@ struct ConversationsPage: View {
   // Compact view mode - persisted preference
   @AppStorage("conversationsCompactView") private var isCompactView = true
 
-  // Search state
-  @State private var searchQuery: String = ""
-  @State private var searchResults: [ServerConversation] = []
-  @State private var isSearching: Bool = false
-  @State private var searchError: String? = nil
-  @StateObject private var searchDebouncer = SearchDebouncer()
 
   // Date picker state
   @State private var showDatePicker: Bool = false
@@ -169,7 +143,7 @@ struct ConversationsPage: View {
       return
     }
 
-    if let conversation = searchResults.first(where: { $0.id == conversationId }) {
+    if let conversation = searchModel.results.first(where: { $0.id == conversationId }) {
       present(conversation)
       return
     }
@@ -188,47 +162,14 @@ struct ConversationsPage: View {
   // MARK: - Main View with Recording Header + List
 
   private var mainConversationsView: some View {
-    VStack(spacing: 0) {
-      // Conversations header
-      HStack {
-        Text("Conversations")
-          .scaledFont(size: 18, weight: .semibold)
-          .foregroundColor(OmiColors.textPrimary)
-
-        Spacer()
-
-        quickNoteButton
-
-        if !appState.isTranscribing {
-          startRecordingButton
-        }
-      }
-      .padding(.horizontal, 24)
-      .padding(.top, 18)
-      .padding(.bottom, 12)
-
-      // Conversation list
-      conversationListSection
-    }
+    // Title lives in the page chrome; status controls live on Home.
+    conversationListSection
   }
 
   private var quickNoteButton: some View {
-    Button {
+    OmiHeaderChip(systemImage: "note.text", title: "Quick Note") {
       NotificationCenter.default.post(name: .navigateToRewindNotes, object: nil)
-    } label: {
-      HStack(spacing: 5) {
-        Image(systemName: "note.text")
-          .scaledFont(size: 12)
-        Text("Quick Note")
-          .scaledFont(size: 13, weight: .medium)
-      }
-      .foregroundColor(OmiColors.textSecondary)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
-      .omiControlSurface(
-        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
     }
-    .buttonStyle(.plain)
   }
 
   // MARK: - Conversation List Section
@@ -236,51 +177,22 @@ struct ConversationsPage: View {
   private var conversationListSection: some View {
     VStack(spacing: 0) {
       // Section header with search bar and filters
-      HStack(spacing: 8) {
-        // Search bar
-        HStack(spacing: 8) {
-          Image(systemName: "magnifyingglass")
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textTertiary)
-
-          TextField("Search conversations...", text: $searchQuery)
-            .textFieldStyle(.plain)
-            .scaledFont(size: 13)
-            .foregroundColor(OmiColors.textPrimary)
-            .onChange(of: searchQuery) { _, newValue in
-              // Feed input to debouncer
-              searchDebouncer.inputQuery = newValue
-            }
-            .onChange(of: searchDebouncer.debouncedQuery) { _, newValue in
-              // Debounced value changed - perform search
-              performSearch(query: newValue)
-            }
-
-          if !searchQuery.isEmpty {
-            Button(action: {
-              searchQuery = ""
-              searchDebouncer.inputQuery = ""
-              searchResults = []
-              searchError = nil
-            }) {
-              Image(systemName: "xmark.circle.fill")
-                .scaledFont(size: 13)
-                .foregroundColor(OmiColors.textTertiary)
-            }
-            .buttonStyle(.plain)
-          }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 11)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+      HStack(spacing: OmiHeader.controlSpacing) {
+        OmiSearchField(
+          placeholder: "Search conversations...",
+          text: $searchModel.query,
+          isBusy: searchModel.isSearching,
+          onClear: { searchModel.clear() }
+        )
 
         // Filter buttons
         filterButtonsRow
+
+        quickNoteButton
       }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 12)
+      .padding(.horizontal, OmiHeader.rowHorizontalPadding)
+      .padding(.top, OmiHeader.rowTopPadding)
+      .padding(.bottom, OmiHeader.rowBottomPadding)
 
       // Folder tabs strip
       FolderTabsStrip(
@@ -293,7 +205,7 @@ struct ConversationsPage: View {
       .padding(.bottom, 12)
 
       // List - show search results or regular conversations
-      if !searchQuery.isEmpty {
+      if !searchModel.query.isEmpty {
         // Search results view
         searchResultsView
       } else {
@@ -344,7 +256,7 @@ struct ConversationsPage: View {
 
   private var searchResultsView: some View {
     Group {
-      if isSearching {
+      if searchModel.isSearching {
         VStack(spacing: 12) {
           ProgressView()
           Text("Searching...")
@@ -352,7 +264,7 @@ struct ConversationsPage: View {
             .foregroundColor(OmiColors.textTertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-      } else if let error = searchError {
+      } else if let error = searchModel.searchError {
         VStack(spacing: 12) {
           Image(systemName: "exclamationmark.triangle")
             .scaledFont(size: 32)
@@ -364,7 +276,7 @@ struct ConversationsPage: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding()
-      } else if searchResults.isEmpty {
+      } else if searchModel.results.isEmpty {
         VStack(spacing: 12) {
           Image(systemName: "magnifyingglass")
             .scaledFont(size: 32)
@@ -394,7 +306,7 @@ struct ConversationsPage: View {
   @ViewBuilder
   private var searchResultsContent: some View {
     let content = LazyVStack(spacing: 8) {
-      ForEach(searchResults) { conversation in
+      ForEach(searchModel.results) { conversation in
         ConversationRowView(
           conversation: conversation,
           onTap: {
@@ -433,38 +345,6 @@ struct ConversationsPage: View {
 
   // MARK: - Search
 
-  private func performSearch(query: String) {
-    guard !query.isEmpty else {
-      searchResults = []
-      searchError = nil
-      return
-    }
-
-    isSearching = true
-    searchError = nil
-    log("Search: Starting search for '\(query)'")
-    AnalyticsManager.shared.searchQueryEntered(query: query)
-
-    Task {
-      do {
-        let result = try await APIClient.shared.searchConversations(
-          query: query,
-          page: 1,
-          perPage: 50,
-          includeDiscarded: false
-        )
-        log("Search: Found \(result.items.count) results")
-        searchResults = result.items
-        isSearching = false
-      } catch {
-        logError("Search: Failed", error: error)
-        searchError = error.localizedDescription
-        searchResults = []
-        isSearching = false
-      }
-    }
-  }
-
   // MARK: - Filter Buttons
 
   private var filterButtonsRow: some View {
@@ -485,20 +365,14 @@ struct ConversationsPage: View {
           } else {
             Image(systemName: appState.showStarredOnly ? "star.fill" : "star")
               .scaledFont(size: 12)
+              .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
           }
           Text("Starred")
-            .scaledFont(size: 12, weight: .medium)
+            .scaledFont(size: 13, weight: .medium)
+            .foregroundColor(
+              appState.showStarredOnly ? OmiColors.textPrimary : OmiColors.textSecondary)
         }
-        .foregroundColor(appState.showStarredOnly ? OmiColors.amber : OmiColors.textSecondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .omiControlSurface(
-          fill: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.16) : OmiColors.backgroundSecondary,
-          radius: 16,
-          stroke: appState.showStarredOnly
-            ? OmiColors.amber.opacity(0.36) : OmiColors.border.opacity(0.14)
-        )
+        .omiHeaderControl(isActive: appState.showStarredOnly)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringStarred)
@@ -518,7 +392,7 @@ struct ConversationsPage: View {
           }
           if let date = appState.selectedDateFilter {
             Text(formatFilterDate(date))
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: 13, weight: .medium)
             // Clear button
             Button(action: {
               Task {
@@ -533,19 +407,13 @@ struct ConversationsPage: View {
             .buttonStyle(.plain)
           } else {
             Text("Date")
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: 13, weight: .medium)
           }
         }
-        .foregroundColor(appState.selectedDateFilter != nil ? .black : OmiColors.textSecondary)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 9)
-        .omiControlSurface(
-          fill: appState.selectedDateFilter != nil
-            ? OmiColors.textPrimary : OmiColors.backgroundSecondary,
-          radius: 16,
-          stroke: appState.selectedDateFilter != nil
-            ? OmiColors.border.opacity(0.28) : OmiColors.border.opacity(0.14)
+        .foregroundColor(
+          appState.selectedDateFilter != nil ? OmiColors.textPrimary : OmiColors.textSecondary
         )
+        .omiHeaderControl(isActive: appState.selectedDateFilter != nil)
       }
       .buttonStyle(.plain)
       .disabled(isFilteringDate)
@@ -734,25 +602,6 @@ struct ConversationsPage: View {
 
   // MARK: - Buttons
 
-  private var startRecordingButton: some View {
-    Button(action: {
-      appState.startTranscription()
-    }) {
-      HStack(spacing: 6) {
-        Image(systemName: "mic.fill")
-          .scaledFont(size: 12)
-        Text("Start Recording")
-          .scaledFont(size: 13, weight: .medium)
-      }
-      .foregroundColor(.black)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
-      .omiControlSurface(
-        fill: OmiColors.textPrimary, radius: 18, stroke: OmiColors.border.opacity(0.2))
-    }
-    .buttonStyle(.plain)
-  }
-
 }
 
 // MARK: - Transcript Notes Divider
@@ -794,7 +643,9 @@ private struct TranscriptNotesDivider: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-  ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
+  ConversationsPage(
+    appState: AppState(), selectedConversation: .constant(nil),
+    searchModel: ConversationsSearchModel())
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundSecondary)
 }

@@ -68,6 +68,7 @@ class ForceDirectedSimulation {
     let maxSpeed: Float = 40
 
     private var tickCount = 0
+    private(set) var lastStepEnergy: Float = 0
     private var stableFrameCount = 0
     private let stableThreshold: Float = 0.2
     private let stableFramesRequired = 10
@@ -269,11 +270,143 @@ class ForceDirectedSimulation {
     }
 
     /// Run multiple physics steps synchronously (for initial layout)
-    /// Bypasses tick counting for full-speed computation.
+    /// Bypasses tick counting for full-speed computation. `ticks` is a
+    /// budget, not a quota — the loop exits as soon as the layout settles
+    /// (total kinetic energy below threshold for a run of steps).
+    /// Bulk layout for the initial build. Same math as `runPhysicsStep`,
+    /// but batched over contiguous value arrays: in unoptimized dev builds
+    /// the per-property class access in the hot loop is dominated by ARC
+    /// retain/release traffic, and the array form sidesteps it entirely.
+    /// Exits early when total kinetic energy plateaus (no fixed threshold
+    /// to mis-tune — "stopped improving" is the criterion).
     func runSync(ticks: Int) {
-        for _ in 0..<ticks {
-            runPhysicsStep()
+        stableFrameCount = 0
+        let nodeCount = nodes.count
+        guard nodeCount > 0 else { return }
+
+        // Snapshot node state into contiguous buffers
+        var positions = [SIMD3<Float>](repeating: .zero, count: nodeCount)
+        var velocities = [SIMD3<Float>](repeating: .zero, count: nodeCount)
+        var forces = [SIMD3<Float>](repeating: .zero, count: nodeCount)
+        var fixed = [Bool](repeating: false, count: nodeCount)
+        var indexOf: [String: Int] = [:]
+        indexOf.reserveCapacity(nodeCount)
+        for (index, node) in nodes.enumerated() {
+            positions[index] = node.position
+            velocities[index] = node.velocity
+            fixed[index] = node.isFixed
+            indexOf[node.id] = index
         }
+        let springs: [(source: Int, target: Int)] = edges.compactMap { edge in
+            guard edge.affectsPhysics,
+                  let source = indexOf[edge.sourceId],
+                  let target = indexOf[edge.targetId] else { return nil }
+            return (source, target)
+        }
+
+        var previousEnergy = Float.greatestFiniteMagnitude
+        var plateauSteps = 0
+        var executedSteps = 0
+
+        for step in 0..<ticks {
+            executedSteps = step + 1
+
+            // 1. Reset forces
+            for i in 0..<nodeCount { forces[i] = .zero }
+
+            // 2. Repulsion (Coulomb-like)
+            for i in 0..<nodeCount {
+                if fixed[i] { continue }
+                for j in (i + 1)..<nodeCount {
+                    let delta = positions[j] - positions[i]
+                    let distSq = max(simd_length_squared(delta), 100)
+                    guard distSq < 100_000_000 else { continue }
+                    let dist = sqrt(distSq)
+                    let force = (delta / dist) * (repulsion / distSq)
+                    forces[i] -= force
+                    if !fixed[j] { forces[j] += force }
+                }
+            }
+
+            // 3. Spring attraction
+            for spring in springs {
+                let delta = positions[spring.target] - positions[spring.source]
+                let dist = simd_length(delta)
+                guard dist > 0 else { continue }
+                let force = (delta / dist) * ((dist - restLength) * attraction)
+                if !fixed[spring.source] { forces[spring.source] += force }
+                if !fixed[spring.target] { forces[spring.target] -= force }
+            }
+
+            // 4. Center gravity + 5. integrate
+            var totalEnergy: Float = 0
+            for i in 0..<nodeCount where !fixed[i] {
+                forces[i] -= positions[i] * centerGravity
+                velocities[i] += forces[i] * dt
+                velocities[i] *= damping
+                let speed = simd_length(velocities[i])
+                if speed > maxSpeed {
+                    velocities[i] = simd_normalize(velocities[i]) * maxSpeed
+                }
+                positions[i] += velocities[i]
+                totalEnergy += speed * speed
+            }
+
+            // 6. Plateau detection: layout has stopped improving when energy
+            // change stays below 1% for a sustained run of steps.
+            let delta = abs(previousEnergy - totalEnergy)
+            if delta < previousEnergy * 0.01 {
+                plateauSteps += 1
+                if plateauSteps >= 20 {
+                    logPerf(
+                        "MemoryGraph: layout converged after \(executedSteps)/\(ticks) ticks (energy \(totalEnergy))"
+                    )
+                    break
+                }
+            } else {
+                plateauSteps = 0
+            }
+            previousEnergy = totalEnergy
+            lastStepEnergy = totalEnergy
+        }
+
+        if plateauSteps < 20 {
+            logPerf(
+                "MemoryGraph: layout budget exhausted (\(executedSteps) ticks, energy \(lastStepEnergy))"
+            )
+        }
+
+        // Write settled state back to the node objects
+        for (index, node) in nodes.enumerated() {
+            node.position = positions[index]
+            node.velocity = velocities[index]
+        }
+        stableFrameCount = stableFramesRequired
+    }
+
+    /// Snapshot of every node's settled position, for layout caching.
+    func layoutPositions() -> [String: SIMD3<Float>] {
+        var positions: [String: SIMD3<Float>] = [:]
+        for node in nodes {
+            positions[node.id] = node.position
+        }
+        return positions
+    }
+
+    /// Restore a previously settled layout. Returns false (leaving positions
+    /// untouched for a fresh simulation) unless every node is covered.
+    func applyLayout(_ positions: [String: SIMD3<Float>]) -> Bool {
+        for node in nodes where !node.isFixed {
+            guard positions[node.id] != nil else { return false }
+        }
+        for node in nodes where !node.isFixed {
+            if let position = positions[node.id] {
+                node.position = position
+                node.velocity = .zero
+            }
+        }
+        stableFrameCount = stableFramesRequired
+        return true
     }
 
     /// One full physics step (no tick-skipping)
@@ -330,6 +463,7 @@ class ForceDirectedSimulation {
         }
 
         // 5. Update velocities and positions
+        var totalEnergy: Float = 0
         for node in nodes where !node.isFixed {
             node.velocity += node.force * dt
             node.velocity *= damping
@@ -339,6 +473,16 @@ class ForceDirectedSimulation {
                 node.velocity = simd_normalize(node.velocity) * maxSpeed
             }
             node.position += node.velocity
+            totalEnergy += speed * speed
+        }
+
+        // 6. Stability tracking (shared with the animated tick path) so
+        // runSync can stop as soon as the layout has settled.
+        lastStepEnergy = totalEnergy
+        if totalEnergy < stableThreshold {
+            stableFrameCount += 1
+        } else {
+            stableFrameCount = 0
         }
     }
 

@@ -1223,12 +1223,13 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "capture_main_window_png",
-      summary: "Write PNG of the frontmost Omi window (in-process capture)",
-      params: ["path"]
+      summary: "Write PNG of the frontmost Omi window (in-process capture); chrome=1 includes titlebar/toolbar",
+      params: ["path", "chrome"]
     ) { params in
       guard let path = params["path"], !path.isEmpty else {
         return ["error": "missing 'path'"]
       }
+      let includeChrome = params["chrome"] == "1"
       return await MainActor.run { () -> [String: String] in
         guard
           let window = NSApp.windows.first(where: {
@@ -1238,11 +1239,12 @@ final class DesktopAutomationActionRegistry {
         else {
           return ["error": "no_visible_window"]
         }
-        let bounds = contentView.bounds
-        guard let rep = contentView.bitmapImageRepForCachingDisplay(in: bounds) else {
+        let captureView = includeChrome ? (contentView.superview ?? contentView) : contentView
+        let bounds = captureView.bounds
+        guard let rep = captureView.bitmapImageRepForCachingDisplay(in: bounds) else {
           return ["error": "bitmap_rep_failed"]
         }
-        contentView.cacheDisplay(in: bounds, to: rep)
+        captureView.cacheDisplay(in: bounds, to: rep)
         guard let data = rep.representation(using: .png, properties: [:]) else {
           return ["error": "png_encode_failed"]
         }
@@ -1252,6 +1254,40 @@ final class DesktopAutomationActionRegistry {
         } catch {
           return ["error": error.localizedDescription]
         }
+      }
+    }
+
+    register(
+      name: "dump_window_chrome",
+      summary: "Dump the main window's titlebar/toolbar view hierarchy (class, frame, text)",
+      params: []
+    ) { _ in
+      await MainActor.run { () -> [String: String] in
+        guard
+          let window = NSApp.windows.first(where: {
+            $0.isVisible && $0.title.range(of: "omi", options: .caseInsensitive) != nil
+          }),
+          let frameView = window.contentView?.superview
+        else {
+          return ["error": "no_visible_window"]
+        }
+        var lines: [String] = []
+        func walk(_ view: NSView, depth: Int) {
+          // Skip the content subtree — only chrome is interesting here.
+          if view === window.contentView { return }
+          let indent = String(repeating: "  ", count: depth)
+          var line = "\(indent)\(type(of: view)) frame=\(NSStringFromRect(view.frame))"
+          if let text = view as? NSTextField {
+            line += " text=\"\(text.stringValue)\""
+          }
+          if view.isHidden { line += " hidden" }
+          lines.append(line)
+          for sub in view.subviews {
+            walk(sub, depth: depth + 1)
+          }
+        }
+        walk(frameView, depth: 0)
+        return ["chrome": lines.joined(separator: "\n")]
       }
     }
 

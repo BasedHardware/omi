@@ -59,7 +59,7 @@ enum ViewExporter {
               appState: AppState(),
               appProvider: AppProvider(),
               chatProvider: ChatProvider(),
-              memoriesViewModel: MemoriesViewModel(),
+              memoriesViewModel: MemoriesViewModel(), homeStatus: HomeStatusStore(),
               selectedIndex: .constant(0)))
         },
         CGSize(width: 900, height: 700)
@@ -73,7 +73,9 @@ enum ViewExporter {
 
       (
         "04-conversations",
-        { AnyView(ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))) },
+        { AnyView(ConversationsPage(
+            appState: AppState(), selectedConversation: .constant(nil),
+            searchModel: ConversationsSearchModel())) },
         CGSize(width: 900, height: 700)
       ),
 
@@ -282,7 +284,7 @@ enum ViewExporter {
               appState: AppState(),
               appProvider: AppProvider(),
               chatProvider: ChatProvider(),
-              memoriesViewModel: previewMemoriesViewModel(),
+              memoriesViewModel: previewMemoriesViewModel(), homeStatus: HomeStatusStore(),
               selectedIndex: .constant(0)))
         }
       ),
@@ -290,14 +292,17 @@ enum ViewExporter {
         "full-ai-chat", 2,
         { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
-      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel())) }),
+      ("full-memories", 3, { AnyView(MemoriesPage(
+            viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel(),
+            appState: AppState())) }),
       (
         "full-tasks", 4,
         {
           let cp = ChatProvider()
           return AnyView(
             TasksPage(
-              viewModel: TasksViewModel(), chatCoordinator: TaskChatCoordinator(chatProvider: cp),
+              viewModel: TasksViewModel(), appState: AppState(),
+              chatCoordinator: TaskChatCoordinator(chatProvider: cp),
               chatProvider: cp))
         }
       ),

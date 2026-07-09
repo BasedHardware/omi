@@ -57,15 +57,19 @@ struct ChatInputView: View {
                     attachments: currentAttachments,
                     onRemove: { id in onAttachmentRemoved?(id) }
                 )
+                .padding(.top, 8)
+                .padding(.horizontal, 4)
             }
 
-            HStack(alignment: .center, spacing: 8) {
+            // One surface: paperclip, editor, and send all live inside the
+            // container — no field-inside-a-panel double chrome.
+            HStack(alignment: .bottom, spacing: 4) {
                 if attachmentsEnabled {
                     Button(action: pickFiles) {
                         Image(systemName: "paperclip")
-                            .scaledFont(size: 18, weight: .medium)
+                            .scaledFont(size: 16, weight: .medium)
                             .foregroundColor(OmiColors.textTertiary)
-                            .frame(width: 32, height: 32)
+                            .frame(width: 32, height: 40)
                     }
                     .buttonStyle(.plain)
                     .help("Attach files")
@@ -110,8 +114,6 @@ struct ChatInputView: View {
                         }
                         .frame(maxHeight: 200)
                         .clipped()
-                        .background(OmiColors.backgroundTertiary)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
                     // Floating Ask/Act toggle (top-right, inside the input area)
                     if askModeEnabled {
@@ -121,17 +123,20 @@ struct ChatInputView: View {
                     }
                 }
 
-                // Send/Stop button — inline to the right of the input
+                // Send/Stop button — inside the container, trailing edge.
+                // Upstream dropped follow-up-while-streaming, so Stop shows
+                // for the whole sending state.
                 if isSending {
                     if isStopping {
                         ProgressView()
                             .controlSize(.small)
-                            .frame(width: 24, height: 24)
+                            .frame(width: 28, height: 40)
                     } else {
                         Button(action: { onStop?() }) {
                             Image(systemName: "stop.circle.fill")
                                 .scaledFont(size: 24)
                                 .foregroundColor(.red.opacity(0.8))
+                                .frame(width: 28, height: 40)
                         }
                         .buttonStyle(.plain)
                     }
@@ -139,15 +144,24 @@ struct ChatInputView: View {
                     Button(action: handleSubmit) {
                         Image(systemName: "arrow.up.circle.fill")
                             .scaledFont(size: 24)
-                            .foregroundColor(canSend ? OmiColors.purplePrimary : OmiColors.textQuaternary)
+                            .foregroundColor(canSend ? OmiColors.textPrimary : OmiColors.textQuaternary)
+                            .frame(width: 28, height: 40)
                     }
                     .buttonStyle(.plain)
                     .disabled(!canSend)
                 }
             }
         }
-        .padding(12)
-        .omiPanel(fill: OmiColors.backgroundSecondary, radius: 22, stroke: dropStrokeColor, shadowOpacity: 0.1, shadowRadius: 12, shadowY: 6)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(OmiColors.backgroundSecondary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(dropStrokeColor, lineWidth: 1)
+        )
         .fixedSize(horizontal: false, vertical: true)
         .if(attachmentsEnabled) { view in
             view.onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleDrop)
@@ -185,7 +199,7 @@ struct ChatInputView: View {
     }
 
     private var dropStrokeColor: Color {
-        isDropTargeted ? OmiColors.purplePrimary.opacity(0.6) : OmiColors.border.opacity(0.2)
+        isDropTargeted ? OmiColors.border : OmiColors.border.opacity(0.25)
     }
 
     private func handleSubmit() {
@@ -421,10 +435,10 @@ struct ChatModeToggle: View {
         Button(action: { mode = targetMode }) {
             Text(label)
                 .scaledFont(size: 12, weight: .medium)
-                .foregroundColor(mode == targetMode ? .white : OmiColors.textTertiary)
+                .foregroundColor(mode == targetMode ? .black : OmiColors.textTertiary)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(mode == targetMode ? OmiColors.userBubble : Color.clear)
+                .background(mode == targetMode ? OmiColors.textPrimary : Color.clear)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         }
         .buttonStyle(.plain)

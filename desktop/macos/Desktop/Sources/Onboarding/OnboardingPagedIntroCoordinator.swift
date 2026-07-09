@@ -125,10 +125,15 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ? AssistantSettings.shared.voiceLanguages : []
 
     let defaults = UserDefaults.standard
-    chatGPTImportedMemoriesCount = defaults.integer(forKey: chatGPTImportedMemoriesKey)
-    claudeImportedMemoriesCount = defaults.integer(forKey: claudeImportedMemoriesKey)
-    chatGPTImportSummary = defaults.string(forKey: chatGPTImportSummaryKey) ?? ""
-    claudeImportSummary = defaults.string(forKey: claudeImportSummaryKey) ?? ""
+    let userID = Self.currentUserID()
+    chatGPTImportedMemoriesCount = defaults.integer(
+      forKey: Self.scopedDefaultsKey(chatGPTImportedMemoriesKey, userID: userID))
+    claudeImportedMemoriesCount = defaults.integer(
+      forKey: Self.scopedDefaultsKey(claudeImportedMemoriesKey, userID: userID))
+    chatGPTImportSummary =
+      defaults.string(forKey: Self.scopedDefaultsKey(chatGPTImportSummaryKey, userID: userID)) ?? ""
+    claudeImportSummary =
+      defaults.string(forKey: Self.scopedDefaultsKey(claudeImportSummaryKey, userID: userID)) ?? ""
   }
 
   deinit {
@@ -220,11 +225,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   func importMemoryLog(_ rawText: String, source: OnboardingMemoryLogSource) async {
     lastActionError = nil
+    let importUserID = Self.currentUserID()
     importingMemoryLogSource = source
     defer { importingMemoryLogSource = nil }
 
     let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
       rawText, source: source)
+    guard Self.currentUserID() == importUserID else { return }
     guard result.memories > 0 else {
       lastActionError =
         "Couldn’t extract durable memories from the pasted \(source.displayName) log."
@@ -236,13 +243,13 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     case .chatgpt:
       chatGPTImportedMemoriesCount = result.memories
       chatGPTImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: chatGPTImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: chatGPTImportSummaryKey)
+      defaults.set(result.memories, forKey: Self.scopedDefaultsKey(chatGPTImportedMemoriesKey, userID: importUserID))
+      defaults.set(result.profileSummary, forKey: Self.scopedDefaultsKey(chatGPTImportSummaryKey, userID: importUserID))
     case .claude:
       claudeImportedMemoriesCount = result.memories
       claudeImportSummary = result.profileSummary
-      defaults.set(result.memories, forKey: claudeImportedMemoriesKey)
-      defaults.set(result.profileSummary, forKey: claudeImportSummaryKey)
+      defaults.set(result.memories, forKey: Self.scopedDefaultsKey(claudeImportedMemoriesKey, userID: importUserID))
+      defaults.set(result.profileSummary, forKey: Self.scopedDefaultsKey(claudeImportSummaryKey, userID: importUserID))
     }
 
     await saveGraph(
@@ -259,6 +266,15 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         ]
       ]
     )
+  }
+
+  private static func scopedDefaultsKey(_ key: String, userID: String?) -> String {
+    guard let userID, !userID.isEmpty else { return key }
+    return key + "." + userID
+  }
+
+  private static func currentUserID() -> String? {
+    UserDefaults.standard.string(forKey: .authUserId)
   }
 
   func selectAppleNotesFolderAndSync() async {

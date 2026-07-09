@@ -5,6 +5,7 @@ description: Transcription language settings navigation via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift
 preconditions:
   - automation_bridge_ready
 

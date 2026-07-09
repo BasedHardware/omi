@@ -1,0 +1,3 @@
+{
+  "change": "Made switching between Home, Conversations, Tasks and Memories snappier — pages render instantly from cache instead of refetching, and a typed conversation search survives navigating away and back"
+}

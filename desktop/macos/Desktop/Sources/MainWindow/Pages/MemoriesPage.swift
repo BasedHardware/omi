@@ -1356,6 +1356,8 @@ class MemoriesViewModel: ObservableObject {
 
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
+  let graphViewModel: MemoryGraphViewModel
+  let appState: AppState
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -1495,36 +1497,12 @@ struct MemoriesPage: View {
   // MARK: - Header
 
   private var header: some View {
-    HStack(spacing: 12) {
-      // Search field
-      HStack(spacing: 10) {
-        if viewModel.isSearching || viewModel.isLoadingFiltered {
-          ProgressView()
-            .scaleEffect(0.7)
-            .frame(width: 14, height: 14)
-        } else {
-          Image(systemName: "magnifyingglass")
-            .foregroundColor(OmiColors.textTertiary)
-        }
-
-        TextField("Search memories...", text: $viewModel.searchText)
-          .textFieldStyle(.plain)
-          .foregroundColor(OmiColors.textPrimary)
-
-        if !viewModel.searchText.isEmpty {
-          Button {
-            viewModel.searchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundColor(OmiColors.textTertiary)
-          }
-          .buttonStyle(.plain)
-        }
-      }
-      .padding(.horizontal, 14)
-      .padding(.vertical, 12)
-      .frame(minHeight: 46)
-      .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
+    HStack(spacing: OmiHeader.controlSpacing) {
+      OmiSearchField(
+        placeholder: "Search memories...",
+        text: $viewModel.searchText,
+        isBusy: viewModel.isSearching || viewModel.isLoadingFiltered
+      )
 
       if viewModel.canonicalLifecycleExposed {
         // Layer filter dropdown. Default is product default access: Short-term + Long-term.
@@ -1543,25 +1521,12 @@ struct MemoriesPage: View {
             .help(filter.description)
           }
         } label: {
-          HStack(spacing: 6) {
-            Image(systemName: viewModel.selectedLayerFilter == .archive ? "archivebox" : "clock.badge.checkmark")
-              .scaledFont(size: 12)
-            Text(viewModel.selectedLayerFilter.displayName)
-              .scaledFont(size: 13, weight: viewModel.selectedLayerFilter == .defaultAccess ? .regular : .medium)
-            Image(systemName: "chevron.down")
-              .scaledFont(size: 10)
-          }
-          .foregroundColor(
-            viewModel.selectedLayerFilter == .defaultAccess ? OmiColors.textSecondary : OmiColors.textPrimary
-          )
-          .padding(.horizontal, 14)
-          .padding(.vertical, 12)
-          .frame(minHeight: 46)
-          .omiControlSurface(
-            fill: viewModel.selectedLayerFilter == .defaultAccess
-              ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
-            radius: 18,
-            stroke: viewModel.selectedLayerFilter == .defaultAccess ? nil : OmiColors.border.opacity(0.6)
+          OmiHeaderChipLabel(
+            systemImage: viewModel.selectedLayerFilter == .archive
+              ? "archivebox" : "clock.badge.checkmark",
+            title: viewModel.selectedLayerFilter.displayName,
+            isActive: viewModel.selectedLayerFilter != .defaultAccess,
+            showsChevron: true
           )
         }
         .menuStyle(.button)
@@ -1569,96 +1534,47 @@ struct MemoriesPage: View {
         .help("Default shows Short-term + Long-term. Archive is explicit.")
       }
 
-      Button {
+      OmiHeaderChip(
+        systemImage: "desktopcomputer",
+        title: "This device",
+        isActive: viewModel.filterThisDeviceOnly
+      ) {
         viewModel.filterThisDeviceOnly.toggle()
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "desktopcomputer")
-            .scaledFont(size: 12)
-          Text("This device")
-            .scaledFont(size: 13, weight: viewModel.filterThisDeviceOnly ? .medium : .regular)
-        }
-        .foregroundColor(
-          viewModel.filterThisDeviceOnly ? OmiColors.textPrimary : OmiColors.textSecondary
-        )
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: viewModel.filterThisDeviceOnly
-            ? OmiColors.backgroundRaised : OmiColors.backgroundTertiary,
-          radius: 18,
-          stroke: viewModel.filterThisDeviceOnly ? OmiColors.border.opacity(0.6) : nil
-        )
       }
-      .buttonStyle(.plain)
       .help("Show memories captured on this Mac")
 
       // Category filter dropdown
-      Button {
+      OmiHeaderChip(
+        systemImage: "line.3.horizontal.decrease",
+        title: categoryFilterLabel,
+        isActive: !viewModel.selectedTags.isEmpty,
+        showsChevron: true
+      ) {
         pendingSelectedTags = viewModel.selectedTags
         categorySearchText = ""
         showCategoryFilter = true
-      } label: {
-        HStack(spacing: 6) {
-          Image(systemName: "line.3.horizontal.decrease")
-            .scaledFont(size: 12)
-          Text(categoryFilterLabel)
-            .scaledFont(size: 13, weight: viewModel.selectedTags.isEmpty ? .regular : .medium)
-          Image(systemName: "chevron.down")
-            .scaledFont(size: 10)
-        }
-        .foregroundColor(
-          viewModel.selectedTags.isEmpty ? OmiColors.textSecondary : OmiColors.textPrimary
-        )
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(minHeight: 46)
-        .omiControlSurface(
-          fill: viewModel.selectedTags.isEmpty
-            ? OmiColors.backgroundTertiary : OmiColors.backgroundRaised,
-          radius: 18,
-          stroke: viewModel.selectedTags.isEmpty ? nil : OmiColors.border.opacity(0.6)
-        )
       }
-      .buttonStyle(.plain)
       .popover(isPresented: $showCategoryFilter, arrowEdge: .bottom) {
         categoryFilterPopover
       }
 
       // Add Memory button (icon only)
-      Button {
+      OmiHeaderIconButton(systemImage: "plus") {
         viewModel.showingAddMemory = true
-      } label: {
-        Image(systemName: "plus")
-          .scaledFont(size: 14)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
       }
-      .buttonStyle(.plain)
       .help("Add Memory")
 
       // Management menu
-      Button {
+      OmiHeaderIconButton(systemImage: "chevron.down") {
         showManagementMenu = true
-      } label: {
-        Image(systemName: "chevron.down")
-          .scaledFont(size: 12, weight: .medium)
-          .foregroundColor(.black)
-          .frame(width: 42, height: 42)
-          .background(OmiColors.textPrimary)
-          .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
       }
-      .buttonStyle(.plain)
       .popover(isPresented: $showManagementMenu, arrowEdge: .bottom) {
         managementMenuPopover
       }
     }
-    .padding(.horizontal, 28)
-    .padding(.top, 24)
-    .padding(.bottom, 20)
+    .padding(.horizontal, OmiHeader.rowHorizontalPadding)
+    .padding(.top, OmiHeader.rowTopPadding)
+    .padding(.bottom, OmiHeader.rowBottomPadding)
     .alert("Delete Default Memories?", isPresented: $viewModel.showingDeleteAllConfirmation) {
       Button("Cancel", role: .cancel) {}
       Button("Delete Default Memories", role: .destructive) {
@@ -1954,7 +1870,7 @@ struct MemoriesPage: View {
   private var memoryList: some View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: 14) {
-        MemoryGraphInlineCard()
+        MemoryGraphInlineCard(viewModel: graphViewModel)
 
         LazyVStack(spacing: 10) {
           ForEach(viewModel.filteredMemories) { memory in

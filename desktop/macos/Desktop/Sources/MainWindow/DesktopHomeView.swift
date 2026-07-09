@@ -115,7 +115,7 @@ struct DesktopHomeView: View {
                 log("DesktopHomeView: Onboarding just completed — navigating to Dashboard")
                 selectedIndex = SidebarNavItem.dashboard.rawValue
               }
-            }
+          }
           mainContent
             .opacity(viewModelContainer.isInitialLoadComplete ? 1 : 0)
             .overlay {
@@ -875,25 +875,29 @@ struct DesktopHomeView: View {
         .clipped()
       }
 
-      // Main content area with rounded container
+      // Main content area. New design: one continuous near-black sheet.
+      // Legacy design keeps its floating rounded card.
       ZStack {
-        // Content container background
-        RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-          .fill(
-            LinearGradient(
-              colors: [
-                OmiColors.backgroundSecondary.opacity(0.96),
-                OmiColors.backgroundPrimary.opacity(0.96),
-              ],
-              startPoint: .topLeading,
-              endPoint: .bottomTrailing
+        if useLegacyHomeDesign {
+          RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+            .fill(
+              LinearGradient(
+                colors: [
+                  OmiColors.backgroundSecondary.opacity(0.96),
+                  OmiColors.backgroundPrimary.opacity(0.96),
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+              )
             )
-          )
-          .overlay(
-            RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
-              .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
-          )
-          .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
+            .overlay(
+              RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous)
+                .stroke(OmiColors.border.opacity(0.22), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.22), radius: 26, x: 0, y: 14)
+        } else {
+          HomePalette.paper
+        }
 
         // Page content - switch recreates views on tab change
         // Extracted into a separate struct so that pages like TasksPage
@@ -919,9 +923,12 @@ struct DesktopHomeView: View {
             selectedTabIndex: $selectedIndex
           )
         }
-        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.windowRadius, style: .continuous))
+        .clipShape(
+          RoundedRectangle(
+            cornerRadius: useLegacyHomeDesign ? OmiChrome.windowRadius : 0, style: .continuous)
+        )
       }
-      .padding(14)
+      .padding(useLegacyHomeDesign ? 14 : 0)
     }
     .overlay {
       // Goal completion celebration overlay
@@ -1093,18 +1100,24 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
+          homeStatus: viewModelContainer.homeStatusStore,
           selectedIndex: $selectedTabIndex)
       case 1:
-        ConversationsPageHost(appState: appState)
+        ConversationsPageHost(
+          appState: appState, searchModel: viewModelContainer.conversationsSearchModel)
       case 2:
         ChatPage(
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel)
+        MemoriesPage(
+          viewModel: viewModelContainer.memoriesViewModel,
+          graphViewModel: viewModelContainer.memoryGraphViewModel,
+          appState: appState)
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,
+          appState: appState,
           chatCoordinator: viewModelContainer.taskChatCoordinator,
           chatProvider: viewModelContainer.chatProvider)
       case 5:
@@ -1133,6 +1146,7 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
           memoriesViewModel: viewModelContainer.memoriesViewModel,
+          homeStatus: viewModelContainer.homeStatusStore,
           selectedIndex: $selectedTabIndex)
       }
     }
@@ -1143,10 +1157,13 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 private struct ConversationsPageHost: View {
   let appState: AppState
+  let searchModel: ConversationsSearchModel
   @State private var selectedConversation: ServerConversation? = nil
 
   var body: some View {
-    ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+    ConversationsPage(
+      appState: appState, selectedConversation: $selectedConversation,
+      searchModel: searchModel)
   }
 }
 
