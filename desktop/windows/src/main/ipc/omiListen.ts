@@ -70,7 +70,11 @@ async function startSession(args: ListenStartArgs, owner: WebContents): Promise<
   const mode = args.sttMode ?? 'auto'
   if (mode === 'local-parakeet' || mode === 'auto') {
     const status = await getLocalSttStatus()
-    if (status.available || status.runtime.canInstall) {
+    // Fail closed: 'auto' may use local Parakeet only when it is already
+    // installed and healthy. Downloading the runtime/model is allowed only for
+    // an explicit Local Parakeet selection — never as a side effect of 'auto'.
+    const allowInstall = mode === 'local-parakeet'
+    if (status.available || (allowInstall && status.runtime.canInstall)) {
       try {
         if (!status.available) {
           emit(owner.id, {
@@ -82,7 +86,7 @@ async function startSession(args: ListenStartArgs, owner: WebContents): Promise<
             }
           })
         }
-        const runtime = await ensureManagedParakeetRuntime()
+        const runtime = await ensureManagedParakeetRuntime({}, { allowInstall })
         await startLocalSession(args, owner, runtime, mode === 'auto')
       } catch (err) {
         const message = err instanceof Error ? err.message : 'local Parakeet STT unavailable'
