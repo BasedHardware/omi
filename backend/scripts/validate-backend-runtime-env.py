@@ -572,15 +572,6 @@ def _extract_workflow_cloud_run_targets(
     return {'services': services, 'jobs': jobs}
 
 
-def _extract_workflow_cloud_run_services(
-    workflow: ConfigDict,
-    *,
-    env: str,
-    manifest_path: Path,
-) -> dict[str, ConfigDict]:
-    return _extract_workflow_cloud_run_targets(workflow, env=env, manifest_path=manifest_path)['services']
-
-
 def _is_cloud_run_deploy_step(step: object) -> bool:
     step_dict = _as_config_dict(step)
     if step_dict is None:
