@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/services/sockets/on_device_apple_provider.dart';
 import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 
 void main() {
@@ -46,6 +48,40 @@ void main() {
 
     expect(source, contains('request.taskHint = .dictation'));
     expect(source, contains('request.addsPunctuation = true'));
+  });
+
+  test('Apple on-device STT drops low-energy filler transcripts', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final tempDir = await Directory.systemTemp.createTemp('on-device-apple-provider-');
+    const pathProviderChannel = MethodChannel('plugins.flutter.io/path_provider');
+    const speechChannel = MethodChannel('com.omi.ios/speech');
+
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      pathProviderChannel,
+      (call) async => call.method == 'getTemporaryDirectory' ? tempDir.path : null,
+    );
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+      speechChannel,
+      (call) async => 'no',
+    );
+
+    try {
+      final provider = OnDeviceAppleProvider();
+
+      final result = await provider.transcribe(_silentPcmWav());
+
+      expect(result, isNull);
+    } finally {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        pathProviderChannel,
+        null,
+      );
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        speechChannel,
+        null,
+      );
+      if (await tempDir.exists()) await tempDir.delete(recursive: true);
+    }
   });
 }
 
