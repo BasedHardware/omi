@@ -19,9 +19,11 @@ FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
     BACKEND_DIR / 'tests' / 'services',
     BACKEND_DIR / 'tests' / 'routers',
-    BACKEND_DIR / 'testing' / 'e2e',
 )
 FULL_TEST_GLOBS = (BACKEND_DIR / 'tests',)
+
+# Hermetic e2e tests selected by workflow contracts / memory policy core — not part of --all.
+EXTRA_DISCOVERABLE_TESTS = (BACKEND_DIR / 'testing' / 'e2e' / 'test_canonical_memory_pipeline.py',)
 
 LEGACY_UNLISTED_TESTS = {
     'tests/test_cache_manager.py',
@@ -64,6 +66,20 @@ FULL_RUN_GLOBS = (
     'backend/utils/http_client.py',
     'backend/utils/async_tasks.py',
     'backend/utils/encryption.py',
+)
+
+MEMORY_POLICY_CORE_PATH_PREFIXES = ('backend/utils/memory/',)
+
+MEMORY_POLICY_CORE_PATH_GLOBS = (
+    'backend/database/memory_*.py',
+    'backend/models/product_memory.py',
+    'backend/models/memory_search_gateway.py',
+    'backend/routers/memory_*.py',
+)
+
+MEMORY_POLICY_CORE_TESTS = (
+    'tests/unit/test_inv_mem_1_guard.py',
+    'testing/e2e/test_canonical_memory_pipeline.py',
 )
 
 AREA_TESTS = (
@@ -197,6 +213,9 @@ def discover_all_tests() -> list[str]:
         tests.update(root.rglob('test_*.py'))
     for root in FULL_TEST_GLOBS:
         tests.update(root.glob('test_*.py'))
+    for path in EXTRA_DISCOVERABLE_TESTS:
+        if path.is_file():
+            tests.add(path)
     return sorted(
         test_path
         for test_path in (_backend_relative(path) for path in tests if path.is_file())
@@ -243,6 +262,12 @@ def is_selectable_backend_path(path: str) -> bool:
 
 def path_matches(path: str, pattern: str) -> bool:
     return PurePosixPath(path).match(pattern)
+
+
+def is_memory_policy_core_path(path: str) -> bool:
+    if any(path.startswith(prefix) for prefix in MEMORY_POLICY_CORE_PATH_PREFIXES):
+        return True
+    return any(path_matches(path, pattern) for pattern in MEMORY_POLICY_CORE_PATH_GLOBS)
 
 
 def load_workflow_contracts() -> List[Dict[str, Any]]:
@@ -294,6 +319,9 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
                 path_matches(path, pattern) for pattern in source_globs
             ):
                 selected.update(match_tests(all_tests, test_globs))
+
+    if any(is_memory_policy_core_path(path) for path in backend_paths):
+        selected.update(test for test in MEMORY_POLICY_CORE_TESTS if test in all_tests)
 
     if not backend_paths:
         return [], 'no backend files changed'
