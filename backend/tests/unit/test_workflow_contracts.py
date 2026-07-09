@@ -27,6 +27,7 @@ def test_workflow_contract_sources_select_adjacent_tests():
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
+        "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",
         "backend/routers/transcribe.py": "tests/unit/test_listen_pipeline.py",
         "backend/jobs/short_term_lifecycle_worker.py": "tests/unit/test_ws_b_short_term_lifecycle.py",
         "backend/utils/memory_ingestion/export_runner.py": "tests/unit/test_memory_ingestion_pipeline.py",

@@ -79,7 +79,12 @@ for n in list(sys.modules):
         sys.modules.pop(n, None)
 sys.meta_path.insert(0, _f)
 try:
-    from routers import sync as mod
+    import types
+
+    sync_pkg = types.ModuleType('utils.sync')
+    sync_pkg.__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync')]
+    sys.modules['utils.sync'] = sync_pkg
+    from utils.sync import pipeline as mod
 finally:
     sys.meta_path.remove(_f)
     for n in list(sys.modules):
