@@ -1582,18 +1582,19 @@ class AuthService {
             provider: pendingOAuthFlow?.provider ?? "unknown",
             authFlowId: callbackFlowId
         )
-        bringAppToFrontAfterAuthCallback()
+        // Foregrounding happens once in signIn() after waitForOAuthCallback returns,
+        // so custom-scheme and loopback paths share a single activation.
         resumeOAuthContinuation(returning: (code: code, state: state))
     }
 
-    /// Focus Omi after the browser finishes the OAuth handoff so the user
-    /// lands back in the app without hunting for the window.
+    /// Focus the main Omi window after the browser finishes the OAuth handoff.
+    /// Filters to titled main windows so ordered-out panels (floating bar, overlays)
+    /// are not resurrected by a blanket `orderFrontRegardless()` sweep.
     @MainActor
     private func bringAppToFrontAfterAuthCallback() {
         NSApp.activate()
-        for window in NSApp.windows {
+        for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
             window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
         }
     }
 
