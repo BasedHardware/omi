@@ -497,6 +497,7 @@ export interface AudioPrecacheResponse {
 
 export interface AudioUrlsResponse {
   audio_files: Array<AudioFileUrlInfo>;
+  conversation_audio?: ConversationAudioUrlInfo | null;
   poll_after_ms?: number | null;
 }
 
@@ -763,6 +764,7 @@ export interface Conversation {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
@@ -798,6 +800,38 @@ export interface ConversationActionItemsDeleteResponse {
 export interface ConversationActionItemsResponse {
   action_items: Array<ActionItemResponse>;
   conversation_id: string;
+}
+
+export interface ConversationAudio {
+  audio_files_fingerprint: string;
+  built_at?: string | null;
+  captured_duration: number;
+  content_type?: string;
+  duration: number;
+  spans?: Array<ConversationAudioSpan>;
+}
+
+export interface ConversationAudioSpan {
+  artifact_offset: number;
+  file_id: string;
+  len: number;
+  wall_offset: number;
+}
+
+export interface ConversationAudioSpanInfo {
+  artifact_offset: number;
+  file_id: string;
+  len: number;
+  wall_offset: number;
+}
+
+export interface ConversationAudioUrlInfo {
+  captured_duration?: number | null;
+  content_type?: string | null;
+  duration?: number | null;
+  signed_url?: string | null;
+  spans?: Array<ConversationAudioSpanInfo>;
+  status: string;
 }
 
 export interface ConversationCreateResponse {
@@ -2251,6 +2285,7 @@ export interface SharedConversationResponse {
   call_id?: string | null;
   client_device_id?: string | null;
   client_platform?: string | null;
+  conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
   deferred?: boolean;
@@ -2987,6 +3022,10 @@ export interface OmiApiSchemas {
   "Conversation": Conversation;
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
+  "ConversationAudio": ConversationAudio;
+  "ConversationAudioSpan": ConversationAudioSpan;
+  "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
+  "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
