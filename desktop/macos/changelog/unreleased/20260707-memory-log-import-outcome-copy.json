@@ -1,3 +1,0 @@
-{
-    "change": "ChatGPT/Claude memory imports now say whether the pasted text had nothing to extract or the import itself failed, instead of one ambiguous error"
-}
