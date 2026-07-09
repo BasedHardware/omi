@@ -1,0 +1,49 @@
+version: 2
+name: memory-graph
+tier: 2
+description: Knowledge graph API counts after memory seed (no SceneKit)
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Baseline graph snapshot
+    bridge.action:
+      name: memory_graph_snapshot
+    expect:
+      ok: true
+
+  - id: S2
+    name: Create seed memory for graph context
+    bridge.action:
+      name: create_test_memory
+      params:
+        content: "[[MARKER:memory-graph]] hermetic graph seed"
+        source: harness
+    expect:
+      result.detail.created: "true"
+
+  - id: S3
+    name: Graph snapshot after seed
+    bridge.action:
+      name: memory_graph_snapshot
+    expect:
+      ok: true
+
+  - id: S4
+    name: Delete seed memory
+    bridge.action:
+      name: delete_test_memory
+      params:
+        marker: "[[MARKER:memory-graph]]"
+    expect:
+      ok: true
+
+  - id: S5
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

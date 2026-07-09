@@ -1,0 +1,41 @@
+version: 2
+name: logout
+tier: manual
+description: Sign out via bridge sign_out — local Auth emulator only, not prod OAuth (Live P2)
+app: com.omi.computer-macos
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
+  - desktop/macos/Desktop/Sources/AuthService.swift
+  - desktop/macos/Desktop/Sources/OmiApp.swift
+preconditions:
+  - auth_ready
+  - local_auth_emulator
+
+steps:
+  - id: S1
+    name: Baseline signed-in snapshot
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.is_signed_in: "true"
+
+  - id: S2
+    name: Sign out via bridge (local Auth emulator)
+    bridge.action:
+      name: sign_out
+    expect:
+      result.detail.signed_out: "true"
+      result.detail.is_signed_in: "false"
+
+  - id: S3
+    name: Verify signed-out state
+    bridge.action:
+      name: memories_snapshot
+    expect:
+      result.detail.is_signed_in: "false"
+
+  - id: S4
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

@@ -167,9 +167,20 @@ struct ConversationDetailView: View {
         .opacity(hasAppeared ? 1 : 0)
         .offset(y: hasAppeared ? 0 : 20)
         .onAppear {
+            ConversationDetailAutomationState.shared.setOpen(
+                conversationId: conversation.id,
+                transcriptDrawerOpen: showTranscriptDrawer
+            )
             withAnimation(.easeOut(duration: 0.5)) {
                 hasAppeared = true
             }
+        }
+        .onDisappear {
+            ConversationDetailAutomationState.shared.clear(conversationId: conversation.id)
+        }
+        .onChange(of: showTranscriptDrawer) { _, newValue in
+            ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
+                newValue, conversationId: conversation.id)
         }
         .task {
             await appProvider.fetchApps()
@@ -243,6 +254,8 @@ struct ConversationDetailView: View {
             withAnimation(.easeInOut(duration: 0.2)) {
                 showTranscriptDrawer = true
             }
+            ConversationDetailAutomationState.shared.setTranscriptDrawerOpen(
+                true, conversationId: conversation.id)
         }
         .dismissableSheet(isPresented: $showAppSelector) {
             AppSelectorSheet(

@@ -1,0 +1,58 @@
+version: 2
+name: conversation-detail
+tier: 2
+description: Hermetic conversation detail open + transcript drawer via capture seam
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
+  - desktop/macos/Desktop/Sources/ConversationDetailAutomationState.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Navigate to Conversations
+    bridge.navigate:
+      target: conversations
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 1
+
+  - id: S2
+    name: Create hermetic capture conversation
+    bridge.action:
+      name: capture_test_transcript
+      params:
+        phase: lifecycle
+        text: "[[MARKER:conversation-detail]] hermetic desktop detail"
+    expect:
+      result.detail.stopped: "true"
+      result.detail.conversation_count_increased: "true"
+
+  - id: S3
+    name: Open latest conversation with transcript drawer
+    bridge.action:
+      name: open_latest_conversation
+      params:
+        showTranscript: "true"
+        settleMs: "500"
+    expect:
+      ok: true
+
+  - id: S4
+    name: Conversation detail snapshot
+    bridge.action:
+      name: conversation_detail_snapshot
+      params:
+        settleMs: "500"
+    expect:
+      result.detail.detail_open: "true"
+      result.detail.transcript_drawer_open: "true"
+      result.detail.segment_count: "1"
+
+  - id: S5
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

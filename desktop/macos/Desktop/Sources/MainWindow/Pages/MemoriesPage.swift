@@ -1335,6 +1335,104 @@ class MemoriesViewModel: ObservableObject {
     }
   }
 
+  // MARK: - Automation (headless memory search/filter/visibility for desktop bridge)
+
+  private var didRegisterAutomationActions = false
+
+  func registerAutomationActions() {
+    guard !didRegisterAutomationActions else { return }
+    didRegisterAutomationActions = true
+    let registry = DesktopAutomationActionRegistry.shared
+
+    registry.register(
+      name: "memories_search",
+      summary: "Set memories search query and return filtered result count",
+      params: ["query"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      let query = params["query"] ?? ""
+      self.searchText = query
+      let deadline = Date().addingTimeInterval(10)
+      while self.isSearching, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      return [
+        "query": query,
+        "result_count": "\(self.filteredMemories.count)",
+        "search_active": query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "false" : "true",
+        "is_searching": self.isSearching ? "true" : "false",
+      ]
+    }
+
+    registry.register(
+      name: "memories_set_tag_filter",
+      summary: "Set memory tag/category filters and return filtered count",
+      params: ["tags"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      let raw = params["tags"] ?? ""
+      let tags: Set<MemoryTag>
+      if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        tags = []
+      } else {
+        let parsed = raw.split(separator: ",")
+          .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+          .compactMap { MemoryTag(rawValue: $0) }
+        tags = Set(parsed)
+      }
+      self.selectedTags = tags
+      let deadline = Date().addingTimeInterval(10)
+      while self.isLoadingFiltered, Date() < deadline {
+        try? await Task.sleep(nanoseconds: 50_000_000)
+      }
+      let tagList = tags.map(\.rawValue).sorted().joined(separator: ",")
+      return [
+        "tags": tagList.isEmpty ? "none" : tagList,
+        "filtered_count": "\(self.filteredMemories.count)",
+        "tag_filter_active": tags.isEmpty ? "false" : "true",
+      ]
+    }
+
+    registry.register(
+      name: "toggle_memory_visibility",
+      summary: "Toggle a memory's public/private visibility via the real API path",
+      params: ["id", "marker"]
+    ) { [weak self] params in
+      guard let self else { return ["error": "memories view model deallocated"] }
+      if self.memories.isEmpty {
+        await self.loadMemories()
+      }
+      let memory: ServerMemory?
+      if let id = params["id"]?.trimmingCharacters(in: .whitespacesAndNewlines), !id.isEmpty {
+        memory = self.memories.first(where: { $0.id == id })
+          ?? self.searchResults.first(where: { $0.id == id })
+          ?? self.filteredFromDatabase.first(where: { $0.id == id })
+      } else if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !marker.isEmpty
+      {
+        memory = self.memories.first(where: { $0.content.contains(marker) })
+          ?? self.searchResults.first(where: { $0.content.contains(marker) })
+          ?? self.filteredFromDatabase.first(where: { $0.content.contains(marker) })
+      } else {
+        memory = nil
+      }
+      guard let memory else {
+        return ["error": "missing id or marker match"]
+      }
+      let priorVisibility = memory.visibility
+      await self.toggleVisibility(memory)
+      let updated = self.memories.first(where: { $0.id == memory.id })
+        ?? self.searchResults.first(where: { $0.id == memory.id })
+      let newVisibility = updated?.visibility ?? (priorVisibility == "public" ? "private" : "public")
+      return [
+        "memory_id": memory.id,
+        "prior_visibility": priorVisibility,
+        "visibility": newVisibility,
+        "toggled": priorVisibility == newVisibility ? "false" : "true",
+      ]
+    }
+  }
+
   // MARK: - Conversation Linking
 
   func navigateToConversation(id: String) async {

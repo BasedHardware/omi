@@ -1,0 +1,29 @@
+version: 2
+name: connector-import
+tier: 2
+description: Typed wrap of memory_log_import_probe connector import seam
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConnectorImportOperations.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingMemoryLogImportService.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Import hermetic ChatGPT memory log probe
+    bridge.action:
+      name: memory_log_import_probe
+      params:
+        source: chatgpt
+        text: |
+          # Memory log
+          [[MARKER:connector-import]] hermetic connector import probe
+    expect:
+      result.detail.outcome: "success"
+
+  - id: S2
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

@@ -2185,34 +2185,52 @@ class TasksViewModel: ObservableObject {
         registry.register(
             name: "toggle_task",
             summary: "Toggle a task's completed state by id (mirrors the checkbox); returns the actual post-toggle state",
-            params: ["id"]
+            params: ["id", "description"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             // Load from SQLite first so a headless caller (Tasks page never opened) resolves
             // the task instead of getting a spurious "not found".
             await self.ensureTasksLoadedForAutomation()
-            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            let task: TaskActionItem?
+            if let id = params["id"], !id.isEmpty {
+                task = self.store.tasks.first(where: { $0.id == id })
+            } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                task = self.store.tasks.first(where: { $0.description.contains(description) })
+            } else {
+                task = nil
+            }
+            guard let task else { return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"] }
             await self.toggleTask(task)
             // Report the real post-toggle state read back from the store rather than the
             // assumed negation — TasksStore leaves the prior state if the local write fails.
-            let completed = self.store.tasks.first(where: { $0.id == id })?.completed ?? !task.completed
-            return ["id": id, "completed": completed ? "true" : "false"]
+            let completed = self.store.tasks.first(where: { $0.id == task.id })?.completed ?? !task.completed
+            return ["id": task.id, "completed": completed ? "true" : "false"]
         }
 
         registry.register(
             name: "delete_task",
             summary: "Delete a task by id (mirrors swipe / menu delete)",
-            params: ["id"]
+            params: ["id", "description"]
         ) { [weak self] params in
             guard let self else { return ["error": "tasks view model deallocated"] }
             // Load from SQLite first so a headless caller resolves the task instead of a
             // spurious "not found" when the Tasks page was never opened.
             await self.ensureTasksLoadedForAutomation()
-            guard let id = params["id"], let task = self.store.tasks.first(where: { $0.id == id })
-            else { return ["error": "task not found: \(params["id"] ?? "")"] }
+            let task: TaskActionItem?
+            if let id = params["id"], !id.isEmpty {
+                task = self.store.tasks.first(where: { $0.id == id })
+            } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !description.isEmpty
+            {
+                task = self.store.tasks.first(where: { $0.description.contains(description) })
+            } else {
+                task = nil
+            }
+            guard let task else { return ["error": "task not found: \(params["id"] ?? params["description"] ?? "")"] }
             await self.deleteTask(task)
-            return ["id": id, "deleted": "true"]
+            return ["id": task.id, "deleted": "true"]
         }
 
         registry.register(
