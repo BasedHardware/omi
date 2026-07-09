@@ -222,6 +222,11 @@ class RateLimit:
           message ages out
         - (external cooldown) remaining time on the active block
 
+        Accounts for in-flight reservations: if reservations
+        consume the remaining capacity, the wait time is based
+        on the rolling window (the oldest committed send must
+        age out before a reservation can succeed).
+
         Returns 0 if a slot is free right now.
         """
         with self._lock:
@@ -230,16 +235,24 @@ class RateLimit:
             # External cooldown takes precedence.
             if self._blocked_until > now:
                 return int(self._blocked_until - now)
-            if len(self._send_times) < self.max_per_hour:
+            effective_count = len(self._send_times) + self._reserved_count
+            if effective_count < self.max_per_hour:
                 return 0
+            # If we're full (committed + reserved), the caller
+            # must wait for the oldest committed send to age out.
             oldest = self._send_times[0]
             wait = self.window_seconds - (now - oldest)
             return max(1, int(wait))
 
     def in_window_count(self) -> int:
+        """Committed sends + in-flight reservations in the current
+        window. Use this (not len of send_times alone) to report
+        the effective count to callers so 429 responses reflect
+        the real blocking condition.
+        """
         with self._lock:
             self._trim(self._now())
-            return len(self._send_times)
+            return len(self._send_times) + self._reserved_count
 
     def daily_count(self) -> int:
         """Number of successful sends since the most recent

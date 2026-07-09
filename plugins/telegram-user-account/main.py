@@ -268,6 +268,11 @@ async def _on_incoming_message(event):
                 logger.warning("could not fetch Telegram history: %s", type(e).__name__)
 
         # Call the persona API.
+        #
+        # try/finally ensures the reserved slot is always cleaned up,
+        # even if the task is cancelled (asyncio.CancelledError is a
+        # BaseException since Python 3.8 and bypasses `except Exception`).
+        _slot_committed = False
         try:
             reply = await _persona_chat(
                 app_id=user["persona_id"],
@@ -278,41 +283,38 @@ async def _on_incoming_message(event):
                 timeout_seconds=60.0,
                 previous_messages=previous_messages,
             )
-        except Exception:
-            # Release the reservation on failure so the budget
-            # isn't consumed by a failed LLM call.
-            flood_control.default_rate_limit.release_slot()
-            raise
 
-        if not reply:
-            logger.warning("persona API returned empty reply for chat=%s", chat_id)
-            flood_control.default_rate_limit.release_slot()
-            return
+            if not reply:
+                logger.warning("persona API returned empty reply for chat=%s", chat_id)
+                return
 
-        # Send the reply via Telethon.
-        try:
-            await _client.send_message(chat_id, reply)
-        except Exception as e:
-            flood_control.default_rate_limit.release_slot()
-            flood_seconds = flood_control.detect_flood_wait(e)
-            if flood_seconds is not None:
-                flood_control.default_rate_limit.block_for_seconds(flood_seconds)
-                logger.warning(
-                    "FLOOD_WAIT from Telegram for chat=%s: wait %ds",
-                    chat_id,
-                    flood_seconds,
-                )
-            else:
-                logger.error("send_message failed for chat=%s: %s", chat_id, type(e).__name__)
-            return
+            # Send the reply via Telethon.
+            try:
+                await _client.send_message(chat_id, reply)
+            except Exception as e:
+                flood_seconds = flood_control.detect_flood_wait(e)
+                if flood_seconds is not None:
+                    flood_control.default_rate_limit.block_for_seconds(flood_seconds)
+                    logger.warning(
+                        "FLOOD_WAIT from Telegram for chat=%s: wait %ds",
+                        chat_id,
+                        flood_seconds,
+                    )
+                else:
+                    logger.error("send_message failed for chat=%s: %s", chat_id, type(e).__name__)
+                return
 
-        flood_control.default_rate_limit.commit_slot()
-        simple_storage.append_message(chat_id, "ai", reply)
-        logger.info(
-            "auto-reply sent to chat=%s (%d chars)",
-            chat_id,
-            len(reply),
-        )
+            flood_control.default_rate_limit.commit_slot()
+            _slot_committed = True
+            simple_storage.append_message(chat_id, "ai", reply)
+            logger.info(
+                "auto-reply sent to chat=%s (%d chars)",
+                chat_id,
+                len(reply),
+            )
+        finally:
+            if not _slot_committed:
+                flood_control.default_rate_limit.release_slot()
     except Exception as e:
         # Catch-all: a handler exception must NOT crash the event
         # loop. Log and continue — the next message should still
@@ -615,6 +617,11 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
     # inside the function would create a fresh binding that the
     # test's `patch.object(main_module, "_persona_chat", ...)`
     # wouldn't reach.
+    #
+    # try/finally ensures the reserved slot is always cleaned up,
+    # even if the task is cancelled (asyncio.CancelledError is a
+    # BaseException since Python 3.8 and bypasses `except Exception`).
+    _slot_committed = False
     try:
         reply = await _persona_chat(
             app_id=user["persona_id"],
@@ -625,61 +632,60 @@ async def persona_chat_endpoint(body: PersonaChatRequest):
             timeout_seconds=30.0,
             previous_messages=previous_messages,
         )
-    except Exception:
-        flood_control.default_rate_limit.release_slot()
-        raise
 
-    if not reply:
-        flood_control.default_rate_limit.release_slot()
-        raise HTTPException(status_code=502, detail="Persona API returned empty reply")
+        if not reply:
+            raise HTTPException(status_code=502, detail="Persona API returned empty reply")
 
-    # Send the reply via Telethon.
-    try:
-        sent = await client.send_message(body.chat_id, reply)
-    except Exception as e:
-        flood_control.default_rate_limit.release_slot()
-        # plan §8: detect FLOOD_WAIT specifically. Telegram's
-        # anti-flood systems return FLOOD_WAIT_* errors with a
-        # `seconds` field; surfacing this in the log + response
-        # lets the desktop show a clear "Telegram asked us to
-        # wait" message instead of a generic 502.
-        flood_seconds = flood_control.detect_flood_wait(e)
-        if flood_seconds is not None:
-            # cubic review 4617059500 P1: register the cooldown
-            # with the local rate limiter so the next request
-            # from this desktop is rejected at can_send() before
-            # it reaches the persona API. Without this, the
-            # caller could immediately retry, hit can_send()=True
-            # (the rolling window is still empty), call the
-            # persona API (wasting LLM tokens), and fail again
-            # at the Telegram send_message stage. Now: the
-            # local gate blocks retries for the duration
-            # Telegram requested.
-            flood_control.default_rate_limit.block_for_seconds(flood_seconds)
-            logger.warning(
-                "FLOOD_WAIT from Telegram for chat_id=%s: wait %ds. "
-                "This is Telegram's anti-flood signal -- slow down. "
-                "Local rate limiter blocked for %ds.",
+        # Send the reply via Telethon.
+        try:
+            sent = await client.send_message(body.chat_id, reply)
+        except Exception as e:
+            # plan §8: detect FLOOD_WAIT specifically. Telegram's
+            # anti-flood systems return FLOOD_WAIT_* errors with a
+            # `seconds` field; surfacing this in the log + response
+            # lets the desktop show a clear "Telegram asked us to
+            # wait" message instead of a generic 502.
+            flood_seconds = flood_control.detect_flood_wait(e)
+            if flood_seconds is not None:
+                # cubic review 4617059500 P1: register the cooldown
+                # with the local rate limiter so the next request
+                # from this desktop is rejected at can_send() before
+                # it reaches the persona API. Without this, the
+                # caller could immediately retry, hit can_send()=True
+                # (the rolling window is still empty), call the
+                # persona API (wasting LLM tokens), and fail again
+                # at the Telegram send_message stage. Now: the
+                # local gate blocks retries for the duration
+                # Telegram requested.
+                flood_control.default_rate_limit.block_for_seconds(flood_seconds)
+                logger.warning(
+                    "FLOOD_WAIT from Telegram for chat_id=%s: wait %ds. "
+                    "This is Telegram's anti-flood signal -- slow down. "
+                    "Local rate limiter blocked for %ds.",
+                    body.chat_id,
+                    flood_seconds,
+                    flood_seconds,
+                )
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Telegram FLOOD_WAIT: wait {flood_seconds}s before sending.",
+                    headers={"Retry-After": str(flood_seconds)},
+                )
+            logger.error(
+                "send_message failed for chat_id=%s: %s",
                 body.chat_id,
-                flood_seconds,
-                flood_seconds,
+                type(e).__name__,
             )
-            raise HTTPException(
-                status_code=429,
-                detail=f"Telegram FLOOD_WAIT: wait {flood_seconds}s before sending.",
-                headers={"Retry-After": str(flood_seconds)},
-            )
-        logger.error(
-            "send_message failed for chat_id=%s: %s",
-            body.chat_id,
-            type(e).__name__,
-        )
-        raise HTTPException(status_code=502, detail="Telethon send_message failed")
+            raise HTTPException(status_code=502, detail="Telethon send_message failed")
 
-    # Commit the reserved slot to the rolling window on successful
-    # send. Failed sends release the slot above and do NOT consume
-    # the budget.
-    flood_control.default_rate_limit.commit_slot()
+        # Commit the reserved slot to the rolling window on successful
+        # send. The finally block sees _slot_committed=True and skips
+        # the release.
+        flood_control.default_rate_limit.commit_slot()
+        _slot_committed = True
+    finally:
+        if not _slot_committed:
+            flood_control.default_rate_limit.release_slot()
 
     # Persist the turn to the chat's ring buffer so the next call
     # has the AI's reply in its context.
