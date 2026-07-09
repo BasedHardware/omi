@@ -21,7 +21,7 @@ void main() {
   late MetaWearablesMockHarness harness;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues({'metaGlassesAutoCapture': true});
     await SharedPreferencesUtil.init();
     tempDir = await Directory.systemTemp.createTemp('meta-glasses-autostart-');
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
@@ -44,9 +44,31 @@ void main() {
     if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
   });
 
+  test('registered visible glasses do not auto-start without explicit opt-in', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
+    await MetaWearablesDat.pairMockRayBanMeta();
+
+    final provider = MetaWearablesProvider();
+    await provider.init();
+    final controller = RecordingCaptureController();
+
+    provider.attachCaptureController(controller);
+    await _drainAutoStart();
+
+    expect(provider.autoCaptureEnabled, isFalse);
+    expect(provider.isCapturing, isFalse);
+    expect(harness.platform.frameCaptureCount, 0);
+    expect(controller.ingestedImages, isEmpty);
+
+    provider.dispose();
+  });
+
   test('registered visible glasses auto-start with DAT auto selector when link state is stale', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
 
     final provider = MetaWearablesProvider();
     await provider.init();
@@ -69,6 +91,7 @@ void main() {
   test('auto-start keeps capture alive when a stale glasses link later becomes eligible', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
 
     final provider = MetaWearablesProvider();
     await provider.init();
@@ -94,6 +117,7 @@ void main() {
   test('auto-start does not depend on link-state stream events when paired glasses are visible', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     harness.platform.emitDeviceChanges = false;
 
     final provider = MetaWearablesProvider();
@@ -115,6 +139,7 @@ void main() {
   test('auto-start targets the DAT active eligible device instead of auto selector', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     await _makeMockEligible();
 
     final provider = MetaWearablesProvider();
@@ -136,6 +161,7 @@ void main() {
   test('auto-started camera stream never starts phone mic recording', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     await _makeMockEligible();
 
     final provider = MetaWearablesProvider();
@@ -159,6 +185,7 @@ void main() {
       () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     await _makeMockEligible();
     harness.platform.reportsActiveDevice = false;
 
@@ -184,6 +211,7 @@ void main() {
   test('auto-start waits for initial permission snapshot instead of hanging in permission request', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     await _makeMockEligible();
     harness.platform.reportsActiveDevice = false;
     harness.platform.blockCameraPermissionRequest = true;
@@ -205,6 +233,7 @@ void main() {
   test('auto-start streams directly when permission status is unavailable but glasses are visible', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     await _makeMockEligible();
     harness.platform.reportsActiveDevice = false;
     harness.platform.cameraPermissionStatusThrows = true;
@@ -230,6 +259,7 @@ void main() {
   test('stream start failure during initial capture schedules the bounded camera retry', () async {
     await MetaWearablesDat.enableMockDevice(initiallyRegistered: true, initialPermissionsGranted: true);
     await MetaWearablesDat.pairMockRayBanMeta();
+    await _enableAutoCaptureForTest();
     await _makeMockEligible();
     harness.platform.failStreamStartCount = 1;
     harness.platform.leaveSessionOnFailedStart = true;
@@ -293,6 +323,10 @@ Future<void> _drainAutoStart() async {
   for (var i = 0; i < 5; i++) {
     await Future<void>.delayed(Duration.zero);
   }
+}
+
+Future<void> _enableAutoCaptureForTest() async {
+  await SharedPreferencesUtil().saveBool('metaGlassesAutoCapture', true);
 }
 
 Future<void> _makeMockEligible() async {

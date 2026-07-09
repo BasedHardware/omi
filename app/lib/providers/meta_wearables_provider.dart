@@ -173,9 +173,8 @@ class MetaWearablesProvider extends ChangeNotifier {
   Duration get _photoInterval => captureInterval.duration;
   Duration get _watchdogStaleFrameThreshold => _photoInterval + _watchdogFrameGrace;
 
-  /// Built-in-app behavior: capture starts by itself whenever registered
-  /// glasses are present, so the phone app is only needed for check-ins.
-  bool autoCaptureEnabled = true;
+  /// Camera wearable capture must be explicit opt-in.
+  bool autoCaptureEnabled = false;
   bool _autoStartInFlight = false;
 
   /// A user-initiated stop must stay stopped: auto-capture may not undo it
@@ -338,7 +337,7 @@ class MetaWearablesProvider extends ChangeNotifier {
     _selectedDeviceUuid = storedUuid.isEmpty ? null : storedUuid;
     captureMode = MetaGlassesCaptureMode.fromName(SharedPreferencesUtil().getString(_captureModePrefKey));
     captureInterval = MetaGlassesCaptureInterval.fromName(SharedPreferencesUtil().getString(_captureIntervalPrefKey));
-    autoCaptureEnabled = SharedPreferencesUtil().getBool(_autoCapturePrefKey, defaultValue: true);
+    autoCaptureEnabled = SharedPreferencesUtil().getBool(_autoCapturePrefKey);
     try {
       final docs = await getApplicationDocumentsDirectory();
       final dir = Directory('${docs.path}/meta_glasses_photo_queue');
