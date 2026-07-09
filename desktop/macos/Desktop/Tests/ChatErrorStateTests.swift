@@ -241,67 +241,51 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("AuthService.swift")
 
     XCTAssertTrue(source.contains("validateRestoredUserDefaultsSession()"))
-    XCTAssertTrue(source.contains("getIdToken(forceRefresh: false)"))
-    XCTAssertTrue(source.contains("Restored UserDefaults session validated from cached ID token"))
-    XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred - cached ID token expired"))
+    XCTAssertTrue(source.contains("refreshSingleFlight(auth: self)"))
+    XCTAssertTrue(source.contains("Restored UserDefaults session validated via forced refresh"))
     XCTAssertTrue(source.contains("Restored UserDefaults session validation deferred - preserving restored session"))
+    XCTAssertFalse(source.contains("cached ID token expired"))
   }
 
-  func testRestoredSessionValidationDoesNotClearPersistedTokens() throws {
-    // Regression: launch-time validation must not wipe restored UserDefaults tokens.
-    // refreshIdToken() still clears definitive invalid/revoked refresh tokens when a
-    // real token request occurs; this validation path only probes a cached token.
+  func testRestoredSessionValidationDoesNotClearPersistedTokensOnTransientFailure() throws {
     let source = try sourceFile("AuthService.swift")
     let validationBlockRange = source.range(of: "Restored UserDefaults session validation deferred - preserving restored session")
     XCTAssertNotNil(validationBlockRange)
     let snippet = String(source[validationBlockRange!.lowerBound...])
     let catchBlock = String(snippet[..<(snippet.range(of: "} catch {")?.lowerBound ?? snippet.endIndex)])
     XCTAssertFalse(catchBlock.contains("clearTokens()"))
-    XCTAssertTrue(source.contains("Definitive auth failure - clearing tokens and session"))
+    XCTAssertTrue(source.contains("invalidateSession(reason: .definitiveRefreshFailure)"))
   }
 
-  func testRestoredSessionSignsOutWhenValidationClearedTokens() throws {
-    // Follow-up to #9161 (Copilot): getIdToken(forceRefresh: false) can clear tokens
-    // internally on a stored token/user mismatch and then surface notSignedIn. Preserving
-    // isSignedIn there would leave a ghost signed-in UI with no credentials, so the catch
-    // must sign out when the tokens are gone — gated on the tokens actually being cleared,
-    // so the transient/race case (tokens intact) is still preserved.
+  func testRestoredSessionInvalidatesWhenValidationClearedTokens() throws {
     let source = try sourceFile("AuthService.swift")
-    let range = source.range(of: "Restored UserDefaults session validation cleared tokens - signing out")
+    let range = source.range(of: "Restored UserDefaults session validation — tokens cleared, invalidating")
     XCTAssertNotNil(range)
-    let snippet = String(source[range!.lowerBound...]).prefix(320)
-    XCTAssertTrue(snippet.contains("self.isSignedIn = false"))
-    XCTAssertTrue(snippet.contains("saveAuthState(isSignedIn: false"))
-    // The sign-out branch is gated on the tokens actually being gone (not a blanket clear).
+    let snippet = String(source[range!.lowerBound...]).prefix(200)
+    XCTAssertTrue(snippet.contains("invalidateSession(reason: .restoredSessionInvalid)"))
     let methodStart = source.range(of: "private func validateRestoredUserDefaultsSession()")
     XCTAssertNotNil(methodStart)
-    let method = String(source[methodStart!.lowerBound...]).prefix(1700)
+    let method = String(source[methodStart!.lowerBound...]).prefix(1200)
     XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
   }
 
-  func testRestoredSessionValidationClearsInMemoryEmailIfAlreadySignedOut() throws {
-    let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
-    XCTAssertNotNil(validationRange)
-    let snippet = String(source[validationRange!.lowerBound...])
-      .prefix(2600)
-
-    XCTAssertTrue(snippet.contains("if self.isSignedIn"))
-    XCTAssertTrue(snippet.contains("Restored UserDefaults session validation found signed-out state"))
-    XCTAssertTrue(snippet.contains("AuthState.shared.userEmail = nil"))
-  }
-
-  func testRestoredSessionValidationDoesNotForceRefreshOnLaunch() throws {
+  func testRestoredSessionValidationForceRefreshesOnLaunch() throws {
     let source = try sourceFile("AuthService.swift")
     let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
       .prefix(900)
 
-    XCTAssertTrue(snippet.contains("storedIdToken != nil"))
-    XCTAssertTrue(snippet.contains("!self.isTokenExpired"))
-    XCTAssertTrue(snippet.contains("getIdToken(forceRefresh: false)"))
-    XCTAssertFalse(snippet.contains("getIdToken(forceRefresh: true)"))
+    XCTAssertTrue(snippet.contains("storedRefreshToken != nil") || snippet.contains("storedIdToken != nil"))
+    XCTAssertTrue(snippet.contains("refreshSingleFlight(auth: self)"))
+    XCTAssertFalse(snippet.contains("!self.isTokenExpired"))
+  }
+
+  func testAuthListenerValidatesSavedSessionInsteadOfBlindPreserve() throws {
+    let source = try sourceFile("AuthService.swift")
+    XCTAssertTrue(source.contains("validateSavedSessionAfterFirebaseNil()"))
+    XCTAssertFalse(source.contains("Keeping saved session (not overriding isSignedIn)"))
+    XCTAssertTrue(source.contains("skipping REST validation while launch restore is in flight"))
   }
 
   func testChatSignInRecoveryDoesNotDuplicatePlanRefresh() throws {

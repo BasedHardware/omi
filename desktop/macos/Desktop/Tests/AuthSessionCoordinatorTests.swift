@@ -101,11 +101,23 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertFalse(snippet.contains("resetSessionStateForAuthChange"))
   }
 
-  func testRefreshSingleFlightAPIExistsOnCoordinator() {
-    // Behavioral single-flight concurrency test lands in commit 2 when refreshIdToken
-    // is wired through the coordinator. Here we only assert the API surface exists.
-    XCTAssertNotNil(AuthSessionCoordinator.shared)
-    _ = AuthSessionCoordinator.shared.refreshSingleFlight
+  func testRefreshIdTokenUsesClassifierNotBlanket400() throws {
+    let source = try sourceFile("AuthService.swift")
+    XCTAssertTrue(source.contains("AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure"))
+    let refreshRange = source.range(of: "private func refreshIdToken()")
+    XCTAssertNotNil(refreshRange)
+    let snippet = String(source[refreshRange!.lowerBound...]).prefix(2500)
+    XCTAssertFalse(snippet.contains("httpResponse.statusCode == 400"))
+    XCTAssertTrue(snippet.contains("invalidateSession(reason: .definitiveRefreshFailure)"))
+  }
+
+  func testRestoreValidationUsesRefreshSingleFlight() throws {
+    let source = try sourceFile("AuthService.swift")
+    let validationRange = source.range(of: "private func validateRestoredUserDefaultsSession()")
+    XCTAssertNotNil(validationRange)
+    let snippet = String(source[validationRange!.lowerBound...]).prefix(800)
+    XCTAssertTrue(snippet.contains("refreshSingleFlight(auth: self)"))
+    XCTAssertTrue(snippet.contains("defer { AuthState.shared.isRestoringAuth = false }"))
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {
