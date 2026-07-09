@@ -9,6 +9,7 @@ import 'package:whisper_flutter_new/whisper_flutter_new.dart';
 
 import 'package:omi/models/stt_result.dart';
 import 'package:omi/services/custom_stt_log_service.dart';
+import 'package:omi/services/sockets/on_device_transcript_quality_gate.dart';
 import 'package:omi/services/sockets/pure_polling.dart';
 
 class OnDeviceWhisperProvider implements ISttProvider {
@@ -16,6 +17,7 @@ class OnDeviceWhisperProvider implements ISttProvider {
   final String language;
   Whisper? _whisper;
   bool _isInitialized = false;
+  final OnDeviceTranscriptQualityGate _qualityGate = OnDeviceTranscriptQualityGate();
 
   OnDeviceWhisperProvider({required this.modelPath, this.language = 'en'});
 
@@ -94,21 +96,29 @@ class OnDeviceWhisperProvider implements ISttProvider {
         cleanText = cleanText.replaceAll(RegExp(r'\[.*?\]'), '').trim();
         cleanText = cleanText.replaceAll(RegExp(r'\(.*?\)'), '').trim();
 
-        if (cleanText.isEmpty) return null;
-
         // Calculate duration: 16kHz * 2 bytes/sample * 1 channel = 32000 bytes/sec
         final duration = audioData.lengthInBytes / 32000.0;
+        final filteredText = _qualityGate.filter(
+          cleanText,
+          audioData: audioData,
+          duration: Duration(microseconds: (duration * Duration.microsecondsPerSecond).round()),
+        );
+        if (filteredText == null) {
+          CustomSttLogService.instance.warning('OnDeviceWhisper', 'Dropped low-quality local transcript: $cleanText');
+          return null;
+        }
+
         final speedFactor = sw.elapsedMilliseconds / 1000 / duration;
         CustomSttLogService.instance.info(
           'OnDeviceWhisper',
-          'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms (${speedFactor.toStringAsFixed(2)}x real-time). Text: $cleanText',
+          'Transcribed ${duration.toStringAsFixed(1)}s in ${sw.elapsedMilliseconds}ms (${speedFactor.toStringAsFixed(2)}x real-time). Text: $filteredText',
         );
 
         return SttTranscriptionResult(
           segments: [
-            SttSegment(text: cleanText, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
+            SttSegment(text: filteredText, start: audioOffsetSeconds, end: audioOffsetSeconds + duration, speakerId: 0),
           ],
-          rawText: cleanText,
+          rawText: filteredText,
         );
       } finally {
         if (await tempFile.exists()) {

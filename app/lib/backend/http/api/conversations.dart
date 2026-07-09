@@ -646,14 +646,14 @@ Future<ActionItemsResponse> getActionItems({
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
-  if (response == null) return const ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return ActionItemsResponse(actionItems: [], hasMore: false);
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return ActionItemsResponse.fromJson(jsonDecode(body));
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return const ActionItemsResponse(actionItems: [], hasMore: false);
+    return ActionItemsResponse(actionItems: [], hasMore: false);
   }
 }
 

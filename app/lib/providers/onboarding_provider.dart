@@ -34,7 +34,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   String? connectingToDeviceId;
   List<BtDevice> deviceList = [];
   List<BtDevice> savedDeviceList = [];
-  late Timer _didNotMakeItTimer;
+  Timer? _didNotMakeItTimer;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
   bool _autoConnectSavedDeviceInFlight = false;
@@ -365,7 +365,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
 
   @override
   void dispose() {
-    _didNotMakeItTimer.cancel();
+    _didNotMakeItTimer?.cancel();
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }
@@ -399,7 +399,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (orderedDevices.isNotEmpty || savedDeviceList.isNotEmpty) {
       notifyListeners();
       if (orderedDevices.isNotEmpty) {
-        _didNotMakeItTimer.cancel();
+        _didNotMakeItTimer?.cancel();
       }
       unawaited(_autoConnectSavedDeviceIfVisible());
     }
