@@ -106,7 +106,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(source.contains("AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure"))
     let refreshRange = source.range(of: "private func refreshIdToken()")
     XCTAssertNotNil(refreshRange)
-    let snippet = String(source[refreshRange!.lowerBound...]).prefix(2500)
+    let snippet = String(source[refreshRange!.lowerBound...]).prefix(3200)
     XCTAssertFalse(snippet.contains("httpResponse.statusCode == 400"))
     XCTAssertTrue(snippet.contains("invalidateSession(reason: .definitiveRefreshFailure)"))
   }
