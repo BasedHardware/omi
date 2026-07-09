@@ -12,30 +12,34 @@ const axiosMock = vi.hoisted(() => {
   return { create, post }
 })
 
+const firebaseMock = vi.hoisted(() => ({
+  auth: {
+    currentUser: null as null | { getIdToken: () => Promise<string> }
+  }
+}))
+
 vi.mock('axios', () => ({
   default: {
     create: axiosMock.create
   }
 }))
 
-vi.mock('./firebase', () => ({
-  auth: {
-    currentUser: null
-  }
-}))
+vi.mock('./firebase', () => firebaseMock)
 
-import { createWindowsMcpKey } from './apiClient'
+import { fetchFirebaseIdToken } from './apiClient'
 
-describe('createWindowsMcpKey', () => {
-  it('posts the Windows MCP key name and returns the key record', async () => {
-    const record = { id: 'key_123', name: 'Omi Windows', key: 'omi_live_secret' }
-    axiosMock.post.mockResolvedValueOnce({ data: record })
+describe('fetchFirebaseIdToken', () => {
+  it('rejects when no user is signed in', async () => {
+    firebaseMock.auth.currentUser = null
 
-    await expect(createWindowsMcpKey()).resolves.toEqual(record)
-    expect(axiosMock.post).toHaveBeenCalledWith(
-      '/v1/mcp/keys',
-      { name: 'Omi Windows' },
-      { __noRetry: true }
+    await expect(fetchFirebaseIdToken()).rejects.toThrow(
+      'Sign in to Omi before generating an MCP key.'
     )
+  })
+
+  it('returns the current user token for main-process MCP key creation', async () => {
+    firebaseMock.auth.currentUser = { getIdToken: vi.fn().mockResolvedValue('firebase-token') }
+
+    await expect(fetchFirebaseIdToken()).resolves.toBe('firebase-token')
   })
 })
