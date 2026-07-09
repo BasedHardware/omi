@@ -70,4 +70,46 @@ describe('generateReply', () => {
     const r = await generateReply({ apiBase: 'a', firebaseToken: 't', ctx, fetchImpl })
     expect(r).toEqual({ ok: false, error: 'empty' })
   })
+
+  it('falls back to desktop chat-completions when chat is quota-limited', async () => {
+    const notice = Buffer.from(
+      JSON.stringify({ text: 'You’ve reached your 30 monthly chat question limit.' })
+    ).toString('base64')
+    const fetchImpl = vi.fn().mockImplementation((url: string) =>
+      String(url).includes('/v2/messages')
+        ? Promise.resolve(new Response(`done: ${notice}\n`, { status: 200 }))
+        : Promise.resolve(
+            new Response(
+              JSON.stringify({ choices: [{ message: { content: 'On the Omi desktop app!' } }] }),
+              { status: 200 }
+            )
+          )
+    )
+    const r = await generateReply({
+      apiBase: 'https://api.test',
+      desktopApiBase: 'https://desktop.test',
+      firebaseToken: 't',
+      ctx,
+      fetchImpl
+    })
+    expect(r).toEqual({ ok: true, text: 'On the Omi desktop app!' })
+    expect(fetchImpl.mock.calls[1][0]).toBe('https://desktop.test/v2/chat/completions')
+  })
+
+  it('surfaces the service notice when the fallback also fails (never sends it)', async () => {
+    const notice = Buffer.from(JSON.stringify({ text: 'Limit reached.' })).toString('base64')
+    const fetchImpl = vi.fn().mockImplementation((url: string) =>
+      String(url).includes('/v2/messages')
+        ? Promise.resolve(new Response(`done: ${notice}\n`, { status: 200 }))
+        : Promise.resolve(new Response('', { status: 429 }))
+    )
+    const r = await generateReply({
+      apiBase: 'a',
+      desktopApiBase: 'b',
+      firebaseToken: 't',
+      ctx,
+      fetchImpl
+    })
+    expect(r).toEqual({ ok: false, error: 'empty', detail: 'Limit reached.' })
+  })
 })

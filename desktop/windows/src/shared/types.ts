@@ -646,6 +646,9 @@ export type AiCloneAuth = {
   token: string
   /** VITE_OMI_API_BASE (main can't read renderer env). */
   apiBase?: string
+  /** VITE_OMI_DESKTOP_API_BASE — fallback chat-completions lane when the
+   *  memory-grounded chat is quota-limited (mirrors agentLLM.ts). */
+  desktopApiBase?: string
   /** Name the persona prompt replies as. */
   displayName?: string
 }
