@@ -207,20 +207,26 @@ AREA_TESTS = (
 )
 
 
-def discover_all_tests() -> list[str]:
+def discover_unit_tests() -> list[str]:
     tests: set[Path] = set()
     for root in FULL_TEST_ROOTS:
         tests.update(root.rglob('test_*.py'))
     for root in FULL_TEST_GLOBS:
         tests.update(root.glob('test_*.py'))
-    for path in EXTRA_DISCOVERABLE_TESTS:
-        if path.is_file():
-            tests.add(path)
     return sorted(
         test_path
         for test_path in (_backend_relative(path) for path in tests if path.is_file())
         if test_path not in LEGACY_UNLISTED_TESTS
     )
+
+
+def discover_all_tests() -> list[str]:
+    """Unit tests plus workflow-contract extras (e2e) for PR path selection only."""
+    tests = {Path(BACKEND_DIR / path) for path in discover_unit_tests()}
+    for path in EXTRA_DISCOVERABLE_TESTS:
+        if path.is_file():
+            tests.add(path)
+    return sorted(_backend_relative(path) for path in tests if path.is_file())
 
 
 def _backend_relative(path: Path) -> str:
@@ -360,7 +366,7 @@ def main() -> None:
     all_tests = discover_all_tests()
     reason = 'full backend unit suite'
     if args.all:
-        selected = all_tests
+        selected = discover_unit_tests()
     elif args.from_test_list:
         selected = existing_tests(read_lines(args.from_test_list), all_tests)
         reason = 'using provided backend unit test list'

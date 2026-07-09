@@ -52,7 +52,9 @@ fi
 
 selected_tests=()
 while IFS= read -r test_path; do
-  [[ -n "$test_path" ]] && selected_tests+=("$test_path")
+  if [[ -n "$test_path" && "$test_path" != testing/e2e/* ]]; then
+    selected_tests+=("$test_path")
+  fi
 done < "$test_list_file"
 
 if [[ ${#selected_tests[@]} -eq 0 ]]; then
