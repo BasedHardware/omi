@@ -466,7 +466,7 @@ private struct BackgroundAgentSummaryCard: View {
             Text("Background agent")
               .scaledFont(size: 12, weight: .semibold)
               .foregroundColor(OmiColors.textSecondary)
-            Text(summary.output)
+            Text(ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output))
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
               .lineLimit(1)
@@ -568,7 +568,7 @@ private struct BackgroundAgentSummaryCard: View {
   }
 }
 
-private struct AgentSpawnCard: View {
+struct AgentSpawnCard: View {
   let title: String
   let objective: String
   let ref: AgentTimelineRef
@@ -646,7 +646,7 @@ private struct AgentSpawnCard: View {
   }
 }
 
-private struct AgentCompletionCard: View {
+struct AgentCompletionCard: View {
   let title: String
   let promptSnippet: String
   let output: String
@@ -676,7 +676,7 @@ private struct AgentCompletionCard: View {
             Text(title.isEmpty ? "Background agent" : title)
               .scaledFont(size: 12, weight: .semibold)
               .foregroundColor(OmiColors.textSecondary)
-            Text(output)
+            Text(ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output))
               .scaledFont(size: 12)
               .foregroundColor(OmiColors.textTertiary)
               .lineLimit(1)

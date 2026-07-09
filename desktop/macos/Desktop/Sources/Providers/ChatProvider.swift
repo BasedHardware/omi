@@ -2985,15 +2985,30 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         }
 
         if let pending = pendingSurfaceTurns[key] {
-            return (
-                pending.userMessageId.flatMap { id in messages.first(where: { $0.id == id }) },
-                pending.assistantMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
-            )
+            let userMessage = pending.userMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
+            var assistantMessage = pending.assistantMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
+            if var existing = assistantMessage {
+                assistantMessage = mergeOptimisticAssistantPayload(
+                    into: &existing,
+                    assistantText: assistant,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+            }
+            return (userMessage, assistantMessage)
         }
 
         let existingUser = messages.first { $0.clientTurnId == key && $0.sender == .user }
-        let existingAssistant = messages.first { $0.clientTurnId == key && $0.sender == .ai }
+        var existingAssistant = messages.first { $0.clientTurnId == key && $0.sender == .ai }
         if existingUser != nil || existingAssistant != nil {
+            if var existing = existingAssistant {
+                existingAssistant = mergeOptimisticAssistantPayload(
+                    into: &existing,
+                    assistantText: assistant,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+            }
             pendingSurfaceTurns[key] = PendingSurfaceTurn(
                 continuityKey: key,
                 userMessageId: existingUser?.id,
@@ -3081,6 +3096,42 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return false }
         return pendingSurfaceTurns[key] != nil
+    }
+
+    /// Merge later artifact/completion payload onto an already-staged assistant
+    /// message for the same continuity key (INV-6: one producing turn).
+    @discardableResult
+    private func mergeOptimisticAssistantPayload(
+        into message: inout ChatMessage,
+        assistantText: String,
+        contentBlocks: [ChatContentBlock],
+        resources: [ChatResource]
+    ) -> ChatMessage {
+        guard let index = messages.firstIndex(where: { $0.id == message.id }) else {
+            return message
+        }
+        if !assistantText.isEmpty,
+           messages[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || messages[index].text == "Done."
+        {
+            messages[index].text = assistantText
+        }
+        if !contentBlocks.isEmpty {
+            var blocks = messages[index].contentBlocks
+            let existingIds = Set(blocks.map(\.id))
+            for block in contentBlocks where !existingIds.contains(block.id) {
+                blocks.append(block)
+            }
+            messages[index].contentBlocks = blocks
+        }
+        if !resources.isEmpty {
+            messages[index].resources = mergedResources(
+                existing: messages[index].resources,
+                adding: resources
+            )
+        }
+        message = messages[index]
+        return message
     }
 
     /// Record a completed turn that did not stream through `sendMessage`.

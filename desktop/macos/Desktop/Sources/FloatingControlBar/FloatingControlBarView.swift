@@ -1122,7 +1122,10 @@ struct FloatingControlBarView: View {
                         NotchAgentListRow(
                             title: pill.title,
                             status: pill.status,
-                            activity: pill.latestActivity,
+                            activity: ChatContinuityInvariants.agentPreviewText(
+                                prompt: pill.query,
+                                output: pill.latestActivity
+                            ),
                             isSelected: pill.id == state.activeAgentChatPillID,
                             progress: 1
                         )
@@ -1969,8 +1972,27 @@ private struct AgentMainChatView: View {
                     case .discoveryCard(_, let title, let summary, let fullText):
                         DiscoveryCard(title: title, summary: summary, fullText: fullText)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                    case .agentSpawn, .agentCompletion:
-                        EmptyView()
+                    case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                        AgentSpawnCard(
+                            title: title,
+                            objective: objective,
+                            ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                            onOpen: nil
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    case .agentCompletion(
+                        _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output,
+                        let status
+                    ):
+                        AgentCompletionCard(
+                            title: title,
+                            promptSnippet: promptSnippet,
+                            output: output,
+                            status: status,
+                            ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                            onOpen: nil
+                        )
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
             }
@@ -2394,7 +2416,10 @@ private struct NotchAgentMorphField: View {
                             NotchAgentListRow(
                                 title: pill.title,
                                 status: pill.status,
-                                activity: pill.latestActivity,
+                                activity: ChatContinuityInvariants.agentPreviewText(
+                                    prompt: pill.query,
+                                    output: pill.latestActivity
+                                ),
                                 isSelected: pill.id == activePillID,
                                 progress: rowRevealProgress
                             )

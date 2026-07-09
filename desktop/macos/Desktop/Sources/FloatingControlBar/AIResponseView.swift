@@ -221,8 +221,28 @@ struct AIResponseView: View {
                 case .discoveryCard(_, let title, let summary, let fullText):
                     DiscoveryCard(title: title, summary: summary, fullText: fullText)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                case .agentSpawn, .agentCompletion:
-                    EmptyView()
+                case .agentSpawn(_, let pillId, let sessionId, let runId, let title, let objective):
+                    AgentSpawnCard(
+                        title: title,
+                        objective: objective,
+                        ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                        onOpen: openAgentRef
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                case .agentCompletion(
+                    _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+                ):
+                    // Keep the completion card + resources on the same message —
+                    // never EmptyView the card while leaving a standalone artifact strip.
+                    AgentCompletionCard(
+                        title: title,
+                        promptSnippet: promptSnippet,
+                        output: output,
+                        status: status,
+                        ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+                        onOpen: openAgentRef
+                    )
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         } else if !message.text.isEmpty {
@@ -240,6 +260,18 @@ struct AIResponseView: View {
             .environment(\.colorScheme, .dark)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private func openAgentRef(_ ref: AgentTimelineRef, completion: @escaping (Bool) -> Void) {
+        if let onOpenAgentRef {
+            onOpenAgentRef(ref, completion)
+            return
+        }
+        if let pillId = ref.pillId, let onOpenAgent {
+            onOpenAgent(pillId, completion)
+            return
+        }
+        completion(false)
     }
 
     private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup] {

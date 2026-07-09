@@ -355,6 +355,23 @@ class FloatingControlBarState: NSObject, ObservableObject {
         return !Self.messageHasAnswerContent(message)
     }
 
+    /// Resources visible in the floating/notch viewport — only those owned by
+    /// viewport-anchored message ids (INV-6: no orphan historical artifacts).
+    func viewportDisplayResources(from provider: ChatProvider?) -> [ChatResource] {
+        guard let provider else { return [] }
+        var ids = Set<String>()
+        if let answerId = chatViewport.answerMessageId { ids.insert(answerId) }
+        if let questionId = chatViewport.questionMessageId { ids.insert(questionId) }
+        for pair in chatViewport.archivedExchanges {
+            if let questionId = pair.questionMessageId { ids.insert(questionId) }
+            if let answerId = pair.answerMessageId { ids.insert(answerId) }
+        }
+        return ChatContinuityInvariants.resourcesBelongingToMessages(
+            messages: provider.messages,
+            messageIds: ids
+        )
+    }
+
     /// Build archived exchanges as a thin view-model from ids + provider messages.
     func derivedChatHistory(from provider: ChatProvider?) -> [FloatingChatExchange] {
         guard let provider else { return [] }
@@ -489,7 +506,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
     func archiveCurrentExchange(using provider: ChatProvider?) {
         if chatViewport.answerMessageId == nil,
            let message = currentAIMessage(from: provider),
-           !message.text.isEmpty || !message.contentBlocks.isEmpty
+           Self.messageHasAnswerContent(message)
         {
             bindAnswerMessage(message)
         }
@@ -499,7 +516,7 @@ class FloatingControlBarState: NSObject, ObservableObject {
         if let answerId = chatViewport.answerMessageId,
            let provider,
            let message = provider.messages.first(where: { $0.id == answerId }),
-           message.text.isEmpty && message.contentBlocks.isEmpty
+           !Self.messageHasAnswerContent(message)
         {
             return
         }

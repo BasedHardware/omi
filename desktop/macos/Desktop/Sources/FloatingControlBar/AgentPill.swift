@@ -1702,7 +1702,10 @@ final class AgentPillsManager: ObservableObject {
             finalMessage.resources = resources
             finalMessage.isStreaming = false
             Self.upsertAssistantMessage(finalMessage, for: pill)
-            pill.latestActivity = String(messageText.prefix(140))
+            pill.latestActivity = ChatContinuityInvariants.agentPreviewText(
+                prompt: pill.query,
+                output: messageText
+            )
             FloatingControlBarManager.shared.recordAgentArtifactCompletion(
                 pillID: pill.id,
                 runId: pill.canonicalRunId,
@@ -1921,9 +1924,12 @@ final class AgentPillsManager: ObservableObject {
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
                 }
-            case .agentCompletion(_, _, _, _, let title, _, let output, _):
-                let label = output.isEmpty ? title : output
-                let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            case .agentCompletion(_, _, _, _, let title, let promptSnippet, let output, _):
+                let preview = ChatContinuityInvariants.agentPreviewText(
+                    prompt: promptSnippet.isEmpty ? title : promptSnippet,
+                    output: output
+                )
+                let trimmed = preview.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !trimmed.isEmpty {
                     return String(trimmed.prefix(110))
                 }
@@ -1948,7 +1954,10 @@ final class AgentPillsManager: ObservableObject {
                 finalMessage.isStreaming = false
                 Self.upsertAssistantMessage(finalMessage, for: pill)
             }
-            pill.latestActivity = String(trimmedFinalText.prefix(140))
+            pill.latestActivity = ChatContinuityInvariants.agentPreviewText(
+                prompt: pill.query,
+                output: trimmedFinalText
+            )
             pill.markContentChanged()
         }
         if let projection = AgentRuntimeStatusStore.shared.floatingPillProjection(pillId: pill.id) {
