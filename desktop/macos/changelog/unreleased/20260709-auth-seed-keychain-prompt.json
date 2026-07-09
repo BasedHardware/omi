@@ -1,3 +1,0 @@
-{
-  "change": "Fixed named-bundle auth seed so local test apps no longer show a login-keychain password prompt on launch"
-}
