@@ -141,9 +141,9 @@ env:
   - name: MEMORY_V3_GET_ENABLED
     value: "true"
   - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
-    value: "false"
+    value: "true"
   - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
-    value: "false"
+    value: "true"
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:

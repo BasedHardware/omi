@@ -293,59 +293,25 @@ def _validate_cloud_run_workflows(
         return [ValidationError('cloud_run/workflows', 'workflow_files must be a list')]
 
     expected_services = _as_config_dict(cloud_run.get('services')) or {}
+    expected_jobs = _as_config_dict(cloud_run.get('jobs')) or {}
     workflow_services: dict[str, ConfigDict] = {}
+    workflow_jobs: dict[str, ConfigDict] = {}
     for workflow_file in workflow_files:
         if not isinstance(workflow_file, str):
             errors.append(ValidationError('cloud_run/workflows', 'workflow file paths must be strings'))
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
-        workflow_services.update(_extract_workflow_cloud_run_services(workflow, env=env, manifest_path=manifest_path))
+        extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest_path=manifest_path)
+        workflow_services.update(extracted['services'])
+        workflow_jobs.update(extracted['jobs'])
 
+    workflow_vars = _workflow_variable_map(env_config, expected_services)
     for service, service_config in expected_services.items():
         service_state = workflow_services.get(service)
         if service_state is None:
             errors.append(ValidationError(f'cloud_run_workflow/{service}', 'missing deploy-cloudrun env_vars block'))
             continue
-        runtime_gcp_project = str(env_config.get('runtime_gcp_project', env_config['gcp_project']))
-        workflow_vars = {
-            '${{ vars.GCP_PROJECT_ID }}': str(env_config['gcp_project']),
-            '${{vars.GCP_PROJECT_ID}}': str(env_config['gcp_project']),
-            '${{ vars.RUNTIME_GCP_PROJECT_ID }}': runtime_gcp_project,
-            '${{vars.RUNTIME_GCP_PROJECT_ID}}': runtime_gcp_project,
-            '${{ vars.OMI_LLM_GATEWAY_URL }}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
-            '${{vars.OMI_LLM_GATEWAY_URL}}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
-            '${{ vars.CLOUD_RUN_VPC_NETWORK }}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
-            ),
-            '${{vars.CLOUD_RUN_VPC_NETWORK}}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
-            ),
-            '${{ vars.CLOUD_RUN_VPC_SUBNET }}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
-            ),
-            '${{vars.CLOUD_RUN_VPC_SUBNET}}': _expected_flag_value(
-                env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
-            ),
-            '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
-            '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
-            '${{ vars.MEMORY_ENABLED_USERS }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
-            '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
-            '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-            '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-            '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
-            ),
-            '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
-            ),
-            '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-            ),
-            '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
-                expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
-            ),
-        }
         actual_env = _literal_env_entries_by_name(service_state.get('env_vars', {}), variables=workflow_vars)
         errors.extend(
             _validate_env_entries(
@@ -371,7 +337,72 @@ def _validate_cloud_run_workflows(
                 strict_provisional=strict_provisional,
             )
         )
+
+    for job, job_config in expected_jobs.items():
+        job_state = workflow_jobs.get(job)
+        if job_state is None:
+            errors.append(ValidationError(f'cloud_run_workflow/{job}', 'missing deploy-cloudrun job env_vars block'))
+            continue
+        actual_env = _literal_env_entries_by_name(job_state.get('env_vars', {}), variables=workflow_vars)
+        errors.extend(
+            _validate_env_entries(
+                scope=f'cloud_run_workflow/{job}',
+                expected=job_config.get('env', {}),
+                actual=actual_env,
+                strict_provisional=strict_provisional,
+            )
+        )
+        actual_secrets = _workflow_secret_entries_by_name(job_state.get('secrets', {}))
+        errors.extend(
+            _validate_cloud_run_secret_entries(
+                scope=f'cloud_run_workflow/{job}',
+                expected=job_config.get('secrets', {}),
+                actual=actual_secrets,
+            )
+        )
     return errors
+
+
+def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict) -> StringMap:
+    runtime_gcp_project = str(env_config.get('runtime_gcp_project', env_config['gcp_project']))
+    return {
+        '${{ vars.GCP_PROJECT_ID }}': str(env_config['gcp_project']),
+        '${{vars.GCP_PROJECT_ID}}': str(env_config['gcp_project']),
+        '${{ vars.RUNTIME_GCP_PROJECT_ID }}': runtime_gcp_project,
+        '${{vars.RUNTIME_GCP_PROJECT_ID}}': runtime_gcp_project,
+        '${{ vars.OMI_LLM_GATEWAY_URL }}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
+        '${{vars.OMI_LLM_GATEWAY_URL}}': _manifest_env_value(expected_services, 'OMI_LLM_GATEWAY_URL'),
+        '${{ vars.CLOUD_RUN_VPC_NETWORK }}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
+        ),
+        '${{vars.CLOUD_RUN_VPC_NETWORK}}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--network', '')
+        ),
+        '${{ vars.CLOUD_RUN_VPC_SUBNET }}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
+        ),
+        '${{vars.CLOUD_RUN_VPC_SUBNET}}': _expected_flag_value(
+            env_config.get('cloud_run', {}).get('network', {}).get('flags', {}).get('--subnet', '')
+        ),
+        '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
+        '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE'),
+        '${{ vars.MEMORY_ENABLED_USERS }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+        '${{vars.MEMORY_ENABLED_USERS}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED_USERS'),
+        '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
+        '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
+        '${{ vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED }}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+        ),
+        '${{vars.MEMORY_CANONICAL_PROMOTION_CRON_ENABLED}}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED'
+        ),
+        '${{ vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED }}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+        ),
+        '${{vars.MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED}}': _manifest_env_value(
+            expected_services, 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED'
+        ),
+    }
 
 
 def _network_flags(env_config: ConfigDict) -> ConfigDict:
@@ -497,19 +528,20 @@ def _workflow_secret_entries_by_name(raw_secrets: object) -> EnvEntryMap:
     return result
 
 
-def _extract_workflow_cloud_run_services(
+def _extract_workflow_cloud_run_targets(
     workflow: ConfigDict,
     *,
     env: str,
     manifest_path: Path,
-) -> dict[str, ConfigDict]:
+) -> dict[str, dict[str, ConfigDict]]:
     workflow_env = _as_config_dict(workflow.get('env')) or {}
     rendered_runtime_env = _rendered_runtime_env_outputs(workflow, env=env, manifest_path=manifest_path)
-    result: dict[str, ConfigDict] = {}
-    jobs = _as_config_dict(workflow.get('jobs'))
-    if jobs is None:
-        return result
-    for raw_job in jobs.values():
+    services: dict[str, ConfigDict] = {}
+    jobs: dict[str, ConfigDict] = {}
+    workflow_jobs = _as_config_dict(workflow.get('jobs'))
+    if workflow_jobs is None:
+        return {'services': services, 'jobs': jobs}
+    for raw_job in workflow_jobs.values():
         job = _as_config_dict(raw_job)
         if job is None:
             continue
@@ -521,9 +553,6 @@ def _extract_workflow_cloud_run_services(
                 continue
             step_dict = _as_config_dict(step) or {}
             step_with = _as_config_dict(step_dict.get('with')) or {}
-            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
-            if service is None:
-                continue
             env_vars = _parse_workflow_env_vars(
                 _resolve_step_output_reference(step_with.get('env_vars'), rendered_runtime_env)
             )
@@ -531,9 +560,16 @@ def _extract_workflow_cloud_run_services(
                 _resolve_step_output_reference(step_with.get('secrets'), rendered_runtime_env)
             )
             flags = _parse_workflow_flags(_resolve_step_output_reference(step_with.get('flags'), rendered_runtime_env))
-            if env_vars or secrets or flags:
-                result[service] = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
-    return result
+            if not (env_vars or secrets or flags):
+                continue
+            service = _resolve_workflow_string(step_with.get('service'), workflow_env)
+            job_name = _resolve_workflow_string(step_with.get('job'), workflow_env)
+            payload = {'env_vars': env_vars, 'secrets': secrets, 'flags': flags}
+            if service is not None:
+                services[service] = payload
+            if job_name is not None:
+                jobs[job_name] = payload
+    return {'services': services, 'jobs': jobs}
 
 
 def _is_cloud_run_deploy_step(step: object) -> bool:
@@ -582,6 +618,14 @@ def _rendered_runtime_env_outputs(workflow: ConfigDict, *, env: str, manifest_pa
             output_prefix = service.replace('-', '_')
             outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(service_config.get('env', {}))
             outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(service_config.get('secrets', {}))
+        jobs = _as_config_dict(cloud_run.get('jobs')) or {}
+        for job, raw_job_config in jobs.items():
+            job_config = _as_config_dict(raw_job_config)
+            if job_config is None:
+                continue
+            output_prefix = job.replace('-', '_')
+            outputs[f'{output_prefix}_env_vars'] = _render_cloud_run_env_vars(job_config.get('env', {}))
+            outputs[f'{output_prefix}_secrets'] = _render_cloud_run_secrets(job_config.get('secrets', {}))
     return outputs
 
 

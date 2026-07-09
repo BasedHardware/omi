@@ -1,5 +1,4 @@
 schema_version: 1
-
 environments:
   dev:
     gcp_project: based-hardware-dev
@@ -19,25 +18,25 @@ environments:
             value: gateway
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-            value: "true"
+            value: 'true'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-            value: "false"
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-            value: "1.0"
+            value: '1.0'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-            value: "false"
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-            value: "1.0"
+            value: '1.0'
             category: rollout
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-            value: "false"
+            value: 'false'
             category: rollout
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-            value: "1.0"
+            value: '1.0'
             category: rollout
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret:
@@ -50,13 +49,13 @@ environments:
             value: vi7SA9ckQCe4ccobWNxlbdcNdC23
             category: memory_rollout
           MEMORY_V3_GET_ENABLED:
-            value: "true"
+            value: 'true'
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-            value: "false"
+            value: 'true'
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-            value: "false"
+            value: 'true'
             category: memory_rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -65,6 +64,7 @@ environments:
       workflow_files:
         - .github/workflows/gcp_backend_auto_dev.yml
         - .github/workflows/gcp_backend.yml
+        - .github/workflows/gcp_notifications_job.yml
       network:
         flags:
           --network: omi-dev-vpc-1
@@ -85,25 +85,25 @@ environments:
               value: gateway
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: "true"
+              value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -115,13 +115,13 @@ environments:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "true"
+              value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: "false"
+              value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: "false"
+              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -159,25 +159,25 @@ environments:
               value: gateway
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: "true"
+              value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -189,13 +189,13 @@ environments:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "true"
+              value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: "false"
+              value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: "false"
+              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -233,25 +233,25 @@ environments:
               value: gateway
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION:
-              value: "true"
+              value: 'true'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_CONVERSATION_ACTION_ITEMS_SHADOW_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED:
-              value: "false"
+              value: 'false'
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
-              value: "1.0"
+              value: '1.0'
               category: rollout
             POSTHOG_HOST:
               value: https://app.posthog.com
@@ -263,13 +263,13 @@ environments:
               value: vi7SA9ckQCe4ccobWNxlbdcNdC23
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "true"
+              value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: "false"
+              value: 'true'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: "false"
+              value: 'true'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -293,7 +293,57 @@ environments:
             POSTHOG_PROJECT_API_KEY:
               secret: POSTHOG_PROJECT_API_KEY
               version: latest
-
+      jobs:
+        notifications-job:
+          env:
+            GOOGLE_CLOUD_PROJECT:
+              value: based-hardware
+            OMI_ENV_STAGE:
+              value: dev
+              category: runtime_identity
+            MEMORY_MODE:
+              value: read
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+            PINECONE_INDEX_NAME:
+              value: memories-backend-dev
+              category: memory_rollout
+          secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+            TYPESENSE_HOST:
+              secret: TYPESENSE_HOST
+              version: latest
+            TYPESENSE_API_KEY:
+              secret: TYPESENSE_API_KEY
+              version: latest
   prod:
     gcp_project: based-hardware
     runtime_gcp_project: based-hardware
@@ -313,16 +363,16 @@ environments:
             value: "off"
             category: memory_rollout
           MEMORY_ENABLED_USERS:
-            value: ""
+            value: ''
             category: memory_rollout
           MEMORY_V3_GET_ENABLED:
-            value: "false"
+            value: 'false'
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-            value: "false"
+            value: 'false'
             category: memory_rollout
           MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-            value: "false"
+            value: 'false'
             category: memory_rollout
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
@@ -330,6 +380,7 @@ environments:
     cloud_run:
       workflow_files:
         - .github/workflows/gcp_backend.yml
+        - .github/workflows/gcp_notifications_job.yml
       network:
         flags:
           --network:
@@ -350,16 +401,16 @@ environments:
               value: "off"
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: ""
+              value: ''
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -386,16 +437,16 @@ environments:
               value: "off"
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: ""
+              value: ''
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -422,16 +473,16 @@ environments:
               value: "off"
               category: memory_rollout
             MEMORY_ENABLED_USERS:
-              value: ""
+              value: ''
               category: memory_rollout
             MEMORY_V3_GET_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
-              value: "false"
+              value: 'false'
               category: memory_rollout
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
@@ -445,4 +496,50 @@ environments:
               version: latest
             GOOGLE_CLIENT_SECRET:
               secret: GOOGLE_CLIENT_SECRET
+              version: latest
+      jobs:
+        notifications-job:
+          env:
+            OMI_ENV_STAGE:
+              value: prod
+              category: runtime_identity
+            MEMORY_MODE:
+              value: "off"
+              category: memory_rollout
+            MEMORY_ENABLED_USERS:
+              value: ''
+              category: memory_rollout
+            MEMORY_V3_GET_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+              value: 'false'
+              category: memory_rollout
+            MEMORY_CANONICAL_CONSOLIDATION_ENABLED:
+              value: 'true'
+              category: memory_rollout
+            MEMORY_TYPESENSE_COLLECTION:
+              value: canonical_memory_atoms
+              category: memory_rollout
+          secrets:
+            SERVICE_ACCOUNT_JSON:
+              secret: SERVICE_ACCOUNT_JSON
+              version: latest
+            ENCRYPTION_SECRET:
+              secret: ENCRYPTION_SECRET
+              version: latest
+            OPENAI_API_KEY:
+              secret: OPENAI_API_KEY
+              version: latest
+            PINECONE_API_KEY:
+              secret: PINECONE_API_KEY
+              version: latest
+            TYPESENSE_HOST:
+              secret: TYPESENSE_HOST
+              version: latest
+            TYPESENSE_API_KEY:
+              secret: TYPESENSE_API_KEY
               version: latest

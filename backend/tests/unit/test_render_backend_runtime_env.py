@@ -38,3 +38,39 @@ def test_network_flags_still_required(monkeypatch):
     monkeypatch.delenv('CLOUD_RUN_VPC_NETWORK', raising=False)
     with pytest.raises(ValueError, match='requires'):
         _MODULE['_render_flags']({'--network': {'env_var': 'CLOUD_RUN_VPC_NETWORK'}})
+
+
+def test_render_dev_emits_notifications_job_outputs(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-us-central1-dev-vpc-1-subnet-1')
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://172.16.63.232')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev'])
+    rc = _MODULE['main']()
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert 'notifications_job_env_vars<<' in out
+    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true' in out
+    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true' in out
+    assert 'MEMORY_CANONICAL_CONSOLIDATION_ENABLED=true' in out
+    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' in out
+    assert 'notifications_job_secrets<<' in out
+    assert 'OPENAI_API_KEY=OPENAI_API_KEY:latest' in out
+    assert 'PINECONE_API_KEY=PINECONE_API_KEY:latest' in out
+    assert 'TYPESENSE_API_KEY=TYPESENSE_API_KEY:latest' in out
+
+
+def test_render_prod_keeps_notifications_job_promotion_off(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-prod-vpc')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-prod-subnet')
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
+    rc = _MODULE['main']()
+    assert rc == 0
+    out = capsys.readouterr().out
+    # Isolate the notifications-job env block
+    start = out.index('notifications_job_env_vars<<')
+    end = out.index('notifications_job_secrets<<')
+    job_env = out[start:end]
+    assert 'MEMORY_MODE=off' in job_env
+    assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false' in job_env
+    assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false' in job_env
+    assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' not in job_env
