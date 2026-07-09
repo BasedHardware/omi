@@ -28,7 +28,10 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 APICLIENT_SWIFT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources' / 'APIClient.swift'
 # High-water mark ratchet: APIClient.swift must shrink as transport/DTOs extract out.
-APICLIENT_SWIFT_MAX_LINES = 6360
+# Raised after INV-AUTH-1 merge kept RequestAuthPolicy / 401 recovery in APIClient
+# (transport extract alone was 6357; auth recovery cannot live only in the old
+# transport without updating the INV-AUTH-1 path-glob guards).
+APICLIENT_SWIFT_MAX_LINES = 6490
 CONVERSATIONS_ROUTER = ROOT_DIR / 'backend' / 'routers' / 'conversations.py'
 CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 

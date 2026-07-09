@@ -287,9 +287,7 @@ actor APIClient {
     authPolicy: RequestAuthPolicy = .default
   ) async throws {
     let base = customBaseURL ?? baseURL
-    guard let url = URL(string: base + endpoint) else {
-      throw APIError.invalidResponse
-    }
+    let url = URL(string: base + endpoint)!
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
