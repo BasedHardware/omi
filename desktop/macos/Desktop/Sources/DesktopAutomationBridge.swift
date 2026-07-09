@@ -1724,7 +1724,8 @@ final class DesktopAutomationActionRegistry {
         let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
         let size = attributes[.size] as? NSNumber
       {
-        detail["log_attachment_bytes"] = "\(size.intValue)"
+        // int64Value, not intValue (Int32): the log can exceed 2 GB in a long dev session.
+        detail["log_attachment_bytes"] = "\(size.int64Value)"
       }
       return detail
     }
