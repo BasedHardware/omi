@@ -12,6 +12,13 @@ enum DesktopHealthEventName: String {
   case realtimeProviderExpectedIdleTeardown = "realtime_provider_expected_idle_teardown"
   case realtimeProviderPolicyClose = "realtime_provider_policy_close"
   case realtimeProviderSessionError = "realtime_provider_session_error"
+  case fallbackTriggered = "fallback_triggered"
+}
+
+enum DesktopFallbackOutcome: String {
+  case recovered
+  case degraded
+  case exhausted
 }
 
 struct DesktopHealthSnapshot {
@@ -125,6 +132,36 @@ final class DesktopDiagnosticsManager {
         "recovery_action": recoveryAction,
         "recovery_result": recoveryResult,
       ])
+  }
+
+  /// Shared fallback / resilience telemetry. Prefer this over inventing new
+  /// `DesktopHealthEventName` cases for provider/mode switches.
+  ///
+  /// - Parameters match the backend `record_fallback` contract.
+  /// - `outcome`: recovered (full UX restored), degraded (continues with hit),
+  ///   exhausted (no acceptable path left).
+  /// - Always tracks remotely on prod/beta so ops can see silent UX heals.
+  func recordFallback(
+    area: String,
+    from: String,
+    to: String,
+    reason: String,
+    outcome: DesktopFallbackOutcome,
+    extra: [String: Any] = [:]
+  ) {
+    var properties: [String: Any] = [
+      "area": bucketFallbackArea(area),
+      "from": safeFallbackLabel(from, default: "none"),
+      "to": safeFallbackLabel(to, default: "none"),
+      "reason": bucketFallbackReason(reason),
+      "outcome": outcome.rawValue,
+    ]
+    for (key, value) in sanitized(extra) {
+      if properties[key] == nil {
+        properties[key] = value
+      }
+    }
+    record(.fallbackTriggered, properties: properties, trackRemotely: true)
   }
 
   func recordRealtimeTokenMintFailed(
@@ -453,6 +490,61 @@ final class DesktopDiagnosticsManager {
     case "openai", "gemini": return provider.lowercased()
     default: return "unknown"
     }
+  }
+
+  private static let allowedFallbackAreas: Set<String> = [
+    "sync_dispatch",
+    "pusher",
+    "stt_selection",
+    "vad",
+    "audio_merge",
+    "webhook",
+    "realtime_hub",
+    "ptt_cascade",
+    "gemini_model",
+    "gemini_proxy",
+    "gemini_stream_proxy",
+    "redis_ratelimit",
+    "silent_mic",
+    "other",
+  ]
+
+  private static let allowedFallbackReasons: Set<String> = [
+    "timeout",
+    "provider_5xx",
+    "provider_429",
+    "enqueue_failed",
+    "config_incomplete",
+    "circuit_open",
+    "capability_mismatch",
+    "auth",
+    "quota",
+    "local_heal",
+    "policy",
+    "dispatch_disabled",
+    "byok",
+    "other",
+    "none",
+  ]
+
+  private func bucketFallbackArea(_ area: String) -> String {
+    let label = safeFallbackLabel(area, default: "other")
+    return Self.allowedFallbackAreas.contains(label) ? label : "other"
+  }
+
+  private func bucketFallbackReason(_ reason: String) -> String {
+    let label = safeFallbackLabel(reason, default: "other")
+    return Self.allowedFallbackReasons.contains(label) ? label : "other"
+  }
+
+  private func safeFallbackLabel(_ value: String, default defaultValue: String) -> String {
+    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let source = trimmed.isEmpty ? defaultValue : trimmed
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._:-"))
+    let normalized = String(
+      source.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" })
+    let clipped = String(normalized.prefix(64))
+    return clipped.isEmpty ? defaultValue : clipped
   }
 
   private func osVersionString() -> String {

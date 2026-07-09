@@ -382,6 +382,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// tries the OTHER realtime provider before dropping to the legacy Claude cascade.
   /// nil = on the primary; non-nil = the provider we failed over TO.
   private var fallbackProvider: RealtimeHubProvider?
+  /// Reason passed to ``failoverToAlternateProvider``; cleared after a successful connect on the alternate.
+  private var pendingFailoverReason: String?
 
   private override init() {
     super.init()
@@ -397,14 +399,43 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Returns true if a failover was started. Only fires once per chain (primary →
   /// alternate); if the alternate also fails we stop and let PTT use the Claude cascade.
   @discardableResult
-  private func failoverToAlternateProvider() -> Bool {
-    guard fallbackProvider == nil else { return false }  // already on the alternate → cascade
+  private func failoverToAlternateProvider(reason: String = "other") -> Bool {
+    guard fallbackProvider == nil else {
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_hub",
+        from: effectiveProvider.rawValue,
+        to: "cascade",
+        reason: reason,
+        outcome: .exhausted,
+        extra: ["user_visible": false])
+      return false  // already on the alternate → cascade
+    }
     let primary = RealtimeHubSettings.shared.provider
     fallbackProvider = primary.alternate
+    pendingFailoverReason = reason
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "realtime_hub",
+      from: primary.rawValue,
+      to: primary.alternate.rawValue,
+      reason: reason,
+      outcome: .degraded,
+      extra: ["user_visible": false])
     log("RealtimeHub: \(primary.displayName) unavailable — failing over to \(primary.alternate.displayName)")
     teardownSession()
     ensureWarm()
     return true
+  }
+
+  private func failoverReason(for failureClass: CredentialFailureClass?) -> String {
+    switch failureClass {
+    case .providerAuthFailed:
+      return "auth"
+    case .providerQuotaExceeded:
+      return "quota"
+    case .backendUnauthorized, .requiresLogin, .paywalled, .byokEnrollmentMismatch,
+         .backendTransient, .providerTransient, .providerPolicyClose, .unknown, .none:
+      return "other"
+    }
   }
 
   private func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool {
@@ -641,6 +672,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // A new pick (user or Auto/AutoModelSelector) re-evaluates from the primary, dropping
     // any active failover so the freshly-selected provider is honored.
     fallbackProvider = nil
+    pendingFailoverReason = nil
     // Only reconnect if the provider actually changed — avoids redundant
     // teardown/recreate races on unrelated notifications.
     if session != nil, sessionProvider == RealtimeHubSettings.shared.provider { return }
@@ -663,7 +695,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let fingerprint = APIKeyService.byokFingerprint(key)
       guard CredentialHealthManager.shared.canUseBYOK(provider: provider.byokProvider, fingerprint: fingerprint) else {
         log("RealtimeHub: skipping known-bad \(provider.displayName) BYOK key fingerprint")
-        if failoverToAlternateProvider() {
+        if failoverToAlternateProvider(reason: "auth") {
           return
         } else if AuthService.shared.isSignedIn {
           mintAndConnect(provider: provider)
@@ -703,7 +735,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         self.recordRealtimeMintFailure(error, provider: providerParam, phase: "warm", context: "realtime_mint")
         if error.healthError.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
-        } else if !self.failoverToAlternateProvider() {
+        } else if !self.failoverToAlternateProvider(reason: self.failoverReason(for: error.healthError.failureClass)) {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -717,7 +749,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           httpStatusCode: error.failureClass.httpStatusCode)
         if error.failureClass.isAccountWide {
           log("RealtimeHub: account credential failure during mint — staying on cascade")
-        } else if !self.failoverToAlternateProvider() {
+        } else if !self.failoverToAlternateProvider(reason: self.failoverReason(for: error.failureClass)) {
           log("⚠️ RealtimeHub: ephemeral mint failed on both providers — staying on cascade")
         }
         return
@@ -1035,7 +1067,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           phase: "barge_in_replacement",
           context: "realtime_barge_in_mint")
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
-        if self.shouldFailoverToAlternate(for: error.healthError.failureClass), self.failoverToAlternateProvider() {
+        if self.shouldFailoverToAlternate(for: error.healthError.failureClass),
+          self.failoverToAlternateProvider(reason: self.failoverReason(for: error.healthError.failureClass))
+        {
           return
         } else if !error.healthError.failureClass.isAccountWide {
           log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
@@ -1050,7 +1084,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           phase: "barge_in_replacement",
           httpStatusCode: error.failureClass.httpStatusCode)
         self.failBargeInReplacement(provider: provider, reason: error.localizedDescription)
-        if self.shouldFailoverToAlternate(for: error.failureClass), self.failoverToAlternateProvider() {
+        if self.shouldFailoverToAlternate(for: error.failureClass),
+          self.failoverToAlternateProvider(reason: self.failoverReason(for: error.failureClass))
+        {
           return
         } else if !error.failureClass.isAccountWide {
           log("⚠️ RealtimeHub[\(provider.displayName)]: barge-in replacement token mint failed")
@@ -1502,6 +1538,17 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastWarmAt = Date()
     hubConnected = true  // authenticated + ready — PTT may now route turns to the hub
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
+    if let fallback = fallbackProvider, let reason = pendingFailoverReason, sessionProvider == fallback {
+      let primary = RealtimeHubSettings.shared.provider
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_hub",
+        from: primary.rawValue,
+        to: fallback.rawValue,
+        reason: reason,
+        outcome: .recovered,
+        extra: ["user_visible": false])
+      pendingFailoverReason = nil
+    }
     if inputTurnInProgress,
       inputTurnActivityStartPending || sessionProvider == .gemini
     {
@@ -2267,11 +2314,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     // context. Only switch for stable credential/quota classes; transient fast closes
     // re-warm the same provider and rely on the shared continuity packet.
     if case .providerAuthFailed = credentialFailureClass {
-      if aliveFor < 10, failoverToAlternateProvider() { return }
+      if aliveFor < 10, failoverToAlternateProvider(reason: "auth") { return }
       return
     }
     if case .providerQuotaExceeded = credentialFailureClass {
-      if failoverToAlternateProvider() { return }
+      if failoverToAlternateProvider(reason: "quota") { return }
       return
     }
     // Re-warm so the NEXT PTT uses the hub, not the STT cascade. Gemini idle-closes
@@ -2283,6 +2330,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if aliveFor > 60 {
       hubReconnectStrikes = 0
       fallbackProvider = nil
+    pendingFailoverReason = nil
     }
     guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else { return }
     hubReconnectStrikes += 1

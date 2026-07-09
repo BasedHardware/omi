@@ -135,6 +135,7 @@ tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_partial_segment
 tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_target_conversation_id_forwarded
 tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_vad_errors_mark_failed
 tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_zero_segments_after_vad_completes
+tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_404_expired_job
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_403_wrong_owner
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_completed_includes_result
 tests/unit/test_tools_router.py::TestRouterEnvelope::test_ok_normal
@@ -159,3 +160,6 @@ tests/unit/test_ws_i_write_convergence.py::test_extract_memories_inner_legacy_ca
 tests/unit/test_ws_i_write_convergence.py::test_v3_get_routes_canonical_user_to_memory_service
 tests/unit/test_ws_l_surface_routing.py::TestMcpSseLegacySearchParity::test_legacy_sse_search_uses_vector_order_and_full_firestore_docs
 tests/unit/test_sync_cloud_tasks.py::test_sync_post_enqueue_cleanup_does_not_unstage
+# File-isolation amortizes router/STT/VAD imports across different node IDs per run.
+tests/unit/test_sync_cloud_tasks.py
+tests/unit/test_fallback_observability.py

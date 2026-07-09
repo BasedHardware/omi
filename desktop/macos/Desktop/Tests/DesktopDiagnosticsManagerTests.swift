@@ -180,6 +180,42 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["retryable"] as? Bool, true)
   }
 
+  func testRecordFallbackUsesSharedContractFields() throws {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "realtime_hub",
+      from: "openai",
+      to: "gemini",
+      reason: "auth",
+      outcome: .recovered,
+      extra: ["user_visible": false])
+
+    let snapshot = try latestSnapshot()
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "realtime_hub")
+    XCTAssertEqual(snapshot["from"] as? String, "openai")
+    XCTAssertEqual(snapshot["to"] as? String, "gemini")
+    XCTAssertEqual(snapshot["reason"] as? String, "auth")
+    XCTAssertEqual(snapshot["outcome"] as? String, "recovered")
+    XCTAssertEqual(snapshot["user_visible"] as? Bool, false)
+  }
+
+  func testRecordFallbackBucketsUnknownAreaAndReason() throws {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "brand_new_area",
+      from: "Cloud Tasks!",
+      to: "",
+      reason: "totally_novel_failure",
+      outcome: .degraded)
+
+    let snapshot = try latestSnapshot()
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "other")
+    XCTAssertEqual(snapshot["from"] as? String, "cloud_tasks_")
+    XCTAssertEqual(snapshot["to"] as? String, "none")
+    XCTAssertEqual(snapshot["reason"] as? String, "other")
+    XCTAssertEqual(snapshot["outcome"] as? String, "degraded")
+  }
+
   private func latestSnapshot() throws -> [String: Any] {
     let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
     defer { try? FileManager.default.removeItem(at: url) }
