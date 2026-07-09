@@ -177,6 +177,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   private process: ChildProcess | null = null
   private processIsExternal = false
+  private stopRequested = false
   // Cumulative session cost last reported by a usage_update notification,
   // per adapter session — the bridge reports totals, results need per-attempt
   // deltas.
@@ -218,6 +219,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   async start(): Promise<void> {
     if (this.process) return
+    this.stopRequested = false
 
     const configuredCommand =
       this.command ?? (this.envCommandName ? process.env[this.envCommandName] : undefined)
@@ -282,7 +284,13 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     const finalizeProcess = (error: Error): void => {
       if (finalized || this.process !== proc) return
       finalized = true
-      this.log(error.message)
+      // A requested stop() also lands here via the exit handler — that's a
+      // normal teardown, not a failure; don't log it as one.
+      if (this.stopRequested) {
+        this.log(`${this.adapterId} ACP subprocess stopped`)
+      } else {
+        this.log(error.message)
+      }
       this.process = null
       this.stdinWriter = null
       this.readline = null
@@ -348,6 +356,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   async stop(): Promise<void> {
     if (!this.process) return
+    this.stopRequested = true
     const proc = this.process
     const exitPromise = new Promise<void>((resolve) => {
       proc.once('exit', () => resolve())
