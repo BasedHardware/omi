@@ -20,6 +20,18 @@ final class FloatingBarGeometryTests: XCTestCase {
         XCTAssertEqual(frame.size, compactSize)
     }
 
+    func testTopCenterExpansionKeepsTopEdgeAndHorizontalCenterFixed() {
+        let compactFrame = NSRect(x: 586, y: 876, width: 268, height: 58)
+        let expandedFrame = FloatingControlBarGeometry.topCenterAnchoredFrame(
+            currentFrame: compactFrame,
+            targetSize: NSSize(width: 430, height: 110)
+        )
+
+        XCTAssertEqual(expandedFrame.midX, compactFrame.midX)
+        XCTAssertEqual(expandedFrame.maxY, compactFrame.maxY)
+        XCTAssertEqual(expandedFrame.size, NSSize(width: 430, height: 110))
+    }
+
     func testPTTExpansionKeepsCompactPillCenter() {
         let compactFrame = FloatingControlBarGeometry.defaultPillFrame(
             size: compactSize,

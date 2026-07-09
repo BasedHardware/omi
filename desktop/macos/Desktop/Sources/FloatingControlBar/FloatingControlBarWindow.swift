@@ -130,6 +130,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     static let pttHintRowHeight: CGFloat = 30
     private static let askOmiAnimationDuration: TimeInterval = 0.14
     private static let askOmiSettleDelay: TimeInterval = 0.16
+    /// Hover-menu (agent switcher) expand/collapse timing. The NSPanel frame
+    /// animation and the SwiftUI content morph (`notchSwitcherProgress`) MUST
+    /// share these durations so the panel and its rows finish together. A
+    /// slower window (the previous 0.3s default) made the surface keep sliding
+    /// open for ~0.14s after the rows had already settled — read as the bar
+    /// "expanding, then sliding".
+    static let notchHoverMenuExpandDuration: TimeInterval = 0.16
+    static let notchHoverMenuCollapseDuration: TimeInterval = 0.10
     private static let frameNoopEpsilon: CGFloat = 0.5
     private static let startupDisplayRevalidationDelays: [TimeInterval] = [0.2, 0.8, 2.0]
     private static let topInset: CGFloat = 40
@@ -253,12 +261,13 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func responseGlowWindowSizeForCurrentScreen(forSurfaceSize size: NSSize) -> NSSize {
         responseGlowWindowSize(forSurfaceSize: size, usesNotchIsland: notchModeEnabled)
     }
-    private func notchHoverMenuWindowSize(agentCount: Int) -> NSSize {
+    /// Bare hover-menu surface size. `resizeAnchored` adds the transparent glow
+    /// outsets exactly once when converting this to an NSPanel frame.
+    private func notchHoverMenuSurfaceSize(agentCount: Int) -> NSSize {
         NSSize(
             width: max(collapsedBarSize.width, Self.notchExpandedWidth),
             height: notchChromeHeightForCurrentScreen
                 + Self.notchHoverMenuHeight(agentCount: agentCount)
-                + Self.notchGlowOutsetBottom
         )
     }
     private func currentResponseSurfaceHeight(usesNotchIsland: Bool? = nil) -> CGFloat {
@@ -586,8 +595,15 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private func performSpacesTransitionGrowIn() {
         updateNotchIslandState()
         guard notchModeEnabled, isVisible else { return }
+        // The panel already lives on every Space (.canJoinAllSpaces), so switching
+        // Spaces must NOT replay the reveal "pop" — doing so re-zoomed the island on
+        // every desktop/app switch, which felt excessive. Keep it fully revealed and
+        // only re-assert the resting frame if the current one has actually drifted
+        // (e.g. the active screen's notch geometry changed).
+        state.notchRevealProgress = 1
         let targetFrame = defaultFrameForCurrentState()
-        animateGrowOutFromNotch(to: targetFrame)
+        guard !Self.framesEquivalent(frame, targetFrame) else { return }
+        resizeToFrame(targetFrame, makeResizable: styleMask.contains(.resizable), animated: false)
     }
 
     private func defaultFrameForCurrentState() -> NSRect {
@@ -780,13 +796,11 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         let allowed = visible && state.canShowNotchHoverMenu
         guard state.notchHoverMenuOpen != allowed else { return }
 
-        if allowed {
-            resizeForAgentSwitcher(visible: true)
-            state.setNotchHoverMenuOpen(true)
-        } else {
-            state.setNotchHoverMenuOpen(false)
-            resizeForAgentSwitcher(visible: false)
-        }
+        // Update content and frame from one authority. The menu is inserted
+        // before expansion so it is progressively revealed by the top-anchored
+        // NSPanel resize; on close it disappears before the panel contracts.
+        state.setNotchHoverMenuOpen(allowed)
+        resizeForAgentSwitcher(visible: allowed)
     }
 
     fileprivate func acceptsMouseHit(inContentPoint point: NSPoint) -> Bool {
@@ -843,7 +857,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
                 } else if self.state.isAgentSwitcherExpanded && !AgentPillsManager.shared.pills.isEmpty {
                     // Keep the notch switcher expanded so pinned/hover-open rows
                     // are not clipped when pills are added or removed.
-                    targetSize = self.notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+                    targetSize = self.notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
                 } else {
                     targetSize = self.collapsedBarSize
                 }
@@ -1339,9 +1353,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     /// Top-center: keeps top edge fixed, centers horizontally (used by chat expand/collapse).
     private func originForTopCenterAnchor(newSize: NSSize) -> NSPoint {
-        if notchModeEnabled {
-            return defaultTopCenteredOrigin(for: newSize)
-        }
         return FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin
     }
 
@@ -1368,17 +1379,6 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             : originForCenterAnchor(newSize: constrainedSize)
 
         let targetFrame = NSRect(origin: newOrigin, size: constrainedSize)
-        if animated, anchorTop, notchModeEnabled {
-            let currentTopCenteredFrame = NSRect(
-                origin: originForTopCenterAnchor(newSize: frame.size),
-                size: frame.size
-            )
-            if abs(frame.midX - targetFrame.midX) > 0.5
-                || abs(currentTopCenteredFrame.minY - frame.minY) > 0.5
-            {
-                setFrame(currentTopCenteredFrame, display: true, animate: false)
-            }
-        }
         resizeToFrame(
             targetFrame,
             makeResizable: makeResizable,
@@ -1528,7 +1528,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         guard notchModeEnabled || !state.isNotchHoverMenuVisible else { return false }
         guard !notchModeEnabled else {
             let targetSize = expanded
-                ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+                ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
                 : collapsedBarSize
             resizeAnchored(
                 to: targetSize,
@@ -1622,15 +1622,32 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         if visible {
             let expandedSize = notchModeEnabled
-                ? notchHoverMenuWindowSize(agentCount: AgentPillsManager.shared.pills.count)
+                ? notchHoverMenuSurfaceSize(agentCount: AgentPillsManager.shared.pills.count)
                 : pillAgentListWindowSize(agentCount: AgentPillsManager.shared.pills.count)
-            resizeAnchored(to: expandedSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(
+                to: expandedSize,
+                makeResizable: false,
+                animated: true,
+                animationDuration: Self.notchHoverMenuExpandDuration,
+                anchorTop: true
+            )
         } else if notchModeEnabled {
-            resizeAnchored(to: collapsedBarSize, makeResizable: false, animated: true, anchorTop: true)
+            resizeAnchored(
+                to: collapsedBarSize,
+                makeResizable: false,
+                animated: true,
+                animationDuration: Self.notchHoverMenuCollapseDuration,
+                anchorTop: true
+            )
         } else {
             // Collapse to the canonical pill position, not the current midX —
             // see canonicalCollapsedPillFrame.
-            resizeToFrame(canonicalCollapsedPillFrame(), makeResizable: false, animated: true)
+            resizeToFrame(
+                canonicalCollapsedPillFrame(),
+                makeResizable: false,
+                animated: true,
+                animationDuration: Self.notchHoverMenuCollapseDuration
+            )
         }
     }
 
