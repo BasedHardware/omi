@@ -1269,9 +1269,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             forName: NSApplication.willTerminateNotification,
             object: nil, queue: .main
         ) { [weak self] _ in
+            // The notification is delivered on the main queue, so force the
+            // latest coalesced draft writes to disk before this callback can
+            // return and the process exits (including Sparkle relaunches).
+            MainActor.assumeIsolated {
+                ChatDraftStore.shared.flush()
+            }
             guard let self else { return }
             Task { @MainActor in
-                ChatDraftStore.shared.flush()
                 await self.resolvedAgentClient().stop()
             }
         }

@@ -247,6 +247,19 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }
 
+  func testTerminationFlushesDraftsBeforeAsyncAgentShutdown() throws {
+    let source = try sourceFile("Providers/ChatProvider.swift")
+    let observerStart = try XCTUnwrap(source.range(of: "terminationObserver = NotificationCenter.default.addObserver"))
+    let observerTail = String(source[observerStart.lowerBound...])
+    let observerEnd = try XCTUnwrap(observerTail.range(of: "private var terminationObserver"))
+    let observer = String(observerTail[..<observerEnd.lowerBound])
+    let flush = try XCTUnwrap(observer.range(of: "ChatDraftStore.shared.flush()"))
+    let asyncShutdown = try XCTUnwrap(observer.range(of: "Task { @MainActor in"))
+
+    XCTAssertTrue(observer.contains("MainActor.assumeIsolated"))
+    XCTAssertLessThan(flush.lowerBound, asyncShutdown.lowerBound)
+  }
+
   func testSignInRecoveryRetriesAfterOAuth() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     let range = source.range(of: "ChatErrorCard: .signIn recovery")
