@@ -271,6 +271,8 @@ SCHEMA_GROUPS = {
         'schemas': (
             'AudioPrecacheResponse',
             'AudioFileUrlInfo',
+            'ConversationAudioSpanInfo',
+            'ConversationAudioUrlInfo',
             'AudioUrlsResponse',
         ),
     },
