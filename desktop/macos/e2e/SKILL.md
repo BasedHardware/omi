@@ -159,6 +159,32 @@ sleep 185
 `suspend_agent_stream` returns `{suspended:true, pid, durationMs}` (or an `error` if no
 agent process is running / on a prod bundle).
 
+### 2f. Inject a server push mid-drag (task requery suppression, TASK-06)
+A server push arriving while a task drag/sort-sync is in flight must not clobber the
+in-flight order — the Tasks view model holds `suppressDatabaseRequery` during that
+window so a recompute recomputes from the in-memory drag order instead of re-reading
+stale rows from SQLite. `inject_requery_during_drag` (non-prod) drives the **real**
+`recomputeAllCaches` path under a simulated drag and reports the outcome:
+
+```bash
+cd desktop/macos
+# optional: seed some tasks first so the order snapshot is non-trivial
+./scripts/omi-ctl action seed_tasks count=8
+./scripts/omi-ctl action inject_requery_during_drag | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print(d)'
+#   assert: requery_suppressed_during_drag=true  (the server-push recompute did NOT re-read SQLite)
+#   control: requery_fires_without_suppress=true  (same push with the flag cleared DOES requery)
+```
+A suppressed requery is exactly why the in-memory drag order stays on screen instead of
+a stale SQLite re-read clobbering it — so `requery_suppressed_during_drag=true` is the
+TASK-06 assertion; the control proves the guard is load-bearing. The action **forces the
+filtered-requery branch** internally, so the assertion is never vacuous even with no user
+filter active; it polls the requery counter (no fixed sleeps) for a deterministic signal.
+The default task filter (`.last7Days`, a date tag) also arms the path in normal use, so
+`requery_fires_without_suppress=true` confirms the injected push *would* have requeried
+without the drag guard. `had_non_status_filters=false` means no filter is active and the
+requery path is inert (the suppression assertion is then vacuous — apply a date/tag
+filter first). Non-production bundles only.
+
 ### The full loop
 ```bash
 cd desktop/macos
