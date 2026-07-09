@@ -48,6 +48,10 @@ class UsageProvider with ChangeNotifier {
 
   bool _forceOutOfCredits = false;
 
+  /// Bumped on [clearUserData] so responses from a previous session's
+  /// in-flight fetches are discarded instead of repopulating cleared state.
+  int _sessionGeneration = 0;
+
   // Chat quota derived from subscription response
   double get chatQuotaUsed => _subscription?.chatQuotaUsed ?? 0.0;
   String? get chatQuotaUnit => _subscription?.chatQuotaUnit;
@@ -122,6 +126,11 @@ class UsageProvider with ChangeNotifier {
     _availablePlans = null;
     _forceOutOfCredits = false;
     _error = null;
+    _sessionGeneration++;
+    _isSubscriptionLoading = false;
+    _isUsageLoading = false;
+    _isPaymentLoading = false;
+    _isLoadingPlans = false;
     notifyListeners();
   }
 
@@ -136,22 +145,28 @@ class UsageProvider with ChangeNotifier {
   Future<void> fetchSubscription() async {
     if (_isSubscriptionLoading) return;
 
+    final generation = _sessionGeneration;
     _isSubscriptionLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      _subscription = await getUserSubscription();
+      final subscription = await getUserSubscription();
+      if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
+      _subscription = subscription;
       if (_subscription != null) {
         PlatformManager.instance.analytics.setSubscriptionTier(_subscription!.subscription.plan.name);
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       _error = 'Failed to load subscription data. Please try again later.';
       Logger.debug('Failed to fetch subscription: $e');
     } finally {
-      _isSubscriptionLoading = false;
-      _forceOutOfCredits = false; // Reset optimistic flag
-      notifyListeners();
+      if (generation == _sessionGeneration) {
+        _isSubscriptionLoading = false;
+        _forceOutOfCredits = false; // Reset optimistic flag
+        notifyListeners();
+      }
     }
   }
 
@@ -161,12 +176,14 @@ class UsageProvider with ChangeNotifier {
   Future<void> fetchUsageStats({required String period}) async {
     if (_isUsageLoading) return;
 
+    final generation = _sessionGeneration;
     _isUsageLoading = true;
     _error = null;
     notifyListeners();
 
     try {
       final response = await getUserUsage(period: period);
+      if (generation != _sessionGeneration) return; // Session cleared mid-flight; discard stale response.
       if (response != null) {
         switch (period) {
           case 'today':
@@ -190,11 +207,14 @@ class UsageProvider with ChangeNotifier {
         _error = 'Failed to load usage data. Please try again later.';
       }
     } catch (e) {
+      if (generation != _sessionGeneration) return;
       _error = 'Failed to load usage data. Please try again later.';
       Logger.debug('Failed to fetch usage stats: $e');
     } finally {
-      _isUsageLoading = false;
-      notifyListeners();
+      if (generation == _sessionGeneration) {
+        _isUsageLoading = false;
+        notifyListeners();
+      }
     }
   }
 
