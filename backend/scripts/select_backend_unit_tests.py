@@ -19,6 +19,7 @@ FULL_TEST_ROOTS = (
     BACKEND_DIR / 'tests' / 'unit',
     BACKEND_DIR / 'tests' / 'services',
     BACKEND_DIR / 'tests' / 'routers',
+    BACKEND_DIR / 'testing' / 'e2e',
 )
 FULL_TEST_GLOBS = (BACKEND_DIR / 'tests',)
 
