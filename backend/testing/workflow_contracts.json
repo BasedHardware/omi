@@ -187,6 +187,26 @@
       ]
     },
     {
+      "id": "listen_ws_session",
+      "risk": "high",
+      "sources": [
+        "backend/utils/listen_session_bootstrap.py",
+        "backend/routers/transcribe.py",
+        "backend/utils/transcribe_decisions.py"
+      ],
+      "tests": [
+        "tests/unit/test_listen_session_bootstrap.py",
+        "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/test_listen_pipeline.py",
+        "tests/unit/utils/test_listen_pusher_session.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "connect-time Firestore reads run off the event loop",
+        "translation and vocabulary decisions stay pinned by characterization tests"
+      ]
+    },
+    {
       "id": "listen_pusher_pipeline",
       "risk": "high",
       "sources": [
