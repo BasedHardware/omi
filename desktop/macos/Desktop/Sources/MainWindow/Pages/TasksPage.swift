@@ -731,6 +731,11 @@ class TasksViewModel: ObservableObject {
     /// prove a server-push recompute during an active drag is suppressed.
     private(set) var automationRequeryCount = 0
 
+    /// Automation-only (TASK-06): forces the filtered-requery branch so the drag
+    /// suppression probe is never vacuous when no user filter is active — the ONLY
+    /// thing that should then block the requery is the drag guard.
+    private var automationForceFilteredRequery = false
+
     // MARK: - Cached Properties (avoid recomputation on every render)
 
     @Published private(set) var displayTasks: [TaskActionItem] = []
@@ -1428,7 +1433,7 @@ class TasksViewModel: ObservableObject {
         // Otherwise just recompute from the in-memory store arrays.
         let hasNonStatusFilters = selectedTags.contains(where: { $0.group != .status })
             || !selectedDynamicTags.isEmpty
-        if hasNonStatusFilters && !suppressDatabaseRequery {
+        if (hasNonStatusFilters || automationForceFilteredRequery) && !suppressDatabaseRequery {
             Task { [weak self] in
                 guard let self, self.recomputeVersion == version else { return }
                 await self.loadFilteredTasksFromDatabase()
@@ -1492,16 +1497,19 @@ class TasksViewModel: ObservableObject {
 
     /// Load filtered tasks from SQLite when non-status filters are applied
     private func loadFilteredTasksFromDatabase() async {
-        automationRequeryCount += 1
         let nonStatusTags = selectedTags.filter { $0.group != .status && $0.group != .date }
         let dateTags = selectedTags.filter { $0.group == .date }
         let hasDynamicFilters = !selectedDynamicTags.isEmpty
 
-        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters else {
+        guard !nonStatusTags.isEmpty || !dateTags.isEmpty || hasDynamicFilters
+            || automationForceFilteredRequery else {
             filteredFromDatabase = []
             recomputeDisplayCaches()
             return
         }
+        // Count only real SQLite requeries (past the empty-filter early return), so
+        // the automation counter reflects an actual DB read (TASK-06).
+        automationRequeryCount += 1
 
         isLoadingFiltered = true
 
@@ -2283,46 +2291,62 @@ class TasksViewModel: ObservableObject {
     }
 
     /// TASK-06: prove a server push arriving mid-drag does not clobber the order.
-    /// Sets `suppressDatabaseRequery` (the flag the drag/sort-sync window holds),
-    /// injects a server-push recompute via the real `recomputeAllCaches` path, and
-    /// reports whether the SQLite requery was suppressed and the order preserved —
-    /// plus a control recompute WITHOUT the flag to prove the requery would
-    /// otherwise fire (the guard is load-bearing). Automation-only.
+    /// Forces the filtered-requery branch (so the probe is never vacuous), sets
+    /// `suppressDatabaseRequery` (the flag the drag/sort-sync window holds), injects
+    /// a server-push recompute via the real `recomputeAllCaches` path, and reports
+    /// whether the SQLite requery was suppressed — plus a control recompute WITHOUT
+    /// the flag that MUST requery (proving the guard is load-bearing). A suppressed
+    /// requery is exactly what keeps the in-memory drag order on screen, so
+    /// `requery_suppressed_during_drag` is the load-bearing signal. Automation-only.
     @MainActor
     func automationInjectRequeryDuringDrag() async -> [String: String] {
         await ensureTasksLoadedForAutomation()
-        let hadNonStatusFilters =
-            selectedTags.contains { $0.group != .status } || !selectedDynamicTags.isEmpty
+        // Force the filtered-requery branch so the ONLY thing that can block the
+        // requery is the drag guard — never a vacuous pass because no filter is set.
+        automationForceFilteredRequery = true
+        // Never leave either flag stuck (a stuck suppress flag would permanently
+        // block filtered requeries for this view model).
+        defer {
+            automationForceFilteredRequery = false
+            suppressDatabaseRequery = false
+        }
 
-        // Simulate the active drag/sort-sync window, then inject a server push.
-        // A suppressed requery is exactly what keeps the in-memory drag order on
-        // screen instead of a stale SQLite re-read clobbering it (TASK-06), so the
-        // requery counter is the load-bearing signal.
+        // Suppress phase: with the drag flag held, the forced requery must NOT run.
         let countBefore = automationRequeryCount
         suppressDatabaseRequery = true
-        // Defense-in-depth: never leave the flag stuck true (a stuck flag would
-        // permanently suppress filtered requeries for this view model). The
-        // control path below also clears it explicitly before its own recompute.
-        defer { suppressDatabaseRequery = false }
         recomputeAllCaches()
-        // recomputeAllCaches dispatches the requery on a Task; give it time to run
-        // (it must NOT, because the flag is set).
-        try? await Task.sleep(nanoseconds: 300_000_000)
+        // Give a (wrongly) scheduled requery a bounded window to appear; a correct
+        // guard never lets it, so this observes no increment.
+        _ = await waitForRequeryCount(above: countBefore, timeoutMs: 1000)
         let countDuringDrag = automationRequeryCount
 
-        // Control: the same push with the drag flag cleared should requery, which
-        // proves the guard is load-bearing (not that no requery would ever fire).
+        // Control: the same forced push WITHOUT the drag flag must requery. Poll
+        // (rather than a fixed sleep) so the signal is deterministic under load.
         suppressDatabaseRequery = false
         recomputeAllCaches()
-        try? await Task.sleep(nanoseconds: 300_000_000)
-        let countNoDrag = automationRequeryCount
-        recomputeAllCaches()  // settle
+        let controlFired = await waitForRequeryCount(above: countDuringDrag, timeoutMs: 3000)
+
+        // Settle back to the real filtered state. The control requery has already
+        // completed (we polled for it), so this recompute cannot invalidate it.
+        automationForceFilteredRequery = false
+        recomputeAllCaches()
 
         return [
-            "had_non_status_filters": hadNonStatusFilters ? "true" : "false",
             "requery_suppressed_during_drag": countDuringDrag == countBefore ? "true" : "false",
-            "requery_fires_without_suppress": countNoDrag > countDuringDrag ? "true" : "false",
+            "requery_fires_without_suppress": controlFired ? "true" : "false",
         ]
+    }
+
+    /// Poll `automationRequeryCount` until it exceeds `baseline` or the timeout
+    /// elapses. Deterministic replacement for a fixed sleep in the TASK-06 probe.
+    @MainActor
+    private func waitForRequeryCount(above baseline: Int, timeoutMs: Int) async -> Bool {
+        let steps = max(1, timeoutMs / 50)
+        for _ in 0..<steps {
+            if automationRequeryCount > baseline { return true }
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+        return automationRequeryCount > baseline
     }
 
     /// Ensure the store + category caches are populated before a headless reorder, so

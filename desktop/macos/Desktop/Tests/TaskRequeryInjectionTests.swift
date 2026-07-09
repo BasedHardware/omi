@@ -20,6 +20,11 @@ final class TaskRequeryInjectionTests: XCTestCase {
       "name: \"inject_requery_during_drag\"",
       "func automationInjectRequeryDuringDrag() async",
       "automationRequeryCount += 1",
+      // Non-vacuity: the probe forces the requery branch so a suppressed count is
+      // meaningful even with no user filter active.
+      "automationForceFilteredRequery = true",
+      // Determinism: poll the counter instead of a fixed sleep.
+      "waitForRequeryCount(above:",
     ] {
       XCTAssertTrue(src.contains(needle), "TASK-06 hook missing invariant: \(needle)")
     }
@@ -27,5 +32,11 @@ final class TaskRequeryInjectionTests: XCTestCase {
     // this is the actual TASK-06 mechanism; removing it is the regression.
     XCTAssertTrue(src.contains("&& !suppressDatabaseRequery"),
       "recompute requery must remain gated on suppressDatabaseRequery")
+    // The counter must live PAST the empty-filter early return (count real DB reads).
+    let requeryFn = src.range(of: "private func loadFilteredTasksFromDatabase() async {")!.upperBound
+    let guardIdx = src.range(of: "else {\n            filteredFromDatabase = []", range: requeryFn..<src.endIndex)!.lowerBound
+    let counterIdx = src.range(of: "automationRequeryCount += 1", range: requeryFn..<src.endIndex)!.lowerBound
+    XCTAssertGreaterThan(counterIdx, guardIdx,
+      "the requery counter must increment only past the empty-filter early return")
   }
 }
