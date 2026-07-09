@@ -18,6 +18,7 @@ final class BleAudioService: ObservableObject {
     @Published private(set) var isProcessing = false
     @Published private(set) var currentCodec: BleAudioCodec?
     @Published private(set) var audioLevel: Float = 0.0
+    @Published private(set) var isDecodeDegraded = false
 
     // MARK: - Properties
 
@@ -79,6 +80,8 @@ final class BleAudioService: ObservableObject {
 
         // Create processor
         processor = BleAudioProcessor(codec: codec)
+        processor?.delegate = self
+        isDecodeDegraded = false
 
         // Subscribe to decoded PCM data
         processor?.pcmDataPublisher
@@ -256,6 +259,19 @@ extension BleAudioService {
         let codec = await connection.getAudioCodec()
         let supported = AudioDecoderFactory.isSupported(codec)
         return (codec, supported, codec.name)
+    }
+}
+
+// MARK: - BleAudioProcessorDelegate
+
+extension BleAudioService: BleAudioProcessor.Delegate {
+    func bleAudioProcessor(_ processor: BleAudioProcessor, didDecodeSamples samples: [Int16]) {
+        // PCM delivery uses pcmDataPublisher; delegate path is unused.
+    }
+
+    func bleAudioProcessor(_ processor: BleAudioProcessor, didFailWithError error: Error) {
+        isDecodeDegraded = true
+        logger.error("BLE decode degraded: \(error.localizedDescription)")
     }
 }
 
