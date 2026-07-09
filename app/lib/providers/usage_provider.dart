@@ -101,6 +101,30 @@ class UsageProvider with ChangeNotifier {
     return false;
   }
 
+  @visibleForTesting
+  void debugSetSubscription(UserSubscriptionResponse? value) {
+    _subscription = value;
+    notifyListeners();
+  }
+
+  /// Wipes user-scoped state on logout so the next account doesn't inherit
+  /// the previous account's subscription/usage (e.g. a stale Pro badge).
+  void clearUserData() {
+    _subscription = null;
+    _todayUsage = null;
+    _monthlyUsage = null;
+    _yearlyUsage = null;
+    _allTimeUsage = null;
+    _todayHistory = null;
+    _monthlyHistory = null;
+    _yearlyHistory = null;
+    _allTimeHistory = null;
+    _availablePlans = null;
+    _forceOutOfCredits = false;
+    _error = null;
+    notifyListeners();
+  }
+
   Future<void> markAsOutOfCreditsAndRefresh() async {
     if (!_forceOutOfCredits) {
       _forceOutOfCredits = true;

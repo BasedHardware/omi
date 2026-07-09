@@ -8,6 +8,7 @@ import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 
 /// Wipes in-memory user-scoped state from every provider so a subsequent
 /// login (different account) doesn't briefly render the previous user's
@@ -20,4 +21,5 @@ void clearAllUserState(BuildContext context) {
   context.read<AppProvider>().clearUserData();
   context.read<PeopleProvider>().clearUserData();
   context.read<ActionItemsProvider>().clearUserData();
+  context.read<UsageProvider>().clearUserData();
 }
