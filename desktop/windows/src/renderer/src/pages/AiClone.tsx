@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Bot, ExternalLink, Loader2, RefreshCw, Send, Trash2, Users } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
-import { auth } from '../lib/firebase'
+import { auth, onAuthStateChanged } from '../lib/firebase'
 import { getPreferences } from '../lib/preferences'
 import { toast } from '../lib/toast'
 import { cn } from '../lib/utils'
 import type { AiCloneChat, AiCloneChatMode, AiCloneDraft, AiCloneState } from '../../../shared/types'
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
+const OMI_DESKTOP_BASE = import.meta.env.VITE_OMI_DESKTOP_API_BASE as string | undefined
 const MODES: { value: AiCloneChatMode; label: string }[] = [
   { value: 'off', label: 'Off' },
   { value: 'draft', label: 'Draft' },
@@ -15,12 +16,17 @@ const MODES: { value: AiCloneChatMode; label: string }[] = [
 ]
 
 /** Fresh Firebase auth bundle for main's /v2/messages calls. */
-async function buildAuth(): Promise<{ token: string; apiBase: string; displayName?: string } | null> {
+async function buildAuth(): Promise<{
+  token: string
+  apiBase: string
+  desktopApiBase?: string
+  displayName?: string
+} | null> {
   const token = await auth.currentUser?.getIdToken()
   if (!token) return null
   const displayName =
     auth.currentUser?.displayName?.trim() || getPreferences().displayName?.trim() || undefined
-  return { token, apiBase: OMI_BASE, displayName }
+  return { token, apiBase: OMI_BASE, desktopApiBase: OMI_DESKTOP_BASE, displayName }
 }
 
 export function AiClone(): React.JSX.Element {
@@ -47,6 +53,21 @@ export function AiClone(): React.JSX.Element {
       if (e.kind === 'token-expired') {
         void buildAuth().then((a) => a && window.omi.aiCloneProvideAuthToken(a))
       }
+    })
+  }, [])
+
+  // If the clone resumed enabled after an app restart, main has no Firebase
+  // token yet — supply one as soon as auth is available so the first incoming
+  // message isn't dropped. Keyed off onAuthStateChanged (not mount) because
+  // this page mounts before Firebase finishes restoring the session.
+  useEffect(() => {
+    return onAuthStateChanged(auth, (u) => {
+      if (!u) return
+      void window.omi.aiCloneGetState().then((s) => {
+        if (s.enabled && !s.authTokenPresent) {
+          void buildAuth().then((a) => a && window.omi.aiCloneProvideAuthToken(a))
+        }
+      })
     })
   }, [])
 
@@ -247,8 +268,10 @@ function ConnectCard(props: {
             disabled={busy}
             aria-pressed={state.enabled}
             className={cn(
+              // Emerald, not the purple --accent: INV-UI-1 ratchets purple usage
+              // down, so new controls stay off it (matches the status dot).
               'relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 disabled:opacity-40',
-              state.enabled ? 'bg-[color:var(--accent)]' : 'bg-white/15'
+              state.enabled ? 'bg-emerald-600' : 'bg-white/15'
             )}
           >
             <span

@@ -29,6 +29,7 @@ export class AiCloneService {
   private beeperReachable = false
   private sessionStartedAt = 0
   private apiBase = DEFAULT_API_BASE
+  private desktopApiBase: string | undefined
   private firebaseToken: string | null = null
   private displayName = ''
   private lastError: string | undefined
@@ -52,8 +53,12 @@ export class AiCloneService {
       },
       decrypt: (s) => safeStorage.decryptString(Buffer.from(s, 'base64'))
     })
+    // A client exists whenever a token does (listChats/approveDraft work while
+    // the responder is off); the WS subscription only runs while enabled.
+    const token = this.store.getBeeperToken()
+    if (token) this.client = new BeeperClient(token)
     // Resume listening on app start if the user left the clone enabled.
-    if (this.store.getEnabled() && this.store.getBeeperToken()) this.startListening()
+    if (this.store.getEnabled() && this.client) this.startListening()
   }
 
   // --- state ---
@@ -96,6 +101,7 @@ export class AiCloneService {
       return this.getState()
     }
     this.store.setBeeperToken(beeperToken)
+    this.client = new BeeperClient(beeperToken)
     this.beeperReachable = true
     this.lastError = undefined
     if (this.store.getEnabled()) this.startListening()
@@ -105,6 +111,8 @@ export class AiCloneService {
 
   disconnect(): AiCloneState {
     this.stopListening()
+    this.client = null
+    this.chatCache.clear()
     this.store.clear()
     this.beeperReachable = false
     this.lastError = undefined
@@ -129,14 +137,12 @@ export class AiCloneService {
   private applyAuth(auth: AiCloneAuth): void {
     this.firebaseToken = auth.token
     if (auth.apiBase) this.apiBase = auth.apiBase
+    if (auth.desktopApiBase) this.desktopApiBase = auth.desktopApiBase
     if (auth.displayName !== undefined) this.displayName = auth.displayName
   }
 
   private startListening(): void {
-    if (this.subscription) return
-    const token = this.store.getBeeperToken()
-    if (!token) return
-    this.client = new BeeperClient(token)
+    if (this.subscription || !this.client) return
     this.sessionStartedAt = Date.now()
     this.subscription = this.client.subscribe({
       onUp: () => {
@@ -163,7 +169,6 @@ export class AiCloneService {
   private stopListening(): void {
     this.subscription?.close()
     this.subscription = null
-    this.client = null
     this.beeperReachable = false
   }
 
@@ -241,26 +246,34 @@ export class AiCloneService {
       this.broadcast({ kind: 'token-expired' })
       return
     }
-    const reply = await generateReply({
-      apiBase: this.apiBase,
-      firebaseToken: this.firebaseToken,
-      ctx: {
-        userDisplayName: this.displayName,
-        senderName: message.senderName ?? chatTitle,
-        chatTitle,
-        network: chat.network ?? 'chat',
-        transcript: await this.recentTranscript(chat.id, message.id),
-        incomingText: message.text ?? ''
+    const ctx = {
+      userDisplayName: this.displayName,
+      senderName: message.senderName ?? chatTitle,
+      chatTitle,
+      network: chat.network ?? 'chat',
+      transcript: await this.recentTranscript(chat.id, message.id),
+      incomingText: message.text ?? ''
+    }
+    const engineArgs = { apiBase: this.apiBase, desktopApiBase: this.desktopApiBase }
+    let reply = await generateReply({ ...engineArgs, firebaseToken: this.firebaseToken, ctx })
+    if (!reply.ok && reply.error === 'unauthorized') {
+      // The token can sit in main for up to an hour, so expiry mid-session is
+      // routine — ask the renderer for a fresh one and retry this message once
+      // instead of dropping it.
+      this.firebaseToken = null
+      this.broadcast({ kind: 'token-expired' })
+      const fresh = await this.waitForToken(5_000)
+      if (fresh) {
+        reply = await generateReply({ ...engineArgs, firebaseToken: fresh, ctx })
       }
-    })
+    }
     if (!reply.ok) {
-      if (reply.error === 'unauthorized') {
-        this.firebaseToken = null
-        this.broadcast({ kind: 'token-expired' })
-        this.recordError(chatTitle, 'Omi session expired — reply skipped; refreshing')
-      } else {
-        this.recordError(chatTitle, `Reply generation failed (${reply.error})`)
-      }
+      this.recordError(
+        chatTitle,
+        reply.error === 'unauthorized'
+          ? 'Omi session expired — reply skipped'
+          : (reply.detail ?? `Reply generation failed (${reply.error})`)
+      )
       return
     }
 
@@ -313,6 +326,16 @@ export class AiCloneService {
         text: m.text!,
         fromMe: !!m.isSender
       }))
+  }
+
+  /** Poll for a renderer-supplied token after a token-expired broadcast. */
+  private async waitForToken(timeoutMs: number): Promise<string | null> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      if (this.firebaseToken) return this.firebaseToken
+      await new Promise((r) => setTimeout(r, 250))
+    }
+    return this.firebaseToken
   }
 
   private recordError(chatTitle: string, text: string): void {

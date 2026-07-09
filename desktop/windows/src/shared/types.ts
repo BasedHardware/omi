@@ -709,6 +709,7 @@ export type AiCloneEvent = { kind: 'state'; state: AiCloneState } | { kind: 'tok
 export type AiCloneAuth = {
   token: string
   apiBase?: string
+  desktopApiBase?: string
   displayName?: string
 }
 
