@@ -27,6 +27,7 @@ import { registerScreenHandlers } from './ipc/screen'
 import { registerInsightHandlers } from './ipc/insight'
 import { createInsightToastWindow } from './insight/toastWindow'
 import { registerAutomationHandlers } from './ipc/automation'
+import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -375,6 +376,9 @@ app.whenReady().then(async () => {
   // Screen-activity synthesis IPC (cheap handler registration; the renderer drives
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
+  // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
+  // only when a task actually runs).
+  registerCodingAgentHandlers()
 
   const mainWindow = createWindow()
 

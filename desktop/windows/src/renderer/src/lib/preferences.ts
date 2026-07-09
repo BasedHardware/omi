@@ -39,6 +39,11 @@ export type Preferences = {
   // disables the sweep. Read with `?? 'dry-run'`.
   retentionMode?: 'off' | 'dry-run' | 'live'
   onboardingCompletedAt?: number
+  // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
+  // Set in Settings → Agents; undefined = not connected (the matching
+  // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).
+  // Claude Code is built in and needs no command.
+  agentCommands?: { openclaw?: string; hermes?: string; codex?: string }
 }
 
 const defaults: Preferences = {

@@ -16,7 +16,10 @@ import type {
   RewindSettings,
   InsightPayload,
   AutomationPlan,
-  StepResult
+  StepResult,
+  CodingAgentCommandOverrides,
+  CodingAgentEvent,
+  CodingAgentRunArgs
 } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -98,6 +101,15 @@ const omi: OmiBridgeApi = {
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
+  codingAgentList: (commandOverrides?: CodingAgentCommandOverrides) =>
+    ipcRenderer.invoke('codingAgent:list', commandOverrides),
+  codingAgentRun: (args: CodingAgentRunArgs) => ipcRenderer.invoke('codingAgent:run', args),
+  codingAgentCancel: (taskId: string) => ipcRenderer.invoke('codingAgent:cancel', taskId),
+  onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: CodingAgentEvent): void => cb(event)
+    ipcRenderer.on('codingAgent:event', listener)
+    return () => ipcRenderer.removeListener('codingAgent:event', listener)
+  },
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),

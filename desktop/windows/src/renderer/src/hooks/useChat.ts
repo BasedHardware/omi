@@ -5,7 +5,8 @@ import { gatherLocalContext } from '../lib/localAgent'
 import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
-import type { AutomationPlan } from '../../../shared/types'
+import { detectAgentTask, resolveTaskCwd } from '../lib/agentTask'
+import type { AutomationPlan, CodingAgentEvent } from '../../../shared/types'
 import { getPreferences } from '../lib/preferences'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 
@@ -184,6 +185,140 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     }
   }
 
+  // Delegated coding-agent task (Claude Code / OpenClaw / Hermes / Codex).
+  // Runs when the message explicitly names an agent (or asks for "an agent").
+  // Streams the agent's progress into an assistant bubble; when the named
+  // agent isn't connected, replies with install/connect guidance instead.
+  // Returns false when the message is not an agent task (fall through).
+  const tryAgentTask = async (
+    text: string,
+    baseHistory: ChatMsg[],
+    userMsg: ChatMsg
+  ): Promise<boolean> => {
+    const detection = detectAgentTask(text)
+    if (!detection) return false
+
+    const prefs = getPreferences()
+    let agents: Awaited<ReturnType<typeof window.omi.codingAgentList>>
+    try {
+      agents = await window.omi.codingAgentList(prefs.agentCommands)
+    } catch {
+      return false // bridge unavailable — let normal chat answer
+    }
+
+    const finish = (content: string): void => {
+      const msg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content }
+      setHistory((h) => [...h, msg])
+      void persistChat([...baseHistory, userMsg, msg])
+      sendingRef.current = false
+      setSending(false)
+    }
+
+    if (detection.agentId) {
+      const named = agents.find((a) => a.id === detection.agentId)
+      if (named && !named.connected) {
+        finish(
+          `${named.displayName} isn't connected yet. ${named.installHint ?? ''}`.trim() +
+            ' You can connect it in Settings → Agents.'
+        )
+        return true
+      }
+    }
+    const agentId = detection.agentId ?? agents.find((a) => a.connected)?.id
+    if (!agentId) {
+      finish('No coding agents are connected yet. You can connect one in Settings → Agents.')
+      return true
+    }
+
+    setSending(true)
+    const taskId = crypto.randomUUID()
+    const assistantId = crypto.randomUUID()
+
+    // Streamed bubble: a header naming the agent, the latest running tool as a
+    // transient italic line, and the agent's text as it arrives.
+    let header = ''
+    let activity: string | null = null
+    let text_ = ''
+    let statusNotes = ''
+    const compose = (final: boolean): string => {
+      let s = header
+      if (statusNotes) s += `\n\n${statusNotes.trimEnd()}`
+      if (text_) s += `\n\n${text_}`
+      if (!final && activity) s += `\n\n_${activity}…_`
+      return s || '_Starting the agent…_'
+    }
+    const render = (final = false): void => {
+      const content = compose(final)
+      setHistory((h) => {
+        const next = [...h]
+        const idx = next.findIndex((m) => m.id === assistantId)
+        if (idx >= 0) next[idx] = { id: assistantId, role: 'assistant', content }
+        return next
+      })
+    }
+    setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: compose(false) }])
+
+    let lastPersist = Date.now()
+    const unsubscribe = window.omi.onCodingAgentEvent((event: CodingAgentEvent) => {
+      if (event.taskId !== taskId) return
+      if (event.type === 'agent_selected') {
+        header = event.fallback
+          ? `**${event.displayName}** took over the task.`
+          : `**${event.displayName}** is on it.`
+      } else if (event.type === 'status') {
+        statusNotes += `_${event.message}_\n`
+      } else if (event.type === 'text_delta') {
+        text_ += event.text
+      } else if (event.type === 'tool_activity') {
+        activity = event.status === 'started' ? event.name : null
+      }
+      render()
+      if (Date.now() - lastPersist > 1500) {
+        lastPersist = Date.now()
+        void persistChat([
+          ...baseHistory,
+          userMsg,
+          { id: assistantId, role: 'assistant', content: compose(false) }
+        ])
+      }
+    })
+
+    try {
+      const cwd = await resolveTaskCwd(text, {
+        searchFiles: (q) => window.omi.kgSearchFiles(q),
+        executeSql: (sql) => window.omi.kgExecuteSql(sql)
+      })
+      const result = await window.omi.codingAgentRun({
+        taskId,
+        prompt: detection.prompt,
+        cwd,
+        agentId,
+        commandOverrides: prefs.agentCommands
+      })
+      if (!result.ok) {
+        statusNotes += `_${result.error ?? 'The agent could not finish the task.'}_\n`
+      } else if (!text_ && result.text) {
+        text_ = result.text
+      } else if (!text_) {
+        text_ = 'Done.'
+      }
+    } catch (e) {
+      statusNotes += `_Error: ${(e as Error).message}_\n`
+    } finally {
+      unsubscribe()
+      activity = null
+      render(true)
+      void persistChat([
+        ...baseHistory,
+        userMsg,
+        { id: assistantId, role: 'assistant', content: compose(true) }
+      ])
+      sendingRef.current = false
+      setSending(false)
+    }
+    return true
+  }
+
   const send = async (text: string): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     if (!text.trim() || sendingRef.current) return
@@ -194,6 +329,10 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     // planner snapshot+LLM round-trip, so the chat never appears to hang. The
     // planner then decides: park a plan, surface an error, or fall through to chat.
     setHistory((h) => [...h, userMsg])
+
+    // Delegated coding-agent tasks take precedence over the UI-automation
+    // planner and normal chat; tryAgentTask owns the latch when it handles one.
+    if (await tryAgentTask(text, baseHistory, userMsg)) return
 
     const verdict = await tryPlan(text)
     if (verdict.kind === 'planned') {
@@ -320,7 +459,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
       // keyword-less follow-up like "again"). Don't render that raw in the thread.
       if (looksLikeRawPlan(assistantText)) {
         assistantText =
-          "It looks like you want me to do something in an app. Phrase it as a direct command (e.g. \"type report in the search box\") with that app focused, and I'll show you a plan to approve."
+          'It looks like you want me to do something in an app. Phrase it as a direct command (e.g. "type report in the search box") with that app focused, and I\'ll show you a plan to approve.'
         setHistory((h) => {
           const next = [...h]
           next[next.length - 1] = { id: assistantId, role: 'assistant', content: assistantText }
