@@ -149,25 +149,145 @@ final class OAuthLoopbackCallbackServer: @unchecked Sendable {
                 let bytesRead = recv(clientFD, &buffer, buffer.count - 1, 0)
                 guard bytesRead > 0,
                       let request = String(bytes: buffer.prefix(bytesRead), encoding: .utf8) else {
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    self.sendResponse(clientFD, page: .invalid)
                     continue
                 }
 
                 switch self.parseCallbackRequest(request) {
                 case .success(let code, let state):
-                    self.sendResponse(clientFD, status: "200 OK", message: "Authentication complete. You can close this tab.")
+                    self.sendResponse(clientFD, page: .success)
                     self.finish(.success((code: code, state: state)))
                     return
                 case .providerError(let error):
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Authentication failed. You can close this tab.")
+                    self.sendResponse(clientFD, page: .failure)
                     self.finish(.failure(AuthError.oauthError(error)))
                     return
                 case .ignore:
-                    self.sendResponse(clientFD, status: "400 Bad Request", message: "Invalid authentication callback.")
+                    self.sendResponse(clientFD, page: .invalid)
                     continue
                 }
             }
         }
+    }
+
+    enum CallbackPage {
+        case success
+        case failure
+        case invalid
+
+        var httpStatus: String {
+            switch self {
+            case .success: return "200 OK"
+            case .failure, .invalid: return "400 Bad Request"
+            }
+        }
+
+        var documentTitle: String {
+            switch self {
+            case .success: return "Signed in - Omi"
+            case .failure, .invalid: return "Authentication failed - Omi"
+            }
+        }
+
+        var heading: String {
+            switch self {
+            case .success: return "You're signed in"
+            case .failure: return "Authentication failed"
+            case .invalid: return "Invalid callback"
+            }
+        }
+
+        var message: String {
+            switch self {
+            case .success: return "You can close this tab and return to Omi."
+            case .failure: return "You can close this tab and try again in the app."
+            case .invalid: return "This authentication callback was invalid. You can close this tab."
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .success: return "✓"
+            case .failure, .invalid: return "!"
+            }
+        }
+
+        var iconBackground: String {
+            switch self {
+            case .success: return "#111111"
+            case .failure, .invalid: return "#d32f2f"
+            }
+        }
+    }
+
+    /// Branded HTML body served on the local OAuth loopback callback.
+    /// Kept pure/static so unit tests can assert markup without opening a socket.
+    static func responseHTML(for page: CallbackPage) -> String {
+        """
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>\(page.documentTitle)</title>
+            <style>
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    margin: 0;
+                    background-color: #f7f7f7;
+                    color: #333;
+                }
+                .card {
+                    background-color: white;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+                    padding: 48px 32px;
+                    text-align: center;
+                    max-width: 400px;
+                }
+                .icon {
+                    width: 56px;
+                    height: 56px;
+                    margin: 0 auto 16px;
+                    border-radius: 50%;
+                    background-color: \(page.iconBackground);
+                    color: white;
+                    font-size: 28px;
+                    font-weight: 600;
+                    line-height: 56px;
+                }
+                h1 {
+                    font-size: 24px;
+                    font-weight: 600;
+                    margin: 0 0 12px 0;
+                }
+                p {
+                    font-size: 16px;
+                    color: #555;
+                    margin: 0;
+                    line-height: 1.5;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="icon">\(page.icon)</div>
+                <h1>\(page.heading)</h1>
+                <p>\(page.message)</p>
+            </div>
+            <script>
+                setTimeout(function () {
+                    try { window.close(); } catch (e) {}
+                }, 1200);
+            </script>
+        </body>
+        </html>
+        """
     }
 
     private enum ParsedCallbackRequest {
@@ -207,12 +327,10 @@ final class OAuthLoopbackCallbackServer: @unchecked Sendable {
         return .success(code: code, state: state)
     }
 
-    private func sendResponse(_ clientFD: Int32, status: String, message: String) {
-        let body = """
-        <!doctype html><html><head><meta charset="utf-8"><title>Omi Authentication</title></head><body><p>\(message)</p></body></html>
-        """
+    private func sendResponse(_ clientFD: Int32, page: CallbackPage) {
+        let body = Self.responseHTML(for: page)
         let response = """
-        HTTP/1.1 \(status)\r
+        HTTP/1.1 \(page.httpStatus)\r
         Content-Type: text/html; charset=utf-8\r
         Content-Length: \(body.utf8.count)\r
         Connection: close\r
@@ -480,8 +598,36 @@ class AuthService {
         return ""
     }
 
+    private let sessionCoordinator = AuthSessionCoordinator.shared
+
     init() {
         // Initialize without super
+    }
+
+    // MARK: - Session invalidation (light — not nuclear signOut)
+
+    /// Clears tokens and signed-in UI state without onboarding wipe, capture stop,
+    /// or storage cache teardown. Use for expired/revoked credentials.
+    func invalidateSession(reason: AuthSessionCoordinator.InvalidateReason) {
+        sessionCoordinator.invalidateSession(reason: reason, auth: self)
+    }
+
+    /// Internal hook for `AuthSessionCoordinator` — not a user-facing sign-out.
+    func performLightSessionInvalidation() {
+        clearTokens()
+        isSignedIn = false
+        AuthState.shared.userEmail = nil
+        AuthState.shared.isRestoringAuth = false
+        saveAuthState(isSignedIn: false, email: nil, userId: nil)
+        // Also clear the Firebase SDK session so that restoreAuthState() and the
+        // auth-state listener do not re-create the ghost session on the next
+        // launch. Unlike signOut(), this does NOT tear down storage caches or
+        // stop background services — it only clears the Firebase SDK user.
+        // Guard: local harness mode skips FirebaseApp.configure(); Auth.auth()
+        // traps fatally if called without Firebase configured.
+        if !DesktopLocalProfile.isEnabled {
+            try? Auth.auth().signOut()
+        }
     }
 
     // MARK: - Configuration (call after FirebaseApp.configure())
@@ -637,7 +783,6 @@ class AuthService {
 
                 self.isSignedIn = true
                 AuthState.shared.userEmail = savedEmail
-                AuthState.shared.isRestoringAuth = false
                 validateRestoredUserDefaultsSession()
             }
         } else {
@@ -649,43 +794,33 @@ class AuthService {
     private func validateRestoredUserDefaultsSession() {
         Task { [weak self] in
             guard let self else { return }
-            guard self.storedIdToken != nil else {
-                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - no cached ID token")
+            defer { AuthState.shared.isRestoringAuth = false }
+
+            guard self.storedRefreshToken != nil || self.storedIdToken != nil else {
+                NSLog("OMI AUTH: Restored UserDefaults session has no tokens — invalidating")
+                self.invalidateSession(reason: .restoredSessionInvalid)
                 return
             }
-            guard !self.isTokenExpired else {
-                NSLog("OMI AUTH: Restored UserDefaults session validation deferred - cached ID token expired")
-                return
-            }
+
             do {
-                _ = try await self.getIdToken(forceRefresh: false)
-                NSLog("OMI AUTH: Restored UserDefaults session validated from cached ID token")
+                _ = try await self.sessionCoordinator.refreshSingleFlight(auth: self)
+                NSLog("OMI AUTH: Restored UserDefaults session validated via forced refresh")
+                self.sessionCoordinator.resetAfterSuccessfulSignIn()
                 APIKeyService.shared.startFetchingKeys()
                 Task { await FloatingBarUsageLimiter.shared.fetchPlan() }
             } catch AuthError.notSignedIn {
                 if self.storedIdToken == nil || self.storedRefreshToken == nil {
-                    // getIdToken() can clear tokens internally before surfacing notSignedIn —
-                    // e.g. a stored token/user mismatch after an account switch (it clears the
-                    // stale token, then the refresh path has no token). The entry guard proved
-                    // a cached ID token existed, so if it's gone now the session is genuinely
-                    // dead; preserving isSignedIn would leave a ghost signed-in UI with no
-                    // credentials. Sign out cleanly so the UI shows sign-in.
-                    NSLog("OMI AUTH: Restored UserDefaults session validation cleared tokens - signing out")
-                    self.isSignedIn = false
-                    AuthState.shared.userEmail = nil
-                    AuthState.shared.isRestoringAuth = false
-                    self.saveAuthState(isSignedIn: false, email: nil, userId: nil)
-                } else if self.isSignedIn {
-                    // Tokens survived — a transient/race failure (e.g. Firebase SDK user not
-                    // yet restored). Keep the restored session; on-demand refresh recovers it.
-                    NSLog("OMI AUTH: Restored UserDefaults session validation deferred - preserving restored session")
+                    NSLog("OMI AUTH: Restored UserDefaults session validation — tokens cleared, invalidating")
+                    self.invalidateSession(reason: .restoredSessionInvalid)
                 } else {
-                    NSLog("OMI AUTH: Restored UserDefaults session validation found signed-out state")
-                    AuthState.shared.userEmail = nil
-                    AuthState.shared.isRestoringAuth = false
+                    // Transient/race while tokens survive — keep restored session for retry.
+                    NSLog("OMI AUTH: Restored UserDefaults session validation deferred - preserving restored session")
                 }
             } catch {
-                NSLog("OMI AUTH: Restored UserDefaults session validation deferred: %@", error.localizedDescription)
+                NSLog(
+                    "OMI AUTH: Restored UserDefaults session validation deferred (transient): %@",
+                    error.localizedDescription
+                )
             }
         }
     }
@@ -723,10 +858,31 @@ class AuthService {
                         AuthState.shared.userEmail = nil
                         AuthState.shared.isRestoringAuth = false
                     } else {
-                        log("AUTH_LISTENER: Keeping saved session (not overriding isSignedIn)")
+                        log("AUTH_LISTENER: Firebase user nil with saved session — validating REST tokens")
+                        await self?.validateSavedSessionAfterFirebaseNil()
                     }
                 }
             }
+        }
+    }
+
+    /// When Firebase SDK has no user but UserDefaults says signed-in, probe REST tokens.
+    /// Invalidates only on definitive death; skips while launch restore is in flight.
+    private func validateSavedSessionAfterFirebaseNil() async {
+        guard !AuthState.shared.isRestoringAuth else {
+            log("AUTH_LISTENER: skipping REST validation while launch restore is in flight")
+            return
+        }
+        guard storedRefreshToken != nil else { return }
+        do {
+            _ = try await sessionCoordinator.refreshSingleFlight(auth: self)
+            sessionCoordinator.resetAfterSuccessfulSignIn()
+            log("AUTH_LISTENER: saved REST session validated after Firebase nil")
+        } catch AuthError.notSignedIn where storedIdToken == nil || storedRefreshToken == nil {
+            log("AUTH_LISTENER: saved REST session definitively dead — invalidating")
+            invalidateSession(reason: .definitiveRefreshFailure)
+        } catch {
+            log("AUTH_LISTENER: saved REST session validation deferred: \(error.localizedDescription)")
         }
     }
 
@@ -812,6 +968,7 @@ class AuthService {
         }
 
         isSignedIn = true
+        sessionCoordinator.resetAfterSuccessfulSignIn()
 
         // Extract email from identity token if not provided by Apple
         if AuthState.shared.userEmail == nil {
@@ -971,6 +1128,7 @@ class AuthService {
             NSLog("OMI AUTH: Waiting for OAuth callback...")
             let (code, returnedState) = try await waitForOAuthCallback(callbackServer: callbackServer)
             clearLoopbackCallbackServerIfCurrent(callbackServer, flowId: flowId)
+            bringAppToFrontAfterAuthCallback()
             if callbackServer != nil {
                 trackAuthFlowEvent(
                     "Auth Callback Received",
@@ -1081,6 +1239,7 @@ class AuthService {
             }
 
             isSignedIn = true
+            sessionCoordinator.resetAfterSuccessfulSignIn()
 
             // Save auth state immediately
             let userId = firebaseTokens.localId
@@ -1463,7 +1622,20 @@ class AuthService {
             provider: pendingOAuthFlow?.provider ?? "unknown",
             authFlowId: callbackFlowId
         )
+        // Foregrounding happens once in signIn() after waitForOAuthCallback returns,
+        // so custom-scheme and loopback paths share a single activation.
         resumeOAuthContinuation(returning: (code: code, state: state))
+    }
+
+    /// Focus the main Omi window after the browser finishes the OAuth handoff.
+    /// Filters to titled main windows so ordered-out panels (floating bar, overlays)
+    /// are not resurrected by a blanket `orderFrontRegardless()` sweep.
+    @MainActor
+    private func bringAppToFrontAfterAuthCallback() {
+        NSApp.activate()
+        for window in NSApp.windows where window.title.lowercased().hasPrefix("omi") {
+            window.makeKeyAndOrderFront(nil)
+        }
     }
 
     /// Cancel an in-flight web OAuth sign-in so the user can retry from a clean
@@ -2012,11 +2184,10 @@ class AuthService {
             NSLog("OMI AUTH: Token refresh error (HTTP %d): %@", httpResponse.statusCode, errorBody)
             // Only clear tokens for definitive auth failures (invalid/revoked refresh token).
             // Transient errors (network issues, 500s) should not destroy the session.
-            let isDefinitiveAuthFailure = errorBody.contains("TOKEN_EXPIRED")
-                || errorBody.contains("INVALID_REFRESH_TOKEN")
-                || errorBody.contains("USER_NOT_FOUND")
-                || errorBody.contains("USER_DISABLED")
-                || httpResponse.statusCode == 400
+            let isDefinitiveAuthFailure = AuthDefinitiveDeathClassifier.isDefinitiveRefreshFailure(
+                httpStatus: httpResponse.statusCode,
+                errorBody: errorBody
+            )
             if isDefinitiveAuthFailure {
                 if DesktopLocalProfile.isEnabled {
                     NSLog("OMI AUTH LOCAL: refresh failed — re-bootstrapping emulator session")
@@ -2025,12 +2196,8 @@ class AuthService {
                         return token
                     }
                 }
-                NSLog("OMI AUTH: Definitive auth failure - clearing tokens and session")
-                clearTokens()
-                // Also clear auth state so the UI shows sign-in instead of a ghost session
-                // where auth_isSignedIn=true but no valid tokens exist.
-                isSignedIn = false
-                saveAuthState(isSignedIn: false, email: nil, userId: nil)
+                NSLog("OMI AUTH: Definitive auth failure — invalidating session")
+                invalidateSession(reason: .definitiveRefreshFailure)
                 throw AuthError.notSignedIn
             }
             throw AuthError.tokenExchangeFailed(httpResponse.statusCode)
@@ -2171,6 +2338,11 @@ class AuthService {
         }
 
         try Auth.auth().signOut()
+        // Reset coordinator only after Firebase sign-out succeeds so the state
+        // transition is atomic — if signOut() throws (e.g. keychain error), the
+        // coordinator stays in its previous phase rather than falsely reporting
+        // .signedOut while local tokens remain intact.
+        sessionCoordinator.resetAfterNuclearSignOut()
         isSignedIn = false
         CredentialHealthManager.shared.reset()
         APIKeyService.shared.clear()

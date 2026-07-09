@@ -67,6 +67,30 @@ Improve the code you touch — within your blast radius:
 - New `TODO`, `FIXME`, and `HACK` comments must reference a tracking issue or be resolved before merge.
 - Existing markers are legacy debt; only delete or annotate them when the owner and next action are clear.
 
+### Fallback / resilience telemetry
+
+Silent UX healing is allowed; **silent ops is not**. When a branch changes provider, mode, correctness, or takes a fail-open path, call the shared helper — do **not** invent a new `*_fallback_total` counter or one-off PostHog event.
+
+```
+IF branch changes provider OR mode OR correctness OR fail-open taken:
+  MUST call record_fallback / recordFallback with outcome
+ELSE IF hard failure (no continue):
+  error metric / Sentry / HTTP — NOT the fallback helper
+ELSE (pure cache miss, expected soft path with no mode change):
+  existing domain metric OR nothing — NOT fallback helper
+```
+
+| Field | Values |
+|-------|--------|
+| `component` / `area` | closed enum (`sync_dispatch`, `pusher`, `realtime_hub`, `ptt_cascade`, …) → else `other` |
+| `from` / `to` | closed enums or `none` |
+| `reason` | shared bounded set (`enqueue_failed`, `circuit_open`, `byok`, …) → else `other` |
+| `outcome` | `recovered` (full UX restored) \| `degraded` (continues with hit) \| `exhausted` (no path left) |
+
+Emitters: Python `utils.observability.fallback.record_fallback` → `omi_fallback_total`; Swift `DesktopDiagnosticsManager.recordFallback` → `desktop_health_event`/`fallback_triggered`; Rust `fallback::record_fallback` → fixed-field `tracing` (`event=fallback`). Legacy metrics (`llm_gateway_*`, `pusher_sessions_degraded`) stay — do not copy their fat label sets onto new sites. Alert on rates with denominators or dwell gauges; never page on raw absolute counts or successful `recovered` heals.
+
+Optional ratchet (not CI): `python backend/scripts/check_fallback_instrumentation.py <touched files>` warns when a diff hunk adds fallback/fail-open/degraded branches without `record_fallback`/`recordFallback`.
+
 ### Backend (Python)
 
 - **No in-function imports** — all imports at module top level.
@@ -120,6 +144,7 @@ backend-sync (main.py, Cloud Run)
   └── ──────► Cloud Tasks queue `account-deletion` ──► POST /v1/users/account-deletion-wipes/run (OIDC, same service)
 
 notifications-job (modal/job.py)  [cron]
+memory-maintenance-job (modal/memory_maintenance_job.py)  [cron]
 agent-vm-reaper (backend/charts/agent-vm-reaper)  [cron]
 ```
 
@@ -135,7 +160,8 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 - **deepgram** — STT. Streaming uses self-hosted (`DEEPGRAM_SELF_HOSTED_URL`) or cloud based on `DEEPGRAM_SELF_HOSTED_ENABLED`. Pre-recorded always uses Deepgram cloud. Called by backend and pusher.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and parakeet is selected.
 - **backend-sync** (`main.py`, same image as backend) — Cloud Run service for `/v2/sync-local-files`. When `SYNC_DISPATCH_MODE=cloud_tasks`: stages raw audio in GCS, enqueues to Cloud Tasks queue `sync-jobs`, which POSTs `/v2/sync-jobs/run` (OIDC-verified, `utils/cloud_tasks.py`) to run decode→VAD→STT inside a request. Inline fallback when the flag is off, env is incomplete, BYOK headers are present, or enqueue fails. Audio playback merges (`/v1/sync/audio/*`) follow the same pattern via queue `audio-merge` building 30-day MP3 artifacts under `playback/` (`AUDIO_MERGE_DISPATCH_MODE`). Account deletion uses `ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks` to enqueue durable wipes to queue `account-deletion`, which posts `/v1/users/account-deletion-wipes/run`; API success is returned only after the deletion marker is persisted and the wipe task is durably enqueued.
-- **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications.
+- **notifications-job** (`modal/job.py`) — Cron job, reads Firestore/Redis, sends push notifications and runs X connector sync. Does not host memory maintenance.
+- **memory-maintenance-job** (`modal/memory_maintenance_job.py`) — Cloud Run Job for canonical ST→LT maintenance (TTL → consolidation → promotion). Manual deploy via `.github/workflows/gcp_memory_maintenance_job.yml`; auto-dev on push to `main` via `gcp_memory_maintenance_job_auto_dev.yml`. Enablement is a multi-var contract (`MEMORY_MODE`, `MEMORY_ENABLED_USERS`, cron/fast-track/consolidation flags) enforced by `backend/scripts/validate-backend-runtime-env.py`; prod stays `MEMORY_MODE=off` until Gate 3. After merge, redeploy `notifications-job` once before enabling the new Scheduler so the old image cannot still run ST→LT.
 - **monitoring** (`backend/charts/monitoring/`) — Prometheus, Grafana, Loki, Alloy, alerts, and HPA metric adapters for backend services.
 - **agent-vm-reaper** (`backend/charts/agent-vm-reaper/`) — CronJob that deletes stale `omi-agent-*` GCE VMs left by desktop agent sandboxes.
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
@@ -184,8 +210,9 @@ The desktop app is a **Swift Package Manager** project (no Xcode project, no `.x
 - Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
 - Compile-only check: `cd desktop/macos && xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK).
 - **DO NOT** use bare `swift build`, `xcodebuild`, or launch from `build/` directly. Always launch via `cd desktop/macos && ./run.sh` (installs to `/Applications/` and registers with LaunchServices, required for permission "Quit & Reopen").
-- Release builds are handled entirely by Codemagic CI (no local release script).
-- For PRs that change function signatures or cross-file types, run a clean release build before merge: `cd desktop/macos && rm -rf .build && xcrun swift build -c release --triple arm64-apple-macosx` — incremental debug builds miss stale-cache type errors that Codemagic's clean release build catches later.
+- **PR CI** (`desktop-swift-ci.yml`): debug build + parallel suite tests (`OMI_SWIFT_TEST_SUITE_WORKERS=4`). No release compile on ordinary PRs.
+- **Clean release compile** runs in CI on `main` pushes that touch desktop Swift, and on PRs that change `desktop/macos/Desktop/Package.swift`. Locally, for signature / cross-file type changes: `cd desktop/macos && rm -rf Desktop/.build && xcrun swift build -c release --package-path Desktop --triple arm64-apple-macosx` — incremental debug builds can miss stale-cache type errors.
+- **Ship builds** (universal, signed, notarized) are handled entirely by Codemagic CI (no local release script).
 
 #### Named Test Bundles
 
@@ -212,7 +239,8 @@ Agents can and should self-test the running app — don't stop at a successful c
 2. **Boot signed-in (no browser):** sign into "Omi Dev" once; `./run.sh` auto-clones auth/onboarding plus common shortcuts/settings into named bundles **before launch** (UserDefaults is read at startup). To do it manually:
    ```bash
    cd desktop/macos && ./scripts/omi-auth-dump.sh                  # capture the Omi Dev session
-   ./scripts/omi-auth-seed.sh com.omi.omi-<feature>          # replay into the test bundle
+   ./scripts/omi-auth-seed.sh com.omi.omi-<feature> \
+     tmp/desktop-auth.json "/Applications/omi-<feature>.app"  # clears stale Keychain; UD→KC migrate
    ./scripts/omi-settings-seed.sh com.omi.omi-<feature>       # replay shortcuts/settings
    ```
    On next launch `restoreAuthState()` picks it up and boots already-signed-in.

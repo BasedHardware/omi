@@ -43,6 +43,7 @@ mod auth;
 mod byok;
 mod config;
 mod encryption;
+mod fallback;
 mod llm;
 mod models;
 mod paywall;

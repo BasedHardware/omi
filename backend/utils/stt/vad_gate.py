@@ -24,6 +24,7 @@ from typing import Any, Deque, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from utils.observability.fallback import record_fallback
 from utils.stt.socket import STTSocket
 from utils.stt.vad import (
     VAD_WINDOW_SAMPLES,
@@ -600,6 +601,13 @@ class GatedSTTSocket(STTSocket):
             gate_out = self._gate.process_audio(data, now)
         except Exception:
             logger.exception('VAD gate process error, falling back to direct send uid=%s', self._gate.uid)
+            record_fallback(
+                component='vad',
+                from_mode='gated',
+                to_mode='direct',
+                reason='other',
+                outcome='degraded',
+            )
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
             return self._conn.send(data)

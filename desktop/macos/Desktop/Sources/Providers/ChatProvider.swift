@@ -877,6 +877,14 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     // product flows, not error recovery surfaces.
     @Published var currentError: ChatErrorState?
 
+    /// Preferred user-visible error string for compact surfaces (floating bar).
+    var displayErrorMessage: String? {
+        if let currentError {
+            return currentError.userFacingSummary
+        }
+        return errorMessage
+    }
+
     /// Captured at the start of each sendMessage so the .retry recovery
     /// action can re-issue the user's last prompt. Cleared after a
     /// successful re-send or on dismiss to avoid stale retries.
@@ -1032,6 +1040,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
     private var sessionGroupingObserver: AnyCancellable?
     private var activationObserver: AnyCancellable?
     private var signOutObserver: AnyCancellable?
+    private var sessionInvalidateObserver: AnyCancellable?
 
     private var refreshAllObserver: AnyCancellable?
 
@@ -1177,6 +1186,20 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     }
                     self.resetSessionStateForAuthChange()
                     AgentRuntimeStatusStore.shared.reset()
+                }
+            }
+
+        // Light session invalidation (expired creds) — stop bridge only; preserve chat draft/state.
+        sessionInvalidateObserver = NotificationCenter.default.publisher(for: .sessionDidInvalidate)
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    guard let self else { return }
+                    log("ChatProvider: sessionDidInvalidate — stopping agent bridge")
+                    if self.agentBridgeStarted {
+                        await self.resolvedAgentClient().clearOwnerState()
+                        await self.resolvedAgentClient().stop()
+                        self.agentBridgeStarted = false
+                    }
                 }
             }
 
@@ -1357,8 +1380,13 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         } catch {
             logError("Failed to start agent bridge", error: error)
             let rawError = String(describing: error)
-            AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
-            errorMessage = "AI not available: \(error.localizedDescription)"
+            if let bridgeError = error as? BridgeError, let card = ChatErrorState.from(bridgeError) {
+                currentError = card
+                errorMessage = nil
+            } else {
+                AnalyticsManager.shared.chatAgentError(error: "AI not available: bridge failed to start", rawError: rawError)
+                errorMessage = "AI not available: \(error.localizedDescription)"
+            }
             return false
         }
     }
@@ -2725,8 +2753,6 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         defer { pollGate.exit() }
         // Skip if user is signed out (tokens are cleared)
         guard AuthState.shared.isSignedIn else { return }
-        // Skip if in auth backoff period (recent 401 errors)
-        guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
         // Skip if we're actively sending. Note: isSending is released *before* the AI
         // message is saved to the backend (to unblock the next query). This means the
         // poll can run while saveMessage() is still in-flight — see the race note below.
@@ -2830,11 +2856,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 messages.append(contentsOf: genuinelyNewMessages)
                 messages.sort(by: { $0.createdAt < $1.createdAt })
             }
-            AuthBackoffTracker.shared.reportSuccess()
         } catch {
-            if case APIError.unauthorized = error {
-                AuthBackoffTracker.shared.reportAuthFailure()
-            }
             // Benign sign-out race: the isSignedIn guard above passed, but the
             // token was cleared by the time getMessages ran. Expected, not a bug
             // — log quietly (breadcrumb only) instead of flooding Sentry.
@@ -3519,7 +3541,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         guard await ensureBridgeStarted() else {
             tracer?.end("bridge_ensure", metadata: ["error": "bridge_failed"])
             tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-            if errorMessage?.isEmpty ?? true {
+            if currentError == .authRequired {
+                draftText = trimmedText
+            } else if currentError == nil, errorMessage?.isEmpty ?? true {
                 errorMessage = "AI not available"
             }
             releaseSendLock(sendGeneration: sendGen)
@@ -4345,6 +4369,9 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                       let card = ChatErrorState.from(bridgeError) {
                 currentError = card
                 lastFailedPrompt = trimmedText
+                if card == .authRequired {
+                    draftText = trimmedText
+                }
                 errorMessage = nil
             } else {
                 errorMessage = error.localizedDescription
@@ -4892,7 +4919,10 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         for runId in runIds {
             guard let artifacts = try? await DesktopCoordinatorService.shared.inspectArtifactsForRun(runId: runId)
             else { continue }
-            artifactsByRunId[runId] = Dictionary(uniqueKeysWithValues: artifacts.map { ($0.artifactId, $0) })
+            // Guard against duplicate artifact ids (last-write-wins); Dictionary(uniqueKeysWithValues:)
+            // traps on a duplicate key and would crash the chat view.
+            artifactsByRunId[runId] = Dictionary(
+                artifacts.map { ($0.artifactId, $0) }, uniquingKeysWith: { _, latest in latest })
         }
         guard !artifactsByRunId.isEmpty else { return }
 
@@ -4991,10 +5021,29 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             log("ChatErrorCard: .signIn recovery — starting desktop OAuth")
             do {
                 try await AuthService.shared.signInWithGoogle()
-            } catch let signInError {
-                logError("ChatErrorCard: sign-in recovery failed", error: signInError)
+            } catch AuthError.cancelled {
+                // User explicitly cancelled — don't auto-pivot to a different provider.
+                log("ChatErrorCard: Google sign-in cancelled by user — not retrying with Apple")
                 currentError = error
-                errorMessage = signInError.localizedDescription
+                lastFailedPrompt = promptToRetry
+                errorMessage = nil
+                return
+            } catch let googleError {
+                // Google unavailable/misconfigured — try Apple as fallback provider.
+                log("ChatErrorCard: Google sign-in unavailable, trying Apple — \(googleError.localizedDescription)")
+                do {
+                    try await AuthService.shared.signInWithApple()
+                } catch let signInError {
+                    logError("ChatErrorCard: sign-in recovery failed", error: signInError)
+                    currentError = error
+                    errorMessage = signInError.localizedDescription
+                    return
+                }
+            }
+            _ = try? await AuthService.shared.getIdToken(forceRefresh: true)
+            _ = await ensureBridgeStarted()
+            if let prompt = promptToRetry, !prompt.isEmpty {
+                await sendMessage(prompt)
             }
         case .installRuntime:
             log("ChatErrorCard: .installRuntime recovery — opening nodejs.org for runtime install")

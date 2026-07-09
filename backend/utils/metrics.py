@@ -28,14 +28,32 @@ PUSHER_SESSION_DEGRADED = Gauge(
 
 LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS = Counter(
     'llm_gateway_chat_extraction_requests_total',
-    'Chat extraction requests routed through or around the LLM gateway',
-    ['feature', 'outcome', 'reason'],
+    'LLM gateway routing outcomes by feature (serving, fallback, direct_exception, shadow)',
+    ['feature', 'mode', 'outcome', 'reason'],
+)
+
+LLM_GATEWAY_DIRECT_EXCEPTION_REQUESTS = Counter(
+    'llm_gateway_direct_exception_requests_total',
+    'Inventoried direct-provider surfaces used while gateway feature mode is active',
+    ['surface', 'reason'],
 )
 
 LLM_GATEWAY_CHAT_EXTRACTION_COMPARISONS = Counter(
     'llm_gateway_chat_extraction_comparisons_total',
     'Privacy-safe comparison buckets between shadow gateway output and legacy extraction output',
     ['feature', 'field', 'outcome'],
+)
+
+OMI_FALLBACK_TOTAL = Counter(
+    'omi_fallback_total',
+    'Fallback / resilience transitions by component, path, reason, and outcome',
+    ['component', 'from_mode', 'to_mode', 'reason', 'outcome'],
+)
+
+OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL = Counter(
+    'omi_sync_dispatch_attempts_total',
+    'Sync v2 dispatch attempts by selected mode (denominator for fallback rates)',
+    ['mode'],
 )
 
 AUTH_FLOW_EVENTS = Counter(

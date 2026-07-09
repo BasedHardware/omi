@@ -306,15 +306,14 @@ struct FloatingControlBarView: View {
         .contentShape(Rectangle())
         .contextMenu { barContextMenu }
         .onHover(perform: handleBarHover)
-        .animation(.spring(response: 0.22, dampingFraction: 0.9), value: state.showingAIConversation)
-        .animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)
         .onChange(of: shouldShowNotchHoverMenu) { _, visible in
-            (window as? FloatingControlBarWindow)?.resizeForAgentSwitcher(visible: visible)
-            // Open: a graceful unfurl. Close: furl faster than the panel collapses so the
-            // dots are back in the notch before the surface shrinks (no stranded dots).
+            // NSPanel owns geometry. This value only fades/morphs the row
+            // contents, using a monotonic curve so it cannot overshoot
+            // vertically. Match the window's expand/collapse durations exactly
+            // so the rows and the panel finish together (no post-expand slide).
             let morphAnim: Animation = visible
-                ? .spring(response: 0.34, dampingFraction: 0.86)
-                : .spring(response: 0.18, dampingFraction: 0.92)
+                ? .easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)
+                : .easeOut(duration: FloatingControlBarWindow.notchHoverMenuCollapseDuration)
             withAnimation(morphAnim) {
                 notchSwitcherProgress = visible ? 1 : 0
             }

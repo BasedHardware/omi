@@ -324,7 +324,10 @@ actor VideoChunkEncoder {
         )
 
         guard writer.startWriting() else {
-            throw RewindError.storageError("Failed to start HEVC writer: \(writer.error?.localizedDescription ?? "unknown error")")
+            if let writerError = writer.error {
+                throw RewindError.storageWriteFailed("Failed to start HEVC writer", underlying: writerError)
+            }
+            throw RewindError.storageError("Failed to start HEVC writer: unknown error")
         }
         writer.startSession(atSourceTime: .zero)
 
@@ -377,7 +380,10 @@ actor VideoChunkEncoder {
 
         let presentationTime = CMTime(seconds: Double(max(0, frameOffsetInChunk - 1)) / frameRate, preferredTimescale: 600)
         guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
-            throw RewindError.storageError("Failed to append frame to HEVC writer: \(assetWriter?.error?.localizedDescription ?? "unknown error")")
+            if let writerError = assetWriter?.error {
+                throw RewindError.storageWriteFailed("Failed to append frame to HEVC writer", underlying: writerError)
+            }
+            throw RewindError.storageError("Failed to append frame to HEVC writer: unknown error")
         }
         writerNotReadyCount = 0
     }
@@ -575,7 +581,11 @@ actor VideoChunkEncoder {
                 case .completed:
                     continuation.resume()
                 case .failed, .cancelled:
-                    continuation.resume(throwing: RewindError.storageError("HEVC writer failed: \(writerBox.writer.error?.localizedDescription ?? Self.writerStatusDescription(writerBox.writer.status))"))
+                    if let writerError = writerBox.writer.error {
+                        continuation.resume(throwing: RewindError.storageWriteFailed("HEVC writer failed", underlying: writerError))
+                    } else {
+                        continuation.resume(throwing: RewindError.storageError("HEVC writer failed: \(Self.writerStatusDescription(writerBox.writer.status))"))
+                    }
                 default:
                     continuation.resume(throwing: RewindError.storageError("HEVC writer ended in unexpected state: \(Self.writerStatusDescription(writerBox.writer.status))"))
                 }

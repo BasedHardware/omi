@@ -27,7 +27,7 @@
 # Prerequisites (full E2E):
 #   - macOS with a running named test bundle, e.g.:
 #       cd desktop/macos && OMI_APP_NAME=omi-gauntlet OMI_SKIP_TUNNEL=1 ./run.sh
-#   - Signed-in session (./scripts/omi-auth-seed.sh com.omi.omi-gauntlet before launch)
+#   - Signed-in session (./run.sh seeds auth; or omi-auth-seed.sh … "/Applications/omi-gauntlet.app")
 #   - LLM / realtime credentials available (BYOK or Omi account quota)
 #   - Optional: brew install beastoin/tap/agent-swift (screenshots; gauntlet still runs without it)
 #

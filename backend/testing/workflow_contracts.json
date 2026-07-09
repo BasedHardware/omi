@@ -187,6 +187,31 @@
       ]
     },
     {
+      "id": "listen_pusher_pipeline",
+      "risk": "high",
+      "sources": [
+        "backend/routers/transcribe.py",
+        "backend/utils/listen_pusher_session.py",
+        "backend/utils/pusher.py",
+        "backend/utils/transcribe_decisions.py",
+        "backend/pusher/main.py"
+      ],
+      "tests": [
+        "tests/unit/test_listen_pipeline.py",
+        "tests/unit/test_pusher_heartbeat.py",
+        "tests/unit/test_pusher_conversation_retry.py",
+        "tests/unit/test_transcribe_decisions.py",
+        "tests/unit/utils/test_listen_pusher_session.py",
+        "tests/unit/test_transcribe_teardown_flush.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "teardown flushes tail audio before pusher close",
+        "pending conversation requests retry until ack or give-up limit",
+        "pusher heartbeat prevents idle connection drops"
+      ]
+    },
+    {
       "id": "backend_cloud_run_deploy",
       "risk": "high",
       "sources": [

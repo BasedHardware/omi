@@ -2,6 +2,58 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.62",
+      "date": "2026-07-09",
+      "changes": [
+        "Smoothed the notch bar's hover expansion so it no longer hops, keeps sliding after opening, or re-zooms when switching Spaces"
+      ]
+    },
+    {
+      "version": "0.12.61",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.60",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.59",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed named-bundle auth seed so local test apps no longer show a login-keychain password prompt on launch"
+      ]
+    },
+    {
+      "version": "0.12.58",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed Claude MCP connector setup to use the registered production OAuth client instead of a stale fallback",
+        "Removed the optional API keys step from onboarding and cleaned up the 2nd brain graph label",
+        "Improved the sign-in browser page and automatically brings Omi to the front when authentication finishes"
+      ]
+    },
+    {
+      "version": "0.12.57",
+      "date": "2026-07-09",
+      "changes": [
+        "Fixed rare crashes when the app received data with duplicate ids (tasks, apps list, chat artifacts)",
+        "Fixed a data-loss bug where periodic WAL flush could mark a recording as saved to disk without actually persisting it, causing the audio to be lost during sync"
+      ]
+    },
+    {
+      "version": "0.12.56",
+      "date": "2026-07-09",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.55",
       "date": "2026-07-09",
       "changes": [

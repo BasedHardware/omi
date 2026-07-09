@@ -403,7 +403,7 @@ probe_auth_03() {
   t0=$(now_s)
   signed="$(defaults_read_raw "$BUNDLE_ID" auth_isSignedIn)"
   if [ "$signed" != "1" ]; then
-    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth-stale: bundle not signed in — reseed via omi-auth-dump.sh + omi-auth-seed.sh $BUNDLE_ID"
+    record auth-03 BLOCKED $(( $(now_s) - t0 )) "auth-stale: bundle not signed in — reseed via omi-auth-dump.sh + omi-auth-seed.sh $BUNDLE_ID "/Applications/${BUNDLE_ID#com.omi.}.app""
     return
   fi
   latency="$(stop_app)" || true

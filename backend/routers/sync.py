@@ -103,6 +103,8 @@ from utils.stt.speaker_embedding import (
     SPEAKER_MATCH_THRESHOLD,
 )
 from utils.subscription import has_transcription_credits
+from utils.observability.fallback import record_fallback
+from utils.metrics import OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL
 
 logger = logging.getLogger(__name__)
 
@@ -1584,8 +1586,23 @@ async def sync_local_files_v2(
                     },
                 )
                 dispatched = True
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='cloud_tasks').inc()
+                except Exception:
+                    pass
             except Exception as e:
                 logger.error(f'sync_v2: Cloud Tasks dispatch failed job={job_id}, falling back inline: {e}')
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='cloud_tasks',
+                    to_mode='inline',
+                    reason='enqueue_failed',
+                    outcome='degraded',
+                )
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                except Exception:
+                    pass
                 start_background_task(_delete_staged_blobs_async(owned_paths), name=f'sync_unstage:{job_id}')
 
             if dispatched:
@@ -1597,6 +1614,31 @@ async def sync_local_files_v2(
                     logger.error(f'sync_v2: post-enqueue local cleanup failed job={job_id}: {e}')
 
         if not dispatched:
+            if not is_cloud_tasks_dispatch_enabled():
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='cloud_tasks',
+                    to_mode='inline',
+                    reason='dispatch_disabled',
+                    outcome='recovered',
+                )
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                except Exception:
+                    pass
+            elif has_byok_keys():
+                record_fallback(
+                    component='sync_dispatch',
+                    from_mode='cloud_tasks',
+                    to_mode='inline',
+                    reason='byok',
+                    outcome='recovered',
+                )
+                try:
+                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline').inc()
+                except Exception:
+                    pass
+
             # Async coordinator: runs on event loop, offloads blocking work to pools.
             # No thread pool slot held for the full pipeline duration (fixes #7361).
             start_background_task(

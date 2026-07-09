@@ -21,6 +21,9 @@ See `.claude/skills/sentry-release/SKILL.md` for full documentation.
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
 
+### Fallback / resilience telemetry
+Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Same field contract as root `AGENTS.md` → Fallback / resilience telemetry. Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
+
 ## Repository
 - This is the `desktop/macos/` subfolder of the **OMI monorepo** (`BasedHardware/omi`)
 - macOS Swift app + Rust backend live here
@@ -100,6 +103,17 @@ storage before UI) and wire `import` + `public` on the extracted target's API.
 - Desktop apps should use backend OAuth flow: `/v1/auth/authorize`
 - Apple Services ID: `me.omi.web` (shared across all apps)
 - iOS apps use native Sign-In, Desktop uses backend OAuth + custom token
+- Session death is owned by `AuthSessionCoordinator` (`INV-AUTH-1`); use `invalidateSession` for expired/revoked Firebase creds, not nuclear `signOut()`.
+
+#### Session 401 vs BYOK/provider 401
+
+| Failure class | Owner | Action on 401 after forced refresh |
+|---------------|-------|-----------------------------------|
+| Firebase session token (default API `Authorization`) | `AuthSessionCoordinator` | `invalidateSession` → Sign-in CTA |
+| BYOK provider key on request | `CredentialHealthManager` | Suppress/mark provider unhealthy; **do not** invalidate Firebase session |
+| Realtime/voice managed lane | `CredentialHealthManager` + hub UX | `requiresLogin` only when session mint fails after refresh |
+| Background poll with `RequestAuthPolicy.sessionPreserving` | Caller | Throw `.unauthorized`; no session invalidation |
+| `DesktopLocalProfile` harness | Auth emulator bootstrap | Re-bootstrap emulator session; no prod invalidation side effects |
 
 ### Database Structure
 - **Firestore** (`based-hardware`): User data, conversations, action items
@@ -261,7 +275,8 @@ timeline identity/open, or pill projection is incomplete until:
    gauntlet and note evidence in the PR:
    ```bash
    cd desktop/macos && OMI_APP_NAME=omi-gauntlet OMI_SKIP_TUNNEL=1 ./run.sh
-   ./scripts/omi-auth-seed.sh com.omi.omi-gauntlet   # if needed
+   # run.sh seeds auth after install (UD tokens → app Keychain migrate). Manual reseed:
+   # ./scripts/omi-auth-seed.sh com.omi.omi-gauntlet tmp/desktop-auth.json "/Applications/omi-gauntlet.app"
    ./scripts/agent-continuity-gauntlet.sh --suite continuity --bundle-id com.omi.omi-gauntlet
    ./scripts/check-gauntlet-evidence-at-head.sh
    ```

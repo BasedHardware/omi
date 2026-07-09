@@ -513,8 +513,6 @@ class MemoriesViewModel: ObservableObject {
     refreshInvocations += 1
     // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
-    // Skip if in auth backoff period (recent 401 errors)
-    guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
     // Skip if page is not visible
     guard isActive else { return }
 
@@ -550,11 +548,7 @@ class MemoriesViewModel: ObservableObject {
       currentOffset = mergedMemories.count
       rawBackendOffset = apiMemories.count
       hasMoreMemories = mergedMemories.count >= reloadLimit
-      AuthBackoffTracker.shared.reportSuccess()
     } catch {
-      if case APIError.unauthorized = error {
-        AuthBackoffTracker.shared.reportAuthFailure()
-      }
       // Silently ignore errors during auto-refresh
       logError("MemoriesViewModel: Auto-refresh failed", error: error)
     }

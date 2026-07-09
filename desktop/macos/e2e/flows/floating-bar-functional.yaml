@@ -18,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
 preconditions:
   - automation_bridge_ready

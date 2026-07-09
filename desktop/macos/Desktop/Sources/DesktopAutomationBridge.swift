@@ -97,7 +97,7 @@ enum DesktopAutomationLaunchOptions {
   }
 }
 
-struct DesktopAutomationSnapshot: Codable {
+struct DesktopAutomationSnapshot: Codable, Sendable {
   var bridgeEnabled: Bool
   var bridgePort: UInt16
   var bundleIdentifier: String
@@ -124,6 +124,11 @@ struct DesktopAutomationSnapshot: Codable {
   var floatingBarVoiceResponseActive: Bool
   var floatingBarUsesNotchIsland: Bool
   var updatedAt: String
+  /// True when the live MainActor refresh timed out and this is the last cached
+  /// snapshot instead — e.g. the main thread is wedged on a blocking Keychain
+  /// read during sign-in. The bridge still answers `/state` so harnesses don't
+  /// hang; callers can detect that the live fields may be stale.
+  var snapshotStale: Bool = false
 }
 
 struct DesktopAutomationNavigationRequest: Codable {
@@ -408,7 +413,70 @@ final class DesktopAutomationStateStore {
   }
 }
 
+/// How long `/state` waits for the live MainActor refresh before serving the last
+/// cached snapshot instead. Generous enough not to false-trip under normal load,
+/// small enough that a wedged main thread can't stall the harness.
+private let liveSnapshotMainActorTimeout: Duration = .seconds(3)
+
+/// Single-resume guard for a continuation raced between two unstructured tasks.
+private final class TimeoutRaceBox<T>: @unchecked Sendable {
+  private var resumed = false
+  private let lock = NSLock()
+  private let continuation: CheckedContinuation<T?, Never>
+
+  init(_ continuation: CheckedContinuation<T?, Never>) {
+    self.continuation = continuation
+  }
+
+  func resume(_ value: T?) {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !resumed else { return }
+    resumed = true
+    continuation.resume(returning: value)
+  }
+}
+
+/// Await `operation`, but give up after `timeout` and return `nil`.
+///
+/// The automation bridge uses this so a wedged MainActor — e.g. a blocking
+/// Keychain read on the main thread during sign-in (`AuthService.storedIdToken`
+/// → `SecItemCopyMatching`) — can't hang `/state`. Crucially the operation runs
+/// in an *unstructured* task, not a `withTaskGroup` child: a task group awaits all
+/// children at scope exit, so a non-cancellable wedged `MainActor.run` would hang
+/// the timeout itself. Here we resume on whichever finishes first and leave the
+/// abandoned operation task to complete (harmlessly) on its own later. Pure and
+/// self-contained, so it is hermetically testable.
+func awaitWithTimeout<T: Sendable>(
+  _ timeout: Duration,
+  operation: @escaping @Sendable () async -> T
+) async -> T? {
+  await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+    let box = TimeoutRaceBox<T>(continuation)
+    let operationTask = Task { box.resume(await operation()) }
+    Task {
+      try? await Task.sleep(for: timeout)
+      box.resume(nil)
+      operationTask.cancel()
+    }
+  }
+}
+
 private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
+  // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
+  // during sign-in), fall back to the last cached snapshot so `/state` still
+  // answers instead of hanging the whole bridge. See awaitWithTimeout.
+  guard let live = await awaitWithTimeout(liveSnapshotMainActorTimeout, operation: liveAutomationSnapshotFromMainActor) else {
+    log("DesktopAutomationBridge: live /state refresh timed out (main thread busy); serving cached snapshot")
+    var stale = await cachedAutomationSnapshot()
+    stale.snapshotStale = true
+    return stale
+  }
+  return live
+}
+
+@Sendable
+private func liveAutomationSnapshotFromMainActor() async -> DesktopAutomationSnapshot {
   let floating = await MainActor.run {
     let floating = FloatingControlBarManager.shared.automationState
     return (
@@ -432,6 +500,7 @@ private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
     snapshot.floatingBarUsesNotchIsland = floating.usesNotchIsland
     snapshot.isAppActive = floating.isAppActive
     snapshot.updatedAt = ISO8601DateFormatter().string(from: Date())
+    snapshot.snapshotStale = false
   }
 }
 
@@ -2460,6 +2529,83 @@ final class DesktopAutomationActionRegistry {
         "share_available": shareAvailable ? "true" : "false",
         "share_url_present": shareAvailable ? "true" : "false",
       ]
+    }
+
+    // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
+    // attach — the report title + the desktop_diagnostics.json attachment + the
+    // log-attachment metadata — WITHOUT calling SentrySDK, so a harness can grep
+    // the diagnostics JSON for secrets without firing a real Sentry event. The
+    // title and diagnostics JSON come from the same builders the real submit
+    // uses (feedbackReportTitle / writeDiagnosticsAttachment), so the dry-run
+    // can't diverge from what ships. The raw log is attached unredacted to Sentry
+    // by design (trusted sink, explicit user report); we surface only its
+    // metadata here — never its contents — so the bridge response can't leak it.
+    register(
+      name: "dump_feedback_payload_dryrun",
+      summary: "Assemble the feedback report payload (title + desktop_diagnostics.json + log-attachment metadata) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+      params: ["message"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "dump_feedback_payload_dryrun is disabled on production bundles"]
+      }
+      let message = (params["message"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      var detail: [String: String] = [
+        "sentry_message": feedbackReportTitle(for: message),
+        "diagnostics_filename": feedbackDiagnosticsAttachmentFilename,
+        "sentry_capture_invoked": "false",
+        "would_submit_to_sentry": "false",
+      ]
+
+      if let url = DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment() {
+        defer { try? FileManager.default.removeItem(at: url) }
+        if let data = try? Data(contentsOf: url), let json = String(data: data, encoding: .utf8) {
+          detail["diagnostics_json"] = json
+          detail["diagnostics_byte_count"] = "\(data.count)"
+        } else {
+          detail["diagnostics_error"] = "unreadable_attachment"
+        }
+      } else {
+        detail["diagnostics_error"] = "attachment_write_failed"
+      }
+
+      let logPath = omiLogFilePath()
+      let logExists = FileManager.default.fileExists(atPath: logPath)
+      detail["log_attachment_filename"] = (logPath as NSString).lastPathComponent
+      detail["log_attachment_exists"] = logExists ? "true" : "false"
+      if logExists,
+        let attributes = try? FileManager.default.attributesOfItem(atPath: logPath),
+        let size = attributes[.size] as? NSNumber
+      {
+        // int64Value, not intValue (Int32): the log can exceed 2 GB in a long dev session.
+        detail["log_attachment_bytes"] = "\(size.int64Value)"
+      }
+      return detail
+    }
+
+    // Deliberately wedge the main thread for durationMs so harnesses can prove the
+    // `/state` fallback: the bridge must keep answering `/state` from the cached
+    // snapshot (snapshotStale=true) while the MainActor is blocked, instead of
+    // hanging as it did when a sign-in Keychain read wedged the main thread. The
+    // sleep is scheduled async so this action's own response returns first; the
+    // wedge then races the next `/state` live refresh. Non-prod only; mirrors
+    // `suspend_agent_stream`'s role for the agent-stall path.
+    register(
+      name: "debug_block_main_thread",
+      summary: "Block the main thread for durationMs to exercise the /state wedged-MainActor fallback. Non-prod only.",
+      params: ["durationMs"]
+    ) { params in
+      guard AppBuild.isNonProduction else {
+        return ["error": "debug_block_main_thread is disabled on production bundles"]
+      }
+      let durationMs = min(max(intParam(params["durationMs"], default: 5000), 100), 20000)
+      // Delay the wedge briefly so this action's own POST /action response (which
+      // itself builds a live snapshot via a MainActor hop) returns *before* the
+      // main thread blocks — otherwise the response would be queued behind the
+      // sleep and take the full 3s /state fallback, which looks like a hang.
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        Thread.sleep(forTimeInterval: Double(durationMs) / 1000.0)
+      }
+      return ["blocking_main_thread_ms": "\(durationMs)"]
     }
   }
 }

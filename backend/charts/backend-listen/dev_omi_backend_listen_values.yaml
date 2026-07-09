@@ -137,11 +137,12 @@ env:
   - name: MEMORY_MODE
     value: "read"
   - name: MEMORY_ENABLED_USERS
+    # Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
   - name: MEMORY_V3_GET_ENABLED
     value: "true"
   - name: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED
-    value: "true"
+    value: "false"
   - name: MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
     value: "true"
   - name: GOOGLE_MAPS_API_KEY

@@ -1,0 +1,3 @@
+{
+  "change": "Fixed desktop sign-in so expired sessions show a Sign in button instead of a dead-end AI error, and chat drafts are preserved when re-authenticating."
+}
