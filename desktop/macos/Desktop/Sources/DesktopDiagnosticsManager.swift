@@ -4,6 +4,8 @@ import Darwin
 
 enum DesktopHealthEventName: String {
   case authTokenStorageFallback = "auth_token_storage_fallback"
+  case authSessionCleared = "auth_session_cleared"
+  case transcriptionWsReconnectExhausted = "transcription_ws_reconnect_exhausted"
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -70,6 +72,38 @@ final class DesktopDiagnosticsManager {
         "storage": "user_defaults",
         "reason": reason,
         "update_channel": updateChannel,
+      ])
+  }
+
+  func recordAuthSessionCleared(
+    reason: String,
+    httpStatusCode: Int?,
+    failureClass: String = "definitive_auth_failure"
+  ) {
+    var properties: [String: Any] = [
+      "reason": reason,
+      "failure_class": failureClass,
+      "recovery_action": "clear_session",
+      "recovery_result": "cleared",
+    ]
+    if let httpStatusCode {
+      properties["http_status_code"] = httpStatusCode
+    }
+    record(.authSessionCleared, properties: properties)
+  }
+
+  func recordTranscriptionWsReconnectExhausted(
+    reconnectAttempts: Int,
+    streamingMode: String
+  ) {
+    record(
+      .transcriptionWsReconnectExhausted,
+      properties: [
+        "reconnect_attempts": reconnectAttempts,
+        "streaming_mode": streamingMode,
+        "failure_class": "ws_reconnect_exhausted",
+        "recovery_action": "surface_error",
+        "recovery_result": "exhausted",
       ])
   }
 
