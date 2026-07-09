@@ -248,7 +248,12 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("Providers/ChatProvider.swift")
     let range = source.range(of: "ChatErrorCard: .signIn recovery")
     XCTAssertNotNil(range)
-    let snippet = String(source[range!.lowerBound...])
+    // Scope to the .signIn case block — stop at the next case to avoid
+    // incidental matches from unrelated methods elsewhere in the file.
+    let fromSignIn = String(source[range!.lowerBound...])
+    let endOfCase = fromSignIn.range(of: "case .installRuntime:")
+    XCTAssertNotNil(endOfCase, "expected .installRuntime case after .signIn recovery")
+    let snippet = endOfCase.map { String(fromSignIn[..<$0.lowerBound]) } ?? fromSignIn
     XCTAssertTrue(snippet.contains("signInWithGoogle()"))
     XCTAssertTrue(snippet.contains("signInWithApple()"))
     XCTAssertTrue(snippet.contains("ensureBridgeStarted()"))

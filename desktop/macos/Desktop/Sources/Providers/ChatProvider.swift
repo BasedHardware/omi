@@ -5025,7 +5025,8 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 // User explicitly cancelled — don't auto-pivot to a different provider.
                 log("ChatErrorCard: Google sign-in cancelled by user — not retrying with Apple")
                 currentError = error
-                errorMessage = AuthError.cancelled.localizedDescription
+                lastFailedPrompt = promptToRetry
+                errorMessage = nil
                 return
             } catch let googleError {
                 // Google unavailable/misconfigured — try Apple as fallback provider.
