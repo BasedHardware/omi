@@ -890,14 +890,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     let hubSource = try realtimeHubControllerSource()
 
     XCTAssertTrue(
-      apiSource.contains("try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: \"Authorization\")"),
+      apiSource.contains("authorizedRetryRequest")
+        && apiSource.contains("getAuthHeader(forceRefresh: true)")
+        && apiSource.contains("forHTTPHeaderField: \"Authorization\""),
       "Backend 401 retry paths must force-refresh Firebase auth")
     XCTAssertTrue(
       apiSource.contains("throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)"),
       "Realtime mint retry transport failures must stay transient, not requires-login")
     XCTAssertTrue(
-      apiSource.contains("} catch AuthError.notSignedIn {\n        throw CredentialHealthError.requiresLogin"),
-      "Only definitive not-signed-in refresh failures should become requires-login")
+      apiSource.contains("invalidateSessionAfterUnauthorized")
+        && apiSource.contains("throw CredentialHealthError.requiresLogin"),
+      "Definitive session 401 after retry must invalidate and require login")
     XCTAssertTrue(
       hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
       "Mint failure must clear minting before failover starts the alternate provider")

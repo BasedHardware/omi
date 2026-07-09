@@ -134,6 +134,7 @@ final class AuthSessionCoordinatorTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
+      .deletingLastPathComponent()
       .appendingPathComponent("docs/product/invariants/auth-session.md")
     XCTAssertTrue(FileManager.default.fileExists(atPath: path.path))
     let text = try String(contentsOf: path, encoding: .utf8)
