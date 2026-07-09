@@ -28,6 +28,8 @@ SCHEMA_GROUPS = {
             'Geolocation',
             'ConversationPhoto',
             'AudioFile',
+            'ConversationAudioSpan',
+            'ConversationAudio',
             'CalendarEventLink',
             'Conversation',
             'ConversationTestPromptResponse',
