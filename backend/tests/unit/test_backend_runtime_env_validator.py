@@ -41,8 +41,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "MEMORY_MODE", "value": "read"},
         {"name": "MEMORY_ENABLED_USERS", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "MEMORY_V3_GET_ENABLED", "value": "true"},
-        {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "false"},
-        {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "false"},'''
+        {"name": "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "value": "true"},
+        {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "true"},'''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n' + memory_env,
