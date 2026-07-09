@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => {
   const autoUpdater = {
@@ -41,9 +41,18 @@ async function settle(): Promise<void> {
   await Promise.resolve()
 }
 
+const realPlatform = process.platform
+
+function setPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true })
+}
+
 describe('windows updater', () => {
   beforeEach(() => {
     resetWindowsUpdaterForTests()
+    // Tests run on the host CI platform (Linux/macOS); pin win32 so the
+    // platform guard does not short-circuit the scenarios under test.
+    setPlatform('win32')
     mocks.app.isPackaged = true
     delete process.env.OMI_UPDATES_ENABLED
     delete process.env.OMI_WINDOWS_UPDATE_FEED_URL
@@ -56,6 +65,11 @@ describe('windows updater', () => {
     mocks.autoUpdater.checkForUpdatesAndNotify.mockClear()
     vi.useFakeTimers()
     vi.clearAllTimers()
+  })
+
+  afterEach(() => {
+    setPlatform(realPlatform)
+    vi.useRealTimers()
   })
 
   it('uses a default feed for packaged apps', async () => {
@@ -79,6 +93,33 @@ describe('windows updater', () => {
     await vi.advanceTimersByTimeAsync(15000)
     expect(mocks.autoUpdater.checkForUpdatesAndNotify).toHaveBeenCalledTimes(1)
   })
+
+  it.each(['darwin', 'linux'] as NodeJS.Platform[])(
+    'never initializes electron-updater on non-Windows packaged builds (%s)',
+    async (platform) => {
+      setPlatform(platform)
+
+      startWindowsUpdater()
+      await settle()
+
+      expect(mocks.autoUpdater.setFeedURL).not.toHaveBeenCalled()
+      expect(mocks.autoUpdater.on).not.toHaveBeenCalled()
+      expect(mocks.breadcrumbs[0]).toEqual([
+        'updater.skipped',
+        { reason: 'unsupported_platform', platform },
+        { category: 'updater' }
+      ])
+
+      await vi.advanceTimersByTimeAsync(5 * 60 * 60 * 1000)
+      expect(mocks.autoUpdater.checkForUpdatesAndNotify).not.toHaveBeenCalled()
+
+      // An env override must not bypass the platform guard either.
+      process.env.OMI_UPDATES_ENABLED = '1'
+      startWindowsUpdater()
+      await settle()
+      expect(mocks.autoUpdater.setFeedURL).not.toHaveBeenCalled()
+    }
+  )
 
   it('stays disabled for unpackaged dev runs unless explicitly enabled', () => {
     mocks.app.isPackaged = false
