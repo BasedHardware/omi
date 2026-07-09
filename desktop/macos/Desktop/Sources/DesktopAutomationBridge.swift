@@ -1401,17 +1401,17 @@ final class DesktopAutomationActionRegistry {
       guard let id = params["id"], !id.isEmpty else {
         return ["error": "missing 'id'"]
       }
-      try await APIClient.shared.deleteConversation(id: id)
-      await MainActor.run {
-        if let appState = AppState.current {
-          appState.deleteConversationLocally(id)
-        } else {
-          NotificationCenter.default.post(
-            name: .conversationDeleted,
-            object: nil,
-            userInfo: ["conversationId": id]
-          )
+      if let appState = await MainActor.run(body: { AppState.current }) {
+        guard await appState.deleteConversation(id) else {
+          throw APIError.invalidResponse
         }
+      } else {
+        try await APIClient.shared.deleteConversation(id: id)
+        NotificationCenter.default.post(
+          name: .conversationDeleted,
+          object: nil,
+          userInfo: ["conversationId": id]
+        )
       }
       return ["deleted": id]
     }

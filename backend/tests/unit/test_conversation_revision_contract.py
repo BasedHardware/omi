@@ -1,0 +1,238 @@
+from datetime import datetime, timezone
+
+import database.conversations as conversations_db
+from models.conversation import Conversation, ConversationMutationResponse
+from models.structured import Structured
+
+
+class _Snapshot:
+    def __init__(self, data, update_time=None, exists=True):
+        self._data = data
+        self.update_time = update_time
+        self.exists = exists
+
+    def to_dict(self):
+        return None if self._data is None else dict(self._data)
+
+
+class _ConversationRef:
+    def __init__(self, snapshot):
+        self.snapshot = snapshot
+        self.set_calls = []
+        self.update_calls = []
+        self.create_calls = []
+
+    def get(self, transaction=None):
+        return self.snapshot
+
+    def set(self, data, **kwargs):
+        self.set_calls.append((data, kwargs))
+
+    def update(self, data):
+        self.update_calls.append(data)
+
+    def create(self, data):
+        self.create_calls.append(data)
+
+
+class _DocumentPath:
+    def __init__(self, ref):
+        self.ref = ref
+
+    def collection(self, _name):
+        return self
+
+    def document(self, document_id):
+        return self if document_id == 'user-1' else self.ref
+
+
+class _Firestore:
+    def __init__(self, ref):
+        self.path = _DocumentPath(ref)
+
+    def collection(self, _name):
+        return self.path
+
+    def transaction(self):
+        return _Transaction()
+
+
+class _Transaction:
+    def set(self, ref, data, **kwargs):
+        ref.set(data, **kwargs)
+
+
+def test_document_update_time_is_exposed_as_server_revision():
+    revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+
+    result = conversations_db._document_data_with_revision(_Snapshot({'id': 'conversation-1'}, update_time=revision))
+
+    assert result == {'id': 'conversation-1', 'updated_at': revision}
+
+
+def test_user_title_override_is_the_read_projection():
+    result = conversations_db._prepare_conversation_for_read(
+        {
+            'structured': {'title': 'Generated title', 'overview': 'Fresh summary'},
+            'user_title': 'My durable title',
+            'data_protection_level': 'standard',
+        },
+        'user-1',
+    )
+
+    assert result['structured']['title'] == 'My durable title'
+    assert result['structured']['overview'] == 'Fresh summary'
+
+
+def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
+    existing = {
+        'id': 'conversation-1',
+        'structured': {'title': 'My title', 'overview': 'Old summary'},
+        'user_title': 'My title',
+        'starred': True,
+        'folder_id': 'important',
+        'visibility': 'shared',
+        'data_protection_level': 'standard',
+    }
+    ref = _ConversationRef(_Snapshot(existing))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    incoming = {
+        'id': 'conversation-1',
+        'structured': {'title': 'Generated replacement', 'overview': 'Fresh summary'},
+        'starred': False,
+        'folder_id': None,
+        'visibility': 'private',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation('user-1', incoming)
+
+    assert len(ref.set_calls) == 1
+    written, options = ref.set_calls[0]
+    assert options == {'merge': True}
+    assert written['structured'] == {'title': 'My title', 'overview': 'Fresh summary'}
+    assert written['user_title'] == 'My title'
+    assert written['starred'] is True
+    assert written['folder_id'] == 'important'
+    assert written['visibility'] == 'shared'
+    assert written['status'] == 'completed'
+
+
+def test_first_processing_write_still_creates_complete_document(monkeypatch):
+    ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+    incoming = {
+        'id': 'conversation-1',
+        'updated_at': datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc),
+        'structured': {'title': 'Generated title'},
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation('user-1', incoming)
+
+    written, options = ref.set_calls[0]
+    assert options == {}
+    assert 'updated_at' not in written
+    assert written['structured']['title'] == 'Generated title'
+
+
+def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
+    ref = _ConversationRef(_Snapshot(None, exists=False))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+    revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+
+    conversations_db.create_conversation_if_absent(
+        'user-1',
+        {
+            'id': 'conversation-1',
+            'updated_at': revision,
+            'structured': {'title': 'Generated title'},
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert len(ref.create_calls) == 1
+    assert 'updated_at' not in ref.create_calls[0]
+
+
+def test_processing_transaction_reloads_user_fields_when_firestore_retries(monkeypatch):
+    ref = _ConversationRef(
+        _Snapshot(
+            {
+                'id': 'conversation-1',
+                'structured': {'title': 'Generated'},
+                'starred': False,
+                'data_protection_level': 'standard',
+            }
+        )
+    )
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+
+    def retry_once(function):
+        def wrapper(transaction):
+            function(transaction)
+            ref.snapshot = _Snapshot(
+                {
+                    'id': 'conversation-1',
+                    'structured': {'title': 'User renamed'},
+                    'user_title': 'User renamed',
+                    'starred': True,
+                    'folder_id': 'user-folder',
+                    'data_protection_level': 'standard',
+                }
+            )
+            function(transaction)
+
+        return wrapper
+
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', retry_once)
+    incoming = {
+        'id': 'conversation-1',
+        'structured': {'title': 'Generated replacement', 'overview': 'Fresh summary'},
+        'starred': False,
+        'folder_id': None,
+        'status': 'completed',
+        'data_protection_level': 'standard',
+    }
+
+    conversations_db.upsert_conversation('user-1', incoming)
+
+    retried_write, options = ref.set_calls[-1]
+    assert options == {'merge': True}
+    assert retried_write['structured']['title'] == 'User renamed'
+    assert retried_write['structured']['overview'] == 'Fresh summary'
+    assert retried_write['starred'] is True
+    assert retried_write['folder_id'] == 'user-folder'
+
+
+def test_title_mutation_records_a_durable_override(monkeypatch):
+    ref = _ConversationRef(_Snapshot({'id': 'conversation-1'}))
+    monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
+
+    conversations_db.update_conversation_title('user-1', 'conversation-1', 'Renamed')
+
+    assert ref.update_calls == [{'structured.title': 'Renamed', 'user_title': 'Renamed'}]
+
+
+def test_mutation_response_contract_carries_canonical_revision_and_state():
+    revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
+    canonical = Conversation(
+        id='conversation-1',
+        created_at=revision,
+        updated_at=revision,
+        started_at=revision,
+        finished_at=revision,
+        structured=Structured(title='Renamed', overview='Processing finished'),
+        starred=True,
+    )
+
+    result = ConversationMutationResponse(status='Ok', conversation=canonical)
+
+    assert result.conversation.updated_at == revision
+    assert result.conversation.structured.title == 'Renamed'
+    assert result.conversation.structured.overview == 'Processing finished'
+    assert result.conversation.starred is True

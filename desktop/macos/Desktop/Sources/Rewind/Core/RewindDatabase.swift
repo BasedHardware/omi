@@ -2319,6 +2319,13 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
         }
 
+        migrator.registerMigration("addConversationCacheAuthority") { db in
+            try db.alter(table: "transcription_sessions") { t in
+                t.add(column: "serverUpdatedAt", .datetime)
+                t.add(column: "cacheCompleteness", .text).notNull().defaults(to: "list")
+            }
+        }
+
         try migrator.migrate(queue)
     }
 
