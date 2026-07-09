@@ -632,9 +632,10 @@ class AuthService {
         // auth-state listener do not re-create the ghost session on the next
         // launch. Unlike signOut(), this does NOT tear down storage caches or
         // stop background services — it only clears the Firebase SDK user.
-        // Guard: local harness mode skips FirebaseApp.configure(); Auth.auth()
-        // traps fatally if called without Firebase configured.
-        if !DesktopLocalProfile.isEnabled {
+        // Guard: tests/local harnesses can exercise invalidation without
+        // FirebaseApp.configure(); Auth.auth() traps fatally if called before
+        // Firebase is configured.
+        if FirebaseApp.app() != nil {
             try? Auth.auth().signOut()
         }
     }
