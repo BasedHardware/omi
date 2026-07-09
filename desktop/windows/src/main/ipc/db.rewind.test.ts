@@ -111,6 +111,33 @@ describe('rewind DB search', () => {
     })
   })
 
+  it('deleteAllRewindFrames removes base rows and FTS OCR entries', async () => {
+    const db = await import('./db')
+    db.insertRewindFrame(frame({ ts: 1_000, ocrText: 'confidential payroll numbers' }))
+    db.insertRewindFrame(frame({ ts: 2_000, app: 'Slack.exe', windowTitle: 'DM with legal' }))
+    expect(db.searchRewindFrames('payroll')).toHaveLength(1)
+
+    const deleted = db.deleteAllRewindFrames()
+
+    expect(deleted).toBe(2)
+    expect(db.listRewindFrames(0, 10_000)).toEqual([])
+    expect(db.searchRewindFrames('payroll')).toEqual([])
+    db.closeDatabase()
+
+    // Inspect the raw file: the FTS index must hold zero rows, so no OCR,
+    // window-title, or app text survives the "delete everything" action.
+    const raw = new Database(process.env.OMI_DB_PATH!)
+    const ftsRows = raw.prepare('SELECT COUNT(*) AS n FROM rewind_frames_fts').get() as {
+      n: number
+    }
+    const ftsMatches = raw
+      .prepare('SELECT COUNT(*) AS n FROM rewind_frames_fts WHERE rewind_frames_fts MATCH ?')
+      .get('payroll OR legal OR Slack') as { n: number }
+    raw.close()
+    expect(ftsRows.n).toBe(0)
+    expect(ftsMatches.n).toBe(0)
+  })
+
   it('summarizes Rewind diagnostic status', async () => {
     const db = await import('./db')
 
