@@ -341,7 +341,9 @@ actor APIClient {
       DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
       do {
         let result = try await performAuthenticatedData(for: retryRequest, retriedAuth: true)
-        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "succeeded")
+        let (_, retryResponse) = result
+        let outcome = (200...299).contains(retryResponse.statusCode) ? "succeeded" : "failed"
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: outcome)
         return result
       } catch {
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")

@@ -54,6 +54,7 @@ final class APIClientAuthRetryTests: XCTestCase {
 
   override func tearDown() {
     DesktopDiagnosticsManager.shared.resetForTests()
+    UserDefaults.standard.removeObject(forKey: .authUserId)
     super.tearDown()
   }
 

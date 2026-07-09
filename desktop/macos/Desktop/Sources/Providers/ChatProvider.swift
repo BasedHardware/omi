@@ -1544,16 +1544,23 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             if first {
                 // Drain the cancelled timeout task.
                 _ = await group.next()
+            } else {
+                // Timeout won: resume the suspended waiter continuation so the
+                // child task completes before the group returns. Without this,
+                // withTaskGroup's implicit wait for remaining tasks would hang
+                // because withCheckedContinuation does not resume on cancellation.
+                if let idx = self.modeSwitchWaiters.firstIndex(where: { $0.id == waiterID }) {
+                    let waiter = self.modeSwitchWaiters.remove(at: idx)
+                    waiter.continuation.resume()
+                }
+                // Drain the now-resumed waiter task.
+                _ = await group.next()
             }
             return first
         }
         guard completed else {
-            // Timeout: drop only this waiter. Do NOT clear modeSwitchInProgress —
+            // Timeout: do NOT clear modeSwitchInProgress —
             // the in-flight switchBridgeMode still owns the serialization lock.
-            if let idx = modeSwitchWaiters.firstIndex(where: { $0.id == waiterID }) {
-                let waiter = modeSwitchWaiters.remove(at: idx)
-                waiter.continuation.resume()
-            }
             log(
                 "ChatProvider: mode switch wait timed out after \(Int(modeSwitchWaitTimeoutSeconds))s "
                     + "(failure_class=mode_switch_timeout recovery_action=fail_soft recovery_result=degraded)")

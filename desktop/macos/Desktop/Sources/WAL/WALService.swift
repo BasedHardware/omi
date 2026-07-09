@@ -249,14 +249,20 @@ final class WALService: ObservableObject {
     /// Start recording frames from a device
     func startRecording(device: String, codec: String) {
         // Best-effort flush of frames retained after a prior degraded stop.
+        // If the retry fails again, preserve the frames in-memory rather than
+        // silently dropping them — they'll be retried on the next flush.
         if !currentFrames.isEmpty {
             _ = createWalFromCurrentFrames()
         }
 
         currentDevice = device
         currentCodec = codec
-        currentFrames = []
-        currentFramesSynced = []
+        // Only clear the frame buffer if the retained flush succeeded (or there
+        // were none to flush). Dropping frames on a failed retry would lose audio.
+        if currentFrames.isEmpty {
+            currentFrames = []
+            currentFramesSynced = []
+        }
         recordingStartTime = Int(Date().timeIntervalSince1970)
 
         startTimers()
@@ -391,10 +397,8 @@ final class WALService: ObservableObject {
             log(
                 "WALService: frame write failed — retaining \(framesToWrite.count) in-memory frames "
                     + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
-            DesktopDiagnosticsManager.shared.recordWalWriteFailed(
-                walId: wal.id,
-                reason: "frame_write_failed"
-            )
+            // writeFramesToDiskAndWait already recorded the health event via
+            // recordFrameWriteFailure — do not duplicate it here.
             updatePendingWals()
             return false
         }

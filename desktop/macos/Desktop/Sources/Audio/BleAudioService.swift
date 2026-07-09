@@ -267,6 +267,12 @@ extension BleAudioService {
 extension BleAudioService: BleAudioProcessor.Delegate {
     func bleAudioProcessor(_ processor: BleAudioProcessor, didDecodeSamples samples: [Int16]) {
         // PCM delivery uses pcmDataPublisher; delegate path is unused.
+        // Reset the degraded flag on successful decode so it reflects the
+        // current processor state rather than staying sticky.
+        if isDecodeDegraded {
+            isDecodeDegraded = false
+            logger.info("BLE decode recovered — clearing degraded flag")
+        }
     }
 
     func bleAudioProcessor(_ processor: BleAudioProcessor, didFailWithError error: Error) {

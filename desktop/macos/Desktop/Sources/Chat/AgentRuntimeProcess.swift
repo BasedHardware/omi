@@ -197,9 +197,13 @@ actor AgentRuntimeProcess {
     if isRunning && !processRunning {
       log(
         "AgentRuntimeProcess: stale alive latch — process no longer running "
-          + "(failure_class=stale_alive_latch recovery_action=clear_latch recovery_result=degraded)")
+          + "(failure_class=stale_alive_latch recovery_action=route_to_termination recovery_result=degraded)")
       DesktopDiagnosticsManager.shared.recordAgentRuntimeStaleAliveCheck()
-      isRunning = false
+      // Route through handleTermination so in-flight continuations are resumed
+      // and the old terminationHandler is properly superseded. Only clearing the
+      // latch here would leave active requests dangling if the terminationHandler
+      // hasn't fired (or is about to be ignored by generation mismatch).
+      handleTermination(reason: .exit)
     }
     return isRunning && processRunning
   }

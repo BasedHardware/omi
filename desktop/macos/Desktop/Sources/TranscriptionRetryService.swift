@@ -124,6 +124,14 @@ class TranscriptionRetryService {
                 log(
                     "TranscriptionRetryService: \(consecutiveDBFailures) consecutive DB failures, pausing timer "
                         + "(failure_class=db_backoff recovery_action=pause_timer recovery_result=degraded)")
+                DesktopDiagnosticsManager.shared.recordFallback(
+                    area: "transcription_retry",
+                    from: "timer_active",
+                    to: "timer_paused",
+                    reason: "db_backoff",
+                    outcome: .degraded,
+                    extra: ["consecutive_failures": consecutiveDBFailures]
+                )
                 retryTimer?.invalidate()
                 retryTimer = nil
                 isPausedForDBErrors = true
