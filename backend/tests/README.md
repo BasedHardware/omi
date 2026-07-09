@@ -25,6 +25,8 @@ component coverage.
 `test.sh` runs selected files in isolated pytest processes by default and parallelizes them with
 `BACKEND_PYTEST_WORKERS`. This keeps legacy module-stubbing tests from polluting each other while still avoiding
 the old serial file-by-file run. Set `BACKEND_PYTEST_FILE_ISOLATION=0` to try one pytest session with xdist.
+When a file fails, the runner prints a copyable command to rerun only the failed files with the same environment
+and timing guard. Use that command instead of a bare `pytest` rerun when investigating a timing failure.
 
 ### Per-test duration guard
 
