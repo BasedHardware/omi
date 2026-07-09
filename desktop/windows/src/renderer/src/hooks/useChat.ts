@@ -71,6 +71,9 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // message firing right as a previous reply finishes), which would wrongly drop
   // the new send; the ref is always current.
   const sendingRef = useRef(false)
+  // Coding-agent task currently streaming into this thread, so reset (the
+  // overlay's Esc) can actually stop the agent subprocess, not just the UI.
+  const activeAgentTaskRef = useRef<string | null>(null)
 
   // In infinite mode the MAIN window shows the ongoing thread, so load it once on
   // mount (and backfill ids on any legacy id-less messages so the merge can match
@@ -232,6 +235,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
 
     setSending(true)
     const taskId = crypto.randomUUID()
+    activeAgentTaskRef.current = taskId
     const assistantId = crypto.randomUUID()
 
     // Streamed bubble: a header naming the agent, the latest running tool as a
@@ -305,6 +309,7 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
     } catch (e) {
       statusNotes += `_Error: ${(e as Error).message}_\n`
     } finally {
+      if (activeAgentTaskRef.current === taskId) activeAgentTaskRef.current = null
       unsubscribe()
       activity = null
       render(true)
@@ -485,6 +490,12 @@ export function useChat(opts?: { surface?: 'main' | 'overlay' }): UseChat {
   // when this is called will keep writing into the (now-empty) history — Esc-reset
   // mid-stream is a rare edge we don't guard against here.
   const reset = (): void => {
+    // Esc while an agent task is running cancels the task (aborts the attempt
+    // and tears the adapter subprocess down), not just the on-screen thread.
+    if (activeAgentTaskRef.current) {
+      void window.omi.codingAgentCancel(activeAgentTaskRef.current).catch(() => {})
+      activeAgentTaskRef.current = null
+    }
     setHistory([])
     setSending(false)
     sendingRef.current = false
