@@ -5,6 +5,7 @@ description: Desktop sidebar navigation — verify core sections load via bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/MainWindow/CrispManager.swift
   - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
 preconditions:
