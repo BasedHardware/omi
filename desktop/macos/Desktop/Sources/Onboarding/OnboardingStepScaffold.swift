@@ -302,8 +302,6 @@ private struct OnboardingSecondBrainPane: View {
               .foregroundColor(.white)
               .padding(.horizontal, 14)
               .padding(.vertical, 7)
-              .background(Color.black.opacity(0.38))
-              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             HStack(spacing: 20) {
               graphHintItem(icon: "arrow.triangle.2.circlepath", label: "Drag to rotate")
@@ -312,15 +310,7 @@ private struct OnboardingSecondBrainPane: View {
             }
           }
           .padding(.horizontal, 16)
-          .padding(.top, 42)
           .padding(.bottom, 10)
-          .background(
-            LinearGradient(
-              colors: [Color.black.opacity(0), Color.black.opacity(0.5)],
-              startPoint: .top,
-              endPoint: .bottom
-            )
-          )
         }
       }
     }
