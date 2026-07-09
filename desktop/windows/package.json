@@ -27,6 +27,7 @@
     "bench:anim": "node scripts/bench/anim.mjs"
   },
   "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "^0.58.1",
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -36,7 +37,6 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.6.1",
-    "@zed-industries/claude-agent-acp": "^0.18.0",
     "axios": "^1.16.1",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",

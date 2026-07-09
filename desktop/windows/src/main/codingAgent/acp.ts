@@ -1,6 +1,6 @@
 // ACP (Agent Client Protocol) JSON-RPC-over-stdio client — Windows port of
 // desktop/macos/agent/src/adapters/acp.ts. One class covers both spawn shapes:
-//   - Default ("acp" / Claude Code): spawn the bundled patched-acp-entry.mjs
+//   - Default ("acp" / Claude Code): spawn the bundled claude-acp-entry.mjs
 //     with Electron's own binary running as Node (ELECTRON_RUN_AS_NODE=1) —
 //     no separately installed CLI needed.
 //   - External (OpenClaw/Hermes/Codex): spawn a user-configured command string
@@ -177,6 +177,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
 
   private process: ChildProcess | null = null
   private processIsExternal = false
+  // Cumulative session cost last reported by a usage_update notification,
+  // per adapter session — the bridge reports totals, results need per-attempt
+  // deltas.
+  private cumulativeCostUsdBySession = new Map<string, number>()
   private readline: ReadlineInterface | null = null
   private stdinWriter: ((line: string) => void) | null = null
   private responseHandlers = new Map<number, ResponseHandler>()
@@ -479,6 +483,10 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   ): Promise<AdapterAttemptResult> {
     const adapterSessionId = context.binding.adapterNativeSessionId
     let fullText = ''
+    // Cumulative session cost from the bridge's standard usage_update
+    // notifications (the public protocol surface for cost — no package
+    // internals involved).
+    let latestCumulativeCostUsd: number | null = null
     const pendingTools: PendingToolActivity[] = []
     let syntheticToolIdCounter = 0
     const previousHandler = this.notificationHandler
@@ -491,6 +499,12 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       // without a session id (older adapters) are accepted as before.
       const updateSessionId = (params as { sessionId?: unknown } | undefined)?.sessionId
       if (typeof updateSessionId === 'string' && updateSessionId !== adapterSessionId) return
+      const update = (
+        params as { update?: { sessionUpdate?: string; cost?: { amount?: unknown } } }
+      )?.update
+      if (update?.sessionUpdate === 'usage_update' && typeof update.cost?.amount === 'number') {
+        latestCumulativeCostUsd = update.cost.amount
+      }
       const didProgress = this.translateSessionUpdate(
         params as Record<string, unknown>,
         pendingTools,
@@ -525,11 +539,22 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
         _meta?: { costUsd?: number }
       }
 
+      // usage_update reports the CUMULATIVE session cost; the attempt's cost
+      // is the delta against the last attempt on this session. Adapters that
+      // instead attach per-turn cost to the prompt response (_meta) win when
+      // no usage_update was seen.
+      let costUsd = result._meta?.costUsd ?? 0
+      if (latestCumulativeCostUsd !== null) {
+        const previous = this.cumulativeCostUsdBySession.get(adapterSessionId) ?? 0
+        costUsd = Math.max(0, latestCumulativeCostUsd - previous)
+        this.cumulativeCostUsdBySession.set(adapterSessionId, latestCumulativeCostUsd)
+      }
+
       return {
         text: fullText,
         adapterSessionId,
         terminalStatus: signal.aborted ? 'cancelled' : 'succeeded',
-        costUsd: result._meta?.costUsd ?? 0,
+        costUsd,
         inputTokens: result.usage?.inputTokens ?? 0,
         outputTokens: result.usage?.outputTokens ?? 0,
         cacheReadTokens: result.usage?.cachedReadTokens ?? 0,

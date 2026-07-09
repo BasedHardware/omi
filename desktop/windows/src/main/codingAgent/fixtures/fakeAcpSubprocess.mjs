@@ -43,9 +43,24 @@ rl.on('line', (line) => {
       send({
         method: 'session/update',
         params: {
+          sessionId: 'fake-native-session',
           update: {
             sessionUpdate: 'agent_message_chunk',
             content: { type: 'text', text: `echo: ${text}` }
+          }
+        }
+      })
+      // Cost arrives via the standard usage_update notification (cumulative
+      // session cost), like @agentclientprotocol/claude-agent-acp emits it.
+      send({
+        method: 'session/update',
+        params: {
+          sessionId: 'fake-native-session',
+          update: {
+            sessionUpdate: 'usage_update',
+            used: 7,
+            size: 200000,
+            cost: { amount: 0.002, currency: 'USD' }
           }
         }
       })

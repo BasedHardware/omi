@@ -32,7 +32,7 @@ describe('ClaudeCodeRuntimeAdapter spawn contract', () => {
     ]
     expect(bin).toBe(process.execPath)
     expect(args).toHaveLength(1)
-    expect(args[0]).toContain('patched-acp-entry.mjs')
+    expect(args[0]).toContain('claude-acp-entry.mjs')
     expect(options).toMatchObject({
       shell: false,
       stdio: ['pipe', 'pipe', 'pipe'],

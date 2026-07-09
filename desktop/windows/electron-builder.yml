@@ -25,13 +25,14 @@ asarUnpack:
   # The coding-agent ACP entry is spawned as a plain Node child process
   # (ELECTRON_RUN_AS_NODE), which cannot read scripts out of the asar archive —
   # both the entry (emitted under out/main/chunks by the ?asset import) and the
-  # packages it needs at runtime must be real files on disk. The two transitive
+  # packages it needs at runtime must be real files on disk. The transitive
   # entries are claude-agent-acp's own runtime imports (electron-builder
   # flattens resolved deps into the package's node_modules).
   - out/main/chunks/*.mjs
-  - node_modules/@zed-industries/claude-agent-acp/**
+  - node_modules/@agentclientprotocol/claude-agent-acp/**
   - node_modules/@agentclientprotocol/sdk/**
   - node_modules/@anthropic-ai/claude-agent-sdk/**
+  - node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/**
 win:
   executableName: omi-windows
   target:

@@ -248,6 +248,44 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     }
   })
 
+  it('reports per-attempt cost as the delta of cumulative usage_update notifications', async () => {
+    const adapter = makeAdapter()
+    let promptCount = 0
+    scriptJsonRpc(proc, (message) => {
+      if (answerCommonHandshake(proc, message)) return
+      if (message.method === 'session/prompt' && message.id !== undefined) {
+        promptCount++
+        notify(proc, 'session/update', {
+          sessionId: 'native-session-1',
+          update: {
+            sessionUpdate: 'usage_update',
+            used: 10,
+            size: 200000,
+            // Cumulative session cost: 0.05 after attempt 1, 0.08 after attempt 2.
+            cost: { amount: promptCount === 1 ? 0.05 : 0.08, currency: 'USD' }
+          }
+        })
+        respond(proc, message.id, { stopReason: 'end_turn' })
+      }
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+    const first = await adapter.executeAttempt(
+      makeAttemptContext(),
+      () => {},
+      new AbortController().signal
+    )
+    const second = await adapter.executeAttempt(
+      makeAttemptContext(),
+      () => {},
+      new AbortController().signal
+    )
+
+    expect(first.costUsd).toBeCloseTo(0.05)
+    expect(second.costUsd).toBeCloseTo(0.03) // 0.08 cumulative − 0.05 already reported
+    await adapter.stop()
+  })
+
   it('ignores session/update notifications from other sessions', async () => {
     const adapter = makeAdapter()
     scriptJsonRpc(proc, (message) => {

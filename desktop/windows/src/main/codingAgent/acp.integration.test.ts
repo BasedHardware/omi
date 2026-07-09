@@ -40,7 +40,9 @@ describe('AcpRuntimeAdapter against a real subprocess', () => {
       expect(result.adapterSessionId).toBe('fake-native-session')
       expect(result.terminalStatus).toBe('succeeded')
       expect(result.inputTokens).toBe(3)
-      expect(result.costUsd).toBeCloseTo(0.001)
+      // The standard usage_update notification (0.002 cumulative) takes
+      // precedence over the legacy per-turn _meta fallback (0.001).
+      expect(result.costUsd).toBeCloseTo(0.002)
     } finally {
       await adapter.stop()
     }
