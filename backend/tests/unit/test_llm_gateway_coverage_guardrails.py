@@ -48,11 +48,13 @@ class DirectUse:
 
 DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/openai_compatible.py', 'OPENAI_API_KEY'),
+    DirectUse('llm_gateway/routers/anthropic_messages.py', 'ANTHROPIC_API_KEY'),
     DirectUse('utils/llm/app_generator.py', 'OpenAI'),
     DirectUse('utils/llm/providers.py', 'ChatGoogleGenerativeAI'),
     DirectUse('utils/llm/providers.py', 'ChatOpenAI'),
     DirectUse('utils/llm/providers.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'AsyncAnthropic'),
+    DirectUse('utils/llm/gateway_anthropic.py', 'AsyncAnthropic'),
     DirectUse('utils/llm/clients.py', 'ChatOpenAI'),
     DirectUse('utils/llm/clients.py', 'GEMINI_API_KEY'),
     DirectUse('utils/llm/clients.py', 'OpenAIEmbeddings'),
@@ -67,7 +69,6 @@ DIRECT_PROVIDER_ALLOWLIST = {
 }
 INVENTORIED_DIRECT_EXCEPTION_FILES = {
     'utils/other/chat_file.py',
-    'utils/retrieval/agentic.py',
     'routers/omni_relay.py',
 }
 
