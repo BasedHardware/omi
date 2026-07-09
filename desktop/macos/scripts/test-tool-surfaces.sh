@@ -72,7 +72,9 @@ ensure_npm_deps "$DESKTOP_DIR/agent"
     tests/tool-surfaces-exhaustiveness.test.ts \
     tests/control-tools.test.ts \
     tests/node-tools.test.ts \
-    tests/codemagic-pi-mono-extension-ci.test.ts
+    tests/codemagic-pi-mono-extension-ci.test.ts \
+    tests/surface-session.test.ts \
+    tests/chat-continuity-invariant.test.ts
 )
 
 ensure_npm_deps "$DESKTOP_DIR/pi-mono-extension"
