@@ -96,7 +96,7 @@ def automation_token(port: int) -> str | None:
     )
     try:
         token = token_file.read_text(encoding="utf-8").strip()
-    except FileNotFoundError:
+    except (OSError, UnicodeError):
         return None
     return token or None
 

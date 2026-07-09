@@ -38,7 +38,9 @@ enum ChatContentBlockCodec {
         let text = dict["text"] as? String ?? ""
         blocks.append(.text(id: id, text: text))
       case "toolCall":
-        let name = dict["name"] as? String ?? ""
+        guard let name = dict["name"] as? String,
+          !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { continue }
         let statusStr = dict["status"] as? String ?? "completed"
         let status: ToolCallStatus
         switch statusStr {
@@ -76,9 +78,12 @@ enum ChatContentBlockCodec {
           .discoveryCard(id: id, title: title, summary: summary, fullText: fullText)
         )
       case "agentSpawn":
+        guard let sessionId = dict["sessionId"] as? String,
+          !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+          let runId = dict["runId"] as? String,
+          !runId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { continue }
         let pillId = (dict["pillId"] as? String).flatMap(UUID.init(uuidString:))
-        let sessionId = dict["sessionId"] as? String ?? ""
-        let runId = dict["runId"] as? String ?? ""
         let title = dict["title"] as? String ?? ""
         let objective = dict["objective"] as? String ?? ""
         blocks.append(

@@ -60,19 +60,29 @@ enum RuntimeOwnerIdentity {
   static func clearAutomationOwnerOverride(
     defaults: UserDefaults = .standard
   ) -> (restored: Bool, ownerId: String?) {
-    let hadOverride = defaults.string(forKey: .automationOwnerOverride)?.isEmpty == false
+    let override = defaults.string(forKey: .automationOwnerOverride)?
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    let hadOverride = !(override?.isEmpty ?? true)
     let backup = defaults.string(forKey: .automationOwnerABackup)?
       .trimmingCharacters(in: .whitespacesAndNewlines)
     defaults.removeObject(forKey: .automationOwnerOverride)
 
     if let backup, !backup.isEmpty {
-      let currentAuthUserId = defaults.string(forKey: .authUserId)
-      if currentAuthUserId != backup {
-        // Heal legacy swap that overwrote auth_userId with a synthetic owner.
+      let currentAuthUserId = defaults.string(forKey: .authUserId)?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      // Only rewrite auth_userId when it still looks like a synthetic overwrite
+      // (empty, equals the override we cleared, or legacy backup-only heal).
+      // Never clobber a legitimately updated auth uid from a mid-session sign-in.
+      let shouldHealAuthUserId =
+        currentAuthUserId == nil
+        || currentAuthUserId?.isEmpty == true
+        || (hadOverride && currentAuthUserId == override)
+        || (!hadOverride && currentAuthUserId != backup)
+      if shouldHealAuthUserId {
         defaults.set(backup, forKey: .authUserId)
       }
       defaults.removeObject(forKey: .automationOwnerABackup)
-      return (true, backup)
+      return (true, defaults.string(forKey: .authUserId) ?? backup)
     }
 
     if hadOverride {

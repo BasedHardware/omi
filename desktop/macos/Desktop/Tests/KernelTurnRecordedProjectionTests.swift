@@ -506,6 +506,39 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(Set(assistants.compactMap(\.clientTurnId)), Set(["key-a", "key-b"]))
   }
 
+  /// P1: user-only first stage must still accept a later assistant payload for the
+  /// same continuity key (create the missing assistant message instead of dropping it).
+  func testRestageCreatesMissingAssistantAfterUserOnlyStage() {
+    let provider = ChatProvider()
+    let key = "voice-user-first"
+
+    let first = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "user only first",
+      assistantText: "",
+      origin: "realtime_voice",
+      turnOwner: .mainChat
+    )
+    XCTAssertNotNil(first.user)
+    XCTAssertNil(first.assistant)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 0)
+
+    let second = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "user only first",
+      assistantText: "assistant arrives later",
+      origin: "realtime_voice",
+      turnOwner: .mainChat
+    )
+    XCTAssertEqual(first.user?.id, second.user?.id)
+    XCTAssertNotNil(second.assistant)
+    XCTAssertEqual(second.assistant?.text, "assistant arrives later")
+    XCTAssertEqual(provider.messages.filter { $0.sender == .user }.count, 1)
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.clientTurnId, key)
+  }
+
   func testEmptyIdempotencyKeyStillAppends() {
     let provider = ChatProvider()
     let projection = provider.kernelTurnProjection

@@ -1262,7 +1262,7 @@ final class AgentPillsManager: ObservableObject {
                         runId: inspection.runId ?? runId,
                         attemptId: inspection.attemptId,
                         title: nil,
-                        query: inspection.finalText
+                        query: nil
                     ) {
                         return true
                     }

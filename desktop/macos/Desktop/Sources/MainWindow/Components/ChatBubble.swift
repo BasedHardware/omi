@@ -66,6 +66,10 @@ struct ChatBubble: View {
     return BackgroundAgentSummary.parse(message.text)
   }
 
+  private var hasAgentOpenAction: Bool {
+    onOpenAgentRef != nil || onOpenAgent != nil
+  }
+
   private func openAgent(ref: AgentTimelineRef, completion: @escaping (Bool) -> Void) {
     if let onOpenAgentRef {
       onOpenAgentRef(ref, completion)
@@ -149,7 +153,7 @@ struct ChatBubble: View {
                 title: title,
                 objective: objective,
                 ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
-                onOpen: openAgent(ref:completion:)
+                onOpen: hasAgentOpenAction ? openAgent(ref:completion:) : nil
               )
             case .agentCompletion(
               _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
@@ -160,7 +164,7 @@ struct ChatBubble: View {
                 output: output,
                 status: status,
                 ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
-                onOpen: openAgent(ref:completion:)
+                onOpen: hasAgentOpenAction ? openAgent(ref:completion:) : nil
               )
             }
           }
@@ -231,8 +235,9 @@ struct ChatBubble: View {
                 .padding(.top, 2)
             }
 
-            // Show more / Show less toggle for long messages
-            if message.text.count > Self.truncationThreshold {
+            // Show more / Show less toggle for long plain-text messages.
+            // BackgroundAgentSummaryCard owns its own expand state.
+            if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
               Button(action: { isExpanded.toggle() }) {
                 Text(isExpanded ? "Show less" : "Show more")
                   .scaledFont(size: 11)
@@ -781,19 +786,23 @@ struct AgentCompletionCard: View {
 
   private var statusIconName: String {
     switch status.lowercased() {
-    case "failed", "cancelled", "stopped", "timed_out", "orphaned":
+    case "failed", "cancelled", "canceled", "stopped", "timed_out", "timeout", "orphaned", "error":
       return "xmark.circle.fill"
-    default:
+    case "completed", "succeeded", "success", "done":
       return "checkmark.circle.fill"
+    default:
+      return "questionmark.circle.fill"
     }
   }
 
   private var statusColor: Color {
     switch status.lowercased() {
-    case "failed", "cancelled", "stopped", "timed_out", "orphaned":
+    case "failed", "cancelled", "canceled", "stopped", "timed_out", "timeout", "orphaned", "error":
       return .red
-    default:
+    case "completed", "succeeded", "success", "done":
       return .green
+    default:
+      return OmiColors.textTertiary
     }
   }
 }

@@ -66,9 +66,16 @@ final class KernelTurnProjection {
     guard turn.origin == "pill_completion" else { return [] }
     guard let summary = BackgroundAgentSummary.parse(turn.assistantText) else { return [] }
     let runId = Self.runIdFromPillCompletionKey(turn.idempotencyKey)
+    let trimmedKey = turn.idempotencyKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let stableSeed =
+      (!trimmedKey.isEmpty ? trimmedKey : nil)
+      ?? runId
+      ?? summary.agentID?.uuidString
+      ?? summary.prompt
+    let blockId = "agent_completion:\(stableSeed)"
     return [
       .agentCompletion(
-        id: UUID().uuidString,
+        id: blockId,
         pillId: summary.agentID,
         sessionId: nil,
         runId: runId,

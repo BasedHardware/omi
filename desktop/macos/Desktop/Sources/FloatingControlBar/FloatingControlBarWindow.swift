@@ -2160,12 +2160,15 @@ class FloatingControlBarManager {
             completion?(false)
             return
         }
+        activeQueryGeneration += 1
+        let generation = activeQueryGeneration
         Task { @MainActor in
             let resolved = await AgentPillsManager.shared.resolveAndPresentAgent(
                 pillId: ref.pillId,
                 sessionId: ref.sessionId,
                 runId: ref.runId
             )
+            guard isActiveQueryGeneration(generation) else { return }
             guard resolved else {
                 log(
                     "FloatingControlBarManager: agent link unavailable after hydrate "

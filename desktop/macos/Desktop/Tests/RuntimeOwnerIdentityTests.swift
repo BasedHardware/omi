@@ -92,6 +92,36 @@ final class RuntimeOwnerIdentityTests: XCTestCase {
     XCTAssertEqual(defaults.string(forKey: .authUserId), "real-owner-a")
   }
 
+  func testClearDoesNotClobberAuthUserIdUpdatedDuringOverride() {
+    defaults.set("real-owner-a", forKey: .authUserId)
+    defaults.set("id-token-a", forKey: .authIdToken)
+    RuntimeOwnerIdentity.applyAutomationOwnerOverride("synthetic-owner-b", defaults: defaults)
+    // Mid-session sign-in updates the real auth uid while override is active.
+    defaults.set("real-owner-c", forKey: .authUserId)
+    defaults.set("id-token-c", forKey: .authIdToken)
+
+    let result = RuntimeOwnerIdentity.clearAutomationOwnerOverride(defaults: defaults)
+
+    XCTAssertTrue(result.restored)
+    XCTAssertEqual(defaults.string(forKey: .authUserId), "real-owner-c")
+    XCTAssertEqual(defaults.string(forKey: .authIdToken), "id-token-c")
+    XCTAssertNil(defaults.string(forKey: .automationOwnerOverride))
+    XCTAssertNil(defaults.string(forKey: .automationOwnerABackup))
+  }
+
+  func testClearHealsWhenAuthUserIdStillEqualsSyntheticOverride() {
+    defaults.set("real-owner-a", forKey: .authUserId)
+    RuntimeOwnerIdentity.applyAutomationOwnerOverride("synthetic-owner-b", defaults: defaults)
+    // Legacy path also wrote the synthetic owner into auth_userId.
+    defaults.set("synthetic-owner-b", forKey: .authUserId)
+
+    let result = RuntimeOwnerIdentity.clearAutomationOwnerOverride(defaults: defaults)
+
+    XCTAssertTrue(result.restored)
+    XCTAssertEqual(result.ownerId, "real-owner-a")
+    XCTAssertEqual(defaults.string(forKey: .authUserId), "real-owner-a")
+  }
+
   func testSwapPathSourceNeverWritesAuthUserId() throws {
     let desktopDir = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

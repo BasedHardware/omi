@@ -2984,7 +2984,7 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
             return (nil, nil)
         }
 
-        if let pending = pendingSurfaceTurns[key] {
+        if var pending = pendingSurfaceTurns[key] {
             let userMessage = pending.userMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
             var assistantMessage = pending.assistantMessageId.flatMap { id in messages.first(where: { $0.id == id }) }
             if var existing = assistantMessage {
@@ -2994,6 +2994,17 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                     contentBlocks: contentBlocks,
                     resources: resources
                 )
+            } else if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
+                assistantMessage = appendOptimisticAssistantMessage(
+                    continuityKey: key,
+                    assistantText: assistant,
+                    origin: origin,
+                    turnOwner: turnOwner,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+                pending.assistantMessageId = assistantMessage?.id
+                pendingSurfaceTurns[key] = pending
             }
             return (userMessage, assistantMessage)
         }
@@ -3005,6 +3016,15 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
                 existingAssistant = mergeOptimisticAssistantPayload(
                     into: &existing,
                     assistantText: assistant,
+                    contentBlocks: contentBlocks,
+                    resources: resources
+                )
+            } else if !assistant.isEmpty || !contentBlocks.isEmpty || !resources.isEmpty {
+                existingAssistant = appendOptimisticAssistantMessage(
+                    continuityKey: key,
+                    assistantText: assistant,
+                    origin: origin,
+                    turnOwner: turnOwner,
                     contentBlocks: contentBlocks,
                     resources: resources
                 )
@@ -3096,6 +3116,47 @@ BROWSER TABS: when you use the browser (Playwright), on your FIRST browser actio
         let key = continuityKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { return false }
         return pendingSurfaceTurns[key] != nil
+    }
+
+    /// Create the assistant half of a staged turn when a later stage for the same
+    /// continuity key arrives with assistant payload after a user-only first stage.
+    private func appendOptimisticAssistantMessage(
+        continuityKey: String,
+        assistantText: String,
+        origin: String,
+        turnOwner: ChatTurnOwner?,
+        contentBlocks: [ChatContentBlock],
+        resources: [ChatResource]
+    ) -> ChatMessage {
+        let capturedSessionId = isInDefaultChat ? nil : currentSessionId
+        let capturedAppId = overrideAppId ?? selectedAppId
+        let messageText =
+            assistantText.isEmpty && (!contentBlocks.isEmpty || !resources.isEmpty)
+            ? "Done."
+            : assistantText
+        let message = ChatMessage(
+            clientTurnId: continuityKey,
+            text: messageText,
+            sender: .ai,
+            contentBlocks: contentBlocks,
+            resources: resources,
+            turnOwner: turnOwner
+        )
+        messages.append(message)
+        pendingSaves.begin()
+        Task { [weak self] in
+            await self?.persistRecordedTurnMessage(
+                message,
+                text: message.text,
+                sender: "ai",
+                appId: capturedAppId,
+                sessionId: capturedSessionId,
+                logLabel: origin,
+                messageSource: origin
+            )
+            await MainActor.run { self?.pendingSaves.end() }
+        }
+        return message
     }
 
     /// Merge later artifact/completion payload onto an already-staged assistant
