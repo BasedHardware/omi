@@ -1,3 +1,0 @@
-{
-  "change": "Prevented stale backend recording events from attaching to a newer desktop recording session"
-}

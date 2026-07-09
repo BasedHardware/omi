@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.65",
+      "date": "2026-07-09",
+      "changes": [
+        "Prevented stale backend recording events from attaching to a newer desktop recording session"
+      ]
+    },
+    {
       "version": "0.12.64",
       "date": "2026-07-09",
       "changes": [
