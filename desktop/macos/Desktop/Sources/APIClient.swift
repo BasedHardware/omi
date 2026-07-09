@@ -314,15 +314,7 @@ actor APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
 
-    let (_, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
+    let (_, httpResponse) = try await performAuthenticatedData(for: request)
 
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
@@ -331,39 +323,42 @@ actor APIClient {
 
   // MARK: - Request Execution
 
-  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+  private func performAuthenticatedData(
+    for request: URLRequest,
+    retriedAuth: Bool = false
+  ) async throws -> (Data, HTTPURLResponse) {
+    let endpoint = request.url?.path ?? "unknown"
     let (data, response) = try await session.data(for: request)
-
     guard let httpResponse = response as? HTTPURLResponse else {
       throw APIError.invalidResponse
     }
 
-    // Handle 401 - token might be expired
-    if httpResponse.statusCode == 401 {
-      // Try to refresh token and retry once
+    if httpResponse.statusCode == 401, !retriedAuth {
       let authService = await MainActor.run { AuthService.shared }
-
       var retryRequest = request
       retryRequest.setValue(
         try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-
-      let (retryData, retryResponse) = try await session.data(for: retryRequest)
-
-      guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
-        throw APIError.invalidResponse
+      DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
+      do {
+        let result = try await performAuthenticatedData(for: retryRequest, retriedAuth: true)
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "succeeded")
+        return result
+      } catch {
+        DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "failed")
+        throw error
       }
-
-      if retryHttpResponse.statusCode == 401 {
-        throw APIError.unauthorized
-      }
-
-      guard (200...299).contains(retryHttpResponse.statusCode) else {
-        let detail = Self.extractErrorDetail(from: retryData)
-        throw APIError.httpError(statusCode: retryHttpResponse.statusCode, detail: detail)
-      }
-
-      return try decoder.decode(T.self, from: retryData)
     }
+
+    if httpResponse.statusCode == 401 {
+      DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
+      throw APIError.unauthorized
+    }
+
+    return (data, httpResponse)
+  }
+
+  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
+    let (data, httpResponse) = try await performAuthenticatedData(for: request)
 
     guard (200...299).contains(httpResponse.statusCode) else {
       let detail = Self.extractErrorDetail(from: data)
@@ -5344,15 +5339,7 @@ extension APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
+    let (data, httpResponse) = try await performAuthenticatedData(for: request)
 
     guard (200...299).contains(httpResponse.statusCode) else {
       throw APIError.httpError(statusCode: httpResponse.statusCode)
@@ -5434,11 +5421,9 @@ extension APIClient {
     body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
     request.httpBody = body
 
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-    if http.statusCode == 401 { throw APIError.unauthorized }
-    guard (200...299).contains(http.statusCode) else {
-      throw APIError.httpError(statusCode: http.statusCode)
+    let (data, httpResponse) = try await performAuthenticatedData(for: request)
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw APIError.httpError(statusCode: httpResponse.statusCode)
     }
     return try decoder.decode([ChatFileResponse].self, from: data)
   }
@@ -5528,19 +5513,7 @@ extension APIClient {
   }
 
   private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-
-    if http.statusCode == 401 {
-      guard !retriedAuth else {
-        throw APIError.unauthorized
-      }
-      var retryRequest = request
-      let authService = await MainActor.run { AuthService.shared }
-      retryRequest.setValue(
-        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
-    }
+    let (data, http) = try await performAuthenticatedData(for: request, retriedAuth: retriedAuth)
 
     if http.statusCode == 200 {
       let completed = try decoder.decode(SyncLocalFilesResultResponse.self, from: data)

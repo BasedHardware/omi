@@ -11,6 +11,11 @@ enum DesktopHealthEventName: String {
   case walUploadFailed = "wal_upload_failed"
   case agentRuntimeStaleAliveCheck = "agent_runtime_stale_alive_check"
   case agentRuntimeUnexpectedExit = "agent_runtime_unexpected_exit"
+  case apiAuthRetry = "api_auth_retry"
+  case dbLockContention = "db_lock_contention"
+  case chatBridgeModeSwitchTimeout = "chat_bridge_mode_switch_timeout"
+  case bleDecodeDegraded = "ble_decode_degraded"
+  case automationBridgeBindFailed = "automation_bridge_bind_failed"
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -166,6 +171,64 @@ final class DesktopDiagnosticsManager {
         "failure_class": oom ? "out_of_memory" : "process_exited",
         "recovery_action": "restart_on_next_send",
         "recovery_result": "degraded",
+      ])
+  }
+
+  func recordApiAuthRetry(endpoint: String, outcome: String) {
+    record(
+      .apiAuthRetry,
+      properties: [
+        "endpoint": endpoint,
+        "outcome": outcome,
+        "failure_class": "auth_retry",
+        "recovery_action": "refresh_token",
+        "recovery_result": outcome,
+      ])
+  }
+
+  func recordDbLockContention(source: String) {
+    record(
+      .dbLockContention,
+      properties: [
+        "source": source,
+        "failure_class": "db_lock_contention",
+        "recovery_action": "backoff",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordChatBridgeModeSwitchTimeout(waitSeconds: Int) {
+    record(
+      .chatBridgeModeSwitchTimeout,
+      properties: [
+        "wait_seconds": waitSeconds,
+        "failure_class": "mode_switch_timeout",
+        "recovery_action": "clear_waiters",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordBleDecodeDegraded(codec: String, failures: Int) {
+    record(
+      .bleDecodeDegraded,
+      properties: [
+        "codec": codec,
+        "consecutive_failures": failures,
+        "failure_class": "ble_decode_degraded",
+        "recovery_action": "continue_raw_capture",
+        "recovery_result": "degraded",
+      ])
+  }
+
+  func recordAutomationBridgeBindFailed(port: Int, reason: String) {
+    record(
+      .automationBridgeBindFailed,
+      properties: [
+        "port": port,
+        "reason": reason,
+        "failure_class": "bind_failed",
+        "recovery_action": "retry_exhausted",
+        "recovery_result": "exhausted",
       ])
   }
 
