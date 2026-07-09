@@ -354,6 +354,28 @@ check_import_time_side_effects_if_needed() {
   "$BACKEND_PYTHON" backend/scripts/scan_import_time_side_effects.py --check-allowlist-monotonic "$BASE_REF"
 }
 
+check_workflow_contracts_if_needed() {
+  if [ "${PRE_PUSH_SKIP_WORKFLOW_CONTRACTS:-}" = "1" ]; then
+    echo "Skipping workflow contract checks because PRE_PUSH_SKIP_WORKFLOW_CONTRACTS=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/testing/workflow_contracts.json' \
+    'backend/scripts/check_workflow_contracts.py' \
+    'scripts/pre-push' \
+    '.github/workflows/backend-checks.yml' \
+    '.github/actions/detect-changes/*' \
+    '.github/actions/detect-changes/**/*'
+  then
+    return
+  fi
+
+  "$BACKEND_PYTHON" backend/scripts/check_workflow_contracts.py --changed-files "$CHANGED_FILES_LIST"
+}
+
 check_backend_typecheck_if_needed() {
   if [ "${PRE_PUSH_SKIP_BACKEND_TYPECHECK:-}" = "1" ]; then
     echo "Skipping backend type check because PRE_PUSH_SKIP_BACKEND_TYPECHECK=1."
@@ -681,6 +703,7 @@ run_step check_backend_async_blockers_if_needed
 run_step check_module_stub_pollution_if_needed
 run_step check_import_time_side_effects_if_needed
 run_step check_backend_typecheck_if_needed
+run_step check_workflow_contracts_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
