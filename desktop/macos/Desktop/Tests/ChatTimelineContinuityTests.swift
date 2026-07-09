@@ -592,6 +592,153 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "ChatProvider must not expose a split transcript filter API"
     )
   }
+
+  /// INV-6: collapsed agent-card / list preview = prompt/objective, not response output.
+  func testAgentPreviewTextPrefersPromptOverOutput() {
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentPreviewText(prompt: "sleep five seconds", output: "Done."),
+      "sleep five seconds"
+    )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentPreviewText(prompt: "  ", output: "Done."),
+      "Done."
+    )
+    XCTAssertEqual(
+      ChatContinuityInvariants.agentPreviewText(prompt: "", output: "  only output  "),
+      "only output"
+    )
+  }
+
+  func testAgentCompletionCardsUsePromptPreviewHelper() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let bubble = try String(
+      contentsOf: root.appendingPathComponent("Sources/MainWindow/Components/ChatBubble.swift"),
+      encoding: .utf8
+    )
+    let floating = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarView.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(
+      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: promptSnippet, output: output)"),
+      "AgentCompletionCard header must preview promptSnippet, not raw output"
+    )
+    XCTAssertTrue(
+      bubble.contains("ChatContinuityInvariants.agentPreviewText(prompt: summary.prompt, output: summary.output)"),
+      "BackgroundAgentCard header must preview prompt, not raw output"
+    )
+    XCTAssertTrue(
+      floating.contains("ChatContinuityInvariants.agentPreviewText(")
+        && floating.contains("prompt: pill.query")
+        && floating.contains("output: pill.latestActivity"),
+      "agent list rows must preview query/objective via agentPreviewText"
+    )
+
+    let aiResponse = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift"),
+      encoding: .utf8
+    )
+    XCTAssertTrue(
+      aiResponse.contains("AgentCompletionCard("),
+      "notch must render AgentCompletionCard so artifacts stay attached to the turn"
+    )
+    XCTAssertFalse(
+      aiResponse.contains("case .agentSpawn, .agentCompletion:\n                    EmptyView()"),
+      "notch must not EmptyView agentCompletion while still showing resources"
+    )
+  }
+
+  /// INV-6: floating resource strips bind per-message displayResources only —
+  /// never flatMap the whole provider timeline (orphan historical artifacts).
+  func testFloatingResourceStripsBindPerMessageNotProviderWide() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+    let aiResponse = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/AIResponseView.swift"),
+      encoding: .utf8
+    )
+    let floatingView = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarView.swift"),
+      encoding: .utf8
+    )
+    let floatingState = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarState.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(aiResponse.contains("resources: message.displayResources"))
+    XCTAssertTrue(floatingView.contains("resources: message.displayResources"))
+    XCTAssertFalse(
+      aiResponse.contains("provider.messages") && aiResponse.contains(".resources"),
+      "AIResponseView must not read provider-wide resources"
+    )
+    XCTAssertTrue(
+      floatingState.contains("func viewportDisplayResources(from provider: ChatProvider?)"),
+      "viewport orphan filter helper must remain available for aggregate strips"
+    )
+    XCTAssertTrue(
+      floatingState.contains("ChatContinuityInvariants.resourcesBelongingToMessages"),
+      "viewportDisplayResources must filter by viewport message ids"
+    )
+  }
+
+  /// INV-6 forbidden dual-write / multi-handler patterns — mechanical tripwires.
+  func testForbiddenContinuityPatternsAbsentFromWritePath() throws {
+    let root = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+
+    let hub = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
+      encoding: .utf8
+    )
+    let runtime = try String(
+      contentsOf: root.appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"),
+      encoding: .utf8
+    )
+    let bridge = try String(
+      contentsOf: root.appendingPathComponent("Sources/Chat/AgentBridge.swift"),
+      encoding: .utf8
+    )
+    let floatingState = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarState.swift"),
+      encoding: .utf8
+    )
+    let provider = try String(
+      contentsOf: root.appendingPathComponent("Sources/Providers/ChatProvider.swift"),
+      encoding: .utf8
+    )
+    let window = try String(
+      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/FloatingControlBarWindow.swift"),
+      encoding: .utf8
+    )
+
+    XCTAssertTrue(hub.contains("ChatProvider.mainInstance"))
+    XCTAssertFalse(hub.contains("warmProvider = ChatProvider()"))
+    XCTAssertFalse(hub.contains("private var warmProvider"))
+    XCTAssertFalse(
+      hub.contains("ChatProvider()"),
+      "speculative warm must not construct a second ChatProvider"
+    )
+
+    XCTAssertFalse(runtime.contains("addTurnRecordedHandler"))
+    XCTAssertFalse(bridge.contains("addTurnRecordedHandler"))
+    XCTAssertTrue(runtime.contains("func setTurnRecordedHandler"))
+    XCTAssertTrue(bridge.contains("Single-slot replace"))
+
+    for source in [hub, runtime, bridge, floatingState, provider, window] {
+      XCTAssertFalse(
+        source.contains("suppressNextRecordedTurn"),
+        "dual-write bandage suppressNextRecordedTurn is forbidden"
+      )
+    }
+
+    XCTAssertFalse(floatingState.contains("@Published var chatHistory"))
+  }
 }
 
 private extension Array where Element == ChatContentBlock {

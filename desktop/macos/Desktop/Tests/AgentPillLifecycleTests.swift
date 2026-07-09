@@ -384,7 +384,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("NotchAgentOmiIndicatorView(pills: stackedPills)"))
     XCTAssertTrue(source.contains("NotchOmiMark(dotColors: visiblePills.map"))
     XCTAssertTrue(source.contains("NotchAgentMorphField("))
-    XCTAssertTrue(source.contains("NotchAgentListRow(\n                                title: pill.title,\n                                status: pill.status,\n                                activity: pill.latestActivity,\n                                isSelected: pill.id == activePillID,\n                                progress: rowRevealProgress"))
+    XCTAssertTrue(source.contains("NotchAgentListRow("))
+    XCTAssertTrue(source.contains("title: pill.title"))
+    XCTAssertTrue(source.contains("status: pill.status"))
+    XCTAssertTrue(
+      source.contains("ChatContinuityInvariants.agentPreviewText(")
+        && source.contains("prompt: pill.query")
+        && source.contains("output: pill.latestActivity"),
+      "notch agent list must preview query/objective, not raw latestActivity output"
+    )
+    XCTAssertTrue(source.contains("isSelected: pill.id == activePillID"))
+    XCTAssertTrue(source.contains("progress: rowRevealProgress"))
     // The provider logo must be drawn exactly once per row — only by the traveling
     // `notchAgentIdentityMark` that morphs from the logo ring onto the orb slot. The
     // row itself must NOT draw its own `AgentProviderLogoMark`, or it would double up

@@ -471,4 +471,48 @@ final class FloatingControlBarStateTests: XCTestCase {
         XCTAssertEqual(state.voiceFollowUpTranscript, "")
         XCTAssertFalse(state.hasVisibleConversation)
     }
+
+    /// INV-6: notch/floating viewport only surfaces resources from viewport
+    /// message ids — historical timeline artifacts must not appear as orphans.
+    func testViewportDisplayResourcesOnlyFromAnchoredMessageIds() {
+        let state = FloatingControlBarState()
+        let provider = ChatProvider()
+
+        let historical = ChatResource.localGeneratedFile(
+            id: "historical-artifact",
+            title: "old.txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/old.txt"
+        )
+        let current = ChatResource.localGeneratedFile(
+            id: "viewport-artifact",
+            title: "now.txt",
+            subtitle: "text/plain",
+            mimeType: "text/plain",
+            uri: "file:///tmp/now.txt"
+        )
+
+        let oldAnswer = ChatMessage(
+            id: "old-answer",
+            text: "older turn",
+            sender: .ai,
+            resources: [historical]
+        )
+        let newAnswer = ChatMessage(
+            id: "new-answer",
+            text: "current turn",
+            sender: .ai,
+            resources: [current]
+        )
+        provider.messages = [oldAnswer, newAnswer]
+
+        state.bindAnswerMessage(newAnswer)
+        let visible = state.viewportDisplayResources(from: provider)
+        XCTAssertEqual(visible.map(\.id), ["viewport-artifact"])
+
+        // Clearing the viewport cursor must hide all resources (no orphan strip).
+        state.clearCurrentAnswerAnchors()
+        XCTAssertTrue(state.viewportDisplayResources(from: provider).isEmpty)
+    }
 }

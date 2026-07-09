@@ -2086,6 +2086,7 @@ def continuity_contract_self_check_failures() -> list[str]:
         "ChatTimelineContinuityTests",
         "FloatingControlBarStateTests",
         "AgentContinuityGauntletTests",
+        "RuntimeOwnerIdentityTests",
     ]
     for class_name in required_filter_classes:
         if class_name not in harness:
@@ -2096,6 +2097,10 @@ def continuity_contract_self_check_failures() -> list[str]:
         "func testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate(",
         "func testApplyKernelTurnRecordedDedupesByIdempotencyKey(",
         "func testMainAndFloatingAutomationSnapshotsAliasSameTimeline(",
+        "func testTurnRecordedHandlerReplacePreventsWarmDuplicateFanout(",
+        "func testPillCompletionKeyCoalescesSecondStageWithoutDuplicate(",
+        "func testSameTextDifferentContinuityKeysKeepsTwoPairs(",
+        "func testResourcesStayOnProducingMessageThroughStageAndPromote(",
     ):
         if needle not in projection:
             failures.append(f"KernelTurnRecordedProjectionTests.{needle.split('(')[0].removeprefix('func ')}")
@@ -2105,6 +2110,11 @@ def continuity_contract_self_check_failures() -> list[str]:
         "func testHydratePreferencePrefersRunThenSessionThenPill(",
         "func testFindPillMatchesByHydratePreferenceOrder(",
         "func testAgentCompletionBlockExposesOpenRefAndStaysVisible(",
+        "func testChatSelectionDoesNotWrapStackChromeInSelectionOverlay(",
+        "func testAgentPreviewTextPrefersPromptOverOutput(",
+        "func testAgentCompletionCardsUsePromptPreviewHelper(",
+        "func testFloatingResourceStripsBindPerMessageNotProviderWide(",
+        "func testForbiddenContinuityPatternsAbsentFromWritePath(",
     ):
         if needle not in timeline:
             failures.append(f"ChatTimelineContinuityTests.{needle.split('(')[0].removeprefix('func ')}")
@@ -2113,11 +2123,28 @@ def continuity_contract_self_check_failures() -> list[str]:
     for needle in (
         "func testViewportDerivesCurrentAnswerAndHistoryFromProviderMessages(",
         "func testCanRestoreUsesViewportAnchorsAndActivityWindow(",
+        "func testViewportDisplayResourcesOnlyFromAnchoredMessageIds(",
         "chatViewport",
     ):
         if needle not in floating_state:
             label = needle.split("(")[0].removeprefix("func ") if needle.startswith("func ") else needle
             failures.append(f"FloatingControlBarStateTests covers {label}")
+
+    owner_identity = (tests_dir / "RuntimeOwnerIdentityTests.swift").read_text(encoding="utf-8")
+    for needle in (
+        "func testOverrideDoesNotRewriteAuthUserIdOrTokens(",
+        "func testSwapPathSourceNeverWritesAuthUserId(",
+    ):
+        if needle not in owner_identity:
+            failures.append(f"RuntimeOwnerIdentityTests.{needle.split('(')[0].removeprefix('func ')}")
+
+    # Forbidden-pattern tripwires must stay present in hermetic coverage.
+    if "suppressNextRecordedTurn" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids suppressNextRecordedTurn")
+    if "addTurnRecordedHandler" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids addTurnRecordedHandler")
+    if "@Published var chatHistory" not in timeline:
+        failures.append("ChatTimelineContinuityTests forbids @Published var chatHistory")
 
     return failures
 

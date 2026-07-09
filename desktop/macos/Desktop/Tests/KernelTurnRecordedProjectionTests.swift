@@ -239,6 +239,13 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
       mimeType: "text/plain",
       uri: "file:///tmp/out.txt"
     )
+    let lateResource = ChatResource.localGeneratedFile(
+      id: "res-2",
+      title: "late.txt",
+      subtitle: "text/plain",
+      mimeType: "text/plain",
+      uri: "file:///tmp/late.txt"
+    )
     let completionBlock = ChatContentBlock.agentCompletion(
       id: "completion-block",
       pillId: pillID,
@@ -271,17 +278,22 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(stagedSession, "sess-42")
     XCTAssertEqual(stagedRun, "run-42")
 
-    // Terminal path reuses the same key (artifact already staged).
+    // Terminal / late-artifact path reuses the same key and merges onto the
+    // producing message (no second assistant turn).
     let second = provider.stageOptimisticTurn(
       continuityKey: key,
       userText: "",
       assistantText: summary,
       origin: "pill_completion",
-      turnOwner: .mainChat
+      turnOwner: .mainChat,
+      resources: [lateResource]
     )
     XCTAssertEqual(second.assistant?.id, first.assistant?.id)
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
-    XCTAssertEqual(provider.messages.first(where: { $0.sender == .ai })?.resources.count, 1)
+    XCTAssertEqual(
+      Set(provider.messages.first(where: { $0.sender == .ai })?.resources.map(\.id) ?? []),
+      Set(["res-1", "res-2"])
+    )
 
     projection.apply(
       .init(
@@ -300,7 +312,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     )
     XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
     let promoted = provider.messages.first(where: { $0.sender == .ai })
-    XCTAssertEqual(promoted?.resources.count, 1)
+    XCTAssertEqual(Set(promoted?.resources.map(\.id) ?? []), Set(["res-1", "res-2"]))
     XCTAssertEqual(promoted?.contentBlocks.count, 1)
     guard case .agentCompletion(_, let promotedPill, _, let promotedRun, _, _, _, _) =
       promoted?.contentBlocks.first
@@ -546,6 +558,129 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     XCTAssertEqual(mainRows.map { $0["text"] }, [
       "main question", "main answer", "notch question", "notch answer",
     ])
+  }
+
+  /// INV-6: restaging the same pill_completion key must merge resources onto the
+  /// producing assistant message — never invent a second artifact-only turn.
+  func testRestagingSameContinuityKeyMergesResourcesOntoProducingMessage() {
+    let provider = ChatProvider()
+    let key = "pill_completion:run-merge"
+    let completionBlock = ChatContentBlock.agentCompletion(
+      id: "completion-merge",
+      pillId: UUID(),
+      sessionId: "sess-merge",
+      runId: "run-merge",
+      title: "Draft Example AGENTS.md",
+      promptSnippet: "Draft Example AGENTS.md",
+      output: "Done.",
+      status: "completed"
+    )
+    let first = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "",
+      assistantText: "[Background agent — Draft Example AGENTS.md] Done.",
+      origin: "pill_completion",
+      turnOwner: .mainChat,
+      contentBlocks: [completionBlock]
+    )
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertTrue(first.assistant?.resources.isEmpty ?? false)
+
+    let resource = ChatResource.localGeneratedFile(
+      id: "agents-md",
+      title: "AGENTS.md",
+      subtitle: "text/markdown",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/AGENTS.md"
+    )
+    let second = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "",
+      assistantText: "[Background agent — Draft Example AGENTS.md] Done.",
+      origin: "pill_completion",
+      turnOwner: .mainChat,
+      contentBlocks: [completionBlock],
+      resources: [resource]
+    )
+
+    let assistants = provider.messages.filter { $0.sender == .ai }
+    XCTAssertEqual(assistants.count, 1)
+    XCTAssertEqual(second.assistant?.id, first.assistant?.id)
+    XCTAssertEqual(assistants.first?.resources.map(\.id), ["agents-md"])
+    XCTAssertEqual(assistants.first?.contentBlocks.count, 1)
+  }
+
+  /// INV-6: resources stay on the producing assistant message through stage+promote;
+  /// do not invent a second artifact-only turn for the same pill_completion key.
+  func testResourcesStayOnProducingMessageThroughStageAndPromote() {
+    let provider = ChatProvider()
+    let projection = provider.kernelTurnProjection
+    let surface = provider.mainChatSurfaceReference()
+    let key = "pill_completion:run-resources"
+    let resource = ChatResource.localGeneratedFile(
+      id: "artifact-owned",
+      title: "report.md",
+      subtitle: "text/markdown",
+      mimeType: "text/markdown",
+      uri: "file:///tmp/report.md"
+    )
+    let completionBlock = ChatContentBlock.agentCompletion(
+      id: "completion-res",
+      pillId: UUID(),
+      sessionId: "sess-res",
+      runId: "run-resources",
+      title: "Background agent",
+      promptSnippet: "write report",
+      output: "Done.",
+      status: "completed"
+    )
+
+    let staged = provider.stageOptimisticTurn(
+      continuityKey: key,
+      userText: "",
+      assistantText: "[Background agent — write report] Done.",
+      origin: "pill_completion",
+      turnOwner: .mainChat,
+      contentBlocks: [completionBlock],
+      resources: [resource]
+    )
+    XCTAssertEqual(provider.messages.filter { $0.sender == .ai }.count, 1)
+    XCTAssertEqual(staged.assistant?.resources.map(\.id), ["artifact-owned"])
+    XCTAssertEqual(
+      ChatContinuityInvariants.resourcesBelongingToMessages(
+        messages: provider.messages,
+        messageIds: Set(provider.messages.map(\.id))
+      ).map(\.id),
+      ["artifact-owned"]
+    )
+
+    projection.apply(
+      .init(
+        conversationId: "conv-1",
+        surfaceKind: surface.surfaceKind,
+        externalRefKind: surface.externalRefKind,
+        externalRefId: surface.externalRefId,
+        userText: "",
+        assistantText: "[Background agent — write report] Done.",
+        origin: "pill_completion",
+        interrupted: false,
+        idempotencyKey: key,
+        userTurnId: nil,
+        assistantTurnId: nil
+      )
+    )
+
+    let assistants = provider.messages.filter { $0.sender == .ai }
+    XCTAssertEqual(assistants.count, 1)
+    XCTAssertEqual(assistants.first?.id, staged.assistant?.id)
+    XCTAssertEqual(assistants.first?.resources.map(\.id), ["artifact-owned"])
+    // Orphan filter: resources for a non-viewport / unknown id must be empty.
+    XCTAssertTrue(
+      ChatContinuityInvariants.resourcesBelongingToMessages(
+        messages: provider.messages,
+        messageIds: ["not-a-message"]
+      ).isEmpty
+    )
   }
 
   private static func decodeSnapshotRows(_ json: String?) throws -> [[String: String]] {

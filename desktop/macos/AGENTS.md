@@ -219,10 +219,26 @@ Rules (fail the PR if any break):
 7. **Snapshots are aliases** — `automationFloatingChatSnapshot` ==
    `automationChatSnapshot` / `automationMainChatSnapshot` over the same messages;
    no surface-specific transcript filter.
-8. **Tests** — continuity behavior changes require a hermetic behavioral test (call
+8. **Resources live on the producing message** — artifacts attach to the
+   `ChatMessage` that produced them (stage/promote keeps `resources` on that id).
+   UI must not invent a standalone artifact-only turn. Floating/notch resource
+   strips bind `message.displayResources` on viewport-derived messages only
+   (never flatMap the whole provider timeline). Aggregate strips must filter
+   with `ChatContinuityInvariants.resourcesBelongingToMessages` /
+   `FloatingControlBarState.viewportDisplayResources`.
+9. **Agent card/list preview = prompt/objective** — collapsed header / list
+   subtitle uses `ChatContinuityInvariants.agentPreviewText(prompt:output:)`
+   (prompt wins; output is expanded-body only). Do not put raw completion output
+   in the one-line preview.
+10. **Forbidden dual-write patterns** — never: construct `ChatProvider()` for
+    speculative warm (use `ChatProvider.mainInstance`); add
+    `addTurnRecordedHandler` / multi-handler append APIs; introduce
+    `suppressNextRecordedTurn`; store `@Published var chatHistory` of
+    `ChatMessage` copies on `FloatingControlBarState`.
+11. **Tests** — continuity behavior changes require a hermetic behavioral test (call
    projection/provider APIs, assert message counts/IDs). Source-string greps for
-   function names are not continuity coverage. Live gauntlet/stress are gates, not
-   substitutes for hermetic tests.
+   function names are not continuity coverage (forbidden-pattern tripwires are the
+   exception). Live gauntlet/stress are gates, not substitutes for hermetic tests.
 
 ### Continuity PR Definition of Done (INV-6)
 
@@ -233,10 +249,12 @@ timeline identity/open, or pill projection is incomplete until:
    updated in the same PR with a matching behavioral test).
 2. **Hermetic behavioral test** for the invariant touched (stage/promote,
    snapshot alias, structured identity, open-by-id hydrate, viewport derive /
-   restore). Not a source grep.
+   restore, resources-on-message, agent preview text). Not a source grep
+   (except forbidden-pattern tripwires).
 3. **`./scripts/agent-logic-harness.sh` green** (includes
    `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`,
-   `FloatingControlBarStateTests` in the Swift focus filter).
+   `FloatingControlBarStateTests`, `RuntimeOwnerIdentityTests` in the Swift
+   focus filter).
 4. **Write-path / cross-surface changes:** run a named-bundle continuity
    gauntlet and note evidence in the PR:
    ```bash
@@ -274,7 +292,7 @@ contract rules, and hermetic unit tests do **not** prove bridge/LLM continuity.
 
 | Gate | What it covers | What it does **not** cover |
 | --- | --- | --- |
-| **Hermetic** (`agent-logic-harness.sh` Swift filter: `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`, `FloatingControlBarStateTests`) | stage/promote same key → one message pair; floating snapshot aliases main; structured agent identity; open-by-id hydrate preference; floating viewport derive / SoT | Live bridge auth, LLM tool use, PTT hub, race/busy policy under a real runtime |
+| **Hermetic** (`agent-logic-harness.sh` Swift filter: `KernelTurnRecordedProjectionTests`, `ChatTimelineContinuityTests`, `FloatingControlBarStateTests`, `RuntimeOwnerIdentityTests`) | stage/promote same key → one message pair; floating snapshot aliases main; structured agent identity; open-by-id hydrate preference; floating viewport derive / SoT; resources on producing message; agent preview = prompt; owner-swap preserves Firebase tokens; forbidden dual-write tripwires | Live bridge auth, LLM tool use, PTT hub, race/busy policy under a real runtime |
 | **Gauntlet `--self-check`** | Bridge action registration (incl. R3 `ask_main_chat_no_wait` / `main_chat_busy_state`), resilience suite wiring, hermetic contract test presence in harness filter | Any live turn |
 | **Live `--suite continuity` / `agents` / `owner` / `prompts`** | Typed + PTT + blind recall, spawn/status, owner swap probe, prompt regressions on a named bundle | stage/promote single-writer, snapshot alias, hydrate preference, viewport SoT (those stay hermetic) |
 | **Live `--suite resilience` (R1–R4)** | Cold bridge launch, warm reuse, bridge busy/race rejection (R3; requires real `is_sending`/`is_streaming` once, latch only extends the race window), subagent launch+status (R4) | INV-6 write-path unit invariants above |
