@@ -3,6 +3,7 @@ import type { LocalAgentRuntimeContext, LocalAgentToolDefinition } from '../loca
 import {
   buildPiChatRequest,
   chatCompletionsUrl,
+  isPiChatEnabled,
   resultToToolContent,
   sendPiChat
 } from './chatBridge'
@@ -74,6 +75,51 @@ const runtimeContext: LocalAgentRuntimeContext = {
     appId: 'com.omiwindows.app'
   }
 }
+
+describe('isPiChatEnabled', () => {
+  it('is disabled by default when neither env var is set (fail closed)', () => {
+    expect(isPiChatEnabled({})).toBe(false)
+  })
+
+  it('stays disabled for explicit off/unknown values', () => {
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: '0' })).toBe(false)
+    expect(isPiChatEnabled({ OMI_PI_CHAT: '0' })).toBe(false)
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: '' })).toBe(false)
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: 'false' })).toBe(false)
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: 'banana' })).toBe(false)
+  })
+
+  it('enables only when a flag is explicitly truthy', () => {
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: '1' })).toBe(true)
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: 'true' })).toBe(true)
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: 'TRUE' })).toBe(true)
+    expect(isPiChatEnabled({ OMI_PI_CHAT: '1' })).toBe(true)
+    expect(isPiChatEnabled({ OMI_PI_CHAT: 'yes' })).toBe(true)
+  })
+
+  it('does not let one truthy flag be vetoed by the other being off', () => {
+    expect(isPiChatEnabled({ OMI_WINDOWS_PI_CHAT: '1', OMI_PI_CHAT: '0' })).toBe(true)
+  })
+
+  it('reads process.env by default and fails closed there too', () => {
+    const saved = {
+      windows: process.env.OMI_WINDOWS_PI_CHAT,
+      generic: process.env.OMI_PI_CHAT
+    }
+    delete process.env.OMI_WINDOWS_PI_CHAT
+    delete process.env.OMI_PI_CHAT
+    try {
+      expect(isPiChatEnabled()).toBe(false)
+      process.env.OMI_WINDOWS_PI_CHAT = '1'
+      expect(isPiChatEnabled()).toBe(true)
+    } finally {
+      if (saved.windows === undefined) delete process.env.OMI_WINDOWS_PI_CHAT
+      else process.env.OMI_WINDOWS_PI_CHAT = saved.windows
+      if (saved.generic === undefined) delete process.env.OMI_PI_CHAT
+      else process.env.OMI_PI_CHAT = saved.generic
+    }
+  })
+})
 
 describe('Pi/Omi chat bridge', () => {
   it('constructs OpenAI-compatible omi-provider requests with only allowed local tools', () => {
