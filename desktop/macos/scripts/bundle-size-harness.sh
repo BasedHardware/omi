@@ -76,20 +76,29 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cleanup_stale_run_lock_if_safe() {
-  local lock_dir="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
-  [[ -d "$lock_dir" ]] || return 0
+  # Per-worktree lock lives under this checkout's .dev/ (see run-sh-build-lock.sh).
+  # Also clear the legacy per-user global path if a crashed older run.sh left it.
+  local -a lock_dirs=(
+    "$MACOS_DIR/.dev/run-sh-build.lock.d"
+    "${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
+  )
+  local lock_dir other_run_sh pid command
 
-  local other_run_sh=0
-  while read -r pid command; do
-    if [[ "$pid" =~ ^[0-9]+$ && "$command" == *"./run.sh"* ]]; then
-      other_run_sh=1
-      break
+  for lock_dir in "${lock_dirs[@]}"; do
+    [[ -d "$lock_dir" ]] || continue
+
+    other_run_sh=0
+    while read -r pid command; do
+      if [[ "$pid" =~ ^[0-9]+$ && "$command" == *"./run.sh"* ]]; then
+        other_run_sh=1
+        break
+      fi
+    done < <(ps -axo pid=,command=)
+
+    if [[ "$other_run_sh" == "0" ]]; then
+      rmdir "$lock_dir" 2>/dev/null || true
     fi
-  done < <(ps -axo pid=,command=)
-
-  if [[ "$other_run_sh" == "0" ]]; then
-    rmdir "$lock_dir" 2>/dev/null || true
-  fi
+  done
 }
 
 run_bundle_build() {
