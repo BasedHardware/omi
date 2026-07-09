@@ -298,7 +298,7 @@ struct DesktopHomeView: View {
                 "DesktopHomeView: userDidSignOut — resetting hasCompletedOnboarding and stopping transcription"
               )
               resetSessionScopedStartupWarmups(preserveCrispReadState: false)
-              appState.conversations = []
+              appState.conversationRepository.resetSession()
               appState.folders = []
               appState.selectedFolderId = nil
               appState.selectedDateFilter = nil
@@ -1161,10 +1161,10 @@ private struct PageContentView: View {
 /// so tapping a row navigates to the detail view.
 private struct ConversationsPageHost: View {
   let appState: AppState
-  @State private var selectedConversation: ServerConversation? = nil
+  @State private var selectedConversationId: String? = nil
 
   var body: some View {
-    ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+    ConversationsPage(appState: appState, selectedConversationId: $selectedConversationId)
   }
 }
 

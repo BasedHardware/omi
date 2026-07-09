@@ -4652,6 +4652,17 @@
             ],
             "title": "Processing Memory Id"
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
           "source": {
             "anyOf": [
               {
@@ -4721,6 +4732,18 @@
             ],
             "default": false,
             "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -4797,6 +4820,88 @@
           "discarded"
         ],
         "title": "ConversationCreateResponse",
+        "type": "object"
+      },
+      "ConversationFolderMutationResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "status",
+          "id"
+        ],
+        "title": "ConversationFolderMutationResponse",
+        "type": "object"
+      },
+      "ConversationMutationResponse": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "required": [
+          "status",
+          "id"
+        ],
+        "title": "ConversationMutationResponse",
         "type": "object"
       },
       "ConversationPhoto": {
@@ -13176,6 +13281,17 @@
             ],
             "title": "Processing Memory Id"
           },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
           "source": {
             "anyOf": [
               {
@@ -13245,6 +13361,18 @@
             ],
             "default": false,
             "title": "Transcript Segments Compressed"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           },
           "visibility": {
             "$ref": "#/components/schemas/ConversationVisibility",
@@ -24295,6 +24423,204 @@
         ]
       }
     },
+    "/v1/conversations/list": {
+      "get": {
+        "description": "Explicit lightweight list projection. Detail-only transcript_segments are omitted.",
+        "operationId": "get_conversation_list_projection_v1_conversations_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "statuses",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "processing,completed",
+              "title": "Statuses"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_discarded",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Include Discarded",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "folder_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Folder Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "starred",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Starred"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Conversation"
+                  },
+                  "title": "Response Get Conversation List Projection V1 Conversations List Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Conversation List Projection",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/merge": {
       "post": {
         "description": "Merge multiple conversations into a new conversation (async).\n\nFlow:\n1. Validates conversations (locked? completed?)\n2. Returns immediately with 200 OK\n3. Background task creates new merged conversation\n4. Background task deletes source conversations\n5. FCM notification sent on completion\n\nThe merged conversation will have:\n- A new ID (source conversations are deleted)\n- Merged transcript segments with adjusted timestamps\n- Copied audio chunks\n- Regenerated title, summary, action items, memories via process_conversation()",
@@ -25698,7 +26024,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/FolderMutationResponse"
+                  "$ref": "#/components/schemas/ConversationFolderMutationResponse"
                 }
               }
             },
@@ -26475,7 +26801,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },
@@ -26857,7 +27183,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ConversationStatusResponse"
+                  "$ref": "#/components/schemas/ConversationMutationResponse"
                 }
               }
             },

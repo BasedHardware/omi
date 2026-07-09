@@ -627,6 +627,45 @@ extension APIClient {
     return try await get(endpoint)
   }
 
+  /// Fetches the explicit lightweight list projection used by the repository.
+  /// Detail-only transcript data is omitted by contract.
+  func getConversationList(
+    limit: Int = 50,
+    offset: Int = 0,
+    statuses: [ConversationStatus] = [],
+    includeDiscarded: Bool = false,
+    startDate: Date? = nil,
+    endDate: Date? = nil,
+    folderId: String? = nil,
+    starred: Bool? = nil
+  ) async throws -> [ServerConversation] {
+    var queryItems = ["limit=\(limit)", "offset=\(offset)"]
+    queryItems += Self.conversationFilterQueryItems(
+      statuses: statuses,
+      includeDiscarded: includeDiscarded,
+      startDate: startDate,
+      endDate: endDate,
+      folderId: folderId,
+      starred: starred
+    )
+    do {
+      return try await get("v1/conversations/list?\(queryItems.joined(separator: "&"))")
+    } catch APIError.httpError(let statusCode, _) where statusCode == 404 {
+      // During a rolling backend deploy, an older instance treats `list` as a
+      // conversation ID. Fall back once to the compatible list route.
+      return try await getConversations(
+        limit: limit,
+        offset: offset,
+        statuses: statuses,
+        includeDiscarded: includeDiscarded,
+        startDate: startDate,
+        endDate: endDate,
+        folderId: folderId,
+        starred: starred
+      )
+    }
+  }
+
   /// Fetches a single conversation by ID
   func getConversation(id: String) async throws -> ServerConversation {
     return try await get("v1/conversations/\(id)")
@@ -639,19 +678,21 @@ extension APIClient {
   }
 
   /// Updates the starred status of a conversation
-  func setConversationStarred(id: String, starred: Bool) async throws {
+  func setConversationStarred(id: String, starred: Bool) async throws -> ConversationMutationAcknowledgement {
     let url = URL(string: baseURL + "v1/conversations/\(id)/starred?starred=\(starred)")!
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationEnvelope = try await performRequest(request)
     invalidateConversationsCountCache()
+    return ConversationMutationAcknowledgement(
+      id: response.id ?? id,
+      updatedAt: response.updatedAt,
+      revision: response.revision,
+      value: .starred(starred),
+      conversation: response.conversation
+    )
   }
 
   /// Sets the visibility of a conversation for sharing
@@ -685,7 +726,7 @@ extension APIClient {
   }
 
   /// Updates the title of a conversation
-  func updateConversationTitle(id: String, title: String) async throws {
+  func updateConversationTitle(id: String, title: String) async throws -> ConversationMutationAcknowledgement {
     var components = URLComponents(string: baseURL + "v1/conversations/\(id)/title")!
     components.queryItems = [URLQueryItem(name: "title", value: title)]
     let url = components.url!
@@ -693,12 +734,14 @@ extension APIClient {
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationEnvelope = try await performRequest(request)
+    return ConversationMutationAcknowledgement(
+      id: response.id ?? id,
+      updatedAt: response.updatedAt,
+      revision: response.revision,
+      value: .title(title),
+      conversation: response.conversation
+    )
   }
 
   /// Searches conversations with a query
@@ -867,7 +910,9 @@ extension APIClient {
   }
 
   /// Moves a conversation to a folder
-  func moveConversationToFolder(conversationId: String, folderId: String?) async throws {
+  func moveConversationToFolder(conversationId: String, folderId: String?) async throws
+    -> ConversationMutationAcknowledgement
+  {
     let body = MoveToFolderRequest(folderId: folderId)
     let url = URL(string: baseURL + "v1/conversations/\(conversationId)/folder")!
     var request = URLRequest(url: url)
@@ -875,13 +920,15 @@ extension APIClient {
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
     request.httpBody = try JSONEncoder().encode(body)
 
-    let (_, response) = try await session.data(for: request)
-    guard let httpResponse = response as? HTTPURLResponse,
-      (200...299).contains(httpResponse.statusCode)
-    else {
-      throw APIError.httpError(statusCode: (response as? HTTPURLResponse)?.statusCode ?? 0)
-    }
+    let response: ConversationMutationEnvelope = try await performRequest(request)
     invalidateConversationsCountCache()
+    return ConversationMutationAcknowledgement(
+      id: response.id ?? conversationId,
+      updatedAt: response.updatedAt,
+      revision: response.revision,
+      value: .folder(folderId),
+      conversation: response.conversation
+    )
   }
 
 }
@@ -894,6 +941,22 @@ enum ConversationStatus: String, Codable {
   case merging = "merging"
   case completed = "completed"
   case failed = "failed"
+}
+
+private struct ConversationMutationEnvelope: Decodable {
+  let status: String
+  let id: String?
+  let updatedAt: Date?
+  let revision: String?
+  /// Optional during the rolling backend deployment. Older servers only
+  /// return `{ "status": "ok" }`; the successful requested field is still
+  /// acknowledged without triggering the detail endpoint's lazy enrichment.
+  let conversation: ServerConversation?
+
+  enum CodingKeys: String, CodingKey {
+    case status, id, revision, conversation
+    case updatedAt = "updated_at"
+  }
 }
 
 enum ConversationSource: String, Codable {
@@ -929,7 +992,7 @@ enum TranscriptPresenceState: Equatable {
   case includedNonEmpty
 }
 
-struct ServerConversation: Codable, Identifiable, Equatable {
+struct ServerConversation: Codable, Identifiable, Equatable, @unchecked Sendable {
   static func == (lhs: ServerConversation, rhs: ServerConversation) -> Bool {
     lhs.id == rhs.id && lhs.createdAt == rhs.createdAt && lhs.startedAt == rhs.startedAt
       && lhs.finishedAt == rhs.finishedAt && lhs.structured == rhs.structured
@@ -937,12 +1000,18 @@ struct ServerConversation: Codable, Identifiable, Equatable {
       && lhs.isLocked == rhs.isLocked && lhs.starred == rhs.starred && lhs.folderId == rhs.folderId
       && lhs.source == rhs.source
       && lhs.transcriptSegmentsIncluded == rhs.transcriptSegmentsIncluded
+      && lhs.revision == rhs.revision
   }
 
   let id: String
   let createdAt: Date
   let startedAt: Date?
   let finishedAt: Date?
+  /// Server-owned freshness metadata. Revision is an opaque identity token;
+  /// updatedAt can be ordered only against another server-owned updatedAt.
+  /// Neither may be compared with local clocks or recording timestamps.
+  let updatedAt: Date?
+  let revision: String?
 
   var structured: Structured
   var transcriptSegments: [TranscriptSegment]
@@ -970,6 +1039,8 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case createdAt = "created_at"
     case startedAt = "started_at"
     case finishedAt = "finished_at"
+    case updatedAt = "updated_at"
+    case revision
     case structured
     case transcriptSegments = "transcript_segments"
     case geolocation
@@ -983,7 +1054,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     case isLocked = "is_locked"
     case starred
     case folderId = "folder_id"
-    case inputDeviceName = "input_device_name"
+    case inputDeviceName = "client_device_id"
     case deferred
   }
 
@@ -999,7 +1070,10 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     createdAt = try Self.parseDate(wire.createdAt, decoder: decoder)
     startedAt = try Self.parseOptionalDate(wire.startedAt, decoder: decoder)
     finishedAt = try Self.parseOptionalDate(wire.finishedAt, decoder: decoder)
-    structured = Structured(wire.structured ?? OmiAPI.Structured(actionItems: nil, category: nil, emoji: nil, events: nil, overview: nil, title: nil))
+    updatedAt = try Self.parseOptionalDate(
+      try container.decodeIfPresent(String.self, forKey: .updatedAt), decoder: decoder)
+    revision = try container.decodeIfPresent(String.self, forKey: .revision)
+    structured = Structured(wire.structured)
     // container.contains distinguishes `"transcript_segments": null` (present,
     // empty) from the key being absent (omitted). wire.transcriptSegments is
     // nil for both, so we must check the container directly.
@@ -1012,7 +1086,7 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     language = wire.language
     status = wire.status.map { ConversationStatus(rawValue: $0.rawValue) ?? .completed } ?? .completed
     discarded = wire.discarded ?? false
-    deleted = false  // backend REST Conversation schema does not expose deleted
+    deleted = try container.decodeIfPresent(Bool.self, forKey: .deleted) ?? false
     isLocked = wire.isLocked ?? false
     starred = wire.starred ?? false
     folderId = wire.folderId
@@ -1062,12 +1136,16 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     starred: Bool,
     folderId: String?,
     inputDeviceName: String?,
-    deferred: Bool = false
+    deferred: Bool = false,
+    updatedAt: Date? = nil,
+    revision: String? = nil
   ) {
     self.id = id
     self.createdAt = createdAt
     self.startedAt = startedAt
     self.finishedAt = finishedAt
+    self.updatedAt = updatedAt
+    self.revision = revision
     self.structured = structured
     self.transcriptSegments = transcriptSegments
     self.transcriptSegmentsIncluded = transcriptSegmentsIncluded

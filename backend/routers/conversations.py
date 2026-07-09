@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    conversation_mutation_data,
     CreateConversationResponse,
     DeleteActionItemRequest,
     MergeConversationsRequest,
@@ -80,6 +81,14 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str) -> dict:
     return conversation
 
 
+def _ensure_mutable_conversation(uid: str, conversation_id: str) -> None:
+    conversation = conversations_db.get_conversation_access_state(uid, conversation_id)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+
+
 def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
     """First open of a lazily-deferred desktop conversation. The LLM enrichment (summary, action
     items, memories, embeddings, app results) takes ~10s, so we run it in the BACKGROUND and return
@@ -128,6 +137,12 @@ class SearchConversationsResponse(BaseModel):
 
 class ConversationStatusResponse(BaseModel):
     status: str
+
+
+class ConversationMutationResponse(ConversationStatusResponse):
+    id: str
+    updated_at: Optional[datetime] = None
+    revision: Optional[str] = None
 
 
 class ConversationsCountResponse(BaseModel):
@@ -318,6 +333,44 @@ def get_conversations(
     return conversations
 
 
+@router.get(
+    '/v1/conversations/list',
+    response_model=List[Conversation],
+    response_model_exclude={'__all__': {'transcript_segments'}},
+    tags=['conversations'],
+    description="Explicit lightweight list projection. Detail-only transcript_segments are omitted.",
+)
+def get_conversation_list_projection(
+    limit: PositiveLimit = 100,
+    offset: NonNegativeOffset = 0,
+    statuses: Optional[str] = "processing,completed",
+    include_discarded: bool = True,
+    start_date: Optional[datetime] = Query(None),
+    end_date: Optional[datetime] = Query(None),
+    folder_id: Optional[str] = Query(None),
+    starred: Optional[bool] = Query(None),
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    if start_date is not None and end_date is not None and _ensure_aware(start_date) > _ensure_aware(end_date):
+        raise HTTPException(status_code=400, detail="start_date must be earlier than or equal to end_date")
+    if not statuses:
+        statuses = "processing,completed"
+    conversations = conversations_db.get_conversations_without_photos(
+        uid,
+        limit,
+        offset,
+        include_discarded=include_discarded,
+        statuses=statuses.split(","),
+        start_date=start_date,
+        end_date=end_date,
+        folder_id=folder_id,
+        starred=starred,
+        list_projection=True,
+    )
+    redact_conversations_for_list(conversations)
+    return conversations
+
+
 @router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)
 def get_conversations_count(
     statuses: Optional[str] = Query(None, description="Comma-separated status filter (e.g. processing,completed)"),
@@ -373,12 +426,14 @@ def get_conversation_by_id(conversation_id: str, uid: str = Depends(auth.get_cur
 
 
 @router.patch(
-    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationStatusResponse
+    "/v1/conversations/{conversation_id}/title", tags=['conversations'], response_model=ConversationMutationResponse
 )
 def patch_conversation_title(conversation_id: str, title: str, uid: str = Depends(auth.get_current_user_uid)):
-    _get_valid_conversation_by_id(uid, conversation_id)
-    conversations_db.update_conversation_title(uid, conversation_id, title)
-    return {'status': 'Ok'}
+    _ensure_mutable_conversation(uid, conversation_id)
+    write_result = conversations_db.update_conversation_title(uid, conversation_id, title)
+    if write_result is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {'status': 'Ok', **conversation_mutation_data(conversation_id, write_result)}
 
 
 @router.delete(
@@ -1011,13 +1066,13 @@ def set_conversation_visibility(
 
 
 @router.patch(
-    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationStatusResponse
+    '/v1/conversations/{conversation_id}/starred', tags=['conversations'], response_model=ConversationMutationResponse
 )
 def set_conversation_starred(conversation_id: str, starred: bool, uid: str = Depends(auth.get_current_user_uid)):
     logger.info(f'update_conversation_starred {conversation_id} {starred} {uid}')
-    _get_valid_conversation_by_id(uid, conversation_id)
-    conversations_db.set_conversation_starred(uid, conversation_id, starred)
-    return {"status": "Ok"}
+    _ensure_mutable_conversation(uid, conversation_id)
+    write_result = conversations_db.set_conversation_starred(uid, conversation_id, starred)
+    return {"status": "Ok", **conversation_mutation_data(conversation_id, write_result)}
 
 
 @router.get(

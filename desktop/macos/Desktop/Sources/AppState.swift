@@ -224,7 +224,8 @@ class AppState: ObservableObject {
   @Published var conversationsError: String? = nil
   @Published var totalConversationsCount: Int? = nil  // Unfiltered total count for dashboard metrics.
   @Published var filteredConversationsCount: Int? = nil  // Count matching the active conversations filters.
-  var pendingConversationMutations: [String: ConversationPendingMutation] = [:]
+  let conversationRepository = ConversationRepository.shared
+  var conversationRepositoryCancellables = Set<AnyCancellable>()
 
   // Conversation filters
   @Published var showStarredOnly: Bool = false
@@ -434,6 +435,31 @@ class AppState: ObservableObject {
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+
+    // AppState remains a compatibility projection for dashboard/automation
+    // consumers while ConversationRepository is the single data owner.
+    conversationRepository.$conversationIds
+      .combineLatest(conversationRepository.$entitiesById)
+      .map { ids, entities in ids.compactMap { entities[$0] } }
+      .sink { [weak self] conversations in self?.conversations = conversations }
+      .store(in: &conversationRepositoryCancellables)
+    conversationRepository.$isLoading
+      .sink { [weak self] value in
+        self?.isLoadingConversations = value
+        if !value, self?.conversationRepository.conversationIds.isEmpty == false {
+          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
+        }
+      }
+      .store(in: &conversationRepositoryCancellables)
+    conversationRepository.$error
+      .sink { [weak self] value in self?.conversationsError = value }
+      .store(in: &conversationRepositoryCancellables)
+    conversationRepository.$totalCount
+      .sink { [weak self] value in self?.totalConversationsCount = value }
+      .store(in: &conversationRepositoryCancellables)
+    conversationRepository.$filteredCount
+      .sink { [weak self] value in self?.filteredConversationsCount = value }
+      .store(in: &conversationRepositoryCancellables)
 
     // Restore paywall flag from prior session so toggles + auto-restart respect
     // it before any backend call has a chance to refresh state — but never for

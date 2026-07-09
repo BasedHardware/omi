@@ -109,6 +109,10 @@ UNDOCUMENTED_PUBLIC_ROUTES: dict[tuple[str, str], str] = {
     ): 'Firebase-authenticated first-party app route; public docs expose Developer API key conversation listing.',
     (
         'GET',
+        '/v1/conversations/list',
+    ): 'Firebase-authenticated lightweight first-party app projection; not part of the Developer API key contract.',
+    (
+        'GET',
         '/v1/conversations/count',
     ): 'Firebase-authenticated first-party app route; not part of the Developer API key contract.',
     (

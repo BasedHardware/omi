@@ -283,20 +283,20 @@ def move_conversation_to_folder(
     uid: str,
     conversation_id: str,
     folder_id: Optional[str],
-) -> bool:
+) -> Any:
     """Move a conversation to a different folder."""
     user_ref = db.collection('users').document(uid)
     conv_ref = user_ref.collection('conversations').document(conversation_id)
 
     # Get the old folder_id to update counts
-    conv_doc = conv_ref.get()
+    conv_doc = conv_ref.get(field_paths=['folder_id'])
     if not getattr(conv_doc, "exists", False):
         return False
 
     old_folder_id = _typed_doc(conv_doc).get('folder_id')
 
     # Update the conversation's folder_id
-    conv_ref.update({'folder_id': folder_id})
+    write_result = conv_ref.update({'folder_id': folder_id})
 
     # Update folder counts
     if old_folder_id:
@@ -304,7 +304,7 @@ def move_conversation_to_folder(
     if folder_id:
         update_folder_conversation_count(uid, folder_id)
 
-    return True
+    return write_result
 
 
 def bulk_move_conversations_to_folder(

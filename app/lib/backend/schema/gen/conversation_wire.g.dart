@@ -442,6 +442,7 @@ class GeneratedConversation {
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
+  final String? revision;
   final String? source;
   final bool starred;
   final DateTime? startedAt;
@@ -450,6 +451,7 @@ class GeneratedConversation {
   final List<String> suggestedSummarizationApps;
   final List<GeneratedTranscriptSegment> transcriptSegments;
   final bool? transcriptSegmentsCompressed;
+  final DateTime? updatedAt;
   final String visibility;
 
   const GeneratedConversation({
@@ -476,6 +478,7 @@ class GeneratedConversation {
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
+    this.revision,
     this.source = "omi",
     this.starred = false,
     required this.startedAt,
@@ -484,6 +487,7 @@ class GeneratedConversation {
     this.suggestedSummarizationApps = const [],
     this.transcriptSegments = const [],
     this.transcriptSegmentsCompressed = false,
+    this.updatedAt,
     this.visibility = "private",
   });
 
@@ -512,6 +516,7 @@ class GeneratedConversation {
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
+      revision: _readFieldValue<String>(_readField(json, const ["revision"]), "revision", _readString, requiredField: false, nullable: true),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
@@ -520,6 +525,7 @@ class GeneratedConversation {
       suggestedSummarizationApps: _required(_readFieldValue<List<String>>(_readField(json, const ["suggested_summarization_apps"]), "suggested_summarization_apps", _readStringList, requiredField: false, nullable: false, defaultValue: const []), "suggested_summarization_apps"),
       transcriptSegments: _required(_readFieldValue<List<GeneratedTranscriptSegment>>(_readField(json, const ["transcript_segments"]), "transcript_segments", (value) => _readObjectList(value, GeneratedTranscriptSegment.fromJson), requiredField: false, nullable: false, defaultValue: const []), "transcript_segments"),
       transcriptSegmentsCompressed: _readFieldValue<bool>(_readField(json, const ["transcript_segments_compressed"]), "transcript_segments_compressed", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      updatedAt: _readFieldValue<DateTime>(_readField(json, const ["updated_at"]), "updated_at", _readDateTime, requiredField: false, nullable: true),
       visibility: _required(_readFieldValue<String>(_readField(json, const ["visibility"]), "visibility", _readString, requiredField: false, nullable: false, defaultValue: "private"), "visibility"),
     );
   }
@@ -549,6 +555,7 @@ class GeneratedConversation {
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
+      'revision': revision,
       'source': source,
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
@@ -557,6 +564,7 @@ class GeneratedConversation {
       'suggested_summarization_apps': suggestedSummarizationApps,
       'transcript_segments': transcriptSegments.map((value) => value.toJson()).toList(),
       'transcript_segments_compressed': transcriptSegmentsCompressed,
+      'updated_at': updatedAt?.toUtc().toIso8601String(),
       'visibility': visibility,
     };
   }

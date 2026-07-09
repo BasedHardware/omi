@@ -3,12 +3,12 @@ import OmiTheme
 
 /// Full detail view for a single conversation
 struct ConversationDetailView: View {
-    let conversation: ServerConversation
+    let conversationId: String
+    @ObservedObject var repository: ConversationRepository
     let onBack: () -> Void
     var folders: [Folder] = []
     var onMoveToFolder: ((String, String?) async -> Void)?
     var onDelete: (() -> Void)?
-    var onTitleUpdated: ((String) -> Void)?
 
     // People (speaker naming)
     var people: [Person] = []
@@ -27,8 +27,6 @@ struct ConversationDetailView: View {
     // Entry animation
     @State private var hasAppeared = false
 
-    // Full conversation loaded from API (with transcript segments)
-    @State private var loadedConversation: ServerConversation?
     @State private var isLoadingConversation = false
     // True while a lazily-deferred conversation is being enriched (polled) on first open.
     @State private var isEnrichingDeferred = false
@@ -61,9 +59,44 @@ struct ConversationDetailView: View {
         return (targets, backendIds, fallbackOrders)
     }
 
-    /// The conversation to display - use loaded version if available, otherwise use prop
+    private var conversation: ServerConversation {
+        repository.conversation(id: conversationId) ?? Self.unavailableConversation(id: conversationId)
+    }
+
+    private static func unavailableConversation(id: String) -> ServerConversation {
+        ServerConversation(
+            id: id,
+            createdAt: .distantPast,
+            startedAt: nil,
+            finishedAt: nil,
+            structured: Structured(
+                title: "Conversation unavailable",
+                overview: "This conversation is no longer available.",
+                emoji: "",
+                category: "other",
+                actionItems: [],
+                events: []
+            ),
+            transcriptSegments: [],
+            transcriptSegmentsIncluded: true,
+            geolocation: nil,
+            photos: [],
+            appsResults: [],
+            source: nil,
+            language: nil,
+            status: .failed,
+            discarded: false,
+            deleted: true,
+            isLocked: false,
+            starred: false,
+            folderId: nil,
+            inputDeviceName: nil
+        )
+    }
+
+    /// The repository projection is the only detail owner.
     private var displayConversation: ServerConversation {
-        loadedConversation ?? conversation
+        conversation
     }
 
     /// The date to display (prefer startedAt, fall back to createdAt)
@@ -174,64 +207,27 @@ struct ConversationDetailView: View {
         .task {
             await appProvider.fetchApps()
             await onFetchPeople?()
-            AnalyticsManager.shared.conversationDetailOpened(conversationId: conversation.id)
+            AnalyticsManager.shared.conversationDetailOpened(conversationId: conversationId)
+
+            isLoadingConversation = true
+            await repository.loadDetail(id: conversationId)
+            isLoadingConversation = false
 
             // Lazy processing: a deferred conversation (status=processing, only its raw transcript)
             // enriches in the background on first open. The first fetch kicks it off and returns
             // immediately (instant open); we then poll until status flips to completed, showing a
             // loader meanwhile. Capped at ~30s so the loader never spins forever (e.g. on error).
-            if conversation.deferred || conversation.status == .processing {
+            if let current = repository.conversation(id: conversationId),
+               current.deferred || current.status == .processing {
                 isEnrichingDeferred = true
                 var attempts = 0
                 while attempts < 15 {
-                    do {
-                        let fetched = try await APIClient.shared.getConversation(id: conversation.id)
-                        loadedConversation = fetched
-                        if fetched.status != .processing { break }
-                    } catch {
-                        logError("ConversationDetail: failed to enrich deferred conversation", error: error)
-                        break
-                    }
+                    await repository.loadDetail(id: conversationId)
+                    guard repository.conversation(id: conversationId)?.status == .processing else { break }
                     attempts += 1
                     try? await Task.sleep(nanoseconds: 2_000_000_000)
                 }
                 isEnrichingDeferred = false
-                return
-            }
-
-            // Load detail-only transcript data only when the list response omitted it.
-            // An explicit empty transcript means either genuinely empty or locked/redacted;
-            // do not refetch forever just because the decoded array is empty.
-            if conversation.shouldFetchDetailForTranscript {
-                isLoadingConversation = true
-                do {
-                    // First try local database (faster, works offline)
-                    if let session = try await TranscriptionStorage.shared.getSessionByBackendId(conversation.id) {
-                        let segmentRecords = try await TranscriptionStorage.shared.getSegments(sessionId: session.id!)
-                        if !segmentRecords.isEmpty {
-                            // Convert local records to TranscriptSegments and update conversation
-                            let segments = segmentRecords.map { $0.toTranscriptSegment() }
-                            var updatedConversation = conversation
-                            updatedConversation.transcriptSegments = segments
-                            updatedConversation.transcriptSegmentsIncluded = true
-                            loadedConversation = updatedConversation
-                            log("ConversationDetail: Loaded \(segments.count) segments from local database")
-                        } else {
-                            // No local segments, fetch from API
-                            let fullConversation = try await APIClient.shared.getConversation(id: conversation.id)
-                            loadedConversation = fullConversation
-                            log("ConversationDetail: Loaded \(fullConversation.transcriptSegments.count) segments from API")
-                        }
-                    } else {
-                        // No local session found, fetch from API
-                        let fullConversation = try await APIClient.shared.getConversation(id: conversation.id)
-                        loadedConversation = fullConversation
-                        log("ConversationDetail: Loaded \(fullConversation.transcriptSegments.count) segments from API (no local session)")
-                    }
-                } catch {
-                    logError("ConversationDetail: Failed to load conversation segments", error: error)
-                }
-                isLoadingConversation = false
             }
         }
         .onReceive(
@@ -543,8 +539,7 @@ struct ConversationDetailView: View {
         defer { isUpdatingTitle = false }
 
         do {
-            try await APIClient.shared.updateConversationTitle(id: conversation.id, title: editedTitle)
-            onTitleUpdated?(editedTitle)
+            try await repository.updateTitle(id: conversationId, title: editedTitle)
         } catch {
             logError("Failed to update title", error: error)
         }
@@ -555,14 +550,9 @@ struct ConversationDetailView: View {
         defer { isDeleting = false }
 
         do {
-            let conversationId = conversation.id
-            try await APIClient.shared.deleteConversation(id: conversationId)
-            await MainActor.run {
-                // Always purge local conversation + memory cache; onDelete is nav/UI only.
-                AppState.current?.deleteConversationLocally(conversationId)
-                onDelete?()
-                onBack()
-            }
+            try await repository.delete(id: conversationId)
+            onDelete?()
+            onBack()
         } catch {
             logError("Failed to delete conversation", error: error)
         }
@@ -691,7 +681,7 @@ struct ConversationDetailView: View {
             .background(OmiColors.backgroundTertiary.opacity(0.5))
 
             // Drawer content
-            if displayConversation.transcriptPresenceState == .lockedOrRedacted && !isLoadingConversation {
+            if displayConversation.transcriptPresenceState == .lockedOrRedacted {
                 VStack(spacing: 12) {
                     Image(systemName: "lock")
                         .scaledFont(size: 40)
@@ -702,7 +692,17 @@ struct ConversationDetailView: View {
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if displayConversation.transcriptSegments.isEmpty && !isLoadingConversation {
+            } else if displayConversation.transcriptSegments.isEmpty && isLoadingConversation {
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+
+                    Text("Loading transcript...")
+                        .scaledFont(size: 14)
+                        .foregroundColor(OmiColors.textTertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if displayConversation.transcriptSegments.isEmpty {
                 // Empty state
                 VStack(spacing: 12) {
                     Image(systemName: "text.quote")
@@ -710,17 +710,6 @@ struct ConversationDetailView: View {
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
                     Text("No transcript available")
-                        .scaledFont(size: 14)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if isLoadingConversation {
-                // Loading state
-                VStack(spacing: 12) {
-                    ProgressView()
-                        .scaleEffect(0.8)
-
-                    Text("Loading transcript...")
                         .scaledFont(size: 14)
                         .foregroundColor(OmiColors.textTertiary)
                 }
@@ -776,7 +765,7 @@ struct ConversationDetailView: View {
                 translations: oldSegment.translations
             )
         }
-        loadedConversation = updatedConversation
+        repository.seed(updatedConversation)
     }
 
     private func persistSpeakerAssignment(
@@ -1065,8 +1054,10 @@ struct ConversationDetailView: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
+    let _ = ConversationRepository.shared.seed(ServerConversation.preview)
     ConversationDetailView(
-        conversation: ServerConversation.preview,
+        conversationId: ServerConversation.preview.id,
+        repository: ConversationRepository.shared,
         onBack: { }
     )
     .frame(width: 600, height: 800)

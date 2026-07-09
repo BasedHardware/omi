@@ -341,6 +341,7 @@ public enum OmiAPI {
     public let privateCloudSyncEnabled: Bool?
     public let processingConversationId: String?
     public let processingMemoryId: String?
+    public let revision: String?
     public let source: ConversationSource?
     public let starred: Bool?
     public let startedAt: String?
@@ -349,6 +350,7 @@ public enum OmiAPI {
     public let suggestedSummarizationApps: [String]?
     public let transcriptSegments: [TranscriptSegment]?
     public let transcriptSegmentsCompressed: Bool?
+    public let updatedAt: String?
     public let visibility: ConversationVisibility?
 
     private enum CodingKeys: String, CodingKey {
@@ -375,6 +377,7 @@ public enum OmiAPI {
       case privateCloudSyncEnabled = "private_cloud_sync_enabled"
       case processingConversationId = "processing_conversation_id"
       case processingMemoryId = "processing_memory_id"
+      case revision
       case source
       case starred
       case startedAt = "started_at"
@@ -383,6 +386,7 @@ public enum OmiAPI {
       case suggestedSummarizationApps = "suggested_summarization_apps"
       case transcriptSegments = "transcript_segments"
       case transcriptSegmentsCompressed = "transcript_segments_compressed"
+      case updatedAt = "updated_at"
       case visibility
     }
 
@@ -411,6 +415,7 @@ public enum OmiAPI {
       privateCloudSyncEnabled = try c.decodeIfPresent(Bool.self, forKey: .privateCloudSyncEnabled)
       processingConversationId = try c.decodeIfPresent(String.self, forKey: .processingConversationId)
       processingMemoryId = try c.decodeIfPresent(String.self, forKey: .processingMemoryId)
+      revision = try c.decodeIfPresent(String.self, forKey: .revision)
       source = try c.decodeIfPresent(ConversationSource.self, forKey: .source)
       starred = try c.decodeIfPresent(Bool.self, forKey: .starred)
       startedAt = try c.decodeIfPresent(String.self, forKey: .startedAt)
@@ -419,10 +424,11 @@ public enum OmiAPI {
       suggestedSummarizationApps = try c.decodeIfPresent([String].self, forKey: .suggestedSummarizationApps)
       transcriptSegments = try c.decodeIfPresent([TranscriptSegment].self, forKey: .transcriptSegments)
       transcriptSegmentsCompressed = try c.decodeIfPresent(Bool.self, forKey: .transcriptSegmentsCompressed)
+      updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String?, appsResults: [AppResult]?, audioFiles: [AudioFile]?, calendarEvent: CalendarEventLink?, callId: String?, clientDeviceId: String?, clientPlatform: String?, createdAt: String, dataProtectionLevel: String?, deferred: Bool?, discarded: Bool?, externalData: [String: OmiAnyCodable]?, finishedAt: String?, folderId: String?, geolocation: Geolocation?, id: String, isLocked: Bool?, language: String?, photos: [ConversationPhoto]?, pluginsResults: [PluginResult]?, privateCloudSyncEnabled: Bool?, processingConversationId: String?, processingMemoryId: String?, source: ConversationSource?, starred: Bool?, startedAt: String?, status: ConversationStatus?, structured: Structured, suggestedSummarizationApps: [String]?, transcriptSegments: [TranscriptSegment]?, transcriptSegmentsCompressed: Bool?, visibility: ConversationVisibility?) {
+    public init(appId: String?, appsResults: [AppResult]?, audioFiles: [AudioFile]?, calendarEvent: CalendarEventLink?, callId: String?, clientDeviceId: String?, clientPlatform: String?, createdAt: String, dataProtectionLevel: String?, deferred: Bool?, discarded: Bool?, externalData: [String: OmiAnyCodable]?, finishedAt: String?, folderId: String?, geolocation: Geolocation?, id: String, isLocked: Bool?, language: String?, photos: [ConversationPhoto]?, pluginsResults: [PluginResult]?, privateCloudSyncEnabled: Bool?, processingConversationId: String?, processingMemoryId: String?, revision: String?, source: ConversationSource?, starred: Bool?, startedAt: String?, status: ConversationStatus?, structured: Structured, suggestedSummarizationApps: [String]?, transcriptSegments: [TranscriptSegment]?, transcriptSegmentsCompressed: Bool?, updatedAt: String?, visibility: ConversationVisibility?) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -446,6 +452,7 @@ public enum OmiAPI {
       self.privateCloudSyncEnabled = privateCloudSyncEnabled
       self.processingConversationId = processingConversationId
       self.processingMemoryId = processingMemoryId
+      self.revision = revision
       self.source = source
       self.starred = starred
       self.startedAt = startedAt
@@ -454,6 +461,7 @@ public enum OmiAPI {
       self.suggestedSummarizationApps = suggestedSummarizationApps
       self.transcriptSegments = transcriptSegments
       self.transcriptSegmentsCompressed = transcriptSegmentsCompressed
+      self.updatedAt = updatedAt
       self.visibility = visibility
     }
   }
@@ -2970,6 +2978,51 @@ public enum OmiAPI {
       throw OmiApiError.httpError(status: http.statusCode, data: data)
     }
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
+  }
+
+  public static func getConversationListProjectionV1ConversationsListGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, statuses: String? = nil, includeDiscarded: Bool? = nil, startDate: String? = nil, endDate: String? = nil, folderId: String? = nil, starred: Bool? = nil) async throws -> [Conversation] {
+    let _path = "/v1/conversations/list"
+    guard var components = URLComponents(string: client.baseURL + _path) else {
+      throw OmiApiError.invalidURL
+    }
+    var queryItems: [URLQueryItem] = []
+    if let limit {
+      queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+    }
+    if let offset {
+      queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+    }
+    if let statuses {
+      queryItems.append(URLQueryItem(name: "statuses", value: String(statuses)))
+    }
+    if let includeDiscarded {
+      queryItems.append(URLQueryItem(name: "include_discarded", value: String(includeDiscarded)))
+    }
+    if let startDate {
+      queryItems.append(URLQueryItem(name: "start_date", value: String(startDate)))
+    }
+    if let endDate {
+      queryItems.append(URLQueryItem(name: "end_date", value: String(endDate)))
+    }
+    if let folderId {
+      queryItems.append(URLQueryItem(name: "folder_id", value: String(folderId)))
+    }
+    if let starred {
+      queryItems.append(URLQueryItem(name: "starred", value: String(starred)))
+    }
+    if !queryItems.isEmpty { components.queryItems = queryItems }
+    guard let url = components.url else { throw OmiApiError.invalidURL }
+    var req = URLRequest(url: url)
+    req.httpMethod = "GET"
+    if let token = client.token {
+      req.setValue("Bearer " + token, forHTTPHeaderField: "Authorization")
+    }
+    let (data, resp) = try await URLSession.shared.data(for: req)
+    guard let http = resp as? HTTPURLResponse else { throw OmiApiError.invalidURL }
+    guard (200..<300).contains(http.statusCode) else {
+      throw OmiApiError.httpError(status: http.statusCode, data: data)
+    }
+    return try JSONDecoder().decode([Conversation].self, from: data)
   }
 
   public static func mergeConversationsV1ConversationsMergePost(client: OmiApiClient, body: OmiAnyCodable) async throws -> OmiAnyCodable {
@@ -8561,5 +8614,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 343 Swift client methods generated.
+  // Total: 344 Swift client methods generated.
 }

@@ -18,6 +18,7 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
     private static var _requests: [CapturedRequest] = []
     private static var _statusCode = 403
     private static var _responseBody = Data("{\"detail\":\"test\"}".utf8)
+    private static var _queuedResponses: [(Int, Data)] = []
 
     static var capturedRequests: [CapturedRequest] {
         lock.lock()
@@ -30,6 +31,7 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
         _requests.removeAll()
         _statusCode = 403
         _responseBody = Data("{\"detail\":\"test\"}".utf8)
+        _queuedResponses = []
         lock.unlock()
     }
 
@@ -37,6 +39,12 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
         lock.lock()
         _statusCode = statusCode
         _responseBody = body
+        lock.unlock()
+    }
+
+    static func setResponses(_ responses: [(statusCode: Int, body: Data)]) {
+        lock.lock()
+        _queuedResponses = responses.map { ($0.statusCode, $0.body) }
         lock.unlock()
     }
 
@@ -101,6 +109,9 @@ private final class URLCapture: URLProtocol, @unchecked Sendable {
     private static func response() -> (Int, Data) {
         lock.lock()
         defer { lock.unlock() }
+        if !_queuedResponses.isEmpty {
+            return _queuedResponses.removeFirst()
+        }
         return (_statusCode, _responseBody)
     }
 }
@@ -351,6 +362,30 @@ final class APIClientRoutingTests: XCTestCase {
                      label: "getConversation")
     }
 
+    func testGetConversationListUsesExplicitLightweightProjection() async {
+        let client = await makeTestClient()
+        _ = try? await client.getConversationList(limit: 50)
+        assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
+                     pathContains: "v1/conversations/list", method: "GET",
+                     label: "getConversationList")
+    }
+
+    func testConversationListFallsBackOnceDuringRollingBackendDeployment() async throws {
+        URLCapture.setResponses([
+            (404, Data("{\"detail\":\"Conversation not found\"}".utf8)),
+            (200, Data("[]".utf8)),
+        ])
+        let client = await makeTestClient()
+
+        let result = try await client.getConversationList(limit: 50)
+
+        XCTAssertTrue(result.isEmpty)
+        let requests = URLCapture.capturedRequests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(requests[0].url.absoluteString.contains("v1/conversations/list?"))
+        XCTAssertTrue(requests[1].url.absoluteString.contains("v1/conversations?"))
+    }
+
     func testDeleteConversationRoutesToPython() async {
         let client = await makeTestClient()
         try? await client.deleteConversation(id: "conv-456")
@@ -363,7 +398,7 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testSetConversationStarredRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.setConversationStarred(id: "c1", starred: true)
+        _ = try? await client.setConversationStarred(id: "c1", starred: true)
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c1/starred", method: "PATCH",
                      label: "setConversationStarred")
@@ -371,10 +406,21 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testUpdateConversationTitleRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.updateConversationTitle(id: "c2", title: "New")
+        _ = try? await client.updateConversationTitle(id: "c2", title: "New")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c2", method: "PATCH",
                      label: "updateConversationTitle")
+    }
+
+    func testStatusOnlyMutationDoesNotTriggerDetailEnrichmentDuringBackendRollout() async {
+        URLCapture.setResponse(statusCode: 200, body: Data("{\"status\":\"Ok\"}".utf8))
+        let client = await makeTestClient()
+
+        _ = try? await client.updateConversationTitle(id: "c2", title: "New")
+
+        let requests = URLCapture.capturedRequests
+        XCTAssertEqual(requests.map(\.method), ["PATCH"])
+        XCTAssertTrue(requests.allSatisfy { $0.url.absoluteString.contains("v1/conversations/c2") })
     }
 
     // -- Folders (GET → Python) --
@@ -602,7 +648,7 @@ final class APIClientRoutingTests: XCTestCase {
 
     func testMoveConversationToFolderRoutesToPython() async {
         let client = await makeTestClient()
-        try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
+        _ = try? await client.moveConversationToFolder(conversationId: "c4", folderId: "f1")
         assertRoutes(URLCapture.capturedRequests, host: "python-test", port: 9001,
                      pathContains: "v1/conversations/c4/folder", method: "PATCH",
                      label: "moveConversationToFolder")

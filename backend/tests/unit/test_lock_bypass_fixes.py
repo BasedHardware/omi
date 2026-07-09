@@ -1558,6 +1558,55 @@ class TestConversationListRedaction:
         assert len(unlocked[0]['transcript_segments']) == 1
 
 
+class TestConversationMutationCanonicalResponse:
+    """Desktop mutations acknowledge a lightweight server-owned revision."""
+
+    def test_title_mutation_returns_canonical_conversation(self):
+        import database.conversations as conversations_db
+        from routers.conversations import patch_conversation_title
+
+        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': False})
+        conversations_db.update_conversation_title = MagicMock()
+
+        result = patch_conversation_title('conv-1', 'Canonical title', uid='test-uid')
+
+        assert result['id'] == 'conv-1'
+
+    def test_star_mutation_returns_canonical_conversation(self):
+        import database.conversations as conversations_db
+        from routers.conversations import set_conversation_starred
+
+        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': False})
+        conversations_db.set_conversation_starred = MagicMock()
+
+        result = set_conversation_starred('conv-1', True, uid='test-uid')
+
+        assert result['id'] == 'conv-1'
+
+
+class TestConversationListProjection:
+    def test_explicit_list_route_requests_firestore_projection(self):
+        import database.conversations as conversations_db
+        from routers.conversations import get_conversation_list_projection
+
+        conversations_db.get_conversations_without_photos = MagicMock(return_value=[])
+
+        result = get_conversation_list_projection(
+            limit=100,
+            offset=0,
+            statuses='processing,completed',
+            include_discarded=False,
+            start_date=None,
+            end_date=None,
+            folder_id=None,
+            starred=None,
+            uid='test-uid',
+        )
+
+        assert result == []
+        assert conversations_db.get_conversations_without_photos.call_args.kwargs['list_projection'] is True
+
+
 # =============================================================================
 # Test suggest_goal excludes locked memories
 # =============================================================================
@@ -1793,7 +1842,7 @@ class TestFolderMoveLockEnforcement:
     def test_move_conversation_rejects_locked(self):
         import database.conversations as conversations_db
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=True))
+        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': True})
 
         from routers.folders import move_conversation_to_folder, MoveConversationRequest
 
@@ -1808,7 +1857,7 @@ class TestFolderMoveLockEnforcement:
         import database.conversations as conversations_db
         import database.folders as folders_db
 
-        conversations_db.get_conversation = MagicMock(return_value=_make_conversation(locked=False))
+        conversations_db.get_conversation_access_state = MagicMock(return_value={'id': 'conv-1', 'is_locked': False})
         folders_db.get_folder = MagicMock(return_value={'id': 'folder-1', 'name': 'Test'})
         folders_db.move_conversation_to_folder = MagicMock()
 
@@ -1816,7 +1865,8 @@ class TestFolderMoveLockEnforcement:
 
         request = MoveConversationRequest(folder_id='folder-1')
         result = move_conversation_to_folder('conv-1', request, uid='test-uid')
-        assert result == {"status": "ok"}
+        assert result["status"] == "ok"
+        assert result["id"] == "conv-1"
 
     def test_bulk_move_rejects_if_any_locked(self):
         import database.conversations as conversations_db

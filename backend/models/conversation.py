@@ -28,6 +28,7 @@ __all__ = [
     'CalendarEventLink',
     'Conversation',
     'ConversationPostProcessing',
+    'conversation_mutation_data',
     'CreateConversation',
     'CreateConversationResponse',
     'CreateMemoryResponse',
@@ -45,6 +46,16 @@ __all__ = [
     'UpdateSegmentTextRequest',
     'UpdateSummaryRequest',
 ]
+
+
+def conversation_mutation_data(conversation_id: str, write_result) -> dict:
+    """Project the opaque server version from a Firestore write result."""
+    update_time = getattr(write_result, 'update_time', None)
+    return {
+        'id': conversation_id,
+        'updated_at': update_time,
+        'revision': update_time.isoformat() if update_time is not None else None,
+    }
 
 
 class UpdateConversation(BaseModel):
@@ -86,6 +97,13 @@ class Conversation(BaseModel):
     created_at: datetime
     started_at: Optional[datetime]
     finished_at: Optional[datetime]
+    # Server-owned freshness metadata. ``revision`` is opaque to clients and is
+    # currently derived from Firestore's document update_time, so it advances
+    # whenever any cached conversation field changes. ``updated_at`` is exposed
+    # for freshness ordering. Clients treat revision as an identity token and
+    # compare updated_at only against another server-owned updated_at value.
+    updated_at: Optional[datetime] = None
+    revision: Optional[str] = None
 
     source: Optional[ConversationSource] = ConversationSource.omi
     language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'

@@ -1333,11 +1333,8 @@ class MemoriesViewModel: ObservableObject {
 
   func navigateToConversation(id: String) async {
     isLoadingConversation = true
-    do {
-      linkedConversation = try await APIClient.shared.getConversation(id: id)
-    } catch {
-      logError("Failed to load conversation", error: error)
-    }
+    await ConversationRepository.shared.loadDetail(id: id)
+    linkedConversation = ConversationRepository.shared.conversation(id: id)
     isLoadingConversation = false
   }
 
@@ -1359,8 +1356,10 @@ struct MemoriesPage: View {
     Group {
       if let conversation = viewModel.linkedConversation {
         // Show conversation detail view
+        let _ = ConversationRepository.shared.seed(conversation)
         ConversationDetailView(
-          conversation: conversation,
+          conversationId: conversation.id,
+          repository: ConversationRepository.shared,
           onBack: { viewModel.dismissConversation() }
         )
       } else {

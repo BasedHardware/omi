@@ -2319,6 +2319,54 @@ actor RewindDatabase {
             try db.execute(sql: "ALTER TABLE task_chat_messages ADD COLUMN resourcesJson TEXT")
         }
 
+        // Conversations use a dedicated read model instead of overloading
+        // transcription_sessions (the crash-recovery/finalization journal).
+        // Payloads retain the complete domain model while indexed columns keep
+        // cache-first list/filter reads cheap and deterministic.
+        migrator.registerMigration("createConversationReadModel") { db in
+            try db.create(table: "conversation_cache") { t in
+                t.column("id", .text).primaryKey()
+                t.column("payload", .blob).notNull()
+                t.column("serverRevision", .text)
+                t.column("serverUpdatedAt", .datetime)
+                t.column("cacheWrittenAt", .datetime).notNull()
+                t.column("completeness", .integer).notNull().defaults(to: 1)
+                t.column("createdAt", .datetime).notNull()
+                t.column("starred", .boolean).notNull().defaults(to: false)
+                t.column("folderId", .text)
+                t.column("status", .text).notNull()
+                t.column("discarded", .boolean).notNull().defaults(to: false)
+                t.column("deleted", .boolean).notNull().defaults(to: false)
+            }
+            try db.create(
+                index: "idx_conversation_cache_list",
+                on: "conversation_cache",
+                columns: ["deleted", "discarded", "createdAt"]
+            )
+
+            try db.create(table: "conversation_query_snapshots") { t in
+                t.column("queryKey", .text).primaryKey()
+                t.column("conversationIdsJson", .text).notNull()
+                t.column("fetchedAt", .datetime).notNull()
+            }
+
+            try db.create(table: "conversation_pending_mutations") { t in
+                t.column("conversationId", .text).primaryKey()
+                t.column("payload", .blob).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
+        // Kept separate from createConversationReadModel so developer builds
+        // that exercised the unreleased first migration can upgrade in place.
+        migrator.registerMigration("addConversationProjectionFreshness") { db in
+            try db.alter(table: "conversation_cache") { t in
+                t.add(column: "listFetchedAt", .datetime)
+                t.add(column: "detailFetchedAt", .datetime)
+                t.add(column: "transcriptFetchedAt", .datetime)
+            }
+        }
+
         try migrator.migrate(queue)
     }
 

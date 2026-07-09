@@ -40,7 +40,8 @@ enum LocalConversationStatus: String, Codable, CaseIterable {
 
 /// Database record for transcription recording sessions
 /// Stores metadata about a transcription session for crash recovery and retry
-/// Also serves as local cache for conversations synced from backend
+/// Server fields are retained only for capture finalization/retry and a one-time
+/// migration into ConversationCacheStorage. This table is not a Conversations UI read model.
 struct TranscriptionSessionRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     var id: Int64?
     var startedAt: Date

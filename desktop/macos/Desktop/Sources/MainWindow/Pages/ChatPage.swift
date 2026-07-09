@@ -84,8 +84,10 @@ struct ChatPage: View {
     }
     .background(OmiColors.backgroundPrimary)
     .sheet(item: $citedConversation) { conversation in
+      let _ = ConversationRepository.shared.seed(conversation)
       ConversationDetailView(
-        conversation: conversation,
+        conversationId: conversation.id,
+        repository: ConversationRepository.shared,
         onBack: {
           citedConversation = nil
           selectedCitation = nil
@@ -504,21 +506,16 @@ struct ChatPage: View {
     selectedCitation = citation
     isLoadingCitation = true
 
-    // Fetch the full conversation
+    // Resolve through the shared repository so every detail surface observes
+    // the same entity and completeness state.
     Task {
-      do {
-        let conversation = try await APIClient.shared.getConversation(id: citation.id)
-        await MainActor.run {
-          citedConversation = conversation
-          isLoadingCitation = false
-        }
-      } catch {
-        logError("Failed to fetch cited conversation", error: error)
-        await MainActor.run {
-          isLoadingCitation = false
-          selectedCitation = nil
-        }
+      await ConversationRepository.shared.loadDetail(id: citation.id)
+      if let conversation = ConversationRepository.shared.conversation(id: citation.id) {
+        citedConversation = conversation
+      } else {
+        selectedCitation = nil
       }
+      isLoadingCitation = false
     }
   }
 }

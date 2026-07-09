@@ -779,6 +779,7 @@ export interface Conversation {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
+  revision?: string | null;
   source?: ConversationSource | null;
   starred?: boolean;
   started_at: string | null;
@@ -787,6 +788,7 @@ export interface Conversation {
   suggested_summarization_apps?: Array<string>;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
+  updated_at?: string | null;
   visibility?: ConversationVisibility;
 }
 
@@ -804,6 +806,20 @@ export interface ConversationCreateResponse {
   discarded: boolean;
   id: string;
   status: string;
+}
+
+export interface ConversationFolderMutationResponse {
+  id: string;
+  revision?: string | null;
+  status: string;
+  updated_at?: string | null;
+}
+
+export interface ConversationMutationResponse {
+  id: string;
+  revision?: string | null;
+  status: string;
+  updated_at?: string | null;
 }
 
 export interface ConversationPhoto {
@@ -2268,6 +2284,7 @@ export interface SharedConversationResponse {
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
+  revision?: string | null;
   source?: ConversationSource | null;
   starred?: boolean;
   started_at: string | null;
@@ -2276,6 +2293,7 @@ export interface SharedConversationResponse {
   suggested_summarization_apps?: Array<string>;
   transcript_segments?: Array<TranscriptSegment>;
   transcript_segments_compressed?: boolean | null;
+  updated_at?: string | null;
   visibility?: ConversationVisibility;
   [key: string]: unknown;
 }
@@ -2988,6 +3006,8 @@ export interface OmiApiSchemas {
   "ConversationActionItemsDeleteResponse": ConversationActionItemsDeleteResponse;
   "ConversationActionItemsResponse": ConversationActionItemsResponse;
   "ConversationCreateResponse": ConversationCreateResponse;
+  "ConversationFolderMutationResponse": ConversationFolderMutationResponse;
+  "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
   "ConversationSource": ConversationSource;
@@ -4121,6 +4141,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v1/conversations/list": {
+    get: {
+      operationId: "get_conversation_list_projection_v1_conversations_list_get";
+      responses: {
+        "200": Array<Conversation>;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v1/conversations/merge": {
     post: {
       operationId: "merge_conversations_v1_conversations_merge_post";
@@ -4266,7 +4296,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "move_conversation_to_folder_v1_conversations__conversation_id__folder_patch";
       responses: {
-        "200": FolderMutationResponse;
+        "200": ConversationFolderMutationResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -4352,7 +4382,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "set_conversation_starred_v1_conversations__conversation_id__starred_patch";
       responses: {
-        "200": ConversationStatusResponse;
+        "200": ConversationMutationResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -4395,7 +4425,7 @@ export interface OmiApiPaths {
     patch: {
       operationId: "patch_conversation_title_v1_conversations__conversation_id__title_patch";
       responses: {
-        "200": ConversationStatusResponse;
+        "200": ConversationMutationResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -8131,6 +8161,24 @@ export async function create_conversation_from_segments_user_v1_conversations_fr
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_conversation_list_projection_v1_conversations_list_get(query: { limit?: number, offset?: number, statuses?: string | null, include_discarded?: boolean, start_date?: string | null, end_date?: string | null, folder_id?: string | null, starred?: boolean | null }, init?: OmiApiClientInit): Promise<Array<Conversation>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/list`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function merge_conversations_v1_conversations_merge_post(body: MergeConversationsRequest, init?: OmiApiClientInit): Promise<MergeConversationsResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/merge`;
@@ -8361,7 +8409,7 @@ export async function finalize_conversation_v1_conversations__conversation_id__f
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function move_conversation_to_folder_v1_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: MoveConversationRequest, init?: OmiApiClientInit): Promise<FolderMutationResponse> {
+export async function move_conversation_to_folder_v1_conversations__conversation_id__folder_patch(path: { conversation_id: string }, body: MoveConversationRequest, init?: OmiApiClientInit): Promise<ConversationFolderMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/folder`;
   const _search = "";
@@ -8493,7 +8541,7 @@ export async function get_shared_conversation_by_id_v1_conversations__conversati
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function set_conversation_starred_v1_conversations__conversation_id__starred_patch(path: { conversation_id: string }, query: { starred: boolean }, init?: OmiApiClientInit): Promise<ConversationStatusResponse> {
+export async function set_conversation_starred_v1_conversations__conversation_id__starred_patch(path: { conversation_id: string }, query: { starred: boolean }, init?: OmiApiClientInit): Promise<ConversationMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/starred`;
   const _params = query ? Object.entries(query)
@@ -8560,7 +8608,7 @@ export async function test_prompt_v1_conversations__conversation_id__test_prompt
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function patch_conversation_title_v1_conversations__conversation_id__title_patch(path: { conversation_id: string }, query: { title: string }, init?: OmiApiClientInit): Promise<ConversationStatusResponse> {
+export async function patch_conversation_title_v1_conversations__conversation_id__title_patch(path: { conversation_id: string }, query: { title: string }, init?: OmiApiClientInit): Promise<ConversationMutationResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/title`;
   const _params = query ? Object.entries(query)
@@ -12366,4 +12414,4 @@ export async function get_speech_profile_v4_speech_profile_get(init?: OmiApiClie
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 343 client methods generated.
+// Total: 344 client methods generated.

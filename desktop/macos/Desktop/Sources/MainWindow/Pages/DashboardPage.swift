@@ -379,8 +379,10 @@ struct DashboardPage: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(useLegacyHomeDesign ? Color.clear : HomePalette.paper)
         .sheet(item: $citedConversation) { conversation in
+            let _ = ConversationRepository.shared.seed(conversation)
             ConversationDetailView(
-                conversation: conversation,
+                conversationId: conversation.id,
+                repository: ConversationRepository.shared,
                 onBack: {
                     citedConversation = nil
                 }
@@ -1656,18 +1658,9 @@ struct DashboardPage: View {
         isLoadingCitation = true
 
         Task {
-            do {
-                let conversation = try await APIClient.shared.getConversation(id: citation.id)
-                await MainActor.run {
-                    citedConversation = conversation
-                    isLoadingCitation = false
-                }
-            } catch {
-                logError("Failed to fetch cited conversation", error: error)
-                await MainActor.run {
-                    isLoadingCitation = false
-                }
-            }
+            await ConversationRepository.shared.loadDetail(id: citation.id)
+            citedConversation = ConversationRepository.shared.conversation(id: citation.id)
+            isLoadingCitation = false
         }
     }
 

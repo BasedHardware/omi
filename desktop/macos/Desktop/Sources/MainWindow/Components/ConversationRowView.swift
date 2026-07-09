@@ -84,6 +84,28 @@ struct ConversationRowView: View {
     return folders.first(where: { $0.id == folderId })?.name
   }
 
+  @ViewBuilder
+  private var syncStatusIndicator: some View {
+    if let metadata = appState.conversationRepository.metadata(id: conversation.id) {
+      switch metadata.syncState {
+      case .synced:
+        EmptyView()
+      case .pending:
+        Image(systemName: "arrow.triangle.2.circlepath")
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.textTertiary)
+          .help("Change queued for sync")
+          .accessibilityLabel("Change queued for sync")
+      case .failed(let message):
+        Image(systemName: "exclamationmark.triangle.fill")
+          .scaledFont(size: 10)
+          .foregroundColor(OmiColors.error)
+          .help("Could not sync change: \(message)")
+          .accessibilityLabel("Could not sync change")
+      }
+    }
+  }
+
   /// Label for the conversation source
   private var sourceLabel: String {
     switch conversation.source {
@@ -109,15 +131,10 @@ struct ConversationRowView: View {
     let newStarred = !conversation.starred
 
     do {
-      try await APIClient.shared.setConversationStarred(id: conversation.id, starred: newStarred)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateStarredByBackendId(
-        conversation.id, starred: newStarred)
-
-      await MainActor.run {
-        appState.setConversationStarred(conversation.id, starred: newStarred)
-      }
+      try await appState.conversationRepository.updateStarred(
+        id: conversation.id,
+        starred: newStarred
+      )
     } catch {
       log("Failed to update starred status: \(error)")
     }
@@ -166,18 +183,8 @@ struct ConversationRowView: View {
     guard !isDeleting else { return }
     isDeleting = true
 
-    // Soft-delete in SQLite immediately so reload doesn't restore it
     do {
-      try await TranscriptionStorage.shared.deleteByBackendId(conversation.id)
-    } catch {
-      log("Failed to soft-delete conversation locally: \(error)")
-    }
-
-    do {
-      try await APIClient.shared.deleteConversation(id: conversation.id)
-      await MainActor.run {
-        appState.deleteConversationLocally(conversation.id)
-      }
+      try await appState.conversationRepository.delete(id: conversation.id)
       log("Deleted conversation \(conversation.id)")
     } catch {
       log("Failed to delete conversation: \(error)")
@@ -191,15 +198,10 @@ struct ConversationRowView: View {
     isUpdatingTitle = true
 
     do {
-      try await APIClient.shared.updateConversationTitle(id: conversation.id, title: editedTitle)
-
-      // Sync to local SQLite cache so reload doesn't revert the change
-      try await TranscriptionStorage.shared.updateTitleByBackendId(
-        conversation.id, title: editedTitle)
-
-      await MainActor.run {
-        appState.updateConversationTitle(conversation.id, title: editedTitle)
-      }
+      try await appState.conversationRepository.updateTitle(
+        id: conversation.id,
+        title: editedTitle
+      )
       log("Updated conversation title to: \(editedTitle)")
     } catch {
       log("Failed to update title: \(error)")
@@ -332,6 +334,8 @@ struct ConversationRowView: View {
           Text(conversation.formattedDuration)
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
+
+          syncStatusIndicator
         }
       }
 
@@ -419,6 +423,8 @@ struct ConversationRowView: View {
           Text(conversation.formattedDuration)
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
+
+          syncStatusIndicator
         }
       }
 

@@ -73,7 +73,7 @@ enum ViewExporter {
 
       (
         "04-conversations",
-        { AnyView(ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))) },
+        { AnyView(ConversationsPage(appState: AppState(), selectedConversationId: .constant(nil))) },
         CGSize(width: 900, height: 700)
       ),
 

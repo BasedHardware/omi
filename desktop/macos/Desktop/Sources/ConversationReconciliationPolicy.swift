@@ -8,7 +8,7 @@ import Foundation
 ///
 /// Each field carries its own `recordedAt` so that a later star or folder change
 /// does not accidentally refresh the TTL of an older title overlay (and vice-versa).
-struct ConversationPendingMutation: Equatable {
+struct ConversationPendingMutation: Codable, Equatable, Sendable {
   var title: String?
   var starred: Bool?
   var titleRecordedAt: Date?
@@ -71,6 +71,23 @@ struct ConversationPendingMutation: Equatable {
       folderId = nil
       hasFolderIdMutation = false
       folderIdRecordedAt = nil
+    }
+  }
+
+  mutating func clearAcknowledged(_ value: ConversationMutationValue) {
+    switch value {
+    case .title(let acknowledged) where title == acknowledged:
+      title = nil
+      titleRecordedAt = nil
+    case .starred(let acknowledged) where starred == acknowledged:
+      starred = nil
+      starredRecordedAt = nil
+    case .folder(let acknowledged) where hasFolderIdMutation && folderId == acknowledged:
+      folderId = nil
+      hasFolderIdMutation = false
+      folderIdRecordedAt = nil
+    default:
+      break
     }
   }
 }
@@ -162,7 +179,9 @@ enum ConversationReconciliationPolicy {
       starred: mutation.starred ?? serverConversation.starred,
       folderId: mutation.hasFolderIdMutation ? mutation.folderId : serverConversation.folderId,
       inputDeviceName: serverConversation.inputDeviceName,
-      deferred: serverConversation.deferred
+      deferred: serverConversation.deferred,
+      updatedAt: serverConversation.updatedAt,
+      revision: serverConversation.revision
     )
   }
 

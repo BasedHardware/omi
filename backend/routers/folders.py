@@ -1,8 +1,9 @@
 import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import List, Optional
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 import database.folders as folders_db
 import database.conversations as conversations_db
@@ -16,13 +17,20 @@ from models.folder import (
     FolderMutationResponse,
     BulkMoveConversationsResponse,
 )
-from models.conversation import Conversation
+from models.conversation import Conversation, conversation_mutation_data
 from utils.conversations.render import redact_conversations_for_list
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+class ConversationFolderMutationResponse(BaseModel):
+    status: str
+    id: str
+    updated_at: Optional[datetime] = None
+    revision: Optional[str] = None
 
 
 @router.get('/v1/folders', response_model=List[Folder], tags=['folders'])
@@ -144,12 +152,16 @@ def get_folder_conversations(
     return valid_conversations
 
 
-@router.patch('/v1/conversations/{conversation_id}/folder', response_model=FolderMutationResponse, tags=['folders'])
+@router.patch(
+    '/v1/conversations/{conversation_id}/folder',
+    response_model=ConversationFolderMutationResponse,
+    tags=['folders'],
+)
 def move_conversation_to_folder(
     conversation_id: str, request: MoveConversationRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Move a conversation to a different folder."""
-    conversation = conversations_db.get_conversation(uid, conversation_id)
+    conversation = conversations_db.get_conversation_access_state(uid, conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
@@ -160,8 +172,10 @@ def move_conversation_to_folder(
         if not folder:
             raise HTTPException(status_code=404, detail="Folder not found")
 
-    folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
-    return {"status": "ok"}
+    write_result = folders_db.move_conversation_to_folder(uid, conversation_id, request.folder_id)
+    if write_result is False or write_result is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"status": "ok", **conversation_mutation_data(conversation_id, write_result)}
 
 
 @router.post(

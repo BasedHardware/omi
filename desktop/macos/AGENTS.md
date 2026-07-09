@@ -120,6 +120,13 @@ storage before UI) and wire `import` + `public` on the extracted target's API.
 - **Redis**: Caching
 - **Typesense**: Search
 
+### Conversations Read/Write Authority
+- `ConversationRepository` is the account-scoped owner for desktop conversation list, search, detail, and user mutations. UI surfaces observe entities by conversation ID; they must not independently reconcile API values with `TranscriptionStorage` rows.
+- `ConversationCacheStorage` is the offline read model. It records projection completeness (`list`, `detail`, `transcript`) so a partial list response cannot erase richer cached detail.
+- Backend `revision` / `updated_at` values are the freshness authority. Never compare a local wall clock with `finished_at` to choose a winner.
+- Title, star, and folder writes are staged in the repository's durable pending-mutation journal and drained serially per conversation, then cleared only by the matching lightweight server revision acknowledgment. New conversation mutations should follow that path and add a deterministic behavioral test.
+- `TranscriptionStorage` owns capture finalization, crash recovery, and retry. Its legacy server fields exist only for finalization and one-time cache migration, not as a Conversations UI cache.
+
 ### User Subcollections (Firestore)
 - `users/{uid}/conversations` - Has `source` field (omi, desktop, phone, etc.)
 - `users/{uid}/action_items` - Tasks (no platform tracking)

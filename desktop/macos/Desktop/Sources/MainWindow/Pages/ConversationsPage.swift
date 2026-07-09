@@ -28,7 +28,8 @@ class SearchDebouncer: ObservableObject {
 
 struct ConversationsPage: View {
   @ObservedObject var appState: AppState
-  @Binding var selectedConversation: ServerConversation?
+  @ObservedObject private var conversationRepository = ConversationRepository.shared
+  @Binding var selectedConversationId: String?
 
   /// When true, renders without internal ScrollViews (for embedding in an outer ScrollView)
   var embedded: Bool = false
@@ -38,10 +39,11 @@ struct ConversationsPage: View {
 
   // Search state
   @State private var searchQuery: String = ""
-  @State private var searchResults: [ServerConversation] = []
-  @State private var isSearching: Bool = false
-  @State private var searchError: String? = nil
   @StateObject private var searchDebouncer = SearchDebouncer()
+
+  private var searchResults: [ServerConversation] { conversationRepository.searchResults }
+  private var isSearching: Bool { conversationRepository.isSearching }
+  private var searchError: String? { conversationRepository.searchError }
 
   // Date picker state
   @State private var showDatePicker: Bool = false
@@ -64,11 +66,13 @@ struct ConversationsPage: View {
 
   var body: some View {
     Group {
-      if let selected = selectedConversation {
+      if let selectedConversationId,
+         conversationRepository.conversation(id: selectedConversationId) != nil {
         // Detail view for selected conversation
         ConversationDetailView(
-          conversation: selected,
-          onBack: { selectedConversation = nil },
+          conversationId: selectedConversationId,
+          repository: conversationRepository,
+          onBack: { self.selectedConversationId = nil },
           folders: appState.folders,
           onMoveToFolder: { conversationId, folderId in
             await appState.moveConversationToFolder(conversationId, folderId: folderId)
@@ -77,14 +81,6 @@ struct ConversationsPage: View {
             // Cascade is owned by ConversationDetailView; refresh list after dismiss.
             Task {
               await appState.refreshConversations()
-            }
-          },
-          onTitleUpdated: { _ in
-            // Refresh to get updated data if conversation still exists
-            if appState.conversations.contains(where: { $0.id == selected.id }) {
-              Task {
-                await appState.refreshConversations()
-              }
             }
           },
           people: appState.people,
@@ -153,7 +149,7 @@ struct ConversationsPage: View {
     let showTranscript = notification.userInfo?["showTranscript"] as? Bool ?? false
 
     func present(_ conversation: ServerConversation) {
-      selectedConversation = conversation
+      selectedConversationId = conversation.id
       guard showTranscript else { return }
       DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
         NotificationCenter.default.post(
@@ -260,8 +256,7 @@ struct ConversationsPage: View {
             Button(action: {
               searchQuery = ""
               searchDebouncer.inputQuery = ""
-              searchResults = []
-              searchError = nil
+              conversationRepository.clearSearch()
             }) {
               Image(systemName: "xmark.circle.fill")
                 .scaledFont(size: 13)
@@ -307,7 +302,7 @@ struct ConversationsPage: View {
             isCompactView: isCompactView,
             onSelect: { conversation in
               AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
-              selectedConversation = conversation
+              selectedConversationId = conversation.id
             },
             onRefresh: {
               Task {
@@ -399,7 +394,7 @@ struct ConversationsPage: View {
           conversation: conversation,
           onTap: {
             AnalyticsManager.shared.memoryListItemClicked(conversationId: conversation.id)
-            selectedConversation = conversation
+            selectedConversationId = conversation.id
           },
           folders: appState.folders,
           onMoveToFolder: { conversationId, folderId in
@@ -435,33 +430,15 @@ struct ConversationsPage: View {
 
   private func performSearch(query: String) {
     guard !query.isEmpty else {
-      searchResults = []
-      searchError = nil
+      conversationRepository.clearSearch()
       return
     }
 
-    isSearching = true
-    searchError = nil
     log("Search: Starting search for '\(query)'")
     AnalyticsManager.shared.searchQueryEntered(query: query)
 
     Task {
-      do {
-        let result = try await APIClient.shared.searchConversations(
-          query: query,
-          page: 1,
-          perPage: 50,
-          includeDiscarded: false
-        )
-        log("Search: Found \(result.items.count) results")
-        searchResults = result.items
-        isSearching = false
-      } catch {
-        logError("Search: Failed", error: error)
-        searchError = error.localizedDescription
-        searchResults = []
-        isSearching = false
-      }
+      await conversationRepository.search(query, limit: 50)
     }
   }
 
@@ -794,7 +771,7 @@ private struct TranscriptNotesDivider: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-  ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
+  ConversationsPage(appState: AppState(), selectedConversationId: .constant(nil))
     .frame(width: 600, height: 800)
     .background(OmiColors.backgroundSecondary)
 }

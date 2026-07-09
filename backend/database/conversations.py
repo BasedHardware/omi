@@ -11,6 +11,10 @@ from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
 from database import users as users_db
+from database.conversation_projection import (
+    apply_conversation_list_field_mask,
+    conversation_snapshot_data,
+)
 from models.audio_file import AudioFile
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -195,8 +199,19 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
 def get_conversation(uid, conversation_id):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_data = conversation_ref.get().to_dict()
-    return conversation_data
+    return conversation_snapshot_data(conversation_ref.get())
+
+
+def get_conversation_access_state(uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
+    """Read only the fields needed to authorize a mutation."""
+    conversation_ref = (
+        db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    )
+    snapshot = conversation_ref.get(field_paths=['is_locked'])
+    if not snapshot.exists:
+        return None
+    data = snapshot.to_dict() or {}
+    return {'id': conversation_id, 'is_locked': bool(data.get('is_locked', False))}
 
 
 @prepare_for_read(decrypt_func=_prepare_conversation_for_read)
@@ -242,7 +257,8 @@ def get_conversations(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    conversations = [conversation_snapshot_data(doc) for doc in conversations_ref.stream()]
+    conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
 
@@ -290,6 +306,7 @@ def get_conversations_without_photos(
     categories: Optional[List[str]] = None,
     folder_id: Optional[str] = None,
     starred: Optional[bool] = None,
+    list_projection: bool = False,
 ):
     """
     Same as get_conversations but without loading photos.
@@ -322,7 +339,11 @@ def get_conversations_without_photos(
     # Limits
     conversations_ref = conversations_ref.limit(limit).offset(offset)
 
-    conversations = [doc.to_dict() for doc in conversations_ref.stream()]
+    if list_projection:
+        conversations_ref = apply_conversation_list_field_mask(conversations_ref)
+
+    conversations = [conversation_snapshot_data(doc) for doc in conversations_ref.stream()]
+    conversations = [conversation for conversation in conversations if conversation is not None]
     return conversations
 
 
@@ -454,11 +475,7 @@ def update_conversation_title(uid: str, conversation_id: str, title: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
 
-    doc_snapshot = conversation_ref.get()
-    if not doc_snapshot.exists:
-        return
-
-    conversation_ref.update({'structured.title': title})
+    return conversation_ref.update({'structured.title': title})
 
 
 def update_conversation_summary(uid: str, conversation_id: str, app_id: Optional[str], content: str) -> str:
@@ -616,10 +633,12 @@ def _get_conversations_by_id(uid, conversation_ids, include_discarded: bool = Fa
     conversations_by_id = {}
     for doc in docs:
         if doc.exists:
-            data = doc.to_dict()
-            if data.get('discarded') and not include_discarded:
+            data = conversation_snapshot_data(doc)
+            if data is None:
                 continue
             data.setdefault('id', doc.id)
+            if data.get('discarded') and not include_discarded:
+                continue
             conversations_by_id[str(data['id'])] = data
 
     return [
@@ -987,7 +1006,7 @@ def set_conversation_visibility(uid: str, conversation_id: str, visibility: str)
 def set_conversation_starred(uid: str, conversation_id: str, starred: bool):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'starred': starred})
+    return conversation_ref.update({'starred': starred})
 
 
 def unlock_all_conversations(uid: str):
