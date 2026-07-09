@@ -929,8 +929,20 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
 }
 
 export function deleteAllRewindFrames(): number {
-  const result = get().prepare('DELETE FROM rewind_frames').run()
-  return result.changes
+  const d = get()
+  // Wipe the FTS mirror in the same transaction as the base-table delete so no
+  // searchable OCR/app/window text survives "delete all Rewind history". The
+  // FTS table is checked via sqlite_master (not rewindFtsAvailable) so a stale
+  // index left by an earlier run is cleared even while FTS is disabled.
+  const wipeAll = d.transaction(() => {
+    const result = d.prepare('DELETE FROM rewind_frames').run()
+    const ftsExists = d
+      .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")
+      .get(REWIND_FTS_TABLE)
+    if (ftsExists) d.exec(`DELETE FROM ${REWIND_FTS_TABLE}`)
+    return result.changes
+  })
+  return wipeAll()
 }
 
 // --- Proactive Insights ---
