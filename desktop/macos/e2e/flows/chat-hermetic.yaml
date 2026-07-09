@@ -7,10 +7,14 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
   - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
   - desktop/macos/Desktop/Sources/AnalyticsManager.swift
+  - desktop/macos/Desktop/Sources/Chat/AgentBridge.swift
   - desktop/macos/Desktop/Sources/Chat/AgentControlService.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContentBlockCodec.swift
+  - desktop/macos/Desktop/Sources/Chat/ChatContinuityInvariants.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCapabilityRegistry.swift
   - desktop/macos/Desktop/Sources/Chat/DesktopCoordinatorService.swift
   - desktop/macos/Desktop/Sources/Chat/KernelTurnProjection.swift
+  - desktop/macos/Desktop/Sources/Chat/RuntimeOwnerIdentity.swift
   - desktop/macos/Desktop/Sources/Chat/ScreenContextTelemetry.swift
   - desktop/macos/Desktop/Sources/Chat/ChatStreamingBuffer.swift
   - desktop/macos/Desktop/Sources/Chat/ChatErrorState.swift
@@ -18,6 +22,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatMessagesView.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatInputView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/SelectableMarkdown.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedToolCapabilities.swift
