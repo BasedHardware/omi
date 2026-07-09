@@ -17,6 +17,12 @@ covers:
   - desktop/macos/Desktop/Sources/WAL/WALCloudSyncLogic.swift
   - desktop/macos/Desktop/Sources/WAL/WALService.swift
   - desktop/macos/Desktop/Sources/WAL/WALSyncReconciler.swift
+  - desktop/macos/Desktop/Sources/TranscriptionService.swift
+  - desktop/macos/Desktop/Sources/TranscriptionRetryService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/ViewModelContainer.swift
+  - desktop/macos/Desktop/Sources/Audio/BleAudioProcessor.swift
+  - desktop/macos/Desktop/Sources/Audio/BleAudioService.swift
 preconditions:
   - automation_bridge_ready
 
