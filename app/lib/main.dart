@@ -73,10 +73,12 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/analytics/rage_click_context_tracker.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/environment_detector.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Background message handler for FCM data messages
@@ -404,9 +406,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };
+              Widget content;
               if (Env.isUsingStagingApi) {
                 final topPadding = MediaQuery.of(context).padding.top;
-                return Column(
+                content = Column(
                   children: [
                     GestureDetector(
                       onTap: () {
@@ -435,8 +438,12 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                     ),
                   ],
                 );
+              } else {
+                content = child!;
               }
-              return child!;
+              return PlatformService.isIOS && Env.posthogApiKey != null
+                  ? RageClickContextTracker(child: content)
+                  : content;
             },
             home: TalkerWrapper(
               talker: Logger.instance.talker,
