@@ -253,7 +253,11 @@ export type OmiBridgeApi = {
   googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
-  mcpKeyCreate: (key: McpKeyRecord) => Promise<void>
+  // Hosted MCP key lifecycle (main-process owned). The renderer passes only the
+  // Firebase ID token; main performs the key-creating HTTP call and persists the
+  // key, returning masked metadata. The raw bearer key never crosses IPC to the
+  // renderer — the only way it leaves main is the user-confirmed mcpKeyCopy path.
+  mcpKeyCreateAndStore: (token: string) => Promise<McpKeyMetadata>
   mcpKeyRead: () => Promise<McpKeyMetadata | null>
   mcpKeyCopy: (request: McpKeyCopyRequest) => Promise<McpKeyCopyResult>
   mcpKeyTest: () => Promise<McpKeyTestResult>
