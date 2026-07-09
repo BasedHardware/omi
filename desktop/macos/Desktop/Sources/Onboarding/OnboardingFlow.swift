@@ -40,7 +40,8 @@ enum OnboardingFlow {
     hasInsertedSecondBrainStep: Bool = false,
     hasRemovedResearchStep: Bool = false,
     hasInsertedBYOKStep: Bool = true,
-    hasRemovedBYOKStep: Bool = true
+    hasRemovedBYOKStep: Bool = true,
+    hasRemovedNotificationPermissionStep: Bool = true
   ) -> Int {
     var migratedStep = currentStep
 
@@ -99,6 +100,13 @@ enum OnboardingFlow {
     // push users who were on Tasks forward by one so they still land on Tasks.
     if !hasInsertedBYOKStep, migratedStep >= 17 {
       migratedStep += 1
+    }
+
+    // Notification-permission step (old index 8) was removed; shift users at 8+ down
+    // before BYOK removal so a legacy BYOK index (18 with notifications still counted)
+    // becomes 17 first, then stays on Tasks instead of dropping to Goal.
+    if !hasRemovedNotificationPermissionStep, migratedStep >= 8 {
+      migratedStep -= 1
     }
 
     // BringYourOwnKeys step removed; users on BYOK (17) stay on Tasks (17),

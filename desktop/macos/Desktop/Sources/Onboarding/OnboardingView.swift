@@ -83,11 +83,9 @@ struct OnboardingView: View {
           hasInsertedSecondBrainStep: hasInsertedSecondBrainStep,
           hasRemovedResearchStep: hasRemovedResearchStep,
           hasInsertedBYOKStep: hasInsertedBYOKStep,
-          hasRemovedBYOKStep: hasRemovedBYOKStep
+          hasRemovedBYOKStep: hasRemovedBYOKStep,
+          hasRemovedNotificationPermissionStep: hasRemovedNotificationPermissionStep
         )
-        if !hasRemovedNotificationPermissionStep, currentStep >= 8 {
-          currentStep -= 1
-        }
       }
       hasMigratedPagedIntro = true
       hasMigratedOnboardingSteps = true

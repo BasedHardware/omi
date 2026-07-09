@@ -166,6 +166,52 @@ final class OnboardingFlowTests: XCTestCase {
     XCTAssertEqual(migratedFromTasks, 17)
   }
 
+  func testMigrationRemovesBYOKAfterPendingNotificationPermissionRemoval() {
+    // Legacy index 18 = BYOK while the old notification-permission step (index 8)
+    // was still counted. Notification removal must run before BYOK removal so the
+    // user lands on Tasks (17), not Goal (16).
+    let migratedFromLegacyBYOK = OnboardingFlow.migratedStep(
+      currentStep: 18,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    let migratedFromLegacyTasks = OnboardingFlow.migratedStep(
+      currentStep: 19,
+      hasMigratedVideoStep: true,
+      hasInsertedVoiceShortcutStep: true,
+      hasMergedVoiceInputStep: true,
+      hasRemovedNotificationStep: true,
+      hasInsertedFloatingBarShortcutStep: true,
+      hasMigratedPagedIntro: true,
+      hasReorderedTrustStep: true,
+      hasInsertedHowDidYouHearStep: true,
+      hasInsertedDataSourcesStep: true,
+      hasInsertedExportsStep: true,
+      hasInsertedSecondBrainStep: false,
+      hasRemovedResearchStep: true,
+      hasInsertedBYOKStep: true,
+      hasRemovedBYOKStep: false,
+      hasRemovedNotificationPermissionStep: false
+    )
+
+    XCTAssertEqual(migratedFromLegacyBYOK, 17)
+    XCTAssertEqual(migratedFromLegacyTasks, 17)
+  }
+
   func testVoiceShortcutContinueUnlocksOnlyAfterReleaseFollowingObservedPress() {
     XCTAssertFalse(
       OnboardingFlow.shouldUnlockVoiceShortcutContinue(

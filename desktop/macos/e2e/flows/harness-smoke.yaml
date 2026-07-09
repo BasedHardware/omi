@@ -12,6 +12,9 @@ covers:
   - desktop/macos/Desktop/Sources/OmiApp.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingFlow.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingStepScaffold.swift
+  - desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceDemoView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingVoiceShortcutStepView.swift
   - desktop/macos/Desktop/Sources/Telemetry/SentryHeartbeatTelemetry.swift
