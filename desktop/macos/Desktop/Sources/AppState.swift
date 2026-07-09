@@ -320,11 +320,7 @@ class AppState: ObservableObject {
     get { servicesCoordinator.localSystemService }
     set { servicesCoordinator.localSystemService = newValue }
   }
-  var useLocalSTT = false
-  var sttFallbackInProgress = false
-  var forceCloudSTTForSession = false
-  var forceLocalSTTForSession = false
-  var sttCloudFallbackTried = false
+  var sttSession = STTSessionState()
 
   static let isAppleSilicon: Bool = {
     var value: Int32 = 0
