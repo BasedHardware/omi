@@ -37,6 +37,7 @@ describe('AcpRuntimeAdapter against a real subprocess', () => {
 
       expect(events).toContainEqual({ type: 'text_delta', text: 'echo: integration ping' })
       expect(result.text).toBe('echo: integration ping')
+      expect(result.adapterSessionId).toBe('fake-native-session')
       expect(result.terminalStatus).toBe('succeeded')
       expect(result.inputTokens).toBe(3)
       expect(result.costUsd).toBeCloseTo(0.001)

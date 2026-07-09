@@ -105,13 +105,19 @@ const PROXY_ENV_KEYS = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'http
 function sanitizeProxyUrl(value: string): string {
   try {
     const url = new URL(value)
-    url.username = ''
-    url.password = ''
-    return url.toString()
+    if (url.username || url.password) {
+      url.username = ''
+      url.password = ''
+      return url.toString()
+    }
   } catch {
-    // Not a valid URL — forward as-is so non-URL proxy configs still work.
-    return value
+    /* fall through to the manual strip below */
   }
+  // URL() didn't expose an authority — either the value isn't a URL, or it
+  // parsed with an accidental scheme (e.g. "alice:pass@proxy:3128", where
+  // "alice:" reads as the protocol). Strip any user[:pass]@ prefix manually,
+  // tolerating an optional scheme://; host-only values pass through unchanged.
+  return value.replace(/^([a-z][a-z0-9+.-]*:\/\/)?[^@\s/]+@/i, '$1')
 }
 
 export class AcpError extends Error {
@@ -480,6 +486,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.notificationHandler = (method, params) => {
       previousHandler?.(method, params)
       if (signal.aborted || method !== 'session/update') return
+      // One ACP process can host several sessions — never let another
+      // session's (or a stale) update stream into this attempt. Updates
+      // without a session id (older adapters) are accepted as before.
+      const updateSessionId = (params as { sessionId?: unknown } | undefined)?.sessionId
+      if (typeof updateSessionId === 'string' && updateSessionId !== adapterSessionId) return
       const didProgress = this.translateSessionUpdate(
         params as Record<string, unknown>,
         pendingTools,
@@ -537,7 +548,27 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   ): Promise<T> {
     const timeoutMs = this.noProgressTimeoutMs
     if (timeoutMs <= 0) {
-      return promise
+      // No watchdog, but cancellation must still settle the attempt even if
+      // the adapter never answers session/cancel with a prompt response.
+      return new Promise<T>((resolve, reject) => {
+        let settled = false
+        const finish = (fn: () => void): void => {
+          if (settled) return
+          settled = true
+          signal.removeEventListener('abort', onAbort)
+          fn()
+        }
+        const onAbort = (): void => finish(() => reject(new Error('ACP attempt cancelled')))
+        if (signal.aborted) {
+          onAbort()
+          return
+        }
+        signal.addEventListener('abort', onAbort, { once: true })
+        promise.then(
+          (value) => finish(() => resolve(value)),
+          (error) => finish(() => reject(error instanceof Error ? error : new Error(String(error))))
+        )
+      })
     }
 
     return new Promise<T>((resolve, reject) => {

@@ -59,13 +59,25 @@ export function normalizeRuntimeFailure(failure: RuntimeFailure): RuntimeFailure
 }
 
 export function sanitizeProcessDiagnostic(text: string): string {
-  return text
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
-    .replace(/sk-[A-Za-z0-9_-]{12,}/g, 'sk-[redacted]')
-    .replace(/(api[_-]?key["'\s:=]+)[A-Za-z0-9._~+/=-]+/gi, '$1[redacted]')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 1_000)
+  return (
+    text
+      .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, 'Bearer [redacted]')
+      .replace(/sk-[A-Za-z0-9_-]{12,}/g, 'sk-[redacted]')
+      // Common provider token shapes (GitHub, Slack) that appear bare in stderr.
+      .replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{16,}\b/g, '[redacted]')
+      .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}\b/g, '[redacted]')
+      .replace(/\bxox[a-z]-[A-Za-z0-9-]{10,}\b/gi, '[redacted]')
+      // Field-style secrets: api_key=..., token: "...", password=..., etc.
+      .replace(
+        /((?:api[_-]?key|token|secret|password|passwd|pwd|credentials?|authorization)["'\s:=]+)[A-Za-z0-9._~+/=-]+/gi,
+        '$1[redacted]'
+      )
+      .replace(/\s+/g, ' ')
+      .trim()
+      // Keep the TAIL: the final stderr lines carry the actual crash cause
+      // (and the strings classifyAdapterProcessFailure sniffs for).
+      .slice(-1_000)
+  )
 }
 
 export function failureFromProcessExit(input: {

@@ -8,13 +8,16 @@
  * separate Node process (ELECTRON_RUN_AS_NODE) by the Claude Code adapter.
  */
 
-// Redirect console to stderr (ACP requires stdout to be pure JSON-RPC)
+// Redirect console to stderr (ACP requires stdout to be pure JSON-RPC).
 console.log = console.error
 console.info = console.error
 console.warn = console.error
 console.debug = console.error
 
-import { ClaudeAcpAgent, runAcp } from '@zed-industries/claude-agent-acp/dist/acp-agent.js'
+// Dynamic import AFTER the redirect: a static import would be hoisted and
+// evaluated first, letting the bridge's module-load logging pollute stdout.
+const { ClaudeAcpAgent, runAcp } =
+  await import('@zed-industries/claude-agent-acp/dist/acp-agent.js')
 
 // Patch newSession to wrap query.next() and capture real cost/usage from
 // SDKResultSuccess messages. The SDK result message has total_cost_usd and

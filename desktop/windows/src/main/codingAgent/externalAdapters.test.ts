@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { OpenClawRuntimeAdapter } from './openclaw'
 import { HermesRuntimeAdapter } from './hermes'
 import { CodexRuntimeAdapter } from './codex'
-import { createMockProcess, stubPlatform } from './acp.testkit'
+import { createMockProcess, respond, scriptJsonRpc, stubPlatform } from './acp.testkit'
 
 vi.mock('child_process', async () => {
   const actual = await vi.importActual<typeof import('child_process')>('child_process')
@@ -98,6 +98,18 @@ describe('external adapter subprocesses (OpenClaw / Hermes / Codex)', () => {
     expect(hermesEnv.HTTPS_PROXY).toBe('http://proxy:3128/')
     await hermes.stop()
 
+    // Non-URL proxy values (no scheme) must still lose their userinfo.
+    vi.mocked(spawn).mockReset()
+    process.env.HTTPS_PROXY = 'alice:s3cr3t@proxy:3128'
+    const hermes2Proc = createMockProcess()
+    vi.mocked(spawn).mockReturnValue(hermes2Proc as never)
+    const hermes2 = new HermesRuntimeAdapter({ command: 'hermes acp' })
+    await hermes2.start()
+    const hermes2Env = (vi.mocked(spawn).mock.calls[0][1] as unknown as { env: NodeJS.ProcessEnv })
+      .env
+    expect(hermes2Env.HTTPS_PROXY).toBe('proxy:3128')
+    await hermes2.stop()
+
     vi.mocked(spawn).mockReset()
     const codexProc = createMockProcess()
     vi.mocked(spawn).mockReturnValue(codexProc as never)
@@ -162,11 +174,37 @@ describe('external adapter subprocesses (OpenClaw / Hermes / Codex)', () => {
     }
   })
 
-  it('applies OpenClaw session semantics: empty MCP servers and no set_model', () => {
+  it('applies OpenClaw session semantics: empty MCP servers and no set_model', async () => {
+    const proc = createMockProcess()
+    vi.mocked(spawn).mockReturnValue(proc as never)
     const adapter = new OpenClawRuntimeAdapter({ command: 'openclaw acp' })
     expect(adapter.adapterId).toBe('openclaw')
     expect(adapter.capabilities.supportsModelSwitching).toBe(false)
     expect(adapter.capabilities.supportsNativeResume).toBe(true)
+
+    // OpenClaw rejects per-session MCP servers: even when the caller passes
+    // some, session/new must go out with an empty list — and no
+    // session/set_model despite a model being requested.
+    const methods: string[] = []
+    scriptJsonRpc(proc, (message) => {
+      if (message.method && message.id !== undefined) {
+        methods.push(message.method)
+        if (message.method === 'initialize') respond(proc, message.id, { protocolVersion: 1 })
+        if (message.method === 'session/new') {
+          expect(message.params?.mcpServers).toEqual([])
+          respond(proc, message.id, { sessionId: 'openclaw-native-1' })
+        }
+      }
+    })
+    const binding = await adapter.openBinding({
+      sessionId: 'omi-session',
+      cwd: 'C:/work',
+      model: 'some-model',
+      mcpServers: [{ name: 'omi', url: 'http://localhost' }]
+    })
+    expect(binding.model).toBeUndefined() // set_model unsupported → not applied
+    expect(methods).toEqual(['initialize', 'session/new'])
+    await adapter.stop()
   })
 
   it('treats Codex sessions as process-local until verified', () => {

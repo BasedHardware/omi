@@ -21,14 +21,17 @@ vi.mock('child_process', async () => {
   }
 })
 
-function makeAttemptContext(adapterNativeSessionId = 'native-session-1'): AdapterAttemptContext {
+function makeAttemptContext(
+  adapterNativeSessionId = 'native-session-1',
+  adapterId = 'acp'
+): AdapterAttemptContext {
   return {
     sessionId: 'omi-session',
     runId: 'omi-run',
     attemptId: 'omi-attempt',
     binding: {
       sessionId: 'omi-session',
-      adapterId: 'acp',
+      adapterId,
       adapterNativeSessionId,
       resumeFidelity: 'native',
       cwd: 'C:/work'
@@ -228,7 +231,7 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     vi.useFakeTimers()
     try {
       const attempt = adapter.executeAttempt(
-        makeAttemptContext(),
+        makeAttemptContext('native-session-1', 'hermes'),
         () => {},
         new AbortController().signal
       )
@@ -243,6 +246,60 @@ describe('AcpRuntimeAdapter (mocked subprocess)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('ignores session/update notifications from other sessions', async () => {
+    const adapter = makeAdapter()
+    scriptJsonRpc(proc, (message) => {
+      if (answerCommonHandshake(proc, message)) return
+      if (message.method === 'session/prompt' && message.id !== undefined) {
+        // Another session's stream must never contaminate this attempt.
+        notify(proc, 'session/update', {
+          sessionId: 'some-other-session',
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'WRONG SESSION ' }
+          }
+        })
+        notify(proc, 'session/update', {
+          sessionId: 'native-session-1',
+          update: {
+            sessionUpdate: 'agent_message_chunk',
+            content: { type: 'text', text: 'right session' }
+          }
+        })
+        respond(proc, message.id, { stopReason: 'end_turn' })
+      }
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+    const events: AdapterStreamEvent[] = []
+    const result = await adapter.executeAttempt(
+      makeAttemptContext(),
+      (event) => events.push(event),
+      new AbortController().signal
+    )
+
+    expect(result.text).toBe('right session')
+    expect(events).toEqual([{ type: 'text_delta', text: 'right session' }])
+    await adapter.stop()
+  })
+
+  it('settles a cancelled attempt even when the adapter never answers (no-watchdog path)', async () => {
+    const adapter = makeAdapter() // adapterId "acp" → noProgressTimeoutMs 0
+    scriptJsonRpc(proc, (message) => {
+      if (answerCommonHandshake(proc, message)) return
+      // session/prompt intentionally never answered.
+    })
+
+    await adapter.openBinding({ sessionId: 'omi-session', cwd: 'C:/work' })
+    const abort = new AbortController()
+    const attempt = adapter.executeAttempt(makeAttemptContext(), () => {}, abort.signal)
+    const outcome = attempt.catch((error: Error) => error)
+    abort.abort()
+    const error = await outcome
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('cancelled')
   })
 
   it('dispatches session/cancel on cancelAttempt', async () => {

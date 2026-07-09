@@ -33,13 +33,18 @@ describe('ClaudeCodeRuntimeAdapter spawn contract', () => {
     expect(bin).toBe(process.execPath)
     expect(args).toHaveLength(1)
     expect(args[0]).toContain('patched-acp-entry.mjs')
-    expect(options).toMatchObject({ shell: false, stdio: ['pipe', 'pipe', 'pipe'] })
+    expect(options).toMatchObject({
+      shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true
+    })
     const env = options.env as NodeJS.ProcessEnv
     // Electron's binary must run as plain Node for the entry script to execute.
     expect(env.ELECTRON_RUN_AS_NODE).toBe('1')
     // Auth is delegated to the Claude Agent SDK's own stored credentials —
-    // stray env keys must not silently redirect it.
+    // stray env keys must not silently redirect it (including to Vertex AI).
     expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+    expect(env.CLAUDE_CODE_USE_VERTEX).toBeUndefined()
     expect(env.CLAUDECODE).toBeUndefined()
 
     await adapter.stop()
