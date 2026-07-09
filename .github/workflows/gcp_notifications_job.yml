@@ -68,7 +68,9 @@ jobs:
       - name: Compute short SHA
         id: image-tag
         run: |
-          echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+          # Use checked-out HEAD so the image tag matches the branch input, not
+          # the workflow-file ref (GITHUB_SHA), when they diverge.
+          echo "short_sha=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
@@ -78,6 +80,11 @@ jobs:
 
       - name: Render backend runtime env
         id: runtime-env
+        env:
+          # Prod network flags are env_var-backed; without these the renderer
+          # exits before notifications_job_* outputs are emitted (same as gcp_backend.yml).
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
