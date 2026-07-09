@@ -36,7 +36,9 @@ export type Preferences = {
   // off (opt-in), so existing users are unaffected until they enable it.
   continuousRecording?: boolean
   // Speech-to-text runtime. 'auto' prefers local Parakeet only when a healthy
-  // supported local runtime is present, otherwise hosted /v4/listen.
+  // local runtime is ALREADY installed, otherwise hosted /v4/listen — it never
+  // downloads/installs the runtime or model. Only the explicit 'local-parakeet'
+  // choice triggers the first-use install.
   sttMode?: SttMode
   // Opt-in realtime voice path. Separate from /v4/listen transcription so
   // continuous recording remains available even when voice is off/unavailable.
