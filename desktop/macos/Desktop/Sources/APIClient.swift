@@ -5402,21 +5402,7 @@ extension APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(MessageDeleteResponse.self, from: data)
+    return try await performRequest(request)
   }
 
   /// Fetch messages for a specific session
@@ -5492,13 +5478,7 @@ extension APIClient {
     body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
     request.httpBody = body
 
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-    if http.statusCode == 401 { throw APIError.unauthorized }
-    guard (200...299).contains(http.statusCode) else {
-      throw APIError.httpError(statusCode: http.statusCode)
-    }
-    return try decoder.decode([ChatFileResponse].self, from: data)
+    return try await performRequest(request)
   }
 
   // MARK: - Sync local files (WAL upload)

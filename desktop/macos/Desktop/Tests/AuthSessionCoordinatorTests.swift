@@ -120,6 +120,26 @@ final class AuthSessionCoordinatorTests: XCTestCase {
     XCTAssertTrue(snippet.contains("defer { AuthState.shared.isRestoringAuth = false }"))
   }
 
+  func testProactiveEnsureValidSessionOnBecomeActive() throws {
+    let coordinator = try sourceFile("AuthSessionCoordinator.swift")
+    XCTAssertTrue(coordinator.contains("ensureValidSessionDebounced"))
+    XCTAssertTrue(coordinator.contains("minInterval: TimeInterval = 30"))
+    let app = try sourceFile("OmiApp.swift")
+    XCTAssertTrue(app.contains("ensureValidSessionDebounced"))
+  }
+
+  func testInvAuthInvariantDocExists() throws {
+    let path = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("docs/product/invariants/auth-session.md")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: path.path))
+    let text = try String(contentsOf: path, encoding: .utf8)
+    XCTAssertTrue(text.contains("INV-AUTH-1"))
+  }
+
   private func sourceFile(_ relativePath: String) throws -> String {
     let testFile = URL(fileURLWithPath: #filePath)
     let sourcesRoot = testFile.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Sources")

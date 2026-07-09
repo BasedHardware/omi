@@ -95,6 +95,7 @@ final class AuthSessionCoordinator {
 
     private(set) var phase: AuthSessionPhase = .signedOut
     private var refreshFlight: Task<String, Error>?
+    private var lastProactiveValidation: Date?
 
     private init() {}
 
@@ -147,14 +148,37 @@ final class AuthSessionCoordinator {
             phase = .signedOut
             return false
         }
+        let forceRefresh = trigger == .appBecameActive
         do {
-            _ = try await auth.getIdToken(forceRefresh: false)
+            if forceRefresh {
+                _ = try await refreshSingleFlight(auth: auth)
+            } else {
+                _ = try await auth.getIdToken(forceRefresh: false)
+            }
             phase = .authenticated
             return true
+        } catch AuthError.notSignedIn {
+            NSLog("OMI AUTH: ensureValidSession(%@) session not signed in", trigger.rawValue)
+            return false
         } catch {
-            NSLog("OMI AUTH: ensureValidSession(%@) failed: %@", trigger.rawValue, error.localizedDescription)
+            NSLog("OMI AUTH: ensureValidSession(%@) deferred: %@", trigger.rawValue, error.localizedDescription)
             return false
         }
+    }
+
+    /// Debounced proactive validation for app-foreground events.
+    func ensureValidSessionDebounced(
+        trigger: EnsureValidSessionTrigger = .appBecameActive,
+        auth: AuthService,
+        minInterval: TimeInterval = 30
+    ) async {
+        guard phase != .restoring, phase != .needsReauth else { return }
+        let now = Date()
+        if let last = lastProactiveValidation, now.timeIntervalSince(last) < minInterval {
+            return
+        }
+        lastProactiveValidation = now
+        _ = await ensureValidSession(trigger: trigger, auth: auth)
     }
 
     /// Central entry for API 401 after refresh+retry. Commit 3 wires APIClient here.
