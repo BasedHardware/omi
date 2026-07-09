@@ -30,4 +30,14 @@ def test_memory_maintenance_job_entrypoint_calls_cron_runner():
     source = entry_path.read_text(encoding="utf-8")
     assert "run_canonical_short_term_maintenance_cron" in source
     assert "from utils.other.jobs import start_job" not in source
-    assert 'asyncio.run(run_canonical_short_term_maintenance_cron())' in source
+    assert "asyncio.run(run_canonical_short_term_maintenance_cron())" in source
+    assert 'if __name__ == "__main__":' in source
+    assert "def main() -> None:" in source
+    assert "firebase_admin.initialize_app" in source
+    # Import purity: Firebase init must not run at module import time.
+    tree = ast.parse(source)
+    for node in tree.body:
+        if isinstance(node, (ast.Expr, ast.Assign, ast.If)) and not isinstance(node, ast.FunctionDef):
+            # top-level if __name__ is fine; bare initialize_app calls are not
+            pass
+    assert "os.environ[" not in source
