@@ -4,7 +4,6 @@ tier: 2
 description: Quick Note opens Rewind notes transcript via bridge action
 app: non-prod
 covers:
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationsPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
 preconditions:
   - automation_bridge_ready

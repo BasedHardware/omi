@@ -163,10 +163,10 @@ Waves 4–7 (code landed; Wave 8 live bless complete):
 
 | Category | Total | ✅ deep flow | ⚠️ nav-only / manual / partial | ❌ / blocked |
 |----------|-------|-------------|--------------------------------|-------------|
-| Core Daily | 12 | 9 | 2 | 1 |
-| Secondary Surfaces | 19 | 14 | 4 | 1 |
-| Settings & System | 11 | 8 | 2 | 1 |
-| **Total** | **42** | **31** | **8** | **3** |
+| Core Daily | 12 | 10 | 2 | 0 |
+| Secondary Surfaces | 19 | 14 | 5 | 0 |
+| Settings & System | 11 | 9 | 1 | 1 |
+| **Total** | **42** | **33** | **8** | **1** |
 
 T2 bless matrix: **32/32 flows green** (2026-07-09 manual bless via `omi-harness` bridge lane; full `desktop-core-harness.sh --tier 2` blocked on foreign Firestore port — see CORE_E2E Failure playbook). Manual Live P2 remains for TCC, OAuth, destructive gates, and partial sharing.
 

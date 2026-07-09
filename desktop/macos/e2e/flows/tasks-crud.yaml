@@ -53,6 +53,15 @@ steps:
       result.detail.deleted: "true"
 
   - id: S6
+    name: Verify task removed (dump absence)
+    bridge.action:
+      name: dump_tasks
+      params:
+        marker: "[[MARKER:tasks-crud]]"
+    expect:
+      result.detail.marker_absent: "true"
+
+  - id: S7
     name: Logs clean
     log.expect:
       absent:

@@ -5,7 +5,6 @@ description: Delete Account confirmation sheet only — never confirm deletion (
 app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+SettingsUpdates.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
 preconditions:
   - auth_ready

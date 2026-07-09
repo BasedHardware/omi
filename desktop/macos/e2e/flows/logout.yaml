@@ -4,7 +4,6 @@ tier: manual
 description: Sign out via bridge sign_out — local Auth emulator only, not prod OAuth (Live P2)
 app: com.omi.computer-macos
 covers:
-  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+AccountBilling.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
 preconditions:

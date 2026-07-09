@@ -1,7 +1,7 @@
 version: 2
 name: settings-basic
 tier: 2
-description: Settings navigation smoke for General, Transcription, and Privacy sections
+description: Settings navigation smoke for General, Transcription, Privacy, Rewind, Notifications, About, Shortcuts, and Advanced sections
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DefaultsKey.swift

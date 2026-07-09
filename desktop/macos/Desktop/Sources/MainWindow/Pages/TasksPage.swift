@@ -2197,7 +2197,11 @@ class TasksViewModel: ObservableObject {
             } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                 !description.isEmpty
             {
-                task = self.store.tasks.first(where: { $0.description.contains(description) })
+                let matches = self.store.tasks.filter { $0.description.contains(description) }
+                if matches.count > 1 {
+                    return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+                }
+                task = matches.first
             } else {
                 task = nil
             }
@@ -2224,7 +2228,11 @@ class TasksViewModel: ObservableObject {
             } else if let description = params["description"]?.trimmingCharacters(in: .whitespacesAndNewlines),
                 !description.isEmpty
             {
-                task = self.store.tasks.first(where: { $0.description.contains(description) })
+                let matches = self.store.tasks.filter { $0.description.contains(description) }
+                if matches.count > 1 {
+                    return ["error": "ambiguous: \(matches.count) tasks match description \"\(description)\""]
+                }
+                task = matches.first
             } else {
                 task = nil
             }
@@ -2254,8 +2262,8 @@ class TasksViewModel: ObservableObject {
 
         registry.register(
             name: "dump_tasks",
-            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field",
-            params: ["includeCompleted", "limit"]
+            summary: "Snapshot tasks from SQLite (id, description, completed, sortOrder, category) sorted by sortOrder — proves reorder/CRUD persistence. Returns every task; filter client-side on the per-row category field. Pass `marker` to get a boolean `marker_absent` field for post-delete verification.",
+            params: ["includeCompleted", "limit", "marker"]
         ) { params in
             let includeCompleted = ["true", "1", "yes"].contains(params["includeCompleted"]?.lowercased() ?? "")
             let limit = Int(params["limit"] ?? "") ?? 500
@@ -2282,7 +2290,14 @@ class TasksViewModel: ObservableObject {
             }
             let json = (try? JSONSerialization.data(withJSONObject: rows))
                 .flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
-            return ["count": String(sorted.count), "tasks": json]
+            var result: [String: String] = ["count": String(sorted.count), "tasks": json]
+            if let marker = params["marker"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                !marker.isEmpty
+            {
+                let present = sorted.contains { $0.description.contains(marker) }
+                result["marker_absent"] = present ? "false" : "true"
+            }
+            return result
         }
     }
 

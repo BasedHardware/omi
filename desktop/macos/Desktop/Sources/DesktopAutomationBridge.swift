@@ -480,13 +480,16 @@ actor DesktopAutomationTraceStore {
 /// `register(name:summary:params:handler:)` (e.g. from a view model's lifecycle) and
 /// remove them with `unregister(_:)`.
 @MainActor
-private func ensureConversationsTabVisibleForAutomation() async {
+private func ensureConversationsTabVisibleForAutomation() async throws {
   NotificationCenter.default.post(
     name: .navigateToSidebarItem,
     object: nil,
     userInfo: ["rawValue": SidebarNavItem.conversations.rawValue]
   )
-  try? await Task.sleep(nanoseconds: 150_000_000)
+  // Propagate cancellation instead of swallowing it with try? — if the
+  // automation task is cancelled during the settle sleep, the caller should
+  // not continue to post further notifications.
+  try await Task.sleep(nanoseconds: 150_000_000)
 }
 
 @MainActor
@@ -1743,7 +1746,7 @@ final class DesktopAutomationActionRegistry {
         return ["error": "missing conversationId"]
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
-      await ensureConversationsTabVisibleForAutomation()
+      try await ensureConversationsTabVisibleForAutomation()
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,
         object: nil,
@@ -1770,7 +1773,7 @@ final class DesktopAutomationActionRegistry {
         return ["error": "no conversations available"]
       }
       let showTranscript = boolParam(params["showTranscript"], default: false)
-      await ensureConversationsTabVisibleForAutomation()
+      try await ensureConversationsTabVisibleForAutomation()
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,
         object: nil,
@@ -2913,7 +2916,7 @@ final class DesktopAutomationBridge {
 
   private func dispatchOpenConversation(_ payload: DesktopAutomationOpenConversationRequest) async throws {
     await activateMainWindowIfNeeded(payload.activateApp ?? true)
-    await ensureConversationsTabVisibleForAutomation()
+    try await ensureConversationsTabVisibleForAutomation()
     await MainActor.run {
       NotificationCenter.default.post(
         name: .desktopAutomationOpenConversationRequested,

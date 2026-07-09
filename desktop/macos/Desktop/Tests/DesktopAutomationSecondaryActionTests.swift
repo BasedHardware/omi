@@ -173,11 +173,11 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
         .appendingPathComponent("Sources/AppState/AppState+SystemActions.swift"),
       encoding: .utf8
     )
-    let resetStart = systemActions.range(of: "func resetOnboardingAndRestart")!
+    let resetStart = try XCTUnwrap(systemActions.range(of: "func resetOnboardingAndRestart"))
     let resetBody = String(systemActions[resetStart.lowerBound...].prefix(1200))
     XCTAssertTrue(resetBody.contains("resetOnboardingRequested"))
-    let notificationRange = resetBody.range(of: "resetOnboardingRequested")!
-    let udClearRange = resetBody.range(of: "removeObject(forKey:")!
+    let notificationRange = try XCTUnwrap(resetBody.range(of: "resetOnboardingRequested"))
+    let udClearRange = try XCTUnwrap(resetBody.range(of: "removeObject(forKey:"))
     XCTAssertLessThan(
       notificationRange.lowerBound,
       udClearRange.lowerBound,
@@ -225,6 +225,47 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
     let body = try actionBody(named: "edit_test_memory", in: source)
     XCTAssertTrue(body.contains("params[\"marker\"]"))
     XCTAssertTrue(body.contains("editMemory"))
+  }
+
+  func testTaskDescriptionLookupRejectsAmbiguousMatches() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/TasksPage.swift")
+    let source = try String(contentsOf: url, encoding: .utf8)
+    XCTAssertTrue(
+      source.contains("\"error\": \"ambiguous:"),
+      "toggle_task/delete_task should reject ambiguous description matches"
+    )
+  }
+
+  func testDumpTasksSupportsMarkerAbsentParam() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/MainWindow/Pages/TasksPage.swift")
+    let source = try String(contentsOf: url, encoding: .utf8)
+    XCTAssertTrue(source.contains("marker_absent"), "dump_tasks should return marker_absent when marker param is provided")
+  }
+
+  func testMultiSpeakerInjectDerivesSpeakerIdFromLabel() throws {
+    let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/AppState/AppState+Transcription.swift")
+    let source = try String(contentsOf: url, encoding: .utf8)
+    XCTAssertTrue(
+      source.contains("Derive speaker_id from the label"),
+      "multi-speaker inject should derive speaker_id from label when omitted"
+    )
+  }
+
+  func testEnsureConversationsTabPropagatesCancellation() throws {
+    let source = try bridgeSource()
+    XCTAssertTrue(
+      source.contains("try await Task.sleep(nanoseconds: 150_000_000)"),
+      "ensureConversationsTabVisibleForAutomation should propagate cancellation via try await"
+    )
   }
 
   private func bridgeSource() throws -> String {

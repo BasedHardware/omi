@@ -40,6 +40,7 @@ steps:
         query: "the"
     expect:
       result.detail.search_active: "true"
+      result.detail.result_count: { min: 1 }
 
   - id: S5
     name: Logs clean

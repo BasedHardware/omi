@@ -1308,7 +1308,14 @@ extension AppState {
         return ["error": "segment \(index) missing text"]
       }
       let speaker = (raw["speaker"] as? String) ?? "SPEAKER_00"
-      let speakerId = raw["speaker_id"] as? Int ?? 0
+      var speakerId = raw["speaker_id"] as? Int ?? 0
+      // Derive speaker_id from the label (e.g. SPEAKER_02 → 2) when omitted,
+      // preventing silent collapse to SPEAKER_00 for multi-speaker fixtures.
+      if raw["speaker_id"] == nil, let labelNum = speaker.split(separator: "_").last,
+        let parsed = Int(labelNum)
+      {
+        speakerId = parsed
+      }
       let isUser = raw["is_user"] as? Bool ?? (speakerId == 0)
       let segmentStart = raw["start"] as? Double ?? offset
       let segmentEnd = raw["end"] as? Double ?? (segmentStart + 0.5)
