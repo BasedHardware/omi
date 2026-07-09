@@ -72,19 +72,24 @@ final class BackgroundStreamingController {
 
   private func activateSession() throws {
     let session = AVAudioSession.sharedInstance()
-    // HFP couples Bluetooth input and output, forcing music off A2DP.
-    // Keep recording on the iPhone mic so media can remain on the glasses.
-    let options: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetoothA2DP]
+    // Meta's background-streaming pattern keeps the glasses HFP route alive;
+    // mixWithOthers prevents this keep-alive from silencing other media.
+    let options: AVAudioSession.CategoryOptions = [.mixWithOthers, .allowBluetoothHFP]
     try session.setCategory(
       .playAndRecord,
       mode: .videoRecording,
       options: options,
     )
-    try session.setActive(true)
-    if let builtInMic = session.availableInputs?.first(where: { $0.portType == .builtInMic }) {
-      try session.setPreferredInput(builtInMic)
+    guard let glassesMic = session.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) else {
+      throw NSError(
+        domain: "MetaWearablesDatAudioRoute",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Meta glasses Bluetooth microphone is unavailable"]
+      )
     }
-    try session.overrideOutputAudioPort(.none)
+    try session.setPreferredInput(glassesMic)
+    try session.setActive(true)
+    try session.setPreferredInput(glassesMic)
   }
 
   private func registerObservers() {

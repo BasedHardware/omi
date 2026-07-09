@@ -84,8 +84,8 @@ class MetaWearablesProvider extends ChangeNotifier {
   static const String _selectedDeviceUuidPrefKey = 'metaWearablesSelectedDeviceUuid';
 
   /// Native audio-session bridge (AppDelegate `com.omi.ios/audioSession`):
-  /// Meta capture uses `configureForMediaSafeCapture`; other recorder flows
-  /// may still opt into the coupled Bluetooth HFP route.
+  /// Meta capture uses `configureForMetaGlassesCapture`, which requires the
+  /// glasses HFP input and mixes other media without a phone-mic fallback.
   static const MethodChannel _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
 
   /// Native gesture bridge (AppDelegate `com.omi/meta_gestures`). Glasses
@@ -194,6 +194,7 @@ class MetaWearablesProvider extends ChangeNotifier {
   DateTime? _lastGestureAt;
   DateTime? _gestureListeningStartedAt;
   bool _gestureHandlerInstalled = false;
+  bool _audioRouteHandlerInstalled = false;
 
   /// Store-and-forward photo queue: every still lands on disk first and is
   /// only deleted after the backend confirms transmission over the socket.
@@ -333,6 +334,7 @@ class MetaWearablesProvider extends ChangeNotifier {
   Future<void> init() async {
     if (_initialized) return;
     _initialized = true;
+    _installAudioRouteHandler();
 
     final storedUuid = SharedPreferencesUtil().getString(_selectedDeviceUuidPrefKey);
     _selectedDeviceUuid = storedUuid.isEmpty ? null : storedUuid;
@@ -784,8 +786,8 @@ class MetaWearablesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Starts glasses capture: DAT camera frames and media-safe phone-mic audio
-  /// share the transcription socket without taking over Bluetooth playback.
+  /// Starts glasses capture: Bluetooth HFP audio starts and is verified before
+  /// DAT camera frames. The iPhone microphone is never an accepted fallback.
   ///
   /// [displayStatusText] is rendered on Ray-Ban Display glasses while
   /// capturing; pass a localized string from the UI.
@@ -805,16 +807,37 @@ class MetaWearablesProvider extends ChangeNotifier {
     _captureWatchdog.reset();
 
     try {
+      Map<String, dynamic>? route;
       try {
-        await MetaWearablesDat.enableBackgroundStreaming();
+        route = await _audioSessionChannel.invokeMapMethod<String, dynamic>('configureForMetaGlassesCapture');
       } catch (e) {
-        Logger.debug('MetaGlassStreamDiag: enableBackgroundStreaming failed: $e');
+        Logger.debug('MetaGlassStreamDiag: configureForMetaGlassesCapture failed: $e');
+        _appendRuntimeProof('MetaGlassRuntimeProof start-capture-failed reason=glasses-microphone-unavailable');
+        notifyListeners();
+        return false;
       }
 
       _appendRuntimeProof(
           'MetaGlassRuntimeProof start-capture captureMode=${captureMode.name} cameraNeeded=$_cameraStreamNeeded cameraPermission=$cameraPermissionState gestures=media-remote');
 
+      await captureController.streamRecording();
+      route = await _audioSessionChannel.invokeMapMethod<String, dynamic>('getCurrentAudioRoute');
+      if (route?['glassesInput'] != true) {
+        await captureController.stopStreamRecording();
+        _appendRuntimeProof('MetaGlassRuntimeProof start-capture-failed reason=audio-route-not-hfp');
+        notifyListeners();
+        return false;
+      }
+      final input = route?['input'] ?? 'unknown';
+      final output = route?['output'] ?? 'unknown';
+      _appendRuntimeProof('MetaGlassRuntimeProof audio-stream-started input=$input output=$output');
+
       if (_cameraStreamNeeded) {
+        try {
+          await MetaWearablesDat.enableBackgroundStreaming();
+        } catch (e) {
+          Logger.debug('MetaGlassStreamDiag: enableBackgroundStreaming failed: $e');
+        }
         await _startPhotoLoop();
         final firstFrameQueued = await _waitForFirstQueuedFrame();
         if (!_cameraCaptureStreamReady || !firstFrameQueued) {
@@ -825,26 +848,13 @@ class MetaWearablesProvider extends ChangeNotifier {
           } catch (e) {
             Logger.debug('MetaWearablesProvider: disableBackgroundStreaming failed after start failure: $e');
           }
+          await captureController.stopStreamRecording();
           notifyListeners();
           return false;
         }
       } else {
         _appendRuntimeProof('MetaGlassStreamDiag start-photo-loop skipped captureMode=${captureMode.name}');
       }
-
-      // HFP couples the glasses mic and speaker routes. Record from the iPhone
-      // built-in mic instead, keep the glasses on A2DP, then open the shared
-      // transcription socket for STT audio and image_chunk photo uploads.
-      Map<String, String>? route;
-      try {
-        route = await _audioSessionChannel.invokeMapMethod<String, String>('configureForMediaSafeCapture');
-      } catch (e) {
-        Logger.debug('MetaGlassStreamDiag: configureForMediaSafeCapture failed: $e');
-      }
-      await captureController.streamRecording();
-      final input = route?['input'] ?? 'unknown';
-      final output = route?['output'] ?? 'unknown';
-      _appendRuntimeProof('MetaGlassRuntimeProof audio-stream-started input=$input output=$output');
 
       await _startGestureListening();
 
@@ -928,6 +938,22 @@ class MetaWearablesProvider extends ChangeNotifier {
     } catch (e) {
       Logger.debug('MetaGlassGestureDiag: stopListening failed: $e');
     }
+  }
+
+  void _installAudioRouteHandler() {
+    if (!Platform.isIOS || _audioRouteHandlerInstalled) return;
+    _audioSessionChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onAudioRouteChanged') {
+        final route = (call.arguments as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+        if (isCapturing && route['glassesInput'] != true) {
+          _appendRuntimeProof(
+              'MetaGlassRuntimeProof audio-route-lost input=${route['input'] ?? 'unknown'} output=${route['output'] ?? 'unknown'}');
+          await stopCapture(manual: false);
+        }
+      }
+      return null;
+    });
+    _audioRouteHandlerInstalled = true;
   }
 
   /// Tap = toggle capture. Media-remote events often double-fire (play +

@@ -8,6 +8,17 @@ import Speech
 import WidgetKit
 import AuthenticationServices
 
+private enum MetaGlassesAudioRouteError: LocalizedError {
+  case glassesMicrophoneUnavailable
+
+  var errorDescription: String? {
+    switch self {
+    case .glassesMicrophoneUnavailable:
+      return "Meta glasses Bluetooth microphone is unavailable"
+    }
+  }
+}
+
 extension FlutterError: Error {}
 
 private func appGroupIdentifier() -> String? {
@@ -90,6 +101,7 @@ final class QuickActionsIconPatcher: NSObject {
   private var methodChannel: FlutterMethodChannel?
   private var deepLinkChannel: FlutterMethodChannel?
   private var authLogChannel: FlutterMethodChannel?
+  private var audioSessionChannel: FlutterMethodChannel?
   private var metaGesturesChannel: FlutterMethodChannel?
   private var metaGesturesListening = false
   private var webAuthChannel: FlutterMethodChannel?
@@ -241,16 +253,18 @@ final class QuickActionsIconPatcher: NSObject {
     // ended — flutter_sound does not auto-resume on its own.
     audioInterruptionManager.register(with: controller.binaryMessenger)
 
-    // Audio session configuration that preserves A2DP media playback while
-    // Omi records from the iPhone microphone.
-    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller.binaryMessenger)
-    audioSessionChannel.setMethodCallHandler { (call, result) in
-        if call.method == "configureForMediaSafeCapture" {
+    // Meta capture keeps other apps' media mixed while requiring the glasses'
+    // Bluetooth HFP microphone. It never falls back to the iPhone microphone.
+    audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller.binaryMessenger)
+    audioSessionChannel?.setMethodCallHandler { (call, result) in
+        if call.method == "configureForMetaGlassesCapture" {
             do {
-                result(try self.configureMediaSafeCaptureSession())
+                result(try self.configureMetaGlassesCaptureSession())
             } catch {
                 result(FlutterError(code: "AUDIO_SESSION_ERROR", message: error.localizedDescription, details: nil))
             }
+        } else if call.method == "getCurrentAudioRoute" {
+            result(self.currentAudioRoute())
         } else if call.method == "configureForBluetooth" {
             do {
                 try self.configureBluetoothCaptureSession()
@@ -273,6 +287,12 @@ final class QuickActionsIconPatcher: NSObject {
             result(FlutterMethodNotImplemented)
         }
     }
+    NotificationCenter.default.addObserver(
+      self,
+      selector: #selector(handleMetaAudioRouteChange(_:)),
+      name: AVAudioSession.routeChangeNotification,
+      object: nil
+    )
 
     // Meta glasses gesture bridge. The DAT SDK has no gesture API; glasses
     // stalk taps arrive as Bluetooth media-remote (AVRCP) commands, which iOS
@@ -348,24 +368,35 @@ final class QuickActionsIconPatcher: NSObject {
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
 
-  private func configureMediaSafeCaptureSession() throws -> [String: String] {
+  private func configureMetaGlassesCaptureSession() throws -> [String: Any] {
     let audioSession = AVAudioSession.sharedInstance()
     try audioSession.setCategory(
       .playAndRecord,
-      mode: .default,
-      options: [.mixWithOthers, .allowBluetoothA2DP]
+      mode: .videoRecording,
+      options: [.mixWithOthers, .allowBluetoothHFP]
     )
-    try audioSession.setActive(true)
-    if let builtInMic = audioSession.availableInputs?.first(where: { $0.portType == .builtInMic }) {
-      try audioSession.setPreferredInput(builtInMic)
+    guard let glassesMic = audioSession.availableInputs?.first(where: { $0.portType == .bluetoothHFP }) else {
+      throw MetaGlassesAudioRouteError.glassesMicrophoneUnavailable
     }
-    try audioSession.overrideOutputAudioPort(.none)
-    let inputPort: AVAudioSession.Port? = audioSession.currentRoute.inputs.first?.portType
-    let outputPort: AVAudioSession.Port? = audioSession.currentRoute.outputs.first?.portType
+    try audioSession.setPreferredInput(glassesMic)
+    try audioSession.setActive(true)
+    try audioSession.setPreferredInput(glassesMic)
+    return currentAudioRoute()
+  }
+
+  private func currentAudioRoute() -> [String: Any] {
+    let route = AVAudioSession.sharedInstance().currentRoute
+    let inputPort: AVAudioSession.Port? = route.inputs.first?.portType
+    let outputPort: AVAudioSession.Port? = route.outputs.first?.portType
     return [
       "input": inputPort?.rawValue ?? "none",
       "output": outputPort?.rawValue ?? "none",
+      "glassesInput": route.inputs.contains(where: { $0.portType == .bluetoothHFP }),
     ]
+  }
+
+  @objc private func handleMetaAudioRouteChange(_ notification: Notification) {
+    audioSessionChannel?.invokeMethod("onAudioRouteChanged", arguments: currentAudioRoute())
   }
 
   private func configureBluetoothCaptureSession() throws {

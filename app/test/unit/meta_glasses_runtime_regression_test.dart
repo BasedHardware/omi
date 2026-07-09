@@ -147,15 +147,15 @@ void main() {
       expect(eventHandler, contains('_completePhotoUploadAck'));
     });
 
-    test('glasses capture preserves media playback while streaming phone-mic audio', () {
+    test('glasses capture never falls back to the iPhone mic while mixing media playback', () {
       // The REST photo-cache endpoint (v1/meta-wearables/photos/cache) exists
       // only in the local repo backend — api.omi.me returns 404 for it, so
       // every REST upload fails and photos never reach history (observed
       // 2026-07-05: 4 frames stuck in the sync queue). The only ingestion
       // path deployed on prod is the transcription socket: image_chunk
-      // messages for photos and PCM16 audio for STT. Bluetooth HFP couples the
-      // glasses input and output routes, so capture must use the built-in phone
-      // mic while leaving media on the glasses' A2DP output.
+      // messages for photos and PCM16 audio for STT. Meta DAT does not expose
+      // microphone frames, so Omi must require the paired glasses' HFP input
+      // and must never silently fall back to the built-in iPhone microphone.
       final provider = _read('lib/providers/meta_wearables_provider.dart');
       final controller = _read('lib/services/capture/capture_controller.dart');
       final appDelegate = _read('ios/Runner/AppDelegate.swift');
@@ -163,26 +163,37 @@ void main() {
         'third_party/meta_wearables_dat_flutter/ios/meta_wearables_dat_flutter/Sources/'
         'meta_wearables_dat_flutter/BackgroundStreamingController.swift',
       );
-      final mediaSafeSession = _functionBody(appDelegate, 'private func configureMediaSafeCaptureSession');
+      final glassesAudioSession = _functionBody(appDelegate, 'private func configureMetaGlassesCaptureSession');
       final startCapture = _asyncMethodBody(provider, 'Future<bool> startCapture');
       final stopCapture = _asyncMethodBody(provider, 'Future<void> stopCapture');
       final flushPhotoQueue = _functionBody(provider, 'Future<void> flushPhotoQueue');
 
-      expect(startCapture, contains('configureForMediaSafeCapture'));
+      expect(startCapture, contains('configureForMetaGlassesCapture'));
+      expect(startCapture, contains('getCurrentAudioRoute'));
+      expect(startCapture, contains("route?['glassesInput']"));
       expect(startCapture, contains("route?['input']"));
       expect(startCapture, contains("route?['output']"));
       expect(startCapture, contains(r'audio-stream-started input=$input output=$output'));
       expect(startCapture, isNot(contains('configureForBluetooth')));
-      for (final nativeSource in [mediaSafeSession, backgroundStreaming]) {
+      expect(startCapture.indexOf('configureForMetaGlassesCapture'), lessThan(startCapture.indexOf('streamRecording')));
+      expect(startCapture.indexOf('streamRecording'), lessThan(startCapture.indexOf('_startPhotoLoop')),
+          reason: 'Meta requires HFP audio to settle before the DAT camera stream starts.');
+      expect(startCapture, contains('stopStreamRecording'));
+      expect(provider, contains("call.method == 'onAudioRouteChanged'"));
+      expect(provider, contains('audio-route-lost'));
+      for (final nativeSource in [glassesAudioSession, backgroundStreaming]) {
         expect(nativeSource, contains('.mixWithOthers'));
-        expect(nativeSource, contains('.allowBluetoothA2DP'));
-        expect(nativeSource, contains('.builtInMic'));
+        expect(nativeSource, contains('.allowBluetoothHFP'));
+        expect(nativeSource, contains('.bluetoothHFP'));
+        expect(nativeSource, contains('mode: .videoRecording'));
         expect(nativeSource, contains('setPreferredInput'));
-        expect(nativeSource, isNot(contains('.allowBluetoothHFP')));
+        expect(nativeSource, isNot(contains('.builtInMic')));
       }
-      expect(mediaSafeSession, contains('audioSession.currentRoute'));
-      expect(mediaSafeSession, contains('AVAudioSession.Port'));
-      expect(mediaSafeSession, isNot(contains('.defaultToSpeaker')));
+      expect(glassesAudioSession, contains('glassesMicrophoneUnavailable'));
+      expect(glassesAudioSession, contains('currentAudioRoute()'));
+      expect(appDelegate, contains('AVAudioSession.sharedInstance().currentRoute'));
+      expect(appDelegate, contains('AVAudioSession.Port'));
+      expect(glassesAudioSession, isNot(contains('.defaultToSpeaker')));
       expect(appDelegate, contains('call.method == "configureForBluetooth"'),
           reason: 'non-Meta voice-recorder flows still use the legacy Bluetooth route');
       expect(startCapture, contains('streamRecording'),
