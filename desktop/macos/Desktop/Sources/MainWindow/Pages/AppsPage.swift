@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import GRDB
 import SwiftUI
 import OmiTheme
@@ -116,12 +117,12 @@ enum AppsCatalogInitialSection {
 struct AppsPage: View {
     @ObservedObject var appProvider: AppProvider
     var appState: AppState? = nil
+    @ObservedObject var connectorStatusStore: ImportConnectorStatusStore = ImportConnectorStatusStore()
     var initialSection: AppsCatalogInitialSection = .imports
     var onDismiss: (() -> Void)? = nil
     var onSelectApp: ((OmiApp) -> Void)? = nil
     var onSelectConnector: ((ImportConnector) -> Void)? = nil
     var onSelectDestination: ((MemoryExportDestination) -> Void)? = nil
-    @StateObject private var connectorStatusStore = ImportConnectorStatusStore()
     @State private var searchText = ""
     @State private var selectedApp: OmiApp?
     @State private var selectedConnector: ImportConnector?
@@ -739,6 +740,7 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     @Published private var metricsByID: [String: ConnectorMetrics] = [:]
+    let connectorDidSync = PassthroughSubject<String, Never>()
 
     private let defaults: UserDefaults
     private let sourceCountKeyPrefix = "appsImportConnectorSourceCount."
@@ -805,6 +807,7 @@ final class ImportConnectorStatusStore: ObservableObject {
             defaults.set(availabilityText, forKey: availabilityTextKeyPrefix + connectorID)
         }
         metricsByID[connectorID] = metrics
+        connectorDidSync.send(connectorID)
     }
 
     private func clearStoredMetrics(for connectorID: String) {
@@ -818,8 +821,13 @@ final class ImportConnectorStatusStore: ObservableObject {
     }
 
     func refresh() async {
+        refreshPersistedManualImportMetrics()
         await refreshLocalFilesMetrics()
         await refreshAppleNotesMetrics()
+    }
+
+    func refreshPersistedManualImportMetrics() {
+        hydrateLegacyManualImports()
     }
 
     private func load() {
@@ -854,7 +862,8 @@ final class ImportConnectorStatusStore: ObservableObject {
 
     private func hydrateLegacyManualImports() {
         let legacyChatGPTCount = defaults.integer(forKey: onboardingChatGPTImportedMemoriesKey)
-        if legacyChatGPTCount > 0, metricsByID["chatgpt"]?.memoryCount == nil {
+        if legacyChatGPTCount > 0,
+           defaults.object(forKey: memoryCountKeyPrefix + "chatgpt") == nil {
             var metrics = metricsByID["chatgpt"] ?? ConnectorMetrics()
             metrics.memoryCount = legacyChatGPTCount
             metrics.availabilityText = "Imported during onboarding"
@@ -862,7 +871,8 @@ final class ImportConnectorStatusStore: ObservableObject {
         }
 
         let legacyClaudeCount = defaults.integer(forKey: onboardingClaudeImportedMemoriesKey)
-        if legacyClaudeCount > 0, metricsByID["claude"]?.memoryCount == nil {
+        if legacyClaudeCount > 0,
+           defaults.object(forKey: memoryCountKeyPrefix + "claude") == nil {
             var metrics = metricsByID["claude"] ?? ConnectorMetrics()
             metrics.memoryCount = legacyClaudeCount
             metrics.availabilityText = "Imported during onboarding"

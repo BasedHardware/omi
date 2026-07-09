@@ -1107,6 +1107,7 @@ private struct PageContentView: View {
       case 0:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,
@@ -1132,7 +1133,10 @@ private struct PageContentView: View {
       case 7:
         RewindPage(appState: appState)
       case 8:
-        AppsPage(appProvider: viewModelContainer.appProvider, appState: appState)
+        AppsPage(
+          appProvider: viewModelContainer.appProvider,
+          appState: appState,
+          connectorStatusStore: viewModelContainer.homeStatusStore.connectorStatusStore)
       case 9:
         SettingsPage(
           appState: appState,
@@ -1147,6 +1151,7 @@ private struct PageContentView: View {
       default:
         DashboardPage(
           viewModel: viewModelContainer.dashboardViewModel,
+          homeStatusStore: viewModelContainer.homeStatusStore,
           appState: appState,
           appProvider: viewModelContainer.appProvider,
           chatProvider: viewModelContainer.chatProvider,

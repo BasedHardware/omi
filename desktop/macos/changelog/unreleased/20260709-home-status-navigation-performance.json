@@ -1,0 +1,3 @@
+{
+  "change": "Made Home load instantly when returning from another page by reusing recently refreshed status data"
+}

@@ -9,6 +9,7 @@ class ViewModelContainer: ObservableObject {
 
     // ViewModels for each page
     let dashboardViewModel = DashboardViewModel()
+    let homeStatusStore = HomeStatusStore()
     let tasksViewModel = TasksViewModel()
     let appProvider = AppProvider()
     let memoriesViewModel = MemoriesViewModel()
@@ -131,6 +132,7 @@ class ViewModelContainer: ObservableObject {
         warmupCoordinator.reset()
         tasksStore.resetSessionState()
         dashboardViewModel.resetSessionState()
+        homeStatusStore.resetSessionState()
         memoriesViewModel.resetSessionState()
         appProvider.resetSessionState()
         isInitialLoadComplete = false
