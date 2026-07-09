@@ -99,6 +99,22 @@ extension ChatErrorState {
       return .dismiss
     }
   }
+
+  /// Compact summary for surfaces that only show a single line (floating bar).
+  var userFacingSummary: String {
+    switch self {
+    case .authRequired:
+      return "Please sign in to continue."
+    case .timeout:
+      return "AI took too long to respond."
+    case .bridgeUnavailable:
+      return "AI isn't available right now."
+    case .interrupted:
+      return "Response stopped."
+    case .noDataFound:
+      return "No matching data found."
+    }
+  }
 }
 
 // MARK: - BridgeError mapping

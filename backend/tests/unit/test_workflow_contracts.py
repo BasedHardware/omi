@@ -13,6 +13,19 @@ def _load_script(name: str):
     return module
 
 
+def test_memory_policy_core_change_selects_inv_mem_guard():
+    """Narrow memory policy PRs always pull INV-MEM guard tests."""
+    selector = _load_script("select_backend_unit_tests")
+    all_tests = selector.discover_all_tests()
+
+    selected, reason = selector.tests_for_changed_paths(
+        ["backend/utils/memory/chat_memory_adapter.py"],
+        all_tests,
+    )
+    assert "tests/unit/test_inv_mem_1_guard.py" in selected
+    assert reason == "selected backend unit tests from changed paths and workflow contracts"
+
+
 def test_workflow_contract_sources_select_adjacent_tests():
     selector = _load_script("select_backend_unit_tests")
     all_tests = selector.discover_all_tests()
@@ -25,6 +38,7 @@ def test_workflow_contract_sources_select_adjacent_tests():
     }
     selected_cases = {
         "backend/utils/memory/legacy_backfill.py": "tests/unit/test_ws_c_backfill.py",
+        "backend/utils/memory/canonical_memory_adapter.py": "testing/e2e/test_canonical_memory_pipeline.py",
         "backend/services/users/account_deletion.py": "tests/services/users/test_account_deletion.py",
         "backend/routers/sync.py": "tests/unit/test_sync_v2.py",
         "backend/utils/sync/pipeline.py": "tests/unit/test_sync_v2.py",

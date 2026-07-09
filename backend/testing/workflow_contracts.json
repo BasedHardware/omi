@@ -207,6 +207,20 @@
       ]
     },
     {
+      "id": "canonical_memory_pipeline",
+      "risk": "high",
+      "sources": [
+        "backend/utils/memory/**",
+        "backend/utils/memory_ingestion/**"
+      ],
+      "tests": ["testing/e2e/test_canonical_memory_pipeline.py"],
+      "checks": ["no_large_tuple_results"],
+      "invariants": [
+        "capture→consolidate→promote→read with archive excluded from default reads",
+        "canonical fail-closed without legacy bleed"
+      ]
+    },
+    {
       "id": "listen_pusher_pipeline",
       "risk": "high",
       "sources": [

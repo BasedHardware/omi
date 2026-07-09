@@ -12,10 +12,6 @@ os.environ.setdefault(
 )
 
 from tests.unit.canonical_cohort_test_helpers import clear_canonical_cohort, set_canonical_cohort
-from tests.unit.memory_import_isolation import ensure_utils_memory_packages_importable
-
-ensure_utils_memory_packages_importable()
-
 from utils.memory.memory_system import (
     CANONICAL_MEMORY_USERS,
     MemorySystem,

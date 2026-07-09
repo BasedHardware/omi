@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.62",
+      "date": "2026-07-09",
+      "changes": [
+        "Smoothed the notch bar's hover expansion so it no longer hops, keeps sliding after opening, or re-zooms when switching Spaces"
+      ]
+    },
+    {
       "version": "0.12.61",
       "date": "2026-07-09",
       "changes": [

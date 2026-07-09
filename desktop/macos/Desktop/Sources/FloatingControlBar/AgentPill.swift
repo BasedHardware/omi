@@ -1970,7 +1970,7 @@ final class AgentPillsManager: ObservableObject {
                 return
             }
         }
-        if let errorText = provider.errorMessage, !errorText.isEmpty {
+        if let errorText = provider.displayErrorMessage, !errorText.isEmpty {
             pill.status = .failed(errorText)
             pill.latestActivity = errorText
             pill.completedAt = Date()

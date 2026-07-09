@@ -74,12 +74,15 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true
   ) async throws -> T {
-    try await transport.get(
-      endpoint,
-      baseURL: customBaseURL ?? baseURL,
-      requireAuth: requireAuth,
-      includeBYOK: includeBYOK
-    )
+    let base = customBaseURL ?? baseURL
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "GET"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+
+    return try await performRequest(request)
   }
 
   func post<T: Decodable, B: Encodable>(
@@ -89,13 +92,17 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true
   ) async throws -> T {
-    try await transport.post(
-      endpoint,
-      baseURL: customBaseURL ?? baseURL,
-      body: body,
-      requireAuth: requireAuth,
-      includeBYOK: includeBYOK
-    )
+    let base = customBaseURL ?? baseURL
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
+    log("APIClient: POST \(url.absoluteString)")
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+    request.httpBody = try transport.encoder.encode(body)
+
+    return try await performRequest(request)
   }
 
   func post<T: Decodable>(
@@ -104,12 +111,15 @@ actor APIClient {
     customBaseURL: String? = nil,
     includeBYOK: Bool = true
   ) async throws -> T {
-    try await transport.post(
-      endpoint,
-      baseURL: customBaseURL ?? baseURL,
-      requireAuth: requireAuth,
-      includeBYOK: includeBYOK
-    )
+    let base = customBaseURL ?? baseURL
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+
+    return try await performRequest(request)
   }
 
   /// Phase 2 realtime hub: ask the backend to mint a short-lived ephemeral token
@@ -161,16 +171,13 @@ actor APIClient {
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      do {
-        retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
-      } catch AuthError.notSignedIn {
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
-      } catch {
-        throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
       }
-
       do {
         let token = try await performRealtimeMintRequest(retry, provider: provider, retriedAuth: true)
         log("CredentialHealth: context=realtime_mint_auth_retry failure_class=retry_succeeded")
@@ -182,6 +189,11 @@ actor APIClient {
       } catch {
         throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)
       }
+    }
+
+    if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
+      throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
     }
 
     guard (200...299).contains(httpResponse.statusCode) else {
@@ -240,24 +252,160 @@ actor APIClient {
     }
   }
 
+  private func performVoidRequest(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws {
+    let (_, response) = try await session.data(for: request)
+
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: authPolicy.signOutOn401
+      ) else {
+        throw APIError.unauthorized
+      }
+      return try await performVoidRequest(retryRequest, authPolicy: authPolicy, retriedAuth: true)
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      throw APIError.httpError(statusCode: httpResponse.statusCode)
+    }
+  }
+
   func delete(
     _ endpoint: String,
     requireAuth: Bool = true,
     customBaseURL: String? = nil,
-    includeBYOK: Bool = true
+    includeBYOK: Bool = true,
+    authPolicy: RequestAuthPolicy = .default
   ) async throws {
-    try await transport.delete(
-      endpoint,
-      baseURL: customBaseURL ?? baseURL,
-      requireAuth: requireAuth,
-      includeBYOK: includeBYOK
-    )
+    let base = customBaseURL ?? baseURL
+    guard let url = URL(string: base + endpoint) else {
+      throw APIError.invalidResponse
+    }
+    var request = URLRequest(url: url)
+    request.httpMethod = "DELETE"
+    request.allHTTPHeaderFields = try await buildHeaders(requireAuth: requireAuth, includeBYOK: includeBYOK)
+
+    try await performVoidRequest(request, authPolicy: authPolicy)
   }
 
   // MARK: - Request Execution
 
-  private func performRequest<T: Decodable>(_ request: URLRequest) async throws -> T {
-    try await transport.performRequest(request)
+  /// When false, a post-refresh HTTP 401 throws `.unauthorized` without invalidating the
+  /// Firebase session (e.g. background polling that should not sign the user out).
+  struct RequestAuthPolicy: Sendable {
+    var signOutOn401: Bool
+
+    static let `default` = RequestAuthPolicy(signOutOn401: true)
+    static let sessionPreserving = RequestAuthPolicy(signOutOn401: false)
+  }
+
+  private func invalidateSessionAfterUnauthorized(endpoint: String, signOutOn401: Bool) async {
+    guard signOutOn401 else { return }
+    await MainActor.run {
+      AuthSessionCoordinator.shared.handleHTTPUnauthorized(
+        endpoint: endpoint,
+        signOutOn401: true,
+        auth: AuthService.shared
+      )
+    }
+  }
+
+  private func endpointLabel(for request: URLRequest) -> String {
+    request.url?.path ?? request.url?.absoluteString ?? "unknown"
+  }
+
+  /// Refresh auth and build a retry request. Returns nil when already retried (caller should throw).
+  private func authorizedRetryRequest(
+    from request: URLRequest,
+    retriedAuth: Bool,
+    signOutOn401: Bool
+  ) async throws -> URLRequest? {
+    if retriedAuth {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
+    let authService = await MainActor.run { AuthService.shared }
+    do {
+      var retry = request
+      retry.setValue(
+        try await authService.getAuthHeader(forceRefresh: true),
+        forHTTPHeaderField: "Authorization"
+      )
+      return retry
+    } catch AuthError.notSignedIn {
+      await invalidateSessionAfterUnauthorized(
+        endpoint: endpointLabel(for: request),
+        signOutOn401: signOutOn401
+      )
+      return nil
+    }
+  }
+
+  private func performRequest<T: Decodable>(
+    _ request: URLRequest,
+    authPolicy: RequestAuthPolicy = .default,
+    retriedAuth: Bool = false
+  ) async throws -> T {
+    let (data, response) = try await session.data(for: request)
+
+    guard let httpResponse = response as? HTTPURLResponse else {
+      throw APIError.invalidResponse
+    }
+
+    if httpResponse.statusCode == 401 {
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: authPolicy.signOutOn401
+      ) else {
+        throw APIError.unauthorized
+      }
+
+      return try await performRequest(retryRequest, authPolicy: authPolicy, retriedAuth: true)
+    }
+
+    guard (200...299).contains(httpResponse.statusCode) else {
+      let detail = OmiHTTPTransport.extractErrorDetail(from: data)
+      throw APIError.httpError(statusCode: httpResponse.statusCode, detail: detail)
+    }
+
+    do {
+      return try decoder.decode(T.self, from: data)
+    } catch let decodingError as DecodingError {
+      // Log detailed decoding error for debugging
+      switch decodingError {
+      case .keyNotFound(let key, let context):
+        logError(
+          "Decoding error - key '\(key.stringValue)' not found: \(context.debugDescription)",
+          error: decodingError)
+      case .typeMismatch(let type, let context):
+        logError(
+          "Decoding error - type mismatch for \(type): \(context.debugDescription)",
+          error: decodingError)
+      case .valueNotFound(let type, let context):
+        logError(
+          "Decoding error - value not found for \(type): \(context.debugDescription)",
+          error: decodingError)
+      case .dataCorrupted(let context):
+        logError(
+          "Decoding error - data corrupted: \(context.debugDescription)", error: decodingError)
+      @unknown default:
+        logError("Decoding error", error: decodingError)
+      }
+      throw decodingError
+    }
   }
 }
 
@@ -1905,12 +2053,17 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      let authService = await MainActor.run { AuthService.shared }
-      var retry = request
-      retry.setValue(try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
+      guard let retry = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
       return try await performMemoryListRequest(retry, retriedAuth: true)
     }
     if httpResponse.statusCode == 401 {
+      await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
       throw APIError.unauthorized
     }
 
@@ -5146,21 +5299,7 @@ extension APIClient {
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
 
-    let (data, response) = try await session.data(for: request)
-
-    guard let httpResponse = response as? HTTPURLResponse else {
-      throw APIError.invalidResponse
-    }
-
-    if httpResponse.statusCode == 401 {
-      throw APIError.unauthorized
-    }
-
-    guard (200...299).contains(httpResponse.statusCode) else {
-      throw APIError.httpError(statusCode: httpResponse.statusCode)
-    }
-
-    return try decoder.decode(MessageDeleteResponse.self, from: data)
+    return try await performRequest(request)
   }
 
   /// Fetch messages for a specific session
@@ -5236,13 +5375,7 @@ extension APIClient {
     body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
     request.httpBody = body
 
-    let (data, response) = try await session.data(for: request)
-    guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-    if http.statusCode == 401 { throw APIError.unauthorized }
-    guard (200...299).contains(http.statusCode) else {
-      throw APIError.httpError(statusCode: http.statusCode)
-    }
-    return try decoder.decode([ChatFileResponse].self, from: data)
+    return try await performRequest(request)
   }
 
   // MARK: - Sync local files (WAL upload)
@@ -5334,13 +5467,13 @@ extension APIClient {
     guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
 
     if http.statusCode == 401 {
-      guard !retriedAuth else {
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: retriedAuth,
+        signOutOn401: true
+      ) else {
         throw APIError.unauthorized
       }
-      var retryRequest = request
-      let authService = await MainActor.run { AuthService.shared }
-      retryRequest.setValue(
-        try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: "Authorization")
       return try await performSyncLocalFilesUpload(retryRequest, retriedAuth: true)
     }
 
@@ -6073,18 +6206,20 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401 {
-      let authService = await MainActor.run { AuthService.shared }
-      _ = try await authService.getIdToken(forceRefresh: true)
-
-      var retryRequest = request
-      retryRequest.setValue(
-        try await authService.getAuthHeader(), forHTTPHeaderField: "Authorization")
+      guard let retryRequest = try await authorizedRetryRequest(
+        from: request,
+        retriedAuth: false,
+        signOutOn401: true
+      ) else {
+        throw APIError.unauthorized
+      }
 
       let (retryData, retryResponse) = try await session.data(for: retryRequest)
       guard let retryHttpResponse = retryResponse as? HTTPURLResponse else {
         throw APIError.invalidResponse
       }
       guard retryHttpResponse.statusCode != 401 else {
+        await invalidateSessionAfterUnauthorized(endpoint: endpointLabel(for: request), signOutOn401: true)
         throw APIError.unauthorized
       }
       guard (200...299).contains(retryHttpResponse.statusCode) else {

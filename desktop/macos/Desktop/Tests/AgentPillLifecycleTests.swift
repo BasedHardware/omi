@@ -419,8 +419,15 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("static func quadraticBezier(from start: CGPoint, control: CGPoint, to end: CGPoint, progress: CGFloat) -> CGPoint"))
     XCTAssertTrue(source.contains("let rowRevealProgress = NotchAgentStackMetrics.smoothStep((progress - 0.38) / 0.62)"))
     XCTAssertTrue(source.contains("let logoPlaceholderProgress = NotchAgentStackMetrics.smoothStep(progress / 0.42)"))
-    XCTAssertTrue(source.contains("? .spring(response: 0.34, dampingFraction: 0.86)"))
-    XCTAssertTrue(source.contains(": .spring(response: 0.18, dampingFraction: 0.92)"))
+    // The hover-menu content morph must share the window's expand/collapse
+    // durations (see notchHoverMenuExpand/CollapseDuration) so the rows and the
+    // NSPanel finish together — a duration mismatch made the surface keep
+    // sliding open after the rows settled ("expands, then slides").
+    XCTAssertTrue(source.contains("? .easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)"))
+    XCTAssertTrue(source.contains(": .easeOut(duration: FloatingControlBarWindow.notchHoverMenuCollapseDuration)"))
+    XCTAssertEqual(FloatingControlBarWindow.notchHoverMenuExpandDuration, 0.16, accuracy: 0.0001)
+    XCTAssertEqual(FloatingControlBarWindow.notchHoverMenuCollapseDuration, 0.10, accuracy: 0.0001)
+    XCTAssertFalse(source.contains(".animation(.spring(response: 0.18, dampingFraction: 0.9), value: shouldShowNotchHoverMenu)"))
     XCTAssertTrue(source.contains(".transition(.identity)"))
     XCTAssertTrue(source.contains("notchOmiChatRow\n                            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"))
     XCTAssertTrue(source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
@@ -475,8 +482,8 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains(".strokeBorder(Color.white.opacity(0.10 * Double(progress)), lineWidth: 0.6)"))
     XCTAssertTrue(windowSource.contains("private static let askOmiAnimationDuration: TimeInterval = 0.14"))
     XCTAssertTrue(windowSource.contains("private static let askOmiSettleDelay: TimeInterval = 0.16"))
-    XCTAssertTrue(windowSource.contains("let currentTopCenteredFrame = NSRect("))
-    XCTAssertTrue(windowSource.contains("abs(frame.midX - targetFrame.midX) > 0.5"))
+    XCTAssertTrue(windowSource.contains("FloatingControlBarGeometry.topCenterAnchoredFrame(currentFrame: frame, targetSize: newSize).origin"))
+    XCTAssertFalse(windowSource.contains("let currentTopCenteredFrame = NSRect("))
     XCTAssertTrue(windowSource.contains("let keepVoiceResponseAlive = state.isVoiceResponseGlowActive"))
     XCTAssertTrue(windowSource.contains("FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)"))
     XCTAssertTrue(windowSource.contains("static func notchAgentListHeight(agentCount: Int) -> CGFloat"))
@@ -485,6 +492,47 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
     XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
     XCTAssertTrue(windowSource.contains("if state.showingAIConversation {\n                return\n            }"))
+  }
+
+  func testSpacesTransitionDoesNotReplayNotchRevealPop() throws {
+    let windowSource = try floatingControlBarWindowSource()
+
+    guard let start = windowSource.range(of: "private func performSpacesTransitionGrowIn()"),
+      let end = windowSource.range(of: "private func defaultFrameForCurrentState()")
+    else {
+      return XCTFail("Expected performSpacesTransitionGrowIn section")
+    }
+    let body = String(windowSource[start.lowerBound..<end.lowerBound])
+
+    // Switching Spaces must NOT replay the reveal "pop": animateGrowOutFromNotch
+    // resets notchRevealProgress to 0.001 and re-zooms the island. The panel
+    // already lives on every Space (.canJoinAllSpaces), so a Space switch should
+    // keep it fully revealed and only re-assert the frame if it drifted.
+    XCTAssertFalse(body.contains("animateGrowOutFromNotch"))
+    XCTAssertTrue(body.contains("state.notchRevealProgress = 1"))
+    XCTAssertTrue(body.contains("guard !Self.framesEquivalent(frame, targetFrame) else { return }"))
+  }
+
+  func testAgentSwitcherResizeMatchesContentMorphDurations() throws {
+    let windowSource = try floatingControlBarWindowSource()
+
+    // The hover-menu window resize must animate with the same durations as the
+    // SwiftUI content morph, or the panel keeps sliding after the rows settle.
+    XCTAssertTrue(windowSource.contains("static let notchHoverMenuExpandDuration: TimeInterval = 0.16"))
+    XCTAssertTrue(windowSource.contains("static let notchHoverMenuCollapseDuration: TimeInterval = 0.10"))
+
+    guard let start = windowSource.range(of: "func resizeForAgentSwitcher(visible: Bool)"),
+      let end = windowSource.range(of: "private func pillAgentListWindowSize(")
+    else {
+      return XCTFail("Expected resizeForAgentSwitcher section")
+    }
+    let body = String(windowSource[start.lowerBound..<end.lowerBound])
+
+    XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
+    XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
+    // No bare animated resize (which defaults to the slow 0.3s) may remain in
+    // the hover-menu expand/collapse path.
+    XCTAssertFalse(body.contains("animated: true, anchorTop: true)"))
   }
 
   func testFloatingBarExplicitSpawnCompletesParentTurn() throws {
@@ -890,14 +938,20 @@ final class AgentPillLifecycleTests: XCTestCase {
     let hubSource = try realtimeHubControllerSource()
 
     XCTAssertTrue(
-      apiSource.contains("try await authService.getAuthHeader(forceRefresh: true), forHTTPHeaderField: \"Authorization\")"),
+      apiSource.contains("authorizedRetryRequest")
+        && apiSource.contains("getAuthHeader(forceRefresh: true)")
+        && apiSource.contains("forHTTPHeaderField: \"Authorization\""),
       "Backend 401 retry paths must force-refresh Firebase auth")
     XCTAssertTrue(
       apiSource.contains("throw CredentialHealthError.backendTransient(statusCode: nil, message: error.localizedDescription)"),
       "Realtime mint retry transport failures must stay transient, not requires-login")
     XCTAssertTrue(
-      apiSource.contains("} catch AuthError.notSignedIn {\n        throw CredentialHealthError.requiresLogin"),
-      "Only definitive not-signed-in refresh failures should become requires-login")
+      apiSource.contains("invalidateSessionAfterUnauthorized")
+        && apiSource.contains("throw CredentialHealthError.requiresLogin"),
+      "Definitive session 401 after retry must invalidate and require login")
+    XCTAssertTrue(
+      apiSource.contains("} catch AuthError.notSignedIn {\n      await invalidateSessionAfterUnauthorized"),
+      "Only definitive not-signed-in refresh failures should invalidate and require login")
     XCTAssertTrue(
       hubSource.contains("self.minting = false\n        CredentialHealthManager.shared.record(error, context: \"realtime_mint\")"),
       "Mint failure must clear minting before failover starts the alternate provider")
