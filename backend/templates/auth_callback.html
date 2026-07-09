@@ -164,7 +164,7 @@
                 // their localhost server picks up the code automatically. Mobile users get
                 // the existing manual-link fallback in case the deep link doesn't fire.
                 if (isLoopback) {
-                    messageElement.textContent = 'Returning to your terminal — you can close this tab.';
+                    messageElement.textContent = 'Signing you in — you can close this tab.';
                 } else {
                     messageElement.textContent = 'Redirecting you back to the app...';
                 }
@@ -183,7 +183,7 @@
                     // Show manual link after 3 seconds if automatic redirect doesn't work
                     setTimeout(() => {
                         if (isLoopback) {
-                            messageElement.textContent = 'If your terminal didn\'t pick it up, click below:';
+                            messageElement.textContent = 'If nothing happened, click below:';
                         } else {
                             messageElement.textContent = 'If the app doesn\'t open automatically, click below:';
                         }
@@ -193,7 +193,7 @@
                 } catch (e) {
                     console.error('Redirect error:', e);
                     errorElement.textContent = isLoopback
-                        ? 'Could not automatically redirect to your local CLI.'
+                        ? 'Could not automatically continue sign-in.'
                         : 'Could not automatically redirect to the app.';
                     messageElement.textContent = 'Please click below to continue:';
                     spinnerElement.style.display = 'none';

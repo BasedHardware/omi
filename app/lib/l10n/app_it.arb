@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Usi un tuo fornitore di trascrizione. Sincronizzare queste registrazioni le trascrive sui server di Omi e contano per il limite di trascrizione del tuo piano.",
     "transcribeLaterTitle": "Trascrivi più tardi",
     "transcribeLaterDescription": "Registra l'audio ora e trascrivilo quando vuoi, invece che in tempo reale. Le registrazioni vengono salvate sul telefono; poi le carichi per creare le conversazioni.",
-    "transcribeLaterNote": "Per ora funziona con i dispositivi Omi. L'audio resta sul telefono finché non scegli di caricarlo.",
+    "transcribeLaterNote": "Per ora funziona con i dispositivi Omi e Limitless. L'audio resta sul telefono finché non scegli di caricarlo.",
     "transcribeLaterStorageFull": "Lo spazio sul telefono sta per esaurirsi, quindi la registrazione è in pausa. Libera spazio o carica le registrazioni e riprenderà automaticamente.",
     "unmute": "Riattiva audio",
     "newRecording": "Nuova registrazione",
@@ -3104,5 +3104,43 @@
     "deviceOnboardingIntroDuration": "Circa 1 minuto",
     "jumpToLatestMessage": "Vai all'ultimo messaggio",
     "latest": "Più recente",
-    "flashFirmware": "Installa il firmware"
+    "flashFirmware": "Installa il firmware",
+    "pendantRecordingTitle": "Registrazione sul ciondolo",
+    "pendantRecordingNote": "Il tuo ciondolo registra autonomamente. Le registrazioni si sincronizzano con il telefono mentre l'app è aperta.",
+    "pendantSyncingRecordings": "Sincronizzazione delle registrazioni dal ciondolo…",
+    "pendantMinutesStored": "~{minutes} min memorizzati",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "La memoria del ciondolo è quasi piena — tieni l'app aperta per sincronizzare.",
+    "connectRayBanMeta": "Connetti Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Usa i tuoi occhiali Ray-Ban Meta come dispositivo di acquisizione Omi per conversazioni e contesto visivo. Omi aprirà l'app Meta AI per collegare i tuoi occhiali.",
+    "raybanMetaOpenMetaAI": "Connetti tramite Meta AI",
+    "raybanMetaWaitingForMetaAI": "Completa la connessione nell'app Meta AI, poi torna qui.",
+    "raybanMetaCheckAgain": "Controlla di nuovo",
+    "raybanMetaAllowCamera": "Consenti la fotocamera sugli occhiali",
+    "raybanMetaCameraExplanation": "Omi usa la fotocamera dei tuoi occhiali per aggiungere foto alle tue conversazioni. Puoi saltare questo passaggio e usare solo l'audio.",
+    "raybanMetaSkipForNow": "Salta per ora",
+    "raybanMetaAudioOnlyTitle": "Modalità solo audio di Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Questa versione di Omi può usare il microfono dei tuoi occhiali tramite Bluetooth. L'acquisizione di foto richiede la versione sviluppatore Meta di Omi.",
+    "raybanMetaMusicPauseNote": "La musica sul telefono si mette in pausa mentre è in uso il microfono degli occhiali.",
+    "raybanMetaContinue": "Continua",
+    "raybanMetaCapturePhoto": "Scatta foto",
+    "raybanMetaPhotoRequested": "Foto richiesta — apparirà nella tua conversazione.",
+    "raybanMetaMicrophoneReady": "Microfono pronto",
+    "raybanMetaImageCaptureReady": "Acquisizione immagini pronta",
+    "raybanMetaImageCaptureUnavailable": "Non disponibile in modalità solo audio",
+    "raybanMetaCamera": "Fotocamera",
+    "errorConnectingRayBanMeta": "Errore di connessione a Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

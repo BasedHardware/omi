@@ -1,0 +1,54 @@
+version: 2
+name: settings-basic
+tier: 2
+description: Settings navigation smoke for General, Transcription, and Privacy sections
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MemoryExportService.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings
+    bridge.navigate:
+      target: settings
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 9
+
+  - id: S2
+    name: Open General section
+    bridge.navigate:
+      target: settings
+      settingsSection: General
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: General
+
+  - id: S3
+    name: Open Transcription section
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
+
+  - id: S4
+    name: Open Privacy section
+    bridge.navigate:
+      target: settings
+      settingsSection: Privacy
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Privacy
+
+  - id: S5
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

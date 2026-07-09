@@ -6,10 +6,10 @@ in the Omi chat when the app is installed by a user.
 """
 
 import contextvars
-from typing import List, Optional, Callable, Any, Dict
+from typing import Any, Dict, List, Optional, cast
 import httpx
 from pydantic import BaseModel, Field, create_model
-from langchain_core.tools import StructuredTool
+from langchain_core.tools import StructuredTool, BaseTool
 from langchain_core.runnables import RunnableConfig
 
 from database.apps import get_app_by_id_db
@@ -79,14 +79,28 @@ def _handle_app_webhook_disable(app_id: str, action: int, error: str):
 try:
     from utils.retrieval.agentic import agent_config_context
 except ImportError:
-    # Fallback if import fails
+    # Fallback if import fails (circular-import guard)
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
+
+
+def _agent_config() -> Optional[Dict[str, Any]]:
+    """Retrieve the agent config dict from the context var, or None if unset."""
+    try:
+        return agent_config_context.get()
+    except LookupError:
+        return None
+
+
+def _sync_noop(**kwargs: Any) -> None:
+    """Synchronous placeholder for async-only StructuredTools (never invoked at runtime)."""
+    return None
+
 
 # Global mapping of tool names to status messages
 _tool_status_messages: Dict[str, str] = {}
 
 
-def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type:
+def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any]) -> type[BaseModel]:
     """
     Create a Pydantic model from a JSON schema parameters definition.
 
@@ -100,7 +114,7 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     properties = parameters.get('properties', {})
     required = set(parameters.get('required', []))
 
-    field_definitions = {}
+    field_definitions: Dict[str, Any] = {}
 
     for param_name, param_schema in properties.items():
         param_type = param_schema.get('type', 'string')
@@ -140,8 +154,8 @@ def create_app_tool(
     app_id: str,
     app_name: str,
     mcp_server_url: Optional[str] = None,
-    mcp_oauth_tokens: Optional[Dict] = None,
-) -> Callable:
+    mcp_oauth_tokens: Optional[Dict[str, Any]] = None,
+) -> StructuredTool:
     """
     Dynamically create a LangChain tool from an app tool definition.
 
@@ -165,7 +179,7 @@ def create_app_tool(
         _tool_status_messages[tool_name] = app_tool.status_message
 
     # Create a Pydantic model from the schema (or empty model if no parameters)
-    if app_tool.parameters and isinstance(app_tool.parameters, dict) and app_tool.parameters.get('properties'):
+    if app_tool.parameters and app_tool.parameters.get('properties'):
         args_schema = _create_pydantic_model_from_schema(app_tool.name, app_tool.parameters)
     else:
         # Create an empty schema for tools with no parameters
@@ -173,12 +187,12 @@ def create_app_tool(
         args_schema = create_model(model_name)
 
     if app_tool.is_mcp and mcp_server_url:
-        _mcp_url = mcp_server_url
-        _mcp_tokens = mcp_oauth_tokens
-        _access_token = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
-        _transport = app_tool.transport
+        _mcp_url: str = mcp_server_url
+        _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens
+        _access_token: Optional[str] = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
+        _transport: str = app_tool.transport
 
-        async def mcp_tool_function(**kwargs) -> str:
+        async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
             kwargs.pop('config', None)
             if await run_blocking(db_executor, is_app_webhook_disabled, app_id):
@@ -209,22 +223,22 @@ def create_app_tool(
         return StructuredTool(
             name=tool_name,
             description=f"{app_tool.description} (from {app_name} app)",
-            func=lambda **kwargs: None,
+            func=_sync_noop,
             coroutine=mcp_tool_function,
             args_schema=args_schema,
         )
 
     # Standard HTTP tool
-    async def tool_function(**kwargs) -> str:
+    async def tool_function(**kwargs: Any) -> str:
         """Tool dynamically created from app definition."""
-        config_param = kwargs.pop('config', None)
+        config_param: Optional[RunnableConfig] = kwargs.pop('config', None)
         return await _call_tool_endpoint(kwargs, config_param, app_tool, app_id)
 
     # Create StructuredTool with the schema
     return StructuredTool(
         name=tool_name,
         description=f"{app_tool.description} (from {app_name} app)",
-        func=lambda **kwargs: None,  # Sync placeholder (won't be used)
+        func=_sync_noop,  # Sync placeholder (async coroutine is used instead)
         coroutine=tool_function,
         args_schema=args_schema,
     )
@@ -243,16 +257,19 @@ def get_tool_status_message(tool_name: str) -> Optional[str]:
     return _tool_status_messages.get(tool_name)
 
 
-async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str) -> str:
+async def _call_tool_endpoint(
+    kwargs: Dict[str, Any], config: Optional[RunnableConfig], app_tool: ChatTool, app_id: str
+) -> str:
     """Helper function to call the tool endpoint asynchronously."""
     # Get user ID from config
     if config is None:
-        try:
-            config = agent_config_context.get()
-        except LookupError:
+        ctx = _agent_config()
+        if ctx is None:
             return f"Error: Configuration not available for {app_tool.name}"
+        config = cast(RunnableConfig, ctx)
 
-    uid = config['configurable'].get('user_id') if config else None
+    configurable: Dict[str, Any] = config.get('configurable') or {}
+    uid = configurable.get('user_id')
     if not uid:
         return f"Error: User ID not found for {app_tool.name}"
 
@@ -264,7 +281,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
         pass
 
     # Prepare request payload
-    payload = {
+    payload: Dict[str, Any] = {
         **kwargs,
         'uid': uid,
         'app_id': app_id,
@@ -295,7 +312,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
             method = app_tool.method.upper()
-            request_kwargs = {
+            request_kwargs: Dict[str, Any] = {
                 'headers': headers,
             }
 
@@ -310,15 +327,17 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                 cb.record_success()
                 await run_blocking(db_executor, record_app_webhook_success, app_id, ENDPOINT_CHAT_TOOL)
                 try:
-                    result = response.json()
-                    if isinstance(result, dict) and 'result' in result:
-                        return str(result['result'])
-                    elif isinstance(result, dict) and 'message' in result:
-                        return str(result['message'])
-                    elif isinstance(result, str):
-                        return result
-                    else:
-                        return str(result)
+                    loaded: object = response.json()
+                    if isinstance(loaded, dict):
+                        data = cast(Dict[str, Any], loaded)
+                        if 'result' in data:
+                            return str(data['result'])
+                        if 'message' in data:
+                            return str(data['message'])
+                        return str(data)
+                    if isinstance(loaded, str):
+                        return loaded
+                    return str(loaded)
                 except ValueError:
                     return response.text
             else:
@@ -342,11 +361,15 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
                     )
                 error_msg = f"Error calling {app_tool.name}: HTTP {response.status_code}"
                 try:
-                    error_detail = response.json()
-                    if isinstance(error_detail, dict) and 'error' in error_detail:
-                        error_msg += f" - {error_detail['error']}"
+                    loaded_err: object = response.json()
+                    if isinstance(loaded_err, dict):
+                        err_data = cast(Dict[str, Any], loaded_err)
+                        if 'error' in err_data:
+                            error_msg += f" - {err_data['error']}"
+                        else:
+                            error_msg += f" - {str(err_data)}"
                     else:
-                        error_msg += f" - {str(error_detail)}"
+                        error_msg += f" - {str(loaded_err)}"
                 except ValueError:
                     error_msg += f" - {response.text[:200]}"
                 return error_msg
@@ -374,7 +397,7 @@ async def _call_tool_endpoint(kwargs: dict, config: Optional[RunnableConfig], ap
         return f"Error calling {app_tool.name}: {str(e)}"
 
 
-def load_app_tools(uid: str) -> List[Callable]:
+def load_app_tools(uid: str) -> List[BaseTool]:
     """
     Load all tools from enabled apps for a user.
 
@@ -385,7 +408,7 @@ def load_app_tools(uid: str) -> List[Callable]:
         List of LangChain tool functions
     """
     enabled_app_ids = get_enabled_apps(uid)
-    tools = []
+    tools: List[BaseTool] = []
 
     for app_id in enabled_app_ids:
         app_data = get_app_by_id_db(app_id)
@@ -404,8 +427,8 @@ def load_app_tools(uid: str) -> List[Callable]:
         # Only load tools if app has chat_tools defined
         if app.chat_tools and len(app.chat_tools) > 0:
             # Extract MCP config from external_integration if present
-            mcp_server_url = None
-            mcp_oauth_tokens = None
+            mcp_server_url: Optional[str] = None
+            mcp_oauth_tokens: Optional[Dict[str, Any]] = None
             if app.external_integration:
                 mcp_server_url = app.external_integration.mcp_server_url
                 mcp_oauth_tokens = app.external_integration.mcp_oauth_tokens

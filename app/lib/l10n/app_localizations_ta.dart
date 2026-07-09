@@ -9406,7 +9406,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'தற்போது Omi சாதனங்களுடன் மட்டுமே இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+      'தற்போது Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9558,4 +9558,86 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get flashFirmware => 'ஃபார்ம்வேரை ஃபிளாஷ் செய்யவும்';
+
+  @override
+  String get pendantRecordingTitle => 'பெண்டன்ட்டில் பதிவு நடக்கிறது';
+
+  @override
+  String get pendantRecordingNote =>
+      'உங்கள் பெண்டன்ட் தானாகவே பதிவு செய்கிறது. ஆப்ஸ் திறந்திருக்கும்போது பதிவுகள் உங்கள் தொலைபேசியுடன் ஒத்திசைக்கப்படும்.';
+
+  @override
+  String get pendantSyncingRecordings => 'உங்கள் பெண்டன்ட்டிலிருந்து பதிவுகள் ஒத்திசைக்கப்படுகின்றன…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes நிமிடங்கள் சேமிக்கப்பட்டுள்ளன';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta ஐ இணைக்கவும்';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'உரையாடல்கள் மற்றும் காட்சி சூழலுக்கான உங்கள் Omi பதிவு சாதனமாக உங்கள் Ray-Ban Meta கண்ணாடியைப் பயன்படுத்தவும். உங்கள் கண்ணாடியை இணைக்க Omi, Meta AI செயலியைத் திறக்கும்.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI மூலம் இணைக்கவும்';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI செயலியில் இணைப்பை முடித்து, பிறகு இங்கே திரும்பி வாருங்கள்.';
+
+  @override
+  String get raybanMetaCheckAgain => 'மீண்டும் சரிபார்க்கவும்';
+
+  @override
+  String get raybanMetaAllowCamera => 'கண்ணாடியில் கேமராவை அனுமதிக்கவும்';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'உங்கள் உரையாடல்களில் புகைப்படங்களைச் சேர்க்க Omi உங்கள் கண்ணாடியின் கேமராவைப் பயன்படுத்துகிறது. இதைத் தவிர்த்து, ஆடியோவை மட்டும் பயன்படுத்தலாம்.';
+
+  @override
+  String get raybanMetaSkipForNow => 'இப்போதைக்கு தவிர்க்கவும்';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta ஆடியோ-மட்டும் பயன்முறை';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi இன் இந்தப் பதிப்பு Bluetooth வழியாக உங்கள் கண்ணாடியின் மைக்ரோபோனைப் பயன்படுத்த முடியும். புகைப்படம் எடுக்க Omi இன் Meta டெவலப்பர் பதிப்பு தேவை.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'கண்ணாடியின் மைக்ரோபோன் பயன்பாட்டில் இருக்கும்போது உங்கள் தொலைபேசியில் இசை இடைநிறுத்தப்படும்.';
+
+  @override
+  String get raybanMetaContinue => 'தொடரவும்';
+
+  @override
+  String get raybanMetaCapturePhoto => 'புகைப்படம் எடுக்கவும்';
+
+  @override
+  String get raybanMetaPhotoRequested => 'புகைப்படம் கோரப்பட்டது — அது உங்கள் உரையாடலில் தோன்றும்.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'மைக்ரோபோன் தயார்';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'படம் எடுத்தல் தயார்';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'ஆடியோ-மட்டும் பயன்முறையில் கிடைக்காது';
+
+  @override
+  String get raybanMetaCamera => 'கேமரா';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta உடன் இணைப்பதில் பிழை: $error';
+  }
 }

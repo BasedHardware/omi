@@ -3,10 +3,14 @@ import hashlib
 import json
 import re
 from collections import Counter, OrderedDict
-from typing import List, Optional, Tuple
+from typing import Callable, Dict, List, Match, Optional, Pattern, Set, Tuple, TypedDict, Union, cast
 
 from google.cloud import translate_v3
-from langdetect import detect as langdetect_detect, detect_langs as langdetect_detect_langs, DetectorFactory
+from langdetect import (  # langdetect ships no py.typed marker; symbols are untyped
+    detect as langdetect_detect,  # type: ignore[reportUnknownVariableType]
+    detect_langs as langdetect_detect_langs,  # type: ignore[reportUnknownVariableType]
+    DetectorFactory,
+)
 from langdetect.lang_detect_exception import LangDetectException
 from enum import Enum
 import logging
@@ -18,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 # LRU Cache for language detection (local, free via langdetect)
-detection_cache = OrderedDict()
+detection_cache: "OrderedDict[str, Union[str, Tuple[str, float]]]" = OrderedDict()
 MAX_DETECTION_CACHE_SIZE = 1000
 
 PROJECT_ID = os.environ.get("GOOGLE_CLOUD_PROJECT")
@@ -191,18 +195,18 @@ TRANSLATION_CACHE_TTL = int(os.environ.get("TRANSLATION_CACHE_TTL", 60 * 60 * 24
 MAX_BATCH_SIZE = 100
 
 
-def _detect_with_langdetect(text: str, hint_language: str = None) -> str | None:
+def _detect_with_langdetect(text: str, hint_language: Optional[str] = None) -> Optional[str]:
     # Normalize locale-tagged language (e.g. "en-US" -> "en") for langdetect compatibility
     base_hint = hint_language.split('-')[0] if hint_language else None
     if base_hint not in LANGDETECT_RELIABLE_LANGUAGES:
         return None
     try:
-        return langdetect_detect(text)
+        return cast(str, langdetect_detect(text))
     except LangDetectException:
         return None
 
 
-def detect_language(text: str, remove_non_lexical: bool = False, hint_language: str = None) -> str | None:
+def detect_language(text: str, remove_non_lexical: bool = False, hint_language: Optional[str] = None) -> Optional[str]:
     """Detect language using free local langdetect library only (no paid API calls)."""
     text_for_detection = text
     if remove_non_lexical:
@@ -214,9 +218,9 @@ def detect_language(text: str, remove_non_lexical: bool = False, hint_language: 
 
     if text_for_detection in detection_cache:
         detection_cache.move_to_end(text_for_detection)
-        return detection_cache[text_for_detection]
+        return cast(str, detection_cache[text_for_detection])
 
-    detected_language = None
+    detected_language: Optional[str] = None
 
     try:
         detected_language = _detect_with_langdetect(text_for_detection, hint_language)
@@ -255,7 +259,7 @@ class TranslationNeed(str, Enum):
 
 
 def detect_language_with_confidence(
-    text: str, remove_non_lexical: bool = True, hint_language: str = None
+    text: str, remove_non_lexical: bool = True, hint_language: Optional[str] = None
 ) -> Tuple[Optional[str], float]:
     """Detect language with confidence score using langdetect.detect_langs().
 
@@ -274,7 +278,7 @@ def detect_language_with_confidence(
     cache_key = f"conf:{text_for_detection}"
     if cache_key in detection_cache:
         detection_cache.move_to_end(cache_key)
-        return detection_cache[cache_key]
+        return cast(Tuple[str, float], detection_cache[cache_key])
 
     try:
         results = langdetect_detect_langs(text_for_detection)
@@ -282,7 +286,7 @@ def detect_language_with_confidence(
             return (None, 0.0)
 
         top = results[0]
-        result = (top.lang, top.prob)
+        result: Tuple[str, float] = (cast(str, top.lang), cast(float, top.prob))  # type: ignore[reportUnknownMemberType]  # langdetect Language.lang/prob untyped
 
         # Cache the result
         if len(detection_cache) >= MAX_DETECTION_CACHE_SIZE:
@@ -360,7 +364,7 @@ def split_into_sentences(text: str) -> List[str]:
     _DEC = 'ⓓⓔⓕ'  # decimal point
     _LAT = 'ⓛⓐⓣ'  # latin abbrev internal period
 
-    _ABBREV_PATTERNS = [
+    _ABBREV_PATTERNS: List[Tuple[Pattern[str], Union[str, Callable[[Match[str]], str]]]] = [
         # Country codes: U.S. → UⓐⓑⓒS. (internal period protected, trailing period kept)
         (re.compile(r'\b([A-Z])\.([A-Z])\.'), lambda m: m.group(1) + _ABBR + m.group(2) + '.'),
         # Extended multi-part acronyms: U.S.A. → UⓐⓑⓒSⓐⓑⓒA.
@@ -378,7 +382,7 @@ def split_into_sentences(text: str) -> List[str]:
         (re.compile(r'\bvs\.'), 'vs' + _LAT),
     ]
 
-    result = []
+    result: List[str] = []
     for line in text.split('\n'):
         line = line.strip()
         if not line:
@@ -393,7 +397,7 @@ def split_into_sentences(text: str) -> List[str]:
         raw = SENTENCE_FINDALL_RE.findall(protected)
 
         # Phase 3: Restore placeholders
-        restored_list = []
+        restored_list: List[str] = []
         for s in raw:
             s = s.strip()
             if not s:
@@ -402,7 +406,7 @@ def split_into_sentences(text: str) -> List[str]:
             restored_list.append(restored)
 
         # Phase 4: Merge false splits at abbreviation boundaries
-        merged = []
+        merged: List[str] = []
         for seg in restored_list:
             if merged and _should_merge(merged[-1], seg):
                 merged[-1] = merged[-1] + ' ' + seg
@@ -481,6 +485,13 @@ def _redis_negative_cache_key(text_hash: str, dest_lang: str) -> str:
 NEGATIVE_CACHE_TTL = 60 * 60 * 24 * 7  # 7 days for negative cache
 
 
+class _SentInfo(TypedDict):
+    """Sentence-level dedup info used by translate_units_batch."""
+
+    text: str
+    indices: List[Tuple[int, int]]
+
+
 def get_negative_cache(text_hash: str, dest_lang: str) -> bool:
     """Check if text is negatively cached (known to not need translation). Returns True if cached."""
     try:
@@ -500,13 +511,15 @@ def set_negative_cache(text_hash: str, dest_lang: str):
         logger.warning(f"Redis negative cache write error: {e}")
 
 
-def get_cached_translation(text_hash: str, dest_lang: str) -> Optional[dict]:
+def get_cached_translation(text_hash: str, dest_lang: str) -> Optional[Dict[str, str]]:
     """Get translation from Redis cache. Returns {"text": ..., "detected_lang": ...} or None."""
     try:
         key = _redis_cache_key(text_hash, dest_lang)
         cached = r.get(key)
         if cached:
-            return json.loads(cached)
+            loaded: object = json.loads(cached)
+            if isinstance(loaded, dict):
+                return cast(Dict[str, str], loaded)
     except Exception as e:
         logger.warning(f"Redis translation cache read error: {e}")
     return None
@@ -523,8 +536,8 @@ def cache_translation(text_hash: str, dest_lang: str, translated_text: str, dete
 
 
 class TranslationService:
-    def __init__(self):
-        self.translation_cache = OrderedDict()
+    def __init__(self) -> None:
+        self.translation_cache: OrderedDict[str, Tuple[str, str]] = OrderedDict()
         self.MAX_CACHE_SIZE = 1000
 
     def _get_cache_key(self, text_hash: str, dest_language: str) -> str:
@@ -563,9 +576,9 @@ class TranslationService:
             return ("", "")
 
         # Phase 1: Check caches (memory -> Redis) for each sentence
-        results = [None] * len(sentences)
-        uncached_indices = []
-        detected_langs = []
+        results: List[Optional[str]] = [None] * len(sentences)
+        uncached_indices: List[int] = []
+        detected_langs: List[str] = []
 
         for i, sentence in enumerate(sentences):
             text_hash = hashlib.md5(sentence.encode()).hexdigest()
@@ -592,7 +605,7 @@ class TranslationService:
 
         # Phase 2: Batch translate uncached sentences
         if uncached_indices:
-            uncached_sentences = [sentences[i] for i in uncached_indices]
+            uncached_sentences: List[str] = [sentences[i] for i in uncached_indices]
             logger.info(
                 f"translate_batch api_call sentences={len(uncached_sentences)} "
                 f"cached={len(sentences) - len(uncached_sentences)}/{len(sentences)}"
@@ -601,11 +614,11 @@ class TranslationService:
             # Batch in chunks of MAX_BATCH_SIZE
             for chunk_start in range(0, len(uncached_sentences), MAX_BATCH_SIZE):
                 chunk_end = min(chunk_start + MAX_BATCH_SIZE, len(uncached_sentences))
-                chunk = uncached_sentences[chunk_start:chunk_end]
-                chunk_indices = uncached_indices[chunk_start:chunk_end]
+                chunk: List[str] = uncached_sentences[chunk_start:chunk_end]
+                chunk_indices: List[int] = uncached_indices[chunk_start:chunk_end]
 
                 try:
-                    response = _client.translate_text(
+                    response = _client.translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
                         contents=chunk,
                         parent=_parent,
                         mime_type=_mime_type,
@@ -631,9 +644,9 @@ class TranslationService:
                             results[idx] = sentences[idx]
 
         # Determine dominant detected language
-        dominant_lang = ""
+        dominant_lang: str = ""
         if detected_langs:
-            lang_counts = Counter(lang for lang in detected_langs if lang)
+            lang_counts: Counter[str] = Counter(lang for lang in detected_langs if lang)
             if lang_counts:
                 dominant_lang = lang_counts.most_common(1)[0][0]
 
@@ -659,7 +672,7 @@ class TranslationService:
         # Phase -1: Check full-text caches for each unit before sentence splitting.
         # This preserves hits from the pre-DD-008 batch path and from
         # translate_text() calls that wrote full-text entries.
-        full_text_results = {}
+        full_text_results: Dict[str, Tuple[str, str]] = {}
         for unit_id, text in units:
             text_hash = hashlib.md5(text.encode()).hexdigest()
             # Check negative cache first — skip if previously determined
@@ -688,7 +701,7 @@ class TranslationService:
         # Phase 0: Split each unit's text into sentences (only for cache-miss units)
         # Units that hit full-text cache in Phase -1 skip sentence splitting entirely.
         # unit_sentences[i] = list of (sentence_text, sentence_hash) for unit i
-        unit_sentences = []
+        unit_sentences: List[Tuple[str, str, List[Tuple[str, str]]]] = []
         for unit_id, text in units:
             if unit_id in full_text_results:
                 continue  # Already have a full-text cache hit — no need to split
@@ -698,7 +711,7 @@ class TranslationService:
 
         # Build global sentence-level dedup map:
         # sent_hash -> {'text': str, 'indices': [(unit_idx, sent_idx), ...]}
-        sent_hash_to_info = {}
+        sent_hash_to_info: Dict[str, _SentInfo] = {}
         for unit_idx, (_, _, sentences) in enumerate(unit_sentences):
             for sent_idx, (sent_text, sent_hash) in enumerate(sentences):
                 if sent_hash not in sent_hash_to_info:
@@ -710,8 +723,8 @@ class TranslationService:
 
         # Phase 1: Check caches for each unique sentence
         # sent_translation[hash] = (translated_text, detected_lang) or None
-        sent_translation = {}  # hash -> (str, str)
-        uncached_sent_hashes = []
+        sent_translation: Dict[str, Tuple[str, str]] = {}  # hash -> (str, str)
+        uncached_sent_hashes: List[str] = []
 
         for sent_hash, info in sent_hash_to_info.items():
             # Check negative cache first
@@ -737,17 +750,17 @@ class TranslationService:
             uncached_sent_hashes.append(sent_hash)
 
         # Phase 2: Batch translate uncached sentences
-        _failed_sent_hashes: set = set()  # track which sentences fell back to original text
+        _failed_sent_hashes: Set[str] = set()  # track which sentences fell back to original text
         if uncached_sent_hashes:
-            uncached_texts = [sent_hash_to_info[h]['text'] for h in uncached_sent_hashes]
+            uncached_texts: List[str] = [sent_hash_to_info[h]['text'] for h in uncached_sent_hashes]
 
             for chunk_start in range(0, len(uncached_texts), MAX_BATCH_SIZE):
                 chunk_end = min(chunk_start + MAX_BATCH_SIZE, len(uncached_texts))
-                chunk = uncached_texts[chunk_start:chunk_end]
-                chunk_hashes = uncached_sent_hashes[chunk_start:chunk_end]
+                chunk: List[str] = uncached_texts[chunk_start:chunk_end]
+                chunk_hashes: List[str] = uncached_sent_hashes[chunk_start:chunk_end]
 
                 try:
-                    response = _client.translate_text(
+                    response = _client.translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
                         contents=chunk,
                         parent=_parent,
                         mime_type=_mime_type,
@@ -775,7 +788,7 @@ class TranslationService:
         # Phase 3: Reassemble per-unit results from sentence translations.
         # Results are emitted in the same order as the input `units` list
         # so downstream consumers can rely on positional mapping.
-        results: list[tuple[str, str, str] | None] = [None] * len(units)  # pre-allocate for in-order assembly
+        results: List[Optional[Tuple[str, str, str]]] = [None] * len(units)  # pre-allocate for in-order assembly
 
         # Map each unit_id back to its original index in `units` (needed because
         # unit_sentences is compacted — cache-hit units are excluded).
@@ -787,9 +800,9 @@ class TranslationService:
                 results[orig_idx] = (unit_id, original_text, '')
                 continue
 
-            translated_parts = []
-            detected_langs = []
-            _fallback_sent_hashes: set[str] = set()
+            translated_parts: List[str] = []
+            detected_langs: List[str] = []
+            _fallback_sent_hashes: Set[str] = set()
             for sent_text, sent_hash in sentences:
                 if sent_hash in sent_translation:
                     trans_text, det_lang = sent_translation[sent_hash]
@@ -803,9 +816,9 @@ class TranslationService:
 
             assembled = ' '.join(translated_parts)
             # Dominant detected language from constituent sentences
-            dominant_lang = ''
+            dominant_lang: str = ''
             if detected_langs:
-                lang_counts = Counter(detected_langs)
+                lang_counts: Counter[str] = Counter(detected_langs)
                 dominant_lang = lang_counts.most_common(1)[0][0]
 
             text_hash = hashlib.md5(original_text.encode()).hexdigest()
@@ -835,7 +848,7 @@ class TranslationService:
                 results[unit_idx] = (unit_id, trans, det)
 
         # Safety: replace any remaining gaps with original-text fallbacks
-        final_results = []
+        final_results: List[Tuple[str, str, str]] = []
         for idx, r in enumerate(results):
             if r is not None:
                 final_results.append(r)
@@ -863,12 +876,12 @@ class TranslationService:
         # Check Redis cache
         redis_cached = get_cached_translation(text_hash, dest_language)
         if redis_cached:
-            result = (redis_cached["text"], redis_cached.get("detected_lang", ""))
+            result: Tuple[str, str] = (redis_cached["text"], redis_cached.get("detected_lang", ""))
             self._set_memory_cache(text_hash, dest_language, result[0], result[1])
             return result
 
         try:
-            response = _client.translate_text(
+            response = _client.translate_text(  # type: ignore[reportUnknownMemberType]  # google-cloud-translate GAPIC client
                 contents=[text],
                 parent=_parent,
                 mime_type=_mime_type,

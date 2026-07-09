@@ -56,7 +56,7 @@ class V3WriteConvergenceDecision:
     http_status: int
     reason: str
     operation: V3ExternalWriteOperation
-    headers: dict[str, str] = field(default_factory=dict)
+    headers: dict[str, str] = field(default_factory=dict[str, str])
     safe_pilot_policy_allowed: bool = False
     legacy_direct_write_fallback_allowed: bool = False
     archive_default_available: bool = False

@@ -197,6 +197,7 @@ class TestAsyncSTTVariants:
             assert 'run_blocking(storage_executor' in source, f"{filename} should offload file I/O via storage_executor"
 
 
+@pytest.mark.slow
 class TestAsyncSTTBehavior:
     """Runtime behavior tests for async STT variants."""
 

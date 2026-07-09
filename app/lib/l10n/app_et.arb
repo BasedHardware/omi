@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.",
     "transcribeLaterTitle": "Transkribeeri hiljem",
     "transcribeLaterDescription": "Salvesta heli kohe ja transkribeeri see vajaduse korral hiljem, mitte reaalajas. Salvestised hoitakse sinu telefonis ning vestluste loomiseks laadid need üles.",
-    "transcribeLaterNote": "Praegu töötab Omi seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.",
+    "transcribeLaterNote": "Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.",
     "transcribeLaterStorageFull": "Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.",
     "unmute": "Tühista vaigistus",
     "newRecording": "Uus salvestus",
@@ -3104,5 +3104,43 @@
     "deviceOnboardingIntroDuration": "Umbes 1 minut",
     "jumpToLatestMessage": "Hüppa uusima sõnumi juurde",
     "latest": "Uusim",
-    "flashFirmware": "Installi püsivara"
+    "flashFirmware": "Installi püsivara",
+    "pendantRecordingTitle": "Salvestamine ripatsil",
+    "pendantRecordingNote": "Sinu ripats salvestab iseseisvalt. Salvestised sünkroonitakse telefoniga, kui rakendus on avatud.",
+    "pendantSyncingRecordings": "Ripatsi salvestiste sünkroonimine…",
+    "pendantMinutesStored": "~{minutes} min salvestatud",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Ripatsi mälu on peaaegu täis — hoia rakendus avatud, et sünkroonida.",
+    "connectRayBanMeta": "Ühenda Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Kasuta oma Ray-Ban Meta prille Omi jäädvustusseadmena vestluste ja visuaalse konteksti jaoks. Omi avab Meta AI rakenduse, et sinu prillid siduda.",
+    "raybanMetaOpenMetaAI": "Ühenda Meta AI kaudu",
+    "raybanMetaWaitingForMetaAI": "Lõpeta ühendamine Meta AI rakenduses ja tule siis siia tagasi.",
+    "raybanMetaCheckAgain": "Kontrolli uuesti",
+    "raybanMetaAllowCamera": "Luba prillide kaamera",
+    "raybanMetaCameraExplanation": "Omi kasutab sinu prillide kaamerat, et lisada vestlustele fotosid. Võid selle vahele jätta ja kasutada ainult heli.",
+    "raybanMetaSkipForNow": "Jäta praegu vahele",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ainult heli režiim",
+    "raybanMetaAudioOnlyExplanation": "See Omi versioon saab kasutada sinu prillide mikrofoni Bluetoothi kaudu. Fotode jäädvustamiseks on vaja Omi Meta arendajaversiooni.",
+    "raybanMetaMusicPauseNote": "Sinu telefoni muusika peatub, kui prillide mikrofon on kasutusel.",
+    "raybanMetaContinue": "Jätka",
+    "raybanMetaCapturePhoto": "Jäädvusta foto",
+    "raybanMetaPhotoRequested": "Foto taotletud — see ilmub sinu vestlusesse.",
+    "raybanMetaMicrophoneReady": "Mikrofon on valmis",
+    "raybanMetaImageCaptureReady": "Pildistamine on valmis",
+    "raybanMetaImageCaptureUnavailable": "Pole saadaval ainult heli režiimis",
+    "raybanMetaCamera": "Kaamera",
+    "errorConnectingRayBanMeta": "Viga Ray-Ban Metaga ühendamisel: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

@@ -1,9 +1,10 @@
 import os
-from typing import Optional
+from typing import List, Optional
 
 import av
 
 from fastapi import APIRouter, UploadFile, Depends, HTTPException
+from pydantic import BaseModel
 from pydub import AudioSegment
 
 from database.redis_db import set_speech_profile_duration
@@ -28,12 +29,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
-@router.get('/v3/speech-profile', tags=['v3'])
+class HasSpeechProfileResponse(BaseModel):
+    has_profile: bool
+
+
+class SpeechProfileResponse(BaseModel):
+    url: Optional[str] = None
+
+
+class SpeechProfileUploadResponse(BaseModel):
+    url: str
+
+
+class SpeechProfileMutationResponse(BaseModel):
+    status: str
+
+
+@router.get('/v3/speech-profile', tags=['v3'], response_model=HasSpeechProfileResponse)
 def has_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'has_profile': get_user_has_speech_profile(uid)}
 
 
-@router.get('/v4/speech-profile', tags=['v3'])
+@router.get('/v4/speech-profile', tags=['v3'], response_model=SpeechProfileResponse)
 def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
     return {'url': get_profile_audio_if_exists(uid, download=False)}
 
@@ -46,7 +63,7 @@ def get_speech_profile(uid: str = Depends(auth.get_current_user_uid)):
 # and audio itself, which we use on post-processing to use speechbrain model
 
 
-@router.post('/v3/upload-audio', tags=['v3'])
+@router.post('/v3/upload-audio', tags=['v3'], response_model=SpeechProfileUploadResponse)
 @max_part_size(SPEECH_PROFILE_MAX_PART_SIZE)
 def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_uid)):
     os.makedirs(f'_temp/{uid}', exist_ok=True)
@@ -89,7 +106,7 @@ def upload_profile(file: UploadFile, uid: str = Depends(auth.get_current_user_ui
 # ******************************************************
 
 
-@router.delete('/v3/speech-profile/expand', tags=['v3'])
+@router.delete('/v3/speech-profile/expand', tags=['v3'], response_model=SpeechProfileMutationResponse)
 def delete_extra_speech_profile_sample(
     memory_id: str, segment_idx: int, person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)
 ):
@@ -106,7 +123,7 @@ def delete_extra_speech_profile_sample(
     return {'status': 'ok'}
 
 
-@router.get('/v3/speech-profile/expand', tags=['v3'])
+@router.get('/v3/speech-profile/expand', tags=['v3'], response_model=List[str])
 def get_extra_speech_profile_samples(person_id: Optional[str] = None, uid: str = Depends(auth.get_current_user_uid)):
     if person_id:
         return get_user_person_speech_samples(uid, person_id)

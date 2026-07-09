@@ -1,8 +1,9 @@
 """Scheduled canonical short-term maintenance (TTL audit + batch-or-daily promotion).
 
-Wired into the hourly ``notifications-job`` Cloud Run job via ``utils.other.jobs``.
-Disabled by default until ``MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true`` and the
-canonical cohort whitelist is non-empty.
+Hosted by the dedicated ``memory-maintenance-job`` Cloud Run Job
+(``backend/modal/memory_maintenance_job.py``). Disabled by default until
+``MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true`` and the canonical cohort
+whitelist is non-empty.
 """
 
 from __future__ import annotations
@@ -11,7 +12,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, Optional
 
 from database._client import db as default_db_client
 from utils.executors import db_executor, run_blocking
@@ -26,6 +27,10 @@ logger = logging.getLogger(__name__)
 MEMORY_CANONICAL_PROMOTION_CRON_ENABLED_ENV = "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED"
 MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS_ENV = "MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS"
 DEFAULT_CRON_INTERVAL_HOURS = 1
+
+
+def _empty_errors() -> list[str]:
+    return []
 
 
 def canonical_promotion_cron_enabled() -> bool:
@@ -59,7 +64,7 @@ class CanonicalShortTermMaintenanceCronSummary:
     promoted_total: int = 0
     vector_sync_failures_total: int = 0
     skipped_users: int = 0
-    errors: List[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=_empty_errors)
 
 
 def _coerce_run_id(run_id: Optional[str], *, now: datetime) -> str:
@@ -84,14 +89,26 @@ def _promoted_count(report: CanonicalShortTermMaintenanceReport) -> int:
 
 def run_canonical_short_term_maintenance_for_cohort(
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:
-    """Run maintenance for every uid in ``CANONICAL_MEMORY_USERS``."""
-    client = db_client if db_client is not None else default_db_client
+    """Run maintenance for every uid in ``CANONICAL_MEMORY_USERS``.
+
+    Enablement and empty-cohort gates live here so the dedicated job entrypoint
+    can call this runner directly (Scheduler owns hourly cadence; the hour-modulo
+    check in ``should_run_canonical_short_term_maintenance_cron`` is optional).
+    """
     current_time = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     effective_run_id = _coerce_run_id(run_id, now=current_time)
+    if not canonical_promotion_cron_enabled():
+        logger.info(
+            "canonical_short_term_maintenance_cron: disabled run_id=%s",
+            effective_run_id,
+        )
+        return CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=0)
+
+    client = db_client if db_client is not None else default_db_client
     uids = list_canonical_cohort_uids()
 
     summary = CanonicalShortTermMaintenanceCronSummary(run_id=effective_run_id, user_count=len(uids))
@@ -149,7 +166,7 @@ def run_canonical_short_term_maintenance_for_cohort(
 
 async def run_canonical_short_term_maintenance_cron(
     *,
-    db_client=None,
+    db_client: Any = None,
     now: Optional[datetime] = None,
     run_id: Optional[str] = None,
 ) -> CanonicalShortTermMaintenanceCronSummary:

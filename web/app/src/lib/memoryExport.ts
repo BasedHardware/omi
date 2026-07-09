@@ -5,15 +5,15 @@ import type { Memory } from '@/types/conversation';
  */
 export function exportMemoriesToCSV(memories: Memory[]): string {
   const headers = ['id', 'content', 'category', 'tags', 'created_at', 'updated_at'];
-  const rows = memories.map(m => [
+  const rows = memories.map((m) => [
     m.id,
     `"${m.content.replace(/"/g, '""')}"`, // Escape quotes in CSV
     m.category,
-    `"${m.tags.join(', ')}"`,
+    `"${(m.tags ?? []).map((tag) => tag.replace(/"/g, '""')).join(', ')}"`,
     m.created_at || '',
     m.updated_at || '',
   ]);
-  return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  return [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
 }
 
 /**
@@ -28,11 +28,9 @@ export function exportMemoriesToJSON(memories: Memory[]): string {
  */
 export function exportMemoriesToMarkdown(memories: Memory[]): string {
   return memories
-    .map(m => {
-      const tags = m.tags.length > 0 ? ` [${m.tags.join(', ')}]` : '';
-      const date = m.created_at
-        ? new Date(m.created_at).toLocaleDateString()
-        : '';
+    .map((m) => {
+      const tags = (m.tags ?? []).length > 0 ? ` [${(m.tags ?? []).join(', ')}]` : '';
+      const date = m.created_at ? new Date(m.created_at).toLocaleDateString() : '';
       return `## ${m.category}${tags}\n\n${m.content}\n\n_${date}_\n`;
     })
     .join('\n---\n\n');
@@ -43,8 +41,8 @@ export function exportMemoriesToMarkdown(memories: Memory[]): string {
  */
 export async function copyMemoriesToClipboard(memories: Memory[]): Promise<void> {
   const text = memories
-    .map(m => {
-      const tags = m.tags.length > 0 ? ` [${m.tags.join(', ')}]` : '';
+    .map((m) => {
+      const tags = (m.tags ?? []).length > 0 ? ` [${(m.tags ?? []).join(', ')}]` : '';
       return `[${m.category}]${tags}\n${m.content}`;
     })
     .join('\n\n---\n\n');
@@ -55,11 +53,7 @@ export async function copyMemoriesToClipboard(memories: Memory[]): Promise<void>
 /**
  * Download a file with the given content
  */
-function downloadFile(
-  content: string,
-  filename: string,
-  mimeType: string
-): void {
+function downloadFile(content: string, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -76,7 +70,7 @@ function downloadFile(
  */
 export function downloadMemories(
   memories: Memory[],
-  format: 'csv' | 'json' | 'markdown'
+  format: 'csv' | 'json' | 'markdown',
 ): void {
   const timestamp = new Date().toISOString().split('T')[0];
 
@@ -85,21 +79,21 @@ export function downloadMemories(
       downloadFile(
         exportMemoriesToCSV(memories),
         `memories-${timestamp}.csv`,
-        'text/csv'
+        'text/csv',
       );
       break;
     case 'json':
       downloadFile(
         exportMemoriesToJSON(memories),
         `memories-${timestamp}.json`,
-        'application/json'
+        'application/json',
       );
       break;
     case 'markdown':
       downloadFile(
         exportMemoriesToMarkdown(memories),
         `memories-${timestamp}.md`,
-        'text/markdown'
+        'text/markdown',
       );
       break;
   }

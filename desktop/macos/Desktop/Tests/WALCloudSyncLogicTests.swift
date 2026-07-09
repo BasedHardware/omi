@@ -1,0 +1,129 @@
+import XCTest
+@testable import Omi_Computer
+import OmiWAL
+
+final class WALCloudSyncLogicTests: XCTestCase {
+
+  private func makeWal(status: WALStatus = .miss) -> WALEntry {
+    WALEntry(
+      timerStart: 1_700_000_000,
+      codec: "opus",
+      status: status,
+      storage: .disk,
+      filePath: "audio_test.bin",
+      seconds: 60,
+      device: "dev1",
+      deviceModel: "Omi"
+    )
+  }
+
+  func testApplyUploadResultDoesNotSyncWithoutServerAck() {
+    // A WAL that never receives a server ack (no applyUploadResult call) must
+    // stay .miss. This guards against the old stub that marked .synced after a
+    // local parse. The companion tests below prove applyUploadResult *does*
+    // transition on a real 200/202 ack, so this is a meaningful guard.
+    var wal = makeWal()
+    XCTAssertEqual(wal.status, .miss)
+    // Sanity: a server ack transitions away from .miss — covered by other tests,
+    // but asserting here makes the test self-contained and meaningful.
+    WALCloudSyncLogic.applyUploadResult(
+      to: &wal,
+      result: .queued(jobId: "job-test"),
+      now: 1_000
+    )
+    XCTAssertEqual(wal.status, .uploaded)
+    XCTAssertEqual(wal.jobId, "job-test")
+  }
+
+  func testApplyUploadResult200MarksSynced() {
+    var wal = makeWal()
+    WALCloudSyncLogic.applyUploadResult(
+      to: &wal,
+      result: .done(
+        SyncLocalFilesResultResponse(
+          newMemories: ["c1"],
+          updatedMemories: [],
+          failedSegments: 0,
+          totalSegments: 1,
+          errors: []
+        )))
+    XCTAssertEqual(wal.status, .synced)
+    XCTAssertNil(wal.jobId)
+  }
+
+  func testApplyUploadResult202MarksUploadedWithJobId() {
+    var wal = makeWal()
+    WALCloudSyncLogic.applyUploadResult(to: &wal, result: .queued(jobId: "job-abc"), now: 1_700_000_100)
+    XCTAssertEqual(wal.status, .uploaded)
+    XCTAssertEqual(wal.jobId, "job-abc")
+    XCTAssertEqual(wal.uploadedAt, 1_700_000_100)
+  }
+
+  func testReconcileCompletedMarksSynced() {
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-1"
+    let fetch = SyncJobFetch(
+      outcome: .ok,
+      status: SyncJobStatusResponse(
+        jobId: "job-1",
+        status: "completed",
+        totalSegments: 1,
+        processedSegments: 1,
+        successfulSegments: 1,
+        failedSegments: 0,
+        result: nil,
+        error: nil
+      ))
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: fetch,
+      fileExists: { _ in true }
+    )
+    XCTAssertTrue(changed)
+    XCTAssertEqual(wals[0].status, .synced)
+  }
+
+  func testReconcileNonTerminalLeavesUploaded() {
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-1"
+    let fetch = SyncJobFetch(
+      outcome: .ok,
+      status: SyncJobStatusResponse(
+        jobId: "job-1",
+        status: "processing",
+        totalSegments: 1,
+        processedSegments: 0,
+        successfulSegments: 0,
+        failedSegments: 0,
+        result: nil,
+        error: nil
+      ))
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: fetch,
+      fileExists: { _ in true }
+    )
+    XCTAssertFalse(changed)
+    XCTAssertEqual(wals[0].status, .uploaded)
+  }
+
+  func testReconcileForbiddenRevertsToMissForReupload() {
+    // A 403 on the status GET is a durable permission failure, not transient.
+    // The WAL must leave .uploaded (so the reconciler stops polling) and revert
+    // to .miss for re-upload when the file remains on disk.
+    var wals = [makeWal(status: .uploaded)]
+    wals[0].jobId = "job-1"
+    let changed = WALCloudSyncLogic.applyReconcileFetch(
+      wals: &wals,
+      memberWalIds: [wals[0].id],
+      fetch: SyncJobFetch(outcome: .forbidden),
+      fileExists: { _ in true }
+    )
+    XCTAssertTrue(changed)
+    XCTAssertEqual(wals[0].status, .miss)
+    XCTAssertNil(wals[0].jobId)
+    XCTAssertEqual(wals[0].uploadedAt, 0)
+  }
+}

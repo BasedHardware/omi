@@ -4,6 +4,32 @@ import Combine
 import SwiftUI
 import UserNotifications
 
+enum SystemAudioPermissionStatus: String {
+  case unknown
+  case granted
+  case denied
+  case unsupported
+
+  /// Map a capture-start failure to an honest permission status. A TCC denial
+  /// manifests as the tap failing to create or the device failing to start;
+  /// format/converter/aggregate failures are provably NOT permission problems
+  /// and must not claim a denial.
+  @available(macOS 14.4, *)
+  static func classify(captureError error: Error) -> SystemAudioPermissionStatus {
+    guard let captureError = error as? SystemAudioCaptureService.SystemAudioCaptureError else {
+      return .unknown
+    }
+    switch captureError {
+    case .tapCreationFailed, .deviceStartFailed:
+      return .denied
+    case .aggregateDeviceFailed, .ioProcCreationFailed, .formatError, .converterCreationFailed:
+      return .unknown
+    case .unsupportedOS:
+      return .unsupported
+    }
+  }
+}
+
 /// Translation from backend (e.g., Japanese speech translated to English)
 struct SegmentTranslation: Identifiable {
   var id: String { lang }
@@ -146,6 +172,7 @@ class AppState: ObservableObject {
   var currentTranscript: String = ""
   @Published var hasMicrophonePermission = false
   @Published var hasSystemAudioPermission = false
+  @Published var systemAudioPermissionStatus: SystemAudioPermissionStatus = .unknown
   @Published var isSystemAudioSupported = false
 
   // Audio source (microphone or BLE device)
@@ -274,6 +301,7 @@ class AppState: ObservableObject {
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
+  var meetingEndFinalizationInProgress = false
   @Published var isAwaitingMeeting = false
 
   var effectiveSystemAudioMode: AssistantSettings.SystemAudioCaptureMode {
@@ -325,6 +353,8 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// True while a bridge-owned hermetic capture session is active (T2 E2E only).
+  var automationCaptureTestSessionActive = false
   var currentBackendConversationId: String?
   var pendingBackendConversationId: String?
   var ignoredRotatedBackendConversationIds: Set<String> = []
@@ -664,6 +694,16 @@ extension Notification.Name {
   static let screenCaptureKitBroken = Notification.Name("screenCaptureKitBroken")
   /// Posted to show the "Try asking" popup centered over the full window
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
+  /// Posted (automation bridge) to open the inline chat on the redesigned Home
+  static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
+  /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
+  static let homeStageToggleConnect = Notification.Name("homeStageToggleConnect")
+  /// Posted (automation bridge) to collapse the redesigned Home back to the hub
+  static let homeStageClose = Notification.Name("homeStageClose")
+  /// Posted (automation bridge) to send a query through the Home ask bar. userInfo["query"] = text.
+  static let homeStageAsk = Notification.Name("homeStageAsk")
+  /// Posted (automation bridge) to stage a file in the Home ask bar. userInfo["path"] = file path.
+  static let homeStageAttach = Notification.Name("homeStageAttach")
   /// Posted to show the over-usage-limit popup. userInfo["reason"] = "transcription" | "chat" | "floating_bar".
   static let showUsageLimitPopup = Notification.Name("showUsageLimitPopup")
   /// Posted to navigate to Rewind settings

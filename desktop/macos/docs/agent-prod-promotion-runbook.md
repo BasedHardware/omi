@@ -11,6 +11,7 @@ Do **not** put external promotion readiness here. Fleet health/readiness checks 
 - Stable promotion is roll-forward-oriented. Recovery usually means promoting a newer fixed desktop release or performing a separately approved manual infrastructure rollback.
 - Do not manually edit a GitHub desktop release to stable. The promotion workflow owns stable release metadata and Firestore promotion.
 - Do not use hotfix/cherry-pick branches for normal desktop rollouts. Use the latest eligible mainline `v*-macos` artifact.
+- When promoting the release that ships the desktop-agent-platonic branch, record the concrete ship+2 burn version numbers for gap-closure G6 (legacy shims, `legacy_default` grant source, sqlite legacy columns) in the release notes or a maintainer tracking issue.
 
 ## 1. Discover release state
 
@@ -52,10 +53,41 @@ gh release view "$RELEASE_TAG" \
 Confirm:
 
 - Codemagic `Release OMI Desktop (Swift)` is completed/success;
+- Codemagic ran `Smoke signed desktop artifact` before `Create GitHub release`;
+- Codemagic uploaded `desktop-smoke-result.json`, and its tag/version/build/artifact digests match the release assets;
 - GitHub Release exists and is not draft;
 - assets include `Omi.zip` and `omi.dmg`;
 - release body has `isLive: true`, `channel: beta`, and an `edSignature`;
+- for prod promotion, release metadata includes `blessed: true`, `blessedSha` matching the tag commit, and `blessedAt` (or run `desktop/macos/scripts/bless-release.sh <tag>` first);
 - live appcast beta/dev item points to the same build.
+
+For high-risk desktop auth/runtime releases, run the live signed-artifact canary
+before promotion:
+
+```bash
+desktop/macos/scripts/smoke-signed-desktop-artifact.sh \
+  --zip /path/to/Omi.zip \
+  --dmg /path/to/omi.dmg \
+  --tag "$RELEASE_TAG" \
+  --expected-channel beta \
+  --launch --network --auth --chat --permissions --storage --quarantine \
+  --result-json /tmp/desktop-live-smoke-result.json
+```
+
+The live canary intentionally requires explicit environment:
+`OMI_SIGNED_ARTIFACT_SMOKE_ALLOW_PRODUCTION_LAUNCH=1` and
+`OMI_SIGNED_ARTIFACT_SMOKE_AUTH_PROOF_COMMAND='...'`. The auth proof command
+must verify the launched app's real persistence path (Keychain write/read,
+restart, and authenticated API), not only curl an API with an injected bearer
+token. `OMI_SIGNED_ARTIFACT_SMOKE_AUTH_HEADER='Bearer ...'` is only for the
+separate minimal chat endpoint probe.
+
+Before making this mandatory for beta exposure, split the release flow so the
+artifact is created/uploaded first, the smoke runs against that immutable digest,
+and only then are beta/stable appcast or Firestore visibility pointers changed.
+For stable promotion, add an upgrade-path canary: previous signed release signed
+in → update to candidate → restart → auth, helper runtime, and local storage
+still work.
 
 ## 3. Build the curated stable release log
 

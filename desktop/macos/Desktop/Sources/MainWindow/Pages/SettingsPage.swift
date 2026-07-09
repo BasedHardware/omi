@@ -2,6 +2,7 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
+import OmiTheme
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
@@ -130,6 +131,11 @@ struct SettingsContentView: View {
 
   // Ask Omi floating bar state
   @State var showAskOmiBar: Bool = false
+
+  // Grant for chat screenshot tools (capture_screen / get_screenshot);
+  // read by ChatToolExecutor.localPolicyDecision. Default on.
+  @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
+  var chatScreenshotSharingEnabled: Bool = true
 
   // Transcription state
   @State var isTranscribing: Bool
@@ -329,6 +335,30 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
+
+    /// Resolve an automation-supplied section name tolerantly (SET-01). The raw values
+    /// are Title Case with spaces ("Plan and Usage"), but `omi-ctl navigate settings
+    /// <section>` sends whatever the caller typed — the documented examples are
+    /// lowercase (`settings rewind`), so a strict `init(rawValue:)` never matched and
+    /// navigation silently stayed on General. Accepts the exact raw value, any
+    /// case/spacing/hyphen/underscore variant of it, or the Swift case name
+    /// (`planUsage`, `floating_bar`, "plan-and-usage", …).
+    nonisolated static func automationMatch(_ raw: String) -> SettingsSection? {
+      if let exact = SettingsSection(rawValue: raw) { return exact }
+      let key = normalizedAutomationKey(raw)
+      guard !key.isEmpty else { return nil }
+      return allCases.first { section in
+        normalizedAutomationKey(section.rawValue) == key
+          || normalizedAutomationKey(String(describing: section)) == key
+      }
+    }
+
+    /// Lowercase and strip everything but letters/digits, so "Plan and Usage",
+    /// "plan_usage", "plan-and-usage", and "planUsage" can meet in one keyspace.
+    private nonisolated static func normalizedAutomationKey(_ value: String) -> String {
+      String(value.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) })
+        .lowercased()
+    }
   }
 
   enum AdvancedSubsection: String, CaseIterable {

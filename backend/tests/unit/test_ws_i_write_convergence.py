@@ -13,6 +13,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.api_core.exceptions import NotFound
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 PROCESS_CONVERSATION_PATH = BACKEND_DIR / "utils" / "conversations" / "process_conversation.py"
@@ -133,6 +134,11 @@ class _DocRef:
             self._db.docs[self.path] = self._db.docs[self.path] | data
             return
         self._db.docs[self.path] = data
+
+    def update(self, data):
+        if self.path not in self._db.docs:
+            raise NotFound(f"Document {self.path} not found")
+        self._db.docs[self.path] = self._db.docs[self.path] | data
 
 
 class _CollectionRef:
@@ -685,7 +691,7 @@ def test_mcp_validate_memory_uses_canonical_store_for_canonical_cohort():
     assert "fetch_memory_dict" in section
     memory_service_source = (BACKEND_DIR / "utils" / "memory" / "memory_service.py").read_text(encoding="utf-8")
     assert "MemorySystem.CANONICAL" in memory_service_source
-    assert "_read_canonical_memory_item" in memory_service_source
+    assert "read_canonical_memory_item" in memory_service_source
 
 
 _WRITER_FILES = [

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextvars
 from contextlib import contextmanager
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
@@ -14,7 +14,7 @@ _pinned_memory_system: contextvars.ContextVar[Optional[tuple[str, MemorySystem]]
 )
 
 
-def pin_memory_system(uid: str, *, db_client=None) -> MemorySystem:
+def pin_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
     """Resolve and pin the memory cohort for one request / tool invocation."""
     system = resolve_memory_system(uid, db_client=db_client)
     _pinned_memory_system.set((uid, system))
@@ -32,7 +32,7 @@ def get_pinned_memory_system(*, uid: str) -> Optional[MemorySystem]:
     return system
 
 
-def resolve_pinned_memory_system(uid: str, *, db_client=None) -> MemorySystem:
+def resolve_pinned_memory_system(uid: str, *, db_client: Any = None) -> MemorySystem:
     """Use the request pin when set; otherwise resolve (unpinned call sites)."""
     pinned = get_pinned_memory_system(uid=uid)
     if pinned is not None:
@@ -46,7 +46,7 @@ def clear_memory_system_pin() -> None:
 
 
 @contextmanager
-def memory_system_request_scope(uid: str, *, db_client=None) -> Iterator[MemorySystem]:
+def memory_system_request_scope(uid: str, *, db_client: Any = None) -> Iterator[MemorySystem]:
     """Pin cohort for a block; reset on exit so thread-pool workers do not leak pins."""
     system = resolve_memory_system(uid, db_client=db_client)
     token = _pinned_memory_system.set((uid, system))

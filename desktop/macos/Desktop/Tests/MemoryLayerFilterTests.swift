@@ -103,6 +103,14 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertFalse(hidden.tierIsExplicit)
     }
 
+    func testNonCanonicalDisplayExcludesLifecycleExplicitRows() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(source.contains("includeExplicitLifecycleRows(for: token)"))
+        XCTAssertTrue(source.contains("lifecycleExposed ? values : values.filter { !$0.tierIsExplicit }"))
+        XCTAssertFalse(source.contains("lifecycleExposed ? values : values.map { $0.hidingLifecycleExposure() }"))
+    }
+
     func testMemoriesPageCommitsPageCapabilitiesThroughSingleFreshnessHelper() throws {
         let source = try memoriesPageSource()
 
@@ -134,6 +142,17 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertTrue(source.contains("memories.append(contentsOf: visibleMemories)"))
         XCTAssertTrue(source.contains("memories = displayCacheMemories(cachedMemories, for: token)"))
         XCTAssertTrue(source.contains("memories = displayCacheMemories(mergedMemories, for: token)"))
+    }
+
+    func testLayerFilterControlsRenderOnlyAfterCanonicalLifecycleExposure() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(source.contains("if viewModel.canonicalLifecycleExposed {\n        // Layer filter dropdown"))
+        XCTAssertTrue(source.contains("ForEach(MemoryLayerFilter.allCases)"))
+        XCTAssertLessThan(
+            try XCTUnwrap(source.range(of: "if viewModel.canonicalLifecycleExposed {\n        // Layer filter dropdown")?.lowerBound),
+            try XCTUnwrap(source.range(of: "ForEach(MemoryLayerFilter.allCases)")?.lowerBound)
+        )
     }
 
     private func memoriesPageSource() throws -> String {

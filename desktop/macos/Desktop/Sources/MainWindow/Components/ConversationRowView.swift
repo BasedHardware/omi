@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import OmiTheme
 
 /// Row view for a conversation in the list
 struct ConversationRowView: View {

@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import os
+import importlib
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
@@ -18,6 +21,39 @@ from utils.memory.canonical_memory_adapter import invalidate_kg_for_memory_retra
 from utils.memory.memory_system import MemorySystem
 
 NOW = datetime(2026, 6, 20, 12, 0, tzinfo=timezone.utc)
+
+
+def _refresh_kg_runtime() -> None:
+    kg_promotion = importlib.import_module("utils.memory.canonical_kg_promotion")
+    canonical_adapter = importlib.import_module("utils.memory.canonical_memory_adapter")
+    memory_system = importlib.import_module("utils.memory.memory_system")
+    globals().update(
+        {
+            "CanonicalKgPromotionResult": kg_promotion.CanonicalKgPromotionResult,
+            "extract_kg_for_promoted_memory": kg_promotion.extract_kg_for_promoted_memory,
+            "invalidate_kg_for_memory_retraction": canonical_adapter.invalidate_kg_for_memory_retraction,
+            "MemorySystem": memory_system.MemorySystem,
+        }
+    )
+
+
+def test_set_canonical_memory_kg_extracted_missing_doc_is_idempotent(caplog):
+    from google.api_core.exceptions import NotFound
+
+    from utils.memory.canonical_kg_promotion import set_canonical_memory_kg_extracted
+
+    ref = MagicMock()
+    ref.update.side_effect = NotFound('No document to update')
+    client = MagicMock()
+    client.document.return_value = ref
+
+    assert set_canonical_memory_kg_extracted('uid-abc', 'memory-1', db_client=client) is False
+    assert 'No document to update' not in caplog.text
+
+
+@pytest.fixture(autouse=True)
+def _refresh_kg_runtime_fixture():
+    _refresh_kg_runtime()
 
 
 def _long_term_item(**overrides) -> MemoryItem:

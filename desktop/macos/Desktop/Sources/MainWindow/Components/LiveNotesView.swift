@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Live notes view showing AI-generated and manual notes during recording
 struct LiveNotesView: View {

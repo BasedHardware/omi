@@ -6,7 +6,7 @@ import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple, TypedDict, cast
 import re
 from urllib.parse import unquote, urlsplit
 
@@ -42,6 +42,60 @@ CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX = "https://chatgpt.com/connector/oauth/"
 CLAUDE_CONNECTOR_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 
 
+# --- OAuth token document contracts (Firestore write-path shapes) ------------
+
+
+class OAuthAccessTokenDict(TypedDict):
+    """MCP OAuth access-token document (mcp_oauth_access_tokens).
+
+    Every field is populated when the document is written, so all keys are
+    treated as required by the write-path contract.
+    """
+
+    id: str
+    grant_id: str
+    uid: str
+    client_id: str
+    resource: str
+    scopes: List[str]
+    created_at: datetime
+    expires_at: datetime
+    revoked_at: Optional[datetime]
+
+
+class OAuthRefreshTokenDict(TypedDict):
+    """MCP OAuth refresh-token document (mcp_oauth_refresh_tokens).
+
+    Every field is populated when the document is written, so all keys are
+    treated as required by the write-path contract.
+    """
+
+    id: str
+    grant_id: str
+    token_family_id: str
+    uid: str
+    client_id: str
+    resource: str
+    scopes: List[str]
+    created_at: datetime
+    expires_at: datetime
+    used_at: Optional[datetime]
+    replaced_by: Optional[str]
+    revoked_at: Optional[datetime]
+    replay_detected_at: Optional[datetime]
+
+
+def _typed_transactional(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Typed shim around firestore.transactional (SDK stub gap)."""
+    return firestore.transactional(func)  # type: ignore[reportUnknownMemberType]  # firestore transactional decorator is untyped
+
+
+def _typed_doc(doc: Any) -> Dict[str, Any]:
+    """Typed adapter for Firestore DocumentSnapshot.to_dict()."""
+    raw: object = doc.to_dict()
+    return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
+
+
 def hash_secret(secret: str) -> str:
     return hashlib.sha256(secret.encode("utf-8")).hexdigest()
 
@@ -50,20 +104,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _csv_env(name: str) -> list[str]:
+def _csv_env(name: str) -> List[str]:
     return [value.strip() for value in os.getenv(name, "").split(",") if value.strip()]
 
 
-def _csv_values(value) -> list[str]:
+def _csv_values(value: object) -> List[str]:
     if isinstance(value, list):
-        return [str(item).strip() for item in value if str(item).strip()]
+        return [str(item).strip() for item in cast(List[Any], value) if str(item).strip()]
     if isinstance(value, str):
         return [item.strip() for item in value.split(",") if item.strip()]
     return []
 
 
-def _secret_hash_from_config(config: dict) -> str:
-    secret_hash = config.get("client_secret_hash") or config.get("secret_hash") or ""
+def _secret_hash_from_config(config: Dict[str, Any]) -> str:
+    secret_hash: Any = config.get("client_secret_hash") or config.get("secret_hash") or ""
     secret_hash_env = config.get("client_secret_hash_env") or config.get("secret_hash_env")
     if secret_hash_env:
         secret_hash = os.getenv(str(secret_hash_env), secret_hash)
@@ -72,13 +126,13 @@ def _secret_hash_from_config(config: dict) -> str:
     return str(secret_hash or (hash_secret(str(secret)) if secret else ""))
 
 
-def _client_from_config(config: dict) -> Optional[dict]:
+def _client_from_config(config: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     client_id = str(config.get("client_id") or config.get("id") or "").strip()
     if not client_id:
         return None
-    auth_method = config.get("token_endpoint_auth_method")
+    auth_method: Any = config.get("token_endpoint_auth_method")
     if auth_method is None:
-        public_value = config.get("public")
+        public_value: Any = config.get("public")
         if public_value is not None and not isinstance(public_value, bool):
             return None
         client_type = str(config.get("client_type") or "").lower()
@@ -88,7 +142,7 @@ def _client_from_config(config: dict) -> Optional[dict]:
     auth_method = str(auth_method)
     if auth_method not in SUPPORTED_TOKEN_AUTH_METHODS:
         return None
-    client = {
+    client: Dict[str, Any] = {
         "id": client_id,
         "name": config.get("name") or client_id,
         "registration_mode": config.get("registration_mode") or "env",
@@ -106,7 +160,7 @@ def _client_from_config(config: dict) -> Optional[dict]:
     return client
 
 
-def _env_clients() -> dict[str, dict]:
+def _env_clients() -> Dict[str, Dict[str, Any]]:
     raw_clients = os.getenv("MCP_OAUTH_CLIENTS_JSON", "")
     if not raw_clients:
         return {}
@@ -114,16 +168,16 @@ def _env_clients() -> dict[str, dict]:
         parsed = json.loads(raw_clients)
     except json.JSONDecodeError:
         return {}
+    entries: List[Dict[str, Any]] = []
     if isinstance(parsed, dict):
-        entries = []
-        for client_id, config in parsed.items():
+        for client_id, config in cast(Dict[Any, Any], parsed).items():
             if isinstance(config, dict):
-                entries.append({"client_id": client_id, **config})
+                entries.append({"client_id": client_id, **cast(Dict[str, Any], config)})
     elif isinstance(parsed, list):
-        entries = [config for config in parsed if isinstance(config, dict)]
-    else:
-        entries = []
-    clients = {}
+        for config in cast(List[Any], parsed):
+            if isinstance(config, dict):
+                entries.append(cast(Dict[str, Any], config))
+    clients: Dict[str, Dict[str, Any]] = {}
     for entry in entries:
         client = _client_from_config(entry)
         if client:
@@ -131,7 +185,7 @@ def _env_clients() -> dict[str, dict]:
     return clients
 
 
-def _legacy_chatgpt_client(client_id: Optional[str] = None) -> dict:
+def _legacy_chatgpt_client(client_id: Optional[str] = None) -> Dict[str, Any]:
     resolved_client_id = client_id or DEFAULT_CLIENT_ID
     secret = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_SECRET", "")
     secret_hash = os.getenv("MCP_OAUTH_CHATGPT_CLIENT_SECRET_SHA256", "")
@@ -158,7 +212,7 @@ def _legacy_chatgpt_client(client_id: Optional[str] = None) -> dict:
     }
 
 
-def _default_claude_client() -> dict:
+def _default_claude_client() -> Dict[str, Any]:
     return {
         "id": DEFAULT_CLAUDE_CLIENT_ID,
         "name": DEFAULT_CLAUDE_CLIENT_NAME,
@@ -173,11 +227,11 @@ def _default_claude_client() -> dict:
     }
 
 
-def _public_redirect_uris() -> list[str]:
+def _public_redirect_uris() -> List[str]:
     return _csv_env("MCP_OAUTH_PUBLIC_REDIRECT_URIS") or _csv_env("MCP_OAUTH_CHATGPT_REDIRECT_URIS")
 
 
-def _builtin_public_chatgpt_client(client_id: str) -> Optional[dict]:
+def _builtin_public_chatgpt_client(client_id: str) -> Optional[Dict[str, Any]]:
     """Built-in public PKCE clients the desktop references by stable id."""
     if client_id not in PUBLIC_CHATGPT_CLIENT_IDS:
         return None
@@ -197,19 +251,19 @@ def _builtin_public_chatgpt_client(client_id: str) -> Optional[dict]:
     }
 
 
-def _finalize_client(client: Optional[dict]) -> Optional[dict]:
+def _finalize_client(client: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """Apply built-in provider defaults to configured and generated clients."""
     if not client:
         return None
     if client.get("id") not in PUBLIC_CHATGPT_CLIENT_IDS:
         return client
-    prefixes = list(client.get("allowed_redirect_uri_prefixes") or [])
+    prefixes: List[str] = list(client.get("allowed_redirect_uri_prefixes") or [])
     if CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX not in prefixes:
         prefixes.append(CHATGPT_CONNECTOR_REDIRECT_URI_PREFIX)
     return {**client, "allowed_redirect_uri_prefixes": prefixes}
 
 
-def _default_public_client() -> Optional[dict]:
+def _default_public_client() -> Optional[Dict[str, Any]]:
     redirect_uris = _public_redirect_uris()
     if not redirect_uris:
         return None
@@ -226,11 +280,11 @@ def _default_public_client() -> Optional[dict]:
     }
 
 
-def get_client(client_id: str) -> Optional[dict]:
-    client = None
+def get_client(client_id: str) -> Optional[Dict[str, Any]]:
+    client: Optional[Dict[str, Any]] = None
     doc = db.collection("mcp_oauth_clients").document(client_id).get()
     if doc.exists:
-        data = doc.to_dict() or {}
+        data: Dict[str, Any] = _typed_doc(doc)
         data.setdefault("id", client_id)
         data.setdefault("allowed_resources", [MCP_RESOURCE_URL])
         data.setdefault("allowed_scopes", SUPPORTED_SCOPES)
@@ -254,17 +308,17 @@ def get_client(client_id: str) -> Optional[dict]:
     return _finalize_client(client)
 
 
-def verify_client_secret(client: dict, client_secret: Optional[str]) -> bool:
+def verify_client_secret(client: Dict[str, Any], client_secret: Optional[str]) -> bool:
     if client.get("token_endpoint_auth_method") != "client_secret_post":
         return False
-    expected_hash = client.get("client_secret_hash") or ""
+    expected_hash: Any = client.get("client_secret_hash") or ""
     if not expected_hash or not client_secret:
         return False
     return hmac.compare_digest(expected_hash, hash_secret(client_secret))
 
 
-def verify_client_auth(client: dict, client_secret: Optional[str]) -> bool:
-    auth_method = client.get("token_endpoint_auth_method") or "client_secret_post"
+def verify_client_auth(client: Dict[str, Any], client_secret: Optional[str]) -> bool:
+    auth_method: Any = client.get("token_endpoint_auth_method") or "client_secret_post"
     if auth_method == "none":
         return not client_secret
     if auth_method == "client_secret_post":
@@ -272,7 +326,7 @@ def verify_client_auth(client: dict, client_secret: Optional[str]) -> bool:
     return False
 
 
-def token_endpoint_auth_methods_supported() -> list[str]:
+def token_endpoint_auth_methods_supported() -> List[str]:
     return list(SUPPORTED_TOKEN_AUTH_METHODS)
 
 
@@ -311,22 +365,22 @@ def _redirect_uri_matches_prefix(redirect_uri: str, prefix: str) -> bool:
     return redirect_path == prefix_path or redirect_path.startswith(prefix_path + "/")
 
 
-def validate_redirect_uri(client: dict, redirect_uri: str) -> bool:
+def validate_redirect_uri(client: Dict[str, Any], redirect_uri: str) -> bool:
     if urlsplit(redirect_uri).fragment:
         return False
     if redirect_uri in set(client.get("allowed_redirect_uris") or []):
         return True
     return any(
         _redirect_uri_matches_prefix(redirect_uri, prefix)
-        for prefix in (client.get("allowed_redirect_uri_prefixes") or [])
+        for prefix in list(client.get("allowed_redirect_uri_prefixes") or [])
     )
 
 
-def validate_resource(client: dict, resource: str) -> bool:
+def validate_resource(client: Dict[str, Any], resource: str) -> bool:
     return resource in set(client.get("allowed_resources") or [])
 
 
-def normalize_scopes(scope: Optional[str], client: Optional[dict] = None) -> list[str]:
+def normalize_scopes(scope: Optional[str], client: Optional[Dict[str, Any]] = None) -> List[str]:
     allowed = set((client or {}).get("allowed_scopes") or SUPPORTED_SCOPES).intersection(SUPPORTED_SCOPES)
     requested = [item for item in (scope or "").split(" ") if item]
     scopes = requested or ["memories.read"]
@@ -346,19 +400,19 @@ def validate_pkce_challenge(code_challenge: Optional[str], code_challenge_method
     return bool(code_challenge) and code_challenge_method == "S256" and bool(PKCE_ALLOWED_RE.fullmatch(code_challenge))
 
 
-def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: list[str]) -> dict:
+def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
     deterministic_grant_id = f"{uid}:{client_id}:{hash_secret(resource)[:16]}"
     now = _now()
     ref = db.collection("mcp_oauth_grants").document(deterministic_grant_id)
     doc = ref.get()
-    existing = doc.to_dict() if doc.exists else {}
+    existing: Dict[str, Any] = _typed_doc(doc) if doc.exists else {}
     if existing and (existing.get("revoked_at") or existing.get("status") == "revoked"):
         ref = db.collection("mcp_oauth_grants").document(f"{deterministic_grant_id}:{uuid.uuid4()}")
         doc = ref.get()
         existing = {}
     existing_scopes = set(existing.get("scopes") or [])
     merged_scopes = sorted(existing_scopes.union(scopes))
-    data = {
+    data: Dict[str, Any] = {
         "id": ref.id,
         "uid": uid,
         "client_id": client_id,
@@ -381,7 +435,7 @@ def issue_authorization_code(
     client_id: str,
     redirect_uri: str,
     resource: str,
-    scopes: list[str],
+    scopes: List[str],
     code_challenge: str,
 ) -> str:
     raw_code = "omi_code_" + secrets.token_urlsafe(32)
@@ -410,16 +464,16 @@ def consume_authorization_code(
     redirect_uri: str,
     resource: str,
     code_verifier: str,
-) -> Optional[dict]:
+) -> Optional[Dict[str, Any]]:
     ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
     transaction = db.transaction()
 
-    @firestore.transactional
-    def _consume(transaction):
+    @_typed_transactional
+    def _consume(transaction: Any) -> Optional[Dict[str, Any]]:
         doc = ref.get(transaction=transaction)
         if not doc.exists:
             return None
-        data = doc.to_dict() or {}
+        data: Dict[str, Any] = _typed_doc(doc)
         expires_at = data.get("expires_at")
         if data.get("consumed_at") or (expires_at and expires_at <= _now()):
             return None
@@ -449,16 +503,16 @@ def exchange_authorization_code_for_tokens(
     redirect_uri: str,
     resource: str,
     code_verifier: str,
-) -> Optional[dict]:
+) -> Optional[Dict[str, Any]]:
     code_ref = db.collection("mcp_oauth_authorization_codes").document(hash_secret(code))
     transaction = db.transaction()
 
-    @firestore.transactional
-    def _exchange(transaction):
+    @_typed_transactional
+    def _exchange(transaction: Any) -> Optional[Dict[str, Any]]:
         code_doc = code_ref.get(transaction=transaction)
         if not code_doc.exists:
             return None
-        code_data = code_doc.to_dict() or {}
+        code_data: Dict[str, Any] = _typed_doc(code_doc)
         expires_at = code_data.get("expires_at")
         if code_data.get("consumed_at") or (expires_at and expires_at <= _now()):
             return None
@@ -478,7 +532,7 @@ def exchange_authorization_code_for_tokens(
             return None
         grant_ref = db.collection("mcp_oauth_grants").document(code_data.get("grant_id"))
         grant_doc = grant_ref.get(transaction=transaction)
-        grant = grant_doc.to_dict() if grant_doc.exists else None
+        grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if not grant or grant.get("revoked_at") or grant.get("status") == "revoked":
             return None
         grant.setdefault("id", code_data.get("grant_id"))
@@ -503,25 +557,25 @@ def _new_refresh_token() -> str:
     return "omi_ort_" + secrets.token_urlsafe(48)
 
 
-def issue_token_pair(grant: dict, scopes: Optional[list[str]] = None, token_family_id: Optional[str] = None) -> dict:
-    (
-        access_token,
-        refresh_token,
-        access_ref,
-        access_data,
-        refresh_ref,
-        refresh_data,
-        grant_ref,
-    ) = _build_token_pair_writes(grant, scopes, token_family_id)
+def issue_token_pair(
+    grant: Dict[str, Any], scopes: Optional[List[str]] = None, token_family_id: Optional[str] = None
+) -> Dict[str, Any]:
+    access_token, refresh_token, access_ref, access_data, refresh_ref, refresh_data, grant_ref = (
+        _build_token_pair_writes(grant, scopes, token_family_id)
+    )
     access_ref.set(access_data)
     refresh_ref.set(refresh_data)
     grant_ref.set({"last_used_at": _now()}, merge=True)
     return _token_pair_response(access_token, refresh_token, access_data["scopes"])
 
 
-def _build_token_pair_writes(grant: dict, scopes: Optional[list[str]] = None, token_family_id: Optional[str] = None):
+def _build_token_pair_writes(
+    grant: Dict[str, Any],
+    scopes: Optional[List[str]] = None,
+    token_family_id: Optional[str] = None,
+) -> Tuple[str, str, Any, OAuthAccessTokenDict, Any, OAuthRefreshTokenDict, Any]:
     now = _now()
-    issued_scopes = sorted(set(scopes or grant.get("scopes") or []))
+    issued_scopes: List[str] = sorted(set(scopes or grant.get("scopes") or []))
     access_token = _new_access_token()
     refresh_token = _new_refresh_token()
     access_id = str(uuid.uuid4())
@@ -530,7 +584,7 @@ def _build_token_pair_writes(grant: dict, scopes: Optional[list[str]] = None, to
     access_ref = db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token))
     refresh_ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
     grant_ref = db.collection("mcp_oauth_grants").document(grant["id"])
-    access_data = {
+    access_data: OAuthAccessTokenDict = {
         "id": access_id,
         "grant_id": grant["id"],
         "uid": grant["uid"],
@@ -541,7 +595,7 @@ def _build_token_pair_writes(grant: dict, scopes: Optional[list[str]] = None, to
         "expires_at": now + timedelta(seconds=ACCESS_TOKEN_TTL_SECONDS),
         "revoked_at": None,
     }
-    refresh_data = {
+    refresh_data: OAuthRefreshTokenDict = {
         "id": refresh_id,
         "grant_id": grant["id"],
         "token_family_id": family_id,
@@ -559,7 +613,7 @@ def _build_token_pair_writes(grant: dict, scopes: Optional[list[str]] = None, to
     return access_token, refresh_token, access_ref, access_data, refresh_ref, refresh_data, grant_ref
 
 
-def _token_pair_response(access_token: str, refresh_token: str, scopes: list[str]) -> dict:
+def _token_pair_response(access_token: str, refresh_token: str, scopes: List[str]) -> Dict[str, Any]:
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
@@ -569,26 +623,26 @@ def _token_pair_response(access_token: str, refresh_token: str, scopes: list[str
     }
 
 
-def get_active_grant(grant_id: str) -> Optional[dict]:
+def get_active_grant(grant_id: str) -> Optional[Dict[str, Any]]:
     doc = db.collection("mcp_oauth_grants").document(grant_id).get()
     if not doc.exists:
         return None
-    data = doc.to_dict() or {}
+    data: Dict[str, Any] = _typed_doc(doc)
     if data.get("revoked_at") or data.get("status") == "revoked":
         return None
     data.setdefault("id", grant_id)
     return data
 
 
-def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[dict]:
+def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -> Optional[Dict[str, Any]]:
     doc = db.collection("mcp_oauth_access_tokens").document(hash_secret(access_token)).get()
     if not doc.exists:
         return None
-    data = doc.to_dict() or {}
+    data: Dict[str, Any] = _typed_doc(doc)
     expires_at = data.get("expires_at")
     if data.get("revoked_at") or data.get("resource") != resource or (expires_at and expires_at <= _now()):
         return None
-    grant = get_active_grant(data.get("grant_id"))
+    grant = get_active_grant(cast(str, data.get("grant_id")))
     if not grant:
         return None
     db.collection("mcp_oauth_grants").document(data["grant_id"]).set({"last_used_at": _now()}, merge=True)
@@ -604,23 +658,23 @@ def validate_access_token(access_token: str, resource: str = MCP_RESOURCE_URL) -
 
 def rotate_refresh_token(
     refresh_token: str, client_id: str, resource: str, scope: Optional[str] = None
-) -> Optional[dict]:
+) -> Optional[Dict[str, Any]]:
     ref = db.collection("mcp_oauth_refresh_tokens").document(hash_secret(refresh_token))
     transaction = db.transaction()
-    replay_grant_id = None
+    replay_grant_id: Optional[str] = None
 
-    @firestore.transactional
-    def _rotate(transaction):
+    @_typed_transactional
+    def _rotate(transaction: Any) -> Optional[Dict[str, Any]]:
         nonlocal replay_grant_id
         doc = ref.get(transaction=transaction)
         if not doc.exists:
             return None
-        data = doc.to_dict() or {}
+        data: Dict[str, Any] = _typed_doc(doc)
         now = _now()
         expires_at = data.get("expires_at")
         grant_ref = db.collection("mcp_oauth_grants").document(data.get("grant_id"))
         grant_doc = grant_ref.get(transaction=transaction)
-        grant = grant_doc.to_dict() if grant_doc.exists else None
+        grant: Optional[Dict[str, Any]] = _typed_doc(grant_doc) if grant_doc.exists else None
         if (
             data.get("client_id") != client_id
             or data.get("resource") != resource
@@ -638,7 +692,7 @@ def rotate_refresh_token(
             transaction.set(ref, {"replay_detected_at": now, "revoked_at": now}, merge=True)
             return None
         try:
-            requested_scopes = (
+            requested_scopes: List[str] = (
                 normalize_scopes(scope, {"allowed_scopes": data.get("scopes")}) if scope else data.get("scopes") or []
             )
         except ValueError:
@@ -660,7 +714,7 @@ def rotate_refresh_token(
         transaction.set(grant_ref, {"last_used_at": now}, merge=True)
         return _token_pair_response(access_token, new_refresh_token, requested_scopes)
 
-    token_pair = _rotate(transaction)
+    token_pair: Optional[Dict[str, Any]] = _rotate(transaction)
     if replay_grant_id:
         revoke_grant(replay_grant_id, replay_detected=True)
     return token_pair
@@ -677,11 +731,11 @@ def revoke_grant(grant_id: str, replay_detected: bool = False) -> None:
             doc.reference.set({"revoked_at": now}, merge=True)
 
 
-def list_user_grants(uid: str) -> list[dict]:
+def list_user_grants(uid: str) -> List[Dict[str, Any]]:
     docs = db.collection("mcp_oauth_grants").where("uid", "==", uid).stream()
-    grants = []
+    grants: List[Dict[str, Any]] = []
     for doc in docs:
-        data = doc.to_dict() or {}
+        data: Dict[str, Any] = _typed_doc(doc)
         data.setdefault("id", doc.id)
         grants.append(data)
     grants.sort(
@@ -697,7 +751,7 @@ def revoke_user_grant(uid: str, grant_id: str) -> bool:
     doc = db.collection("mcp_oauth_grants").document(grant_id).get()
     if not doc.exists:
         return False
-    data = doc.to_dict() or {}
+    data: Dict[str, Any] = _typed_doc(doc)
     if data.get("uid") != uid:
         return False
     revoke_grant(grant_id)

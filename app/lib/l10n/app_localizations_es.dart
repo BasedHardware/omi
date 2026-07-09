@@ -9361,7 +9361,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'De momento funciona con dispositivos Omi. El audio permanece en tu teléfono hasta que decidas subirlo.';
+      'De momento funciona con dispositivos Omi y Limitless. El audio permanece en tu teléfono hasta que decidas subirlo.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9511,4 +9511,85 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Flashear firmware';
+
+  @override
+  String get pendantRecordingTitle => 'Grabando en el colgante';
+
+  @override
+  String get pendantRecordingNote =>
+      'Tu colgante graba por sí solo. Las grabaciones se sincronizan con tu teléfono mientras la app está abierta.';
+
+  @override
+  String get pendantSyncingRecordings => 'Sincronizando grabaciones desde tu colgante…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes min almacenados';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'El almacenamiento del colgante está casi lleno: mantén la app abierta para sincronizar.';
+
+  @override
+  String get connectRayBanMeta => 'Conectar Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Usa tus gafas Ray-Ban Meta como tu dispositivo de captura de Omi para conversaciones y contexto visual. Omi abrirá la app Meta AI para vincular tus gafas.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Conectar a través de Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Termina de conectar en la app Meta AI y luego vuelve aquí.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Comprobar de nuevo';
+
+  @override
+  String get raybanMetaAllowCamera => 'Permitir la cámara en las gafas';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi usa la cámara de tus gafas para añadir fotos a tus conversaciones. Puedes omitir esto y usar solo audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Omitir por ahora';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Modo solo audio de Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Esta versión de Omi puede usar el micrófono de tus gafas por Bluetooth. La captura de fotos requiere la versión para desarrolladores de Meta de Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'La música de tu teléfono se pausa mientras se usa el micrófono de las gafas.';
+
+  @override
+  String get raybanMetaContinue => 'Continuar';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Capturar foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto solicitada: aparecerá en tu conversación.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Micrófono listo';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Captura de imagen lista';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'No disponible en modo solo audio';
+
+  @override
+  String get raybanMetaCamera => 'Cámara';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Error al conectar con Ray-Ban Meta: $error';
+  }
 }

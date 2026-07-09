@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.",
     "transcribeLaterTitle": "Litteroi myöhemmin",
     "transcribeLaterDescription": "Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.",
-    "transcribeLaterNote": "Toimii toistaiseksi Omi-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
+    "transcribeLaterNote": "Toimii toistaiseksi Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
     "transcribeLaterStorageFull": "Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.",
     "unmute": "Poista mykistys",
     "newRecording": "Uusi tallennus",
@@ -3104,5 +3104,43 @@
     "deviceOnboardingIntroDuration": "Noin 1 minuutti",
     "jumpToLatestMessage": "Siirry uusimpaan viestiin",
     "latest": "Uusin",
-    "flashFirmware": "Asenna laiteohjelmisto"
+    "flashFirmware": "Asenna laiteohjelmisto",
+    "pendantRecordingTitle": "Tallennus riipuksella",
+    "pendantRecordingNote": "Riipuksesi tallentaa itsenäisesti. Tallenteet synkronoituvat puhelimeesi, kun sovellus on auki.",
+    "pendantSyncingRecordings": "Synkronoidaan tallenteita riipuksestasi…",
+    "pendantMinutesStored": "~{minutes} min tallennettu",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Riipuksen tallennustila on lähes täynnä — pidä sovellus auki synkronointia varten.",
+    "connectRayBanMeta": "Yhdistä Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Käytä Ray-Ban Meta -laseja Omi-tallennuslaitteena keskusteluihin ja visuaaliseen kontekstiin. Omi avaa Meta AI -sovelluksen lasien yhdistämistä varten.",
+    "raybanMetaOpenMetaAI": "Yhdistä Meta AI:n kautta",
+    "raybanMetaWaitingForMetaAI": "Viimeistele yhdistäminen Meta AI -sovelluksessa ja palaa sitten tänne.",
+    "raybanMetaCheckAgain": "Tarkista uudelleen",
+    "raybanMetaAllowCamera": "Salli lasien kamera",
+    "raybanMetaCameraExplanation": "Omi käyttää lasiesi kameraa lisätäkseen valokuvia keskusteluihisi. Voit ohittaa tämän ja käyttää vain ääntä.",
+    "raybanMetaSkipForNow": "Ohita toistaiseksi",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Metan vain ääni -tila",
+    "raybanMetaAudioOnlyExplanation": "Tämä Omi-versio voi käyttää lasiesi mikrofonia Bluetoothin kautta. Valokuvien ottaminen vaatii Omin Meta-kehittäjäversion.",
+    "raybanMetaMusicPauseNote": "Puhelimesi musiikki keskeytyy, kun lasien mikrofoni on käytössä.",
+    "raybanMetaContinue": "Jatka",
+    "raybanMetaCapturePhoto": "Ota valokuva",
+    "raybanMetaPhotoRequested": "Valokuvaa pyydetty — se näkyy keskustelussasi.",
+    "raybanMetaMicrophoneReady": "Mikrofoni valmis",
+    "raybanMetaImageCaptureReady": "Kuvan kaappaus valmis",
+    "raybanMetaImageCaptureUnavailable": "Ei käytettävissä vain ääni -tilassa",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Virhe yhdistettäessä Ray-Ban Metaan: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

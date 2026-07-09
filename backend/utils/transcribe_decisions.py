@@ -1,11 +1,27 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import Optional, Sequence
+from typing import Any, Mapping, Optional, Sequence
 
 MAX_CONVERSATION_TIMEOUT_SECONDS = 4 * 60 * 60
 MIN_CONVERSATION_TIMEOUT_SECONDS = 120
 TARGET_SAMPLE_RATE = 16000
 USER_SELF_PERSON_ID = 'user'
+
+# Live-session sources whose devices natively produce photos. Receiving a photo
+# must not overwrite their provenance; for every other source the legacy
+# behavior stands: a photo-bearing conversation is relabeled 'openglass'.
+PHOTO_CAPABLE_SOURCE_VALUES = frozenset({'openglass', 'rayban_meta'})
+
+
+def resolve_photo_conversation_source(current_source_value: Optional[str]) -> Optional[str]:
+    """Source a conversation should carry once it has photos.
+
+    Returns the new source value, or None when the current source already
+    identifies a photo-capable device and must be preserved.
+    """
+    if current_source_value in PHOTO_CAPABLE_SOURCE_VALUES:
+        return None
+    return 'openglass'
 
 
 class ConversationLifecycleAction(str, Enum):
@@ -123,8 +139,8 @@ def decide_existing_conversation_action(
 def decide_lifecycle_action(
     *,
     conversation_exists: bool,
-    status,
-    in_progress_status,
+    status: Any,
+    in_progress_status: Any,
     seconds_since_last_update: Optional[float],
     conversation_creation_timeout: int,
 ) -> ConversationLifecycleAction:
@@ -142,8 +158,8 @@ def should_process_on_disconnect(
     is_multi_channel: bool,
     close_code: int,
     conversation_id: Optional[str],
-    conversation,
-    in_progress_status,
+    conversation: Mapping[str, Any],
+    in_progress_status: Any,
 ) -> bool:
     if close_code != 1000:
         return False
@@ -230,14 +246,14 @@ def should_flush_final_multi_channel_mix(
 
 
 def should_skip_speaker_detection(
-    *, person_id: Optional[str], is_user: bool, segment_id: str, suggested_segments
+    *, person_id: Optional[str], is_user: bool, segment_id: str, suggested_segments: Sequence[str]
 ) -> bool:
     return bool(person_id) or is_user or segment_id in suggested_segments
 
 
 def should_queue_speaker_embedding(
     *,
-    speaker_id,
+    speaker_id: Any,
     person_id: Optional[str],
     is_user: bool,
     speaker_id_enabled: bool,

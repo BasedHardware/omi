@@ -4,8 +4,7 @@ import contextvars
 import json
 import time
 from collections import deque
-from datetime import datetime, timezone
-from typing import Dict, Optional, Set
+from typing import Any, Coroutine, Dict, List, Optional, Set, TypedDict, cast
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -14,7 +13,6 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import users as users_db
 from database.redis_db import get_cached_user_geolocation
-from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from utils.conversations.factory import deserialize_conversation
 from models.geolocation import Geolocation
@@ -25,16 +23,21 @@ from utils.app_integrations import (
     trigger_external_integrations,
 )
 from utils.conversations.location import async_get_google_maps_location
-from utils.byok import set_byok_keys
+from utils.byok import set_byok_keys, set_byok_uid
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.async_tasks import supervise_tasks, drain_tasks, create_named_task, wait_for_event
+from utils.async_tasks import (
+    supervise_tasks,
+    drain_tasks,
+    create_named_task,
+    wait_for_event,
+)
 from utils.webhooks import (
     send_audio_bytes_developer_webhook,
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.other.storage import upload_audio_chunk, upload_audio_chunks_batch
+from utils.other.storage import upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
 import logging
@@ -76,13 +79,38 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 BG_DRAIN_TIMEOUT = 30.0  # seconds
 
 
+class _SpeakerSampleRequest(TypedDict):
+    person_id: str
+    conversation_id: str
+    segment_ids: List[str]
+    queued_at: float
+
+
+class _TranscriptQueueItem(TypedDict):
+    segments: List[Dict[str, Any]]
+    memory_id: Optional[str]
+
+
+class _AudioBytesQueueItem(TypedDict):
+    type: str
+    sample_rate: int
+    data: bytearray
+
+
+class _PrivateCloudChunk(TypedDict):
+    data: bytes
+    conversation_id: str
+    timestamp: float
+    retries: int
+
+
 async def _process_conversation_task(
     uid: str,
     conversation_id: str,
     language: str,
     websocket: WebSocket,
     byok_keys: Optional[Dict[str, str]] = None,
-):
+) -> None:
     """Process a conversation and send result back to _listen via websocket.
 
     `byok_keys` is forwarded from the listen service. When present, LLM and
@@ -91,6 +119,7 @@ async def _process_conversation_task(
     """
     if byok_keys:
         set_byok_keys(byok_keys)
+        set_byok_uid(uid)
     try:
         conversation_data = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
         if not conversation_data:
@@ -99,7 +128,7 @@ async def _process_conversation_task(
             data = bytearray()
             data.extend(struct.pack("I", 201))
             data.extend(bytes(json.dumps(response), "utf-8"))
-            await websocket.send_bytes(data)
+            await websocket.send_bytes(bytes(data))
             return
 
         conversation = deserialize_conversation(conversation_data)
@@ -133,19 +162,18 @@ async def _process_conversation_task(
             conversation = await loop.run_in_executor(
                 None, lambda: ctx.run(process_conversation, uid, language, conversation)
             )
-            messages = await trigger_external_integrations(uid, conversation)
+            await trigger_external_integrations(uid, conversation)
         except Exception as e:
             logger.error(f"Error processing conversation: {e} {uid} {conversation_id}")
             await run_blocking(db_executor, conversations_db.set_conversation_as_discarded, uid, conversation.id)
             conversation.discarded = True
-            messages = []
 
         # Send success response back (minimal - transcribe will fetch from DB)
         response = {"conversation_id": conversation_id, "success": True}
         data = bytearray()
         data.extend(struct.pack("I", 201))
         data.extend(bytes(json.dumps(response), "utf-8"))
-        await websocket.send_bytes(data)
+        await websocket.send_bytes(bytes(data))
 
     except Exception as e:
         logger.error(f"Error in _process_conversation_task: {e} {uid} {conversation_id}")
@@ -154,7 +182,7 @@ async def _process_conversation_task(
         data.extend(struct.pack("I", 201))
         data.extend(bytes(json.dumps(response), "utf-8"))
         try:
-            await websocket.send_bytes(data)
+            await websocket.send_bytes(bytes(data))
         except Exception:
             pass
 
@@ -163,7 +191,7 @@ async def _websocket_util_trigger(
     websocket: WebSocket,
     uid: str,
     sample_rate: int = 8000,
-):
+) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
 
     try:
@@ -189,14 +217,14 @@ async def _websocket_util_trigger(
     )
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
-    bg_tasks: Set[asyncio.Task] = set()
+    bg_tasks: Set[asyncio.Task[Any]] = set()
 
-    def spawn(coro) -> asyncio.Task:
+    def spawn(coro: Coroutine[Any, Any, Any]) -> asyncio.Task[Any]:
         """Create a tracked background task that will be cancelled on cleanup."""
         task = asyncio.create_task(coro)
         bg_tasks.add(task)
 
-        def on_done(t):
+        def on_done(t: asyncio.Task[Any]) -> None:
             bg_tasks.discard(t)
             if t.cancelled():
                 return
@@ -208,17 +236,17 @@ async def _websocket_util_trigger(
         return task
 
     # Bounded queues — prevent unbounded memory growth during backpressure
-    speaker_sample_queue: deque = deque(maxlen=SPEAKER_SAMPLE_QUEUE_WARN_SIZE)
-    transcript_queue: deque = deque(maxlen=TRANSCRIPT_QUEUE_WARN_SIZE)
-    audio_bytes_queue: deque = deque(maxlen=AUDIO_BYTES_QUEUE_WARN_SIZE)
+    speaker_sample_queue: deque[_SpeakerSampleRequest] = deque(maxlen=SPEAKER_SAMPLE_QUEUE_WARN_SIZE)
+    transcript_queue: deque[_TranscriptQueueItem] = deque(maxlen=TRANSCRIPT_QUEUE_WARN_SIZE)
+    audio_bytes_queue: deque[_AudioBytesQueueItem] = deque(maxlen=AUDIO_BYTES_QUEUE_WARN_SIZE)
 
     # private_cloud_queue caps at PRIVATE_CLOUD_QUEUE_MAX_SIZE to prevent OOM kills.
     # An OOM kill loses ALL queued data for ALL users on the pod — dropping the oldest
     # chunk for one user is strictly better than killing the pod.
-    private_cloud_queue: deque = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    private_cloud_queue: deque[_PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
 
-    async def process_private_cloud_queue():
+    async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
 
         Chunks are accumulated per conversation and flushed when:
@@ -229,9 +257,9 @@ async def _websocket_util_trigger(
         nonlocal websocket_active
 
         # Pending batches keyed by conversation_id
-        pending: Dict[str, dict] = {}
+        pending: Dict[str, Dict[str, Any]] = {}
 
-        def _add_to_batch(chunk_info: dict):
+        def _add_to_batch(chunk_info: _PrivateCloudChunk) -> None:
             conv_id = chunk_info['conversation_id']
             if conv_id not in pending:
                 pending[conv_id] = {
@@ -254,9 +282,14 @@ async def _websocket_util_trigger(
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
-                chunks_to_upload = [{'data': chunk_data, 'timestamp': timestamp}]
+                chunks_to_upload: List[Dict[str, Any]] = [{'data': chunk_data, 'timestamp': timestamp}]
                 await run_blocking(
-                    storage_executor, upload_audio_chunks_batch, chunks_to_upload, uid, conv_id, cached_protection_level
+                    storage_executor,
+                    cast(Any, upload_audio_chunks_batch),
+                    chunks_to_upload,
+                    uid,
+                    conv_id,
+                    cast(str, cached_protection_level),
                 )
                 del chunks_to_upload
                 try:
@@ -269,7 +302,7 @@ async def _websocket_util_trigger(
                             conversations_db.update_conversation,
                             uid,
                             conv_id,
-                            {'audio_files': [af.dict() for af in audio_files]},
+                            {'audio_files': [af.model_dump() for af in audio_files]},
                         )
                 except Exception as e:
                     logger.error(f"Error updating audio files: {e} {uid} {conv_id}")
@@ -303,7 +336,7 @@ async def _websocket_util_trigger(
             batch_size_threshold = sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION
 
             # Determine which conversations to flush
-            conv_ids_to_flush = []
+            conv_ids_to_flush: List[str] = []
             for conv_id, batch in pending.items():
                 batch_age = now - batch['queued_at']
                 is_shutdown = not websocket_active
@@ -315,7 +348,7 @@ async def _websocket_util_trigger(
             for conv_id in conv_ids_to_flush:
                 await _flush_batch(conv_id)
 
-    async def process_speaker_sample_queue():
+    async def process_speaker_sample_queue() -> None:
         """Background task that processes speaker sample extraction requests."""
         nonlocal websocket_active
 
@@ -331,8 +364,8 @@ async def _websocket_util_trigger(
             # Separate ready and pending requests.
             # On shutdown, skip the age check — process everything so pending
             # samples aren't silently dropped when the drain timeout fires.
-            ready_requests = []
-            pending_requests = []
+            ready_requests: List[_SpeakerSampleRequest] = []
+            pending_requests: List[_SpeakerSampleRequest] = []
 
             for request in list(speaker_sample_queue):
                 if is_shutdown or current_time - request['queued_at'] >= SPEAKER_SAMPLE_MIN_AGE:
@@ -361,7 +394,7 @@ async def _websocket_util_trigger(
                 except Exception as e:
                     logger.error(f"Error extracting speaker samples: {e} {uid} {conv_id}")
 
-    async def process_transcript_queue():
+    async def process_transcript_queue() -> None:
         """Batched consumer for transcript events (realtime integrations + webhooks)."""
         nonlocal websocket_active
 
@@ -372,7 +405,7 @@ async def _websocket_util_trigger(
                 continue
 
             # Process batch
-            batch = list(transcript_queue)
+            batch: List[_TranscriptQueueItem] = list(transcript_queue)
             transcript_queue.clear()
 
             for item in batch:
@@ -384,7 +417,7 @@ async def _websocket_util_trigger(
                 except Exception as e:
                     logger.error(f"Error processing transcript batch: {e} {uid}")
 
-    async def process_audio_bytes_queue():
+    async def process_audio_bytes_queue() -> None:
         """Event-driven consumer for audio bytes triggers (app integrations + webhooks)."""
         nonlocal websocket_active
 
@@ -403,7 +436,7 @@ async def _websocket_util_trigger(
                 continue
 
             # Process all queued items
-            batch = list(audio_bytes_queue)
+            batch: List[_AudioBytesQueueItem] = list(audio_bytes_queue)
             audio_bytes_queue.clear()
 
             for item in batch:
@@ -415,7 +448,7 @@ async def _websocket_util_trigger(
                 except Exception as e:
                     logger.error(f"Error processing audio bytes: {e} {uid}")
 
-    async def receive_tasks():
+    async def receive_tasks() -> None:
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal speaker_sample_queue
@@ -425,8 +458,8 @@ async def _websocket_util_trigger(
         audiobuffer = bytearray()
         trigger_audiobuffer = bytearray()
         private_cloud_sync_buffer = bytearray()
-        private_cloud_chunk_start_time = None
-        current_conversation_id = None
+        private_cloud_chunk_start_time: Optional[float] = None
+        current_conversation_id: Optional[str] = None
 
         try:
             while websocket_active:
@@ -555,7 +588,7 @@ async def _websocket_util_trigger(
                                 {
                                     'data': bytes(private_cloud_sync_buffer),
                                     'conversation_id': current_conversation_id,
-                                    'timestamp': private_cloud_chunk_start_time,
+                                    'timestamp': cast(float, private_cloud_chunk_start_time),
                                     'retries': 0,
                                 }
                             )
@@ -619,7 +652,7 @@ async def _websocket_util_trigger(
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
             websocket_active = False
 
-    bg_main_tasks = []
+    bg_main_tasks: List[asyncio.Task[Any]] = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
         receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
@@ -678,5 +711,5 @@ async def websocket_endpoint_trigger(
     websocket: WebSocket,
     uid: str,
     sample_rate: int = 8000,
-):
+) -> None:
     await _websocket_util_trigger(websocket, uid, sample_rate)

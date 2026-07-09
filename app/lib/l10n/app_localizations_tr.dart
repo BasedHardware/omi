@@ -9350,7 +9350,8 @@ class AppLocalizationsTr extends AppLocalizations {
       'Sesi anında değil, dilediğin zaman transkribe etmek üzere şimdi kaydet. Kayıtlar telefonunda saklanır; konuşma oluşturmak için onları sen yüklersin.';
 
   @override
-  String get transcribeLaterNote => 'Şimdilik Omi cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+  String get transcribeLaterNote =>
+      'Şimdilik Omi ve Limitless cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9500,4 +9501,85 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get flashFirmware => 'Donanım Yazılımını Yükle';
+
+  @override
+  String get pendantRecordingTitle => 'Pendant\'ta kayıt yapılıyor';
+
+  @override
+  String get pendantRecordingNote =>
+      'Pendant\'ın kendi kendine kayıt yapıyor. Uygulama açıkken kayıtlar telefonuna eşitlenir.';
+
+  @override
+  String get pendantSyncingRecordings => 'Pendant\'ından kayıtlar eşitleniyor…';
+
+  @override
+  String pendantMinutesStored(int minutes) {
+    return '~$minutes dk kayıtlı';
+  }
+
+  @override
+  String get pendantStorageAlmostFull =>
+      'Pendant\'ın depolama alanı neredeyse dolu — eşitleme için uygulamayı açık tut.';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta\'yı Bağla';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Ray-Ban Meta gözlüğünüzü konuşmalar ve görsel bağlam için Omi kayıt cihazınız olarak kullanın. Omi, gözlüğünüzü bağlamak için Meta AI uygulamasını açacaktır.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI ile bağlan';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Bağlantıyı Meta AI uygulamasında tamamlayın, ardından buraya geri dönün.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Tekrar Kontrol Et';
+
+  @override
+  String get raybanMetaAllowCamera => 'Gözlükte Kameraya İzin Ver';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi, konuşmalarınıza fotoğraf eklemek için gözlüğünüzün kamerasını kullanır. Bunu atlayıp yalnızca sesi kullanabilirsiniz.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Şimdilik Atla';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta yalnızca ses modu';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi\'nin bu sürümü gözlüğünüzün mikrofonunu Bluetooth üzerinden kullanabilir. Fotoğraf çekimi için Omi\'nin Meta geliştirici sürümü gerekir.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Gözlüğün mikrofonu kullanılırken telefonunuzdaki müzik duraklatılır.';
+
+  @override
+  String get raybanMetaContinue => 'Devam Et';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Fotoğraf Çek';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Fotoğraf istendi — konuşmanızda görünecektir.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon hazır';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Görüntü yakalama hazır';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Yalnızca ses modunda kullanılamaz';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta\'ya bağlanırken hata: $error';
+  }
 }

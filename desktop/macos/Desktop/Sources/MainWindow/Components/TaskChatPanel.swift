@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Compact chat panel for the task sidebar.
 /// Displays task-scoped chat using an independent TaskChatState per task.
@@ -82,15 +83,12 @@ struct TaskChatPanel: View {
                             onSend: { text in
                                 AnalyticsManager.shared.chatMessageSent(messageLength: text.count, source: "task_chat")
                                 Task {
-                                    // On the first message, include full task details so the AI
-                                    // has complete context (same data the Investigate button sends).
+                                    // On the first message, provide task details through a scoped
+                                    // DesktopContextPacket instead of raw prompt prepending.
                                     let isFirstMessage = taskState.messages.isEmpty
                                     let taskContext: String? = (isFirstMessage && task != nil) ? task!.chatContext : nil
                                     await taskState.sendMessage(text, taskContext: taskContext)
                                 }
-                            },
-                            onFollowUp: { text in
-                                Task { await taskState.sendFollowUp(text) }
                             },
                             onStop: {
                                 taskState.stopAgent()
@@ -157,13 +155,6 @@ struct TaskChatPanel: View {
                         .scaledFont(size: 10)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    if let sessionId = taskState.legacyAcpSessionId {
-                        Text("·")
-                            .scaledFont(size: 10)
-                        Text(String(sessionId.prefix(8)))
-                            .scaledFont(size: 10)
-                            .fontDesign(.monospaced)
-                    }
                     Spacer()
                 }
                 .foregroundColor(OmiColors.textTertiary.opacity(0.7))

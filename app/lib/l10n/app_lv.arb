@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Jūs izmantojat savu transkripcijas pakalpojumu. Šo ierakstu sinhronizēšana tos transkribē Omi serveros, un tie tiek ieskaitīti jūsu plāna transkripcijas limitā.",
     "transcribeLaterTitle": "Transkribēt vēlāk",
     "transcribeLaterDescription": "Ierakstiet audio tagad un transkribējiet to pēc pieprasījuma, nevis reāllaikā. Ieraksti tiek saglabāti jūsu tālrunī, un pēc tam jūs tos augšupielādējat, lai izveidotu sarunas.",
-    "transcribeLaterNote": "Pagaidām darbojas ar Omi ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.",
+    "transcribeLaterNote": "Pagaidām darbojas ar Omi un Limitless ierīcēm. Audio paliek jūsu tālrunī, līdz izvēlaties to augšupielādēt.",
     "transcribeLaterStorageFull": "Jūsu tālrunī ir maz brīvas vietas, tāpēc ierakstīšana ir apturēta. Atbrīvojiet vietu vai augšupielādējiet savus ierakstus, un tā automātiski atsāksies.",
     "unmute": "Ieslēgt skaņu",
     "newRecording": "Jauns ieraksts",
@@ -3104,5 +3104,43 @@
     "deviceOnboardingIntroDuration": "Apmēram 1 minūte",
     "jumpToLatestMessage": "Pārlēkt uz jaunāko ziņojumu",
     "latest": "Jaunākais",
-    "flashFirmware": "Instalēt aparātprogrammatūru"
+    "flashFirmware": "Instalēt aparātprogrammatūru",
+    "pendantRecordingTitle": "Ierakstīšana kulonā",
+    "pendantRecordingNote": "Jūsu kulons ieraksta patstāvīgi. Ieraksti tiek sinhronizēti ar jūsu tālruni, kamēr lietotne ir atvērta.",
+    "pendantSyncingRecordings": "Notiek ierakstu sinhronizēšana no jūsu kulona…",
+    "pendantMinutesStored": "~{minutes} min saglabāts",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Kulona krātuve ir gandrīz pilna — turiet lietotni atvērtu, lai sinhronizētu.",
+    "connectRayBanMeta": "Savienot Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Izmantojiet savas Ray-Ban Meta brilles kā Omi tveršanas ierīci sarunām un vizuālajam kontekstam. Omi atvērs Meta AI lietotni, lai savienotu jūsu brilles.",
+    "raybanMetaOpenMetaAI": "Savienot, izmantojot Meta AI",
+    "raybanMetaWaitingForMetaAI": "Pabeidziet savienošanu Meta AI lietotnē un pēc tam atgriezieties šeit.",
+    "raybanMetaCheckAgain": "Pārbaudīt vēlreiz",
+    "raybanMetaAllowCamera": "Atļaut kameru brillēs",
+    "raybanMetaCameraExplanation": "Omi izmanto jūsu briļļu kameru, lai pievienotu fotoattēlus jūsu sarunām. Jūs varat to izlaist un izmantot tikai audio.",
+    "raybanMetaSkipForNow": "Izlaist pagaidām",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta tikai audio režīms",
+    "raybanMetaAudioOnlyExplanation": "Šī Omi versija var izmantot jūsu briļļu mikrofonu, izmantojot Bluetooth. Fotoattēlu tveršanai nepieciešama Omi Meta izstrādātāja versija.",
+    "raybanMetaMusicPauseNote": "Mūzika jūsu tālrunī tiek pauzēta, kamēr tiek izmantots briļļu mikrofons.",
+    "raybanMetaContinue": "Turpināt",
+    "raybanMetaCapturePhoto": "Uzņemt fotoattēlu",
+    "raybanMetaPhotoRequested": "Fotoattēls pieprasīts — tas parādīsies jūsu sarunā.",
+    "raybanMetaMicrophoneReady": "Mikrofons gatavs",
+    "raybanMetaImageCaptureReady": "Attēlu tveršana gatava",
+    "raybanMetaImageCaptureUnavailable": "Nav pieejams tikai audio režīmā",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Kļūda, veidojot savienojumu ar Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

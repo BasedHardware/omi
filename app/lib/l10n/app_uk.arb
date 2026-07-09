@@ -3054,7 +3054,7 @@
     "syncCustomSttWarningMessage": "Ви використовуєте власний сервіс транскрипції. Синхронізація цих записів розшифрує їх на серверах Omi, і вони зараховуються до ліміту транскрипції вашого тарифу.",
     "transcribeLaterTitle": "Транскрибувати пізніше",
     "transcribeLaterDescription": "Записуйте аудіо зараз, а транскрибуйте за потреби, а не наживо. Записи зберігаються на вашому телефоні, а потім ви завантажуєте їх, щоб створити розмови.",
-    "transcribeLaterNote": "Наразі працює з пристроями Omi. Аудіо залишається на вашому телефоні, доки ви не вирішите його завантажити.",
+    "transcribeLaterNote": "Наразі працює з пристроями Omi та Limitless. Аудіо залишається на вашому телефоні, доки ви не вирішите його завантажити.",
     "transcribeLaterStorageFull": "На телефоні бракує місця, тому запис призупинено. Звільніть місце або завантажте свої записи — і запис автоматично відновиться.",
     "unmute": "Увімкнути звук",
     "newRecording": "Новий запис",
@@ -3104,5 +3104,43 @@
     "deviceOnboardingIntroDuration": "Близько 1 хвилини",
     "jumpToLatestMessage": "Перейти до останнього повідомлення",
     "latest": "Останнє",
-    "flashFirmware": "Встановити прошивку"
+    "flashFirmware": "Встановити прошивку",
+    "pendantRecordingTitle": "Запис на кулоні",
+    "pendantRecordingNote": "Ваш кулон записує самостійно. Записи синхронізуються з телефоном, поки застосунок відкритий.",
+    "pendantSyncingRecordings": "Синхронізація записів із вашого кулона…",
+    "pendantMinutesStored": "~{minutes} хв збережено",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Пам'ять кулона майже заповнена — тримайте застосунок відкритим для синхронізації.",
+    "connectRayBanMeta": "Підключити Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Використовуйте окуляри Ray-Ban Meta як пристрій запису Omi для бесід і візуального контексту. Omi відкриє додаток Meta AI, щоб підключити ваші окуляри.",
+    "raybanMetaOpenMetaAI": "Підключити через Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завершіть підключення в додатку Meta AI, а потім поверніться сюди.",
+    "raybanMetaCheckAgain": "Перевірити знову",
+    "raybanMetaAllowCamera": "Дозволити камеру на окулярах",
+    "raybanMetaCameraExplanation": "Omi використовує камеру ваших окулярів, щоб додавати фотографії до ваших бесід. Ви можете пропустити це й використовувати лише звук.",
+    "raybanMetaSkipForNow": "Пропустити поки що",
+    "raybanMetaAudioOnlyTitle": "Режим лише звуку Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Ця версія Omi може використовувати мікрофон ваших окулярів через Bluetooth. Для зйомки фотографій потрібна версія Omi для розробників Meta.",
+    "raybanMetaMusicPauseNote": "Музика на вашому телефоні призупиняється, поки використовується мікрофон окулярів.",
+    "raybanMetaContinue": "Продовжити",
+    "raybanMetaCapturePhoto": "Зробити фото",
+    "raybanMetaPhotoRequested": "Фото запитано — воно з'явиться у вашій бесіді.",
+    "raybanMetaMicrophoneReady": "Мікрофон готовий",
+    "raybanMetaImageCaptureReady": "Зйомка зображення готова",
+    "raybanMetaImageCaptureUnavailable": "Недоступно в режимі лише звуку",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Помилка підключення до Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

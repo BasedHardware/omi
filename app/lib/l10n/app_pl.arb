@@ -3089,7 +3089,7 @@
     "syncCustomSttWarningMessage": "Używasz własnego dostawcy transkrypcji. Synchronizacja tych nagrań transkrybuje je na serwerach Omi i są wliczane do limitu transkrypcji w Twoim planie.",
     "transcribeLaterTitle": "Transkrypcja później",
     "transcribeLaterDescription": "Nagrywaj dźwięk teraz, a transkrypcję uruchamiaj na żądanie zamiast na żywo. Nagrania są zapisywane w telefonie, a następnie przesyłasz je, aby utworzyć rozmowy.",
-    "transcribeLaterNote": "Na razie działa z urządzeniami Omi. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
+    "transcribeLaterNote": "Na razie działa z urządzeniami Omi i Limitless. Dźwięk pozostaje w telefonie, dopóki nie zdecydujesz się go przesłać.",
     "transcribeLaterStorageFull": "W telefonie jest mało miejsca, więc nagrywanie zostało wstrzymane. Zwolnij miejsce lub prześlij nagrania, a nagrywanie wznowi się automatycznie.",
     "unmute": "Wyłącz wyciszenie",
     "newRecording": "Nowe nagranie",
@@ -3139,5 +3139,43 @@
     "deviceOnboardingIntroDuration": "Około 1 minuty",
     "jumpToLatestMessage": "Przejdź do najnowszej wiadomości",
     "latest": "Najnowsza",
-    "flashFirmware": "Wgraj oprogramowanie układowe"
+    "flashFirmware": "Wgraj oprogramowanie układowe",
+    "pendantRecordingTitle": "Nagrywanie na zawieszce",
+    "pendantRecordingNote": "Twoja zawieszka nagrywa samodzielnie. Nagrania synchronizują się z telefonem, gdy aplikacja jest otwarta.",
+    "pendantSyncingRecordings": "Synchronizowanie nagrań z zawieszki…",
+    "pendantMinutesStored": "~{minutes} min zapisane",
+    "@pendantMinutesStored": {
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "pendantStorageAlmostFull": "Pamięć zawieszki jest prawie pełna — pozostaw aplikację otwartą, aby zsynchronizować.",
+    "connectRayBanMeta": "Połącz Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Używaj okularów Ray-Ban Meta jako urządzenia przechwytującego Omi do rozmów i kontekstu wizualnego. Omi otworzy aplikację Meta AI, aby połączyć Twoje okulary.",
+    "raybanMetaOpenMetaAI": "Połącz przez Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dokończ łączenie w aplikacji Meta AI, a następnie wróć tutaj.",
+    "raybanMetaCheckAgain": "Sprawdź ponownie",
+    "raybanMetaAllowCamera": "Zezwól na aparat w okularach",
+    "raybanMetaCameraExplanation": "Omi używa aparatu Twoich okularów, aby dodawać zdjęcia do Twoich rozmów. Możesz to pominąć i używać tylko dźwięku.",
+    "raybanMetaSkipForNow": "Pomiń na razie",
+    "raybanMetaAudioOnlyTitle": "Tryb tylko audio Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Ta wersja Omi może używać mikrofonu Twoich okularów przez Bluetooth. Przechwytywanie zdjęć wymaga wersji Omi dla deweloperów Meta.",
+    "raybanMetaMusicPauseNote": "Muzyka w Twoim telefonie zostaje wstrzymana, gdy używany jest mikrofon okularów.",
+    "raybanMetaContinue": "Kontynuuj",
+    "raybanMetaCapturePhoto": "Zrób zdjęcie",
+    "raybanMetaPhotoRequested": "Zażądano zdjęcia — pojawi się w Twojej rozmowie.",
+    "raybanMetaMicrophoneReady": "Mikrofon gotowy",
+    "raybanMetaImageCaptureReady": "Przechwytywanie obrazu gotowe",
+    "raybanMetaImageCaptureUnavailable": "Niedostępne w trybie tylko audio",
+    "raybanMetaCamera": "Aparat",
+    "errorConnectingRayBanMeta": "Błąd podczas łączenia z Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    }
 }

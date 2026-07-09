@@ -20,6 +20,7 @@ enum TranscriptionFinalizationStrategy: String, Codable, CaseIterable {
 enum TranscriptionFinalizationReason: String, Codable, CaseIterable {
     case userStop = "user_stop"
     case finishAndContinue = "finish_and_continue"
+    case meetingEnded = "meeting_ended"
     case maxDurationRotation = "max_duration_rotation"
     case crashRecovery = "crash_recovery"
     case retry = "retry"
@@ -284,6 +285,10 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
     var session: QueryInterfaceRequest<TranscriptionSessionRecord> {
         request(for: TranscriptionSegmentRecord.session)
     }
+
+    var hasSpeakerAssignment: Bool {
+        isUser || personId != nil
+    }
 }
 
 // MARK: - Session with Segments
@@ -395,9 +400,19 @@ extension TranscriptionSessionRecord {
         )
     }
 
-    /// Update this record from a ServerConversation (preserving local id)
-    mutating func updateFrom(_ conversation: ServerConversation) {
+    /// Update this record from a ServerConversation (preserving local id).
+    /// When a local mutation is newer than the server timestamp, keep user-controlled local
+    /// fields such as title, star, folder, and delete state while still accepting backend-owned data.
+    mutating func updateFrom(
+        _ conversation: ServerConversation,
+        preservingNewerLocalFields preserveNewerLocalFields: Bool = false
+    ) {
         let encoder = JSONEncoder()
+        let localUpdatedAt = updatedAt
+        let localTitle = title
+        let localStarred = starred
+        let localFolderId = folderId
+        let localDeleted = deleted
 
         // Update timestamps — use server's latest timestamp so local mutations
         // (which set updatedAt = Date()) aren't overwritten by stale sync data
@@ -440,6 +455,46 @@ extension TranscriptionSessionRecord {
         // Mark as synced
         self.backendId = conversation.id
         self.backendSynced = true
+
+        if preserveNewerLocalFields {
+            self.title = Self.preserveLocalNonEmpty(localTitle, over: self.title)
+            self.starred = localStarred
+            self.folderId = localFolderId
+            self.deleted = localDeleted
+            self.updatedAt = max(localUpdatedAt, self.updatedAt)
+        }
+    }
+
+    /// True when the server response can fill at least one empty local server-owned field.
+    func hasHydratableServerFields(from conversation: ServerConversation) -> Bool {
+        guard backendSynced, backendId == conversation.id else { return false }
+        return Self.isEmpty(title) && !conversation.structured.title.isEmpty ||
+            Self.isEmpty(overview) && !conversation.structured.overview.isEmpty ||
+            Self.isEmpty(emoji) && !conversation.structured.emoji.isEmpty ||
+            Self.isDefaultCategory(category) && !Self.isDefaultCategory(conversation.structured.category) ||
+            Self.isEmptyJsonCollection(actionItemsJson) && !conversation.structured.actionItems.isEmpty ||
+            Self.isEmptyJsonCollection(eventsJson) && !conversation.structured.events.isEmpty ||
+            Self.isEmptyJsonCollection(photosJson) && !conversation.photos.isEmpty ||
+            Self.isEmptyJsonCollection(appsResultsJson) && !conversation.appsResults.isEmpty
+    }
+
+    private static func preserveLocalNonEmpty(_ local: String?, over server: String?) -> String? {
+        guard !isEmpty(local) else { return server }
+        guard isEmpty(server) else { return local }
+        return local
+    }
+
+    private static func isEmpty(_ value: String?) -> Bool {
+        value?.isEmpty ?? true
+    }
+
+    private static func isDefaultCategory(_ value: String?) -> Bool {
+        isEmpty(value) || value == "other"
+    }
+
+    private static func isEmptyJsonCollection(_ value: String?) -> Bool {
+        guard let value, !value.isEmpty else { return true }
+        return value.trimmingCharacters(in: .whitespacesAndNewlines) == "[]"
     }
 }
 

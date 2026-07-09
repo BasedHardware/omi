@@ -48,7 +48,7 @@ if [[ ${#missing_files[@]} -gt 0 ]]; then
   echo "STAGING_API_URL=" >> .dev.env
 
   flutter pub get
-  dart run build_runner build --delete-conflicting-outputs
+  flutter pub run build_runner build --delete-conflicting-outputs
 fi
 
 flutter test

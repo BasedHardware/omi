@@ -1,5 +1,7 @@
 import Sentry
 import SwiftUI
+import UniformTypeIdentifiers
+import OmiTheme
 
 /// Window controller for the feedback dialog
 @MainActor
@@ -80,9 +82,11 @@ struct FeedbackView: View {
         Text("Report an Issue")
           .font(.headline)
 
-        Text("App logs will be included automatically. Optionally describe what went wrong.")
-          .font(.caption)
-          .foregroundColor(.secondary)
+        Text(
+          "App logs will be included automatically. Optionally describe what went wrong, or save a redacted diagnostics file to share manually."
+        )
+        .font(.caption)
+        .foregroundColor(.secondary)
 
         TextEditor(text: $feedbackText)
           .font(.body)
@@ -113,6 +117,11 @@ struct FeedbackView: View {
           }
           .keyboardShortcut(.cancelAction)
 
+          Button("Save Diagnostics…") {
+            saveDiagnosticsLocally()
+          }
+          .help("Save a redacted diagnostics report locally — works offline, nothing is uploaded.")
+
           Spacer()
 
           Button("Send Report") {
@@ -140,9 +149,8 @@ struct FeedbackView: View {
 
     // Capture event with log file attached via scope
     let eventId = SentrySDK.capture(message: sentryMessage) { scope in
-      let isDev = AppBuild.isNonProduction
-      let logPath = isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
-      let logFilename = isDev ? "omi-dev.log" : "omi.log"
+      let logPath = omiLogFilePath()
+      let logFilename = (logPath as NSString).lastPathComponent
       if FileManager.default.fileExists(atPath: logPath) {
         let attachment = Attachment(path: logPath, filename: logFilename, contentType: "text/plain")
         scope.addAttachment(attachment)
@@ -176,5 +184,40 @@ struct FeedbackView: View {
       showSuccess = true
       isSubmitting = false
     }
+  }
+
+  /// Save a redacted diagnostics bundle to a user-chosen location and reveal it
+  /// in Finder. Fully offline — no Sentry, no network — so users on named/dev
+  /// bundles or without connectivity can still capture a report (BL-023 / SET-03).
+  private func saveDiagnosticsLocally() {
+    let panel = NSSavePanel()
+    panel.title = "Save Diagnostics"
+    panel.message = "Save a redacted diagnostics report you can share manually."
+    panel.nameFieldStringValue = "omi-diagnostics-\(Self.exportTimestamp()).txt"
+    panel.allowedContentTypes = [.plainText]
+    panel.canCreateDirectories = true
+
+    guard panel.runModal() == .OK, let url = panel.url else { return }
+
+    // Building the bundle reads the log, serializes snapshots, and writes the
+    // file — keep it off the main thread so a large log can't hang the UI. The
+    // panel already returned; reveal in Finder back on main.
+    DispatchQueue.global(qos: .userInitiated).async {
+      let saved = DesktopDiagnosticsManager.shared.writeLocalDiagnosticsBundle(to: url)
+      DispatchQueue.main.async {
+        if saved {
+          NSWorkspace.shared.activateFileViewerSelecting([url])
+          log("Saved local diagnostics bundle to a user-chosen location")
+        } else {
+          log("Failed to save local diagnostics bundle")
+        }
+      }
+    }
+  }
+
+  private static func exportTimestamp() -> String {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "yyyyMMdd-HHmmss"
+    return formatter.string(from: Date())
   }
 }

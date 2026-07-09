@@ -1,0 +1,8 @@
+{
+  "version": "0.12.22",
+  "date": "2026-07-05",
+  "changes": [
+    "Show onboarding data-source read failures instead of stale or empty metrics",
+    "Reported invalid realtime WebSocket URLs instead of leaving the connection stuck"
+  ]
+}

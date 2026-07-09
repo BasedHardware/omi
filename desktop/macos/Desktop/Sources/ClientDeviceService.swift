@@ -1,12 +1,12 @@
 import CryptoKit
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Stable per-installation device identity for capture provenance (mirrors Flutter `deviceIdHash`).
 final class ClientDeviceService {
   static let shared = ClientDeviceService()
 
-  private let keychainService = "com.omi.client-device-id"
   private let keychainAccount = "install-uuid"
   private let devInstallIdDefaultsKey = "dev-client-device-install-uuid"
   private let installIdMirrorDefaultsKey = "client-device-install-uuid-mirror"
@@ -14,6 +14,16 @@ final class ClientDeviceService {
   private let userDefaults: UserDefaults
   private let cacheLock = NSLock()
   private var cachedInstallId: String?
+
+  /// Team+bundle scoped service for this process. Never the shared legacy
+  /// `com.omi.client-device-id` name — querying that from a binary not on its ACL
+  /// is what caused keychain password prompt spam (#8799).
+  private var keychainService: String {
+    DesktopKeychainStore.scopedService(
+      DesktopKeychainStore.legacyClientDeviceService,
+      bundleID: bundleIdentifier ?? Bundle.main.bundleIdentifier ?? "unknown.bundle"
+    )
+  }
 
   init(
     bundleIdentifier: String? = Bundle.main.bundleIdentifier,
@@ -71,7 +81,10 @@ final class ClientDeviceService {
   }
 
   private func loadOrCreateInstallId() -> String {
-    if usesBundleScopedDevInstallId {
+    // All non-production bundles (Omi Dev + named omi-*) stay out of Keychain
+    // entirely — UserDefaults is enough for throwaway local identity and never
+    // prompts. Production Beta/Prod use the team+bundle scoped Keychain item.
+    if usesUserDefaultsInstallId {
       return loadOrCreateDevInstallId()
     }
     switch readKeychainInstallId() {
@@ -84,8 +97,8 @@ final class ClientDeviceService {
       userDefaults.set(fresh, forKey: installIdMirrorDefaultsKey)
       return fresh
     case .unavailable(let status):
-      // Denied prompt or transient keychain failure. Never rotate the shared
-      // item here — that would change this Mac's identity for all Omi builds.
+      // Denied prompt or transient keychain failure. Never rotate the item here —
+      // and never fall through to the legacy unscoped service (that prompts).
       log("ClientDeviceService: keychain read unavailable (status \(status)); using mirror fallback")
       if let mirror = userDefaults.string(forKey: installIdMirrorDefaultsKey), !mirror.isEmpty {
         return mirror
@@ -96,10 +109,11 @@ final class ClientDeviceService {
     }
   }
 
-  private var usesBundleScopedDevInstallId: Bool {
+  private var usesUserDefaultsInstallId: Bool {
     guard let bundleIdentifier else { return false }
-    // Throwaway named dev bundles should not prompt for the shared login-keychain item.
-    return bundleIdentifier.hasPrefix("com.omi.omi-")
+    // Any non-production com.omi.* bundle (desktop-dev + omi-*) — avoid Keychain.
+    return bundleIdentifier.hasPrefix("com.omi.")
+      && bundleIdentifier != AppBuild.productionBundleIdentifier
   }
 
   private func loadOrCreateDevInstallId() -> String {
@@ -118,12 +132,15 @@ final class ClientDeviceService {
   }
 
   private func readKeychainInstallId() -> KeychainReadResult {
+    let context = LAContext()
+    context.interactionNotAllowed = true
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: keychainService,
       kSecAttrAccount as String: keychainAccount,
       kSecReturnData as String: true,
       kSecMatchLimit as String: kSecMatchLimitOne,
+      kSecUseAuthenticationContext as String: context,
     ]
     var item: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -143,14 +160,34 @@ final class ClientDeviceService {
 
   private func saveKeychainInstallId(_ value: String) {
     let data = Data(value.utf8)
+    let context = LAContext()
+    context.interactionNotAllowed = true
     let query: [String: Any] = [
       kSecClass as String: kSecClassGenericPassword,
       kSecAttrService as String: keychainService,
       kSecAttrAccount as String: keychainAccount,
+      kSecUseAuthenticationContext as String: context,
+    ]
+    let attributes: [String: Any] = [
       kSecValueData as String: data,
       kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
     ]
-    SecItemDelete(query as CFDictionary)
-    SecItemAdd(query as CFDictionary, nil)
+    let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+    if updateStatus == errSecSuccess {
+      return
+    }
+    if updateStatus != errSecItemNotFound {
+      // Do not SecItemDelete+Add on auth failure — that can prompt. Fail closed;
+      // the mirror fallback in loadOrCreateInstallId covers continuity.
+      log("ClientDeviceService: keychain update unavailable (status \(updateStatus))")
+      return
+    }
+    var addQuery = query
+    addQuery[kSecValueData as String] = data
+    addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+    let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+    if addStatus != errSecSuccess {
+      log("ClientDeviceService: keychain add unavailable (status \(addStatus))")
+    }
   }
 }

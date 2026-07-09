@@ -86,7 +86,7 @@ Every read/write/maintenance path resolves the user's cohort first.
 
 ### 2. Scheduled maintenance orchestration
 
-**What happens:** Hourly `notifications-job` may run `run_canonical_short_term_maintenance_cron` when `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true` and the whitelist is non-empty. Per user: **TTL audit → consolidation → promotion** (in that order).
+**What happens:** Hourly `memory-maintenance-job` may run `run_canonical_short_term_maintenance_cron` when `MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true` and the whitelist is non-empty. Per user: **TTL audit → consolidation → promotion** (in that order).
 
 **Plain English:** A background job ages out expired short-term rows, asks the LLM to reconcile duplicates/contradictions, then promotes survivors to long-term — but only if consolidation did not fail mid-flight.
 

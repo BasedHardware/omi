@@ -21,6 +21,7 @@ extension AppState {
       sttCloudFallbackTried = false
       forceLocalSTTForSession = false
     }
+    meetingEndFinalizationInProgress = false
 
     // Paywall hard-stop: every code path that enables the mic + WS streaming
     // funnels through here, including auto-restart from sleep and toggle
@@ -414,8 +415,19 @@ extension AppState {
         log("Transcription: System audio capture aborted (recording stopped during start)")
         return
       }
+      recordSystemAudioCaptureOutcome(.granted)
       log("Transcription: System audio capture started (mode=\(effectiveSystemAudioMode.rawValue))")
     } catch {
+      // Mirror the success path's staleness guards: if recording stopped or the
+      // service was replaced while startCapture was suspended, the failure says
+      // nothing about permission for the CURRENT session — don't record it.
+      guard isTranscribing,
+        (systemAudioCaptureService as? SystemAudioCaptureService) === systemService
+      else {
+        log("Transcription: System audio capture failed after session ended — outcome not recorded")
+        return
+      }
+      recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))
       logError(
         "Transcription: System audio capture failed (continuing with mic only)", error: error)
     }
@@ -449,9 +461,14 @@ extension AppState {
     // The meeting detector runs only in "Only during meetings" mode.
     if mode == .onlyDuringMeetings {
       if meetingDetector == nil {
-        let detector = MeetingDetector(onChange: { [weak self] _ in
-          Task { @MainActor in await self?.reconcileCapture() }
-        })
+        let detector = MeetingDetector(
+          onInitialStateObserved: { [weak self] in
+            Task { @MainActor in await self?.reconcileCapture() }
+          },
+          onChange: { [weak self] _ in
+            Task { @MainActor in await self?.reconcileCapture() }
+          }
+        )
         meetingDetector = detector
         detector.start()
       }
@@ -460,11 +477,17 @@ extension AppState {
       meetingDetector = nil
     }
 
+    let meetingStateReady = mode != .onlyDuringMeetings || meetingDetector?.hasObservedState == true
     let meetingActive = meetingDetector?.isMeetingActive ?? false
     // Only during meetings → capture (mic + system) only while in a call. Always/Never → the mic
     // runs continuously (system audio still respects the mode below).
     let shouldCapture = mode != .onlyDuringMeetings || meetingActive
     isAwaitingMeeting = mode == .onlyDuringMeetings && !meetingActive
+
+    guard meetingStateReady else {
+      log("Transcription: waiting for meeting detector before changing capture state")
+      return
+    }
 
     captureGateInFlight = true
 
@@ -505,6 +528,33 @@ extension AppState {
       }
     }
 
+    if !meetingEndFinalizationInProgress,
+      MeetingConversationBoundaryPolicy.shouldFinishConversation(
+        mode: mode,
+        meetingStateReady: meetingStateReady,
+        shouldCapture: shouldCapture,
+        segmentCount: totalSegmentCount,
+        hasSpeakerSegments: !speakerSegments.isEmpty
+      )
+    {
+      meetingEndFinalizationInProgress = true
+      log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
+      Task { @MainActor in
+        defer { self.meetingEndFinalizationInProgress = false }
+        guard MeetingConversationBoundaryPolicy.shouldFinishConversation(
+          mode: self.effectiveSystemAudioMode,
+          meetingStateReady: self.meetingDetector?.hasObservedState == true,
+          shouldCapture: self.meetingDetector?.isMeetingActive == true,
+          segmentCount: self.totalSegmentCount,
+          hasSpeakerSegments: !self.speakerSegments.isEmpty
+        ) else {
+          log("Transcription: skipped meeting-ended finalization because meeting state changed")
+          return
+        }
+        _ = await self.finishConversation(finalizationReason: .meetingEnded)
+      }
+    }
+
     captureGateInFlight = false
     if let recoveryReason = pendingCoreAudioCaptureRecoveryReason {
       pendingCoreAudioCaptureRecoveryReason = nil
@@ -531,6 +581,13 @@ extension AppState {
     }
 
     log("Transcription: silent-mic fallback — switching to built-in mic (deviceID=\(builtInID))")
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "silent_mic",
+      from: "bluetooth",
+      to: "built_in",
+      reason: "local_heal",
+      outcome: .recovered,
+      extra: ["user_visible": false])
 
     // Tear down the dead Bluetooth capture and spin a new one pinned to the built-in mic.
     // Silent healing — no user-facing UI, the recording just keeps working.
@@ -801,13 +858,15 @@ extension AppState {
 
   /// Finish the current conversation and keep recording for a new one.
   /// Disconnects the WebSocket (triggers backend conversation processing) then reconnects.
-  func finishConversation() async -> FinishConversationResult {
+  func finishConversation(
+    finalizationReason: TranscriptionFinalizationReason = .finishAndContinue
+  ) async -> FinishConversationResult {
     guard totalSegmentCount > 0 || !speakerSegments.isEmpty else {
       log("Transcription: No segments to finish")
       return .discarded
     }
 
-    log("Transcription: Finishing conversation — disconnecting WebSocket to trigger backend processing")
+    log("Transcription: Finishing conversation — reason=\(finalizationReason.rawValue)")
 
     // Capture state before rotation — memory_created event for this conversation
     // may arrive on the new WebSocket after currentSessionId and recordingStartTime have changed.
@@ -834,7 +893,7 @@ extension AppState {
     // (backend will process it; memory_created event may arrive on the new session's WebSocket)
     if let sessionId = sessionToFinalize {
       do {
-        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .finishAndContinue)
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: finalizationReason)
         log("Transcription: Finished DB session \(sessionId) before reconnect")
       } catch {
         logError("Transcription: Failed to finish DB session \(sessionId)", error: error)
@@ -871,7 +930,7 @@ extension AppState {
       Task {
         await ConversationFinalizationService.shared.finalizeSession(
           id: sessionId,
-          reason: .finishAndContinue,
+          reason: finalizationReason,
           allowCloudForceProcess: !finishedUsesLocalSTT
         )
       }
@@ -1040,6 +1099,7 @@ extension AppState {
     captureReconcilePending = false
     pendingCoreAudioCaptureRecoveryReason = nil
     isAwaitingMeeting = false
+    meetingEndFinalizationInProgress = false
 
     // Stop system audio capture first (if available)
     if #available(macOS 14.4, *) {
@@ -1114,6 +1174,7 @@ extension AppState {
     LiveNotesMonitor.shared.clear()
     recordingStartTime = nil
     currentSessionId = nil
+    meetingEndFinalizationInProgress = false
 
     // Track transcription stopped
     AnalyticsManager.shared.transcriptionStopped(wordCount: totalWordCount)
@@ -1136,6 +1197,164 @@ extension AppState {
     log(
       "ResourceMonitor: Trimmed transcript state \(beforeCount) -> \(speakerSegments.count) segments"
     )
+  }
+
+  // MARK: - Automation capture test seam (non-prod hermetic E2E)
+
+  /// Start a headless capture session without mic/audio — T2 hermetic only.
+  func automationStartCaptureTestSession() async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test session disabled on production bundles"]
+    }
+    if isTranscribing {
+      if automationCaptureTestSessionActive {
+        return [
+          "already_recording": "true",
+          "session_id": currentSessionId.map { "\($0)" } ?? "",
+          "segment_count": "\(totalSegmentCount)",
+        ]
+      }
+      return ["error": "real capture session already active"]
+    }
+    do {
+      let sessionId = try await TranscriptionStorage.shared.startSession(
+        source: currentConversationSource.rawValue,
+        language: AssistantSettings.shared.effectiveTranscriptionLanguage,
+        timezone: TimeZone.current.identifier,
+        inputDeviceName: "harness-capture",
+        clientConversationId: UUID().uuidString.lowercased(),
+        finalizationStrategy: .localSegments
+      )
+      currentSessionId = sessionId
+      recordingStartTime = Date()
+      isTranscribing = true
+      useLocalSTT = true
+      speakerSegments = []
+      totalSegmentCount = 0
+      totalWordCount = 0
+      currentTranscript = ""
+      LiveNotesMonitor.shared.startSession(sessionId: sessionId)
+      automationCaptureTestSessionActive = true
+      return [
+        "started": "true",
+        "session_id": "\(sessionId)",
+        "is_transcribing": "true",
+      ]
+    } catch {
+      return ["error": "failed to start capture session: \(error.localizedDescription)"]
+    }
+  }
+
+  func automationInjectCaptureTestTranscript(text: String) async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test transcript disabled on production bundles"]
+    }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return ["error": "missing transcript text"] }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot inject into non-automation capture session"]
+      }
+      return ["error": "no active capture session"]
+    }
+    guard isTranscribing else { return ["error": "no active capture session"] }
+    let start = recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
+    let segment = TranscriptionService.BackendSegment(
+      id: UUID().uuidString.lowercased(),
+      text: trimmed,
+      speaker: "SPEAKER_00",
+      speaker_id: 0,
+      is_user: true,
+      person_id: nil,
+      start: max(0, start),
+      end: max(0.1, start + 0.5),
+      translations: nil
+    )
+    handleBackendSegments([segment])
+    if let sessionId = currentSessionId {
+      await persistBackendSegmentsToStorage([segment], sessionId: sessionId)
+    }
+    return [
+      "injected": trimmed,
+      "session_id": currentSessionId.map { "\($0)" } ?? "",
+      "segment_count": "\(totalSegmentCount)",
+      "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+    ]
+  }
+
+  /// Hermetic capture teardown: mirrors the session-finalization portion of
+  /// `stopTranscription()` (finish session, finalize conversation, clear live
+  /// transcript state, reload conversations) without stopping the audio engine
+  /// or cloud STT WebSocket. Keep this in sync when `stopTranscription()` changes.
+  func automationStopCaptureTestSession() async -> [String: String] {
+    guard AppBuild.isNonProduction else {
+      return ["error": "capture test session disabled on production bundles"]
+    }
+    guard automationCaptureTestSessionActive else {
+      if isTranscribing {
+        return ["error": "cannot stop non-automation capture session"]
+      }
+      return [
+        "already_stopped": "true",
+        "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+      ]
+    }
+    guard isTranscribing else {
+      automationCaptureTestSessionActive = false
+      return [
+        "already_stopped": "true",
+        "conversation_count": "\(totalConversationsCount ?? conversations.count)",
+      ]
+    }
+    let beforeCount = totalConversationsCount ?? conversations.count
+    let sessionId = currentSessionId
+    let segmentCount = totalSegmentCount
+
+    isTranscribing = false
+    LiveNotesMonitor.shared.endSession()
+
+    var finalizeError: String?
+    if let sessionId {
+      do {
+        try await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+        await ConversationFinalizationService.shared.finalizeSession(
+          id: sessionId,
+          reason: .userStop,
+          allowCloudForceProcess: false
+        )
+      } catch {
+        finalizeError = "failed to finalize capture session: \(error.localizedDescription)"
+      }
+    }
+
+    // Reset cleanup state regardless of finalize outcome so a failed finalize
+    // can't leave `automationCaptureTestSessionActive` stuck true (which made a
+    // retried stop silently report "already_stopped" without ever finalizing).
+    speakerSegments = []
+    liveSpeakerPersonMap = [:]
+    LiveTranscriptMonitor.shared.clear()
+    LiveNotesMonitor.shared.clear()
+    recordingStartTime = nil
+    currentSessionId = nil
+    useLocalSTT = false
+    totalSegmentCount = 0
+    totalWordCount = 0
+    currentTranscript = ""
+    automationCaptureTestSessionActive = false
+
+    if let finalizeError {
+      return ["error": finalizeError]
+    }
+
+    await loadConversations()
+    let afterCount = totalConversationsCount ?? conversations.count
+    return [
+      "stopped": "true",
+      "conversation_count_before": "\(beforeCount)",
+      "conversation_count_after": "\(afterCount)",
+      "conversation_count_increased": afterCount > beforeCount ? "true" : "false",
+      "segment_count": "\(segmentCount)",
+    ]
   }
 
   // MARK: - Conversations
