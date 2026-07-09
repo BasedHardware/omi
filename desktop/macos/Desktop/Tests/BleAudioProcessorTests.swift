@@ -25,7 +25,8 @@ final class BleAudioProcessorTests: XCTestCase {
     XCTAssertEqual(delegate.failureCount, 1)
 
     let snapshot = try latestHealthSnapshot()
-    XCTAssertEqual(snapshot["event"] as? String, "ble_decode_degraded")
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "ble_audio")
     XCTAssertEqual(snapshot["recovery_action"] as? String, "continue_raw_capture")
   }
 

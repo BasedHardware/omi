@@ -6,16 +6,7 @@ enum DesktopHealthEventName: String {
   case authTokenStorageFallback = "auth_token_storage_fallback"
   case authSessionCleared = "auth_session_cleared"
   case transcriptionWsReconnectExhausted = "transcription_ws_reconnect_exhausted"
-  case walPersistenceDegraded = "wal_persistence_degraded"
-  case walWriteFailed = "wal_write_failed"
-  case walUploadFailed = "wal_upload_failed"
-  case agentRuntimeStaleAliveCheck = "agent_runtime_stale_alive_check"
-  case agentRuntimeUnexpectedExit = "agent_runtime_unexpected_exit"
-  case apiAuthRetry = "api_auth_retry"
-  case dbLockContention = "db_lock_contention"
-  case chatBridgeModeSwitchTimeout = "chat_bridge_mode_switch_timeout"
-  case bleDecodeDegraded = "ble_decode_degraded"
-  case automationBridgeBindFailed = "automation_bridge_bind_failed"
+
   case pttStarted = "ptt_started"
   case pttAudioCaptureSilentTurn = "ptt_audio_capture_silent_turn"
   case pttAudioCaptureWatchdogTriggered = "ptt_audio_capture_watchdog_triggered"
@@ -118,10 +109,13 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordWalPersistenceDegraded(reason: String, recoveryAction: String, recoveryResult: String) {
-    record(
-      .walPersistenceDegraded,
-      properties: [
-        "reason": reason,
+    recordFallback(
+      area: "wal_persistence",
+      from: "disk",
+      to: "memory",
+      reason: reason,
+      outcome: .degraded,
+      extra: [
         "failure_class": "wal_persistence_degraded",
         "recovery_action": recoveryAction,
         "recovery_result": recoveryResult,
@@ -129,11 +123,15 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordWalWriteFailed(walId: String, reason: String) {
-    record(
-      .walWriteFailed,
-      properties: [
+    recordFallback(
+      area: "wal_persistence",
+      from: "disk",
+      to: "memory",
+      reason: "wal_write_failed",
+      outcome: .degraded,
+      extra: [
         "wal_id": walId,
-        "reason": reason,
+        "detail_reason": reason,
         "failure_class": "wal_write_failed",
         "recovery_action": "retain_frames",
         "recovery_result": "degraded",
@@ -141,11 +139,15 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordWalUploadFailed(walId: String, reason: String) {
-    record(
-      .walUploadFailed,
-      properties: [
+    recordFallback(
+      area: "wal_upload",
+      from: "disk",
+      to: "pending",
+      reason: "upload_failed",
+      outcome: .degraded,
+      extra: [
         "wal_id": walId,
-        "reason": reason,
+        "detail_reason": reason,
         "failure_class": "wal_upload_failed",
         "recovery_action": "leave_pending",
         "recovery_result": "degraded",
@@ -153,19 +155,27 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordAgentRuntimeStaleAliveCheck() {
-    record(
-      .agentRuntimeStaleAliveCheck,
-      properties: [
+    recordFallback(
+      area: "agent_runtime",
+      from: "alive_latch",
+      to: "termination_cleanup",
+      reason: "stale_alive_latch",
+      outcome: .degraded,
+      extra: [
         "failure_class": "stale_alive_latch",
-        "recovery_action": "clear_latch",
+        "recovery_action": "route_to_termination",
         "recovery_result": "degraded",
       ])
   }
 
   func recordAgentRuntimeUnexpectedExit(exitCode: Int32, oom: Bool) {
-    record(
-      .agentRuntimeUnexpectedExit,
-      properties: [
+    recordFallback(
+      area: "agent_runtime",
+      from: "running",
+      to: "stopped",
+      reason: oom ? "out_of_memory" : "process_exited",
+      outcome: .degraded,
+      extra: [
         "exit_code": Int(exitCode),
         "oom": oom,
         "failure_class": oom ? "out_of_memory" : "process_exited",
@@ -175,21 +185,30 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordApiAuthRetry(endpoint: String, outcome: String) {
-    record(
-      .apiAuthRetry,
-      properties: [
+    let fallbackOutcome: DesktopFallbackOutcome = outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
+    recordFallback(
+      area: "api_auth",
+      from: "expired_token",
+      to: outcome == "succeeded" ? "refreshed_token" : "reauth",
+      reason: "http_401",
+      outcome: fallbackOutcome,
+      extra: [
         "endpoint": endpoint,
-        "outcome": outcome,
+        "retry_outcome": outcome,
         "failure_class": "auth_retry",
         "recovery_action": "refresh_token",
-        "recovery_result": outcome,
+        "recovery_result": fallbackOutcome.rawValue,
       ])
   }
 
   func recordDbLockContention(source: String) {
-    record(
-      .dbLockContention,
-      properties: [
+    recordFallback(
+      area: "db_lock",
+      from: "query",
+      to: "backoff",
+      reason: "db_lock_contention",
+      outcome: .degraded,
+      extra: [
         "source": source,
         "failure_class": "db_lock_contention",
         "recovery_action": "backoff",
@@ -198,9 +217,13 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordChatBridgeModeSwitchTimeout(waitSeconds: Int) {
-    record(
-      .chatBridgeModeSwitchTimeout,
-      properties: [
+    recordFallback(
+      area: "chat_bridge",
+      from: "mode_switch",
+      to: "continue_waiting",
+      reason: "mode_switch_timeout",
+      outcome: .degraded,
+      extra: [
         "wait_seconds": waitSeconds,
         "failure_class": "mode_switch_timeout",
         "recovery_action": "clear_waiters",
@@ -209,9 +232,13 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordBleDecodeDegraded(codec: String, failures: Int) {
-    record(
-      .bleDecodeDegraded,
-      properties: [
+    recordFallback(
+      area: "ble_audio",
+      from: "decode",
+      to: "raw_capture",
+      reason: "ble_decode_failed",
+      outcome: .degraded,
+      extra: [
         "codec": codec,
         "consecutive_failures": failures,
         "failure_class": "ble_decode_degraded",
@@ -221,11 +248,15 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordAutomationBridgeBindFailed(port: Int, reason: String) {
-    record(
-      .automationBridgeBindFailed,
-      properties: [
+    recordFallback(
+      area: "automation_bridge",
+      from: "unbound",
+      to: "bind_failed",
+      reason: "bind_failed",
+      outcome: .exhausted,
+      extra: [
         "port": port,
-        "reason": reason,
+        "detail_reason": reason,
         "failure_class": "bind_failed",
         "recovery_action": "retry_exhausted",
         "recovery_result": "exhausted",
@@ -682,6 +713,15 @@ final class DesktopDiagnosticsManager {
     "gemini_stream_proxy",
     "redis_ratelimit",
     "silent_mic",
+    "wal_persistence",
+    "wal_upload",
+    "agent_runtime",
+    "api_auth",
+    "db_lock",
+    "chat_bridge",
+    "ble_audio",
+    "automation_bridge",
+    "transcription_retry",
     "other",
   ]
 
@@ -701,6 +741,18 @@ final class DesktopDiagnosticsManager {
     "byok",
     "other",
     "none",
+    "wal_directory_unavailable",
+    "wal_write_failed",
+    "upload_failed",
+    "stale_alive_latch",
+    "out_of_memory",
+    "process_exited",
+    "http_401",
+    "db_lock_contention",
+    "mode_switch_timeout",
+    "ble_decode_failed",
+    "bind_failed",
+    "db_backoff",
   ]
 
   private func bucketFallbackArea(_ area: String) -> String {

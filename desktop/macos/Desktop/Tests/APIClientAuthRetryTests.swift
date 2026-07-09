@@ -101,8 +101,10 @@ final class APIClientAuthRetryTests: XCTestCase {
     XCTAssertEqual(AuthRetryURLStub.attempts, 2)
 
     let snapshot = try latestHealthSnapshot()
-    XCTAssertEqual(snapshot["event"] as? String, "api_auth_retry")
-    XCTAssertEqual(snapshot["outcome"] as? String, "succeeded")
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "api_auth")
+    XCTAssertEqual(snapshot["outcome"] as? String, "recovered")
+    XCTAssertEqual(snapshot["retry_outcome"] as? String, "succeeded")
   }
 
   private func latestHealthSnapshot() throws -> [String: Any] {

@@ -66,6 +66,7 @@ final class WALService: ObservableObject {
     private let fileManager = FileManager.default
     private let apiClient: APIClient
     private let reconciler: WALSyncReconciler
+    private var frameWriteInProgress = false
 
     /// Test seam — when set, bypasses `APIClient.uploadLocalFilesV2`.
     var uploadLocalFilesHandler: ((URL) async throws -> UploadLocalFilesResult)?
@@ -349,6 +350,7 @@ final class WALService: ObservableObject {
               let codec = currentCodec,
               let startTime = recordingStartTime,
               !currentFrames.isEmpty else { return true }
+        guard !frameWriteInProgress else { return true }
 
         guard walDirectory != nil else {
             let reason = "wal_directory_unavailable"
@@ -391,26 +393,96 @@ final class WALService: ObservableObject {
         }
 
         let framesToWrite = currentFrames
-        let wrote = writeFramesToDiskAndWait(frames: framesToWrite, wal: wal)
-        guard wrote else {
-            errorMessage = "Failed to save audio backup. Recording continues in memory."
-            log(
-                "WALService: frame write failed — retaining \(framesToWrite.count) in-memory frames "
-                    + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
-            // writeFramesToDiskAndWait already recorded the health event via
-            // recordFrameWriteFailure — do not duplicate it here.
-            updatePendingWals()
-            return false
+        let syncedToWrite = currentFramesSynced
+        frameWriteInProgress = true
+        writeFramesToDiskAsync(frames: framesToWrite, wal: wal) { [weak self] wrote in
+            guard let self else { return }
+            self.frameWriteInProgress = false
+            guard wrote else {
+                self.errorMessage = "Failed to save audio backup. Recording continues in memory."
+                log(
+                    "WALService: frame write failed — retaining \(framesToWrite.count) in-memory frames "
+                        + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded)")
+                // writeFramesToDiskAsync already recorded the health event via
+                // recordFrameWriteFailure — do not duplicate it here.
+                self.updatePendingWals()
+                return
+            }
+
+            // Clear only the frames that were durably written (#9240). New frames
+            // may have arrived while the off-main write was in flight.
+            let writtenCount = framesToWrite.count
+            if self.currentFrames.count >= writtenCount {
+                self.currentFrames.removeFirst(writtenCount)
+            } else {
+                self.currentFrames = []
+            }
+            let syncedCount = min(syncedToWrite.count, self.currentFramesSynced.count)
+            if syncedCount > 0 {
+                self.currentFramesSynced.removeFirst(syncedCount)
+            }
+            self.recordingStartTime = Int(Date().timeIntervalSince1970)
+            self.updatePendingWals()
+            self.saveWals()
         }
 
-        // Clear current frames only after durable write succeeds (#9240).
-        currentFrames = []
-        currentFramesSynced = []
-        recordingStartTime = Int(Date().timeIntervalSince1970)
-
         updatePendingWals()
-        saveWals()
         return true
+    }
+
+    private func writeFramesToDiskAsync(
+        frames: [Data],
+        wal: WALEntry,
+        completion: @escaping @MainActor (Bool) -> Void
+    ) {
+        guard let walDir = walDirectory else {
+            recordFrameWriteFailure(walId: wal.id, reason: "wal_directory_unavailable")
+            completion(false)
+            return
+        }
+
+        let fileName = wal.generateFileName()
+        let fileUrl = walDir.appendingPathComponent(fileName)
+        let walId = wal.id
+
+        var fileData = Data()
+        for frame in frames {
+            var length = UInt32(frame.count).littleEndian
+            fileData.append(Data(bytes: &length, count: 4))
+            fileData.append(frame)
+        }
+
+        let frameCount = frames.count
+        DispatchQueue.global(qos: .utility).async { [weak self, fileData] in
+            let succeeded: Bool
+            let failureReason: String?
+            do {
+                try fileData.write(to: fileUrl, options: .atomic)
+                log("WALService: Wrote \(frameCount) frames to \(fileName)")
+                succeeded = true
+                failureReason = nil
+            } catch {
+                let reason = error.localizedDescription
+                log(
+                    "WALService: Failed to write frames to disk "
+                        + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
+                        + reason)
+                succeeded = false
+                failureReason = reason
+            }
+
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if succeeded, let index = self.wals.firstIndex(where: { $0.id == walId }) {
+                    self.wals[index].storage = .disk
+                    self.wals[index].filePath = fileName
+                    completion(true)
+                } else {
+                    self.recordFrameWriteFailure(walId: walId, reason: failureReason ?? "frame_write_failed")
+                    completion(false)
+                }
+            }
+        }
     }
 
     private func writeFramesToDisk(frames: [Data], wal: WALEntry) {

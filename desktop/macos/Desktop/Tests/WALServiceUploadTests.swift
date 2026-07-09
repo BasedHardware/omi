@@ -150,7 +150,8 @@ final class WALServiceUploadTests: XCTestCase {
     XCTAssertNotNil(service.errorMessage)
 
     let snapshot = try latestHealthSnapshot()
-    XCTAssertEqual(snapshot["event"] as? String, "wal_persistence_degraded")
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "wal_persistence")
     XCTAssertEqual(snapshot["recovery_action"] as? String, "retain_frames")
   }
 
@@ -194,7 +195,8 @@ final class WALServiceUploadTests: XCTestCase {
     }
 
     let snapshot = try latestHealthSnapshot()
-    XCTAssertEqual(snapshot["event"] as? String, "wal_upload_failed")
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "wal_upload")
     XCTAssertEqual(snapshot["recovery_action"] as? String, "leave_pending")
   }
 
